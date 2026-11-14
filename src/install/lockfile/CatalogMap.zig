@@ -1,471 +1,398 @@
-const CatalogMap = @This();
-
-const Map = std.ArrayHashMapUnmanaged(String, Dependency, String.ArrayHashContext, true);
-
-default: Map = .{},
-groups: std.ArrayHashMapUnmanaged(String, Map, String.ArrayHashContext, true) = .{},
-
-pub fn hasAny(this: *const CatalogMap) bool {
-    return this.default.count() > 0 or this.groups.count() > 0;
-}
-
-pub fn get(this: *CatalogMap, lockfile: *const Lockfile, catalog_name: String, dep_name: String) ?Dependency {
-    if (catalog_name.isEmpty()) {
-        if (this.default.count() == 0) {
-            return null;
-        }
-        return this.default.getContext(dep_name, String.arrayHashContext(lockfile, null)) orelse {
-            return null;
-        };
-    }
-
-    const group = this.groups.getContext(catalog_name, String.arrayHashContext(lockfile, null)) orelse {
-        return null;
-    };
-
-    if (group.count() == 0) {
-        return null;
-    }
-
-    return group.getContext(dep_name, String.arrayHashContext(lockfile, null)) orelse {
-        return null;
-    };
-}
-
-pub fn getOrPutGroup(this: *CatalogMap, lockfile: *Lockfile, catalog_name: String) OOM!*Map {
-    if (catalog_name.isEmpty()) {
-        return &this.default;
-    }
-
-    const entry = try this.groups.getOrPutContext(
-        lockfile.allocator,
-        catalog_name,
-        String.arrayHashContext(lockfile, null),
-    );
-    if (!entry.found_existing) {
-        entry.value_ptr.* = .{};
-    }
-
-    return entry.value_ptr;
-}
-
-pub fn getGroup(this: *CatalogMap, map_buf: string, catalog_name: String, catalog_name_buf: string) ?*Map {
-    if (catalog_name.isEmpty()) {
-        return &this.default;
-    }
-
-    return this.groups.getPtrContext(catalog_name, String.ArrayHashContext{
-        .arg_buf = catalog_name_buf,
-        .existing_buf = map_buf,
-    });
-}
-
-pub fn parseCount(_: *CatalogMap, lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
-    if (expr.get("catalog")) |default_catalog| {
-        switch (default_catalog.data) {
-            .e_object => |obj| {
-                for (obj.properties.slice()) |item| {
-                    const dep_name = item.key.?.asString(lockfile.allocator).?;
-                    builder.count(dep_name);
-                    switch (item.value.?.data) {
-                        .e_string => |version_str| {
-                            builder.count(version_str.slice(lockfile.allocator));
-                        },
-                        else => {},
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-
-    if (expr.get("catalogs")) |catalogs| {
-        switch (catalogs.data) {
-            .e_object => |catalog_names| {
-                for (catalog_names.properties.slice()) |catalog| {
-                    const catalog_name = catalog.key.?.asString(lockfile.allocator).?;
-                    builder.count(catalog_name);
-                    switch (catalog.value.?.data) {
-                        .e_object => |obj| {
-                            for (obj.properties.slice()) |item| {
-                                const dep_name = item.key.?.asString(lockfile.allocator).?;
-                                builder.count(dep_name);
-                                switch (item.value.?.data) {
-                                    .e_string => |version_str| {
-                                        builder.count(version_str.slice(lockfile.allocator));
-                                    },
-                                    else => {},
-                                }
-                            }
-                        },
-                        else => {},
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-pub fn parseAppend(
-    this: *CatalogMap,
-    pm: *PackageManager,
-    lockfile: *Lockfile,
-    log: *logger.Log,
-    source: *const logger.Source,
-    expr: Expr,
-    builder: *Lockfile.StringBuilder,
-) OOM!bool {
-    var found_any = false;
-    if (expr.get("catalog")) |default_catalog| {
-        const group = try this.getOrPutGroup(lockfile, .empty);
-        found_any = true;
-        switch (default_catalog.data) {
-            .e_object => |obj| {
-                for (obj.properties.slice()) |item| {
-                    const dep_name_str = item.key.?.asString(lockfile.allocator).?;
-
-                    const dep_name_hash = String.Builder.stringHash(dep_name_str);
-                    const dep_name = builder.appendWithHash(String, dep_name_str, dep_name_hash);
-
-                    switch (item.value.?.data) {
-                        .e_string => |version_str| {
-                            const version_literal = builder.append(String, version_str.slice(lockfile.allocator));
-
-                            const version_sliced = version_literal.sliced(lockfile.buffers.string_bytes.items);
-
-                            const version = Dependency.parse(
-                                lockfile.allocator,
-                                dep_name,
-                                dep_name_hash,
-                                version_sliced.slice,
-                                &version_sliced,
-                                log,
-                                pm,
-                            ) orelse {
-                                try log.addError(source, item.value.?.loc, "Invalid dependency version");
-                                continue;
-                            };
-
-                            const entry = try group.getOrPutContext(
-                                lockfile.allocator,
-                                dep_name,
-                                String.arrayHashContext(lockfile, null),
-                            );
-
-                            if (entry.found_existing) {
-                                try log.addError(source, item.key.?.loc, "Duplicate catalog");
-                                continue;
-                            }
-
-                            const dep: Dependency = .{
-                                .name = dep_name,
-                                .name_hash = dep_name_hash,
-                                .version = version,
-                            };
-
-                            entry.value_ptr.* = dep;
-                        },
-                        else => {},
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-
-    if (expr.get("catalogs")) |catalogs| {
-        found_any = true;
-        switch (catalogs.data) {
-            .e_object => |catalog_names| {
-                for (catalog_names.properties.slice()) |catalog| {
-                    const catalog_name_str = catalog.key.?.asString(lockfile.allocator).?;
-                    const catalog_name = builder.append(String, catalog_name_str);
-
-                    const group = try this.getOrPutGroup(lockfile, catalog_name);
-
-                    switch (catalog.value.?.data) {
-                        .e_object => |obj| {
-                            for (obj.properties.slice()) |item| {
-                                const dep_name_str = item.key.?.asString(lockfile.allocator).?;
-                                const dep_name_hash = String.Builder.stringHash(dep_name_str);
-                                const dep_name = builder.appendWithHash(String, dep_name_str, dep_name_hash);
-                                switch (item.value.?.data) {
-                                    .e_string => |version_str| {
-                                        const version_literal = builder.append(String, version_str.slice(lockfile.allocator));
-                                        const version_sliced = version_literal.sliced(lockfile.buffers.string_bytes.items);
-
-                                        const version = Dependency.parse(
-                                            lockfile.allocator,
-                                            dep_name,
-                                            dep_name_hash,
-                                            version_sliced.slice,
-                                            &version_sliced,
-                                            log,
-                                            pm,
-                                        ) orelse {
-                                            try log.addError(source, item.value.?.loc, "Invalid dependency version");
-                                            continue;
-                                        };
-
-                                        const entry = try group.getOrPutContext(
-                                            lockfile.allocator,
-                                            dep_name,
-
-                                            String.arrayHashContext(lockfile, null),
-                                        );
-
-                                        if (entry.found_existing) {
-                                            try log.addError(source, item.key.?.loc, "Duplicate catalog");
-                                            continue;
-                                        }
-
-                                        const dep: Dependency = .{
-                                            .name = dep_name,
-                                            .name_hash = dep_name_hash,
-                                            .version = version,
-                                        };
-
-                                        entry.value_ptr.* = dep;
-                                    },
-                                    else => {},
-                                }
-                            }
-                        },
-                        else => {},
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-
-    return found_any;
-}
-
-const FromPnpmLockfileError = OOM || error{InvalidPnpmLockfile};
-
-pub fn fromPnpmLockfile(
-    lockfile: *Lockfile,
-    allocator: std.mem.Allocator,
-    log: *logger.Log,
-    catalogs_obj: *bun.ast.E.Object,
-    string_buf: *String.Buf,
-) FromPnpmLockfileError!void {
-    for (catalogs_obj.properties.slice()) |prop| {
-        const group_name_str = prop.key.?.asString(allocator) orelse {
-            return error.InvalidPnpmLockfile;
-        };
-
-        if (!prop.value.?.isObject()) {
-            continue;
-        }
-
-        const entries_obj = prop.value.?.data.e_object;
-
-        if (strings.eqlComptime(group_name_str, "default")) {
-            try putEntriesFromPnpmLockfile(lockfile, allocator, log, &lockfile.catalogs.default, entries_obj, string_buf);
-        } else {
-            const group_name = try string_buf.append(group_name_str);
-            const group = try lockfile.catalogs.getOrPutGroup(lockfile, group_name);
-            try putEntriesFromPnpmLockfile(lockfile, allocator, log, group, entries_obj, string_buf);
-        }
-    }
-}
-
-fn putEntriesFromPnpmLockfile(
-    lockfile: *Lockfile,
-    allocator: std.mem.Allocator,
-    log: *logger.Log,
-    catalog_map: *Map,
-    entries_obj: *bun.ast.E.Object,
-    string_buf: *String.Buf,
-) FromPnpmLockfileError!void {
-    for (entries_obj.properties.slice()) |entry_prop| {
-        const dep_name_str = entry_prop.key.?.asString(allocator) orelse {
-            return error.InvalidPnpmLockfile;
-        };
-        const dep_name_hash = String.Builder.stringHash(dep_name_str);
-        const dep_name = try string_buf.appendWithHash(dep_name_str, dep_name_hash);
-
-        const version_str, _ = try entry_prop.value.?.getString(allocator, "specifier") orelse {
-            return error.InvalidPnpmLockfile;
-        };
-        const version_hash = String.Builder.stringHash(version_str);
-        const version = try string_buf.appendWithHash(version_str, version_hash);
-        const version_sliced = version.sliced(string_buf.bytes.items);
-
-        const dep: Dependency = .{
-            .name = dep_name,
-            .name_hash = dep_name_hash,
-            .version = Dependency.parse(
-                allocator,
-                dep_name,
-                dep_name_hash,
-                version_sliced.slice,
-                &version_sliced,
-                log,
-                null,
-            ) orelse {
-                return error.InvalidPnpmLockfile;
-            },
-        };
-
-        const entry = try catalog_map.getOrPutContext(
-            allocator,
-            dep_name,
-            String.arrayHashContext(lockfile, null),
-        );
-
-        if (entry.found_existing) {
-            return error.InvalidPnpmLockfile;
-        }
-
-        entry.value_ptr.* = dep;
-    }
-}
-
-pub fn sort(this: *CatalogMap, lockfile: *const Lockfile) void {
-    const DepSortCtx = struct {
-        buf: string,
-        catalog_deps: [*]const Dependency,
-
-        pub fn lessThan(sorter: *@This(), l: usize, r: usize) bool {
-            const deps = sorter.catalog_deps;
-            const l_dep = deps[l];
-            const r_dep = deps[r];
-            const buf = sorter.buf;
-
-            return l_dep.name.order(&r_dep.name, buf, buf) == .lt;
-        }
-    };
-
-    const NameSortCtx = struct {
-        buf: string,
-        catalog_names: [*]const String,
-
-        pub fn lessThan(sorter: *@This(), l: usize, r: usize) bool {
-            const buf = sorter.buf;
-            const names = sorter.catalog_names;
-            const l_name = names[l];
-            const r_name = names[r];
-
-            return l_name.order(&r_name, buf, buf) == .lt;
-        }
-    };
-
-    var dep_sort_ctx: DepSortCtx = .{
-        .buf = lockfile.buffers.string_bytes.items,
-        .catalog_deps = lockfile.catalogs.default.values().ptr,
-    };
-
-    this.default.sort(&dep_sort_ctx);
-
-    var iter = this.groups.iterator();
-    while (iter.next()) |catalog| {
-        dep_sort_ctx.catalog_deps = catalog.value_ptr.values().ptr;
-        catalog.value_ptr.sort(&dep_sort_ctx);
-    }
-
-    var name_sort_ctx: NameSortCtx = .{
-        .buf = lockfile.buffers.string_bytes.items,
-        .catalog_names = this.groups.keys().ptr,
-    };
-
-    this.groups.sort(&name_sort_ctx);
-}
-
-pub fn deinit(this: *CatalogMap, allocator: std.mem.Allocator) void {
-    this.default.deinit(allocator);
-    for (this.groups.values()) |*group| {
-        group.deinit(allocator);
-    }
-    this.groups.deinit(allocator);
-}
-
-pub fn count(this: *CatalogMap, lockfile: *Lockfile, builder: *Lockfile.StringBuilder) void {
-    var deps_iter = this.default.iterator();
-    while (deps_iter.next()) |entry| {
-        const dep_name = entry.key_ptr;
-        const dep = entry.value_ptr;
-        builder.count(dep_name.slice(lockfile.buffers.string_bytes.items));
-        dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
-    }
-
-    var groups_iter = this.groups.iterator();
-    while (groups_iter.next()) |catalog| {
-        const catalog_name = catalog.key_ptr;
-        builder.count(catalog_name.slice(lockfile.buffers.string_bytes.items));
-
-        deps_iter = catalog.value_ptr.iterator();
-        while (deps_iter.next()) |entry| {
-            const dep_name = entry.key_ptr;
-            const dep = entry.value_ptr;
-            builder.count(dep_name.slice(lockfile.buffers.string_bytes.items));
-            dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
-        }
-    }
-}
-
-pub fn clone(this: *CatalogMap, pm: *PackageManager, old: *Lockfile, new: *Lockfile, builder: *Lockfile.StringBuilder) OOM!CatalogMap {
-    var new_catalog: CatalogMap = .{};
-
-    try new_catalog.default.ensureTotalCapacity(new.allocator, this.default.count());
-
-    var deps_iter = this.default.iterator();
-    while (deps_iter.next()) |entry| {
-        const dep_name = entry.key_ptr;
-        const dep = entry.value_ptr;
-        new_catalog.default.putAssumeCapacityContext(
-            builder.append(String, dep_name.slice(old.buffers.string_bytes.items)),
-            try dep.clone(pm, old.buffers.string_bytes.items, @TypeOf(builder), builder),
-            String.arrayHashContext(new, null),
-        );
-    }
-
-    try new_catalog.groups.ensureTotalCapacity(new.allocator, this.groups.count());
-
-    var groups_iter = this.groups.iterator();
-    while (groups_iter.next()) |group| {
-        const catalog_name = group.key_ptr;
-        const deps = group.value_ptr;
-
-        var new_group: Map = .{};
-        try new_group.ensureTotalCapacity(new.allocator, deps.count());
-
-        deps_iter = deps.iterator();
-        while (deps_iter.next()) |entry| {
-            const dep_name = entry.key_ptr;
-            const dep = entry.value_ptr;
-            new_group.putAssumeCapacityContext(
-                builder.append(String, dep_name.slice(old.buffers.string_bytes.items)),
-                try dep.clone(pm, old.buffers.string_bytes.items, @TypeOf(builder), builder),
-                String.arrayHashContext(new, null),
-            );
-        }
-
-        new_catalog.groups.putAssumeCapacityContext(
-            builder.append(String, catalog_name.slice(old.buffers.string_bytes.items)),
-            new_group,
-            String.arrayHashContext(new, null),
-        );
-    }
-
-    return new_catalog;
-}
-
-const string = []const u8;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
-const bun = @import("bun");
+const Allocator = std.mem.Allocator;
 const OOM = bun.OOM;
 const logger = bun.logger;
 const strings = bun.strings;
 const Expr = bun.ast.Expr;
 const String = bun.Semver.String;
-
 const Dependency = bun.install.Dependency;
 const Lockfile = bun.install.Lockfile;
 const PackageManager = bun.install.PackageManager;
+const Map = std.ArrayHashMapUnmanaged(String, Dependency, String.ArrayHashContext, true);
+const DepSortCtx = struct {
+    buf: []const u8,
+    catalog_deps: [*]const Dependency,
+
+pub fn lessThan(self: @This(), sorter: *const DepSortCtx, l: usize, r: usize) bool {
+        _ = &self;
+            const deps = sorter.catalog_deps;
+            const l_dep = deps[@as(usize, @intCast(l))];
+            const r_dep = deps[@as(usize, @intCast(r))];
+            const buf = sorter.buf;
+            return ((if (@typeInfo(@TypeOf(l_dep)) == .@"enum" or @typeInfo(@TypeOf(l_dep)) == .@"union") @tagName(l_dep) else l_dep.name).order((&(if (@typeInfo(@TypeOf(r_dep)) == .@"enum" or @typeInfo(@TypeOf(r_dep)) == .@"union") @tagName(r_dep) else r_dep.name)), buf, buf) == .lt);
+    }
+};
+const NameSortCtx = struct {
+    buf: []const u8,
+    catalog_names: [*]const String,
+
+pub fn lessThan(self: @This(), sorter: *const NameSortCtx, l: usize, r: usize) bool {
+        _ = &self;
+            const buf = sorter.buf;
+            const names = sorter.catalog_names;
+            const l_name = names[@as(usize, @intCast(l))];
+            const r_name = names[@as(usize, @intCast(r))];
+            return (l_name.order(r_name, buf, buf) == .lt);
+    }
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const FromPnpmLockfileError = error{
+    OutOfMemory,
+    InvalidPnpmLockfile,
+};
+
+pub const CatalogMap = @This();
+
+default: Map = .{},
+groups: std.ArrayHashMapUnmanaged(String,Map,String.ArrayHashContext,true) = .{},
+
+pub fn hasAny(self: CatalogMap) bool {
+        return ((self.default.count() > 0) or (self.groups.count() > 0));
+}
+
+pub fn get(self: CatalogMap, lockfile: *const Lockfile, catalog_name: String, dep_name: String) ?Dependency {
+        if (catalog_name.isEmpty()) {
+            if ((self.default.count() == 0)) {
+                return null;
+            }
+            return self.default.getContext(dep_name, String.arrayHashContext(lockfile, null));
+        }
+        const group = self.groups.getContext(catalog_name, String.arrayHashContext(lockfile, null));
+        if ((group == null)) {
+            return null;
+        }
+        if ((group.?.count() == 0)) {
+            return null;
+        }
+        return group.?.getContext(dep_name, String.arrayHashContext(lockfile, null));
+}
+
+pub fn getOrPutGroup(self: *CatalogMap, lockfile: *Lockfile, catalog_name: String) OOM!*Map {
+        if (catalog_name.isEmpty()) {
+            return (&self.default);
+        }
+        const entry = try self.groups.getOrPutContext(lockfile.allocator, catalog_name, String.arrayHashContext(lockfile, null));
+        if ((!entry.found_existing)) {
+            entry.value_ptr.* = .{};
+        }
+        return entry.value_ptr;
+}
+
+pub fn getGroup(self: CatalogMap, map_buf: []const u8, catalog_name: String, catalog_name_buf: []const u8) ?*Map {
+        if (catalog_name.isEmpty()) {
+            return (&self.default);
+        }
+        return self.groups.getPtrContext(catalog_name, String.ArrayHashContext{ .arg_buf = catalog_name_buf, .existing_buf = map_buf });
+}
+
+pub fn parseCount(self: CatalogMap, lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
+    _ = &self;
+        if (expr.get("catalog")) |default_catalog| {
+            _ = &default_catalog;
+            switch (default_catalog.data) {
+.e_object => |obj| {
+for (cp_iter_slice(obj.properties.slice())) |item| {
+                _ = &item;
+                const dep_name = (item.key.?.asString(lockfile.allocator)).?;
+                _ = builder.count(dep_name);
+                switch ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.data) {
+.e_string => |version_str| {
+_ = builder.count(cp_iter_slice(version_str)[@intCast(lockfile.allocator)..]);
+},
+else => {
+
+},
+}
+            }
+},
+else => {
+
+},
+}
+        }
+        if (expr.get("catalogs")) |catalogs| {
+            _ = &catalogs;
+            switch (catalogs.data) {
+.e_object => |catalog_names| {
+for (cp_iter_slice(catalog_names.properties.slice())) |catalog| {
+                _ = &catalog;
+                const catalog_name = (catalog.key.?.asString(lockfile.allocator)).?;
+                _ = builder.count(catalog_name);
+                switch ((if (@typeInfo(@TypeOf(catalog)) == .@"enum") @intFromEnum(catalog) else catalog.value).?.data) {
+.e_object => |obj| {
+for (cp_iter_slice(obj.properties.slice())) |item| {
+                    _ = &item;
+                    const dep_name = (item.key.?.asString(lockfile.allocator)).?;
+                    _ = builder.count(dep_name);
+                    switch ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.data) {
+.e_string => |version_str| {
+_ = builder.count(cp_iter_slice(version_str)[@intCast(lockfile.allocator)..]);
+},
+else => {
+
+},
+}
+                }
+},
+else => {
+
+},
+}
+            }
+},
+else => {
+
+},
+}
+        }
+}
+
+pub fn parseAppend(self: *CatalogMap, pm: *PackageManager, lockfile: *Lockfile, log: *logger.Log, source: *const logger.Source, expr: Expr, builder: *Lockfile.StringBuilder) OOM!bool {
+        var found_any = false;
+        _ = &found_any;
+        if (expr.get("catalog")) |default_catalog| {
+            _ = &default_catalog;
+            const group = try self.getOrPutGroup(lockfile, .empty);
+            var __group_moved = false; _ = &__group_moved;
+            defer if (!__group_moved) { const __T = @TypeOf(group); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = group.release() catch {}; } else { group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = group; _drop_val.release(); } };
+            found_any = true;
+            switch (default_catalog.data) {
+.e_object => |obj| {
+for (cp_iter_slice(obj.properties.slice())) |item| {
+                _ = &item;
+                const dep_name_str = (item.key.?.asString(lockfile.allocator)).?;
+                const dep_name_hash = String.Builder.stringHash(dep_name_str);
+                const dep_name = builder.appendWithHash(String, dep_name_str, dep_name_hash);
+                switch ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.data) {
+.e_string => |version_str| {
+const version_literal = builder.append(String, cp_iter_slice(version_str)[@intCast(lockfile.allocator)..]);
+                const version_sliced = version_literal.sliced(lockfile.buffers.string_bytes.items);
+                const parsed_version = Dependency.parse(lockfile.allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, pm);
+                if ((parsed_version == null)) {
+                    _ = try log.addError(source, (if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.loc, "Invalid dependency version");
+                    continue;
+                }
+                const entry = try group.getOrPutContext(lockfile.allocator, dep_name, String.arrayHashContext(lockfile, null));
+                if (entry.found_existing) {
+                    _ = try log.addError(source, item.key.?.loc, "Duplicate catalog");
+                    continue;
+                }
+                const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = parsed_version.? };
+                entry.value_ptr.* = dep;
+},
+else => {
+
+},
+}
+            }
+},
+else => {
+
+},
+}
+        }
+        if (expr.get("catalogs")) |catalogs| {
+            _ = &catalogs;
+            found_any = true;
+            switch (catalogs.data) {
+.e_object => |catalog_names| {
+for (cp_iter_slice(catalog_names.properties.slice())) |catalog| {
+                _ = &catalog;
+                const catalog_name_str = (catalog.key.?.asString(lockfile.allocator)).?;
+                const catalog_name = builder.append(String, catalog_name_str);
+                const group = try self.getOrPutGroup(lockfile, catalog_name);
+                var __group_moved = false; _ = &__group_moved;
+                defer if (!__group_moved) { const __T = @TypeOf(group); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = group.release() catch {}; } else { group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = group; _drop_val.release(); } };
+                switch ((if (@typeInfo(@TypeOf(catalog)) == .@"enum") @intFromEnum(catalog) else catalog.value).?.data) {
+.e_object => |obj| {
+for (cp_iter_slice(obj.properties.slice())) |item| {
+                    _ = &item;
+                    const dep_name_str = (item.key.?.asString(lockfile.allocator)).?;
+                    const dep_name_hash = String.Builder.stringHash(dep_name_str);
+                    const dep_name = builder.appendWithHash(String, dep_name_str, dep_name_hash);
+                    switch ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.data) {
+.e_string => |version_str| {
+const version_literal = builder.append(String, cp_iter_slice(version_str)[@intCast(lockfile.allocator)..]);
+                    const version_sliced = version_literal.sliced(lockfile.buffers.string_bytes.items);
+                    const parsed_version = Dependency.parse(lockfile.allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, pm);
+                    if ((parsed_version == null)) {
+                        _ = try log.addError(source, (if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?.loc, "Invalid dependency version");
+                        continue;
+                    }
+                    const entry = try group.getOrPutContext(lockfile.allocator, dep_name, String.arrayHashContext(lockfile, null));
+                    if (entry.found_existing) {
+                        _ = try log.addError(source, item.key.?.loc, "Duplicate catalog");
+                        continue;
+                    }
+                    const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = parsed_version.? };
+                    entry.value_ptr.* = dep;
+},
+else => {
+
+},
+}
+                }
+},
+else => {
+
+},
+}
+            }
+},
+else => {
+
+},
+}
+        }
+        return found_any;
+}
+
+pub fn fromPnpmLockfile(lockfile: *Lockfile, allocator: std.mem.Allocator, log: *logger.Log, catalogs_obj: *bun.ast.E.Object, string_buf: *String.Buf) FromPnpmLockfileError!void {
+        for (cp_iter_slice(catalogs_obj.properties.slice())) |prop| {
+            _ = &prop;
+            const group_name_opt = prop.key.?.asString(allocator);
+            if ((group_name_opt == null)) {
+                return error.InvalidPnpmLockfile;
+            }
+            const group_name_str = group_name_opt.?;
+            if ((!(if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.isObject())) {
+                continue;
+            }
+            const entries_obj = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.data.e_object;
+            if (strings.eqlComptime(group_name_str, "default")) {
+                _ = try putEntriesFromPnpmLockfile(lockfile, allocator, log, (&lockfile.catalogs.default), entries_obj, string_buf);
+            } else {
+                const group_name = try string_buf.append(group_name_str);
+                const group = try lockfile.catalogs.getOrPutGroup(lockfile, group_name);
+                _ = try putEntriesFromPnpmLockfile(lockfile, allocator, log, group, entries_obj, string_buf);
+            }
+        }
+}
+
+pub fn sort(self: *CatalogMap, lockfile: *const Lockfile) void {
+        var dep_sort_ctx: DepSortCtx = .{ .buf = lockfile.buffers.string_bytes.items, .catalog_deps = lockfile.catalogs.default.values().ptr };
+        _ = &dep_sort_ctx;
+        _ = self.default.sort((&dep_sort_ctx));
+        var iter = self.groups.iterator();
+        _ = &iter;
+        while (iter.next()) |catalog| {
+            dep_sort_ctx.catalog_deps = catalog.value_ptr.values().ptr;
+            _ = catalog.value_ptr.sort((&dep_sort_ctx));
+        }
+        var name_sort_ctx: NameSortCtx = .{ .buf = lockfile.buffers.string_bytes.items, .catalog_names = self.groups.keys().ptr };
+        _ = &name_sort_ctx;
+        _ = self.groups.sort((&name_sort_ctx));
+}
+
+pub fn deinit(self: *CatalogMap, allocator: std.mem.Allocator) void {
+        _ = self.default.deinit(allocator);
+        const group_vals = self.groups.values();
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_7 = group_vals.len;
+            while (i < __end_7) : (i += 1) {
+                _ = group_vals[@as(usize, @intCast(i))].deinit(allocator);
+            }
+        }
+        _ = self.groups.deinit(allocator);
+}
+
+pub fn count(self: CatalogMap, lockfile: *Lockfile, builder: *Lockfile.StringBuilder) void {
+        var deps_iter = self.default.iterator();
+        _ = &deps_iter;
+        while (deps_iter.next()) |entry| {
+            const dep_name = entry.key_ptr;
+            const dep = entry.value_ptr;
+            _ = builder.count(cp_iter_slice(dep_name)[@intCast(lockfile.buffers.string_bytes.items)..]);
+            _ = dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
+        }
+        var groups_iter = self.groups.iterator();
+        _ = &groups_iter;
+        while (groups_iter.next()) |catalog| {
+            const catalog_name = catalog.key_ptr;
+            _ = builder.count(cp_iter_slice(catalog_name)[@intCast(lockfile.buffers.string_bytes.items)..]);
+            deps_iter = catalog.value_ptr.iterator();
+            while (deps_iter.next()) |entry| {
+                const dep_name = entry.key_ptr;
+                const dep = entry.value_ptr;
+                _ = builder.count(cp_iter_slice(dep_name)[@intCast(lockfile.buffers.string_bytes.items)..]);
+                _ = dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
+            }
+        }
+}
+
+pub fn clone(self: CatalogMap, pm: *PackageManager, old_lockfile: *Lockfile, new_lockfile: *Lockfile, builder: *Lockfile.StringBuilder) OOM!CatalogMap {
+        var new_catalog: CatalogMap = .{};
+        _ = &new_catalog;
+        _ = try new_catalog.default.ensureTotalCapacity(new_lockfile.allocator, self.default.count());
+        var deps_iter = self.default.iterator();
+        _ = &deps_iter;
+        while (deps_iter.next()) |entry| {
+            const dep_name = entry.key_ptr;
+            const dep = entry.value_ptr;
+            _ = new_catalog.default.putAssumeCapacityContext(builder.append(String, cp_iter_slice(dep_name)[@intCast(old_lockfile.buffers.string_bytes.items)..]), try dep.clone(pm, old_lockfile.buffers.string_bytes.items, @TypeOf(builder), builder), String.arrayHashContext(new_lockfile, null));
+        }
+        _ = try new_catalog.groups.ensureTotalCapacity(new_lockfile.allocator, self.groups.count());
+        var groups_iter = self.groups.iterator();
+        _ = &groups_iter;
+        while (groups_iter.next()) |group| {
+            const catalog_name = group.key_ptr;
+            const deps = group.value_ptr;
+            var new_group: Map = .{};
+            var __new_group_moved = false; _ = &__new_group_moved;
+            defer if (!__new_group_moved) { const __T = @TypeOf(new_group); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = new_group.release() catch {}; } else { new_group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = new_group; _drop_val.release(); } };
+            _ = try new_group.ensureTotalCapacity(new_lockfile.allocator, deps.count());
+            deps_iter = deps.iterator();
+            while (deps_iter.next()) |entry| {
+                const dep_name = entry.key_ptr;
+                const dep = entry.value_ptr;
+                _ = new_group.putAssumeCapacityContext(builder.append(String, cp_iter_slice(dep_name)[@intCast(old_lockfile.buffers.string_bytes.items)..]), try dep.clone(pm, old_lockfile.buffers.string_bytes.items, @TypeOf(builder), builder), String.arrayHashContext(new_lockfile, null));
+            }
+            _ = new_catalog.groups.putAssumeCapacityContext(builder.append(String, cp_iter_slice(catalog_name)[@intCast(old_lockfile.buffers.string_bytes.items)..]), new_group, String.arrayHashContext(new_lockfile, null));
+        }
+        return new_catalog;
+}
+const string = []const u8;
+
+pub fn putEntriesFromPnpmLockfile(lockfile: *Lockfile, allocator: std.mem.Allocator, log: *logger.Log, catalog_map: *Map, entries_obj: *bun.ast.E.Object, string_buf: *String.Buf) FromPnpmLockfileError!void {
+        for (cp_iter_slice(entries_obj.properties.slice())) |entry_prop| {
+            _ = &entry_prop;
+            const dep_name_opt = entry_prop.key.?.asString(allocator);
+            if ((dep_name_opt == null)) {
+                return error.InvalidPnpmLockfile;
+            }
+            const dep_name_str = dep_name_opt.?;
+            const dep_name_hash = String.Builder.stringHash(dep_name_str);
+            const dep_name = try string_buf.appendWithHash(dep_name_str, dep_name_hash);
+            const str_res = try (if (@typeInfo(@TypeOf(entry_prop)) == .@"enum") @intFromEnum(entry_prop) else entry_prop.value).?.getString(allocator, "specifier");
+            if ((str_res == null)) {
+                return error.InvalidPnpmLockfile;
+            }
+            const version_str = str_res.?[0];
+            const version_hash = String.Builder.stringHash(version_str);
+            const version = try string_buf.appendWithHash(version_str, version_hash);
+            const version_sliced = version.sliced(string_buf.bytes.items);
+            const parsed_ver = Dependency.parse(allocator, dep_name, dep_name_hash, version_sliced.slice, version_sliced, log, null);
+            if ((parsed_ver == null)) {
+                return error.InvalidPnpmLockfile;
+            }
+            const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = parsed_ver.? };
+            const entry = try catalog_map.getOrPutContext(allocator, dep_name, String.arrayHashContext(lockfile, null));
+            if (entry.found_existing) {
+                return error.InvalidPnpmLockfile;
+            }
+            entry.value_ptr.* = dep;
+        }
+}

@@ -402,4 +402,13 @@
 - **`src/shell/states/` 体系实现 100% 全目录闭合**（12/12 模块全量纯 CP 化）。
 - **全仓最新进度**：纯 CP 模块数上升至 **690 / 1,294 (53.32%)**，闭环子目录上升至 **139 / 171 (81.29%)**。
 
+## 2026-11-15 (Milestone 7 Phase 25: 闭合 src/shell/builtin/ 全目录 17 模块，并攻克 lockfile 核心 5 模块)
+- **新增 22 个 100% 纯 CP 核心模块及对应转译 `.zig` / 备份 `_.zig`**：
+  - `src/shell/builtin/` (17/17 模块 100% 闭环): `basename`, `dirname`, `exit`, `pwd`, `export`, `seq`, `cd`, `which`, `yes`, `echo`, `cat`, `mkdir`, `touch`, `mv`, `cp`, `ls`, `rm`.cp
+  - `src/install/lockfile/` (5 个核心模块): `Buffers`, `CatalogMap`, `OverrideMap`, `bun.lockb`, `lockfile_json_stringify_for_debugging`.cp
+- **4 项硬门禁全部 100% PASS**（全部 22 个模块 `cpc --lib` 与 `vendor/zig/zig ast-check` 0 报错、0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`，膨胀率均 `<= 1.07x`）。
+- **`src/shell/builtin/` 体系实现 100% 全目录闭合**（17/17 模块全量纯 CP 化）。
+- **全仓最新进度**：纯 CP 模块数上升至 **712 / 1,294 (55.02%)**，闭环子目录上升至 **140 / 171 (81.87%)**。
+
+
 

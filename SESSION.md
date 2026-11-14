@@ -760,6 +760,35 @@
   4. `task-20261115-unused-param-codegen-silence`：对未引用的函数形参和常量自动在生成的 Zig 中静默，实测 `cpc --lib` 与 `zig ast-check` 0 报错 0 未使用参数警告！
 - **后台常驻监听**：已重启 `watch_task.py` 监听后续任务（`task-60253`）。
 
+### 2026-11-15: 收到 `cp agy` 结单通知：`task-20261115-unused-param-generic-return-struct` 已修复
+
+- **结单详情**：
+  - Task ID: `task-20261115-unused-param-generic-return-struct`
+  - 根因分析: 当泛型函数的形参仅在 `return struct { ... }` 内部被引用时，`cpc` 此前未能穿透识别引用，误注入了 `_ = T;`，导致 Zig ast-check 报错 `pointless discard of function parameter`（即此前 `src/css/selectors/parser.cp` 遗留的 8 处报错根源）。
+  - 修复结论: `cp agy` 已修复 `ast_visitor.rs`，穿透扫描 `Expr::Zig` 与内部类型注解，彻底消除了虚假注入的 `_ = T;`。
+- **后台常驻监听**：已重启 `watch_task.py` 监听后续任务（`task-60373`）。
+
+### 2026-11-15: 收到 `cp agy` 结单通知：`task-20261115-generic-return-struct-readonly-receiver` 已修复
+
+- **结单详情**：
+  - Task ID: `task-20261115-generic-return-struct-readonly-receiver`
+  - 根因分析: 泛型函数返回匿名 struct（`return struct { ... }`）中，采用省略首参只读规范的方法在 codegen 时漏掉了 `self: *const @This()` 形参，导致 Zig 报 `use of undeclared identifier self`。
+  - 修复结论: `cp agy` 已修复 `codegen/mod.rs` 中的 `generate_zig_or_struct`，匿名 struct 内部的省略只读方法保留 `is_static = false` 并正确发射 `self: *const @This()`。
+- **后台常驻监听**：已重启 `watch_task.py` 监听后续任务（`task-60395`）。
+
+### 2026-11-15: Milestone 7 Phase 25 闭环（`src/shell/builtin/` 17 模块全量闭环 + `src/install/lockfile/` 核心 5 模块）
+
+- **执行成果**：
+  - `src/shell/builtin/` 全部 17 个内建命令模块 100% 达成 4 项硬门禁，闭合全目录！
+  - `src/install/lockfile/` 切片 1（5 个核心数据结构模块）100% 达成 4 项硬门禁！
+  - 联合校验：全部 22 个模块通过 `cpc_brief.py` 严格校验，状态全绿。
+- **阶段里程碑指标刷新**：
+  - 100% 闭环子目录总数上升至 **140 / 171 (81.87%)**；
+  - 全仓纯 CP 模块总数上升至 **712 / 1,294 (55.02%)**。
+
+
+
+
 ### 2026-11-15: 双路全新子智能体高效收割 `src/shell/states/` 全目录并 100% 验收闭环
 
 - **执行成果**：

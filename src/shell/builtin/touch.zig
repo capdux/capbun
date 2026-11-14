@@ -1,396 +1,8 @@
-const Touch = @This();
-
-opts: Opts = .{},
-state: union(enum) {
-    idle,
-    exec: struct {
-        started: bool = false,
-        tasks_count: usize = 0,
-        tasks_done: usize = 0,
-        output_done: usize = 0,
-        output_waiting: usize = 0,
-        started_output_queue: bool = false,
-        args: []const [*:0]const u8,
-        err: ?jsc.SystemError = null,
-    },
-    waiting_write_err,
-    done,
-} = .idle,
-
-pub fn format(this: *const Touch, writer: *std.Io.Writer) !void {
-    try writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(this), @tagName(this.state) });
-}
-
-pub fn deinit(this: *Touch) void {
-    log("{f} deinit", .{this});
-}
-
-pub fn start(this: *Touch) Yield {
-    const filepath_args = switch (this.opts.parse(this.bltn().argsSlice())) {
-        .ok => |filepath_args| filepath_args,
-        .err => |e| {
-            const buf = switch (e) {
-                .illegal_option => |opt_str| this.bltn().fmtErrorArena(.touch, "illegal option -- {s}\n", .{opt_str}),
-                .show_usage => Builtin.Kind.touch.usageString(),
-                .unsupported => |unsupported| this.bltn().fmtErrorArena(.touch, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
-            };
-
-            return this.writeFailingError(buf, 1);
-        },
-    } orelse {
-        return this.writeFailingError(Builtin.Kind.touch.usageString(), 1);
-    };
-
-    this.state = .{
-        .exec = .{
-            .args = filepath_args,
-        },
-    };
-
-    return this.next();
-}
-
-pub fn next(this: *Touch) Yield {
-    switch (this.state) {
-        .idle => @panic("Invalid state"),
-        .exec => {
-            var exec = &this.state.exec;
-            if (exec.started) {
-                if (this.state.exec.tasks_done >= this.state.exec.tasks_count and this.state.exec.output_done >= this.state.exec.output_waiting) {
-                    const exit_code: ExitCode = if (this.state.exec.err != null) 1 else 0;
-                    if (this.state.exec.err) |e| e.deref();
-                    this.state = .done;
-                    return this.bltn().done(exit_code);
-                }
-                return .suspended;
-            }
-
-            exec.started = true;
-            exec.tasks_count = exec.args.len;
-
-            for (exec.args) |dir_to_mk_| {
-                const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
-                var task = ShellTouchTask.create(this, this.opts, dir_to_mk, this.bltn().parentCmd().base.shell.cwdZ());
-                task.schedule();
-            }
-            return .suspended;
-        },
-        .waiting_write_err => return .failed,
-        .done => return this.bltn().done(0),
-    }
-}
-
-pub fn onIOWriterChunk(this: *Touch, _: usize, e: ?jsc.SystemError) Yield {
-    if (e) |err| err.deref();
-
-    if (this.state == .waiting_write_err) {
-        return this.bltn().done(1);
-    }
-
-    return this.next();
-}
-
-pub fn writeFailingError(this: *Touch, buf: []const u8, exit_code: ExitCode) Yield {
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        this.state = .waiting_write_err;
-        return this.bltn().stderr.enqueue(this, buf, safeguard);
-    }
-
-    _ = this.bltn().writeNoIO(.stderr, buf);
-
-    return this.bltn().done(exit_code);
-}
-
-pub fn onShellTouchTaskDone(this: *Touch, task: *ShellTouchTask) void {
-    log("{f} onShellTouchTaskDone {f} tasks_done={d} tasks_count={d}", .{ this, task, this.state.exec.tasks_done, this.state.exec.tasks_count });
-
-    defer bun.default_allocator.destroy(task);
-    this.state.exec.tasks_done += 1;
-    const err = task.err;
-
-    if (err) |e| {
-        const output_task: *ShellTouchOutputTask = bun.new(ShellTouchOutputTask, .{
-            .parent = this,
-            .output = .{ .arrlist = .{} },
-            .state = .waiting_write_err,
-        });
-        const error_string = this.bltn().taskErrorToString(.touch, e);
-        if (this.state.exec.err) |prev| prev.deref();
-        this.state.exec.err = e;
-        output_task.start(error_string).run();
-        return;
-    }
-
-    this.next().run();
-}
-
-pub const ShellTouchOutputTask = OutputTask(Touch, .{
-    .writeErr = ShellTouchOutputTaskVTable.writeErr,
-    .onWriteErr = ShellTouchOutputTaskVTable.onWriteErr,
-    .writeOut = ShellTouchOutputTaskVTable.writeOut,
-    .onWriteOut = ShellTouchOutputTaskVTable.onWriteOut,
-    .onDone = ShellTouchOutputTaskVTable.onDone,
-});
-
-const ShellTouchOutputTaskVTable = struct {
-    pub fn writeErr(this: *Touch, childptr: anytype, errbuf: []const u8) ?Yield {
-        this.state.exec.output_waiting += 1;
-        if (this.bltn().stderr.needsIO()) |safeguard| {
-            return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stderr, errbuf);
-        return null;
-    }
-
-    pub fn onWriteErr(this: *Touch) void {
-        this.state.exec.output_done += 1;
-    }
-
-    pub fn writeOut(this: *Touch, childptr: anytype, output: *OutputSrc) ?Yield {
-        this.state.exec.output_waiting += 1;
-        if (this.bltn().stdout.needsIO()) |safeguard| {
-            const slice = output.slice();
-            log("THE SLICE: {d} {s}", .{ slice.len, slice });
-            return this.bltn().stdout.enqueue(childptr, slice, safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stdout, output.slice());
-        return null;
-    }
-
-    pub fn onWriteOut(this: *Touch) void {
-        this.state.exec.output_done += 1;
-    }
-
-    pub fn onDone(this: *Touch) Yield {
-        return this.next();
-    }
-};
-
-pub const ShellTouchTask = struct {
-    touch: *Touch,
-
-    opts: Opts,
-    filepath: [:0]const u8,
-    cwd_path: [:0]const u8,
-
-    err: ?jsc.SystemError = null,
-    task: jsc.WorkPoolTask = .{ .callback = &runFromThreadPool },
-    event_loop: jsc.EventLoopHandle,
-    concurrent_task: jsc.EventLoopTask,
-
-    pub fn format(this: *const ShellTouchTask, writer: *std.Io.Writer) !void {
-        try writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ @intFromPtr(this), this.filepath });
-    }
-
-    pub fn deinit(this: *ShellTouchTask) void {
-        if (this.err) |*e| {
-            e.deref();
-        }
-        bun.default_allocator.destroy(this);
-    }
-
-    pub fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
-        const task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
-        task.* = ShellTouchTask{
-            .touch = touch,
-            .opts = opts,
-            .cwd_path = cwd_path,
-            .filepath = filepath,
-            .event_loop = touch.bltn().eventLoop(),
-            .concurrent_task = jsc.EventLoopTask.fromEventLoop(touch.bltn().eventLoop()),
-        };
-        return task;
-    }
-
-    pub fn schedule(this: *@This()) void {
-        debug("{f} schedule", .{this});
-        WorkPool.schedule(&this.task);
-    }
-
-    pub fn runFromMainThread(this: *@This()) void {
-        debug("{f} runFromJS", .{this});
-        this.touch.onShellTouchTaskDone(this);
-    }
-
-    pub fn runFromMainThreadMini(this: *@This(), _: *void) void {
-        this.runFromMainThread();
-    }
-
-    fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-        var this: *ShellTouchTask = @fieldParentPtr("task", task);
-        debug("{f} runFromThreadPool", .{this});
-
-        // We have to give an absolute path
-        const filepath: [:0]const u8 = brk: {
-            if (ResolvePath.Platform.auto.isAbsolute(this.filepath)) break :brk this.filepath;
-            const parts: []const []const u8 = &.{
-                this.cwd_path[0..],
-                this.filepath[0..],
-            };
-            break :brk ResolvePath.joinZ(parts, .auto);
-        };
-
-        var node_fs = jsc.Node.fs.NodeFS{};
-        const milliseconds: f64 = @floatFromInt(std.time.milliTimestamp());
-        const atime: jsc.Node.TimeLike = if (bun.Environment.isWindows) milliseconds / 1000.0 else jsc.Node.TimeLike{
-            .sec = @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)),
-            .nsec = @intFromFloat(@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms),
-        };
-        const mtime = atime;
-        const args = jsc.Node.fs.Arguments.Utimes{
-            .atime = atime,
-            .mtime = mtime,
-            .path = .{ .string = bun.PathString.init(filepath) },
-        };
-        if (node_fs.utimes(args, .sync).asErr()) |err| out: {
-            if (err.getErrno() == .NOENT) {
-                const perm = 0o664;
-                switch (Syscall.open(filepath, bun.O.CREAT | bun.O.WRONLY, perm)) {
-                    .result => |fd| {
-                        fd.close();
-                        break :out;
-                    },
-                    .err => |e| {
-                        this.err = e.withPath(filepath).toShellSystemError();
-                        break :out;
-                    },
-                }
-            }
-            this.err = err.withPath(filepath).toShellSystemError();
-        }
-
-        if (this.event_loop == .js) {
-            this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.from(this, .manual_deinit));
-        } else {
-            this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.from(this, "runFromMainThreadMini"));
-        }
-    }
-};
-
-const Opts = struct {
-    /// -a
-    ///
-    /// change only the access time
-    access_time_only: bool = false,
-
-    /// -c, --no-create
-    ///
-    /// do not create any files
-    no_create: bool = false,
-
-    /// -d, --date=STRING
-    ///
-    /// parse STRING and use it instead of current time
-    date: ?[]const u8 = null,
-
-    /// -h, --no-dereference
-    ///
-    /// affect each symbolic link instead of any referenced file
-    /// (useful only on systems that can change the timestamps of a symlink)
-    no_dereference: bool = false,
-
-    /// -m
-    ///
-    /// change only the modification time
-    modification_time_only: bool = false,
-
-    /// -r, --reference=FILE
-    ///
-    /// use this file's times instead of current time
-    reference: ?[]const u8 = null,
-
-    /// -t STAMP
-    ///
-    /// use [[CC]YY]MMDDhhmm[.ss] instead of current time
-    timestamp: ?[]const u8 = null,
-
-    /// --time=WORD
-    ///
-    /// change the specified time:
-    /// WORD is access, atime, or use: equivalent to -a
-    /// WORD is modify or mtime: equivalent to -m
-    time: ?[]const u8 = null,
-
-    const Parse = FlagParser(*@This());
-
-    pub fn parse(opts: *Opts, args: []const [*:0]const u8) Result(?[]const [*:0]const u8, ParseError) {
-        return Parse.parseFlags(opts, args);
-    }
-
-    pub fn parseLong(this: *Opts, flag: []const u8) ?ParseFlagResult {
-        _ = this;
-        if (bun.strings.eqlComptime(flag, "--no-create")) {
-            return .{
-                .unsupported = unsupportedFlag("--no-create"),
-            };
-        }
-
-        if (bun.strings.eqlComptime(flag, "--date")) {
-            return .{
-                .unsupported = unsupportedFlag("--date"),
-            };
-        }
-
-        if (bun.strings.eqlComptime(flag, "--reference")) {
-            return .{
-                .unsupported = unsupportedFlag("--reference=FILE"),
-            };
-        }
-
-        if (bun.strings.eqlComptime(flag, "--time")) {
-            return .{
-                .unsupported = unsupportedFlag("--reference=FILE"),
-            };
-        }
-
-        return null;
-    }
-
-    pub fn parseShort(this: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
-        _ = this;
-        switch (char) {
-            'a' => {
-                return .{ .unsupported = unsupportedFlag("-a") };
-            },
-            'c' => {
-                return .{ .unsupported = unsupportedFlag("-c") };
-            },
-            'd' => {
-                return .{ .unsupported = unsupportedFlag("-d") };
-            },
-            'h' => {
-                return .{ .unsupported = unsupportedFlag("-h") };
-            },
-            'm' => {
-                return .{ .unsupported = unsupportedFlag("-m") };
-            },
-            'r' => {
-                return .{ .unsupported = unsupportedFlag("-r") };
-            },
-            't' => {
-                return .{ .unsupported = unsupportedFlag("-t") };
-            },
-            else => {
-                return .{ .illegal_option = smallflags[1 + i ..] };
-            },
-        }
-
-        return null;
-    }
-};
-
-pub inline fn bltn(this: *Touch) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("touch", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-// --
-const debug = bun.Output.scoped(.ShellTouch, .hidden);
-const log = debug;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const interpreter = @import("../interpreter.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const FlagParser = interpreter.FlagParser;
 const Interpreter = interpreter.Interpreter;
 const OutputSrc = interpreter.OutputSrc;
@@ -398,17 +10,352 @@ const OutputTask = interpreter.OutputTask;
 const ParseError = interpreter.ParseError;
 const ParseFlagResult = interpreter.ParseFlagResult;
 const unsupportedFlag = interpreter.unsupportedFlag;
-
 const Builtin = Interpreter.Builtin;
 const Result = Interpreter.Builtin.Result;
-
-const bun = @import("bun");
 const ResolvePath = bun.path;
 const Syscall = bun.sys;
-
 const jsc = bun.jsc;
 const WorkPool = bun.jsc.WorkPool;
-
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
+const debug = bun.Output.scoped(.ShellTouch, .hidden);
+const log = debug;
+pub const State = union(enum) {
+    idle,
+    exec: ExecState,
+    waiting_write_err,
+    done,
+};
+pub const ShellTouchTask = struct {
+    touch: *Touch,
+    opts: Opts,
+    filepath: [:0]const u8,
+    cwd_path: [:0]const u8,
+    err: ?jsc.SystemError = null,
+    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    event_loop: jsc.EventLoopHandle,
+    concurrent_task: jsc.EventLoopTask,
+
+pub fn format(self: *const @This(), writer: anytype) !void {
+            _ = try writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ @intFromPtr(self), self.filepath });
+    }
+
+pub fn deinit(self: *@This()) void {
+            if (self.err) |e| {
+                _ = &e;
+                var err_obj = e;
+                _ = &err_obj;
+                _ = err_obj.deref();
+            }
+            _ = bun.default_allocator.destroy(self);
+    }
+
+pub fn create(self: @This(), touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
+        _ = &self;
+            var task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
+            _ = &task;
+            task.* = ShellTouchTask{ .touch = touch, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .event_loop = touch.bltn().eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(touch.bltn().eventLoop()) };
+            return task;
+    }
+
+pub fn schedule(self: *@This()) void {
+            _ = debug("{f} schedule", .{ self });
+            _ = WorkPool.schedule((&self.task));
+    }
+
+pub fn runFromMainThread(self: *@This()) void {
+            _ = debug("{f} runFromJS", .{ self });
+            _ = self.touch.onShellTouchTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *@This()) void {
+            _ = self.runFromMainThread();
+    }
+
+pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
+            var this: *ShellTouchTask = @fieldParentPtr("task", task);
+            _ = &this;
+            _ = debug("{f} runFromThreadPool", .{ this });
+            var filepath: [:0]const u8 = this.filepath;
+            _ = &filepath;
+            if ((!ResolvePath.Platform.auto.isAbsolute(this.filepath))) {
+                const parts: [2][]const u8 = .{ this.cwd_path[0..], this.filepath[0..] };
+                filepath = ResolvePath.joinZ((&parts), .auto);
+            }
+            var node_fs = jsc.Node.fs.NodeFS{  };
+            _ = &node_fs;
+            const milliseconds: f64 = @floatFromInt(std.time.milliTimestamp());
+            const atime: jsc.Node.TimeLike = (if (bun.Environment.isWindows) (milliseconds / 1000.0) else jsc.Node.TimeLike{ .sec = @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)), .nsec = @intFromFloat((@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms)) });
+            const mtime = atime;
+            const args = jsc.Node.fs.Arguments.Utimes{ .atime = atime, .mtime = mtime, .path = .{ .string = bun.PathString.init(filepath) } };
+            if (node_fs.utimes(args, .sync).asErr()) |err_| {
+                _ = &err_;
+                if ((err_.getErrno() == .NOENT)) {
+                    const perm: i32 = 436;
+                    switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), perm)) {
+.result => |fd| {
+_ = fd.close();
+},
+.err => |e| {
+this.err = e.withPath(filepath).toShellSystemError();
+},
+}
+                } else {
+                    this.err = err_.withPath(filepath).toShellSystemError();
+                }
+            }
+            if ((this.event_loop == .js)) {
+                _ = this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+            } else {
+                _ = this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+            }
+    }
+};
+const ShellTouchOutputTaskVTable = struct {
+
+pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
+            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            if (self.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return self.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(self: *@This()) void {
+            self.state.exec.output_done = (self.state.exec.output_done + 1);
+    }
+
+pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
+            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            if (self.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                const slice = output.slice();
+                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
+                return self.bltn().stdout.enqueue(childptr, slice, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(self: *@This()) void {
+            self.state.exec.output_done = (self.state.exec.output_done + 1);
+    }
+
+pub fn onDone(self: *@This()) Yield {
+            return self.next();
+    }
+};
+pub const ShellTouchOutputTask = OutputTask(Touch, .{ .writeErr = ShellTouchOutputTaskVTable.writeErr, .onWriteErr = ShellTouchOutputTaskVTable.onWriteErr, .writeOut = ShellTouchOutputTaskVTable.writeOut, .onWriteOut = ShellTouchOutputTaskVTable.onWriteOut, .onDone = ShellTouchOutputTaskVTable.onDone });
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const ExecState = struct {
+    started: bool = false,
+    tasks_count: usize = 0,
+    tasks_done: usize = 0,
+    output_done: usize = 0,
+    output_waiting: usize = 0,
+    started_output_queue: bool = false,
+    args: []const [*:0]u8,
+    err: ?jsc.SystemError = null,
+};
+
+pub const Opts = struct {
+    access_time_only: bool = false,
+    no_create: bool = false,
+    date: []const ?u8 = null,
+    no_dereference: bool = false,
+    modification_time_only: bool = false,
+    reference: []const ?u8 = null,
+    timestamp: []const ?u8 = null,
+    time: []const ?u8 = null,
+
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+            const Parse = FlagParser(*Opts);
+            return Parse.parseFlags(self, args);
+    }
+
+pub fn parseLong(self: *Opts, flag: []const u8) ?ParseFlagResult {
+        _ = &self;
+            _ = flag.len;
+            if (bun.strings.eqlComptime(flag, "--no-create")) {
+                return .{ .unsupported = unsupportedFlag("--no-create") };
+            }
+            if (bun.strings.eqlComptime(flag, "--date")) {
+                return .{ .unsupported = unsupportedFlag("--date") };
+            }
+            if (bun.strings.eqlComptime(flag, "--reference")) {
+                return .{ .unsupported = unsupportedFlag("--reference=FILE") };
+            }
+            if (bun.strings.eqlComptime(flag, "--time")) {
+                return .{ .unsupported = unsupportedFlag("--reference=FILE") };
+            }
+            return null;
+    }
+
+pub fn parseShort(self: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
+        _ = &self;
+            switch (char) {
+'a' => {
+return .{ .unsupported = unsupportedFlag("-a") };
+},
+'c' => {
+return .{ .unsupported = unsupportedFlag("-c") };
+},
+'d' => {
+return .{ .unsupported = unsupportedFlag("-d") };
+},
+'h' => {
+return .{ .unsupported = unsupportedFlag("-h") };
+},
+'m' => {
+return .{ .unsupported = unsupportedFlag("-m") };
+},
+'r' => {
+return .{ .unsupported = unsupportedFlag("-r") };
+},
+'t' => {
+return .{ .unsupported = unsupportedFlag("-t") };
+},
+else => {
+return .{ .illegal_option = smallflags[(1 + i)..] };
+},
+}
+            return null;
+    }
+};
+
+pub const Touch = @This();
+
+opts: Opts = .{},
+state: State = .idle,
+
+pub fn format(self: Touch, writer: anytype) !void {
+        _ = try writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(self), @tagName(self.state) });
+}
+
+pub fn deinit(self: *Touch) void {
+        _ = log("{f} deinit", .{ self });
+}
+
+pub fn start(self: *Touch) Yield {
+        const filepath_args_opt = (switch (self.opts.parse(self.bltn().argsSlice())) {
+.ok => |f_args| f_args,
+.err => |e| {
+{
+            const buf = (switch (e) {
+.illegal_option => |opt_str| self.bltn().fmtErrorArena(.touch, "illegal option -- {s}\n", .{ opt_str }),
+.show_usage => Builtin.Kind.touch.usageString(),
+.unsupported => |unsupported| self.bltn().fmtErrorArena(.touch, "unsupported option, please open a GitHub issue -- {s}\n", .{ unsupported }),
+});
+            return self.writeFailingError(buf, 1);
+        }
+},
+});
+        if ((filepath_args_opt == null)) {
+            return self.writeFailingError(Builtin.Kind.touch.usageString(), 1);
+        }
+        const filepath_args = filepath_args_opt.?;
+        self.state = .{ .exec = .{ .args = filepath_args } };
+        return self.next();
+}
+
+pub fn next(self: *Touch) Yield {
+        switch (self.state) {
+.idle => {
+_ = @panic("Invalid state");
+},
+.exec => {
+var exec = (&(&self.state.exec));
+        _ = &exec;
+        if (exec.started) {
+            if (((self.state.exec.tasks_done >= self.state.exec.tasks_count) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
+                const exit_code: ExitCode = (if ((self.state.exec.err != null)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
+                if (self.state.exec.err) |e| {
+                    _ = &e;
+                    _ = e.deref();
+                }
+                self.state = .done;
+                return self.bltn().done(exit_code);
+            }
+            return .suspended;
+        }
+        exec.started = true;
+        exec.tasks_count = exec.args.len;
+        for (cp_iter_slice(exec.args)) |dir_to_mk_| {
+            _ = &dir_to_mk_;
+            const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
+            var task = ShellTouchTask.create(self, self.opts, dir_to_mk, self.bltn().parentCmd().base.shell.cwdZ());
+            _ = &task;
+            _ = task.schedule();
+        }
+        return .suspended;
+},
+.waiting_write_err => {
+return .failed;
+},
+.done => {
+return self.bltn().done(0);
+},
+}
+}
+
+pub fn onIOWriterChunk(self: *Touch, e: ?jsc.SystemError) Yield {
+        if (e) |err| {
+            _ = &err;
+            _ = err.deref();
+        }
+        if ((self.state == .waiting_write_err)) {
+            return self.bltn().done(1);
+        }
+        return self.next();
+}
+
+pub fn writeFailingError(self: *Touch, buf: []const u8, exit_code: ExitCode) Yield {
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state = .waiting_write_err;
+            return self.bltn().stderr.enqueue(self, buf, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        return self.bltn().done(exit_code);
+}
+
+pub fn onShellTouchTaskDone(self: *Touch, task: *ShellTouchTask) void {
+        _ = log("{f} onShellTouchTaskDone {f} tasks_done={d} tasks_count={d}", .{ self, task, self.state.exec.tasks_done, self.state.exec.tasks_count });
+        defer {
+        _ = bun.default_allocator.destroy(task);
+        }
+        self.state.exec.tasks_done = (self.state.exec.tasks_done + 1);
+        const err = task.err;
+        if (err) |e| {
+            _ = &e;
+            const output_task: *ShellTouchOutputTask = bun.new(ShellTouchOutputTask, .{ .parent = self, .output = .{ .arrlist = .{} }, .state = .waiting_write_err });
+            const error_string = self.bltn().taskErrorToString(.touch, e);
+            if (self.state.exec.err) |prev| {
+                _ = &prev;
+                _ = prev.deref();
+            }
+            self.state.exec.err = e;
+            _ = output_task.start(error_string).run();
+            return;
+        }
+        _ = self.next().run();
+}
+
+pub inline fn bltn(self: *Touch) *Builtin {
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("touch", self));
+        return @fieldParentPtr("impl", impl_);
+}
+pub const FilepathArgs = ?[]const [*:0]u8;

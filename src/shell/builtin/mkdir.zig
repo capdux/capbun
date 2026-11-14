@@ -1,400 +1,378 @@
-const Mkdir = @This();
-
-opts: Opts = .{},
-state: union(enum) {
-    idle,
-    exec: struct {
-        started: bool = false,
-        tasks_count: usize = 0,
-        tasks_done: usize = 0,
-        output_waiting: u16 = 0,
-        output_done: u16 = 0,
-        args: []const [*:0]const u8,
-        err: ?jsc.SystemError = null,
-    },
-    waiting_write_err,
-    done,
-} = .idle,
-
-pub fn onIOWriterChunk(this: *Mkdir, _: usize, e: ?jsc.SystemError) Yield {
-    if (e) |err| err.deref();
-
-    switch (this.state) {
-        .waiting_write_err => return this.bltn().done(1),
-        .exec => {
-            this.state.exec.output_done += 1;
-        },
-        .idle, .done => @panic("Invalid state"),
-    }
-
-    return this.next();
-}
-
-pub fn writeFailingError(this: *Mkdir, buf: []const u8, exit_code: ExitCode) Yield {
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        this.state = .waiting_write_err;
-        return this.bltn().stderr.enqueue(this, buf, safeguard);
-    }
-
-    _ = this.bltn().writeNoIO(.stderr, buf);
-    // if (this.bltn().writeNoIO(.stderr, buf).asErr()) |e| {
-    //     return .{ .err = e };
-    // }
-
-    return this.bltn().done(exit_code);
-}
-
-pub fn start(this: *Mkdir) Yield {
-    const filepath_args = switch (this.opts.parse(this.bltn().argsSlice())) {
-        .ok => |filepath_args| filepath_args,
-        .err => |e| {
-            const buf = switch (e) {
-                .illegal_option => |opt_str| this.bltn().fmtErrorArena(.mkdir, "illegal option -- {s}\n", .{opt_str}),
-                .show_usage => Builtin.Kind.mkdir.usageString(),
-                .unsupported => |unsupported| this.bltn().fmtErrorArena(.mkdir, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
-            };
-
-            return this.writeFailingError(buf, 1);
-        },
-    } orelse {
-        return this.writeFailingError(Builtin.Kind.mkdir.usageString(), 1);
-    };
-
-    this.state = .{
-        .exec = .{
-            .args = filepath_args,
-        },
-    };
-
-    return this.next();
-}
-
-pub fn next(this: *Mkdir) Yield {
-    switch (this.state) {
-        .idle => @panic("Invalid state"),
-        .exec => {
-            var exec = &this.state.exec;
-            if (exec.started) {
-                if (this.state.exec.tasks_done >= this.state.exec.tasks_count and this.state.exec.output_done >= this.state.exec.output_waiting) {
-                    const exit_code: ExitCode = if (this.state.exec.err != null) 1 else 0;
-                    if (this.state.exec.err) |e| e.deref();
-                    this.state = .done;
-                    return this.bltn().done(exit_code);
-                }
-                return .suspended;
-            }
-
-            exec.started = true;
-            exec.tasks_count = exec.args.len;
-
-            for (exec.args) |dir_to_mk_| {
-                const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
-                var task = ShellMkdirTask.create(this, this.opts, dir_to_mk, this.bltn().parentCmd().base.shell.cwdZ());
-                task.schedule();
-            }
-            return .suspended;
-        },
-        .waiting_write_err => return .failed,
-        .done => return this.bltn().done(0),
-    }
-}
-
-pub fn onShellMkdirTaskDone(this: *Mkdir, task: *ShellMkdirTask) void {
-    defer task.deinit();
-    this.state.exec.tasks_done += 1;
-    var output = task.takeOutput();
-    const err = task.err;
-    const output_task: *ShellMkdirOutputTask = bun.new(ShellMkdirOutputTask, .{
-        .parent = this,
-        .output = .{ .arrlist = output.moveToUnmanaged() },
-        .state = .waiting_write_err,
-    });
-
-    if (err) |e| {
-        const error_string = this.bltn().taskErrorToString(.mkdir, e);
-        if (this.state.exec.err) |prev| prev.deref();
-        this.state.exec.err = e;
-        output_task.start(error_string).run();
-        return;
-    }
-    output_task.start(null).run();
-}
-
-pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{
-    .writeErr = ShellMkdirOutputTaskVTable.writeErr,
-    .onWriteErr = ShellMkdirOutputTaskVTable.onWriteErr,
-    .writeOut = ShellMkdirOutputTaskVTable.writeOut,
-    .onWriteOut = ShellMkdirOutputTaskVTable.onWriteOut,
-    .onDone = ShellMkdirOutputTaskVTable.onDone,
-});
-
-const ShellMkdirOutputTaskVTable = struct {
-    pub fn writeErr(this: *Mkdir, childptr: anytype, errbuf: []const u8) ?Yield {
-        this.state.exec.output_waiting += 1;
-        if (this.bltn().stderr.needsIO()) |safeguard| {
-            return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stderr, errbuf);
-        return null;
-    }
-
-    pub fn onWriteErr(this: *Mkdir) void {
-        this.state.exec.output_done += 1;
-    }
-
-    pub fn writeOut(this: *Mkdir, childptr: anytype, output: *OutputSrc) ?Yield {
-        this.state.exec.output_waiting += 1;
-        if (this.bltn().stdout.needsIO()) |safeguard| {
-            const slice = output.slice();
-            log("THE SLICE: {d} {s}", .{ slice.len, slice });
-            return this.bltn().stdout.enqueue(childptr, slice, safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stdout, output.slice());
-        return null;
-    }
-
-    pub fn onWriteOut(this: *Mkdir) void {
-        this.state.exec.output_done += 1;
-    }
-
-    pub fn onDone(this: *Mkdir) Yield {
-        return this.next();
-    }
-};
-
-pub fn deinit(this: *Mkdir) void {
-    _ = this;
-}
-
-pub const ShellMkdirTask = struct {
-    mkdir: *Mkdir,
-
-    opts: Opts,
-    filepath: [:0]const u8,
-    cwd_path: [:0]const u8,
-    created_directories: ArrayList(u8),
-
-    err: ?jsc.SystemError = null,
-    task: jsc.WorkPoolTask = .{ .callback = &runFromThreadPool },
-    event_loop: jsc.EventLoopHandle,
-    concurrent_task: jsc.EventLoopTask,
-
-    pub fn deinit(this: *ShellMkdirTask) void {
-        this.created_directories.deinit();
-        bun.default_allocator.destroy(this);
-    }
-
-    fn takeOutput(this: *ShellMkdirTask) ArrayList(u8) {
-        const out = this.created_directories;
-        this.created_directories = ArrayList(u8).init(bun.default_allocator);
-        return out;
-    }
-
-    pub fn format(this: *const ShellMkdirTask, writer: *std.Io.Writer) !void {
-        try writer.print("ShellMkdirTask(0x{x}, filepath={s})", .{ @intFromPtr(this), this.filepath });
-    }
-
-    pub fn create(
-        mkdir: *Mkdir,
-        opts: Opts,
-        filepath: [:0]const u8,
-        cwd_path: [:0]const u8,
-    ) *ShellMkdirTask {
-        const task = bun.handleOom(bun.default_allocator.create(ShellMkdirTask));
-        const evtloop = mkdir.bltn().parentCmd().base.eventLoop();
-        task.* = ShellMkdirTask{
-            .mkdir = mkdir,
-            .opts = opts,
-            .cwd_path = cwd_path,
-            .filepath = filepath,
-            .created_directories = ArrayList(u8).init(bun.default_allocator),
-            .event_loop = evtloop,
-            .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop),
-        };
-        return task;
-    }
-
-    pub fn schedule(this: *@This()) void {
-        debug("{f} schedule", .{this});
-        WorkPool.schedule(&this.task);
-    }
-
-    pub fn runFromMainThread(this: *@This()) void {
-        debug("{f} runFromJS", .{this});
-        this.mkdir.onShellMkdirTaskDone(this);
-    }
-
-    pub fn runFromMainThreadMini(this: *@This(), _: *void) void {
-        this.runFromMainThread();
-    }
-
-    fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-        var this: *ShellMkdirTask = @fieldParentPtr("task", task);
-        debug("{f} runFromThreadPool", .{this});
-
-        // We have to give an absolute path to our mkdir
-        // implementation for it to work with cwd
-        const filepath: [:0]const u8 = brk: {
-            if (ResolvePath.Platform.auto.isAbsolute(this.filepath)) break :brk this.filepath;
-            const parts: []const []const u8 = &.{
-                this.cwd_path[0..],
-                this.filepath[0..],
-            };
-            break :brk ResolvePath.joinZ(parts, .auto);
-        };
-
-        var node_fs = jsc.Node.fs.NodeFS{};
-        // Recursive
-        if (this.opts.parents) {
-            const args = jsc.Node.fs.Arguments.Mkdir{
-                .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) },
-                .recursive = true,
-                .always_return_none = true,
-            };
-
-            var vtable = MkdirVerboseVTable{ .inner = this, .active = this.opts.verbose };
-
-            switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, &vtable)) {
-                .result => {},
-                .err => |e| {
-                    this.err = e.withPath(filepath).toShellSystemError();
-                    std.mem.doNotOptimizeAway(&node_fs);
-                },
-            }
-        } else {
-            const args = jsc.Node.fs.Arguments.Mkdir{
-                .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) },
-                .recursive = false,
-                .always_return_none = true,
-            };
-            switch (node_fs.mkdirNonRecursive(args)) {
-                .result => {
-                    if (this.opts.verbose) {
-                        bun.handleOom(this.created_directories.appendSlice(filepath[0..filepath.len]));
-                        bun.handleOom(this.created_directories.append('\n'));
-                    }
-                },
-                .err => |e| {
-                    this.err = e.withPath(filepath).toShellSystemError();
-                    std.mem.doNotOptimizeAway(&node_fs);
-                },
-            }
-        }
-
-        if (this.event_loop == .js) {
-            this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.from(this, .manual_deinit));
-        } else {
-            this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.from(this, "runFromMainThreadMini"));
-        }
-    }
-
-    const MkdirVerboseVTable = struct {
-        inner: *ShellMkdirTask,
-        active: bool,
-
-        pub fn onCreateDir(vtable: *@This(), dirpath: bun.OSPathSliceZ) void {
-            if (!vtable.active) return;
-            if (bun.Environment.isWindows) {
-                var buf: bun.PathBuffer = undefined;
-                const str = bun.strings.fromWPath(&buf, dirpath[0..dirpath.len]);
-                bun.handleOom(vtable.inner.created_directories.appendSlice(str));
-                bun.handleOom(vtable.inner.created_directories.append('\n'));
-            } else {
-                bun.handleOom(vtable.inner.created_directories.appendSlice(dirpath));
-                bun.handleOom(vtable.inner.created_directories.append('\n'));
-            }
-            return;
-        }
-    };
-};
-
-const Opts = struct {
-    /// -m, --mode
-    ///
-    /// set file mode (as in chmod), not a=rwx - umask
-    mode: ?u32 = null,
-
-    /// -p, --parents
-    ///
-    /// no error if existing, make parent directories as needed,
-    /// with their file modes unaffected by any -m option.
-    parents: bool = false,
-
-    /// -v, --verbose
-    ///
-    /// print a message for each created directory
-    verbose: bool = false,
-
-    const Parse = FlagParser(*@This());
-
-    pub fn parse(opts: *Opts, args: []const [*:0]const u8) Result(?[]const [*:0]const u8, ParseError) {
-        return Parse.parseFlags(opts, args);
-    }
-
-    pub fn parseLong(this: *Opts, flag: []const u8) ?ParseFlagResult {
-        if (bun.strings.eqlComptime(flag, "--mode")) {
-            return .{ .unsupported = "--mode" };
-        } else if (bun.strings.eqlComptime(flag, "--parents")) {
-            this.parents = true;
-            return .continue_parsing;
-        } else if (bun.strings.eqlComptime(flag, "--vebose")) {
-            this.verbose = true;
-            return .continue_parsing;
-        }
-
-        return null;
-    }
-
-    pub fn parseShort(this: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
-        switch (char) {
-            'm' => {
-                return .{ .unsupported = "-m " };
-            },
-            'p' => {
-                this.parents = true;
-            },
-            'v' => {
-                this.verbose = true;
-            },
-            else => {
-                return .{ .illegal_option = smallflags[1 + i ..] };
-            },
-        }
-
-        return null;
-    }
-};
-
-pub inline fn bltn(this: *Mkdir) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("mkdir", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-// --
-const debug = bun.Output.scoped(.ShellMkdir, .hidden);
-
-const log = debug;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const ArrayList = std.array_list.Managed;
+const string = []const u8;
 
-const interpreter = @import("../interpreter.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const ArrayList = std.array_list.Managed;
 const FlagParser = interpreter.FlagParser;
 const Interpreter = interpreter.Interpreter;
 const OutputSrc = interpreter.OutputSrc;
 const OutputTask = interpreter.OutputTask;
 const ParseError = interpreter.ParseError;
 const ParseFlagResult = interpreter.ParseFlagResult;
-
 const Builtin = Interpreter.Builtin;
 const Result = Interpreter.Builtin.Result;
-
-const bun = @import("bun");
 const ResolvePath = bun.path;
-
 const jsc = bun.jsc;
 const WorkPool = bun.jsc.WorkPool;
-
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
+const debug = bun.Output.scoped(.ShellMkdir, .hidden);
+const log = debug;
+pub const State = union(enum) {
+    idle,
+    exec: ExecState,
+    waiting_write_err,
+    done,
+};
+pub const MkdirVerboseVTable = struct {
+    inner: *ShellMkdirTask,
+    active: bool,
+
+pub fn onCreateDir(self: @This(), vtable: *MkdirVerboseVTable, dirpath: bun.OSPathSliceZ) void {
+        _ = &self;
+            if ((!vtable.active)) {
+                return;
+            }
+            if (bun.Environment.isWindows) {
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                const str = bun.strings.fromWPath((&buf), dirpath[0..dirpath.len]);
+                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(str));
+                _ = bun.handleOom(vtable.inner.created_directories.append(10));
+            } else {
+                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(dirpath));
+                _ = bun.handleOom(vtable.inner.created_directories.append(10));
+            }
+            return;
+    }
+};
+pub const ShellMkdirTask = struct {
+    mkdir: *Mkdir,
+    opts: Opts,
+    filepath: [:0]const u8,
+    cwd_path: [:0]const u8,
+    created_directories: ArrayList(u8),
+    err: ?jsc.SystemError = null,
+    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    event_loop: jsc.EventLoopHandle,
+    concurrent_task: jsc.EventLoopTask,
+
+pub fn deinit(self: *@This()) void {
+            _ = self.created_directories.deinit();
+            _ = bun.default_allocator.destroy(self);
+    }
+
+pub fn takeOutput(self: *@This()) ArrayList(u8) {
+            const out = self.created_directories;
+            self.created_directories = ArrayList(u8).init(bun.default_allocator);
+            return out;
+    }
+
+pub fn format(self: *const @This(), writer: anytype) !void {
+            _ = try writer.print("ShellMkdirTask(0x{x}, filepath={s})", .{ @intFromPtr(self), self.filepath });
+    }
+
+pub fn create(self: @This(), mkdir: *Mkdir, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellMkdirTask {
+        _ = &self;
+            var task = bun.handleOom(bun.default_allocator.create(ShellMkdirTask));
+            _ = &task;
+            const evtloop = mkdir.bltn().parentCmd().base.eventLoop();
+            task.* = ShellMkdirTask{ .mkdir = mkdir, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .created_directories = ArrayList(u8).init(bun.default_allocator), .event_loop = evtloop, .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop) };
+            return task;
+    }
+
+pub fn schedule(self: *@This()) void {
+            _ = debug("{f} schedule", .{ self });
+            _ = WorkPool.schedule((&self.task));
+    }
+
+pub fn runFromMainThread(self: *@This()) void {
+            _ = debug("{f} runFromJS", .{ self });
+            _ = self.mkdir.onShellMkdirTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *@This()) void {
+            _ = self.runFromMainThread();
+    }
+
+pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
+            var this: *ShellMkdirTask = @fieldParentPtr("task", task);
+            _ = &this;
+            _ = debug("{f} runFromThreadPool", .{ this });
+            var filepath: [:0]const u8 = this.filepath;
+            _ = &filepath;
+            if ((!ResolvePath.Platform.auto.isAbsolute(this.filepath))) {
+                const parts: [2][]const u8 = .{ this.cwd_path[0..], this.filepath[0..] };
+                filepath = ResolvePath.joinZ((&parts), .auto);
+            }
+            var node_fs = jsc.Node.fs.NodeFS{  };
+            _ = &node_fs;
+            if (this.opts.parents) {
+                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = true, .always_return_none = true };
+                var vtable = MkdirVerboseVTable{ .inner = this, .active = this.opts.verbose };
+                _ = &vtable;
+                switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, (&vtable))) {
+.result => {
+
+},
+.err => |e| {
+this.err = e.withPath(filepath).toShellSystemError();
+                _ = std.mem.doNotOptimizeAway((&node_fs));
+},
+}
+            } else {
+                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = false, .always_return_none = true };
+                switch (node_fs.mkdirNonRecursive(args)) {
+.result => {
+if (this.opts.verbose) {
+                    _ = bun.handleOom(this.created_directories.appendSlice(filepath[0..filepath.len]));
+                    _ = bun.handleOom(this.created_directories.append(10));
+                }
+},
+.err => |e| {
+this.err = e.withPath(filepath).toShellSystemError();
+                _ = std.mem.doNotOptimizeAway((&node_fs));
+},
+}
+            }
+            if ((this.event_loop == .js)) {
+                _ = this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+            } else {
+                _ = this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+            }
+    }
+};
+const ShellMkdirOutputTaskVTable = struct {
+
+pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
+            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            if (self.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return self.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(self: *@This()) void {
+            self.state.exec.output_done = (self.state.exec.output_done + 1);
+    }
+
+pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
+            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            if (self.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                const slice = output.slice();
+                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
+                return self.bltn().stdout.enqueue(childptr, slice, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(self: *@This()) void {
+            self.state.exec.output_done = (self.state.exec.output_done + 1);
+    }
+
+pub fn onDone(self: *@This()) Yield {
+            return self.next();
+    }
+};
+pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{ .writeErr = ShellMkdirOutputTaskVTable.writeErr, .onWriteErr = ShellMkdirOutputTaskVTable.onWriteErr, .writeOut = ShellMkdirOutputTaskVTable.writeOut, .onWriteOut = ShellMkdirOutputTaskVTable.onWriteOut, .onDone = ShellMkdirOutputTaskVTable.onDone });
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const ExecState = struct {
+    started: bool = false,
+    tasks_count: usize = 0,
+    tasks_done: usize = 0,
+    output_waiting: u16 = 0,
+    output_done: u16 = 0,
+    args: []const [*:0]u8,
+    err: ?jsc.SystemError = null,
+};
+
+pub const Opts = struct {
+    mode: ?u32 = null,
+    parents: bool = false,
+    verbose: bool = false,
+
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+            const Parse = FlagParser(*Opts);
+            return Parse.parseFlags(self, args);
+    }
+
+pub fn parseLong(self: *Opts, flag: []const u8) ?ParseFlagResult {
+            if (bun.strings.eqlComptime(flag, "--mode")) {
+                return .{ .unsupported = "--mode" };
+            } else {
+                if (bun.strings.eqlComptime(flag, "--parents")) {
+                    self.parents = true;
+                    return .continue_parsing;
+                } else {
+                    if ((bun.strings.eqlComptime(flag, "--verbose") or bun.strings.eqlComptime(flag, "--vebose"))) {
+                        self.verbose = true;
+                        return .continue_parsing;
+                    }
+                }
+            }
+            return null;
+    }
+
+pub fn parseShort(self: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
+            switch (char) {
+'m' => {
+return .{ .unsupported = "-m " };
+},
+'p' => {
+self.parents = true;
+},
+'v' => {
+self.verbose = true;
+},
+else => {
+return .{ .illegal_option = smallflags[(1 + i)..] };
+},
+}
+            return null;
+    }
+};
+
+pub const Mkdir = @This();
+
+opts: Opts = .{},
+state: State = .idle,
+
+pub fn onIOWriterChunk(self: *Mkdir, e: ?jsc.SystemError) Yield {
+        if (e) |err| {
+            _ = &err;
+            _ = err.deref();
+        }
+        switch (self.state) {
+.waiting_write_err => {
+return self.bltn().done(1);
+},
+.exec => {
+self.state.exec.output_done = (self.state.exec.output_done + 1);
+},
+.idle, .done => {
+_ = @panic("Invalid state");
+},
+}
+        return self.next();
+}
+
+pub fn writeFailingError(self: *Mkdir, buf: []const u8, exit_code: ExitCode) Yield {
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state = .waiting_write_err;
+            return self.bltn().stderr.enqueue(self, buf, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        return self.bltn().done(exit_code);
+}
+
+pub fn start(self: *Mkdir) Yield {
+        const filepath_args_opt = (switch (self.opts.parse(self.bltn().argsSlice())) {
+.ok => |f_args| f_args,
+.err => |e| {
+{
+            const buf = (switch (e) {
+.illegal_option => |opt_str| self.bltn().fmtErrorArena(.mkdir, "illegal option -- {s}\n", .{ opt_str }),
+.show_usage => Builtin.Kind.mkdir.usageString(),
+.unsupported => |unsupported| self.bltn().fmtErrorArena(.mkdir, "unsupported option, please open a GitHub issue -- {s}\n", .{ unsupported }),
+});
+            return self.writeFailingError(buf, 1);
+        }
+},
+});
+        if ((filepath_args_opt == null)) {
+            return self.writeFailingError(Builtin.Kind.mkdir.usageString(), 1);
+        }
+        const filepath_args = filepath_args_opt.?;
+        self.state = .{ .exec = .{ .args = filepath_args } };
+        return self.next();
+}
+
+pub fn next(self: *Mkdir) Yield {
+        switch (self.state) {
+.idle => {
+_ = @panic("Invalid state");
+},
+.exec => {
+var exec = (&(&self.state.exec));
+        _ = &exec;
+        if (exec.started) {
+            if (((self.state.exec.tasks_done >= self.state.exec.tasks_count) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
+                const exit_code: ExitCode = (if ((self.state.exec.err != null)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
+                if (self.state.exec.err) |e| {
+                    _ = &e;
+                    _ = e.deref();
+                }
+                self.state = .done;
+                return self.bltn().done(exit_code);
+            }
+            return .suspended;
+        }
+        exec.started = true;
+        exec.tasks_count = exec.args.len;
+        for (cp_iter_slice(exec.args)) |dir_to_mk_| {
+            _ = &dir_to_mk_;
+            const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
+            var task = ShellMkdirTask.create(self, self.opts, dir_to_mk, self.bltn().parentCmd().base.shell.cwdZ());
+            _ = &task;
+            _ = task.schedule();
+        }
+        return .suspended;
+},
+.waiting_write_err => {
+return .failed;
+},
+.done => {
+return self.bltn().done(0);
+},
+}
+}
+
+pub fn onShellMkdirTaskDone(self: *Mkdir, task: *ShellMkdirTask) void {
+        defer {
+        _ = task.deinit();
+        }
+        self.state.exec.tasks_done = (self.state.exec.tasks_done + 1);
+        var output = task.takeOutput();
+        _ = &output;
+        const err = task.err;
+        const output_task: *ShellMkdirOutputTask = bun.new(ShellMkdirOutputTask, .{ .parent = self, .output = .{ .arrlist = output.moveToUnmanaged() }, .state = .waiting_write_err });
+        if (err) |e| {
+            _ = &e;
+            const error_string = self.bltn().taskErrorToString(.mkdir, e);
+            if (self.state.exec.err) |prev| {
+                _ = &prev;
+                _ = prev.deref();
+            }
+            self.state.exec.err = e;
+            _ = output_task.start(error_string).run();
+            return;
+        }
+        _ = output_task.start(null).run();
+}
+
+pub fn deinit(self: *Mkdir) void {
+    _ = &self;
+}
+
+pub inline fn bltn(self: *Mkdir) *Builtin {
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("mkdir", self));
+        return @fieldParentPtr("impl", impl_);
+}
+pub const FilepathArgs = ?[]const [*:0]u8;

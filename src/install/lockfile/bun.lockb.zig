@@ -1,629 +1,15 @@
-const Serializer = @This();
-
-pub const version = "bun-lockfile-format-v0\n";
-const header_bytes: string = "#!/usr/bin/env bun\n" ++ version;
-
-const has_patched_dependencies_tag: u64 = @bitCast(@as([8]u8, "pAtChEdD".*));
-const has_workspace_package_ids_tag: u64 = @bitCast(@as([8]u8, "wOrKsPaC".*));
-const has_trusted_dependencies_tag: u64 = @bitCast(@as([8]u8, "tRuStEDd".*));
-const has_empty_trusted_dependencies_tag: u64 = @bitCast(@as([8]u8, "eMpTrUsT".*));
-const has_overrides_tag: u64 = @bitCast(@as([8]u8, "oVeRriDs".*));
-const has_catalogs_tag: u64 = @bitCast(@as([8]u8, "cAtAlOgS".*));
-const has_config_version_tag: u64 = @bitCast(@as([8]u8, "cNfGvRsN".*));
-
-pub fn save(this: *Lockfile, options: *const PackageManager.Options, bytes: *std.array_list.Managed(u8), total_size: *usize, end_pos: *usize) !void {
-
-    // we clone packages with the z_allocator to make sure bytes are zeroed.
-    // TODO: investigate if we still need this now that we have `padding_checker.zig`
-    var old_packages_list = this.packages;
-    this.packages = try this.packages.clone(z_allocator);
-    old_packages_list.deinit(this.allocator);
-
-    var writer = bytes.writer();
-    try writer.writeAll(header_bytes);
-    try writer.writeInt(u32, @intFromEnum(this.format), .little);
-
-    try writer.writeAll(&this.meta_hash);
-
-    end_pos.* = bytes.items.len;
-    try writer.writeInt(u64, 0, .little);
-
-    const StreamType = struct {
-        bytes: *std.array_list.Managed(u8),
-        pub inline fn getPos(s: @This()) anyerror!usize {
-            return s.bytes.items.len;
-        }
-
-        pub fn pwrite(
-            s: @This(),
-            data: []const u8,
-            index: usize,
-        ) usize {
-            @memcpy(s.bytes.items[index..][0..data.len], data);
-            return data.len;
-        }
-    };
-    const stream = StreamType{ .bytes = bytes };
-
-    if (comptime Environment.allow_assert) {
-        for (this.packages.items(.resolution)) |res| {
-            switch (res.tag) {
-                .folder => {
-                    assert(!strings.containsChar(this.str(&res.value.folder), std.fs.path.sep_windows));
-                },
-                .symlink => {
-                    assert(!strings.containsChar(this.str(&res.value.symlink), std.fs.path.sep_windows));
-                },
-                .local_tarball => {
-                    assert(!strings.containsChar(this.str(&res.value.local_tarball), std.fs.path.sep_windows));
-                },
-                .workspace => {
-                    assert(!strings.containsChar(this.str(&res.value.workspace), std.fs.path.sep_windows));
-                },
-                else => {},
-            }
-        }
-    }
-
-    try Lockfile.Package.Serializer.save(this.packages, StreamType, stream, @TypeOf(writer), writer);
-    try Lockfile.Buffers.save(this, options, z_allocator, StreamType, stream, @TypeOf(writer), writer);
-    try writer.writeInt(u64, 0, .little);
-
-    // < Bun v1.0.4 stopped right here when reading the lockfile
-    // So we add an extra 8 byte tag to say "hey, there's more data here"
-    if (this.workspace_versions.count() > 0) {
-        try writer.writeAll(std.mem.asBytes(&has_workspace_package_ids_tag));
-
-        // We need to track the "version" field in "package.json" of workspace member packages
-        // We do not necessarily have that in the Resolution struct. So we store it here.
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []PackageNameHash,
-            this.workspace_versions.keys(),
-        );
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []Semver.Version,
-            this.workspace_versions.values(),
-        );
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []PackageNameHash,
-            this.workspace_paths.keys(),
-        );
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []String,
-            this.workspace_paths.values(),
-        );
-    }
-
-    if (this.trusted_dependencies) |trusted_dependencies| {
-        if (trusted_dependencies.count() > 0) {
-            try writer.writeAll(std.mem.asBytes(&has_trusted_dependencies_tag));
-
-            try Lockfile.Buffers.writeArray(
-                StreamType,
-                stream,
-                @TypeOf(writer),
-                writer,
-                []u32,
-                trusted_dependencies.keys(),
-            );
-        } else {
-            try writer.writeAll(std.mem.asBytes(&has_empty_trusted_dependencies_tag));
-        }
-    }
-
-    if (this.overrides.map.count() > 0) {
-        try writer.writeAll(std.mem.asBytes(&has_overrides_tag));
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []PackageNameHash,
-            this.overrides.map.keys(),
-        );
-        var external_overrides = try std.ArrayListUnmanaged(Dependency.External).initCapacity(z_allocator, this.overrides.map.count());
-        defer external_overrides.deinit(z_allocator);
-        external_overrides.items.len = this.overrides.map.count();
-        for (external_overrides.items, this.overrides.map.values()) |*dest, src| {
-            dest.* = src.toExternal();
-        }
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []Dependency.External,
-            external_overrides.items,
-        );
-    }
-
-    if (this.patched_dependencies.entries.len > 0) {
-        for (this.patched_dependencies.values()) |patched_dep| bun.assert(!patched_dep.patchfile_hash_is_null);
-
-        try writer.writeAll(std.mem.asBytes(&has_patched_dependencies_tag));
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []PackageNameAndVersionHash,
-            this.patched_dependencies.keys(),
-        );
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []PatchedDep,
-            this.patched_dependencies.values(),
-        );
-    }
-
-    if (this.catalogs.hasAny()) {
-        try writer.writeAll(std.mem.asBytes(&has_catalogs_tag));
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []String,
-            this.catalogs.default.keys(),
-        );
-
-        var external_deps_buf: std.ArrayListUnmanaged(Dependency.External) = try .initCapacity(z_allocator, this.catalogs.default.count());
-        defer external_deps_buf.deinit(z_allocator);
-        external_deps_buf.items.len = this.catalogs.default.count();
-        for (external_deps_buf.items, this.catalogs.default.values()) |*dest, src| {
-            dest.* = src.toExternal();
-        }
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []Dependency.External,
-            external_deps_buf.items,
-        );
-        external_deps_buf.clearRetainingCapacity();
-
-        try Lockfile.Buffers.writeArray(
-            StreamType,
-            stream,
-            @TypeOf(writer),
-            writer,
-            []String,
-            this.catalogs.groups.keys(),
-        );
-
-        for (this.catalogs.groups.values()) |catalog_deps| {
-            try Lockfile.Buffers.writeArray(
-                StreamType,
-                stream,
-                @TypeOf(writer),
-                writer,
-                []String,
-                catalog_deps.keys(),
-            );
-
-            try external_deps_buf.ensureTotalCapacity(z_allocator, catalog_deps.count());
-            external_deps_buf.items.len = catalog_deps.count();
-            defer external_deps_buf.clearRetainingCapacity();
-
-            for (external_deps_buf.items, catalog_deps.values()) |*dest, src| {
-                dest.* = src.toExternal();
-            }
-
-            try Lockfile.Buffers.writeArray(
-                StreamType,
-                stream,
-                @TypeOf(writer),
-                writer,
-                []Dependency.External,
-                external_deps_buf.items,
-            );
-        }
-    }
-
-    try writer.writeAll(std.mem.asBytes(&has_config_version_tag));
-    const config_version: bun.ConfigVersion = options.config_version orelse .current;
-    try writer.writeInt(u64, @intFromEnum(config_version), .little);
-
-    total_size.* = try stream.getPos();
-
-    try writer.writeAll(&alignment_bytes_to_repeat_buffer);
-}
-
-pub const SerializerLoadResult = struct {
-    packages_need_update: bool = false,
-    migrated_from_lockb_v2: bool = false,
-};
-
-pub fn load(
-    lockfile: *Lockfile,
-    stream: *Stream,
-    allocator: Allocator,
-    log: *logger.Log,
-    manager: ?*PackageManager,
-) !SerializerLoadResult {
-    var res = SerializerLoadResult{};
-    var reader = stream.reader();
-    var header_buf_: [header_bytes.len]u8 = undefined;
-    const header_buf = header_buf_[0..try reader.readAll(&header_buf_)];
-
-    if (!strings.eqlComptime(header_buf, header_bytes)) {
-        return error.InvalidLockfile;
-    }
-
-    var migrate_from_v2 = false;
-    const format = try reader.readInt(u32, .little);
-    if (format > @intFromEnum(Lockfile.FormatVersion.current)) {
-        return error.@"Unexpected lockfile version";
-    }
-
-    if (format < @intFromEnum(Lockfile.FormatVersion.current)) {
-
-        // we only allow migrating from v2 to v3 or above
-        if (format != @intFromEnum(Lockfile.FormatVersion.v2)) {
-            return error.@"Outdated lockfile version";
-        }
-
-        migrate_from_v2 = true;
-    }
-
-    lockfile.format = Lockfile.FormatVersion.current;
-    lockfile.allocator = allocator;
-
-    _ = try reader.readAll(&lockfile.meta_hash);
-
-    const total_buffer_size = try reader.readInt(u64, .little);
-    if (total_buffer_size > stream.buffer.len) {
-        return error.@"Lockfile is missing data";
-    }
-
-    const packages_load_result = try Lockfile.Package.Serializer.load(
-        stream,
-        total_buffer_size,
-        allocator,
-        migrate_from_v2,
-    );
-
-    lockfile.packages = packages_load_result.list;
-
-    res.packages_need_update = packages_load_result.needs_update;
-    res.migrated_from_lockb_v2 = migrate_from_v2;
-
-    lockfile.buffers = try Lockfile.Buffers.load(
-        stream,
-        allocator,
-        log,
-        manager,
-    );
-    if ((try stream.reader().readInt(u64, .little)) != 0) {
-        return error.@"Lockfile is malformed (expected 0 at the end)";
-    }
-
-    const has_workspace_name_hashes = false;
-    // < Bun v1.0.4 stopped right here when reading the lockfile
-    // So we add an extra 8 byte tag to say "hey, there's more data here"
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        if (remaining_in_buffer > 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (next_num == has_workspace_package_ids_tag) {
-                {
-                    var workspace_package_name_hashes = try Lockfile.Buffers.readArray(
-                        stream,
-                        allocator,
-                        std.ArrayListUnmanaged(PackageNameHash),
-                    );
-                    defer workspace_package_name_hashes.deinit(allocator);
-
-                    var workspace_versions_list = workspace_versions_list: {
-                        if (!migrate_from_v2) {
-                            break :workspace_versions_list try Lockfile.Buffers.readArray(
-                                stream,
-                                allocator,
-                                std.ArrayListUnmanaged(Semver.Version),
-                            );
-                        }
-
-                        var old_versions_list = try Lockfile.Buffers.readArray(
-                            stream,
-                            allocator,
-                            std.ArrayListUnmanaged(Semver.VersionType(u32)),
-                        );
-                        defer old_versions_list.deinit(allocator);
-
-                        var versions_list: std.ArrayListUnmanaged(Semver.Version) = try .initCapacity(allocator, old_versions_list.items.len);
-                        for (old_versions_list.items) |old_version| {
-                            versions_list.appendAssumeCapacity(old_version.migrate());
-                        }
-
-                        break :workspace_versions_list versions_list;
-                    };
-
-                    comptime {
-                        if (PackageNameHash != @TypeOf((VersionHashMap.KV{ .key = undefined, .value = undefined }).key)) {
-                            @compileError("VersionHashMap must be in sync with serialization");
-                        }
-                        if (Semver.Version != @TypeOf((VersionHashMap.KV{ .key = undefined, .value = undefined }).value)) {
-                            @compileError("VersionHashMap must be in sync with serialization");
-                        }
-                    }
-                    defer workspace_versions_list.deinit(allocator);
-                    try lockfile.workspace_versions.ensureTotalCapacity(allocator, workspace_versions_list.items.len);
-                    lockfile.workspace_versions.entries.len = workspace_versions_list.items.len;
-                    @memcpy(lockfile.workspace_versions.keys(), workspace_package_name_hashes.items);
-                    @memcpy(lockfile.workspace_versions.values(), workspace_versions_list.items);
-                    try lockfile.workspace_versions.reIndex(allocator);
-                }
-
-                {
-                    var workspace_paths_hashes = try Lockfile.Buffers.readArray(
-                        stream,
-                        allocator,
-                        std.ArrayListUnmanaged(PackageNameHash),
-                    );
-                    defer workspace_paths_hashes.deinit(allocator);
-                    var workspace_paths_strings = try Lockfile.Buffers.readArray(
-                        stream,
-                        allocator,
-                        std.ArrayListUnmanaged(String),
-                    );
-                    defer workspace_paths_strings.deinit(allocator);
-
-                    try lockfile.workspace_paths.ensureTotalCapacity(allocator, workspace_paths_strings.items.len);
-
-                    lockfile.workspace_paths.entries.len = workspace_paths_strings.items.len;
-                    @memcpy(lockfile.workspace_paths.keys(), workspace_paths_hashes.items);
-                    @memcpy(lockfile.workspace_paths.values(), workspace_paths_strings.items);
-                    try lockfile.workspace_paths.reIndex(allocator);
-                }
-            } else {
-                stream.pos -= 8;
-            }
-        }
-    }
-
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        // >= because `has_empty_trusted_dependencies_tag` is tag only
-        if (remaining_in_buffer >= 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (remaining_in_buffer > 8 and next_num == has_trusted_dependencies_tag) {
-                var trusted_dependencies_hashes = try Lockfile.Buffers.readArray(
-                    stream,
-                    allocator,
-                    std.ArrayListUnmanaged(u32),
-                );
-                defer trusted_dependencies_hashes.deinit(allocator);
-
-                lockfile.trusted_dependencies = .{};
-                try lockfile.trusted_dependencies.?.ensureTotalCapacity(allocator, trusted_dependencies_hashes.items.len);
-
-                lockfile.trusted_dependencies.?.entries.len = trusted_dependencies_hashes.items.len;
-                @memcpy(lockfile.trusted_dependencies.?.keys(), trusted_dependencies_hashes.items);
-                try lockfile.trusted_dependencies.?.reIndex(allocator);
-            } else if (next_num == has_empty_trusted_dependencies_tag) {
-                // trusted dependencies exists in package.json but is an empty array.
-                lockfile.trusted_dependencies = .{};
-            } else {
-                stream.pos -= 8;
-            }
-        }
-    }
-
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        if (remaining_in_buffer > 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (next_num == has_overrides_tag) {
-                var overrides_name_hashes = try Lockfile.Buffers.readArray(
-                    stream,
-                    allocator,
-                    std.ArrayListUnmanaged(PackageNameHash),
-                );
-                defer overrides_name_hashes.deinit(allocator);
-
-                var map = lockfile.overrides.map;
-                defer lockfile.overrides.map = map;
-
-                try map.ensureTotalCapacity(allocator, overrides_name_hashes.items.len);
-                const override_versions_external = try Lockfile.Buffers.readArray(
-                    stream,
-                    allocator,
-                    std.ArrayListUnmanaged(Dependency.External),
-                );
-                const context: Dependency.Context = .{
-                    .allocator = allocator,
-                    .log = log,
-                    .buffer = lockfile.buffers.string_bytes.items,
-                    .package_manager = manager,
-                };
-                for (overrides_name_hashes.items, override_versions_external.items) |name, value| {
-                    map.putAssumeCapacity(name, Dependency.toDependency(value, context));
-                }
-            } else {
-                stream.pos -= 8;
-            }
-        }
-    }
-
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        if (remaining_in_buffer > 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (next_num == has_patched_dependencies_tag) {
-                var patched_dependencies_name_and_version_hashes =
-                    try Lockfile.Buffers.readArray(
-                        stream,
-                        allocator,
-                        std.ArrayListUnmanaged(PackageNameAndVersionHash),
-                    );
-                defer patched_dependencies_name_and_version_hashes.deinit(allocator);
-
-                var map = lockfile.patched_dependencies;
-                defer lockfile.patched_dependencies = map;
-
-                try map.ensureTotalCapacity(allocator, patched_dependencies_name_and_version_hashes.items.len);
-                const patched_dependencies_paths = try Lockfile.Buffers.readArray(
-                    stream,
-                    allocator,
-                    std.ArrayListUnmanaged(PatchedDep),
-                );
-
-                for (patched_dependencies_name_and_version_hashes.items, patched_dependencies_paths.items) |name_hash, patch_path| {
-                    map.putAssumeCapacity(name_hash, patch_path);
-                }
-            } else {
-                stream.pos -= 8;
-            }
-        }
-    }
-
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        if (remaining_in_buffer > 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (next_num == has_catalogs_tag) {
-                lockfile.catalogs = .{};
-
-                var default_dep_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
-                defer default_dep_names.deinit(allocator);
-
-                var default_deps = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
-                defer default_deps.deinit(allocator);
-
-                try lockfile.catalogs.default.ensureTotalCapacity(allocator, default_deps.items.len);
-
-                const context: Dependency.Context = .{
-                    .allocator = allocator,
-                    .log = log,
-                    .buffer = lockfile.buffers.string_bytes.items,
-                    .package_manager = manager,
-                };
-
-                for (default_dep_names.items, default_deps.items) |dep_name, dep| {
-                    lockfile.catalogs.default.putAssumeCapacityContext(dep_name, Dependency.toDependency(dep, context), String.arrayHashContext(lockfile, null));
-                }
-
-                var catalog_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
-                defer catalog_names.deinit(allocator);
-
-                try lockfile.catalogs.groups.ensureTotalCapacity(allocator, catalog_names.items.len);
-
-                for (catalog_names.items) |catalog_name| {
-                    var catalog_dep_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
-                    defer catalog_dep_names.deinit(allocator);
-
-                    var catalog_deps = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
-                    defer catalog_deps.deinit(allocator);
-
-                    const group = try lockfile.catalogs.getOrPutGroup(lockfile, catalog_name);
-
-                    try group.ensureTotalCapacity(allocator, catalog_deps.items.len);
-
-                    for (catalog_dep_names.items, catalog_deps.items) |dep_name, dep| {
-                        group.putAssumeCapacityContext(dep_name, Dependency.toDependency(dep, context), String.arrayHashContext(lockfile, null));
-                    }
-                }
-            } else {
-                stream.pos -= 8;
-            }
-        }
-    }
-
-    {
-        const remaining_in_buffer = total_buffer_size -| stream.pos;
-
-        if (remaining_in_buffer > 8 and total_buffer_size <= stream.buffer.len) {
-            const next_num = try reader.readInt(u64, .little);
-            if (next_num == has_config_version_tag) {
-                const config_version = bun.ConfigVersion.fromInt(try reader.readInt(u64, .little)) orelse {
-                    return error.InvalidLockfile;
-                };
-                lockfile.saved_config_version = config_version;
-            }
-        }
-    }
-
-    lockfile.scratch = Lockfile.Scratch.init(allocator);
-    lockfile.package_index = PackageIndex.Map.initContext(allocator, .{});
-    lockfile.string_pool = StringPool.init(allocator);
-    try lockfile.package_index.ensureTotalCapacity(@as(u32, @truncate(lockfile.packages.len)));
-
-    if (!has_workspace_name_hashes) {
-        const slice = lockfile.packages.slice();
-        const name_hashes = slice.items(.name_hash);
-        const resolutions = slice.items(.resolution);
-        for (name_hashes, resolutions, 0..) |name_hash, resolution, id| {
-            try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
-
-            // compatibility with < Bun v1.0.4
-            switch (resolution.tag) {
-                .workspace => {
-                    try lockfile.workspace_paths.put(allocator, name_hash, resolution.value.workspace);
-                },
-                else => {},
-            }
-        }
-    } else {
-        const slice = lockfile.packages.slice();
-        const name_hashes = slice.items(.name_hash);
-        for (name_hashes, 0..) |name_hash, id| {
-            try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
-        }
-    }
-
-    if (comptime Environment.allow_assert) assert(stream.pos == total_buffer_size);
-
-    // const end = try reader.readInt(u64, .little);
-    return res;
-}
-
-const string = []const u8;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const assert = bun.assert;
 const logger = bun.logger;
 const strings = bun.strings;
 const z_allocator = bun.z_allocator;
-
 const Semver = bun.Semver;
 const String = bun.Semver.String;
-
 const install = bun.install;
 const Dependency = install.Dependency;
 const PackageID = install.PackageID;
@@ -632,9 +18,497 @@ const PackageNameAndVersionHash = install.PackageNameAndVersionHash;
 const PackageNameHash = install.PackageNameHash;
 const PatchedDep = install.PatchedDep;
 const alignment_bytes_to_repeat_buffer = install.alignment_bytes_to_repeat_buffer;
-
 const Lockfile = install.Lockfile;
 const PackageIndex = Lockfile.PackageIndex;
 const Stream = Lockfile.Stream;
 const StringPool = Lockfile.StringPool;
 const VersionHashMap = Lockfile.VersionHashMap;
+const StreamType = struct {
+    bytes: *std.array_list.Managed(u8),
+
+pub inline fn getPos(self: @This(), s: StreamType) !usize {
+        _ = &self;
+            return s.bytes.items.len;
+    }
+
+pub fn pwrite(self: @This(), s: StreamType, data: []const u8, index: usize) usize {
+        _ = &self;
+            _ = @memcpy(s.bytes.items[index..][0..data.len], data);
+            return data.len;
+    }
+};
+pub const version = "bun-lockfile-format-v0\n";
+const header_bytes: []const u8 = ("#!/usr/bin/env bun\n" ++ version);
+const has_patched_dependencies_tag: u64 = @bitCast(@as([8]u8, ("pAtChEdD").*));
+const has_workspace_package_ids_tag: u64 = @bitCast(@as([8]u8, ("wOrKsPaC").*));
+const has_trusted_dependencies_tag: u64 = @bitCast(@as([8]u8, ("tRuStEDd").*));
+const has_empty_trusted_dependencies_tag: u64 = @bitCast(@as([8]u8, ("eMpTrUsT").*));
+const has_overrides_tag: u64 = @bitCast(@as([8]u8, ("oVeRriDs").*));
+const has_catalogs_tag: u64 = @bitCast(@as([8]u8, ("cAtAlOgS").*));
+const has_config_version_tag: u64 = @bitCast(@as([8]u8, ("cNfGvRsN").*));
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const SerializerLoadResult = struct {
+    packages_need_update: bool = false,
+    migrated_from_lockb_v2: bool = false,
+};
+
+pub const Serializer = @This();
+
+
+pub fn save(lockfile: *Lockfile, options: *const PackageManager.Options, bytes: *std.array_list.Managed(u8), total_size: *usize, end_pos: *usize) !void {
+        var old_packages_list = lockfile.packages;
+        _ = &old_packages_list;
+        lockfile.packages = try lockfile.packages.clone(z_allocator);
+        _ = old_packages_list.deinit(lockfile.allocator);
+        var writer = bytes.writer();
+        _ = &writer;
+        _ = try writer.writeAll(header_bytes);
+        _ = try writer.writeInt(u32, @intFromEnum(lockfile.format), .little);
+        _ = try writer.writeAll((&lockfile.meta_hash));
+        end_pos.* = bytes.items.len;
+        _ = try writer.writeInt(u64, 0, .little);
+        const stream = StreamType{ .bytes = bytes };
+        if (comptime Environment.allow_assert) {
+            for (cp_iter_slice(lockfile.packages.items(.resolution))) |res| {
+                _ = &res;
+                switch (res.tag) {
+.folder => {
+_ = assert((!strings.containsChar(lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).folder)), std.fs.path.sep_windows)));
+},
+.symlink => {
+_ = assert((!strings.containsChar(lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).symlink)), std.fs.path.sep_windows)));
+},
+.local_tarball => {
+_ = assert((!strings.containsChar(lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).local_tarball)), std.fs.path.sep_windows)));
+},
+.workspace => {
+_ = assert((!strings.containsChar(lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).workspace)), std.fs.path.sep_windows)));
+},
+else => {
+
+},
+}
+            }
+        }
+        _ = try Lockfile.Package.Serializer.save(lockfile.packages, StreamType, stream, @TypeOf(writer), writer);
+        _ = try Lockfile.Buffers.save(lockfile, options, z_allocator, StreamType, stream, @TypeOf(writer), writer);
+        _ = try writer.writeInt(u64, 0, .little);
+        if ((lockfile.workspace_versions.count() > 0)) {
+            _ = try writer.writeAll(std.mem.asBytes((&has_workspace_package_ids_tag)));
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.workspace_versions.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Semver.Version, lockfile.workspace_versions.values());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.workspace_paths.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.workspace_paths.values());
+        }
+        if (lockfile.trusted_dependencies) |trusted_dependencies| {
+            _ = &trusted_dependencies;
+            if ((trusted_dependencies.count() > 0)) {
+                _ = try writer.writeAll(std.mem.asBytes((&has_trusted_dependencies_tag)));
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, u32, trusted_dependencies.keys());
+            } else {
+                _ = try writer.writeAll(std.mem.asBytes((&has_empty_trusted_dependencies_tag)));
+            }
+        }
+        if ((lockfile.overrides.map.count() > 0)) {
+            _ = try writer.writeAll(std.mem.asBytes((&has_overrides_tag)));
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.overrides.map.keys());
+            var external_overrides = try std.ArrayListUnmanaged(Dependency.External).initCapacity(z_allocator, lockfile.overrides.map.count());
+            _ = &external_overrides;
+            defer {
+            _ = external_overrides.deinit(z_allocator);
+            }
+            external_overrides.items.len = lockfile.overrides.map.count();
+            const over_vals = lockfile.overrides.map.values();
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_1 = external_overrides.items.len;
+                while (i < __end_1) : (i += 1) {
+                    external_overrides.items[cp_cast_int(usize, i)] = over_vals[@as(usize, @intCast(i))].toExternal();
+                }
+            }
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_overrides.items);
+        }
+        if ((lockfile.patched_dependencies.entries.len > 0)) {
+            for (lockfile.patched_dependencies.values()) |patched_dep| {
+                _ = &patched_dep;
+                _ = bun.assert((!patched_dep.patchfile_hash_is_null));
+            }
+            _ = try writer.writeAll(std.mem.asBytes((&has_patched_dependencies_tag)));
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameAndVersionHash, lockfile.patched_dependencies.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PatchedDep, lockfile.patched_dependencies.values());
+        }
+        if (lockfile.catalogs.hasAny()) {
+            _ = try writer.writeAll(std.mem.asBytes((&has_catalogs_tag)));
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.catalogs.default.keys());
+            var external_deps_buf: std.ArrayListUnmanaged(Dependency.External) = try .initCapacity(z_allocator, lockfile.catalogs.default.count());
+            _ = &external_deps_buf;
+            defer {
+            _ = external_deps_buf.deinit(z_allocator);
+            }
+            external_deps_buf.items.len = lockfile.catalogs.default.count();
+            const cat_vals = lockfile.catalogs.default.values();
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_3 = external_deps_buf.items.len;
+                while (i < __end_3) : (i += 1) {
+                    external_deps_buf.items[cp_cast_int(usize, i)] = cat_vals[@as(usize, @intCast(i))].toExternal();
+                }
+            }
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_deps_buf.items);
+            _ = external_deps_buf.clearRetainingCapacity();
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.catalogs.groups.keys());
+            for (lockfile.catalogs.groups.values()) |catalog_deps| {
+                _ = &catalog_deps;
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, catalog_deps.keys());
+                _ = catalog_deps_buf_ensure: {
+                break :catalog_deps_buf_ensure try external_deps_buf.ensureTotalCapacity(z_allocator, catalog_deps.count());
+
+};
+                external_deps_buf.items.len = catalog_deps.count();
+                defer {
+                _ = external_deps_buf.clearRetainingCapacity();
+                }
+                const group_cat_vals = catalog_deps.values();
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_5 = external_deps_buf.items.len;
+                    while (i < __end_5) : (i += 1) {
+                        external_deps_buf.items[cp_cast_int(usize, i)] = group_cat_vals[@as(usize, @intCast(i))].toExternal();
+                    }
+                }
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_deps_buf.items);
+            }
+        }
+        const config_version: bun.ConfigVersion = ((options.config_version) orelse (.current));
+        _ = try writer.writeAll(std.mem.asBytes((&has_config_version_tag)));
+        _ = try writer.writeInt(u64, @intFromEnum(config_version), .little);
+        total_size.* = try stream.getPos();
+}
+
+pub fn load(lockfile: *Lockfile, stream: *Stream, allocator: Allocator, log: *logger.Log, manager: ?*PackageManager) !SerializerLoadResult {
+        var res = SerializerLoadResult{  };
+        _ = &res;
+        var reader = stream.reader();
+        _ = &reader;
+        var header_buf_: struct { header_bytes.len } = undefined;
+        _ = &header_buf_;
+        u8 = undefined;
+        const read_len = try reader.readAll((&header_buf_));
+        const header_buf = header_buf_[0..read_len];
+        if ((!strings.eqlComptime(header_buf, header_bytes))) {
+            return error.InvalidLockfile;
+        }
+        var migrate_from_v2 = false;
+        _ = &migrate_from_v2;
+        const format = try reader.readInt(u32, .little);
+        if ((format > @intFromEnum(Lockfile.FormatVersion.current))) {
+            return error.@"Unexpected lockfile version";
+        }
+        if ((format < @intFromEnum(Lockfile.FormatVersion.current))) {
+            if ((format != @intFromEnum(Lockfile.FormatVersion.v2))) {
+                return error.@"Outdated lockfile version";
+            }
+            migrate_from_v2 = true;
+        }
+        lockfile.format = Lockfile.FormatVersion.current;
+        lockfile.allocator = allocator;
+        _ = try reader.readAll((&lockfile.meta_hash));
+        const total_buffer_size = try reader.readInt(u64, .little);
+        if ((total_buffer_size < stream.buffer.len)) {
+            stream.buffer = stream.buffer[0..total_buffer_size];
+        }
+        const packages_load_result = try Lockfile.Package.Serializer.load(stream, allocator, migrate_from_v2);
+        lockfile.packages = packages_load_result.list;
+        res.packages_need_update = packages_load_result.needs_update;
+        res.migrated_from_lockb_v2 = migrate_from_v2;
+        lockfile.buffers = try Lockfile.Buffers.load(stream, allocator, log, manager);
+        if ((try stream.reader().readInt(u64, .little) != 0)) {
+            return error.InvalidLockfile;
+        }
+        var has_workspace_name_hashes = false;
+        _ = &has_workspace_name_hashes;
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer > 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if ((next_num == has_workspace_package_ids_tag)) {
+                    {
+                        var workspace_package_name_hashes = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(PackageNameHash));
+                        _ = &workspace_package_name_hashes;
+                        defer {
+                        _ = workspace_package_name_hashes.deinit(allocator);
+                        }
+                        var workspace_versions_list = workspace_versions_list: {
+                        if ((!migrate_from_v2)) {
+                            break :workspace_versions_list try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Semver.Version));
+                        }
+                        var old_versions_list = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Semver.VersionType(u32)));
+                        _ = &old_versions_list;
+                        defer {
+                        _ = old_versions_list.deinit(allocator);
+                        }
+                        var versions_list: std.ArrayListUnmanaged(Semver.Version) = try .initCapacity(allocator, old_versions_list.items.len);
+                        _ = &versions_list;
+                        for (old_versions_list.items) |old_version| {
+                            _ = &old_version;
+                            _ = versions_list.appendAssumeCapacity(old_version.migrate());
+                        }
+                        break :workspace_versions_list versions_list;
+};
+                        _ = &workspace_versions_list;
+                        comptime {
+                        if ((PackageNameHash != @FieldType(VersionHashMap.KV, "key"))) {
+                            _ = @compileError("VersionHashMap must be in sync with serialization");
+                        }
+                        if ((Semver.Version != @FieldType(VersionHashMap.KV, "value"))) {
+                            _ = @compileError("VersionHashMap must be in sync with serialization");
+                        }
+
+}
+                        defer {
+                        _ = workspace_versions_list.deinit(allocator);
+                        }
+                        _ = try lockfile.workspace_versions.ensureTotalCapacity(allocator, workspace_versions_list.items.len);
+                        lockfile.workspace_versions.entries.len = workspace_versions_list.items.len;
+                        _ = @memcpy(lockfile.workspace_versions.keys(), workspace_package_name_hashes.items);
+                        _ = @memcpy(lockfile.workspace_versions.values(), workspace_versions_list.items);
+                        _ = try lockfile.workspace_versions.reIndex(allocator);
+                    }
+                    {
+                        var workspace_paths_hashes = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(PackageNameHash));
+                        _ = &workspace_paths_hashes;
+                        defer {
+                        _ = workspace_paths_hashes.deinit(allocator);
+                        }
+                        var workspace_paths_strings = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
+                        _ = &workspace_paths_strings;
+                        defer {
+                        _ = workspace_paths_strings.deinit(allocator);
+                        }
+                        _ = try lockfile.workspace_paths.ensureTotalCapacity(allocator, workspace_paths_strings.items.len);
+                        lockfile.workspace_paths.entries.len = workspace_paths_strings.items.len;
+                        _ = @memcpy(lockfile.workspace_paths.keys(), workspace_paths_hashes.items);
+                        _ = @memcpy(lockfile.workspace_paths.values(), workspace_paths_strings.items);
+                        _ = try lockfile.workspace_paths.reIndex(allocator);
+                    }
+                } else {
+                    stream.pos = (stream.pos - 8);
+                }
+            }
+        }
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer >= 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if (((remaining_in_buffer > 8) and (next_num == has_trusted_dependencies_tag))) {
+                    var trusted_dependencies_hashes = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(u32));
+                    _ = &trusted_dependencies_hashes;
+                    defer {
+                    _ = trusted_dependencies_hashes.deinit(allocator);
+                    }
+                    lockfile.trusted_dependencies = .{};
+                    _ = try lockfile.trusted_dependencies.?.ensureTotalCapacity(allocator, trusted_dependencies_hashes.items.len);
+                    lockfile.trusted_dependencies.?.entries.len = trusted_dependencies_hashes.items.len;
+                    _ = @memcpy(lockfile.trusted_dependencies.?.keys(), trusted_dependencies_hashes.items);
+                    _ = try lockfile.trusted_dependencies.?.reIndex(allocator);
+                } else {
+                    if ((next_num == has_empty_trusted_dependencies_tag)) {
+                        lockfile.trusted_dependencies = .{};
+                    } else {
+                        stream.pos = (stream.pos - 8);
+                    }
+                }
+            }
+        }
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer > 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if ((next_num == has_overrides_tag)) {
+                    var overrides_name_hashes = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(PackageNameHash));
+                    _ = &overrides_name_hashes;
+                    defer {
+                    _ = overrides_name_hashes.deinit(allocator);
+                    }
+                    var map = lockfile.overrides.map;
+                    _ = &map;
+                    defer {
+                    lockfile.overrides.map = map;
+                    }
+                    _ = try map.ensureTotalCapacity(allocator, overrides_name_hashes.items.len);
+                    const override_versions_external = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
+                    const context: Dependency.Context = .{ .allocator = allocator, .log = log, .buffer = lockfile.buffers.string_bytes.items, .package_manager = manager };
+                    {
+                        var i: i32 = 0;
+                        _ = &i;
+                        const __end_7 = overrides_name_hashes.items.len;
+                        while (i < __end_7) : (i += 1) {
+                            _ = map.putAssumeCapacity(overrides_name_hashes.items[@as(usize, @intCast(i))], Dependency.toDependency(override_versions_external.items[@as(usize, @intCast(i))], context));
+                        }
+                    }
+                } else {
+                    stream.pos = (stream.pos - 8);
+                }
+            }
+        }
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer > 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if ((next_num == has_patched_dependencies_tag)) {
+                    var patched_dependencies_name_and_version_hashes = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(PackageNameAndVersionHash));
+                    _ = &patched_dependencies_name_and_version_hashes;
+                    defer {
+                    _ = patched_dependencies_name_and_version_hashes.deinit(allocator);
+                    }
+                    var map = lockfile.patched_dependencies;
+                    _ = &map;
+                    defer {
+                    lockfile.patched_dependencies = map;
+                    }
+                    _ = try map.ensureTotalCapacity(allocator, patched_dependencies_name_and_version_hashes.items.len);
+                    const patched_dependencies_paths = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(PatchedDep));
+                    {
+                        var i: i32 = 0;
+                        _ = &i;
+                        const __end_8 = patched_dependencies_name_and_version_hashes.items.len;
+                        while (i < __end_8) : (i += 1) {
+                            _ = map.putAssumeCapacity(patched_dependencies_name_and_version_hashes.items[@as(usize, @intCast(i))], patched_dependencies_paths.items[@as(usize, @intCast(i))]);
+                        }
+                    }
+                } else {
+                    stream.pos = (stream.pos - 8);
+                }
+            }
+        }
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer > 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if ((next_num == has_catalogs_tag)) {
+                    lockfile.catalogs = .{};
+                    var default_dep_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
+                    _ = &default_dep_names;
+                    defer {
+                    _ = default_dep_names.deinit(allocator);
+                    }
+                    var default_deps = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
+                    _ = &default_deps;
+                    defer {
+                    _ = default_deps.deinit(allocator);
+                    }
+                    _ = try lockfile.catalogs.default.ensureTotalCapacity(allocator, default_deps.items.len);
+                    const context: Dependency.Context = .{ .allocator = allocator, .log = log, .buffer = lockfile.buffers.string_bytes.items, .package_manager = manager };
+                    {
+                        var i: i32 = 0;
+                        _ = &i;
+                        const __end_9 = default_dep_names.items.len;
+                        while (i < __end_9) : (i += 1) {
+                            _ = lockfile.catalogs.default.putAssumeCapacityContext(default_dep_names.items[@as(usize, @intCast(i))], Dependency.toDependency(default_deps.items[@as(usize, @intCast(i))], context), String.arrayHashContext(lockfile, null));
+                        }
+                    }
+                    var catalog_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
+                    _ = &catalog_names;
+                    defer {
+                    _ = catalog_names.deinit(allocator);
+                    }
+                    _ = try lockfile.catalogs.groups.ensureTotalCapacity(allocator, catalog_names.items.len);
+                    for (catalog_names.items) |catalog_name| {
+                        _ = &catalog_name;
+                        var catalog_dep_names = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String));
+                        _ = &catalog_dep_names;
+                        defer {
+                        _ = catalog_dep_names.deinit(allocator);
+                        }
+                        var catalog_deps = try Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
+                        _ = &catalog_deps;
+                        defer {
+                        _ = catalog_deps.deinit(allocator);
+                        }
+                        const group = try lockfile.catalogs.getOrPutGroup(lockfile, catalog_name);
+                        _ = try group.ensureTotalCapacity(allocator, catalog_deps.items.len);
+                        {
+                            var i: i32 = 0;
+                            _ = &i;
+                            const __end_11 = catalog_dep_names.items.len;
+                            while (i < __end_11) : (i += 1) {
+                                _ = group.putAssumeCapacityContext(catalog_dep_names.items[@as(usize, @intCast(i))], Dependency.toDependency(catalog_deps.items[@as(usize, @intCast(i))], context), String.arrayHashContext(lockfile, null));
+                            }
+                        }
+                    }
+                } else {
+                    stream.pos = (stream.pos - 8);
+                }
+            }
+        }
+        {
+            const remaining_in_buffer = (total_buffer_size -| stream.pos);
+            if (((remaining_in_buffer > 8) and (total_buffer_size <= stream.buffer.len))) {
+                const next_num = try reader.readInt(u64, .little);
+                if ((next_num == has_config_version_tag)) {
+                    const raw_ver = try reader.readInt(u64, .little);
+                    const config_version_opt = bun.ConfigVersion.fromInt(raw_ver);
+                    if ((config_version_opt == null)) {
+                        return error.InvalidLockfile;
+                    }
+                    lockfile.saved_config_version = config_version_opt.?;
+                }
+            }
+        }
+        lockfile.scratch = Lockfile.Scratch.init(allocator);
+        lockfile.package_index = PackageIndex.Map.initContext(allocator, .{});
+        lockfile.string_pool = StringPool.init(allocator);
+        _ = try lockfile.package_index.ensureTotalCapacity(@as(u32, @truncate(lockfile.packages.len)));
+        if ((!has_workspace_name_hashes)) {
+            const slice = lockfile.packages.slice();
+            const name_hashes = slice.items(.name_hash);
+            const resolutions = slice.items(.resolution);
+            {
+                var id: i32 = 0;
+                _ = &id;
+                const __end_12 = name_hashes.len;
+                while (id < __end_12) : (id += 1) {
+                    const name_hash = name_hashes[@as(usize, @intCast(id))];
+                    const resolution = resolutions[@as(usize, @intCast(id))];
+                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
+                    switch (resolution.tag) {
+.workspace => {
+_ = try lockfile.workspace_paths.put(allocator, name_hash, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).workspace);
+},
+else => {
+
+},
+}
+                }
+            }
+        } else {
+            const slice = lockfile.packages.slice();
+            const name_hashes = slice.items(.name_hash);
+            {
+                var id: i32 = 0;
+                _ = &id;
+                const __end_13 = name_hashes.len;
+                while (id < __end_13) : (id += 1) {
+                    const name_hash = name_hashes[@as(usize, @intCast(id))];
+                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
+                }
+            }
+        }
+        if (comptime Environment.allow_assert) {
+            _ = assert((stream.pos == total_buffer_size));
+        }
+        return res;
+}
+const string = []const u8;

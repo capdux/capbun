@@ -1,153 +1,146 @@
-//! Some additional behaviour beyond basic `cd <dir>`:
-//! - `cd` by itself or `cd ~` will always put the user in their home directory.
-//! - `cd ~username` will put the user in the home directory of the specified user
-//! - `cd -` will put the user in the previous directory
-
-const Cd = @This();
-
-state: union(enum) {
-    idle,
-    waiting_write_stderr,
-    done,
-    err: Syscall.Error,
-} = .idle,
-
-fn writeStderrNonBlocking(this: *Cd, comptime fmt: []const u8, args: anytype) Yield {
-    this.state = .waiting_write_stderr;
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        return this.bltn().stderr.enqueueFmtBltn(this, .cd, fmt, args, safeguard);
-    }
-    const buf = this.bltn().fmtErrorArena(.cd, fmt, args);
-    _ = this.bltn().writeNoIO(.stderr, buf);
-    this.state = .done;
-    return this.bltn().done(1);
-}
-
-pub fn start(this: *Cd) Yield {
-    const args = this.bltn().argsSlice();
-    if (args.len > 1) {
-        return this.writeStderrNonBlocking("too many arguments\n", .{});
-    }
-
-    if (args.len == 1) {
-        const first_arg = args[0][0..std.mem.len(args[0]) :0];
-        switch (first_arg[0]) {
-            '-' => {
-                switch (this.bltn().parentCmd().base.shell.changePrevCwd(this.bltn().parentCmd().base.interpreter)) {
-                    .result => {},
-                    .err => |err| {
-                        return this.handleChangeCwdErr(
-                            err,
-                            this.bltn().parentCmd().base.shell.prevCwdZ(),
-                        );
-                    },
-                }
-            },
-            '~' => {
-                const homedir = this.bltn().parentCmd().base.shell.getHomedir();
-                homedir.deref();
-                switch (this.bltn().parentCmd().base.shell.changeCwd(this.bltn().parentCmd().base.interpreter, homedir.slice())) {
-                    .result => {},
-                    .err => |err| return this.handleChangeCwdErr(err, homedir.slice()),
-                }
-            },
-            else => {
-                switch (this.bltn().parentCmd().base.shell.changeCwd(this.bltn().parentCmd().base.interpreter, first_arg)) {
-                    .result => {},
-                    .err => |err| return this.handleChangeCwdErr(err, first_arg),
-                }
-            },
-        }
-    }
-
-    return this.bltn().done(0);
-}
-
-fn handleChangeCwdErr(this: *Cd, err: Syscall.Error, new_cwd_: []const u8) Yield {
-    const errno: usize = @intCast(err.errno);
-
-    switch (errno) {
-        @as(usize, @intFromEnum(Syscall.E.NOTDIR)) => {
-            if (this.bltn().stderr.needsIO() == null) {
-                const buf = this.bltn().fmtErrorArena(.cd, "not a directory: {s}\n", .{new_cwd_});
-                _ = this.bltn().writeNoIO(.stderr, buf);
-                this.state = .done;
-                return this.bltn().done(1);
-            }
-
-            return this.writeStderrNonBlocking("not a directory: {s}\n", .{new_cwd_});
-        },
-        @as(usize, @intFromEnum(Syscall.E.NOENT)) => {
-            if (this.bltn().stderr.needsIO() == null) {
-                const buf = this.bltn().fmtErrorArena(.cd, "not a directory: {s}\n", .{new_cwd_});
-                _ = this.bltn().writeNoIO(.stderr, buf);
-                this.state = .done;
-                return this.bltn().done(1);
-            }
-
-            return this.writeStderrNonBlocking("not a directory: {s}\n", .{new_cwd_});
-        },
-        @as(usize, @intFromEnum(Syscall.E.NAMETOOLONG)) => {
-            if (this.bltn().stderr.needsIO() == null) {
-                const buf = this.bltn().fmtErrorArena(.cd, "file name too long\n", .{});
-                _ = this.bltn().writeNoIO(.stderr, buf);
-                this.state = .done;
-                return this.bltn().done(1);
-            }
-
-            return this.writeStderrNonBlocking("file name too long\n", .{});
-        },
-        else => {
-            const errmsg = err.msg() orelse err.name();
-            if (this.bltn().stderr.needsIO() == null) {
-                const buf = this.bltn().fmtErrorArena(.cd, "{s}: {s}\n", .{ errmsg, new_cwd_ });
-                _ = this.bltn().writeNoIO(.stderr, buf);
-                this.state = .done;
-                return this.bltn().done(1);
-            }
-
-            return this.writeStderrNonBlocking("{s}: {s}\n", .{ errmsg, new_cwd_ });
-        },
-    }
-}
-
-pub fn onIOWriterChunk(this: *Cd, _: usize, e: ?jsc.SystemError) Yield {
-    if (comptime bun.Environment.allow_assert) {
-        assert(this.state == .waiting_write_stderr);
-    }
-
-    if (e != null) {
-        defer e.?.deref();
-        return this.bltn().done(e.?.getErrno());
-    }
-
-    this.state = .done;
-    return this.bltn().done(1);
-}
-
-pub inline fn bltn(this: *Cd) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("cd", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-pub fn deinit(this: *Cd) void {
-    log("({s}) deinit", .{@tagName(.cd)});
-    _ = this;
-}
-
-// --
-const log = bun.Output.scoped(.Cd, .hidden);
-
-const interpreter = @import("../interpreter.zig");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const log = bun.Output.scoped(.Cd, .hidden);
 const Interpreter = interpreter.Interpreter;
 const Builtin = Interpreter.Builtin;
-
-const bun = @import("bun");
 const Syscall = bun.sys;
 const assert = bun.assert;
 const jsc = bun.jsc;
-
 const shell = bun.shell;
-const Yield = bun.shell.Yield;
+const Yield = shell.Yield;
+const State = union(enum) {
+    idle,
+    waiting_write_stderr,
+    done,
+    @"err": Syscall.Error,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const Cd = @This();
+
+state: State = .idle,
+
+pub fn writeStderrNonBlocking(self: *Cd, comptime fmt: []const u8, args: anytype) Yield {
+        self.state = .waiting_write_stderr;
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            return self.bltn().stderr.enqueueFmtBltn(self, .cd, fmt, args, safeguard);
+        }
+        const buf = self.bltn().fmtErrorArena(.cd, fmt, args);
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        self.state = .done;
+        return self.bltn().done(1);
+}
+
+pub fn start(self: *Cd) Yield {
+        const args = self.bltn().argsSlice();
+        if ((args.len > 1)) {
+            return self.writeStderrNonBlocking("too many arguments\n", .{});
+        }
+        if ((args.len == 1)) {
+            const first_arg = args[0][0..std.mem.len(args[0]) :0];
+            switch (first_arg[0]) {
+'-' => {
+switch (self.bltn().parentCmd().base.shell.changePrevCwd(self.bltn().parentCmd().base.interpreter)) {
+.result => {
+
+},
+.@"err" => |e| {
+return self.handleChangeCwdErr(e, self.bltn().parentCmd().base.shell.prevCwdZ());
+},
+}
+},
+'~' => {
+const homedir = self.bltn().parentCmd().base.shell.getHomedir();
+            _ = homedir.deref();
+            switch (self.bltn().parentCmd().base.shell.changeCwd(self.bltn().parentCmd().base.interpreter, homedir.slice())) {
+.result => {
+
+},
+.@"err" => |e| {
+return self.handleChangeCwdErr(e, homedir.slice());
+},
+}
+},
+else => {
+switch (self.bltn().parentCmd().base.shell.changeCwd(self.bltn().parentCmd().base.interpreter, first_arg)) {
+.result => {
+
+},
+.@"err" => |e| {
+return self.handleChangeCwdErr(e, first_arg);
+},
+}
+},
+}
+        }
+        return self.bltn().done(0);
+}
+
+pub fn handleChangeCwdErr(self: *Cd, err_val: Syscall.Error, new_cwd_: []const u8) Yield {
+        const errno: usize = @intCast(err_val.errno);
+        if (((errno == (if (comptime @typeInfo(@TypeOf(@intFromEnum(Syscall.E.NOTDIR))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromEnum(Syscall.E.NOTDIR))) else cp_cast_int(usize, @intFromEnum(Syscall.E.NOTDIR)))) or (errno == (if (comptime @typeInfo(@TypeOf(@intFromEnum(Syscall.E.NOENT))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromEnum(Syscall.E.NOENT))) else cp_cast_int(usize, @intFromEnum(Syscall.E.NOENT)))))) {
+            if ((self.bltn().stderr.needsIO() == null)) {
+                const buf = self.bltn().fmtErrorArena(.cd, "not a directory: {s}\n", .{ new_cwd_ });
+                _ = self.bltn().writeNoIO(.stderr, buf);
+                self.state = .done;
+                return self.bltn().done(1);
+            }
+            return self.writeStderrNonBlocking("not a directory: {s}\n", .{ new_cwd_ });
+        } else {
+            if ((errno == (if (comptime @typeInfo(@TypeOf(@intFromEnum(Syscall.E.NAMETOOLONG))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromEnum(Syscall.E.NAMETOOLONG))) else cp_cast_int(usize, @intFromEnum(Syscall.E.NAMETOOLONG))))) {
+                if ((self.bltn().stderr.needsIO() == null)) {
+                    const buf = self.bltn().fmtErrorArena(.cd, "file name too long\n", .{});
+                    _ = self.bltn().writeNoIO(.stderr, buf);
+                    self.state = .done;
+                    return self.bltn().done(1);
+                }
+                return self.writeStderrNonBlocking("file name too long\n", .{});
+            } else {
+                const errmsg = ((err_val.msg()) orelse ((if (@typeInfo(@TypeOf(err_val)) == .@"enum" or @typeInfo(@TypeOf(err_val)) == .@"union") @tagName(err_val) else err_val.name)()));
+                if ((self.bltn().stderr.needsIO() == null)) {
+                    const buf = self.bltn().fmtErrorArena(.cd, "{s}: {s}\n", .{ errmsg, new_cwd_ });
+                    _ = self.bltn().writeNoIO(.stderr, buf);
+                    self.state = .done;
+                    return self.bltn().done(1);
+                }
+                return self.writeStderrNonBlocking("{s}: {s}\n", .{ errmsg, new_cwd_ });
+            }
+        }
+}
+
+pub fn onIOWriterChunk(self: *Cd, e: ?jsc.SystemError) Yield {
+        if (comptime bun.Environment.allow_assert) {
+            _ = assert((self.state == .waiting_write_stderr));
+        }
+        if (e) |err_val| {
+            _ = &err_val;
+            defer {
+            _ = err_val.deref();
+            }
+            return self.bltn().done(err_val.getErrno());
+        }
+        self.state = .done;
+        return self.bltn().done(1);
+}
+
+pub inline fn bltn(self: *Cd) *Builtin {
+        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("cd", self));
+        _ = &@"impl";
+        return @fieldParentPtr("impl", @"impl"());
+}
+
+pub fn deinit(self: *Cd) void {
+        _ = log("({s}) deinit", .{ @tagName(.cd) });
+        _ = self.state;
+}

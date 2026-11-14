@@ -1,526 +1,507 @@
-const Mv = @This();
-
-opts: Opts = .{},
-args: struct {
-    sources: []const [*:0]const u8 = &[_][*:0]const u8{},
-    target: [:0]const u8 = &[0:0]u8{},
-    target_fd: ?bun.FD = null,
-} = .{},
-state: union(enum) {
-    idle,
-    check_target: struct {
-        task: ShellMvCheckTargetTask,
-        state: union(enum) {
-            running,
-            done,
-        },
-    },
-    executing: struct {
-        task_count: usize,
-        tasks_done: usize = 0,
-        error_signal: std.atomic.Value(bool),
-        tasks: []ShellMvBatchedTask,
-        err: ?Syscall.Error = null,
-        err_path_owned: bool = false,
-    },
-    done,
-    waiting_write_err: struct {
-        exit_code: ExitCode,
-    },
-    err,
-} = .idle,
-
-pub const ShellMvCheckTargetTask = struct {
-    mv: *Mv,
-
-    cwd: bun.FD,
-    target: [:0]const u8,
-    result: ?Maybe(?bun.FD) = null,
-
-    task: ShellTask(@This(), runFromThreadPool, runFromMainThread, debug),
-
-    pub fn runFromThreadPool(this: *@This()) void {
-        const fd = switch (ShellSyscall.openat(this.cwd, this.target, bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
-            .err => |e| {
-                switch (e.getErrno()) {
-                    Syscall.E.NOTDIR => {
-                        this.result = .{ .result = null };
-                    },
-                    else => {
-                        this.result = .{ .err = e };
-                    },
-                }
-                return;
-            },
-            .result => |fd| fd,
-        };
-        this.result = .{ .result = fd };
-    }
-
-    pub fn runFromMainThread(this: *@This()) void {
-        this.mv.checkTargetTaskDone(this);
-    }
-
-    pub fn runFromMainThreadMini(this: *@This(), _: *void) void {
-        this.runFromMainThread();
-    }
-};
-
-pub const ShellMvBatchedTask = struct {
-    const BATCH_SIZE = 5;
-
-    mv: *Mv,
-    sources: []const [*:0]const u8,
-    target: [:0]const u8,
-    target_fd: ?bun.FD,
-    cwd: bun.FD,
-    error_signal: *std.atomic.Value(bool),
-
-    err: ?Syscall.Error = null,
-    /// True iff err.?.path was heap-allocated by this task (moveInDir's dupeZ); false when
-    /// it borrows this.target / argv or is empty.
-    err_path_owned: bool = false,
-
-    task: ShellTask(@This(), runFromThreadPool, runFromMainThread, debug),
-    event_loop: jsc.EventLoopHandle,
-
-    pub fn runFromThreadPool(this: *@This()) void {
-        // Moving multiple entries into a directory
-        if (this.sources.len > 1) return this.moveMultipleIntoDir();
-
-        const src = this.sources[0][0..std.mem.len(this.sources[0]) :0];
-        // Moving entry into directory
-        if (this.target_fd) |fd| {
-            _ = fd;
-
-            var buf: bun.PathBuffer = undefined;
-            _ = this.moveInDir(src, &buf);
-            return;
-        }
-
-        switch (Syscall.renameat(this.cwd, src, this.cwd, this.target)) {
-            .err => |e| {
-                if (e.getErrno() == .NOTDIR) {
-                    this.err = e.withPath(this.target);
-                } else this.err = e;
-            },
-            else => {},
-        }
-    }
-
-    pub fn moveInDir(this: *@This(), src: [:0]const u8, buf: *bun.PathBuffer) bool {
-        const path_in_dir_ = bun.path.normalizeBuf(ResolvePath.basename(src), buf, .auto);
-        if (path_in_dir_.len + 1 >= buf.len) {
-            this.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
-            return false;
-        }
-        buf[path_in_dir_.len] = 0;
-        const path_in_dir = buf[0..path_in_dir_.len :0];
-
-        switch (Syscall.renameat(this.cwd, src, this.target_fd.?, path_in_dir)) {
-            .err => |e| {
-                const target_path = ResolvePath.joinZ(&[_][]const u8{
-                    this.target,
-                    ResolvePath.basename(src),
-                }, .auto);
-
-                this.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, target_path[0..])));
-                this.err_path_owned = true;
-                return false;
-            },
-            else => {},
-        }
-
-        return true;
-    }
-
-    fn moveMultipleIntoDir(this: *@This()) void {
-        var buf: bun.PathBuffer = undefined;
-        var fixed_alloc = std.heap.FixedBufferAllocator.init(buf[0..bun.MAX_PATH_BYTES]);
-
-        for (this.sources) |src_raw| {
-            if (this.error_signal.load(.seq_cst)) return;
-            defer fixed_alloc.reset();
-
-            const src = src_raw[0..std.mem.len(src_raw) :0];
-            if (!this.moveInDir(src, &buf)) {
-                return;
-            }
-        }
-    }
-
-    /// From the man pages of `mv`:
-    /// ```txt
-    /// As the rename(2) call does not work across file systems, mv uses cp(1) and rm(1) to accomplish the move.  The effect is equivalent to:
-    ///     rm -f destination_path && \
-    ///     cp -pRP source_file destination && \
-    ///     rm -rf source_file
-    /// ```
-    fn moveAcrossFilesystems(this: *@This(), src: [:0]const u8, dest: [:0]const u8) void {
-        _ = this;
-        _ = src;
-        _ = dest;
-
-        // TODO
-    }
-
-    pub fn runFromMainThread(this: *@This()) void {
-        this.mv.batchedMoveTaskDone(this);
-    }
-
-    pub fn runFromMainThreadMini(this: *@This(), _: *void) void {
-        this.runFromMainThread();
-    }
-};
-
-pub fn start(this: *Mv) Yield {
-    return this.next();
-}
-
-pub fn writeFailingError(this: *Mv, buf: []const u8, exit_code: ExitCode) Yield {
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        this.state = .{ .waiting_write_err = .{ .exit_code = exit_code } };
-        return this.bltn().stderr.enqueue(this, buf, safeguard);
-    }
-
-    _ = this.bltn().writeNoIO(.stderr, buf);
-
-    return this.bltn().done(exit_code);
-}
-
-pub fn next(this: *Mv) Yield {
-    while (!(this.state == .done or this.state == .err)) {
-        switch (this.state) {
-            .idle => {
-                if (this.parseOpts().asErr()) |e| {
-                    const buf = switch (e) {
-                        .illegal_option => |opt_str| this.bltn().fmtErrorArena(.mv, "illegal option -- {s}\n", .{opt_str}),
-                        .show_usage => Builtin.Kind.mv.usageString(),
-                    };
-
-                    return this.writeFailingError(buf, 1);
-                }
-                this.state = .{
-                    .check_target = .{
-                        .task = ShellMvCheckTargetTask{
-                            .mv = this,
-                            .cwd = this.bltn().parentCmd().base.shell.cwd_fd,
-                            .target = this.args.target,
-                            .task = .{
-                                .event_loop = this.bltn().parentCmd().base.eventLoop(),
-                                .concurrent_task = jsc.EventLoopTask.fromEventLoop(this.bltn().parentCmd().base.eventLoop()),
-                            },
-                        },
-                        .state = .running,
-                    },
-                };
-                this.state.check_target.task.task.schedule();
-                return .suspended;
-            },
-            .check_target => {
-                if (this.state.check_target.state == .running) return .suspended;
-                const check_target = &this.state.check_target;
-
-                if (comptime bun.Environment.allow_assert) {
-                    assert(check_target.task.result != null);
-                }
-
-                const maybe_fd: ?bun.FD = switch (check_target.task.result.?) {
-                    .err => |e| brk: {
-                        switch (e.getErrno()) {
-                            Syscall.E.NOENT => {
-                                // Means we are renaming entry, not moving to a directory
-                                if (this.args.sources.len == 1) break :brk null;
-
-                                const buf = this.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{this.args.target});
-                                return this.writeFailingError(buf, 1);
-                            },
-                            else => {
-                                const sys_err = e.toShellSystemError();
-                                defer sys_err.deref();
-                                const buf = this.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
-                                return this.writeFailingError(buf, 1);
-                            },
-                        }
-                    },
-                    .result => |maybe_fd| maybe_fd,
-                };
-
-                // Trying to move multiple files into a file
-                if (maybe_fd == null and this.args.sources.len > 1) {
-                    const buf = this.bltn().fmtErrorArena(.mv, "{s} is not a directory\n", .{this.args.target});
-                    return this.writeFailingError(buf, 1);
-                }
-
-                const count_per_task = ShellMvBatchedTask.BATCH_SIZE;
-
-                const task_count = brk: {
-                    const sources_len: f64 = @floatFromInt(this.args.sources.len);
-                    const batch_size: f64 = @floatFromInt(count_per_task);
-                    const task_count: usize = @intFromFloat(@ceil(sources_len / batch_size));
-                    break :brk task_count;
-                };
-
-                this.args.target_fd = maybe_fd;
-                const cwd_fd = this.bltn().parentCmd().base.shell.cwd_fd;
-                const tasks = bun.handleOom(this.bltn().arena.allocator().alloc(ShellMvBatchedTask, task_count));
-                // Initialize tasks
-                {
-                    var i: usize = 0;
-                    while (i < tasks.len) : (i += 1) {
-                        const start_idx = i * count_per_task;
-                        const end_idx = @min(start_idx + count_per_task, this.args.sources.len);
-                        const sources = this.args.sources[start_idx..end_idx];
-
-                        tasks[i] = ShellMvBatchedTask{
-                            .mv = this,
-                            .cwd = cwd_fd,
-                            .target = this.args.target,
-                            .target_fd = this.args.target_fd,
-                            .sources = sources,
-                            // We set this later
-                            .error_signal = undefined,
-                            .task = .{
-                                .event_loop = this.bltn().parentCmd().base.eventLoop(),
-                                .concurrent_task = jsc.EventLoopTask.fromEventLoop(this.bltn().parentCmd().base.eventLoop()),
-                            },
-                            .event_loop = this.bltn().parentCmd().base.eventLoop(),
-                        };
-                    }
-                }
-
-                this.state = .{
-                    .executing = .{
-                        .task_count = task_count,
-                        .error_signal = std.atomic.Value(bool).init(false),
-                        .tasks = tasks,
-                    },
-                };
-
-                for (this.state.executing.tasks) |*t| {
-                    t.error_signal = &this.state.executing.error_signal;
-                    t.task.schedule();
-                }
-
-                return .suspended;
-            },
-            // Shouldn't happen
-            .executing => {},
-            .waiting_write_err => {
-                return .failed;
-            },
-            .done, .err => unreachable,
-        }
-    }
-
-    switch (this.state) {
-        .done => return this.bltn().done(0),
-        else => return this.bltn().done(1),
-    }
-}
-
-pub fn onIOWriterChunk(this: *Mv, _: usize, e: ?jsc.SystemError) Yield {
-    defer if (e) |err| err.deref();
-    switch (this.state) {
-        .waiting_write_err => {
-            if (e != null) {
-                this.state = .err;
-                return this.next();
-            }
-            return this.bltn().done(this.state.waiting_write_err.exit_code);
-        },
-        else => @panic("Invalid state"),
-    }
-}
-
-pub fn checkTargetTaskDone(this: *Mv, task: *ShellMvCheckTargetTask) void {
-    _ = task;
-
-    if (comptime bun.Environment.allow_assert) {
-        assert(this.state == .check_target);
-        assert(this.state.check_target.task.result != null);
-    }
-
-    this.state.check_target.state = .done;
-    this.next().run();
-}
-
-pub fn batchedMoveTaskDone(this: *Mv, task: *ShellMvBatchedTask) void {
-    if (comptime bun.Environment.allow_assert) {
-        assert(this.state == .executing);
-        assert(this.state.executing.tasks_done < this.state.executing.task_count);
-    }
-
-    var exec = &this.state.executing;
-
-    if (task.err) |*err| {
-        exec.error_signal.store(true, .seq_cst);
-        if (exec.err == null) {
-            exec.err = err.*;
-            exec.err_path_owned = task.err_path_owned;
-        } else if (task.err_path_owned) {
-            bun.default_allocator.free(err.path);
-        }
-    }
-
-    exec.tasks_done += 1;
-    if (exec.tasks_done >= exec.task_count) {
-        if (exec.err) |err| {
-            const e = err.toShellSystemError();
-            defer e.deref();
-            const buf = this.bltn().fmtErrorArena(.mv, "{f}: {f}\n", .{ e.path, e.message });
-            if (exec.err_path_owned) bun.default_allocator.free(err.path);
-            exec.err = null;
-            _ = this.writeFailingError(buf, err.errno);
-            return;
-        }
-        this.state = .done;
-
-        this.next().run();
-    }
-}
-
-pub fn deinit(this: *Mv) void {
-    if (this.args.target_fd) |fd| fd.toOptional().close();
-    if (this.state == .executing) {
-        if (this.state.executing.err) |err| {
-            if (this.state.executing.err_path_owned) bun.default_allocator.free(err.path);
-        }
-    }
-}
-
-const Opts = struct {
-    /// `-f`
-    ///
-    /// Do not prompt for confirmation before overwriting the destination path.  (The -f option overrides any previous -i or -n options.)
-    force_overwrite: bool = true,
-    /// `-h`
-    ///
-    /// If the target operand is a symbolic link to a directory, do not follow it.  This causes the mv utility to rename the file source to the destination path target rather than moving source into the
-    /// directory referenced by target.
-    no_dereference: bool = false,
-    /// `-i`
-    ///
-    /// Cause mv to write a prompt to standard error before moving a file that would overwrite an existing file.  If the response from the standard input begins with the character ‘y’ or ‘Y’, the move is
-    /// attempted.  (The -i option overrides any previous -f or -n options.)
-    interactive_mode: bool = false,
-    /// `-n`
-    ///
-    /// Do not overwrite an existing file.  (The -n option overrides any previous -f or -i options.)
-    no_overwrite: bool = false,
-    /// `-v`
-    ///
-    /// Cause mv to be verbose, showing files after they are moved.
-    verbose_output: bool = false,
-
-    const ParseError = union(enum) {
-        illegal_option: []const u8,
-        show_usage,
-    };
-};
-
-pub fn parseOpts(this: *Mv) Result(void, Opts.ParseError) {
-    const filepath_args = switch (this.parseFlags()) {
-        .ok => |args| args,
-        .err => |e| return .{ .err = e },
-    };
-
-    if (filepath_args.len < 2) {
-        return .{ .err = .show_usage };
-    }
-
-    this.args.sources = filepath_args[0 .. filepath_args.len - 1];
-    this.args.target = std.mem.span(filepath_args[filepath_args.len - 1]);
-
-    return .ok;
-}
-
-pub fn parseFlags(this: *Mv) Result([]const [*:0]const u8, Opts.ParseError) {
-    const args = this.bltn().argsSlice();
-    var idx: usize = 0;
-    if (args.len == 0) {
-        return .{ .err = .show_usage };
-    }
-
-    while (idx < args.len) : (idx += 1) {
-        const flag = args[idx];
-        switch (this.parseFlag(flag[0..std.mem.len(flag)])) {
-            .done => {
-                const filepath_args = args[idx..];
-                return .{ .ok = filepath_args };
-            },
-            .continue_parsing => {},
-            .illegal_option => |opt_str| return .{ .err = .{ .illegal_option = opt_str } },
-        }
-    }
-
-    return .{ .err = .show_usage };
-}
-
-pub fn parseFlag(this: *Mv, flag: []const u8) union(enum) { continue_parsing, done, illegal_option: []const u8 } {
-    if (flag.len == 0) return .done;
-    if (flag[0] != '-') return .done;
-
-    const small_flags = flag[1..];
-    for (small_flags) |char| {
-        switch (char) {
-            'f' => {
-                this.opts.force_overwrite = true;
-                this.opts.interactive_mode = false;
-                this.opts.no_overwrite = false;
-            },
-            'h' => {
-                this.opts.no_dereference = true;
-            },
-            'i' => {
-                this.opts.interactive_mode = true;
-                this.opts.force_overwrite = false;
-                this.opts.no_overwrite = false;
-            },
-            'n' => {
-                this.opts.no_overwrite = true;
-                this.opts.force_overwrite = false;
-                this.opts.interactive_mode = false;
-            },
-            'v' => {
-                this.opts.verbose_output = true;
-            },
-            else => {
-                return .{ .illegal_option = "-" };
-            },
-        }
-    }
-
-    return .continue_parsing;
-}
-
-pub inline fn bltn(this: *Mv) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("mv", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-// --
-const debug = bun.Output.scoped(.ShellCat, .hidden);
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const interpreter = @import("../interpreter.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Interpreter = interpreter.Interpreter;
 const ParseError = interpreter.ParseError;
 const ShellSyscall = interpreter.ShellSyscall;
 const ShellTask = interpreter.ShellTask;
-
 const Builtin = Interpreter.Builtin;
 const Result = Interpreter.Builtin.Result;
-
-const bun = @import("bun");
 const ResolvePath = bun.path;
 const assert = bun.assert;
 const jsc = bun.jsc;
-
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const Yield = shell.Yield;
-
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
+const debug = bun.Output.scoped(.ShellCat, .hidden);
+pub const ParseFlagResult = union(enum) {
+    continue_parsing,
+    done,
+    illegal_option: []const u8,
+};
+pub const CheckTargetState = union(enum) {
+    running,
+    done,
+};
+pub const ShellMvCheckTargetTask = struct {
+    mv: *Mv,
+    cwd: bun.FD,
+    target: [:0]const u8,
+    result: ?Maybe(OptionalFD) = null,
+    task: ShellTask(ShellMvCheckTargetTask,runFromThreadPool,runFromMainThread,debug),
+
+pub fn runFromThreadPool(self: *@This()) void {
+            const fd = (switch (ShellSyscall.openat(self.cwd, self.target, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.err => |e| {
+{
+                switch (e.getErrno()) {
+.NOTDIR => {
+self.result = .{ .result = null };
+},
+else => {
+self.result = .{ .err = e };
+},
+}
+                return;
+            }
+},
+.result => |open_fd| open_fd,
+});
+            self.result = .{ .result = fd };
+    }
+
+pub fn runFromMainThread(self: *@This()) void {
+            _ = self.mv.checkTargetTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *@This()) void {
+            _ = self.runFromMainThread();
+    }
+};
+pub const ShellMvBatchedTask = struct {
+    mv: *Mv,
+    sources: []const [*:0]u8,
+    target: [:0]const u8,
+    target_fd: ?bun.FD,
+    cwd: bun.FD,
+    error_signal: *std.atomic.Value(bool),
+    err: ?Syscall.Error = null,
+    err_path_owned: bool = false,
+    task: ShellTask(ShellMvBatchedTask,runFromThreadPool,runFromMainThread,debug),
+    event_loop: jsc.EventLoopHandle,
+
+pub fn runFromThreadPool(self: *@This()) void {
+            if ((std.mem.span(self.sources).len > 1)) {
+                return self.moveMultipleIntoDir();
+            }
+            const src = self.sources[0][0..std.mem.len(self.sources[0]) :0];
+            if (self.target_fd) |fd| {
+                _ = &fd;
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                _ = self.moveInDir(src, (&buf));
+                return;
+            }
+            switch (Syscall.renameat(self.cwd, src, self.cwd, self.target)) {
+.err => |e| {
+if ((e.getErrno() == .NOTDIR)) {
+                self.err = e.withPath(self.target);
+            } else {
+                self.err = e;
+            }
+},
+else => {
+
+},
+}
+    }
+
+pub fn moveInDir(self: *@This(), src: [:0]const u8, buf: *bun.PathBuffer) bool {
+            const path_in_dir_ = bun.path.normalizeBuf(ResolvePath.basename(src), buf, .auto);
+            if (((path_in_dir_.len + 1) >= buf.len)) {
+                self.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
+                return false;
+            }
+            buf[cp_cast_int(usize, path_in_dir_.len)] = 0;
+            const path_in_dir = buf[0..path_in_dir_.len :0];
+            switch (Syscall.renameat(self.cwd, src, self.target_fd.?, path_in_dir)) {
+.err => |e| {
+const parts: [2][]const u8 = .{ self.target[0..], ResolvePath.basename(src) };
+            const target_path = ResolvePath.joinZ((&parts), .auto);
+            self.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, target_path[0..])));
+            self.err_path_owned = true;
+            return false;
+},
+else => {
+
+},
+}
+            return true;
+    }
+
+pub fn moveMultipleIntoDir(self: *@This()) void {
+            var buf: bun.PathBuffer = undefined;
+            _ = &buf;
+            var fixed_alloc = std.heap.FixedBufferAllocator.init(buf[0..bun.MAX_PATH_BYTES]);
+            _ = &fixed_alloc;
+            for (cp_iter_slice(self.sources)) |src_raw| {
+                _ = &src_raw;
+                if (self.error_signal.load(.seq_cst)) {
+                    return;
+                }
+                defer {
+                _ = fixed_alloc.reset();
+                }
+                const src = src_raw[0..std.mem.len(src_raw) :0];
+                if ((!self.moveInDir(src, (&buf)))) {
+                    return;
+                }
+            }
+    }
+
+pub fn moveAcrossFilesystems(self: *@This(), src: [:0]const u8, dest: [:0]const u8) void {
+        _ = &self;
+            _ = src.len;
+            _ = dest.len;
+    }
+
+pub fn runFromMainThread(self: *@This()) void {
+            _ = self.mv.batchedMoveTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *@This()) void {
+            _ = self.runFromMainThread();
+    }
+    pub const BATCH_SIZE = 5;
+};
+pub const State = union(enum) {
+    idle,
+    check_target: CheckTargetTaskState,
+    executing: ExecutingState,
+    done,
+    waiting_write_err: WaitingWriteErrState,
+    err,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const Opts = struct {
+    force_overwrite: bool = true,
+    no_dereference: bool = false,
+    interactive_mode: bool = false,
+    no_overwrite: bool = false,
+    verbose_output: bool = false,
+    pub const ParseError = union(enum) {
+            illegal_option: []const u8,
+            show_usage,
+        };
+};
+
+pub const Args = struct {
+    sources: []const [*:0]u8 = &.{},
+    target: [:0]const u8 = "",
+    target_fd: ?bun.FD = null,
+};
+
+pub const CheckTargetTaskState = struct {
+    task: ShellMvCheckTargetTask,
+    state: CheckTargetState,
+};
+
+pub const ExecutingState = struct {
+    task_count: usize,
+    tasks_done: usize = 0,
+    error_signal: std.atomic.Value(bool),
+    tasks: []ShellMvBatchedTask,
+    err: ?Syscall.Error = null,
+    err_path_owned: bool = false,
+};
+
+pub const WaitingWriteErrState = struct {
+    exit_code: ExitCode,
+};
+
+pub const Mv = @This();
+
+opts: Opts = .{},
+args: Args = .{},
+state: State = .idle,
+
+pub fn start(self: *Mv) Yield {
+        return self.next();
+}
+
+pub fn writeFailingError(self: *Mv, buf: []const u8, exit_code: ExitCode) Yield {
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state = .{ .waiting_write_err = .{ .exit_code = exit_code } };
+            return self.bltn().stderr.enqueue(self, buf, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        return self.bltn().done(exit_code);
+}
+
+pub fn next(self: *Mv) Yield {
+        while ((!((self.state == .done) or (self.state == .err)))) {
+            switch (self.state) {
+.idle => {
+if (self.parseOpts().asErr()) |e| {
+                _ = &e;
+                const buf = (switch (e) {
+.illegal_option => |opt_str| self.bltn().fmtErrorArena(.mv, "illegal option -- {s}\n", .{ opt_str }),
+.show_usage => Builtin.Kind.mv.usageString(),
+});
+                return self.writeFailingError(buf, 1);
+            }
+            self.state = .{ .check_target = .{ .task = ShellMvCheckTargetTask{ .mv = self, .cwd = self.bltn().parentCmd().base.shell.cwd_fd, .target = self.args.target, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) } }, .state = .running } };
+            _ = self.state.check_target.task.task.schedule();
+            return .suspended;
+},
+.check_target => {
+if ((self.state.check_target.state == .running)) {
+                return .suspended;
+            }
+            const check_target = (&self.state.check_target);
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((check_target.task.result != null));
+            }
+            var maybe_fd: ?bun.FD = null;
+            _ = &maybe_fd;
+            switch (check_target.task.result.?) {
+.err => |e| {
+switch (e.getErrno()) {
+.NOENT => {
+if ((std.mem.span(self.args.sources).len != 1)) {
+                const buf = self.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{ self.args.target });
+                return self.writeFailingError(buf, 1);
+            }
+},
+else => {
+const sys_err = e.toShellSystemError();
+            defer {
+            _ = sys_err.deref();
+            }
+            const buf = self.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
+            return self.writeFailingError(buf, 1);
+},
+}
+},
+.result => |open_fd| {
+maybe_fd = open_fd;
+},
+}
+            if (((maybe_fd == null) and (std.mem.span(self.args.sources).len > 1))) {
+                const buf = self.bltn().fmtErrorArena(.mv, "{s} is not a directory\n", .{ self.args.target });
+                return self.writeFailingError(buf, 1);
+            }
+            const count_per_task = ShellMvBatchedTask.BATCH_SIZE;
+            const sources_len: f64 = @floatFromInt(std.mem.span(self.args.sources).len);
+            const batch_size: f64 = @floatFromInt(count_per_task);
+            const task_count: usize = @intFromFloat(@ceil((sources_len / batch_size)));
+            self.args.target_fd = maybe_fd;
+            const cwd_fd = self.bltn().parentCmd().base.shell.cwd_fd;
+            var tasks = bun.handleOom(self.bltn().@"arena".allocator().alloc(ShellMvBatchedTask, task_count));
+            _ = &tasks;
+            {
+                var i: usize = 0;
+                _ = &i;
+                while ((i < tasks.len)) : (i = (i + 1)) {
+                    const start_idx = (i * count_per_task);
+                    const end_idx = @min((start_idx + count_per_task), std.mem.span(self.args.sources).len);
+                    const sources = self.args.sources[start_idx..end_idx];
+                    tasks[cp_cast_int(usize, i)] = ShellMvBatchedTask{ .mv = self, .cwd = cwd_fd, .target = self.args.target, .target_fd = self.args.target_fd, .sources = sources, .error_signal = undefined, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) }, .event_loop = self.bltn().parentCmd().base.eventLoop() };
+                }
+            }
+            self.state = .{ .executing = .{ .task_count = task_count, .error_signal = std.atomic.Value(bool).init(false), .tasks = tasks } };
+            for (cp_mut_slice(&self.state.executing.tasks)) |*t| {
+                _ = &t;
+                (t.*).error_signal = (&self.state.executing.error_signal);
+                _ = (t.*).task.schedule();
+            }
+            return .suspended;
+},
+.executing => {
+
+},
+.waiting_write_err => {
+return .failed;
+},
+.done, .err => {
+_ = unreachable;
+},
+}
+        }
+        switch (self.state) {
+.done => {
+return self.bltn().done(0);
+},
+else => {
+return self.bltn().done(1);
+},
+}
+}
+
+pub fn onIOWriterChunk(self: *Mv, e: ?jsc.SystemError) Yield {
+        defer {
+        if (e) |err| {
+            _ = &err;
+            _ = err.deref();
+        }
+        }
+        switch (self.state) {
+.waiting_write_err => {
+if ((e != null)) {
+            self.state = .err;
+            return self.next();
+        }
+        return self.bltn().done(self.state.waiting_write_err.exit_code);
+},
+else => {
+_ = @panic("Invalid state");
+},
+}
+}
+
+pub fn checkTargetTaskDone(self: *Mv, task: *ShellMvCheckTargetTask) void {
+        _ = @intFromPtr(task);
+        if (comptime bun.Environment.allow_assert) {
+            _ = assert((self.state == .check_target));
+            _ = assert((self.state.check_target.task.result != null));
+        }
+        self.state.check_target.state = .done;
+        _ = self.next().run();
+}
+
+pub fn batchedMoveTaskDone(self: *Mv, task: *ShellMvBatchedTask) void {
+        if (comptime bun.Environment.allow_assert) {
+            _ = assert((self.state == .executing));
+            _ = assert((self.state.executing.tasks_done < self.state.executing.task_count));
+        }
+        var exec = (&(&self.state.executing));
+        _ = &exec;
+        if (task.err) |*err_val| {
+            _ = &err_val;
+            _ = exec.error_signal.store(true, .seq_cst);
+            if ((exec.err == null)) {
+                exec.err = (err_val.*).*;
+                exec.err_path_owned = task.err_path_owned;
+            } else {
+                if (task.err_path_owned) {
+                    _ = bun.default_allocator.free((err_val.*).path);
+                }
+            }
+        }
+        exec.tasks_done = (exec.tasks_done + 1);
+        if ((exec.tasks_done >= exec.task_count)) {
+            if (exec.err) |err_val| {
+                _ = &err_val;
+                const sys_err = err_val.toShellSystemError();
+                defer {
+                _ = sys_err.deref();
+                }
+                const buf = self.bltn().fmtErrorArena(.mv, "{f}: {f}\n", .{ sys_err.path, sys_err.message });
+                if (exec.err_path_owned) {
+                    _ = bun.default_allocator.free(err_val.path);
+                }
+                exec.err = null;
+                _ = self.writeFailingError(buf, err_val.errno);
+                return;
+            }
+            self.state = .done;
+            _ = self.next().run();
+        }
+}
+
+pub fn deinit(self: *Mv) void {
+        if (self.args.target_fd) |fd| {
+            _ = &fd;
+            _ = fd.toOptional().close();
+        }
+        if ((self.state == .executing)) {
+            if (self.state.executing.err) |err_val| {
+                _ = &err_val;
+                if (self.state.executing.err_path_owned) {
+                    _ = bun.default_allocator.free(err_val.path);
+                }
+            }
+        }
+}
+
+pub fn parseOpts(self: *Mv) Result(void,Opts.ParseError) {
+        const filepath_args = (switch (self.parseFlags()) {
+.ok => |args| args,
+.err => |e| {
+return .{ .err = e };
+},
+});
+        if ((filepath_args.len < 2)) {
+            return .{ .err = .show_usage };
+        }
+        self.args.sources = filepath_args[0..(filepath_args.len - 1)];
+        self.args.target = std.mem.span(filepath_args[@as(usize, @intCast((filepath_args.len - 1)))]);
+        return .ok;
+}
+
+pub fn parseFlags(self: *Mv) Result(FilepathSlice,Opts.ParseError) {
+        const args = self.bltn().argsSlice();
+        var idx: usize = 0;
+        _ = &idx;
+        if ((args.len == 0)) {
+            return .{ .err = .show_usage };
+        }
+        while ((idx < args.len)) : (idx = (idx + 1)) {
+            const flag = args[@as(usize, @intCast(idx))];
+            switch (self.parseFlag(flag[0..std.mem.len(flag)])) {
+.done => {
+const filepath_args = args[idx..];
+            return .{ .ok = filepath_args };
+},
+.continue_parsing => {
+
+},
+.illegal_option => |opt_str| {
+return .{ .err = .{ .illegal_option = opt_str } };
+},
+}
+        }
+        return .{ .err = .show_usage };
+}
+
+pub fn parseFlag(self: *Mv, flag: []const u8) ParseFlagResult {
+        if ((flag.len == 0)) {
+            return .done;
+        }
+        if ((flag[0] != 45)) {
+            return .done;
+        }
+        const small_flags = flag[1..];
+        for (cp_iter_slice(small_flags)) |char| {
+            _ = &char;
+            switch (char) {
+'f' => {
+self.opts.force_overwrite = true;
+            self.opts.interactive_mode = false;
+            self.opts.no_overwrite = false;
+},
+'h' => {
+self.opts.no_dereference = true;
+},
+'i' => {
+self.opts.interactive_mode = true;
+            self.opts.force_overwrite = false;
+            self.opts.no_overwrite = false;
+},
+'n' => {
+self.opts.no_overwrite = true;
+            self.opts.force_overwrite = false;
+            self.opts.interactive_mode = false;
+},
+'v' => {
+self.opts.verbose_output = true;
+},
+else => {
+return .{ .illegal_option = "-" };
+},
+}
+        }
+        return .continue_parsing;
+}
+
+pub inline fn bltn(self: *Mv) *Builtin {
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("mv", self));
+        return @fieldParentPtr("impl", impl_);
+}
+pub const OptionalFD = ?bun.FD;
+pub const FilepathSlice = []const [*:0]u8;

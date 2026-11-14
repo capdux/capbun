@@ -1,427 +1,468 @@
-fn jsonStringifyDependency(this: *const Lockfile, w: anytype, dep_id: DependencyID, dep: Dependency, res: PackageID) !void {
-    const sb = this.buffers.string_bytes.items;
-
-    try w.beginObject();
-    defer w.endObject() catch {};
-
-    try w.objectField("name");
-    try w.write(dep.name.slice(sb));
-
-    if (dep.version.tag == .npm and dep.version.value.npm.is_alias) {
-        try w.objectField("is_alias");
-        try w.write(true);
-    }
-
-    try w.objectField("literal");
-    try w.write(dep.version.literal.slice(sb));
-
-    try w.objectField(@tagName(dep.version.tag));
-    switch (dep.version.tag) {
-        .uninitialized => try w.write(null),
-        .npm => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info: Dependency.Version.NpmInfo = dep.version.value.npm;
-
-            try w.objectField("name");
-            try w.write(info.name.slice(sb));
-
-            try w.objectField("version");
-            try w.print("\"{f}\"", .{info.version.fmt(sb)});
-        },
-        .dist_tag => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info: Dependency.Version.TagInfo = dep.version.value.dist_tag;
-
-            try w.objectField("name");
-            try w.write(info.name.slice(sb));
-
-            try w.objectField("tag");
-            try w.write(info.name.slice(sb));
-        },
-        .tarball => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info: Dependency.Version.TarballInfo = dep.version.value.tarball;
-            try w.objectField(@tagName(info.uri));
-            try w.write(switch (info.uri) {
-                inline else => |s| s.slice(sb),
-            });
-
-            try w.objectField("package_name");
-            try w.write(info.package_name.slice(sb));
-        },
-        .folder => {
-            try w.write(dep.version.value.folder.slice(sb));
-        },
-        .symlink => {
-            try w.write(dep.version.value.symlink.slice(sb));
-        },
-        .workspace => {
-            try w.write(dep.version.value.workspace.slice(sb));
-        },
-        .git => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info: Repository = dep.version.value.git;
-
-            try w.objectField("owner");
-            try w.write(info.owner.slice(sb));
-            try w.objectField("repo");
-            try w.write(info.repo.slice(sb));
-            try w.objectField("committish");
-            try w.write(info.committish.slice(sb));
-            try w.objectField("resolved");
-            try w.write(info.resolved.slice(sb));
-            try w.objectField("package_name");
-            try w.write(info.package_name.slice(sb));
-        },
-        .github => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info: Repository = dep.version.value.github;
-
-            try w.objectField("owner");
-            try w.write(info.owner.slice(sb));
-            try w.objectField("repo");
-            try w.write(info.repo.slice(sb));
-            try w.objectField("committish");
-            try w.write(info.committish.slice(sb));
-            try w.objectField("resolved");
-            try w.write(info.resolved.slice(sb));
-            try w.objectField("package_name");
-            try w.write(info.package_name.slice(sb));
-        },
-        .catalog => {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const info = dep.version.value.catalog;
-
-            try w.objectField("name");
-            try w.write(dep.name.slice(sb));
-
-            try w.objectField("version");
-            try w.print("\"catalog:{f}\"", .{info.fmtJson(sb, .{ .quote = false })});
-        },
-    }
-
-    try w.objectField("package_id");
-    try w.write(if (res == invalid_package_id) null else res);
-
-    try w.objectField("behavior");
-    {
-        try w.beginObject();
-        defer w.endObject() catch {};
-
-        const fields = @typeInfo(Behavior).@"struct".fields;
-        inline for (fields[1 .. fields.len - 1]) |field| {
-            if (@field(dep.behavior, field.name)) {
-                try w.objectField(field.name);
-                try w.write(true);
-            }
-        }
-    }
-
-    try w.objectField("id");
-    try w.write(dep_id);
-}
-
-pub fn jsonStringify(this: *const Lockfile, w: anytype) !void {
-    const sb = this.buffers.string_bytes.items;
-    try w.beginObject();
-    defer w.endObject() catch {};
-
-    try w.objectField("format");
-    try w.write(@tagName(this.format));
-    try w.objectField("meta_hash");
-    try w.write(std.fmt.bytesToHex(this.meta_hash, .lower));
-
-    {
-        try w.objectField("package_index");
-        try w.beginObject();
-        defer w.endObject() catch {};
-
-        var iter = this.package_index.iterator();
-        while (iter.next()) |it| {
-            const entry: PackageIndex.Entry = it.value_ptr.*;
-            const first_id = switch (entry) {
-                .id => |id| id,
-                .ids => |ids| ids.items[0],
-            };
-            const name = this.packages.items(.name)[first_id].slice(sb);
-            try w.objectField(name);
-            switch (entry) {
-                .id => |id| try w.write(id),
-                .ids => |ids| {
-                    try w.beginArray();
-                    for (ids.items) |id| {
-                        try w.write(id);
-                    }
-                    try w.endArray();
-                },
-            }
-        }
-    }
-    {
-        try w.objectField("trees");
-        try w.beginArray();
-        defer w.endArray() catch {};
-
-        const dependencies = this.buffers.dependencies.items;
-        const hoisted_deps = this.buffers.hoisted_dependencies.items;
-        const resolutions = this.buffers.resolutions.items;
-        var depth_buf: Tree.DepthBuf = undefined;
-        var path_buf: bun.PathBuffer = undefined;
-        @memcpy(path_buf[0.."node_modules".len], "node_modules");
-
-        for (0..this.buffers.trees.items.len) |tree_id| {
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            const tree = this.buffers.trees.items[tree_id];
-
-            try w.objectField("id");
-            try w.write(tree_id);
-
-            const relative_path, const depth = Lockfile.Tree.relativePathAndDepth(
-                this,
-                @intCast(tree_id),
-                &path_buf,
-                &depth_buf,
-                .node_modules,
-            );
-
-            try w.objectField("path");
-            try w.print("\"{f}\"", .{bun.fmt.fmtPath(u8, relative_path, .{ .path_sep = .posix })});
-
-            try w.objectField("depth");
-            try w.write(depth);
-
-            try w.objectField("dependencies");
-            {
-                try w.beginObject();
-                defer w.endObject() catch {};
-
-                for (tree.dependencies.get(hoisted_deps)) |tree_dep_id| {
-                    const dep = dependencies[tree_dep_id];
-                    const package_id = resolutions[tree_dep_id];
-
-                    try w.objectField(dep.name.slice(sb));
-                    {
-                        try w.beginObject();
-                        defer w.endObject() catch {};
-
-                        try w.objectField("id");
-                        try w.write(tree_dep_id);
-
-                        try w.objectField("package_id");
-                        try w.write(package_id);
-                    }
-                }
-            }
-        }
-    }
-
-    {
-        try w.objectField("dependencies");
-        try w.beginArray();
-        defer w.endArray() catch {};
-
-        const dependencies = this.buffers.dependencies.items;
-        const resolutions = this.buffers.resolutions.items;
-
-        for (0..dependencies.len) |dep_id| {
-            const dep = dependencies[dep_id];
-            const res = resolutions[dep_id];
-            try jsonStringifyDependency(this, w, @intCast(dep_id), dep, res);
-        }
-    }
-
-    {
-        try w.objectField("packages");
-        try w.beginArray();
-        defer w.endArray() catch {};
-
-        for (0..this.packages.len) |i| {
-            const pkg: Package = this.packages.get(i);
-            try w.beginObject();
-            defer w.endObject() catch {};
-
-            try w.objectField("id");
-            try w.write(i);
-
-            try w.objectField("name");
-            try w.write(pkg.name.slice(sb));
-
-            try w.objectField("name_hash");
-            try w.write(pkg.name_hash);
-
-            try w.objectField("resolution");
-            {
-                const res = pkg.resolution;
-                try w.beginObject();
-                defer w.endObject() catch {};
-
-                try w.objectField("tag");
-                try w.write(@tagName(res.tag));
-
-                try w.objectField("value");
-                try w.print("\"{f}\"", .{res.fmt(sb, .posix)});
-
-                try w.objectField("resolved");
-                try w.print("\"{f}\"", .{res.fmtURL(sb)});
-            }
-
-            try w.objectField("dependencies");
-            {
-                try w.beginArray();
-                defer w.endArray() catch {};
-
-                for (pkg.dependencies.off..pkg.dependencies.off + pkg.dependencies.len) |dep_id| {
-                    try w.write(dep_id);
-                }
-            }
-
-            if (@as(u16, @intFromEnum(pkg.meta.arch)) != Npm.Architecture.all_value) {
-                try w.objectField("arch");
-                try w.beginArray();
-                defer w.endArray() catch {};
-
-                for (Npm.Architecture.NameMap.kvs) |kv| {
-                    if (pkg.meta.arch.has(kv.value)) {
-                        try w.write(kv.key);
-                    }
-                }
-            }
-
-            if (@as(u16, @intFromEnum(pkg.meta.os)) != Npm.OperatingSystem.all_value) {
-                try w.objectField("os");
-                try w.beginArray();
-                defer w.endArray() catch {};
-
-                for (Npm.OperatingSystem.NameMap.kvs) |kv| {
-                    if (pkg.meta.os.has(kv.value)) {
-                        try w.write(kv.key);
-                    }
-                }
-            }
-
-            try w.objectField("integrity");
-            if (pkg.meta.integrity.tag != .unknown) {
-                try w.print("\"{f}\"", .{pkg.meta.integrity});
-            } else {
-                try w.write(null);
-            }
-
-            try w.objectField("man_dir");
-            try w.write(pkg.meta.man_dir.slice(sb));
-
-            try w.objectField("origin");
-            try w.write(@tagName(pkg.meta.origin));
-
-            try w.objectField("bin");
-            switch (pkg.bin.tag) {
-                .none => try w.write(null),
-                .file => {
-                    try w.beginObject();
-                    defer w.endObject() catch {};
-
-                    try w.objectField("file");
-                    try w.write(pkg.bin.value.file.slice(sb));
-                },
-                .named_file => {
-                    try w.beginObject();
-                    defer w.endObject() catch {};
-
-                    try w.objectField("name");
-                    try w.write(pkg.bin.value.named_file[0].slice(sb));
-
-                    try w.objectField("file");
-                    try w.write(pkg.bin.value.named_file[1].slice(sb));
-                },
-                .dir => {
-                    try w.objectField("dir");
-                    try w.write(pkg.bin.value.dir.slice(sb));
-                },
-                .map => {
-                    try w.beginObject();
-                    defer w.endObject() catch {};
-
-                    const data: []const ExternalString = pkg.bin.value.map.get(this.buffers.extern_strings.items);
-                    var bin_i: usize = 0;
-                    while (bin_i < data.len) : (bin_i += 2) {
-                        try w.objectField(data[bin_i].slice(sb));
-                        try w.write(data[bin_i + 1].slice(sb));
-                    }
-                },
-            }
-
-            {
-                try w.objectField("scripts");
-                try w.beginObject();
-                defer w.endObject() catch {};
-
-                inline for (comptime std.meta.fieldNames(Lockfile.Scripts)) |field_name| {
-                    const script = @field(pkg.scripts, field_name).slice(sb);
-                    if (script.len > 0) {
-                        try w.objectField(field_name);
-                        try w.write(script);
-                    }
-                }
-            }
-        }
-    }
-
-    var buf: [100]u8 = undefined;
-
-    try w.objectField("workspace_paths");
-    {
-        try w.beginObject();
-        defer w.endObject() catch {};
-
-        for (this.workspace_paths.keys(), this.workspace_paths.values()) |k, v| {
-            const len = std.fmt.printInt(&buf, k, 10, .lower, .{});
-            try w.objectField(buf[0..len]);
-            try w.write(v.slice(sb));
-        }
-    }
-    try w.objectField("workspace_versions");
-    {
-        try w.beginObject();
-        defer w.endObject() catch {};
-
-        for (this.workspace_versions.keys(), this.workspace_versions.values()) |k, v| {
-            const len = std.fmt.printInt(&buf, k, 10, .lower, .{});
-            try w.objectField(buf[0..len]);
-            try w.print("\"{f}\"", .{v.fmt(sb)});
-        }
-    }
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const PathBuffer = bun.PathBuffer;
 const ExternalString = bun.Semver.ExternalString;
-
 const install = bun.install;
 const DependencyID = install.DependencyID;
 const Npm = install.Npm;
 const PackageID = install.PackageID;
 const Repository = install.Repository;
 const invalid_package_id = install.invalid_package_id;
-
 const Dependency = install.Dependency;
 const Behavior = Dependency.Behavior;
-
 const Lockfile = install.Lockfile;
 const Package = Lockfile.Package;
 const PackageIndex = Lockfile.PackageIndex;
 const Tree = Lockfile.Tree;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+
+pub fn jsonStringifyDependency(client: *const Lockfile, w: anytype, dep_id: DependencyID, dep: Dependency, res: PackageID) !void {
+        const sb = client.buffers.string_bytes.items;
+        _ = try w.beginObject();
+        defer {
+        _ = (blk_catch_0: { break :blk_catch_0 ((w.endObject()) catch |__ce_0| { _ = &__ce_0;  }); });
+        }
+        _ = try w.objectField("name");
+        _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(sb)..]);
+        if (((dep.version.tag == .npm) and (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).npm.is_alias)) {
+            _ = try w.objectField("is_alias");
+            _ = try w.write(true);
+        }
+        _ = try w.objectField("literal");
+        _ = try w.write(cp_iter_slice(dep.version.literal)[@intCast(sb)..]);
+        _ = try w.objectField(@tagName(dep.version.tag));
+        switch (dep.version.tag) {
+.uninitialized => {
+_ = try w.write(null);
+},
+.npm => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_1: { break :blk_catch_1 ((w.endObject()) catch |__ce_1| { _ = &__ce_1;  }); });
+        }
+        const info: Dependency.Version.NpmInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).npm;
+        _ = try w.objectField("name");
+        _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(info)) == .@"enum" or @typeInfo(@TypeOf(info)) == .@"union") @tagName(info) else info.name))[@intCast(sb)..]);
+        _ = try w.objectField("version");
+        _ = try w.print("\"{f}\"", .{ info.version.fmt(sb) });
+},
+.dist_tag => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_2: { break :blk_catch_2 ((w.endObject()) catch |__ce_2| { _ = &__ce_2;  }); });
+        }
+        const info: Dependency.Version.TagInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).dist_tag;
+        _ = try w.objectField("name");
+        _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(info)) == .@"enum" or @typeInfo(@TypeOf(info)) == .@"union") @tagName(info) else info.name))[@intCast(sb)..]);
+        _ = try w.objectField("tag");
+        _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(info)) == .@"enum" or @typeInfo(@TypeOf(info)) == .@"union") @tagName(info) else info.name))[@intCast(sb)..]);
+},
+.tarball => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_3: { break :blk_catch_3 ((w.endObject()) catch |__ce_3| { _ = &__ce_3;  }); });
+        }
+        const info: Dependency.Version.TarballInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).tarball;
+        _ = try w.objectField(@tagName(info.uri));
+        _ = try w.write((switch (info.uri) {
+inline else => |s| cp_iter_slice(s)[@intCast(sb)..],
+}));
+        _ = try w.objectField("package_name");
+        _ = try w.write(cp_iter_slice(info.package_name)[@intCast(sb)..]);
+},
+.folder => {
+_ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).folder)[@intCast(sb)..]);
+},
+.symlink => {
+_ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).symlink)[@intCast(sb)..]);
+},
+.workspace => {
+_ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).workspace)[@intCast(sb)..]);
+},
+.git => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_4: { break :blk_catch_4 ((w.endObject()) catch |__ce_4| { _ = &__ce_4;  }); });
+        }
+        const info: Repository = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).git;
+        _ = try w.objectField("owner");
+        _ = try w.write(cp_iter_slice(info.owner)[@intCast(sb)..]);
+        _ = try w.objectField("repo");
+        _ = try w.write(cp_iter_slice(info.repo)[@intCast(sb)..]);
+        _ = try w.objectField("committish");
+        _ = try w.write(cp_iter_slice(info.committish)[@intCast(sb)..]);
+        _ = try w.objectField("resolved");
+        _ = try w.write(cp_iter_slice(info.resolved)[@intCast(sb)..]);
+        _ = try w.objectField("package_name");
+        _ = try w.write(cp_iter_slice(info.package_name)[@intCast(sb)..]);
+},
+.github => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_5: { break :blk_catch_5 ((w.endObject()) catch |__ce_5| { _ = &__ce_5;  }); });
+        }
+        const info: Repository = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).github;
+        _ = try w.objectField("owner");
+        _ = try w.write(cp_iter_slice(info.owner)[@intCast(sb)..]);
+        _ = try w.objectField("repo");
+        _ = try w.write(cp_iter_slice(info.repo)[@intCast(sb)..]);
+        _ = try w.objectField("committish");
+        _ = try w.write(cp_iter_slice(info.committish)[@intCast(sb)..]);
+        _ = try w.objectField("resolved");
+        _ = try w.write(cp_iter_slice(info.resolved)[@intCast(sb)..]);
+        _ = try w.objectField("package_name");
+        _ = try w.write(cp_iter_slice(info.package_name)[@intCast(sb)..]);
+},
+.catalog => {
+_ = try w.beginObject();
+        defer {
+        _ = (blk_catch_6: { break :blk_catch_6 ((w.endObject()) catch |__ce_6| { _ = &__ce_6;  }); });
+        }
+        const info = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog;
+        _ = try w.objectField("name");
+        _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(sb)..]);
+        _ = try w.objectField("version");
+        _ = try w.print("\"catalog:{f}\"", .{ info.fmtJson(sb, .{ .quote = false }) });
+},
+}
+        _ = try w.objectField("package_id");
+        _ = try w.write((if ((res == invalid_package_id)) null else res));
+        _ = try w.objectField("behavior");
+        {
+            _ = try w.beginObject();
+            defer {
+            _ = (blk_catch_7: { break :blk_catch_7 ((w.endObject()) catch |__ce_7| { _ = &__ce_7;  }); });
+            }
+            const fields = @typeInfo(Behavior).@"struct".fields;
+            inline for (fields[1..(fields.len - 1)]) |field| {
+                if (@field(dep.behavior, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) {
+                    _ = try w.objectField((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
+                    _ = try w.write(true);
+                }
+            }
+        }
+        _ = try w.objectField("id");
+        _ = try w.write(dep_id);
+}
+
+pub fn jsonStringify(client: *const Lockfile, w: anytype) !void {
+        const sb = client.buffers.string_bytes.items;
+        _ = try w.beginObject();
+        defer {
+        _ = (blk_catch_8: { break :blk_catch_8 ((w.endObject()) catch |__ce_8| { _ = &__ce_8;  }); });
+        }
+        _ = try w.objectField("format");
+        _ = try w.write(@tagName(client.format));
+        _ = try w.objectField("meta_hash");
+        _ = try w.write(std.fmt.bytesToHex(client.meta_hash, .lower));
+        {
+            _ = try w.objectField("package_index");
+            _ = try w.beginObject();
+            defer {
+            _ = (blk_catch_9: { break :blk_catch_9 ((w.endObject()) catch |__ce_9| { _ = &__ce_9;  }); });
+            }
+            var iter = client.package_index.iterator();
+            _ = &iter;
+            while (iter.next()) |it| {
+                const entry: PackageIndex.Entry = it.value_ptr.*;
+                const first_id = (switch (entry) {
+.id => |id| id,
+.ids => |ids| ids.items[0],
+});
+                const name = cp_iter_slice(client.packages.items(.name)[@as(usize, @intCast(first_id))])[@intCast(sb)..];
+                _ = try w.objectField(name);
+                switch (entry) {
+.id => |id| {
+_ = try w.write(id);
+},
+.ids => |ids| {
+_ = try w.beginArray();
+                for (ids.items) |id| {
+                    _ = &id;
+                    _ = try w.write(id);
+                }
+                _ = try w.endArray();
+},
+}
+            }
+        }
+        {
+            _ = try w.objectField("trees");
+            _ = try w.beginArray();
+            defer {
+            _ = (blk_catch_10: { break :blk_catch_10 ((w.endArray()) catch |__ce_10| { _ = &__ce_10;  }); });
+            }
+            const dependencies = client.buffers.dependencies.items;
+            const hoisted_deps = client.buffers.hoisted_dependencies.items;
+            const resolutions = client.buffers.resolutions.items;
+            var depth_buf: Tree.DepthBuf = undefined;
+            _ = &depth_buf;
+            var path_buf: bun.PathBuffer = undefined;
+            _ = &path_buf;
+            _ = @memcpy(path_buf[0.."node_modules".len], "node_modules");
+            {
+                var tree_id: i32 = 0;
+                _ = &tree_id;
+                const __end_1 = client.buffers.trees.items.len;
+                while (tree_id < __end_1) : (tree_id += 1) {
+                    _ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_11: { break :blk_catch_11 ((w.endObject()) catch |__ce_11| { _ = &__ce_11;  }); });
+                    }
+                    const tree = client.buffers.trees.items[@as(usize, @intCast(tree_id))];
+                    _ = try w.objectField("id");
+                    _ = try w.write(tree_id);
+                    const path_and_depth = Lockfile.Tree.relativePathAndDepth(client, @intCast(tree_id), (&path_buf), (&depth_buf), .node_modules);
+                    const relative_path = path_and_depth[0];
+                    const depth = path_and_depth[1];
+                    _ = try w.objectField("path");
+                    _ = try w.print("\"{f}\"", .{ bun.fmt.fmtPath(u8, relative_path, .{ .path_sep = .posix }) });
+                    _ = try w.objectField("depth");
+                    _ = try w.write(depth);
+                    _ = try w.objectField("dependencies");
+                    {
+                        _ = try w.beginObject();
+                        defer {
+                        _ = (blk_catch_12: { break :blk_catch_12 ((w.endObject()) catch |__ce_12| { _ = &__ce_12;  }); });
+                        }
+                        for (cp_iter_slice(tree.dependencies.get(hoisted_deps))) |tree_dep_id| {
+                            _ = &tree_dep_id;
+                            const dep = dependencies[@as(usize, @intCast(tree_dep_id))];
+                            const package_id = resolutions[@as(usize, @intCast(tree_dep_id))];
+                            _ = try w.objectField(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(sb)..]);
+                            {
+                                _ = try w.beginObject();
+                                defer {
+                                _ = (blk_catch_13: { break :blk_catch_13 ((w.endObject()) catch |__ce_13| { _ = &__ce_13;  }); });
+                                }
+                                _ = try w.objectField("id");
+                                _ = try w.write(tree_dep_id);
+                                _ = try w.objectField("package_id");
+                                _ = try w.write(package_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        {
+            _ = try w.objectField("dependencies");
+            _ = try w.beginArray();
+            defer {
+            _ = (blk_catch_14: { break :blk_catch_14 ((w.endArray()) catch |__ce_14| { _ = &__ce_14;  }); });
+            }
+            const dependencies = client.buffers.dependencies.items;
+            const resolutions = client.buffers.resolutions.items;
+            {
+                var dep_id: i32 = 0;
+                _ = &dep_id;
+                const __end_3 = dependencies.len;
+                while (dep_id < __end_3) : (dep_id += 1) {
+                    const dep = dependencies[@as(usize, @intCast(dep_id))];
+                    const res = resolutions[@as(usize, @intCast(dep_id))];
+                    _ = try jsonStringifyDependency(client, w, @intCast(dep_id), dep, res);
+                }
+            }
+        }
+        {
+            _ = try w.objectField("packages");
+            _ = try w.beginArray();
+            defer {
+            _ = (blk_catch_15: { break :blk_catch_15 ((w.endArray()) catch |__ce_15| { _ = &__ce_15;  }); });
+            }
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_4 = client.packages.len;
+                while (i < __end_4) : (i += 1) {
+                    const pkg: Package = client.packages.get(i);
+                    _ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_16: { break :blk_catch_16 ((w.endObject()) catch |__ce_16| { _ = &__ce_16;  }); });
+                    }
+                    _ = try w.objectField("id");
+                    _ = try w.write(i);
+                    _ = try w.objectField("name");
+                    _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name))[@intCast(sb)..]);
+                    _ = try w.objectField("name_hash");
+                    _ = try w.write(pkg.name_hash);
+                    _ = try w.objectField("resolution");
+                    {
+                        const res = pkg.resolution;
+                        _ = try w.beginObject();
+                        defer {
+                        _ = (blk_catch_17: { break :blk_catch_17 ((w.endObject()) catch |__ce_17| { _ = &__ce_17;  }); });
+                        }
+                        _ = try w.objectField("tag");
+                        _ = try w.write(@tagName(res.tag));
+                        _ = try w.objectField("value");
+                        _ = try w.print("\"{f}\"", .{ res.fmt(sb, .posix) });
+                        _ = try w.objectField("resolved");
+                        _ = try w.print("\"{f}\"", .{ res.fmtURL(sb) });
+                    }
+                    _ = try w.objectField("dependencies");
+                    {
+                        _ = try w.beginArray();
+                        defer {
+                        _ = (blk_catch_18: { break :blk_catch_18 ((w.endArray()) catch |__ce_18| { _ = &__ce_18;  }); });
+                        }
+                        {
+                            var dep_id: i32 = pkg.dependencies.off;
+                            _ = &dep_id;
+                            const __end_5 = (pkg.dependencies.off + pkg.dependencies.len);
+                            while (dep_id < __end_5) : (dep_id += 1) {
+                                _ = try w.write(dep_id);
+                            }
+                        }
+                    }
+                    if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".arch))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".arch))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".arch))) != Npm.Architecture.all_value)) {
+                        _ = try w.objectField("arch");
+                        _ = try w.beginArray();
+                        defer {
+                        _ = (blk_catch_19: { break :blk_catch_19 ((w.endArray()) catch |__ce_19| { _ = &__ce_19;  }); });
+                        }
+                        for (cp_iter_slice(Npm.Architecture.NameMap.kvs)) |kv| {
+                            _ = &kv;
+                            if (pkg.@"meta".arch.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
+                                _ = try w.write(kv.key);
+                            }
+                        }
+                    }
+                    if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".os))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".os))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".os))) != Npm.OperatingSystem.all_value)) {
+                        _ = try w.objectField("os");
+                        _ = try w.beginArray();
+                        defer {
+                        _ = (blk_catch_20: { break :blk_catch_20 ((w.endArray()) catch |__ce_20| { _ = &__ce_20;  }); });
+                        }
+                        for (cp_iter_slice(Npm.OperatingSystem.NameMap.kvs)) |kv| {
+                            _ = &kv;
+                            if (pkg.@"meta".os.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
+                                _ = try w.write(kv.key);
+                            }
+                        }
+                    }
+                    _ = try w.objectField("integrity");
+                    if ((pkg.@"meta".integrity.tag != .unknown)) {
+                        _ = try w.print("\"{f}\"", .{ pkg.@"meta".integrity });
+                    } else {
+                        _ = try w.write(null);
+                    }
+                    _ = try w.objectField("man_dir");
+                    _ = try w.write(cp_iter_slice(pkg.@"meta".man_dir)[@intCast(sb)..]);
+                    _ = try w.objectField("origin");
+                    _ = try w.write(@tagName(pkg.@"meta".origin));
+                    _ = try w.objectField("bin");
+                    switch (pkg.bin.tag) {
+.none => {
+_ = try w.write(null);
+},
+.file => {
+_ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_21: { break :blk_catch_21 ((w.endObject()) catch |__ce_21| { _ = &__ce_21;  }); });
+                    }
+                    _ = try w.objectField("file");
+                    _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).file)[@intCast(sb)..]);
+},
+.named_file => {
+_ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_22: { break :blk_catch_22 ((w.endObject()) catch |__ce_22| { _ = &__ce_22;  }); });
+                    }
+                    _ = try w.objectField("name");
+                    _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[0])[@intCast(sb)..]);
+                    _ = try w.objectField("file");
+                    _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[1])[@intCast(sb)..]);
+},
+.dir => {
+_ = try w.objectField("dir");
+                    _ = try w.write(cp_iter_slice((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).dir)[@intCast(sb)..]);
+},
+.map => {
+_ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_23: { break :blk_catch_23 ((w.endObject()) catch |__ce_23| { _ = &__ce_23;  }); });
+                    }
+                    const data: []const ExternalString = (if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).map.get(client.buffers.extern_strings.items);
+                    var bin_i: usize = 0;
+                    _ = &bin_i;
+                    while ((bin_i < data.len)) : (bin_i = (bin_i + 2)) {
+                        _ = try w.objectField(cp_iter_slice(data[@as(usize, @intCast(bin_i))])[@intCast(sb)..]);
+                        _ = try w.write(cp_iter_slice(data[@as(usize, @intCast((bin_i + 1)))])[@intCast(sb)..]);
+                    }
+},
+}
+                    {
+                        _ = try w.objectField("scripts");
+                        _ = try w.beginObject();
+                        defer {
+                        _ = (blk_catch_24: { break :blk_catch_24 ((w.endObject()) catch |__ce_24| { _ = &__ce_24;  }); });
+                        }
+                        inline for ((comptime std.@"meta".fieldNames(Lockfile.Scripts))) |field_name| {
+                            const script = cp_iter_slice(@field(pkg.scripts, field_name))[@intCast(sb)..];
+                            if ((script.len > 0)) {
+                                _ = try w.objectField(field_name);
+                                _ = try w.write(script);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        var buf: [100]u8 = undefined;
+        _ = &buf;
+        _ = try w.objectField("workspace_paths");
+        {
+            _ = try w.beginObject();
+            defer {
+            _ = (blk_catch_25: { break :blk_catch_25 ((w.endObject()) catch |__ce_25| { _ = &__ce_25;  }); });
+            }
+            const wp_keys = client.workspace_paths.keys();
+            const wp_vals = client.workspace_paths.values();
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_8 = wp_keys.len;
+                while (i < __end_8) : (i += 1) {
+                    const k = wp_keys[@as(usize, @intCast(i))];
+                    const v = wp_vals[@as(usize, @intCast(i))];
+                    const len = std.fmt.printInt((&buf), k, 10, .lower, .{});
+                    _ = try w.objectField(buf[0..len]);
+                    _ = try w.write(cp_iter_slice(v)[@intCast(sb)..]);
+                }
+            }
+        }
+        _ = try w.objectField("workspace_versions");
+        {
+            _ = try w.beginObject();
+            defer {
+            _ = (blk_catch_26: { break :blk_catch_26 ((w.endObject()) catch |__ce_26| { _ = &__ce_26;  }); });
+            }
+            const wv_keys = client.workspace_versions.keys();
+            const wv_vals = client.workspace_versions.values();
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_9 = wv_keys.len;
+                while (i < __end_9) : (i += 1) {
+                    const k = wv_keys[@as(usize, @intCast(i))];
+                    const v = wv_vals[@as(usize, @intCast(i))];
+                    const len = std.fmt.printInt((&buf), k, 10, .lower, .{});
+                    _ = try w.objectField(buf[0..len]);
+                    _ = try w.print("\"{f}\"", .{ v.fmt(sb) });
+                }
+            }
+        }
+}

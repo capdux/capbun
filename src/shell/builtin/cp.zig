@@ -1,749 +1,9 @@
-const Cp = @This();
-
-opts: Opts = .{},
-state: union(enum) {
-    idle,
-    exec: struct {
-        target_path: [:0]const u8,
-        paths_to_copy: []const [*:0]const u8,
-        started: bool = false,
-        /// this is thread safe as it is only incremented
-        /// and decremented on the main thread by this struct
-        tasks_count: u32 = 0,
-        output_waiting: u32 = 0,
-        output_done: u32 = 0,
-        err: ?bun.shell.ShellErr = null,
-
-        ebusy: if (bun.Environment.isWindows) EbusyState else struct {} = .{},
-    },
-    ebusy: struct {
-        state: EbusyState,
-        idx: usize = 0,
-        main_exit_code: ExitCode = 0,
-    },
-    waiting_write_err,
-    done,
-} = .idle,
-
-pub fn format(this: *const Cp, writer: *std.Io.Writer) !void {
-    try writer.print("Cp(0x{x})", .{@intFromPtr(this)});
-}
-
-/// On Windows it is possible to get an EBUSY error very simply
-/// by running the following command:
-///
-/// `cp myfile.txt myfile.txt mydir/`
-///
-/// Bearing in mind that the shell cp implementation creates a
-/// ShellCpTask for each source file, it's possible for one of the
-/// tasks to get EBUSY while trying to access the source file or the
-/// destination file.
-///
-/// But it's fine to ignore the EBUSY error since at
-/// least one of them will succeed anyway.
-///
-/// We handle this _after_ all the tasks have been
-/// executed, to avoid complicated synchronization on multiple
-/// threads, because the precise src or dest for each argument is
-/// not known until its corresponding ShellCpTask is executed by the
-/// threadpool.
-const EbusyState = struct {
-    tasks: std.ArrayListUnmanaged(*ShellCpTask) = .{},
-    absolute_targets: bun.StringArrayHashMapUnmanaged(void) = .{},
-    absolute_srcs: bun.StringArrayHashMapUnmanaged(void) = .{},
-
-    pub fn deinit(this: *EbusyState) void {
-        // The tasks themselves are freed in `ignoreEbusyErrorIfPossible()`
-        this.tasks.deinit(bun.default_allocator);
-        for (this.absolute_targets.keys()) |tgt| {
-            bun.default_allocator.free(tgt);
-        }
-        this.absolute_targets.deinit(bun.default_allocator);
-        for (this.absolute_srcs.keys()) |tgt| {
-            bun.default_allocator.free(tgt);
-        }
-        this.absolute_srcs.deinit(bun.default_allocator);
-    }
-};
-
-pub fn start(this: *Cp) Yield {
-    const maybe_filepath_args = switch (this.opts.parse(this.bltn().argsSlice())) {
-        .ok => |args| args,
-        .err => |e| {
-            const buf = switch (e) {
-                .illegal_option => |opt_str| this.bltn().fmtErrorArena(.cp, "illegal option -- {s}\n", .{opt_str}),
-                .show_usage => Builtin.Kind.cp.usageString(),
-                .unsupported => |unsupported| this.bltn().fmtErrorArena(.cp, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
-            };
-
-            return this.writeFailingError(buf, 1);
-        },
-    };
-
-    if (maybe_filepath_args == null or maybe_filepath_args.?.len <= 1) {
-        return this.writeFailingError(Builtin.Kind.cp.usageString(), 1);
-    }
-
-    const args = maybe_filepath_args orelse unreachable;
-    const paths_to_copy = args[0 .. args.len - 1];
-    const tgt_path = std.mem.span(args[args.len - 1]);
-
-    this.state = .{ .exec = .{
-        .target_path = tgt_path,
-        .paths_to_copy = paths_to_copy,
-    } };
-
-    return this.next();
-}
-
-pub fn ignoreEbusyErrorIfPossible(this: *Cp) Yield {
-    if (!bun.Environment.isWindows) @compileError("dont call this plz");
-
-    if (this.state.ebusy.idx < this.state.ebusy.state.tasks.items.len) {
-        outer_loop: for (this.state.ebusy.state.tasks.items[this.state.ebusy.idx..], 0..) |task_, i| {
-            const task: *ShellCpTask = task_;
-            const failure_src = task.src_absolute.?;
-            const failure_tgt = task.tgt_absolute.?;
-            if (this.state.ebusy.state.absolute_targets.get(failure_tgt)) |_| {
-                task.deinit();
-                continue :outer_loop;
-            }
-            if (this.state.ebusy.state.absolute_srcs.get(failure_src)) |_| {
-                task.deinit();
-                continue :outer_loop;
-            }
-            this.state.ebusy.idx += i + 1;
-            return this.printShellCpTask(task);
-        }
-    }
-
-    this.state.ebusy.state.deinit();
-    const exit_code = this.state.ebusy.main_exit_code;
-    this.state = .done;
-    return this.bltn().done(exit_code);
-}
-
-pub fn next(this: *Cp) Yield {
-    while (this.state != .done) {
-        switch (this.state) {
-            .idle => @panic("Invalid state for \"Cp\": idle, this indicates a bug in Bun. Please file a GitHub issue"),
-            .exec => {
-                var exec = &this.state.exec;
-                if (exec.started) {
-                    if (this.state.exec.tasks_count <= 0 and this.state.exec.output_done >= this.state.exec.output_waiting) {
-                        const exit_code: ExitCode = if (this.state.exec.err != null) 1 else 0;
-                        if (this.state.exec.err != null) {
-                            this.state.exec.err.?.deinit(bun.default_allocator);
-                        }
-                        if (comptime bun.Environment.isWindows) {
-                            if (exec.ebusy.tasks.items.len > 0) {
-                                const ebusy = this.state.exec.ebusy;
-                                this.state = .{ .ebusy = .{ .state = ebusy, .main_exit_code = exit_code } };
-                                continue;
-                            }
-                            exec.ebusy.deinit();
-                        }
-                        this.state = .done;
-                        return this.bltn().done(exit_code);
-                    }
-                    return .suspended;
-                }
-
-                exec.started = true;
-                exec.tasks_count = @intCast(exec.paths_to_copy.len);
-
-                const cwd_path = this.bltn().parentCmd().base.shell.cwdZ();
-
-                // Launch a task for each argument
-                for (exec.paths_to_copy) |path_raw| {
-                    const path = std.mem.span(path_raw);
-                    const cp_task = ShellCpTask.create(this, this.bltn().eventLoop(), this.opts, 1 + exec.paths_to_copy.len, path, exec.target_path, cwd_path);
-                    cp_task.schedule();
-                }
-                return .suspended;
-            },
-            .ebusy => {
-                if (comptime bun.Environment.isWindows) {
-                    return this.ignoreEbusyErrorIfPossible();
-                }
-                @panic("Should only be called on Windows");
-            },
-            .waiting_write_err => return .failed,
-            .done => unreachable,
-        }
-    }
-
-    return this.bltn().done(0);
-}
-
-pub fn deinit(cp: *Cp) void {
-    assert(cp.state == .done or cp.state == .waiting_write_err);
-}
-
-pub fn writeFailingError(this: *Cp, buf: []const u8, exit_code: ExitCode) Yield {
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        this.state = .waiting_write_err;
-        return this.bltn().stderr.enqueue(this, buf, safeguard);
-    }
-
-    _ = this.bltn().writeNoIO(.stderr, buf);
-
-    return this.bltn().done(exit_code);
-}
-
-pub fn onIOWriterChunk(this: *Cp, _: usize, e: ?jsc.SystemError) Yield {
-    if (e) |err| err.deref();
-    if (this.state == .waiting_write_err) {
-        return this.bltn().done(1);
-    }
-    this.state.exec.output_done += 1;
-    return this.next();
-}
-
-pub inline fn bltn(this: *@This()) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("cp", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-pub fn onShellCpTaskDone(this: *Cp, task: *ShellCpTask) void {
-    assert(this.state == .exec);
-    log("task done: 0x{x} {d}", .{ @intFromPtr(task), this.state.exec.tasks_count });
-    this.state.exec.tasks_count -= 1;
-
-    if (comptime bun.Environment.isWindows) {
-        if (task.err) |*err| {
-            if (err.* == .sys and
-                err.sys.getErrno() == .BUSY and
-                (task.tgt_absolute != null and
-                    err.sys.path.eqlUTF8(task.tgt_absolute.?)) or
-                (task.src_absolute != null and
-                    err.sys.path.eqlUTF8(task.src_absolute.?)))
-            {
-                log("{f} got ebusy {d} {d}", .{ this, this.state.exec.ebusy.tasks.items.len, this.state.exec.paths_to_copy.len });
-                bun.handleOom(this.state.exec.ebusy.tasks.append(bun.default_allocator, task));
-                this.next().run();
-                return;
-            }
-        } else {
-            if (bun.take(&task.tgt_absolute)) |tgt| {
-                const gop = bun.handleOom(this.state.exec.ebusy.absolute_targets.getOrPut(bun.default_allocator, tgt));
-                if (gop.found_existing) bun.default_allocator.free(tgt);
-            }
-            if (bun.take(&task.src_absolute)) |src| {
-                const gop = bun.handleOom(this.state.exec.ebusy.absolute_srcs.getOrPut(bun.default_allocator, src));
-                if (gop.found_existing) bun.default_allocator.free(src);
-            }
-        }
-    }
-
-    this.printShellCpTask(task).run();
-}
-
-pub fn printShellCpTask(this: *Cp, task: *ShellCpTask) Yield {
-    // Deinitialize this task as we are starting a new one
-    defer task.deinit();
-
-    var output = task.takeOutput();
-
-    const output_task: *ShellCpOutputTask = bun.new(ShellCpOutputTask, .{
-        .parent = this,
-        .output = .{ .arrlist = output.moveToUnmanaged() },
-        .state = .waiting_write_err,
-    });
-    if (bun.take(&task.err)) |err| {
-        const error_string = this.bltn().taskErrorToString(.cp, err);
-        if (this.state == .exec) {
-            if (this.state.exec.err) |*prev| prev.deinit(bun.default_allocator);
-            this.state.exec.err = err;
-        } else {
-            var e = err;
-            e.deinit(bun.default_allocator);
-        }
-        return output_task.start(error_string);
-    }
-    return output_task.start(null);
-}
-
-pub const ShellCpOutputTask = OutputTask(Cp, .{
-    .writeErr = ShellCpOutputTaskVTable.writeErr,
-    .onWriteErr = ShellCpOutputTaskVTable.onWriteErr,
-    .writeOut = ShellCpOutputTaskVTable.writeOut,
-    .onWriteOut = ShellCpOutputTaskVTable.onWriteOut,
-    .onDone = ShellCpOutputTaskVTable.onDone,
-});
-
-const ShellCpOutputTaskVTable = struct {
-    pub fn writeErr(this: *Cp, childptr: anytype, errbuf: []const u8) ?Yield {
-        if (this.state == .exec) this.state.exec.output_waiting += 1;
-        if (this.bltn().stderr.needsIO()) |safeguard| {
-            return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stderr, errbuf);
-        return null;
-    }
-
-    pub fn onWriteErr(this: *Cp) void {
-        if (this.state == .exec) this.state.exec.output_done += 1;
-    }
-
-    pub fn writeOut(this: *Cp, childptr: anytype, output: *OutputSrc) ?Yield {
-        if (this.state == .exec) this.state.exec.output_waiting += 1;
-        if (this.bltn().stdout.needsIO()) |safeguard| {
-            return this.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
-        }
-        _ = this.bltn().writeNoIO(.stdout, output.slice());
-        return null;
-    }
-
-    pub fn onWriteOut(this: *Cp) void {
-        if (this.state == .exec) this.state.exec.output_done += 1;
-    }
-
-    pub fn onDone(this: *Cp) Yield {
-        return this.next();
-    }
-};
-
-pub const ShellCpTask = struct {
-    cp: *Cp,
-
-    opts: Opts,
-    operands: usize = 0,
-    src: [:0]const u8,
-    tgt: [:0]const u8,
-    src_absolute: ?[:0]const u8 = null,
-    tgt_absolute: ?[:0]const u8 = null,
-    cwd_path: [:0]const u8,
-    verbose_output_lock: bun.Mutex = .{},
-    verbose_output: ArrayList(u8) = ArrayList(u8).init(bun.default_allocator),
-
-    task: jsc.WorkPoolTask = .{ .callback = &runFromThreadPool },
-    event_loop: jsc.EventLoopHandle,
-    concurrent_task: jsc.EventLoopTask,
-    err: ?bun.shell.ShellErr = null,
-
-    const debug = bun.Output.scoped(.ShellCpTask, .visible);
-
-    fn deinit(this: *ShellCpTask) void {
-        debug("deinit", .{});
-        this.verbose_output.deinit();
-        if (this.err) |*e| {
-            e.deinit(bun.default_allocator);
-        }
-        if (this.src_absolute) |sc| {
-            bun.default_allocator.free(sc);
-        }
-        if (this.tgt_absolute) |tc| {
-            bun.default_allocator.free(tc);
-        }
-        bun.destroy(this);
-    }
-
-    pub fn schedule(this: *@This()) void {
-        debug("schedule", .{});
-        WorkPool.schedule(&this.task);
-    }
-
-    pub fn create(
-        cp: *Cp,
-        evtloop: jsc.EventLoopHandle,
-        opts: Opts,
-        operands: usize,
-        src: [:0]const u8,
-        tgt: [:0]const u8,
-        cwd_path: [:0]const u8,
-    ) *ShellCpTask {
-        return bun.new(ShellCpTask, ShellCpTask{
-            .cp = cp,
-            .operands = operands,
-            .opts = opts,
-            .src = src,
-            .tgt = tgt,
-            .cwd_path = cwd_path,
-            .event_loop = evtloop,
-            .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop),
-        });
-    }
-
-    fn takeOutput(this: *ShellCpTask) ArrayList(u8) {
-        const out = this.verbose_output;
-        this.verbose_output = ArrayList(u8).init(bun.default_allocator);
-        return out;
-    }
-
-    pub fn ensureDest(nodefs: *jsc.Node.fs.NodeFS, dest: bun.OSPathSliceZ) Maybe(void) {
-        return switch (nodefs.mkdirRecursiveOSPath(dest, jsc.Node.Arguments.Mkdir.DefaultMode, false)) {
-            .err => |err| Maybe(void){ .err = err },
-            .result => .success,
-        };
-    }
-
-    pub fn hasTrailingSep(path: [:0]const u8) bool {
-        if (path.len == 0) return false;
-        return ResolvePath.Platform.auto.isSeparator(path[path.len - 1]);
-    }
-
-    const Kind = enum {
-        file,
-        dir,
-    };
-
-    pub fn isDir(_: *ShellCpTask, path: [:0]const u8) Maybe(bool) {
-        if (bun.Environment.isWindows) {
-            const attributes = bun.sys.getFileAttributes(path[0..path.len]) orelse {
-                const err: Syscall.Error = .{
-                    .errno = @intFromEnum(bun.sys.SystemErrno.ENOENT),
-                    .syscall = .copyfile,
-                    .path = path,
-                };
-                return .{ .err = err };
-            };
-
-            return .{ .result = attributes.is_directory };
-        }
-        const stat = switch (Syscall.lstat(path)) {
-            .result => |x| x,
-            .err => |e| {
-                return .{ .err = e };
-            },
-        };
-        return .{ .result = bun.S.ISDIR(stat.mode) };
-    }
-
-    fn enqueueToEventLoop(this: *ShellCpTask) void {
-        if (this.event_loop == .js) {
-            this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.from(this, .manual_deinit));
-        } else {
-            this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.from(this, "runFromMainThreadMini"));
-        }
-    }
-
-    pub fn runFromMainThread(this: *ShellCpTask) void {
-        debug("runFromMainThread", .{});
-        this.cp.onShellCpTaskDone(this);
-    }
-
-    pub fn runFromMainThreadMini(this: *ShellCpTask, _: *void) void {
-        this.runFromMainThread();
-    }
-
-    pub fn runFromThreadPool(task: *WorkPoolTask) void {
-        debug("runFromThreadPool", .{});
-        var this: *@This() = @fieldParentPtr("task", task);
-        if (this.runFromThreadPoolImpl()) |e| {
-            this.err = e;
-            this.enqueueToEventLoop();
-            return;
-        }
-    }
-
-    fn runFromThreadPoolImpl(this: *ShellCpTask) ?bun.shell.ShellErr {
-        var buf2: bun.PathBuffer = undefined;
-        var buf3: bun.PathBuffer = undefined;
-        // We have to give an absolute path to our cp
-        // implementation for it to work with cwd
-        const src: [:0]const u8 = brk: {
-            if (ResolvePath.Platform.auto.isAbsolute(this.src)) break :brk this.src;
-            const parts: []const []const u8 = &.{
-                this.cwd_path[0..],
-                this.src[0..],
-            };
-            break :brk ResolvePath.joinZ(parts, .auto);
-        };
-        var tgt: [:0]const u8 = brk: {
-            if (ResolvePath.Platform.auto.isAbsolute(this.tgt)) break :brk this.tgt;
-            const parts: []const []const u8 = &.{
-                this.cwd_path[0..],
-                this.tgt[0..],
-            };
-            break :brk ResolvePath.joinZBuf(buf2[0..bun.MAX_PATH_BYTES], parts, .auto);
-        };
-
-        // Cases:
-        // SRC       DEST
-        // ----------------
-        // file   -> file
-        // file   -> folder
-        // folder -> folder
-        // ----------------
-        // We need to check dest to see what it is
-        // If it doesn't exist we need to create it
-        const src_is_dir = switch (this.isDir(src)) {
-            .result => |x| x,
-            .err => |e| return bun.shell.ShellErr.newSys(e),
-        };
-
-        // Any source directory without -R is an error
-        if (src_is_dir and !this.opts.recursive) {
-            const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is a directory (not copied)", .{this.src}));
-            return .{ .custom = errmsg };
-        }
-
-        if (!src_is_dir and bun.strings.eql(src, tgt)) {
-            const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} and {s} are identical (not copied)", .{ this.src, this.src }));
-            return .{ .custom = errmsg };
-        }
-
-        const tgt_is_dir: bool, const tgt_exists: bool = switch (this.isDir(tgt)) {
-            .result => |is_dir| .{ is_dir, true },
-            .err => |e| brk: {
-                if (e.getErrno() == .NOENT) {
-                    // If it has a trailing directory separator, its a directory
-                    const is_dir = hasTrailingSep(tgt);
-                    break :brk .{ is_dir, false };
-                }
-                return bun.shell.ShellErr.newSys(e);
-            },
-        };
-
-        var copying_many = false;
-
-        // Note:
-        // The following logic is based on the POSIX spec:
-        //   https://man7.org/linux/man-pages/man1/cp.1p.html
-
-        // Handle the "1st synopsis": source_file -> target_file
-        if (!src_is_dir and !tgt_is_dir and this.operands == 2) {
-            // Don't need to do anything here
-        }
-        // Handle the "2nd synopsis": -R source_files... -> target
-        else if (this.opts.recursive) {
-            if (tgt_exists) {
-                const basename = ResolvePath.basename(src[0..src.len]);
-                const parts: []const []const u8 = &.{
-                    tgt[0..tgt.len],
-                    basename,
-                };
-                tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], parts, .auto);
-            } else if (this.operands == 2) {
-                // source_dir -> new_target_dir
-            } else {
-                const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "directory {s} does not exist", .{this.tgt}));
-                return .{ .custom = errmsg };
-            }
-            copying_many = true;
-        }
-        // Handle the "3rd synopsis": source_files... -> target
-        else {
-            if (src_is_dir) return .{ .custom = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is a directory (not copied)", .{this.src})) };
-            if (!tgt_exists or !tgt_is_dir) return .{ .custom = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is not a directory", .{this.tgt})) };
-            const basename = ResolvePath.basename(src[0..src.len]);
-            const parts: []const []const u8 = &.{
-                tgt[0..tgt.len],
-                basename,
-            };
-            tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], parts, .auto);
-            copying_many = true;
-        }
-
-        this.src_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, src[0..src.len]));
-        this.tgt_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, tgt[0..tgt.len]));
-
-        const args = jsc.Node.fs.Arguments.Cp{
-            .src = jsc.Node.PathLike{ .string = bun.PathString.init(this.src_absolute.?) },
-            .dest = jsc.Node.PathLike{ .string = bun.PathString.init(this.tgt_absolute.?) },
-            .flags = .{
-                .mode = @enumFromInt(0),
-                .recursive = this.opts.recursive,
-                .force = true,
-                .errorOnExist = false,
-                .deinit_paths = false,
-            },
-        };
-
-        debug("Scheduling {s} -> {s}", .{ this.src_absolute.?, this.tgt_absolute.? });
-        if (this.event_loop == .js) {
-            const vm: *jsc.VirtualMachine = this.event_loop.js.getVmImpl();
-            debug("Yoops", .{});
-            _ = bun.api.node.fs.ShellAsyncCpTask.createWithShellTask(
-                vm.global,
-                args,
-                vm,
-                bun.ArenaAllocator.init(bun.default_allocator),
-                this,
-                false,
-            );
-        } else {
-            _ = bun.api.node.fs.ShellAsyncCpTask.createMini(
-                args,
-                this.event_loop.mini,
-                bun.ArenaAllocator.init(bun.default_allocator),
-                this,
-            );
-        }
-
-        return null;
-    }
-
-    fn onSubtaskFinish(this: *ShellCpTask, err: Maybe(void)) void {
-        debug("onSubtaskFinish", .{});
-        if (err.asErr()) |e| {
-            this.err = bun.shell.ShellErr.newSys(e);
-        }
-        this.enqueueToEventLoop();
-    }
-
-    pub fn onCopyImpl(this: *ShellCpTask, src: [:0]const u8, dest: [:0]const u8) void {
-        this.verbose_output_lock.lock();
-        log("onCopy: {s} -> {s}\n", .{ src, dest });
-        defer this.verbose_output_lock.unlock();
-        var writer = this.verbose_output.writer();
-        bun.handleOom(writer.print("{s} -> {s}\n", .{ src, dest }));
-    }
-
-    pub fn cpOnCopy(this: *ShellCpTask, src_: anytype, dest_: anytype) void {
-        if (!this.opts.verbose) return;
-        if (comptime bun.Environment.isPosix) return this.onCopyImpl(src_, dest_);
-
-        var buf: bun.PathBuffer = undefined;
-        var buf2: bun.PathBuffer = undefined;
-        const src: [:0]const u8 = switch (@TypeOf(src_)) {
-            [:0]const u8, [:0]u8 => src_,
-            [:0]const u16, [:0]u16 => bun.strings.fromWPath(buf[0..], src_),
-            else => @compileError("Invalid type: " ++ @typeName(@TypeOf(src_))),
-        };
-        const dest: [:0]const u8 = switch (@TypeOf(dest_)) {
-            [:0]const u8, [:0]u8 => src_,
-            [:0]const u16, [:0]u16 => bun.strings.fromWPath(buf2[0..], dest_),
-            else => @compileError("Invalid type: " ++ @typeName(@TypeOf(dest_))),
-        };
-        this.onCopyImpl(src, dest);
-    }
-
-    pub fn cpOnFinish(this: *ShellCpTask, result: Maybe(void)) void {
-        this.onSubtaskFinish(result);
-    }
-};
-
-const Opts = packed struct(u16) {
-    /// -f
-    ///
-    /// If the destination file cannot be opened, remove it and create a
-    /// new file, without prompting for confirmation regardless of its
-    /// permissions.  (The -f option overrides any previous -n option.) The
-    /// target file is not unlinked before the copy.  Thus, any existing access
-    /// rights will be retained.
-    remove_and_create_new_file_if_not_found: bool = false,
-
-    /// -H
-    ///
-    /// Take actions based on the type and contents of the file
-    /// referenced by any symbolic link specified as a
-    /// source_file operand.
-    dereference_command_line_symlinks: bool = false,
-
-    /// -i
-    ///
-    /// Write a prompt to standard error before copying to any
-    /// existing non-directory destination file. If the
-    /// response from the standard input is affirmative, the
-    /// copy shall be attempted; otherwise, it shall not.
-    interactive: bool = false,
-
-    /// -L
-    ///
-    /// Take actions based on the type and contents of the file
-    /// referenced by any symbolic link specified as a
-    /// source_file operand or any symbolic links encountered
-    /// during traversal of a file hierarchy.
-    dereference_all_symlinks: bool = false,
-
-    /// -P
-    ///
-    /// Take actions on any symbolic link specified as a
-    /// source_file operand or any symbolic link encountered
-    /// during traversal of a file hierarchy.
-    preserve_symlinks: bool = false,
-
-    /// -p
-    ///
-    /// Duplicate the following characteristics of each source
-    /// file in the corresponding destination file:
-    /// 1. The time of last data modification and time of last
-    ///    access.
-    /// 2. The user ID and group ID.
-    /// 3. The file permission bits and the S_ISUID and
-    ///    S_ISGID bits.
-    preserve_file_attributes: bool = false,
-
-    /// -R
-    ///
-    /// Copy file hierarchies.
-    recursive: bool = false,
-
-    /// -v
-    ///
-    /// Cause cp to be verbose, showing files as they are copied.
-    verbose: bool = false,
-
-    /// -n
-    ///
-    /// Do not overwrite an existing file.  (The -n option overrides any previous -f or -i options.)
-    overwrite_existing_file: bool = true,
-
-    _padding: u7 = 0,
-
-    const Parse = FlagParser(*@This());
-
-    pub fn parse(opts: *Opts, args: []const [*:0]const u8) Result(?[]const [*:0]const u8, ParseError) {
-        return Parse.parseFlags(opts, args);
-    }
-
-    pub fn parseLong(this: *Opts, flag: []const u8) ?ParseFlagResult {
-        _ = this;
-        _ = flag;
-        return null;
-    }
-
-    pub fn parseShort(this: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
-        switch (char) {
-            'f' => {
-                return .{ .unsupported = unsupportedFlag("-f") };
-            },
-            'H' => {
-                return .{ .unsupported = unsupportedFlag("-H") };
-            },
-            'i' => {
-                return .{ .unsupported = unsupportedFlag("-i") };
-            },
-            'L' => {
-                return .{ .unsupported = unsupportedFlag("-L") };
-            },
-            'P' => {
-                return .{ .unsupported = unsupportedFlag("-P") };
-            },
-            'p' => {
-                return .{ .unsupported = unsupportedFlag("-P") };
-            },
-            'R' => {
-                this.recursive = true;
-                return .continue_parsing;
-            },
-            'v' => {
-                this.verbose = true;
-                return .continue_parsing;
-            },
-            'n' => {
-                this.overwrite_existing_file = true;
-                this.remove_and_create_new_file_if_not_found = false;
-                return .continue_parsing;
-            },
-            else => {
-                return .{ .illegal_option = smallflags[i..] };
-            },
-        }
-
-        return null;
-    }
-};
-
-// --
-const log = bun.Output.scoped(.cp, .hidden);
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const ArrayList = std.array_list.Managed;
+const string = []const u8;
 
-const interpreter = @import("../interpreter.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const ArrayList = std.array_list.Managed;
 const FlagParser = interpreter.FlagParser;
 const Interpreter = interpreter.Interpreter;
 const OutputSrc = interpreter.OutputSrc;
@@ -751,21 +11,651 @@ const OutputTask = interpreter.OutputTask;
 const ParseError = interpreter.ParseError;
 const ParseFlagResult = interpreter.ParseFlagResult;
 const unsupportedFlag = interpreter.unsupportedFlag;
-
 const Builtin = Interpreter.Builtin;
 const Result = Interpreter.Builtin.Result;
-
-const bun = @import("bun");
 const ResolvePath = bun.path;
 const assert = bun.assert;
-
 const jsc = bun.jsc;
 const WorkPool = jsc.WorkPool;
 const WorkPoolTask = jsc.WorkPoolTask;
-
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const Yield = shell.Yield;
-
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
+const log = bun.Output.scoped(.cp, .hidden);
+const task_debug = bun.Output.scoped(.ShellCpTask, .visible);
+pub const EbusyState = struct {
+    tasks: std.ArrayListUnmanaged(*ShellCpTask) = .{},
+    absolute_targets: bun.StringArrayHashMapUnmanaged(void) = .{},
+    absolute_srcs: bun.StringArrayHashMapUnmanaged(void) = .{},
+
+pub fn deinit(self: *@This()) void {
+            _ = self.tasks.deinit(bun.default_allocator);
+            for (cp_iter_slice(self.absolute_targets.keys())) |tgt| {
+                _ = &tgt;
+                _ = bun.default_allocator.free(tgt);
+            }
+            _ = self.absolute_targets.deinit(bun.default_allocator);
+            for (cp_iter_slice(self.absolute_srcs.keys())) |tgt| {
+                _ = &tgt;
+                _ = bun.default_allocator.free(tgt);
+            }
+            _ = self.absolute_srcs.deinit(bun.default_allocator);
+    }
+};
+pub const EbusyExecState = (if (bun.Environment.isWindows) EbusyState else struct {
+});
+pub const State = union(enum) {
+    idle,
+    exec: ExecState,
+    ebusy: EbusySubState,
+    waiting_write_err,
+    done,
+};
+pub const ShellCpKind = enum {
+    file,
+    dir,
+};
+const ShellCpOutputTaskVTable = struct {
+
+pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
+            if ((self.state == .exec)) {
+                self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            }
+            if (self.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return self.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(self: *@This()) void {
+            if ((self.state == .exec)) {
+                self.state.exec.output_done = (self.state.exec.output_done + 1);
+            }
+    }
+
+pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
+            if ((self.state == .exec)) {
+                self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
+            }
+            if (self.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return self.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(self: *@This()) void {
+            if ((self.state == .exec)) {
+                self.state.exec.output_done = (self.state.exec.output_done + 1);
+            }
+    }
+
+pub fn onDone(self: *@This()) Yield {
+            return self.next();
+    }
+};
+pub const ShellCpOutputTask = OutputTask(Cp, .{ .writeErr = ShellCpOutputTaskVTable.writeErr, .onWriteErr = ShellCpOutputTaskVTable.onWriteErr, .writeOut = ShellCpOutputTaskVTable.writeOut, .onWriteOut = ShellCpOutputTaskVTable.onWriteOut, .onDone = ShellCpOutputTaskVTable.onDone });
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const ExecState = struct {
+    target_path: [:0]const u8,
+    paths_to_copy: []const [*:0]u8,
+    started: bool = false,
+    tasks_count: u32 = 0,
+    output_waiting: u32 = 0,
+    output_done: u32 = 0,
+    err: OptionalShellErr = null,
+    ebusy: EbusyExecState = .{},
+};
+
+pub const EbusySubState = struct {
+    state: EbusyState,
+    idx: usize = 0,
+    main_exit_code: ExitCode = 0,
+};
+
+pub const Opts = packed struct(u16) {
+    remove_and_create_new_file_if_not_found: bool = false,
+    dereference_command_line_symlinks: bool = false,
+    interactive: bool = false,
+    dereference_all_symlinks: bool = false,
+    preserve_symlinks: bool = false,
+    preserve_file_attributes: bool = false,
+    recursive: bool = false,
+    verbose: bool = false,
+    overwrite_existing_file: bool = true,
+    _padding: u7 = 0,
+
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+            const Parse = FlagParser(*Opts);
+            return Parse.parseFlags(self, args);
+    }
+
+pub fn parseLong(self: *Opts, flag: []const u8) ?ParseFlagResult {
+        _ = &self;
+            _ = flag.len;
+            return null;
+    }
+
+pub fn parseShort(self: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
+            switch (char) {
+'f' => {
+return .{ .unsupported = unsupportedFlag("-f") };
+},
+'H' => {
+return .{ .unsupported = unsupportedFlag("-H") };
+},
+'i' => {
+return .{ .unsupported = unsupportedFlag("-i") };
+},
+'L' => {
+return .{ .unsupported = unsupportedFlag("-L") };
+},
+'P', 'p' => {
+return .{ .unsupported = unsupportedFlag("-P") };
+},
+'R' => {
+self.recursive = true;
+            return .continue_parsing;
+},
+'v' => {
+self.verbose = true;
+            return .continue_parsing;
+},
+'n' => {
+self.overwrite_existing_file = true;
+            self.remove_and_create_new_file_if_not_found = false;
+            return .continue_parsing;
+},
+else => {
+return .{ .illegal_option = smallflags[i..] };
+},
+}
+    }
+};
+
+pub const ShellCpTask = struct {
+    cp: *Cp,
+    opts: Opts,
+    operands: usize = 0,
+    src: [:0]const u8,
+    tgt: [:0]const u8,
+    src_absolute: OptionalPathZ = null,
+    tgt_absolute: OptionalPathZ = null,
+    cwd_path: [:0]const u8,
+    verbose_output_lock: bun.Mutex = .{},
+    verbose_output: ArrayList(u8) = ArrayList(u8).init(bun.default_allocator),
+    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    event_loop: jsc.EventLoopHandle,
+    concurrent_task: jsc.EventLoopTask,
+    err: OptionalShellErr = null,
+
+pub fn deinit(self: *ShellCpTask) void {
+            _ = task_debug("deinit", .{});
+            _ = self.verbose_output.deinit();
+            if (self.err) |e| {
+                _ = &e;
+                var err_obj = e;
+                _ = &err_obj;
+                _ = err_obj.deinit(bun.default_allocator);
+            }
+            if (self.src_absolute) |sc| {
+                _ = &sc;
+                _ = bun.default_allocator.free(sc);
+            }
+            if (self.tgt_absolute) |tc| {
+                _ = &tc;
+                _ = bun.default_allocator.free(tc);
+            }
+            _ = bun.destroy(self);
+    }
+
+pub fn schedule(self: *ShellCpTask) void {
+            _ = task_debug("schedule", .{});
+            _ = WorkPool.schedule((&self.task));
+    }
+
+pub fn create(self: ShellCpTask, cp: *Cp, evtloop: jsc.EventLoopHandle, opts: Opts, operands: usize, src: [:0]const u8, tgt: [:0]const u8, cwd_path: [:0]const u8) *ShellCpTask {
+        _ = &self;
+            return bun.new(ShellCpTask, ShellCpTask{ .cp = cp, .operands = operands, .opts = opts, .src = src, .tgt = tgt, .cwd_path = cwd_path, .event_loop = evtloop, .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop) });
+    }
+
+pub fn takeOutput(self: *ShellCpTask) ArrayList(u8) {
+            const out = self.verbose_output;
+            self.verbose_output = ArrayList(u8).init(bun.default_allocator);
+            return out;
+    }
+
+pub fn ensureDest(self: ShellCpTask, nodefs: *jsc.Node.fs.NodeFS, dest: bun.OSPathSliceZ) Maybe(void) {
+        _ = &self;
+            return (switch (nodefs.mkdirRecursiveOSPath(dest, jsc.Node.Arguments.Mkdir.DefaultMode, false)) {
+.err => |e| .{ .err = e },
+.result => .success,
+});
+    }
+
+pub fn hasTrailingSep(self: ShellCpTask, path: [:0]const u8) bool {
+        _ = &self;
+            if ((path.len == 0)) {
+                return false;
+            }
+            return ResolvePath.Platform.auto.isSeparator(path[@as(usize, @intCast((path.len - 1)))]);
+    }
+
+pub fn isDir(self: *ShellCpTask, path: [:0]const u8) Maybe(bool) {
+        _ = &self;
+            if (bun.Environment.isWindows) {
+                const attributes_opt = bun.sys.getFileAttributes(path[0..path.len]);
+                if ((attributes_opt == null)) {
+                    const err_val: Syscall.Error = .{ .errno = @intFromEnum(bun.sys.SystemErrno.ENOENT), .syscall = .copyfile, .path = path };
+                    return .{ .err = err_val };
+                }
+                const attributes = attributes_opt.?;
+                return .{ .result = attributes.is_directory };
+            }
+            const stat = (switch (Syscall.lstat(path)) {
+.result => |x| x,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            return .{ .result = bun.S.ISDIR(stat.mode) };
+    }
+
+pub fn enqueueToEventLoop(self: *ShellCpTask) void {
+            if ((self.event_loop == .js)) {
+                _ = self.event_loop.js.enqueueTaskConcurrent(self.concurrent_task.js.@"from"(self, .manual_deinit));
+            } else {
+                _ = self.event_loop.mini.enqueueTaskConcurrent(self.concurrent_task.mini.@"from"(self, "runFromMainThreadMini"));
+            }
+    }
+
+pub fn runFromMainThread(self: *ShellCpTask) void {
+            _ = task_debug("runFromMainThread", .{});
+            _ = self.cp.onShellCpTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *ShellCpTask) void {
+            _ = self.runFromMainThread();
+    }
+
+pub fn runFromThreadPool(task: *WorkPoolTask) void {
+            _ = task_debug("runFromThreadPool", .{});
+            var this: *ShellCpTask = @fieldParentPtr("task", task);
+            _ = &this;
+            if (this.runFromThreadPoolImpl()) |e| {
+                _ = &e;
+                this.err = e;
+                _ = this.enqueueToEventLoop();
+                return;
+            }
+    }
+
+pub fn runFromThreadPoolImpl(self: *ShellCpTask) ?bun.shell.ShellErr {
+            var buf2: bun.PathBuffer = undefined;
+            _ = &buf2;
+            var buf3: bun.PathBuffer = undefined;
+            _ = &buf3;
+            var src: [:0]const u8 = self.src;
+            _ = &src;
+            if ((!ResolvePath.Platform.auto.isAbsolute(self.src))) {
+                const parts: [2][]const u8 = .{ self.cwd_path[0..], self.src[0..] };
+                src = ResolvePath.joinZ((&parts), .auto);
+            }
+            var tgt: [:0]const u8 = self.tgt;
+            _ = &tgt;
+            if ((!ResolvePath.Platform.auto.isAbsolute(self.tgt))) {
+                const parts: [2][]const u8 = .{ self.cwd_path[0..], self.tgt[0..] };
+                tgt = ResolvePath.joinZBuf(buf2[0..bun.MAX_PATH_BYTES], (&parts), .auto);
+            }
+            const src_is_dir = (switch (self.isDir(src)) {
+.result => |x| x,
+.err => |e| {
+return bun.shell.ShellErr.newSys(e);
+},
+});
+            if ((src_is_dir and (!self.opts.recursive))) {
+                const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is a directory (not copied)", .{ self.src }));
+                return .{ .custom = errmsg };
+            }
+            if (((!src_is_dir) and bun.strings.eql(src, tgt))) {
+                const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} and {s} are identical (not copied)", .{ self.src, self.src }));
+                return .{ .custom = errmsg };
+            }
+            var tgt_is_dir: bool = false;
+            _ = &tgt_is_dir;
+            var tgt_exists: bool = false;
+            _ = &tgt_exists;
+            switch (self.isDir(tgt)) {
+.result => |is_dir| {
+tgt_is_dir = is_dir;
+            tgt_exists = true;
+},
+.err => |e| {
+if ((e.getErrno() == .NOENT)) {
+                tgt_is_dir = self.hasTrailingSep(tgt);
+                tgt_exists = false;
+            } else {
+                return bun.shell.ShellErr.newSys(e);
+            }
+},
+}
+            var copying_many = false;
+            _ = &copying_many;
+            if ((((!src_is_dir) and (!tgt_is_dir)) and (self.operands == 2))) {
+            } else {
+                if (self.opts.recursive) {
+                    if (tgt_exists) {
+                        const basename = ResolvePath.basename(src[0..src.len]);
+                        const parts: [2][]const u8 = .{ tgt[0..tgt.len], basename };
+                        tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], (&parts), .auto);
+                    } else {
+                        if ((self.operands == 2)) {
+                        } else {
+                            const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "directory {s} does not exist", .{ self.tgt }));
+                            return .{ .custom = errmsg };
+                        }
+                    }
+                    copying_many = true;
+                } else {
+                    if (src_is_dir) {
+                        return .{ .custom = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is a directory (not copied)", .{ self.src })) };
+                    }
+                    if (((!tgt_exists) or (!tgt_is_dir))) {
+                        return .{ .custom = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} is not a directory", .{ self.tgt })) };
+                    }
+                    const basename = ResolvePath.basename(src[0..src.len]);
+                    const parts: [2][]const u8 = .{ tgt[0..tgt.len], basename };
+                    tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], (&parts), .auto);
+                    copying_many = true;
+                }
+            }
+            self.src_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, src[0..src.len]));
+            self.tgt_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, tgt[0..tgt.len]));
+            const args = jsc.Node.fs.Arguments.Cp{ .src = jsc.Node.PathLike{ .string = bun.PathString.init(self.src_absolute.?) }, .dest = jsc.Node.PathLike{ .string = bun.PathString.init(self.tgt_absolute.?) }, .flags = .{ .mode = @enumFromInt(0), .recursive = self.opts.recursive, .force = true, .errorOnExist = false, .deinit_paths = false } };
+            _ = task_debug("Scheduling {s} -> {s}", .{ self.src_absolute.?, self.tgt_absolute.? });
+            if ((self.event_loop == .js)) {
+                const vm: *jsc.VirtualMachine = self.event_loop.js.getVmImpl();
+                _ = task_debug("Yoops", .{});
+                _ = bun.api.node.fs.ShellAsyncCpTask.createWithShellTask(vm.global, args, vm, bun.ArenaAllocator.init(bun.default_allocator), self, false);
+            } else {
+                _ = bun.api.node.fs.ShellAsyncCpTask.createMini(args, self.event_loop.mini, bun.ArenaAllocator.init(bun.default_allocator), self);
+            }
+            return null;
+    }
+
+pub fn onSubtaskFinish(self: *ShellCpTask, e: Maybe(void)) void {
+            _ = task_debug("onSubtaskFinish", .{});
+            if (e.asErr()) |err_val| {
+                _ = &err_val;
+                self.err = bun.shell.ShellErr.newSys(err_val);
+            }
+            _ = self.enqueueToEventLoop();
+    }
+
+pub fn onCopyImpl(self: *ShellCpTask, src: [:0]const u8, dest: [:0]const u8) void {
+            _ = self.verbose_output_lock.lock();
+            _ = log("onCopy: {s} -> {s}\n", .{ src, dest });
+            defer {
+            _ = self.verbose_output_lock.unlock();
+            }
+            var writer = self.verbose_output.writer();
+            _ = &writer;
+            _ = bun.handleOom(writer.print("{s} -> {s}\n", .{ src, dest }));
+    }
+
+pub fn cpOnCopy(self: *ShellCpTask, src_: anytype, dest_: anytype) void {
+            if ((!self.opts.verbose)) {
+                return;
+            }
+            if (comptime bun.Environment.isPosix) {
+                return self.onCopyImpl(src_, dest_);
+            }
+            var buf: bun.PathBuffer = undefined;
+            _ = &buf;
+            var buf2: bun.PathBuffer = undefined;
+            _ = &buf2;
+            const src: [:0]const u8 = (if ((@TypeOf(src_) == [:0]const u8) or (@TypeOf(src_) == [:0]u8)) src_ else if ((@TypeOf(src_) == [:0]const u16) or (@TypeOf(src_) == [:0]u16)) bun.strings.fromWPath(buf[0..], src_) else @compileError(("Invalid type: " ++ @typeName(@TypeOf(src_)))));
+            const dest: [:0]const u8 = (if ((@TypeOf(dest_) == [:0]const u8) or (@TypeOf(dest_) == [:0]u8)) dest_ else if ((@TypeOf(dest_) == [:0]const u16) or (@TypeOf(dest_) == [:0]u16)) bun.strings.fromWPath(buf2[0..], dest_) else @compileError(("Invalid type: " ++ @typeName(@TypeOf(dest_)))));
+            _ = self.onCopyImpl(src, dest);
+    }
+
+pub fn cpOnFinish(self: *ShellCpTask, result: Maybe(void)) void {
+            _ = self.onSubtaskFinish(result);
+    }
+    pub const Kind = ShellCpKind;
+};
+
+pub const Cp = @This();
+
+opts: Opts = .{},
+state: State = .idle,
+
+pub fn format(self: Cp, writer: anytype) !void {
+        _ = try writer.print("Cp(0x{x})", .{ @intFromPtr(self) });
+}
+
+pub fn start(self: *Cp) Yield {
+        const maybe_filepath_args = (switch (self.opts.parse(self.bltn().argsSlice())) {
+.ok => |args| args,
+.err => |e| {
+{
+            const buf = (switch (e) {
+.illegal_option => |opt_str| self.bltn().fmtErrorArena(.cp, "illegal option -- {s}\n", .{ opt_str }),
+.show_usage => Builtin.Kind.cp.usageString(),
+.unsupported => |unsupported| self.bltn().fmtErrorArena(.cp, "unsupported option, please open a GitHub issue -- {s}\n", .{ unsupported }),
+});
+            return self.writeFailingError(buf, 1);
+        }
+},
+});
+        if (((maybe_filepath_args == null) or (maybe_filepath_args.?.len <= 1))) {
+            return self.writeFailingError(Builtin.Kind.cp.usageString(), 1);
+        }
+        const args = maybe_filepath_args.?;
+        const paths_to_copy = args[0..(args.len - 1)];
+        const tgt_path = std.mem.span(args[@as(usize, @intCast((args.len - 1)))]);
+        self.state = .{ .exec = .{ .target_path = tgt_path, .paths_to_copy = paths_to_copy } };
+        return self.next();
+}
+
+pub fn ignoreEbusyErrorIfPossible(self: *Cp) Yield {
+        if ((!bun.Environment.isWindows)) {
+            _ = @compileError("dont call this plz");
+        }
+        if ((self.state.ebusy.idx < self.state.ebusy.state.tasks.items.len)) {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(self.state.ebusy.state.tasks.items[self.state.ebusy.idx..])) |task_| {
+                _ = &task_;
+                defer {
+                i = (i + 1);
+                }
+                const task: *ShellCpTask = task_;
+                const failure_src = task.src_absolute.?;
+                const failure_tgt = task.tgt_absolute.?;
+                if (self.state.ebusy.state.absolute_targets.get(failure_tgt)) |entry| {
+                    _ = &entry;
+                    _ = task.deinit();
+                    continue;
+                }
+                if (self.state.ebusy.state.absolute_srcs.get(failure_src)) |entry| {
+                    _ = &entry;
+                    _ = task.deinit();
+                    continue;
+                }
+                self.state.ebusy.idx = (self.state.ebusy.idx + (i + 1));
+                return self.printShellCpTask(task);
+            }
+        }
+        _ = self.state.ebusy.state.deinit();
+        const exit_code = self.state.ebusy.main_exit_code;
+        self.state = .done;
+        return self.bltn().done(exit_code);
+}
+
+pub fn next(self: *Cp) Yield {
+        while ((self.state != .done)) {
+            switch (self.state) {
+.idle => {
+_ = @panic("Invalid state for \"Cp\": idle, this indicates a bug in Bun. Please file a GitHub issue");
+},
+.exec => {
+var exec = (&(&self.state.exec));
+            _ = &exec;
+            if (exec.started) {
+                if (((self.state.exec.tasks_count <= 0) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
+                    const exit_code: ExitCode = (if ((self.state.exec.err != null)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
+                    if (self.state.exec.err) |e| {
+                        _ = &e;
+                        var err_obj = e;
+                        _ = &err_obj;
+                        _ = err_obj.deinit(bun.default_allocator);
+                    }
+                    if (comptime bun.Environment.isWindows) {
+                        if ((exec.ebusy.tasks.items.len > 0)) {
+                            const ebusy = self.state.exec.ebusy;
+                            self.state = .{ .ebusy = .{ .state = ebusy, .main_exit_code = exit_code } };
+                            continue;
+                        }
+                        _ = exec.ebusy.deinit();
+                    }
+                    self.state = .done;
+                    return self.bltn().done(exit_code);
+                }
+                return .suspended;
+            }
+            exec.started = true;
+            exec.tasks_count = @intCast(exec.paths_to_copy.len);
+            const cwd_path = self.bltn().parentCmd().base.shell.cwdZ();
+            for (cp_iter_slice(exec.paths_to_copy)) |path_raw| {
+                _ = &path_raw;
+                const path = std.mem.span(path_raw);
+                const cp_task = ShellCpTask.create(self, self.bltn().eventLoop(), self.opts, (1 + exec.paths_to_copy.len), path, exec.target_path, cwd_path);
+                _ = cp_task.schedule();
+            }
+            return .suspended;
+},
+.ebusy => {
+if (comptime bun.Environment.isWindows) {
+                return self.ignoreEbusyErrorIfPossible();
+            }
+            _ = @panic("Should only be called on Windows");
+},
+.waiting_write_err => {
+return .failed;
+},
+.done => {
+_ = unreachable;
+},
+}
+        }
+        return self.bltn().done(0);
+}
+
+pub fn deinit(self: *Cp) void {
+        _ = assert(((self.state == .done) or (self.state == .waiting_write_err)));
+}
+
+pub fn writeFailingError(self: *Cp, buf: []const u8, exit_code: ExitCode) Yield {
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state = .waiting_write_err;
+            return self.bltn().stderr.enqueue(self, buf, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        return self.bltn().done(exit_code);
+}
+
+pub fn onIOWriterChunk(self: *Cp, e: ?jsc.SystemError) Yield {
+        if (e) |err| {
+            _ = &err;
+            _ = err.deref();
+        }
+        if ((self.state == .waiting_write_err)) {
+            return self.bltn().done(1);
+        }
+        self.state.exec.output_done = (self.state.exec.output_done + 1);
+        return self.next();
+}
+
+pub inline fn bltn(self: *Cp) *Builtin {
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cp", self));
+        return @fieldParentPtr("impl", impl_);
+}
+
+pub fn onShellCpTaskDone(self: *Cp, task: *ShellCpTask) void {
+        _ = assert((self.state == .exec));
+        _ = log("task done: 0x{x} {d}", .{ @intFromPtr(task), self.state.exec.tasks_count });
+        self.state.exec.tasks_count = (self.state.exec.tasks_count - 1);
+        if (comptime bun.Environment.isWindows) {
+            if (task.err) |*err_val| {
+                _ = &err_val;
+                if (((((err_val.*).* == .sys) and ((err_val.*).sys.getErrno() == .BUSY)) and (((task.tgt_absolute != null) and (err_val.*).sys.path.eqlUTF8(task.tgt_absolute.?)) or ((task.src_absolute != null) and (err_val.*).sys.path.eqlUTF8(task.src_absolute.?))))) {
+                    _ = log("{f} got ebusy {d} {d}", .{ self, self.state.exec.ebusy.tasks.items.len, self.state.exec.paths_to_copy.len });
+                    _ = bun.handleOom(self.state.exec.ebusy.tasks.append(bun.default_allocator, task));
+                    _ = self.next().run();
+                    return;
+                }
+            } else {
+                if (bun.take((&task.tgt_absolute))) |tgt| {
+                    _ = &tgt;
+                    const gop = bun.handleOom(self.state.exec.ebusy.absolute_targets.getOrPut(bun.default_allocator, tgt));
+                    if (gop.found_existing) {
+                        _ = bun.default_allocator.free(tgt);
+                    }
+                }
+                if (bun.take((&task.src_absolute))) |src| {
+                    _ = &src;
+                    const gop = bun.handleOom(self.state.exec.ebusy.absolute_srcs.getOrPut(bun.default_allocator, src));
+                    if (gop.found_existing) {
+                        _ = bun.default_allocator.free(src);
+                    }
+                }
+            }
+        }
+        _ = self.printShellCpTask(task).run();
+}
+
+pub fn printShellCpTask(self: *Cp, task: *ShellCpTask) Yield {
+        defer {
+        _ = task.deinit();
+        }
+        var output = task.takeOutput();
+        _ = &output;
+        const output_task: *ShellCpOutputTask = bun.new(ShellCpOutputTask, .{ .parent = self, .output = .{ .arrlist = output.moveToUnmanaged() }, .state = .waiting_write_err });
+        if (bun.take((&task.err))) |err_val| {
+            _ = &err_val;
+            const error_string = self.bltn().taskErrorToString(.cp, err_val);
+            if ((self.state == .exec)) {
+                if (self.state.exec.err) |*prev| {
+                    _ = &prev;
+                    _ = (prev.*).deinit(bun.default_allocator);
+                }
+                self.state.exec.err = err_val;
+            } else {
+                var e = err_val;
+                _ = &e;
+                _ = e.deinit(bun.default_allocator);
+            }
+            return output_task.start(error_string);
+        }
+        return output_task.start(null);
+}
+pub const FilepathArgs = ?[]const [*:0]u8;
+pub const OptionalPathZ = ?[:0]const u8;
+pub const OptionalShellErr = ?bun.shell.ShellErr;

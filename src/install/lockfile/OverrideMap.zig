@@ -1,350 +1,7 @@
-const OverrideMap = @This();
-
-const debug = Output.scoped(.OverrideMap, .visible);
-
-map: std.ArrayHashMapUnmanaged(PackageNameHash, Dependency, ArrayIdentityContext.U64, false) = .{},
-
-/// In the future, this `get` function should handle multi-level resolutions. This is difficult right
-/// now because given a Dependency ID, there is no fast way to trace it to its package.
-///
-/// A potential approach is to add another buffer to the lockfile that maps Dependency ID to Package ID,
-/// and from there `OverrideMap.map` can have a union as the value, where the union is between "override all"
-/// and "here is a list of overrides depending on the package that imported" similar to PackageIndex above.
-pub fn get(this: *const OverrideMap, name_hash: PackageNameHash) ?Dependency.Version {
-    debug("looking up override for {x}", .{name_hash});
-    if (this.map.count() == 0) {
-        return null;
-    }
-    return if (this.map.get(name_hash)) |dep|
-        dep.version
-    else
-        null;
-}
-
-pub fn sort(this: *OverrideMap, lockfile: *const Lockfile) void {
-    const Ctx = struct {
-        buf: string,
-        override_deps: [*]const Dependency,
-
-        pub fn lessThan(sorter: *const @This(), l: usize, r: usize) bool {
-            const deps = sorter.override_deps;
-            const l_dep = deps[l];
-            const r_dep = deps[r];
-
-            const buf = sorter.buf;
-            return l_dep.name.order(&r_dep.name, buf, buf) == .lt;
-        }
-    };
-
-    const ctx: Ctx = .{
-        .buf = lockfile.buffers.string_bytes.items,
-        .override_deps = this.map.values().ptr,
-    };
-
-    this.map.sort(&ctx);
-}
-
-pub fn deinit(this: *OverrideMap, allocator: Allocator) void {
-    this.map.deinit(allocator);
-}
-
-pub fn count(this: *OverrideMap, lockfile: *Lockfile, builder: *Lockfile.StringBuilder) void {
-    for (this.map.values()) |dep| {
-        dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
-    }
-}
-
-pub fn clone(this: *OverrideMap, pm: *PackageManager, old_lockfile: *Lockfile, new_lockfile: *Lockfile, new_builder: *Lockfile.StringBuilder) !OverrideMap {
-    var new = OverrideMap{};
-    try new.map.ensureTotalCapacity(new_lockfile.allocator, this.map.entries.len);
-
-    for (this.map.keys(), this.map.values()) |k, v| {
-        new.map.putAssumeCapacity(
-            k,
-            try v.clone(pm, old_lockfile.buffers.string_bytes.items, @TypeOf(new_builder), new_builder),
-        );
-    }
-
-    return new;
-}
-
-// the rest of this struct is expression parsing code:
-
-pub fn parseCount(
-    _: *OverrideMap,
-    lockfile: *Lockfile,
-    expr: Expr,
-    builder: *Lockfile.StringBuilder,
-) void {
-    if (expr.asProperty("overrides")) |overrides| {
-        if (overrides.expr.data != .e_object)
-            return;
-
-        for (overrides.expr.data.e_object.properties.slice()) |entry| {
-            builder.count(entry.key.?.asString(lockfile.allocator).?);
-            switch (entry.value.?.data) {
-                .e_string => |s| {
-                    builder.count(s.slice(lockfile.allocator));
-                },
-                .e_object => {
-                    if (entry.value.?.asProperty(".")) |dot| {
-                        if (dot.expr.asString(lockfile.allocator)) |s| {
-                            builder.count(s);
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-    } else if (expr.asProperty("resolutions")) |resolutions| {
-        if (resolutions.expr.data != .e_object)
-            return;
-
-        for (resolutions.expr.data.e_object.properties.slice()) |entry| {
-            builder.count(entry.key.?.asString(lockfile.allocator).?);
-            builder.count(entry.value.?.asString(lockfile.allocator) orelse continue);
-        }
-    }
-}
-
-/// Given a package json expression, detect and parse override configuration into the given override map.
-/// It is assumed the input map is uninitialized (zero entries)
-pub fn parseAppend(
-    this: *OverrideMap,
-    pm: *PackageManager,
-    lockfile: *Lockfile,
-    root_package: *Lockfile.Package,
-    log: *logger.Log,
-    json_source: *const logger.Source,
-    expr: Expr,
-    builder: *Lockfile.StringBuilder,
-) !void {
-    if (Environment.allow_assert) {
-        assert(this.map.entries.len == 0); // only call parse once
-    }
-    if (expr.asProperty("overrides")) |overrides| {
-        try this.parseFromOverrides(pm, lockfile, root_package, json_source, log, overrides.expr, builder);
-    } else if (expr.asProperty("resolutions")) |resolutions| {
-        try this.parseFromResolutions(pm, lockfile, root_package, json_source, log, resolutions.expr, builder);
-    }
-    debug("parsed {d} overrides", .{this.map.entries.len});
-}
-
-/// https://docs.npmjs.com/cli/v9/configuring-npm/package-json#overrides
-pub fn parseFromOverrides(
-    this: *OverrideMap,
-    pm: *PackageManager,
-    lockfile: *Lockfile,
-    root_package: *Lockfile.Package,
-    source: *const logger.Source,
-    log: *logger.Log,
-    expr: Expr,
-    builder: *Lockfile.StringBuilder,
-) !void {
-    if (expr.data != .e_object) {
-        try log.addWarningFmt(source, expr.loc, lockfile.allocator, "\"overrides\" must be an object", .{});
-        return error.Invalid;
-    }
-
-    try this.map.ensureUnusedCapacity(lockfile.allocator, expr.data.e_object.properties.len);
-
-    for (expr.data.e_object.properties.slice()) |prop| {
-        const key = prop.key.?;
-        const k = key.asString(lockfile.allocator).?;
-        if (k.len == 0) {
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Missing overridden package name", .{});
-            continue;
-        }
-
-        const name_hash = String.Builder.stringHash(k);
-
-        const value = value: {
-            // for one level deep, we will only support a string and  { ".": value }
-            const value_expr = prop.value.?;
-            if (value_expr.data == .e_string) {
-                break :value value_expr;
-            } else if (value_expr.data == .e_object) {
-                if (value_expr.asProperty(".")) |dot| {
-                    if (dot.expr.data == .e_string) {
-                        if (value_expr.data.e_object.properties.len > 1) {
-                            try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Bun currently does not support nested \"overrides\"", .{});
-                        }
-                        break :value dot.expr;
-                    } else {
-                        try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Invalid override value for \"{s}\"", .{k});
-                        continue;
-                    }
-                } else {
-                    try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Bun currently does not support nested \"overrides\"", .{});
-                    continue;
-                }
-            }
-            try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Invalid override value for \"{s}\"", .{k});
-            continue;
-        };
-
-        const version_str = value.data.e_string.slice(lockfile.allocator);
-        if (strings.hasPrefixComptime(version_str, "patch:")) {
-            // TODO(dylan-conway): apply .patch files to packages
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support patched package \"overrides\"", .{});
-            continue;
-        }
-
-        if (try parseOverrideValue(
-            "override",
-            lockfile,
-            pm,
-            root_package,
-            source,
-            value.loc,
-            log,
-            k,
-            version_str,
-            builder,
-        )) |version| {
-            this.map.putAssumeCapacity(name_hash, version);
-        }
-    }
-}
-
-/// yarn classic: https://classic.yarnpkg.com/lang/en/docs/selective-version-resolutions/
-/// yarn berry: https://yarnpkg.com/configuration/manifest#resolutions
-pub fn parseFromResolutions(
-    this: *OverrideMap,
-    pm: *PackageManager,
-    lockfile: *Lockfile,
-    root_package: *Lockfile.Package,
-    source: *const logger.Source,
-    log: *logger.Log,
-    expr: Expr,
-    builder: *Lockfile.StringBuilder,
-) !void {
-    if (expr.data != .e_object) {
-        try log.addWarningFmt(source, expr.loc, lockfile.allocator, "\"resolutions\" must be an object with string values", .{});
-        return;
-    }
-    try this.map.ensureUnusedCapacity(lockfile.allocator, expr.data.e_object.properties.len);
-    for (expr.data.e_object.properties.slice()) |prop| {
-        const key = prop.key.?;
-        var k = key.asString(lockfile.allocator).?;
-        if (strings.hasPrefixComptime(k, "**/"))
-            k = k[3..];
-        if (k.len == 0) {
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Missing resolution package name", .{});
-            continue;
-        }
-        const value = prop.value.?;
-        if (value.data != .e_string) {
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Expected string value for resolution \"{s}\"", .{k});
-            continue;
-        }
-        // currently we only support one level deep, so we should error if there are more than one
-        // - "foo/bar":
-        // - "@namespace/hello/world"
-        if (k[0] == '@') {
-            const first_slash = strings.indexOfChar(k, '/') orelse {
-                try log.addWarningFmt(source, key.loc, lockfile.allocator, "Invalid package name \"{s}\"", .{k});
-                continue;
-            };
-            if (strings.indexOfChar(k[first_slash + 1 ..], '/') != null) {
-                try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support nested \"resolutions\"", .{});
-                continue;
-            }
-        } else if (strings.indexOfChar(k, '/') != null) {
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support nested \"resolutions\"", .{});
-            continue;
-        }
-
-        const version_str = value.data.e_string.data;
-        if (strings.hasPrefixComptime(version_str, "patch:")) {
-            // TODO(dylan-conway): apply .patch files to packages
-            try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support patched package \"resolutions\"", .{});
-            continue;
-        }
-
-        if (try parseOverrideValue(
-            "resolution",
-            lockfile,
-            pm,
-            root_package,
-            source,
-            value.loc,
-            log,
-            k,
-            version_str,
-            builder,
-        )) |version| {
-            const name_hash = String.Builder.stringHash(k);
-            this.map.putAssumeCapacity(name_hash, version);
-        }
-    }
-}
-
-pub fn parseOverrideValue(
-    comptime field: []const u8,
-    lockfile: *Lockfile,
-    package_manager: *PackageManager,
-    root_package: *Lockfile.Package,
-    source: *const logger.Source,
-    loc: logger.Loc,
-    log: *logger.Log,
-    key: []const u8,
-    value: []const u8,
-    builder: *Lockfile.StringBuilder,
-) !?Dependency {
-    if (value.len == 0) {
-        try log.addWarningFmt(source, loc, lockfile.allocator, "Missing " ++ field ++ " value", .{});
-        return null;
-    }
-
-    // "Overrides may also be defined as a reference to a spec for a direct dependency
-    // by prefixing the name of the package you wish the version to match with a `$`"
-    // https://docs.npmjs.com/cli/v9/configuring-npm/package-json#overrides
-    // This is why a `*Lockfile.Package` is needed here.
-    if (value[0] == '$') {
-        const ref_name = value[1..];
-        // This is fine for this string to not share the string pool, because it's only used for .eql()
-        const ref_name_str = String.init(ref_name, ref_name);
-        const pkg_deps: []const Dependency = root_package.dependencies.get(lockfile.buffers.dependencies.items);
-        for (pkg_deps) |dep| {
-            if (dep.name.eql(ref_name_str, lockfile.buffers.string_bytes.items, ref_name)) {
-                return dep;
-            }
-        }
-        try log.addWarningFmt(source, loc, lockfile.allocator, "Could not resolve " ++ field ++ " \"{s}\" (you need \"{s}\" in your dependencies)", .{ value, ref_name });
-        return null;
-    }
-
-    const literalString = builder.append(String, value);
-    const literalSliced = literalString.sliced(lockfile.buffers.string_bytes.items);
-
-    const name_hash = String.Builder.stringHash(key);
-    const name = builder.appendWithHash(String, key, name_hash);
-
-    return Dependency{
-        .name = name,
-        .name_hash = name_hash,
-        .version = Dependency.parse(
-            lockfile.allocator,
-            name,
-            name_hash,
-            literalSliced.slice,
-            &literalSliced,
-            log,
-            package_manager,
-        ) orelse {
-            try log.addWarningFmt(source, loc, lockfile.allocator, "Invalid " ++ field ++ " value \"{s}\"", .{value});
-            return null;
-        },
-    };
-}
-
-const string = []const u8;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
-const bun = @import("bun");
+const Allocator = std.mem.Allocator;
 const ArrayIdentityContext = bun.ArrayIdentityContext;
 const Environment = bun.Environment;
 const Output = bun.Output;
@@ -353,8 +10,280 @@ const logger = bun.logger;
 const strings = bun.strings;
 const Expr = bun.ast.Expr;
 const String = bun.Semver.String;
-
 const Dependency = bun.install.Dependency;
 const Lockfile = bun.install.Lockfile;
 const PackageManager = bun.install.PackageManager;
 const PackageNameHash = bun.install.PackageNameHash;
+const debug = Output.scoped(.OverrideMap, .visible);
+const SortCtx = struct {
+    buf: []const u8,
+    override_deps: [*]const Dependency,
+
+pub fn lessThan(self: @This(), sorter: *const SortCtx, l: usize, r: usize) bool {
+        _ = &self;
+            const deps = sorter.override_deps;
+            const l_dep = deps[@as(usize, @intCast(l))];
+            const r_dep = deps[@as(usize, @intCast(r))];
+            const buf = sorter.buf;
+            return ((if (@typeInfo(@TypeOf(l_dep)) == .@"enum" or @typeInfo(@TypeOf(l_dep)) == .@"union") @tagName(l_dep) else l_dep.name).order((&(if (@typeInfo(@TypeOf(r_dep)) == .@"enum" or @typeInfo(@TypeOf(r_dep)) == .@"union") @tagName(r_dep) else r_dep.name)), buf, buf) == .lt);
+    }
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const OverrideMap = @This();
+
+map: std.ArrayHashMapUnmanaged(PackageNameHash,Dependency,ArrayIdentityContext.U64,false) = .{},
+
+pub fn get(self: OverrideMap, name_hash: PackageNameHash) ?Dependency.Version {
+        _ = debug("looking up override for {x}", .{ name_hash });
+        if ((self.map.count() == 0)) {
+            return null;
+        }
+        if (self.map.get(name_hash)) |dep| {
+            _ = &dep;
+            return dep.version;
+        }
+        return null;
+}
+
+pub fn sort(self: *OverrideMap, lockfile: *const Lockfile) void {
+        const ctx: SortCtx = .{ .buf = lockfile.buffers.string_bytes.items, .override_deps = self.map.values().ptr };
+        _ = self.map.sort((&ctx));
+}
+
+pub fn deinit(self: *OverrideMap, allocator: Allocator) void {
+        _ = self.map.deinit(allocator);
+}
+
+pub fn count(self: OverrideMap, lockfile: *Lockfile, builder: *Lockfile.StringBuilder) void {
+        for (self.map.values()) |dep| {
+            _ = &dep;
+            _ = dep.count(lockfile.buffers.string_bytes.items, @TypeOf(builder), builder);
+        }
+}
+
+pub fn clone(self: OverrideMap, pm: *PackageManager, old_lockfile: *Lockfile, new_lockfile: *Lockfile, new_builder: *Lockfile.StringBuilder) !OverrideMap {
+        var cloned = OverrideMap{  };
+        _ = &cloned;
+        _ = try cloned.map.ensureTotalCapacity(new_lockfile.allocator, self.map.entries.len);
+        const keys = self.map.keys();
+        const vals = self.map.values();
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_1 = keys.len;
+            while (i < __end_1) : (i += 1) {
+                const k = keys[@as(usize, @intCast(i))];
+                const v = vals[@as(usize, @intCast(i))];
+                _ = cloned.map.putAssumeCapacity(k, try v.clone(pm, old_lockfile.buffers.string_bytes.items, @TypeOf(new_builder), new_builder));
+            }
+        }
+        return cloned;
+}
+
+pub fn parseCount(self: OverrideMap, lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
+    _ = &self;
+        if (expr.asProperty("overrides")) |overrides| {
+            _ = &overrides;
+            if ((overrides.expr.data != .e_object)) {
+                return;
+            }
+            for (cp_iter_slice(overrides.expr.data.e_object.properties.slice())) |entry| {
+                _ = &entry;
+                _ = builder.count((entry.key.?.asString(lockfile.allocator)).?);
+                switch ((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).?.data) {
+.e_string => |s| {
+_ = builder.count(cp_iter_slice(s)[@intCast(lockfile.allocator)..]);
+},
+.e_object => {
+if ((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).?.asProperty(".")) |dot| {
+                    _ = &dot;
+                    if (dot.expr.asString(lockfile.allocator)) |s| {
+                        _ = &s;
+                        _ = builder.count(s);
+                    }
+                }
+},
+else => {
+
+},
+}
+            }
+        } else {
+            if (expr.asProperty("resolutions")) |resolutions| {
+                _ = &resolutions;
+                if ((resolutions.expr.data != .e_object)) {
+                    return;
+                }
+                for (cp_iter_slice(resolutions.expr.data.e_object.properties.slice())) |entry| {
+                    _ = &entry;
+                    _ = builder.count((entry.key.?.asString(lockfile.allocator)).?);
+                    if ((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).?.asString(lockfile.allocator)) |s| {
+                        _ = &s;
+                        _ = builder.count(s);
+                    }
+                }
+            }
+        }
+}
+
+pub fn parseAppend(self: *OverrideMap, pm: *PackageManager, lockfile: *Lockfile, root_package: *Lockfile.Package, log: *logger.Log, json_source: *const logger.Source, expr: Expr, builder: *Lockfile.StringBuilder) !void {
+        if (Environment.allow_assert) {
+            _ = assert((self.map.entries.len == 0));
+        }
+        if (expr.asProperty("overrides")) |overrides| {
+            _ = &overrides;
+            _ = try self.parseFromOverrides(pm, lockfile, root_package, json_source, log, overrides.expr, builder);
+        } else {
+            if (expr.asProperty("resolutions")) |resolutions| {
+                _ = &resolutions;
+                _ = try self.parseFromResolutions(pm, lockfile, root_package, json_source, log, resolutions.expr, builder);
+            }
+        }
+        _ = debug("parsed {d} overrides", .{ self.map.entries.len });
+}
+
+pub fn parseFromOverrides(self: *OverrideMap, pm: *PackageManager, lockfile: *Lockfile, root_package: *Lockfile.Package, source: *const logger.Source, log: *logger.Log, expr: Expr, builder: *Lockfile.StringBuilder) !void {
+        if ((expr.data != .e_object)) {
+            _ = try log.addWarningFmt(source, expr.loc, lockfile.allocator, "\"overrides\" must be an object", .{});
+            return error.Invalid;
+        }
+        _ = try self.map.ensureUnusedCapacity(lockfile.allocator, expr.data.e_object.properties.len);
+        for (cp_iter_slice(expr.data.e_object.properties.slice())) |prop| {
+            _ = &prop;
+            const key = prop.key.?;
+            const k = (key.asString(lockfile.allocator)).?;
+            if ((k.len == 0)) {
+                _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Missing overridden package name", .{});
+                continue;
+            }
+            const name_hash = String.Builder.stringHash(k);
+            const value = value: {
+            const value_expr = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+            if ((value_expr.data == .e_string)) {
+                break :value value_expr;
+            } else {
+                if ((value_expr.data == .e_object)) {
+                    if (value_expr.asProperty(".")) |dot| {
+                        _ = &dot;
+                        if ((dot.expr.data == .e_string)) {
+                            if ((value_expr.data.e_object.properties.len > 1)) {
+                                _ = try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Bun currently does not support nested \"overrides\"", .{});
+                            }
+                            break :value dot.expr;
+                        } else {
+                            _ = try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Invalid override value for \"{s}\"", .{ k });
+                            continue;
+                        }
+                    } else {
+                        _ = try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Bun currently does not support nested \"overrides\"", .{});
+                        continue;
+                    }
+                }
+            }
+            _ = try log.addWarningFmt(source, value_expr.loc, lockfile.allocator, "Invalid override value for \"{s}\"", .{ k });
+            continue;
+};
+            const version_str = cp_iter_slice(value.data.e_string)[@intCast(lockfile.allocator)..];
+            if (strings.hasPrefixComptime(version_str, "patch:")) {
+                _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support patched package \"overrides\"", .{});
+                continue;
+            }
+            if (try OverrideMap.parseOverrideValue("override", lockfile, pm, root_package, source, value.loc, log, k, version_str, builder)) |version| {
+                _ = &version;
+                _ = self.map.putAssumeCapacity(name_hash, version);
+            }
+        }
+}
+
+pub fn parseFromResolutions(self: *OverrideMap, pm: *PackageManager, lockfile: *Lockfile, root_package: *Lockfile.Package, source: *const logger.Source, log: *logger.Log, expr: Expr, builder: *Lockfile.StringBuilder) !void {
+        if ((expr.data != .e_object)) {
+            _ = try log.addWarningFmt(source, expr.loc, lockfile.allocator, "\"resolutions\" must be an object with string values", .{});
+            return;
+        }
+        _ = try self.map.ensureUnusedCapacity(lockfile.allocator, expr.data.e_object.properties.len);
+        for (cp_iter_slice(expr.data.e_object.properties.slice())) |prop| {
+            _ = &prop;
+            const key = prop.key.?;
+            var k = (key.asString(lockfile.allocator)).?;
+            _ = &k;
+            if (strings.hasPrefixComptime(k, "**/")) {
+                k = k[3..];
+            }
+            if ((k.len == 0)) {
+                _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Missing resolution package name", .{});
+                continue;
+            }
+            const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+            if ((value.data != .e_string)) {
+                _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Expected string value for resolution \"{s}\"", .{ k });
+                continue;
+            }
+            if ((k[0] == 64)) {
+                const first_slash_opt = strings.indexOfChar(k, 47);
+                if ((first_slash_opt == null)) {
+                    _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Invalid package name \"{s}\"", .{ k });
+                    continue;
+                }
+                const first_slash = first_slash_opt.?;
+                if ((strings.indexOfChar(k[(first_slash + 1)..], 47) != null)) {
+                    _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support nested \"resolutions\"", .{});
+                    continue;
+                }
+            } else {
+                if ((strings.indexOfChar(k, 47) != null)) {
+                    _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support nested \"resolutions\"", .{});
+                    continue;
+                }
+            }
+            const version_str = value.data.e_string.data;
+            if (strings.hasPrefixComptime(version_str, "patch:")) {
+                _ = try log.addWarningFmt(source, key.loc, lockfile.allocator, "Bun currently does not support patched package \"resolutions\"", .{});
+                continue;
+            }
+            if (try OverrideMap.parseOverrideValue("resolution", lockfile, pm, root_package, source, value.loc, log, k, version_str, builder)) |version| {
+                _ = &version;
+                const name_hash = String.Builder.stringHash(k);
+                _ = self.map.putAssumeCapacity(name_hash, version);
+            }
+        }
+}
+
+pub fn parseOverrideValue(comptime field: []const u8, lockfile: *Lockfile, package_manager: *PackageManager, root_package: *Lockfile.Package, source: *const logger.Source, loc: logger.Loc, log: *logger.Log, key: []const u8, value: []const u8, builder: *Lockfile.StringBuilder) !?Dependency {
+        if ((value.len == 0)) {
+            _ = try log.addWarningFmt(source, loc, lockfile.allocator, (("Missing " ++ field) ++ " value"), .{});
+            return null;
+        }
+        if ((value[0] == 36)) {
+            const ref_name = value[1..];
+            const ref_name_str = String.init(ref_name, ref_name);
+            const pkg_deps: []const Dependency = root_package.dependencies.get(lockfile.buffers.dependencies.items);
+            for (cp_iter_slice(pkg_deps)) |dep| {
+                _ = &dep;
+                if ((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).eql(ref_name_str, lockfile.buffers.string_bytes.items, ref_name)) {
+                    return dep;
+                }
+            }
+            _ = try log.addWarningFmt(source, loc, lockfile.allocator, (("Could not resolve " ++ field) ++ " \"{s}\" (you need \"{s}\" in your dependencies)"), .{ value, ref_name });
+            return null;
+        }
+        const literalString = builder.append(String, value);
+        const literalSliced = literalString.sliced(lockfile.buffers.string_bytes.items);
+        const name_hash = String.Builder.stringHash(key);
+        const name = builder.appendWithHash(String, key, name_hash);
+        const parsed_version = Dependency.parse(lockfile.allocator, name, name_hash, literalSliced.slice, literalSliced, log, package_manager);
+        if ((parsed_version == null)) {
+            _ = try log.addWarningFmt(source, loc, lockfile.allocator, (("Invalid " ++ field) ++ " value \"{s}\""), .{ value });
+            return null;
+        }
+        return Dependency{ .name = name, .name_hash = name_hash, .version = parsed_version.? };
+}
+const string = []const u8;

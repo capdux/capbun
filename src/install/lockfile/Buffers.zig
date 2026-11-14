@@ -1,384 +1,9 @@
-const Buffers = @This();
-
-trees: Tree.List = .{},
-hoisted_dependencies: DependencyIDList = .{},
-/// This is the underlying buffer used for the `resolutions` external slices inside of `Package`
-/// Should be the same length as `dependencies`
-resolutions: PackageIDList = .{},
-/// This is the underlying buffer used for the `dependencies` external slices inside of `Package`
-dependencies: DependencyList = .{},
-/// This is the underlying buffer used for any `Semver.ExternalString` instance in the lockfile
-extern_strings: ExternalStringBuffer = .{},
-/// This is where all non-inlinable `Semver.String`s are stored.
-string_bytes: StringBuffer = .{},
-
-pub fn deinit(this: *Buffers, allocator: Allocator) void {
-    this.trees.deinit(allocator);
-    this.resolutions.deinit(allocator);
-    this.dependencies.deinit(allocator);
-    this.extern_strings.deinit(allocator);
-    this.string_bytes.deinit(allocator);
-}
-
-pub fn preallocate(this: *Buffers, that: Buffers, allocator: Allocator) !void {
-    try this.trees.ensureTotalCapacity(allocator, that.trees.items.len);
-    try this.resolutions.ensureTotalCapacity(allocator, that.resolutions.items.len);
-    try this.dependencies.ensureTotalCapacity(allocator, that.dependencies.items.len);
-    try this.extern_strings.ensureTotalCapacity(allocator, that.extern_strings.items.len);
-    try this.string_bytes.ensureTotalCapacity(allocator, that.string_bytes.items.len);
-}
-
-const sizes = blk: {
-    const fields = std.meta.fields(Lockfile.Buffers);
-    const Data = struct {
-        size: usize,
-        name: []const u8,
-        type: type,
-        alignment: usize,
-    };
-    var data: [fields.len]Data = undefined;
-    for (fields, &data) |field_info, *elem| {
-        elem.* = .{
-            .size = @sizeOf(field_info.type),
-            .name = field_info.name,
-            .alignment = if (@sizeOf(field_info.type) == 0) 1 else field_info.alignment,
-            .type = field_info.type.Slice,
-        };
-    }
-
-    const SortContext = struct {
-        data: []Data,
-        pub fn swap(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) void {
-            const tmp = ctx.data[lhs];
-            ctx.data[lhs] = ctx.data[rhs];
-            ctx.data[rhs] = tmp;
-        }
-        pub fn lessThan(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) bool {
-            return ctx.data[lhs].alignment > ctx.data[rhs].alignment;
-        }
-    };
-
-    std.sort.insertionContext(0, fields.len, SortContext{
-        .data = &data,
-    });
-    var sizes_bytes: [fields.len]usize = undefined;
-    var names: [fields.len][]const u8 = undefined;
-    var types: [fields.len]type = undefined;
-    for (data, &sizes_bytes, &names, &types) |elem, *size, *name, *Type| {
-        size.* = elem.size;
-        name.* = elem.name;
-        Type.* = elem.type;
-    }
-    break :blk .{
-        .bytes = sizes_bytes,
-        .names = names,
-        .types = types,
-    };
-};
-
-pub fn readArray(stream: *Stream, allocator: Allocator, comptime ArrayList: type) !ArrayList {
-    const arraylist: ArrayList = undefined;
-
-    const PointerType = std.meta.Child(@TypeOf(arraylist.items.ptr));
-
-    var reader = stream.reader();
-    const start_pos = try reader.readInt(u64, .little);
-
-    // If its 0xDEADBEEF, then that means the value was never written in the lockfile.
-    if (start_pos == 0xDEADBEEF) {
-        return error.CorruptLockfile;
-    }
-
-    // These are absolute numbers, it shouldn't be zero.
-    // There's a prefix before any of the arrays, so it can never be zero here.
-    if (start_pos == 0) {
-        return error.CorruptLockfile;
-    }
-
-    // We shouldn't be going backwards.
-    if (start_pos < (stream.pos -| @sizeOf(u64))) {
-        return error.CorruptLockfile;
-    }
-
-    const end_pos = try reader.readInt(u64, .little);
-
-    // If its 0xDEADBEEF, then that means the value was never written in the lockfile.
-    // That shouldn't happen.
-    if (end_pos == 0xDEADBEEF) {
-        return error.CorruptLockfile;
-    }
-
-    // These are absolute numbers, it shouldn't be zero.
-    if (end_pos == 0) {
-        return error.CorruptLockfile;
-    }
-
-    // Prevent integer overflow.
-    if (start_pos > end_pos) {
-        return error.CorruptLockfile;
-    }
-
-    // Prevent buffer overflow.
-    if (end_pos > stream.buffer.len) {
-        return error.CorruptLockfile;
-    }
-
-    const byte_len = end_pos - start_pos;
-    stream.pos = end_pos;
-
-    if (byte_len == 0) return ArrayList{
-        .items = &[_]PointerType{},
-        .capacity = 0,
-    };
-
-    const misaligned = std.mem.bytesAsSlice(PointerType, stream.buffer[start_pos..end_pos]);
-
-    return ArrayList{
-        .items = try allocator.dupe(PointerType, @as([*]PointerType, @alignCast(misaligned.ptr))[0..misaligned.len]),
-        .capacity = misaligned.len,
-    };
-}
-
-pub fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer, comptime ArrayList: type, array: ArrayList) !void {
-    comptime assertNoUninitializedPadding(@TypeOf(array));
-    const bytes = std.mem.sliceAsBytes(array);
-
-    const start_pos = try stream.getPos();
-    try writer.writeInt(u64, 0xDEADBEEF, .little);
-    try writer.writeInt(u64, 0xDEADBEEF, .little);
-
-    const prefix = comptime std.fmt.comptimePrint(
-        "\n<{s}> {d} sizeof, {d} alignof\n",
-        .{
-            @typeName(std.meta.Child(ArrayList)),
-            @sizeOf(std.meta.Child(ArrayList)),
-            @alignOf(std.meta.Child(ArrayList)),
-        },
-    );
-    try writer.writeAll(prefix);
-
-    if (bytes.len > 0) {
-        _ = try Aligner.write(sizes.types[0], Writer, writer, try stream.getPos());
-
-        const real_start_pos = try stream.getPos();
-        try writer.writeAll(bytes);
-        const real_end_pos = try stream.getPos();
-        const positioned = [2]u64{ real_start_pos, real_end_pos };
-        var written: usize = 0;
-        while (written < 16) {
-            written += stream.pwrite(std.mem.asBytes(&positioned)[written..], start_pos + written);
-        }
-    } else {
-        const real_end_pos = try stream.getPos();
-        const positioned = [2]u64{ real_end_pos, real_end_pos };
-        var written: usize = 0;
-        while (written < 16) {
-            written += stream.pwrite(std.mem.asBytes(&positioned)[written..], start_pos + written);
-        }
-    }
-}
-
-pub fn save(
-    lockfile: *Lockfile,
-    options: *const PackageManager.Options,
-    allocator: Allocator,
-    comptime StreamType: type,
-    stream: StreamType,
-    comptime Writer: type,
-    writer: Writer,
-) !void {
-    const buffers = lockfile.buffers;
-    inline for (sizes.names) |name| {
-        if (options.log_level.isVerbose()) {
-            Output.prettyErrorln("Saving {d} {s}", .{ @field(buffers, name).items.len, name });
-        }
-
-        // Dependencies have to be converted to .toExternal first
-        // We store pointers in Version.Value, so we can't just write it directly
-        if (comptime strings.eqlComptime(name, "dependencies")) {
-            const remaining = buffers.dependencies.items;
-
-            if (comptime Environment.allow_assert) {
-                for (remaining) |dep| {
-                    switch (dep.version.tag) {
-                        .folder => {
-                            const folder = lockfile.str(&dep.version.value.folder);
-                            if (strings.containsChar(folder, std.fs.path.sep_windows)) {
-                                std.debug.panic("workspace windows separator: {s}\n", .{folder});
-                            }
-                        },
-                        .tarball => {
-                            if (dep.version.value.tarball.uri == .local) {
-                                const tarball = lockfile.str(&dep.version.value.tarball.uri.local);
-                                if (strings.containsChar(tarball, std.fs.path.sep_windows)) {
-                                    std.debug.panic("tarball windows separator: {s}", .{tarball});
-                                }
-                            }
-                        },
-                        .workspace => {
-                            const workspace = lockfile.str(&dep.version.value.workspace);
-                            if (strings.containsChar(workspace, std.fs.path.sep_windows)) {
-                                std.debug.panic("workspace windows separator: {s}\n", .{workspace});
-                            }
-                        },
-                        .symlink => {
-                            const symlink = lockfile.str(&dep.version.value.symlink);
-                            if (strings.containsChar(symlink, std.fs.path.sep_windows)) {
-                                std.debug.panic("symlink windows separator: {s}\n", .{symlink});
-                            }
-                        },
-                        else => {},
-                    }
-                }
-            }
-
-            // It would be faster to buffer these instead of one big allocation
-            var to_clone = try std.ArrayListUnmanaged(Dependency.External).initCapacity(allocator, remaining.len);
-
-            defer to_clone.deinit(allocator);
-            for (remaining) |dep| {
-                to_clone.appendAssumeCapacity(Dependency.toExternal(dep));
-            }
-
-            try writeArray(StreamType, stream, Writer, writer, []Dependency.External, to_clone.items);
-        } else {
-            const list = @field(buffers, name);
-            const items = list.items;
-            const Type = @TypeOf(items);
-            if (comptime Type == Tree) {
-                // We duplicate it here so that alignment bytes are zeroed out
-                var clone = try std.ArrayListUnmanaged(Tree.External).initCapacity(allocator, list.items.len);
-                for (list.items) |item| {
-                    clone.appendAssumeCapacity(Tree.toExternal(item));
-                }
-                defer clone.deinit(allocator);
-
-                try writeArray(StreamType, stream, Writer, writer, Tree.External, clone.items);
-            } else {
-                // We duplicate it here so that alignment bytes are zeroed out
-                var clone = try std.ArrayListUnmanaged(std.meta.Child(Type)).initCapacity(allocator, list.items.len);
-                clone.appendSliceAssumeCapacity(items);
-                defer clone.deinit(allocator);
-
-                try writeArray(StreamType, stream, Writer, writer, Type, clone.items);
-            }
-        }
-
-        if (comptime Environment.isDebug) {
-            // Output.prettyErrorln("Field {s}: {d} - {d}", .{ name, pos, try stream.getPos() });
-        }
-    }
-}
-
-pub fn legacyPackageToDependencyID(this: Buffers, dependency_visited: ?*Bitset, package_id: PackageID) !DependencyID {
-    switch (package_id) {
-        0 => return Tree.root_dep_id,
-        invalid_package_id => return invalid_package_id,
-        else => for (this.resolutions.items, 0..) |pkg_id, dep_id| {
-            if (pkg_id == package_id) {
-                if (dependency_visited) |visited| {
-                    if (visited.isSet(dep_id)) continue;
-                    visited.set(dep_id);
-                }
-                return @as(DependencyID, @truncate(dep_id));
-            }
-        },
-    }
-    return error.@"Lockfile is missing resolution data";
-}
-
-pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*PackageManager) !Buffers {
-    var this = Buffers{};
-    var external_dependency_list_: std.ArrayListUnmanaged(Dependency.External) = std.ArrayListUnmanaged(Dependency.External){};
-
-    inline for (sizes.names) |name| {
-        const Type = @TypeOf(@field(this, name));
-
-        var pos: usize = 0;
-        if (comptime Environment.isDebug) {
-            pos = try stream.getPos();
-        }
-
-        if (comptime Type == @TypeOf(this.dependencies)) {
-            external_dependency_list_ = try readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External));
-            if (pm_) |pm| {
-                if (pm.options.log_level.isVerbose()) {
-                    Output.prettyErrorln("Loaded {d} {s}", .{ external_dependency_list_.items.len, name });
-                }
-            }
-        } else if (comptime Type == @TypeOf(this.trees)) {
-            var tree_list = try readArray(stream, allocator, std.ArrayListUnmanaged(Tree.External));
-            defer tree_list.deinit(allocator);
-            this.trees = try Tree.List.initCapacity(allocator, tree_list.items.len);
-            this.trees.items.len = tree_list.items.len;
-
-            for (tree_list.items, this.trees.items) |from, *to| {
-                to.* = Tree.toTree(from);
-            }
-        } else {
-            @field(this, name) = try readArray(stream, allocator, Type);
-            if (pm_) |pm| {
-                if (pm.options.log_level.isVerbose()) {
-                    Output.prettyErrorln("Loaded {d} {s}", .{ @field(this, name).items.len, name });
-                }
-            }
-        }
-
-        // if (comptime Environment.isDebug) {
-        //     Output.prettyErrorln("Field {s}: {d} - {d}", .{ name, pos, try stream.getPos() });
-        // }
-    }
-
-    const external_dependency_list = external_dependency_list_.items;
-    // Dependencies are serialized separately.
-    // This is unfortunate. However, not using pointers for Semver Range's make the code a lot more complex.
-    this.dependencies = try DependencyList.initCapacity(allocator, external_dependency_list.len);
-    const string_buf = this.string_bytes.items;
-    const extern_context = Dependency.Context{
-        .log = log,
-        .allocator = allocator,
-        .buffer = string_buf,
-        .package_manager = pm_,
-    };
-
-    this.dependencies.expandToCapacity();
-    this.dependencies.items.len = external_dependency_list.len;
-
-    {
-        var external_deps = external_dependency_list.ptr;
-        const dependencies = this.dependencies.items;
-        if (comptime Environment.allow_assert) assert(external_dependency_list.len == dependencies.len);
-        for (dependencies) |*dep| {
-            dep.* = Dependency.toDependency(external_deps[0], extern_context);
-            external_deps += 1;
-        }
-    }
-
-    // Legacy tree structure stores package IDs instead of dependency IDs
-    if (this.trees.items.len > 0 and this.trees.items[0].dependency_id != Tree.root_dep_id) {
-        var visited = try Bitset.initEmpty(allocator, this.dependencies.items.len);
-        for (this.trees.items) |*tree| {
-            const package_id = tree.dependency_id;
-            tree.dependency_id = try this.legacyPackageToDependencyID(&visited, package_id);
-        }
-        visited.setRangeValue(.{
-            .start = 0,
-            .end = this.dependencies.items.len,
-        }, false);
-        for (this.hoisted_dependencies.items) |*package_id| {
-            const pid = package_id.*;
-            package_id.* = try this.legacyPackageToDependencyID(&visited, pid);
-        }
-        visited.deinit(allocator);
-    }
-
-    return this;
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const Allocator = std.mem.Allocator;
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
@@ -386,7 +11,6 @@ const logger = bun.logger;
 const strings = bun.strings;
 const Bitset = bun.bit_set.DynamicBitSetUnmanaged;
 const String = bun.Semver.String;
-
 const install = bun.install;
 const Aligner = install.Aligner;
 const Dependency = bun.install.Dependency;
@@ -394,7 +18,6 @@ const DependencyID = install.DependencyID;
 const PackageID = install.PackageID;
 const PackageManager = bun.install.PackageManager;
 const invalid_package_id = install.invalid_package_id;
-
 const Lockfile = bun.install.Lockfile;
 const DependencyIDList = Lockfile.DependencyIDList;
 const DependencyList = Lockfile.DependencyList;
@@ -404,3 +27,377 @@ const Stream = Lockfile.Stream;
 const StringBuffer = Lockfile.StringBuffer;
 const Tree = Lockfile.Tree;
 const assertNoUninitializedPadding = Lockfile.assertNoUninitializedPadding;
+const ExternalDepList = std.ArrayListUnmanaged(Dependency.External);
+const BufferData = struct {
+    size: usize,
+    name: []const u8,
+    @"type": type,
+    alignment: usize,
+};
+const BufferSortContext = struct {
+    data: []BufferData,
+
+pub fn swap(self: @This(), ctx: BufferSortContext, lhs: usize, rhs: usize) void {
+        _ = &self;
+            const tmp = ctx.data[@as(usize, @intCast(lhs))];
+            ctx.data[cp_cast_int(usize, lhs)] = ctx.data[@as(usize, @intCast(rhs))];
+            ctx.data[cp_cast_int(usize, rhs)] = tmp;
+    }
+
+pub fn lessThan(self: @This(), ctx: BufferSortContext, lhs: usize, rhs: usize) bool {
+        _ = &self;
+            return (ctx.data[@as(usize, @intCast(lhs))].alignment > ctx.data[@as(usize, @intCast(rhs))].alignment);
+    }
+};
+const sizes = blk: {
+    const fields = std.@"meta".fields(Lockfile.Buffers);
+    _ = &fields;
+    const N = fields.len;
+    _ = &N;
+    var data: [N]BufferData = undefined;
+    _ = &data;
+    {
+        var i: i32 = 0;
+        _ = &i;
+        const __end_0 = N;
+        while (i < __end_0) : (i += 1) {
+            const field_info = fields[@as(usize, @intCast(i))];
+            _ = &field_info;
+            data[cp_cast_int(usize, i)] = BufferData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment), .@"type" = field_info.@"type".Slice };
+        }
+    }
+    _ = std.sort.insertionContext(0, N, BufferSortContext{ .data = (&data) });
+    var sizes_bytes: [N]usize = undefined;
+    _ = &sizes_bytes;
+    var names: [N][]const u8 = undefined;
+    _ = &names;
+    var types: [N]type = undefined;
+    _ = &types;
+    {
+        var i: i32 = 0;
+        _ = &i;
+        const __end_1 = N;
+        while (i < __end_1) : (i += 1) {
+            const elem = data[@as(usize, @intCast(i))];
+            _ = &elem;
+            sizes_bytes[cp_cast_int(usize, i)] = elem.size;
+            names[cp_cast_int(usize, i)] = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
+            types[cp_cast_int(usize, i)] = elem.@"type";
+        }
+    }
+    break :blk .{ .bytes = sizes_bytes, .names = names, .types = types };
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const Buffers = @This();
+
+trees: Tree.List = .{},
+hoisted_dependencies: DependencyIDList = .{},
+resolutions: PackageIDList = .{},
+dependencies: DependencyList = .{},
+extern_strings: ExternalStringBuffer = .{},
+string_bytes: StringBuffer = .{},
+
+pub fn deinit(self: *Buffers, allocator: Allocator) void {
+        _ = self.trees.deinit(allocator);
+        _ = self.resolutions.deinit(allocator);
+        _ = self.dependencies.deinit(allocator);
+        _ = self.extern_strings.deinit(allocator);
+        _ = self.string_bytes.deinit(allocator);
+}
+
+pub fn preallocate(self: *Buffers, that: Buffers, allocator: Allocator) !void {
+        _ = try self.trees.ensureTotalCapacity(allocator, that.trees.items.len);
+        _ = try self.resolutions.ensureTotalCapacity(allocator, that.resolutions.items.len);
+        _ = try self.dependencies.ensureTotalCapacity(allocator, that.dependencies.items.len);
+        _ = try self.extern_strings.ensureTotalCapacity(allocator, that.extern_strings.items.len);
+        _ = try self.string_bytes.ensureTotalCapacity(allocator, that.string_bytes.items.len);
+}
+
+pub fn legacyPackageToDependencyID(self: Buffers, dependency_visited: ?*Bitset, package_id: PackageID) !DependencyID {
+        if ((package_id == 0)) {
+            return Tree.root_dep_id;
+        }
+        if ((package_id == invalid_package_id)) {
+            return invalid_package_id;
+        }
+        {
+            var dep_id: i32 = 0;
+            _ = &dep_id;
+            const __end_2 = self.resolutions.items.len;
+            while (dep_id < __end_2) : (dep_id += 1) {
+                const pkg_id = self.resolutions.items[@as(usize, @intCast(dep_id))];
+                if ((pkg_id == package_id)) {
+                    if (dependency_visited) |visited| {
+                        _ = &visited;
+                        if (visited.isSet(dep_id)) {
+                            continue;
+                        }
+                        _ = visited.set(dep_id);
+                    }
+                    return @as(DependencyID, @truncate(dep_id));
+                }
+            }
+        }
+        return error.@"Lockfile is missing resolution data";
+}
+
+pub fn save(lockfile: *Lockfile, options: *const PackageManager.Options, allocator: Allocator, comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer) !void {
+        const buffers = lockfile.buffers;
+        inline for (sizes.names) |name| {
+            if (options.log_level.isVerbose()) {
+                _ = Output.prettyErrorln("Saving {d} {s}", .{ @field(buffers, name).items.len, name });
+            }
+            if (comptime strings.eqlComptime(name, "dependencies")) {
+                const remaining = buffers.dependencies.items;
+                if (comptime Environment.allow_assert) {
+                    for (cp_iter_slice(remaining)) |dep| {
+                        _ = &dep;
+                        switch (dep.version.tag) {
+.folder => {
+const folder = lockfile.str((&(if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).folder));
+                        if (strings.containsChar(folder, std.fs.path.sep_windows)) {
+                            _ = std.debug.panic("workspace windows separator: {s}\n", .{ folder });
+                        }
+},
+.tarball => {
+if (((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).tarball.uri == .local)) {
+                            const tarball = lockfile.str((&(if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).tarball.uri.local));
+                            if (strings.containsChar(tarball, std.fs.path.sep_windows)) {
+                                _ = std.debug.panic("tarball windows separator: {s}", .{ tarball });
+                            }
+                        }
+},
+.workspace => {
+const workspace = lockfile.str((&(if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).workspace));
+                        if (strings.containsChar(workspace, std.fs.path.sep_windows)) {
+                            _ = std.debug.panic("workspace windows separator: {s}\n", .{ workspace });
+                        }
+},
+.symlink => {
+const symlink = lockfile.str((&(if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).symlink));
+                        if (strings.containsChar(symlink, std.fs.path.sep_windows)) {
+                            _ = std.debug.panic("symlink windows separator: {s}\n", .{ symlink });
+                        }
+},
+else => {
+
+},
+}
+                    }
+                }
+                var to_clone = try std.ArrayListUnmanaged(Dependency.External).initCapacity(allocator, remaining.len);
+                _ = &to_clone;
+                defer {
+                _ = to_clone.deinit(allocator);
+                }
+                for (cp_iter_slice(remaining)) |dep| {
+                    _ = &dep;
+                    _ = to_clone.appendAssumeCapacity(Dependency.toExternal(dep));
+                }
+                _ = try writeArray(StreamType, stream, Writer, writer, &.{}, Dependency.External, to_clone.items);
+            } else {
+                const list = @field(buffers, name);
+                const items = list.items;
+                const Type = @TypeOf(items);
+                if (comptime (Type == Tree)) {
+                    var clone = try std.ArrayListUnmanaged(Tree.External).initCapacity(allocator, list.items.len);
+                    _ = &clone;
+                    for (list.items) |item| {
+                        _ = &item;
+                        _ = clone.appendAssumeCapacity(Tree.toExternal(item));
+                    }
+                    defer {
+                    _ = clone.deinit(allocator);
+                    }
+                    _ = try writeArray(StreamType, stream, Writer, writer, Tree.External, clone.items);
+                } else {
+                    var clone = try std.ArrayListUnmanaged(std.@"meta".Child(Type)).initCapacity(allocator, list.items.len);
+                    _ = &clone;
+                    _ = clone.appendSliceAssumeCapacity(items);
+                    defer {
+                    _ = clone.deinit(allocator);
+                    }
+                    _ = try writeArray(StreamType, stream, Writer, writer, Type, clone.items);
+                }
+            }
+            if (comptime Environment.isDebug) {
+            }
+        }
+}
+
+pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*PackageManager) !Buffers {
+        var this = Buffers{  };
+        _ = &this;
+        var external_dependency_list_: ExternalDepList = ExternalDepList{  };
+        _ = &external_dependency_list_;
+        inline for (sizes.names) |name| {
+            const Type = @TypeOf(@field(this, name));
+            var pos: usize = 0;
+            _ = &pos;
+            if (comptime Environment.isDebug) {
+                pos = try stream.getPos();
+            }
+            if (comptime (Type == @TypeOf(this.dependencies))) {
+                external_dependency_list_ = try readArray(stream, allocator, ExternalDepList);
+                if (pm_) |pm| {
+                    _ = &pm;
+                    if (pm.options.log_level.isVerbose()) {
+                        _ = Output.prettyErrorln("Loaded {d} {s}", .{ external_dependency_list_.items.len, name });
+                    }
+                }
+            } else {
+                if (comptime (Type == @TypeOf(this.trees))) {
+                    var tree_list = try readArray(stream, allocator, std.ArrayListUnmanaged(Tree.External));
+                    _ = &tree_list;
+                    defer {
+                    _ = tree_list.deinit(allocator);
+                    }
+                    this.trees = try Tree.List.initCapacity(allocator, tree_list.items.len);
+                    this.trees.items.len = tree_list.items.len;
+                    {
+                        var i: i32 = 0;
+                        _ = &i;
+                        const __end_6 = tree_list.items.len;
+                        while (i < __end_6) : (i += 1) {
+                            this.trees.items[cp_cast_int(usize, i)] = Tree.toTree(tree_list.items[@as(usize, @intCast(i))]);
+                        }
+                    }
+                } else {
+                    @field(this, name) = try readArray(stream, allocator, Type);
+                    if (pm_) |pm| {
+                        _ = &pm;
+                        if (pm.options.log_level.isVerbose()) {
+                            _ = Output.prettyErrorln("Loaded {d} {s}", .{ @field(this, name).items.len, name });
+                        }
+                    }
+                }
+            }
+        }
+        const external_dependency_list = external_dependency_list_.items;
+        this.dependencies = try DependencyList.initCapacity(allocator, external_dependency_list.len);
+        const string_buf = this.string_bytes.items;
+        const extern_context = Dependency.Context{ .log = log, .allocator = allocator, .buffer = string_buf, .package_manager = pm_ };
+        _ = this.dependencies.expandToCapacity();
+        this.dependencies.items.len = external_dependency_list.len;
+        {
+            var external_deps = external_dependency_list.ptr;
+            _ = &external_deps;
+            if (comptime Environment.allow_assert) {
+                _ = assert((external_dependency_list.len == this.dependencies.items.len));
+            }
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_7 = this.dependencies.items.len;
+                while (i < __end_7) : (i += 1) {
+                    this.dependencies.items[cp_cast_int(usize, i)] = Dependency.toDependency(external_deps[0], extern_context);
+                    external_deps = (external_deps + 1);
+                }
+            }
+        }
+        if (((this.trees.items.len > 0) and (this.trees.items[0].dependency_id != Tree.root_dep_id))) {
+            var visited = try Bitset.initEmpty(allocator, this.dependencies.items.len);
+            _ = &visited;
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_8 = this.trees.items.len;
+                while (i < __end_8) : (i += 1) {
+                    const package_id = this.trees.items[@as(usize, @intCast(i))].dependency_id;
+                    this.trees.items[@as(usize, @intCast(i))].dependency_id = try this.legacyPackageToDependencyID((&visited), package_id);
+                }
+            }
+            _ = visited.setRangeValue(.{ .start = 0, .end = this.dependencies.items.len }, false);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_9 = this.hoisted_dependencies.items.len;
+                while (i < __end_9) : (i += 1) {
+                    const pid = this.hoisted_dependencies.items[@as(usize, @intCast(i))];
+                    this.hoisted_dependencies.items[cp_cast_int(usize, i)] = try this.legacyPackageToDependencyID((&visited), pid);
+                }
+            }
+            _ = visited.deinit(allocator);
+        }
+        return this;
+}
+
+pub fn readArray(stream: *Stream, allocator: Allocator, comptime ArrayList: type) !ArrayList {
+        const arraylist: ArrayList = undefined;
+        const PointerType = std.@"meta".Child(@TypeOf(arraylist.items.ptr));
+        var reader = stream.reader();
+        _ = &reader;
+        const start_pos = try reader.readInt(u64, .little);
+        if ((start_pos == 3735928559)) {
+            return error.CorruptLockfile;
+        }
+        if ((start_pos == 0)) {
+            return error.CorruptLockfile;
+        }
+        if ((start_pos < (stream.pos -| @sizeOf(u64)))) {
+            return error.CorruptLockfile;
+        }
+        const end_pos = try reader.readInt(u64, .little);
+        if ((end_pos == 3735928559)) {
+            return error.CorruptLockfile;
+        }
+        if ((end_pos == 0)) {
+            return error.CorruptLockfile;
+        }
+        if ((start_pos > end_pos)) {
+            return error.CorruptLockfile;
+        }
+        if ((end_pos > stream.buffer.len)) {
+            return error.CorruptLockfile;
+        }
+        const byte_len = (end_pos - start_pos);
+        stream.pos = end_pos;
+        if ((byte_len == 0)) {
+            return ArrayList{  };
+        }
+        const misaligned = std.mem.bytesAsSlice(PointerType, stream.buffer[start_pos..end_pos]);
+        const duped = try allocator.dupe(PointerType, (blk: {
+        break :blk @as([*]PointerType, @ptrCast(@alignCast(misaligned.ptr)))[0..misaligned.len];
+
+}));
+        return ArrayList{ .items = duped, .capacity = misaligned.len };
+}
+
+pub fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer, comptime ArrayList: type, array: ArrayList) !void {
+        _ = (comptime assertNoUninitializedPadding(@TypeOf(array)));
+        const bytes = std.mem.sliceAsBytes(array);
+        const start_pos = try stream.getPos();
+        _ = try writer.writeInt(u64, 3735928559, .little);
+        _ = try writer.writeInt(u64, 3735928559, .little);
+        const prefix = (comptime std.fmt.comptimePrint("\n<{s}> {d} sizeof, {d} alignof\n", .{ @typeName(std.@"meta".Child(ArrayList)), @sizeOf(std.@"meta".Child(ArrayList)), @alignOf(std.@"meta".Child(ArrayList)) }));
+        _ = try writer.writeAll(prefix);
+        if ((bytes.len > 0)) {
+            _ = try Aligner.write(sizes.types[0], Writer, writer, try stream.getPos());
+            const real_start_pos = try stream.getPos();
+            _ = try writer.writeAll(bytes);
+            const real_end_pos = try stream.getPos();
+            const positioned: [2]u64 = .{ real_start_pos, real_end_pos };
+            var written: usize = 0;
+            _ = &written;
+            while ((written < 16)) {
+                written = (written + stream.pwrite(std.mem.asBytes((&positioned))[written..], (start_pos + written)));
+            }
+        } else {
+            const real_end_pos = try stream.getPos();
+            const positioned: [2]u64 = .{ real_end_pos, real_end_pos };
+            var written: usize = 0;
+            _ = &written;
+            while ((written < 16)) {
+                written = (written + stream.pwrite(std.mem.asBytes((&positioned))[written..], (start_pos + written)));
+            }
+        }
+}

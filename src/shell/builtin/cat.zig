@@ -1,357 +1,361 @@
-const Cat = @This();
-
-opts: Opts = .{},
-state: union(enum) {
-    idle,
-    exec_stdin: struct {
-        in_done: bool = false,
-        chunks_queued: usize = 0,
-        chunks_done: usize = 0,
-        errno: ExitCode = 0,
-    },
-    exec_filepath_args: struct {
-        args: []const [*:0]const u8,
-        idx: usize = 0,
-        reader: ?*IOReader = null,
-        chunks_queued: usize = 0,
-        chunks_done: usize = 0,
-        out_done: bool = false,
-        in_done: bool = false,
-
-        pub fn deinit(this: *@This()) void {
-            if (this.reader) |r| r.deref();
-        }
-    },
-    waiting_write_err,
-    done,
-} = .idle,
-
-pub fn writeFailingError(this: *Cat, buf: []const u8, exit_code: ExitCode) Yield {
-    if (this.bltn().stderr.needsIO()) |safeguard| {
-        this.state = .waiting_write_err;
-        return this.bltn().stderr.enqueue(this, buf, safeguard);
-    }
-
-    _ = this.bltn().writeNoIO(.stderr, buf);
-
-    return this.bltn().done(exit_code);
-}
-
-pub fn start(this: *Cat) Yield {
-    const filepath_args = switch (this.opts.parse(this.bltn().argsSlice())) {
-        .ok => |filepath_args| filepath_args,
-        .err => |e| {
-            const buf = switch (e) {
-                .illegal_option => |opt_str| this.bltn().fmtErrorArena(.cat, "illegal option -- {s}\n", .{opt_str}),
-                .show_usage => Builtin.Kind.cat.usageString(),
-                .unsupported => |unsupported| this.bltn().fmtErrorArena(.cat, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
-            };
-
-            return this.writeFailingError(buf, 1);
-        },
-    };
-
-    const should_read_from_stdin = filepath_args == null or filepath_args.?.len == 0;
-
-    if (should_read_from_stdin) {
-        this.state = .{
-            .exec_stdin = .{},
-        };
-    } else {
-        this.state = .{
-            .exec_filepath_args = .{
-                .args = filepath_args.?,
-            },
-        };
-    }
-
-    return this.next();
-}
-
-pub fn next(this: *Cat) Yield {
-    switch (this.state) {
-        .idle => @panic("Invalid state"),
-        .exec_stdin => {
-            if (!this.bltn().stdin.needsIO()) {
-                this.state.exec_stdin.in_done = true;
-                const buf = this.bltn().readStdinNoIO();
-                if (this.bltn().stdout.needsIO()) |safeguard| {
-                    return this.bltn().stdout.enqueue(this, buf, safeguard);
-                }
-                _ = this.bltn().writeNoIO(.stdout, buf);
-                return this.bltn().done(0);
-            }
-            this.bltn().stdin.fd.addReader(this);
-            return this.bltn().stdin.fd.start();
-        },
-        .exec_filepath_args => {
-            var exec = &this.state.exec_filepath_args;
-            if (exec.idx >= exec.args.len) {
-                exec.deinit();
-                return this.bltn().done(0);
-            }
-
-            if (exec.reader) |r| {
-                r.deref();
-                exec.reader = null;
-            }
-
-            const arg = std.mem.span(exec.args[exec.idx]);
-            exec.idx += 1;
-            const dir = this.bltn().parentCmd().base.shell.cwd_fd;
-            const fd = switch (ShellSyscall.openat(dir, arg, bun.O.RDONLY, 0)) {
-                .result => |fd| fd,
-                .err => |e| {
-                    const buf = this.bltn().taskErrorToString(.cat, e);
-                    defer exec.deinit();
-                    return this.writeFailingError(buf, 1);
-                },
-            };
-
-            const reader = IOReader.init(fd, this.bltn().eventLoop());
-            exec.chunks_done = 0;
-            exec.chunks_queued = 0;
-            exec.in_done = false;
-            exec.out_done = false;
-            exec.reader = reader;
-            exec.reader.?.addReader(this);
-            return exec.reader.?.start();
-        },
-        .waiting_write_err => return .failed,
-        .done => return this.bltn().done(0),
-    }
-}
-
-pub fn onIOWriterChunk(this: *Cat, _: usize, err: ?jsc.SystemError) Yield {
-    debug("onIOWriterChunk(0x{x}, {s}, had_err={})", .{ @intFromPtr(this), @tagName(this.state), err != null });
-    // Writing to stdout errored, cancel everything and write error
-    if (err) |e| {
-        defer e.deref();
-        const errno: ExitCode = @intCast(@intFromEnum(e.getErrno()));
-        switch (this.state) {
-            .exec_stdin => {
-                this.state.exec_stdin.errno = errno;
-                // Cancel reader if needed
-                if (!this.state.exec_stdin.in_done) {
-                    if (this.bltn().stdin.needsIO()) {
-                        this.bltn().stdin.fd.removeReader(this);
-                    }
-                    this.state.exec_stdin.in_done = true;
-                }
-                return this.bltn().done(e.getErrno());
-            },
-            .exec_filepath_args => {
-                var exec = &this.state.exec_filepath_args;
-                if (exec.reader) |r| {
-                    r.removeReader(this);
-                }
-                exec.deinit();
-                return this.bltn().done(e.getErrno());
-            },
-            .waiting_write_err => return this.bltn().done(e.getErrno()),
-            else => @panic("Invalid state"),
-        }
-    }
-
-    switch (this.state) {
-        .exec_stdin => {
-            this.state.exec_stdin.chunks_done += 1;
-            if (this.state.exec_stdin.in_done and (this.state.exec_stdin.chunks_done >= this.state.exec_stdin.chunks_queued)) {
-                return this.bltn().done(0);
-            }
-            // Need to wait for more chunks to be written
-            return .suspended;
-        },
-        .exec_filepath_args => {
-            this.state.exec_filepath_args.chunks_done += 1;
-            if (this.state.exec_filepath_args.chunks_done >= this.state.exec_filepath_args.chunks_queued) {
-                this.state.exec_filepath_args.out_done = true;
-            }
-            if (this.state.exec_filepath_args.in_done and this.state.exec_filepath_args.out_done) {
-                return this.next();
-            }
-            // Wait for reader to be done
-            return .suspended;
-        },
-        .waiting_write_err => return this.bltn().done(1),
-        else => @panic("Invalid state"),
-    }
-}
-
-pub fn onIOReaderChunk(this: *Cat, chunk: []const u8, remove: *bool) Yield {
-    debug("onIOReaderChunk(0x{x}, {s}, chunk_len={d})", .{ @intFromPtr(this), @tagName(this.state), chunk.len });
-    remove.* = false;
-    switch (this.state) {
-        .exec_stdin => {
-            if (this.bltn().stdout.needsIO()) |safeguard| {
-                this.state.exec_stdin.chunks_queued += 1;
-                return this.bltn().stdout.enqueue(this, chunk, safeguard);
-            }
-            _ = this.bltn().writeNoIO(.stdout, chunk);
-            return .done;
-        },
-        .exec_filepath_args => {
-            if (this.bltn().stdout.needsIO()) |safeguard| {
-                this.state.exec_filepath_args.chunks_queued += 1;
-                return this.bltn().stdout.enqueue(this, chunk, safeguard);
-            }
-            _ = this.bltn().writeNoIO(.stdout, chunk);
-            return .done;
-        },
-        else => @panic("Invalid state"),
-    }
-    return .done;
-}
-
-pub fn onIOReaderDone(this: *Cat, err: ?jsc.SystemError) Yield {
-    const errno: ExitCode = if (err) |e| brk: {
-        defer e.deref();
-        break :brk @as(ExitCode, @intCast(@intFromEnum(e.getErrno())));
-    } else 0;
-    debug("onIOReaderDone(0x{x}, {s}, errno={d})", .{ @intFromPtr(this), @tagName(this.state), errno });
-
-    switch (this.state) {
-        .exec_stdin => {
-            this.state.exec_stdin.errno = errno;
-            this.state.exec_stdin.in_done = true;
-            if (errno != 0) {
-                if ((this.state.exec_stdin.chunks_done >= this.state.exec_stdin.chunks_queued) or this.bltn().stdout.needsIO() == null) {
-                    return this.bltn().done(errno);
-                }
-                this.bltn().stdout.fd.writer.cancelChunks(this);
-                return .suspended;
-            }
-            if ((this.state.exec_stdin.chunks_done >= this.state.exec_stdin.chunks_queued) or this.bltn().stdout.needsIO() == null) {
-                return this.bltn().done(0);
-            }
-        },
-        .exec_filepath_args => {
-            this.state.exec_filepath_args.in_done = true;
-            if (errno != 0) {
-                if (this.state.exec_filepath_args.out_done or this.bltn().stdout.needsIO() == null) {
-                    this.state.exec_filepath_args.deinit();
-                    return this.bltn().done(errno);
-                }
-                this.bltn().stdout.fd.writer.cancelChunks(this);
-                return .suspended;
-            }
-            if (this.state.exec_filepath_args.out_done or (this.state.exec_filepath_args.chunks_done >= this.state.exec_filepath_args.chunks_queued) or this.bltn().stdout.needsIO() == null) {
-                return this.next();
-            }
-        },
-        .done, .waiting_write_err, .idle => {},
-    }
-
-    return .suspended;
-}
-
-pub fn deinit(_: *Cat) void {}
-
-pub inline fn bltn(this: *Cat) *Builtin {
-    const impl: *Builtin.Impl = @alignCast(@fieldParentPtr("cat", this));
-    return @fieldParentPtr("impl", impl);
-}
-
-const Opts = struct {
-    /// -b
-    ///
-    /// Number the non-blank output lines, starting at 1.
-    number_nonblank: bool = false,
-
-    /// -e
-    ///
-    /// Display non-printing characters and display a dollar sign ($) at the end of each line.
-    show_ends: bool = false,
-
-    /// -n
-    ///
-    /// Number the output lines, starting at 1.
-    number_all: bool = false,
-
-    /// -s
-    ///
-    /// Squeeze multiple adjacent empty lines, causing the output to be single spaced.
-    squeeze_blank: bool = false,
-
-    /// -t
-    ///
-    /// Display non-printing characters and display tab characters as ^I at the end of each line.
-    show_tabs: bool = false,
-
-    /// -u
-    ///
-    /// Disable output buffering.
-    disable_output_buffering: bool = false,
-
-    /// -v
-    ///
-    /// Displays non-printing characters so they are visible.
-    show_nonprinting: bool = false,
-
-    const Parse = FlagParser(*@This());
-
-    pub fn parse(opts: *Opts, args: []const [*:0]const u8) Result(?[]const [*:0]const u8, ParseError) {
-        return Parse.parseFlags(opts, args);
-    }
-
-    pub fn parseLong(this: *Opts, flag: []const u8) ?ParseFlagResult {
-        _ = this; // autofix
-        _ = flag;
-        return null;
-    }
-
-    pub fn parseShort(this: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
-        _ = this; // autofix
-        switch (char) {
-            'b' => {
-                return .{ .unsupported = unsupportedFlag("-b") };
-            },
-            'e' => {
-                return .{ .unsupported = unsupportedFlag("-e") };
-            },
-            'n' => {
-                return .{ .unsupported = unsupportedFlag("-n") };
-            },
-            's' => {
-                return .{ .unsupported = unsupportedFlag("-s") };
-            },
-            't' => {
-                return .{ .unsupported = unsupportedFlag("-t") };
-            },
-            'u' => {
-                return .{ .unsupported = unsupportedFlag("-u") };
-            },
-            'v' => {
-                return .{ .unsupported = unsupportedFlag("-v") };
-            },
-            else => {
-                return .{ .illegal_option = smallflags[1 + i ..] };
-            },
-        }
-
-        return null;
-    }
-};
-
-const debug = bun.Output.scoped(.ShellCat, .hidden);
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const interpreter = @import("../interpreter.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const FlagParser = interpreter.FlagParser;
 const Interpreter = interpreter.Interpreter;
 const ParseError = interpreter.ParseError;
 const ParseFlagResult = interpreter.ParseFlagResult;
 const ShellSyscall = interpreter.ShellSyscall;
 const unsupportedFlag = interpreter.unsupportedFlag;
-
 const Builtin = Interpreter.Builtin;
 const Result = Interpreter.Builtin.Result;
-
-const bun = @import("bun");
 const jsc = bun.jsc;
-
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const IOReader = shell.IOReader;
 const Yield = bun.shell.Yield;
+const debug = bun.Output.scoped(.ShellCat, .hidden);
+pub const State = union(enum) {
+    idle,
+    exec_stdin: ExecStdin,
+    exec_filepath_args: ExecFilePathArgs,
+    waiting_write_err,
+    done,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const interpreter = @import("../interpreter.zig");
+pub const bun = @import("bun");
+pub const ExecStdin = struct {
+    in_done: bool = false,
+    chunks_queued: usize = 0,
+    chunks_done: usize = 0,
+    errno: ExitCode = 0,
+};
+
+pub const ExecFilePathArgs = struct {
+    args: []const [*:0]u8,
+    idx: usize = 0,
+    reader: ?*IOReader = null,
+    chunks_queued: usize = 0,
+    chunks_done: usize = 0,
+    out_done: bool = false,
+    in_done: bool = false,
+
+pub fn deinit(self: *ExecFilePathArgs) void {
+            if (self.reader) |r| {
+                _ = &r;
+                _ = r.deref();
+            }
+    }
+};
+
+pub const Opts = struct {
+    number_nonblank: bool = false,
+    show_ends: bool = false,
+    number_all: bool = false,
+    squeeze_blank: bool = false,
+    show_tabs: bool = false,
+    disable_output_buffering: bool = false,
+    show_nonprinting: bool = false,
+
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+            const Parse = FlagParser(*Opts);
+            return Parse.parseFlags(self, args);
+    }
+
+pub fn parseLong(self: *Opts, flag: []const u8) ?ParseFlagResult {
+        _ = &self;
+            _ = flag.len;
+            return null;
+    }
+
+pub fn parseShort(self: *Opts, char: u8, smallflags: []const u8, i: usize) ?ParseFlagResult {
+        _ = &self;
+            switch (char) {
+'b' => {
+return .{ .unsupported = unsupportedFlag("-b") };
+},
+'e' => {
+return .{ .unsupported = unsupportedFlag("-e") };
+},
+'n' => {
+return .{ .unsupported = unsupportedFlag("-n") };
+},
+'s' => {
+return .{ .unsupported = unsupportedFlag("-s") };
+},
+'t' => {
+return .{ .unsupported = unsupportedFlag("-t") };
+},
+'u' => {
+return .{ .unsupported = unsupportedFlag("-u") };
+},
+'v' => {
+return .{ .unsupported = unsupportedFlag("-v") };
+},
+else => {
+return .{ .illegal_option = smallflags[(1 + i)..] };
+},
+}
+    }
+};
+
+pub const Cat = @This();
+
+opts: Opts = .{},
+state: State = .idle,
+
+pub fn writeFailingError(self: *Cat, buf: []const u8, exit_code: ExitCode) Yield {
+        if (self.bltn().stderr.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state = .waiting_write_err;
+            return self.bltn().stderr.enqueue(self, buf, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stderr, buf);
+        return self.bltn().done(exit_code);
+}
+
+pub fn start(self: *Cat) Yield {
+        const filepath_args = (switch (self.opts.parse(self.bltn().argsSlice())) {
+.ok => |f_args| f_args,
+.err => |e| {
+{
+            const buf = (switch (e) {
+.illegal_option => |opt_str| self.bltn().fmtErrorArena(.cat, "illegal option -- {s}\n", .{ opt_str }),
+.show_usage => Builtin.Kind.cat.usageString(),
+.unsupported => |unsupported| self.bltn().fmtErrorArena(.cat, "unsupported option, please open a GitHub issue -- {s}\n", .{ unsupported }),
+});
+            return self.writeFailingError(buf, 1);
+        }
+},
+});
+        const should_read_from_stdin = ((filepath_args == null) or (filepath_args.?.len == 0));
+        if (should_read_from_stdin) {
+            self.state = .{ .exec_stdin = .{} };
+        } else {
+            self.state = .{ .exec_filepath_args = .{ .args = filepath_args.? } };
+        }
+        return self.next();
+}
+
+pub fn next(self: *Cat) Yield {
+        switch (self.state) {
+.idle => {
+_ = @panic("Invalid state");
+},
+.exec_stdin => {
+if ((!self.bltn().stdin.needsIO())) {
+            self.state.exec_stdin.in_done = true;
+            const buf = self.bltn().readStdinNoIO();
+            if (self.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return self.bltn().stdout.enqueue(self, buf, safeguard);
+            }
+            _ = self.bltn().writeNoIO(.stdout, buf);
+            return self.bltn().done(0);
+        }
+        _ = self.bltn().stdin.fd.addReader(self);
+        return self.bltn().stdin.fd.start();
+},
+.exec_filepath_args => {
+var exec = (&(&self.state.exec_filepath_args));
+        _ = &exec;
+        if ((exec.idx >= exec.args.len)) {
+            _ = exec.deinit();
+            return self.bltn().done(0);
+        }
+        if (exec.reader) |r| {
+            _ = &r;
+            _ = r.deref();
+            exec.reader = null;
+        }
+        const arg = std.mem.span(exec.args[@as(usize, @intCast(exec.idx))]);
+        exec.idx = (exec.idx + 1);
+        const dir = self.bltn().parentCmd().base.shell.cwd_fd;
+        const fd = (switch (ShellSyscall.openat(dir, arg, bun.O.RDONLY, 0)) {
+.result => |open_fd| open_fd,
+.err => |e| {
+{
+            const buf = self.bltn().taskErrorToString(.cat, e);
+            defer {
+            _ = exec.deinit();
+            }
+            return self.writeFailingError(buf, 1);
+        }
+},
+});
+        const reader = IOReader.init(fd, self.bltn().eventLoop());
+        exec.chunks_done = 0;
+        exec.chunks_queued = 0;
+        exec.in_done = false;
+        exec.out_done = false;
+        exec.reader = reader;
+        _ = exec.reader.?.addReader(self);
+        return exec.reader.?.start();
+},
+.waiting_write_err => {
+return .failed;
+},
+.done => {
+return self.bltn().done(0);
+},
+}
+}
+
+pub fn onIOWriterChunk(self: *Cat, err: ?jsc.SystemError) Yield {
+        _ = debug("onIOWriterChunk(0x{x}, {s}, had_err={})", .{ @intFromPtr(self), @tagName(self.state), (err != null) });
+        if (err) |e| {
+            _ = &e;
+            defer {
+            _ = e.deref();
+            }
+            const errno: ExitCode = @intCast(@intFromEnum(e.getErrno()));
+            switch (self.state) {
+.exec_stdin => {
+self.state.exec_stdin.errno = errno;
+            if ((!self.state.exec_stdin.in_done)) {
+                if (self.bltn().stdin.needsIO()) {
+                    _ = self.bltn().stdin.fd.removeReader(self);
+                }
+                self.state.exec_stdin.in_done = true;
+            }
+            return self.bltn().done(e.getErrno());
+},
+.exec_filepath_args => {
+var exec = (&(&self.state.exec_filepath_args));
+            _ = &exec;
+            if (exec.reader) |r| {
+                _ = &r;
+                _ = r.removeReader(self);
+            }
+            _ = exec.deinit();
+            return self.bltn().done(e.getErrno());
+},
+.waiting_write_err => {
+return self.bltn().done(e.getErrno());
+},
+else => {
+_ = @panic("Invalid state");
+},
+}
+        }
+        switch (self.state) {
+.exec_stdin => {
+self.state.exec_stdin.chunks_done = (self.state.exec_stdin.chunks_done + 1);
+        if ((self.state.exec_stdin.in_done and (self.state.exec_stdin.chunks_done >= self.state.exec_stdin.chunks_queued))) {
+            return self.bltn().done(0);
+        }
+        return .suspended;
+},
+.exec_filepath_args => {
+self.state.exec_filepath_args.chunks_done = (self.state.exec_filepath_args.chunks_done + 1);
+        if ((self.state.exec_filepath_args.chunks_done >= self.state.exec_filepath_args.chunks_queued)) {
+            self.state.exec_filepath_args.out_done = true;
+        }
+        if ((self.state.exec_filepath_args.in_done and self.state.exec_filepath_args.out_done)) {
+            return self.next();
+        }
+        return .suspended;
+},
+.waiting_write_err => {
+return self.bltn().done(1);
+},
+else => {
+_ = @panic("Invalid state");
+},
+}
+}
+
+pub fn onIOReaderChunk(self: *Cat, chunk: []const u8, remove: *bool) Yield {
+        _ = debug("onIOReaderChunk(0x{x}, {s}, chunk_len={d})", .{ @intFromPtr(self), @tagName(self.state), chunk.len });
+        remove.* = false;
+        switch (self.state) {
+.exec_stdin => {
+if (self.bltn().stdout.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state.exec_stdin.chunks_queued = (self.state.exec_stdin.chunks_queued + 1);
+            return self.bltn().stdout.enqueue(self, chunk, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stdout, chunk);
+        return .done;
+},
+.exec_filepath_args => {
+if (self.bltn().stdout.needsIO()) |safeguard| {
+            _ = &safeguard;
+            self.state.exec_filepath_args.chunks_queued = (self.state.exec_filepath_args.chunks_queued + 1);
+            return self.bltn().stdout.enqueue(self, chunk, safeguard);
+        }
+        _ = self.bltn().writeNoIO(.stdout, chunk);
+        return .done;
+},
+else => {
+_ = @panic("Invalid state");
+},
+}
+        return .done;
+}
+
+pub fn onIOReaderDone(self: *Cat, err: ?jsc.SystemError) Yield {
+        var exit_code: ExitCode = (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0));
+        _ = &exit_code;
+        if (err) |e| {
+            _ = &e;
+            defer {
+            _ = e.deref();
+            }
+            exit_code = @as(ExitCode, @intCast(@intFromEnum(e.getErrno())));
+        }
+        _ = debug("onIOReaderDone(0x{x}, {s}, errno={d})", .{ @intFromPtr(self), @tagName(self.state), exit_code });
+        switch (self.state) {
+.exec_stdin => {
+self.state.exec_stdin.errno = exit_code;
+        self.state.exec_stdin.in_done = true;
+        if ((exit_code != 0)) {
+            if (((self.state.exec_stdin.chunks_done >= self.state.exec_stdin.chunks_queued) or (self.bltn().stdout.needsIO() == null))) {
+                return self.bltn().done(exit_code);
+            }
+            _ = self.bltn().stdout.fd.writer.cancelChunks(self);
+            return .suspended;
+        }
+        if (((self.state.exec_stdin.chunks_done >= self.state.exec_stdin.chunks_queued) or (self.bltn().stdout.needsIO() == null))) {
+            return self.bltn().done(0);
+        }
+},
+.exec_filepath_args => {
+self.state.exec_filepath_args.in_done = true;
+        if ((exit_code != 0)) {
+            if ((self.state.exec_filepath_args.out_done or (self.bltn().stdout.needsIO() == null))) {
+                _ = self.state.exec_filepath_args.deinit();
+                return self.bltn().done(exit_code);
+            }
+            _ = self.bltn().stdout.fd.writer.cancelChunks(self);
+            return .suspended;
+        }
+        if (((self.state.exec_filepath_args.out_done or (self.state.exec_filepath_args.chunks_done >= self.state.exec_filepath_args.chunks_queued)) or (self.bltn().stdout.needsIO() == null))) {
+            return self.next();
+        }
+},
+.done, .waiting_write_err, .idle => {
+
+},
+}
+        return .suspended;
+}
+
+pub fn deinit(self: *Cat) void {
+    _ = &self;
+}
+
+pub inline fn bltn(self: *Cat) *Builtin {
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cat", self));
+        return @fieldParentPtr("impl", impl_);
+}
+pub const FilepathArgs = ?[]const [*:0]u8;
