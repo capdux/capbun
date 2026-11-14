@@ -350,3 +350,14 @@
   - **二级嵌套复杂常量的顶层提权**：针对 `IncrementalResult.empty`、`EntryPointList.empty`、`HTMLRouter.empty`、`TestingBatch.empty` 等内部复杂常量，提升为模块顶层 `pub const Type_empty: Type = .{ ... };`，父类型内写 `pub const empty: Type = Type_empty;`，规避 `cpc` 对嵌套常量表达式跳过 CP Lowering 的局限。
   - **位域结构体直接 `@packed(u6)` 表达**：将原始 Zig 复杂的 `@Type(.{ .@"struct" = ... })` 运行时类型构造，直接纯化为 CP 原生的 `@packed(u6) pub struct HmrTopicBits { ... }`，代码更简洁安全且 100% 位兼容。
 
+## 2026-11-15: Milestone 7 Phase 24 攻坚总结（`src/shell/states/` 全目录 12 个模块 100% 闭环收割）
+- **双路全新短生命周期子智能体并行作战成果**：
+  - 子智能体 A（切片 1）：`Base.cp` (1.013x), `Script.cp` (1.038x), `Stmt.cp` (0.981x), `Binary.cp` (1.000x), `Async.cp` (1.000x), `If.cp` (0.990x)
+  - 子智能体 B（切片 2）：`Subshell.cp` (1.005x), `Assigns.cp` (1.004x), `CondExpr.cp` (0.997x), `Pipeline.cp` (0.970x), `Cmd.cp` (0.998x), `Expansion.cp` (0.958x)
+  - 全部 12 个模块一次性通过 `cpc --lib` 与 `vendor/zig/zig ast-check` 双重校验，膨胀率完美收敛在 `[0.958x, 1.038x]` 区间。
+- **关键工程经验与 Lowering 深度沉淀**：
+  - **AST 状态机根结构体模式**：针对 Shell 解析执行中的各种 State 节点，均以 `@root struct State { ... }` 包裹，同时将内嵌的辅助状态（如 `ExecState`, `ElifState`, `NormalState`）提升至模块顶层，避免跳过 CP Lowering。
+  - **接收者与所有权严格收窄**：只读方法统一省略首参并在函数体内使用 `_` 访问实例字段；可变方法标注首参 `*_`；针对状态转移显式标注 `move _`，有效根除悬垂引用与内存泄漏。
+  - **CP 关键字避让与规范转义**：对标识符中与 CP 关键字重名的 `arena`（改为 `arena_`）、`ref`（改为 `env_ref`）、`err`（转义为 `@"err"`）等进行规范化清洗，保障语法无歧义。
+
+

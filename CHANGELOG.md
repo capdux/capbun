@@ -394,3 +394,12 @@
 - **4 项硬门禁全部 100% PASS**（`cpc --lib` 0 报错、`vendor/zig/zig ast-check` 0 报错、0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`，膨胀率 1.021x <= 1.20x）。
 - **`src/bake/` 体系实现 100% 全目录闭合**（16/16 模块全量纯 CP 化）。
 
+## 2026-11-15 (Milestone 7 Phase 24: 双路子智能体并行收割，彻底闭合 src/shell/states/ 全目录 12 个模块)
+- **新增 12 个 100% 纯 CP 核心状态机/AST 模块及对应转译 `.zig` / 备份 `_.zig`**：
+  - `src/shell/states/{Base,Script,Stmt,Binary,Async,If}.cp` (切片 1，1,078 行)
+  - `src/shell/states/{Subshell,Assigns,CondExpr,Pipeline,Cmd,Expansion}.cp` (切片 2，2,801 行)
+- **4 项硬门禁全部 100% PASS**（全部 12 个模块 `cpc --lib` 与 `vendor/zig/zig ast-check` 0 报错、0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`，膨胀率均 `<= 1.04x`）。
+- **`src/shell/states/` 体系实现 100% 全目录闭合**（12/12 模块全量纯 CP 化）。
+- **全仓最新进度**：纯 CP 模块数上升至 **690 / 1,294 (53.32%)**，闭环子目录上升至 **139 / 171 (81.29%)**。
+
+

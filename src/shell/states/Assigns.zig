@@ -1,226 +1,11 @@
-/// In pipeline expressions, assigns (e.g. `FOO=bar BAR=baz | echo hi`) have
-/// no effect on the environment of the shell, so we can skip them.
-pub const Assigns = @This();
-
-base: State,
-node: []const ast.Assign,
-parent: ParentPtr,
-state: union(enum) {
-    idle,
-    expanding: struct {
-        idx: u32 = 0,
-        current_expansion_result: std.array_list.Managed([:0]const u8),
-        expansion: Expansion,
-    },
-    err: bun.shell.ShellErr,
-    done,
-},
-ctx: AssignCtx,
-owned: bool = true,
-io: IO,
-
-pub const ParentPtr = StatePtrUnion(.{
-    Stmt,
-    Binary,
-    Cmd,
-    Pipeline,
-});
-
-pub const ChildPtr = StatePtrUnion(.{
-    Expansion,
-});
-
-pub inline fn deinit(this: *Assigns) void {
-    switch (this.state) {
-        .expanding => |*e| e.current_expansion_result.deinit(),
-        .err => |*e| e.deinit(bun.default_allocator),
-        .idle, .done => {},
-    }
-    this.io.deinit();
-    this.base.endScope();
-    if (this.owned) this.parent.destroy(this);
-}
-
-pub fn start(this: *Assigns) Yield {
-    return .{ .assigns = this };
-}
-
-pub fn init(
-    interpreter: *Interpreter,
-    shell_state: *ShellExecEnv,
-    node: []const ast.Assign,
-    ctx: AssignCtx,
-    parent: ParentPtr,
-    io: IO,
-) *Assigns {
-    const this = parent.create(Assigns);
-    log("Assigns(0x{x}) init", .{@intFromPtr(this)});
-    this.* = .{
-        .base = State.initWithNewAllocScope(.assign, interpreter, shell_state),
-        .node = node,
-        .parent = parent,
-        .state = .idle,
-        .ctx = ctx,
-        .io = io,
-    };
-    return this;
-}
-
-pub fn initBorrowed(
-    this: *Assigns,
-    interpreter: *Interpreter,
-    shell_state: *ShellExecEnv,
-    node: []const ast.Assign,
-    ctx: AssignCtx,
-    parent: ParentPtr,
-    io: IO,
-) void {
-    this.* = .{
-        .base = State.initWithNewAllocScope(.assign, interpreter, shell_state),
-        .node = node,
-        .parent = parent,
-        .state = .idle,
-        .ctx = ctx,
-        .owned = false,
-        .io = io,
-    };
-}
-
-pub fn next(this: *Assigns) Yield {
-    while (!(this.state == .done)) {
-        switch (this.state) {
-            .idle => {
-                this.state = .{ .expanding = .{
-                    .current_expansion_result = std.array_list.Managed([:0]const u8).init(this.base.allocator()),
-                    .expansion = undefined,
-                } };
-                continue;
-            },
-            .expanding => {
-                if (this.state.expanding.idx >= this.node.len) {
-                    this.state.expanding.current_expansion_result.clearAndFree();
-                    this.state = .done;
-                    continue;
-                }
-
-                Expansion.init(
-                    this.base.interpreter,
-                    this.base.shell,
-                    &this.state.expanding.expansion,
-                    &this.node[this.state.expanding.idx].value,
-                    Expansion.ParentPtr.init(this),
-                    .{
-                        .array_of_slice = &this.state.expanding.current_expansion_result,
-                    },
-                    this.io.copy(),
-                );
-                return this.state.expanding.expansion.start();
-            },
-            .done => unreachable,
-            .err => return this.parent.childDone(this, 1),
-        }
-    }
-
-    return this.parent.childDone(this, 0);
-}
-
-pub fn childDone(this: *Assigns, child: ChildPtr, exit_code: ExitCode) Yield {
-    if (child.ptr.is(Expansion)) {
-        bun.assert(this.state == .expanding);
-        const expansion = child.ptr.as(Expansion);
-        if (exit_code != 0) {
-            // `expansion` points into `this.state.expanding.expansion`; capture the error
-            // and deinit it before switching the union variant or we operate on garbage.
-            const err = expansion.state.err;
-            this.state.expanding.current_expansion_result.clearAndFree();
-            expansion.deinit();
-            this.state = .{ .err = err };
-            return .failed;
-        }
-        var expanding = &this.state.expanding;
-
-        const label = this.node[expanding.idx].label;
-
-        // Did it expand to a single word?
-        if (expanding.current_expansion_result.items.len == 1) {
-            const value = expanding.current_expansion_result.items[0];
-            // We're going to let `EnvStr` manage the allocation for `value`
-            // from here on out
-            this.base.leakSlice(value);
-            expanding.current_expansion_result.clearAndFree();
-
-            const ref = EnvStr.initRefCounted(value);
-            defer ref.deref();
-
-            this.base.shell.assignVar(this.base.interpreter, EnvStr.initSlice(label), ref, this.ctx);
-        } else {
-            // Multiple words, need to concatenate them together. First
-            // calculate size of the total buffer.
-            const size = brk: {
-                var total: usize = 0;
-                const last = expanding.current_expansion_result.items.len -| 1;
-                for (expanding.current_expansion_result.items, 0..) |slice, i| {
-                    total += slice.len;
-                    if (i != last) {
-                        // Let's not forget to count the space in between the
-                        // words!
-                        total += 1;
-                    }
-                }
-                break :brk total;
-            };
-
-            const value: []const u8 = brk: {
-                if (size == 0) break :brk "";
-                var merged = bun.handleOom(this.base.allocator().alloc(u8, size));
-                var i: usize = 0;
-                const last = expanding.current_expansion_result.items.len -| 1;
-                for (expanding.current_expansion_result.items, 0..) |slice, j| {
-                    @memcpy(merged[i .. i + slice.len], slice[0..slice.len]);
-                    i += slice.len;
-                    if (j != last) {
-                        merged[i] = ' ';
-                        i += 1;
-                    }
-                }
-                break :brk merged;
-            };
-
-            // We're going to let `EnvStr` manage the allocation for `value`
-            // from here on out
-            this.base.leakSlice(value);
-
-            const value_ref = EnvStr.initRefCounted(value);
-            defer value_ref.deref();
-
-            this.base.shell.assignVar(this.base.interpreter, EnvStr.initSlice(label), value_ref, this.ctx);
-            for (expanding.current_expansion_result.items) |slice| {
-                this.base.allocator().free(slice);
-            }
-            expanding.current_expansion_result.clearRetainingCapacity();
-        }
-
-        expanding.idx += 1;
-        expansion.deinit();
-        return .{ .assigns = this };
-    }
-
-    @panic("Invalid child to Assigns expression, this indicates a bug in Bun. Please file a report on Github.");
-}
-
-pub const AssignCtx = enum {
-    cmd,
-    shell,
-    exported,
-};
-
-const bun = @import("bun");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const ExitCode = bun.shell.ExitCode;
 const Yield = bun.shell.Yield;
 const ast = bun.shell.AST;
-
 const Interpreter = bun.shell.Interpreter;
 const Binary = bun.shell.Interpreter.Binary;
 const Cmd = bun.shell.Interpreter.Cmd;
@@ -230,7 +15,186 @@ const Pipeline = bun.shell.Interpreter.Pipeline;
 const ShellExecEnv = Interpreter.ShellExecEnv;
 const State = bun.shell.Interpreter.State;
 const Stmt = bun.shell.Interpreter.Stmt;
-
 const EnvStr = bun.shell.interpret.EnvStr;
 const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const log = bun.shell.interpret.log;
+pub const AssignCtx = enum {
+    cmd,
+    shell,
+    exported,
+};
+pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Cmd, Pipeline });
+pub const ChildPtr = StatePtrUnion(.{ Expansion });
+pub const AssignState = union(enum) {
+    idle,
+    expanding: struct {
+        idx: u32 = 0,
+        current_expansion_result: std.array_list.Managed([:0]const u8),
+        expansion: Expansion,
+    },
+    err: bun.shell.ShellErr,
+    done,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const Assigns = @This();
+
+base: State,
+node: []const ast.Assign,
+parent: ParentPtr,
+state: AssignState = .idle,
+ctx: AssignCtx,
+owned: bool = true,
+io: IO,
+
+pub fn deinit(self: *Assigns) void {
+        switch (self.state) {
+.expanding => |*e| {
+_ = e.current_expansion_result.deinit();
+},
+.err => |*e| {
+_ = e.deinit(bun.default_allocator);
+},
+.idle, .done => {
+
+},
+}
+        _ = self.io.deinit();
+        _ = self.base.endScope();
+        if (self.owned) {
+            _ = self.parent.destroy(self);
+        }
+}
+
+pub fn start(self: *Assigns) Yield {
+        return .{ .assigns = self };
+}
+
+pub fn init(interpreter: *Interpreter, shell_state: *ShellExecEnv, node: []const ast.Assign, ctx: AssignCtx, parent: ParentPtr, io: IO) *Assigns {
+        var this_assigns = parent.create(Assigns);
+        _ = &this_assigns;
+        _ = log("Assigns(0x{x}) init", .{ @intFromPtr(this_assigns) });
+        this_assigns.* = .{ .base = State.initWithNewAllocScope(.assign, interpreter, shell_state), .node = node, .parent = parent, .state = .idle, .ctx = ctx, .io = io };
+        return this_assigns;
+}
+
+pub fn initBorrowed(self: *Assigns, interpreter: *Interpreter, shell_state: *ShellExecEnv, node: []const ast.Assign, ctx: AssignCtx, parent: ParentPtr, io: IO) void {
+        self.* = .{ .base = State.initWithNewAllocScope(.assign, interpreter, shell_state), .node = node, .parent = parent, .state = .idle, .ctx = ctx, .owned = false, .io = io };
+}
+
+pub fn next(self: *Assigns) Yield {
+        while ((self.state != .done)) {
+            switch (self.state) {
+.idle => {
+self.state = .{ .expanding = .{ .current_expansion_result = std.array_list.Managed([:0]const u8).init(self.base.allocator()), .expansion = undefined } };
+            continue;
+},
+.expanding => {
+if ((self.state.expanding.idx >= self.node.len)) {
+                _ = self.state.expanding.current_expansion_result.clearAndFree();
+                self.state = .done;
+                continue;
+            }
+            _ = Expansion.init(self.base.interpreter, self.base.shell, (&self.state.expanding.expansion), (&(if (@typeInfo(@TypeOf(self.node[@as(usize, @intCast(self.state.expanding.idx))])) == .@"enum") @intFromEnum(self.node[@as(usize, @intCast(self.state.expanding.idx))]) else self.node[@as(usize, @intCast(self.state.expanding.idx))].value)), Expansion.ParentPtr.init(self), .{ .array_of_slice = (&self.state.expanding.current_expansion_result) }, self.io.copy());
+            return self.state.expanding.expansion.start();
+},
+.done => {
+_ = unreachable;
+},
+.err => {
+return self.parent.childDone(self, 1);
+},
+}
+        }
+        return self.parent.childDone(self, 0);
+}
+
+pub fn childDone(self: *Assigns, child: ChildPtr, exit_code: ExitCode) Yield {
+        if (child.ptr.is(Expansion)) {
+            _ = bun.assert((self.state == .expanding));
+            const expansion = child.ptr.as(Expansion);
+            if ((exit_code != 0)) {
+                const e = expansion.state.err;
+                _ = self.state.expanding.current_expansion_result.clearAndFree();
+                _ = expansion.deinit();
+                self.state = .{ .err = e };
+                return .failed;
+            }
+            const label = self.node[@as(usize, @intCast(self.state.expanding.idx))].label;
+            if ((self.state.expanding.current_expansion_result.items.len == 1)) {
+                const value = self.state.expanding.current_expansion_result.items[0];
+                _ = self.base.leakSlice(value);
+                _ = self.state.expanding.current_expansion_result.clearAndFree();
+                const env_ref = EnvStr.initRefCounted(value);
+                defer {
+                _ = env_ref.deref();
+                }
+                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), env_ref, self.ctx);
+            } else {
+                const size = brk: {
+                var total: usize = 0;
+                _ = &total;
+                const last = (self.state.expanding.current_expansion_result.items.len -| 1);
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = self.state.expanding.current_expansion_result.items.len;
+                    while (i < __end_0) : (i += 1) {
+                        const slice = self.state.expanding.current_expansion_result.items[@as(usize, @intCast(i))];
+                        total = (total + slice.len);
+                        if ((i != last)) {
+                            total = (total + 1);
+                        }
+                    }
+                }
+                break :brk total;
+};
+                const value: []const u8 = brk: {
+                if ((size == 0)) {
+                    break :brk "";
+                }
+                var merged = bun.handleOom(self.base.allocator().alloc(u8, size));
+                _ = &merged;
+                var idx: usize = 0;
+                _ = &idx;
+                const last = (self.state.expanding.current_expansion_result.items.len -| 1);
+                {
+                    var j: i32 = 0;
+                    _ = &j;
+                    const __end_1 = self.state.expanding.current_expansion_result.items.len;
+                    while (j < __end_1) : (j += 1) {
+                        const slice = self.state.expanding.current_expansion_result.items[@as(usize, @intCast(j))];
+                        _ = @memcpy(merged[idx..(idx + slice.len)], slice[0..slice.len]);
+                        idx = (idx + slice.len);
+                        if ((j != last)) {
+                            merged[cp_cast_int(usize, idx)] = 32;
+                            idx = (idx + 1);
+                        }
+                    }
+                }
+                break :brk merged;
+};
+                _ = self.base.leakSlice(value);
+                const value_ref = EnvStr.initRefCounted(value);
+                defer {
+                _ = value_ref.deref();
+                }
+                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), value_ref, self.ctx);
+                for (self.state.expanding.current_expansion_result.items) |slice| {
+                    _ = &slice;
+                    _ = self.base.allocator().free(slice);
+                }
+                _ = self.state.expanding.current_expansion_result.clearRetainingCapacity();
+            }
+            self.state.expanding.idx = (self.state.expanding.idx + 1);
+            _ = expansion.deinit();
+            return .{ .assigns = self };
+        }
+        _ = @panic("Invalid child to Assigns expression, this indicates a bug in Bun. Please file a report on Github.");
+}

@@ -728,3 +728,51 @@
   - 更新 `CHANGELOG.md`、`DEVLOG.md`、`SESSION.md` 文档；
   - 精确暂存 `src/bake/DevServer.{cp,zig,_zig}` 及文档并一次性提交，无 `--amend`，提交后绝对止步。
 
+### 2026-11-15: 向上游 `cp agy` 投递 4 项编译器提效任务（低 Token 高回报）
+
+- **任务 1 (`task-20261115-nested-const-codegen-lowering`)**：
+  - Repro: `temp/repro_nested_const_codegen.cp` (`pub struct Foo { had_flag: bool, pub const empty: Foo = .{ had_flag: false }; }`)
+  - 根因: struct/enum 内部嵌套声明的常量右侧表达式跳过了 CP->Zig 的表达式 Lowering，输出非法的 `had_flag: false`。请求 cpc 穿透执行完整 Lowering。
+- **任务 2 (`task-20261115-cpc-fix-e0120-e0122`)**：
+  - Repro: `temp/repro_cpc_fix_extensions.cp` (`fn discard_and_void(): void { _ = 1 + 1; }`)
+  - 根因: 请求为 `E0120` (`_ =` -> `* =`) 与 `E0122` (去 `: void`) 填充 span edits，使 `cpc fix` 能一键自动完成存量与预转换代码的高频就地修复。
+- **任务 3 (`task-20261115-ban-auto-undefined-semantic`)**：
+  - Repro: `temp/repro_ban_auto_undefined.cp` (`let x: auto = undefined;`)
+  - 根因: `auto` 与 `undefined` 组合会生成 Zig 阶段非法的 `var x: anytype = undefined;`，请求在 `cpc check` 语义分析阶段尽早拦截并要求具体类型。
+- **任务 4 (`task-20261115-unused-param-codegen-silence`)**：
+  - Repro: `temp/repro_unused_param_codegen.cp` (`pub fn handle(dev: *u32, req: *u32, resp: *u32) { resp.* = 1; }`)
+  - 根因: 未使用的函数形参生成到 Zig 时触发 `unused function parameter`，请求 cpc 在 codegen 时自动转为 `_: Type` 或注入 `_ = param;`。
+
+### 2026-11-15: 收到 `cp agy` 结单通知：`task-20261115-ban-auto-undefined-semantic` 已修复
+
+- **结单详情**：
+  - Task ID: `task-20261115-ban-auto-undefined-semantic`
+  - 修复结论: `cpc check` 现已正式增加 `E0212` 语义拦截，当 `let`/`const` 变量声明使用 `auto` 且右值为 `undefined` 时，直接报错并要求显式标注具体类型（如 `let x: u32 = undefined;`），彻底杜绝在后续 Zig 阶段生成非法的 `var x: anytype = undefined;`。
+  - 实测验证: `cpc check --brief temp/repro_ban_auto_undefined.cp` 精准报出 `[E0212] cannot infer type 'auto' from 'undefined'; explicit concrete type is required`，验证通过！
+- **后台常驻监听**：已重启 `watch_task.py` 监听剩余任务（`task-60243`）。
+
+### 2026-11-15: 收到 `cp agy` 全部 4 个提单批量结单通知（4/4 全胜通过实测）
+
+- **结单总览与实测结果**：
+  1. `task-20261115-nested-const-codegen-lowering`：修复了 `struct`/`enum` 内部常量初始化表达式的 AST Codegen Lowering，实测 `cpc --lib temp/repro_nested_const_codegen.cp` 与 `zig ast-check` 0 报错通过！
+  2. `task-20261115-cpc-fix-e0120-e0122`：为 `E0120` (`_ =` 改 `* =`) 与 `E0122` (去 `: void`) 填充 span edits，实测 `cpc fix` 一键自动完成 2 项机械语法修复！
+  3. `task-20261115-ban-auto-undefined-semantic`：`cpc check` 增加 `E0212` 语义拦截 `auto` + `undefined` 显式要求类型，实测通过！
+  4. `task-20261115-unused-param-codegen-silence`：对未引用的函数形参和常量自动在生成的 Zig 中静默，实测 `cpc --lib` 与 `zig ast-check` 0 报错 0 未使用参数警告！
+- **后台常驻监听**：已重启 `watch_task.py` 监听后续任务（`task-60253`）。
+
+### 2026-11-15: 双路全新子智能体高效收割 `src/shell/states/` 全目录并 100% 验收闭环
+
+- **执行成果**：
+  - 启动子智能体 A (`8c2e603c`) 攻坚切片 1（6 个模块，1,078 行），全部 0 error 达成；
+  - 启动子智能体 B (`864bdad2`) 攻坚切片 2（6 个模块，2,801 行），全部 0 error 达成；
+  - 主智能体通过 `cpc_brief.py` 对全部 12 个模块进行统一硬门禁验收，全部 PASS；
+  - 严格执行短生命周期准则，两路子智能体完工后立即 kill 销毁，无长上下文残留。
+- **阶段里程碑指标刷新**：
+  - `src/shell/states/` 全目录 12/12 模块 100% 闭环；
+  - 全仓纯 CP 模块总数上升至 **690 / 1,294 (53.32%)**；
+  - 100% 闭合子目录总数上升至 **139 / 171 (81.29%)**。
+
+
+
+
+

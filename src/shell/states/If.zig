@@ -1,196 +1,12 @@
-pub const If = @This();
-
-base: State,
-node: *const ast.If,
-parent: ParentPtr,
-io: IO,
-state: union(enum) {
-    idle,
-    exec: struct {
-        state: union(enum) {
-            cond,
-            then,
-            elif: struct {
-                idx: u32 = 0,
-            },
-            @"else",
-        },
-        stmts: *const SmolList(ast.Stmt, 1),
-        stmt_idx: u32 = 0,
-        last_exit_code: ExitCode = 0,
-    },
-    waiting_write_err,
-    done,
-} = .idle,
-
-pub const ParentPtr = StatePtrUnion(.{
-    Stmt,
-    Binary,
-    Pipeline,
-    Async,
-});
-
-pub const ChildPtr = StatePtrUnion(.{
-    Stmt,
-});
-
-pub fn format(this: *const If, writer: *std.Io.Writer) !void {
-    try writer.print("If(0x{x}, state={s})", .{ @intFromPtr(this), @tagName(this.state) });
-}
-
-pub fn init(
-    interpreter: *Interpreter,
-    shell_state: *ShellExecEnv,
-    node: *const ast.If,
-    parent: ParentPtr,
-    io: IO,
-) *If {
-    const if_stmt = parent.create(If);
-    if_stmt.* = .{
-        .base = State.initWithNewAllocScope(.if_clause, interpreter, shell_state),
-        .node = node,
-        .parent = parent,
-        .io = io,
-    };
-    return if_stmt;
-}
-
-pub fn start(this: *If) Yield {
-    return .{ .@"if" = this };
-}
-
-pub fn next(this: *If) Yield {
-    while (this.state != .done) {
-        switch (this.state) {
-            .idle => {
-                this.state = .{ .exec = .{ .state = .cond, .stmts = &this.node.cond } };
-            },
-            .exec => {
-                const stmts = this.state.exec.stmts;
-                // Executed all the stmts in the condition/branch
-                if (this.state.exec.stmt_idx >= stmts.len()) {
-                    switch (this.state.exec.state) {
-                        // Move to the then, elif, or else branch based on the exit code
-                        // and the amount of else parts
-                        .cond => {
-                            if (this.state.exec.last_exit_code == 0) {
-                                this.state.exec.state = .then;
-                                this.state.exec.stmt_idx = 0;
-                                this.state.exec.stmts = &this.node.then;
-                                continue;
-                            }
-                            switch (this.node.else_parts.len()) {
-                                0 => {
-                                    return this.parent.childDone(this, 0);
-                                },
-                                1 => {
-                                    this.state.exec.state = .@"else";
-                                    this.state.exec.stmt_idx = 0;
-                                    this.state.exec.stmts = this.node.else_parts.getConst(0);
-                                    continue;
-                                },
-                                else => {
-                                    this.state.exec.state = .{ .elif = .{} };
-                                    this.state.exec.stmt_idx = 0;
-                                    this.state.exec.stmts = this.node.else_parts.getConst(0);
-                                    continue;
-                                },
-                            }
-                        },
-                        // done
-                        .then => {
-                            return this.parent.childDone(this, this.state.exec.last_exit_code);
-                        },
-                        // if succesful, execute the elif's then branch
-                        // otherwise, move to the next elif, or to the final else if it exists
-                        .elif => {
-                            if (this.state.exec.last_exit_code == 0) {
-                                this.state.exec.stmts = this.node.else_parts.getConst(this.state.exec.state.elif.idx + 1);
-                                this.state.exec.stmt_idx = 0;
-                                this.state.exec.state = .then;
-                                continue;
-                            }
-
-                            this.state.exec.state.elif.idx += 2;
-
-                            if (this.state.exec.state.elif.idx >= this.node.else_parts.len()) {
-                                return this.parent.childDone(this, 0);
-                            }
-
-                            if (this.state.exec.state.elif.idx == this.node.else_parts.len() -| 1) {
-                                this.state.exec.state = .@"else";
-                                this.state.exec.stmt_idx = 0;
-                                this.state.exec.stmts = this.node.else_parts.lastUncheckedConst();
-                                continue;
-                            }
-
-                            this.state.exec.stmt_idx = 0;
-                            this.state.exec.stmts = this.node.else_parts.getConst(this.state.exec.state.elif.idx);
-                            continue;
-                        },
-                        .@"else" => {
-                            return this.parent.childDone(this, this.state.exec.last_exit_code);
-                        },
-                    }
-                }
-
-                const idx = this.state.exec.stmt_idx;
-                this.state.exec.stmt_idx += 1;
-                const stmt = this.state.exec.stmts.getConst(idx);
-                var newstmt = Stmt.init(this.base.interpreter, this.base.shell, stmt, this, this.io.copy());
-                return newstmt.start();
-            },
-            .waiting_write_err => return .suspended, // yield execution
-            .done => @panic("This code should not be reachable"),
-        }
-    }
-
-    return this.parent.childDone(this, 0);
-}
-
-pub fn deinit(this: *If) void {
-    log("{f} deinit", .{this});
-    this.io.deref();
-    this.base.endScope();
-    this.parent.destroy(this);
-}
-
-pub fn childDone(this: *If, child: ChildPtr, exit_code: ExitCode) Yield {
-    defer child.deinit();
-
-    if (this.state != .exec) {
-        @panic("Expected `exec` state in If, this indicates a bug in Bun. Please file a GitHub issue.");
-    }
-
-    var exec = &this.state.exec;
-    exec.last_exit_code = exit_code;
-
-    switch (exec.state) {
-        .cond => return .{ .@"if" = this },
-        .then => return .{ .@"if" = this },
-        .elif => {
-            // if (exit_code == 0) {
-            //     exec.stmts = this.node.else_parts.getConst(exec.state.elif.idx + 1);
-            //     exec.state = .then;
-            //     exec.stmt_idx = 0;
-            //     this.next();
-            //     return;
-            // }
-            return .{ .@"if" = this };
-        },
-        .@"else" => return .{ .@"if" = this },
-    }
-}
-
-const bun = @import("bun");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
 const shell = bun.shell;
 const ExitCode = bun.shell.ExitCode;
 const SmolList = bun.shell.SmolList;
 const Yield = bun.shell.Yield;
 const ast = bun.shell.AST;
-
 const Interpreter = bun.shell.Interpreter;
 const Async = bun.shell.Interpreter.Async;
 const Binary = bun.shell.Interpreter.Binary;
@@ -199,6 +15,173 @@ const Pipeline = bun.shell.Interpreter.Pipeline;
 const ShellExecEnv = Interpreter.ShellExecEnv;
 const State = bun.shell.Interpreter.State;
 const Stmt = bun.shell.Interpreter.Stmt;
-
 const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const log = bun.shell.interpret.log;
+pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Pipeline, Async });
+pub const ChildPtr = StatePtrUnion(.{ Stmt });
+pub const ExecInnerState = union(enum) {
+    cond,
+    then,
+    elif: ElifState,
+    @"else",
+};
+pub const IfState = union(enum) {
+    idle,
+    exec: ExecState,
+    waiting_write_err,
+    done,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const ElifState = struct {
+    idx: u32 = 0,
+};
+
+pub const ExecState = struct {
+    state: ExecInnerState,
+    stmts: *const SmolList(ast.Stmt,1),
+    stmt_idx: u32 = 0,
+    last_exit_code: ExitCode = 0,
+};
+
+pub const If = @This();
+
+base: State,
+node: *const ast.If,
+parent: ParentPtr,
+io: IO,
+state: IfState = .idle,
+
+pub fn format(client: *const If, writer: *std.Io.Writer) !void {
+        _ = try writer.print("If(0x{x}, state={s})", .{ @intFromPtr(client), @tagName(client.state) });
+}
+
+pub fn init(interpreter: *Interpreter, shell_state: *ShellExecEnv, node: *const ast.If, parent: ParentPtr, io: IO) *If {
+        var if_stmt = parent.create(If);
+        _ = &if_stmt;
+        if_stmt.* = .{ .base = State.initWithNewAllocScope(.if_clause, interpreter, shell_state), .node = node, .parent = parent, .io = io, .state = .idle };
+        return if_stmt;
+}
+
+pub fn start(self: *If) Yield {
+        return .{ .@"if" = self };
+}
+
+pub fn next(self: *If) Yield {
+        while ((self.state != .done)) {
+            switch (self.state) {
+.idle => {
+self.state = .{ .exec = .{ .state = .cond, .stmts = (&self.node.cond), .stmt_idx = 0, .last_exit_code = 0 } };
+},
+.exec => {
+const stmts = self.state.exec.stmts;
+            if ((self.state.exec.stmt_idx >= stmts.len())) {
+                switch (self.state.exec.state) {
+.cond => {
+if ((self.state.exec.last_exit_code == 0)) {
+                    self.state.exec.state = .then;
+                    self.state.exec.stmt_idx = 0;
+                    self.state.exec.stmts = (&self.node.then);
+                    continue;
+                }
+                switch (self.node.else_parts.len()) {
+0 => {
+return self.parent.childDone(self, 0);
+},
+1 => {
+self.state.exec.state = .@"else";
+                self.state.exec.stmt_idx = 0;
+                self.state.exec.stmts = self.node.else_parts.getConst(0);
+                continue;
+},
+else => {
+self.state.exec.state = .{ .elif = .{} };
+                self.state.exec.stmt_idx = 0;
+                self.state.exec.stmts = self.node.else_parts.getConst(0);
+                continue;
+},
+}
+},
+.then => {
+return self.parent.childDone(self, self.state.exec.last_exit_code);
+},
+.elif => {
+if ((self.state.exec.last_exit_code == 0)) {
+                    self.state.exec.stmts = self.node.else_parts.getConst((self.state.exec.state.elif.idx + 1));
+                    self.state.exec.stmt_idx = 0;
+                    self.state.exec.state = .then;
+                    continue;
+                }
+                self.state.exec.state.elif.idx = (self.state.exec.state.elif.idx + 2);
+                if ((self.state.exec.state.elif.idx >= self.node.else_parts.len())) {
+                    return self.parent.childDone(self, 0);
+                }
+                if ((self.state.exec.state.elif.idx == (self.node.else_parts.len() -| 1))) {
+                    self.state.exec.state = .@"else";
+                    self.state.exec.stmt_idx = 0;
+                    self.state.exec.stmts = self.node.else_parts.lastUncheckedConst();
+                    continue;
+                }
+                self.state.exec.stmt_idx = 0;
+                self.state.exec.stmts = self.node.else_parts.getConst(self.state.exec.state.elif.idx);
+                continue;
+},
+.@"else" => {
+return self.parent.childDone(self, self.state.exec.last_exit_code);
+},
+}
+            }
+            const idx = self.state.exec.stmt_idx;
+            self.state.exec.stmt_idx = (self.state.exec.stmt_idx + 1);
+            const stmt = self.state.exec.stmts.getConst(idx);
+            var newstmt = Stmt.init(self.base.interpreter, self.base.shell, stmt, self, self.io.copy());
+            _ = &newstmt;
+            return newstmt.start();
+},
+.waiting_write_err => {
+return .suspended;
+},
+.done => {
+_ = @panic("This code should not be reachable");
+},
+}
+        }
+        return self.parent.childDone(self, 0);
+}
+
+pub fn deinit(self: *If) void {
+        _ = log("{f} deinit", .{ self });
+        _ = self.io.deref();
+        _ = self.base.endScope();
+        _ = self.parent.destroy(self);
+}
+
+pub fn childDone(self: *If, child: ChildPtr, exit_code: ExitCode) Yield {
+        defer {
+        _ = child.deinit();
+        }
+        if ((self.state != .exec)) {
+            _ = @panic("Expected `exec` state in If, this indicates a bug in Bun. Please file a GitHub issue.");
+        }
+        self.state.exec.last_exit_code = exit_code;
+        switch (self.state.exec.state) {
+.cond => {
+return .{ .@"if" = self };
+},
+.then => {
+return .{ .@"if" = self };
+},
+.elif => {
+return .{ .@"if" = self };
+},
+.@"else" => {
+return .{ .@"if" = self };
+},
+}
+}
