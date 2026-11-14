@@ -1,667 +1,9 @@
-/// This is a type whose items can either be heap-allocated (essentially the
-/// same as a BabyList(T)) or inlined in the struct itself.
-///
-/// This is type is a performance optimization for avoiding allocations, especially when you know the list
-/// will commonly have N or fewer items.
-///
-/// The `capacity` field is used to disambiguate between the two states: - When
-/// `capacity <= N`, the items are stored inline, and `capacity` is the length
-/// of the items.  - When `capacity > N`, the items are stored on the heap, and
-/// this type essentially becomes a BabyList(T), but with the fields reordered.
-///
-/// This code is based on servo/rust-smallvec and the Zig std.ArrayList source.
-pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
-    return struct {
-        capacity: u32 = 0,
-        data: Data = .{ .inlined = undefined },
-
-        const Data = union {
-            inlined: [N]T,
-            heap: HeapData,
-        };
-
-        const HeapData = struct {
-            len: u32,
-            ptr: [*]T,
-
-            pub fn initCapacity(allocator: Allocator, capacity: u32) HeapData {
-                return .{
-                    .len = 0,
-                    .ptr = bun.handleOom(allocator.alloc(T, capacity)).ptr,
-                };
-            }
-        };
-
-        const This = @This();
-
-        pub fn initInlined(values: []const T) This {
-            bun.assert(values.len <= N);
-            var this = This{
-                .capacity = values.len,
-                .data = .{ .inlined = undefined },
-            };
-
-            @memcpy(this.data.inlined[0..values.len], values);
-
-            return this;
-        }
-        pub fn parse(input: *Parser) Result(@This()) {
-            const parseFn = comptime voidWrap(T, generic.parseFor(T));
-            var values: @This() = .{};
-            while (true) {
-                input.skipWhitespace();
-                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, {}, parseFn)) {
-                    .result => |v| {
-                        values.append(input.allocator(), v);
-                    },
-                    .err => |e| return .{ .err = e },
-                }
-                switch (input.next()) {
-                    .err => return .{ .result = values },
-                    .result => |t| {
-                        if (t.* == .comma) continue;
-                        std.debug.panic("Expected a comma", .{});
-                    },
-                }
-            }
-            unreachable;
-        }
-
-        pub fn toCss(this: *const @This(), dest: *Printer) PrintErr!void {
-            const length = this.len();
-            for (this.slice(), 0..) |*val, idx| {
-                try val.toCss(dest);
-                if (idx < length - 1) {
-                    try dest.delim(',', false);
-                }
-            }
-        }
-
-        /// NOTE: This will deinit the list
-        pub fn fromList(allocator: Allocator, list: std.ArrayListUnmanaged(T)) @This() {
-            if (list.cap > N) {
-                return .{
-                    .capacity = list.cap,
-                    .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
-                };
-            }
-            defer list.deinit(allocator);
-            var this: @This() = .{
-                .capacity = list.len,
-                .data = .{ .inlined = undefined },
-            };
-            @memcpy(this.data.inlined[0..list.len], list.items[0..list.len]);
-            return this;
-        }
-
-        pub fn fromListNoDeinit(list: std.ArrayListUnmanaged(T)) @This() {
-            if (list.cap > N) {
-                return .{
-                    .capacity = list.cap,
-                    .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
-                };
-            }
-            var this: @This() = .{
-                .capacity = list.len,
-                .data = .{ .inlined = undefined },
-            };
-            @memcpy(this.data.inlined[0..list.len], list.items[0..list.len]);
-            return this;
-        }
-
-        /// NOTE: This will deinit the list
-        pub fn fromBabyList(allocator: Allocator, list: bun.BabyList(T)) @This() {
-            if (list.cap > N) {
-                return .{
-                    .capacity = list.cap,
-                    .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
-                };
-            }
-            var list_ = list;
-            defer list_.deinit(allocator);
-            var this: @This() = .{
-                .capacity = list_.len,
-                .data = .{ .inlined = undefined },
-            };
-            @memcpy(this.data.inlined[0..list_.len], list_.items[0..list_.len]);
-            return this;
-        }
-
-        pub fn fromBabyListNoDeinit(list: bun.BabyList(T)) @This() {
-            if (list.cap > N) {
-                return .{
-                    .capacity = list.cap,
-                    .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
-                };
-            }
-            var this: @This() = .{
-                .capacity = list.len,
-                .data = .{ .inlined = undefined },
-            };
-            @memcpy(this.data.inlined[0..list.len], list.ptr[0..list.len]);
-            return this;
-        }
-
-        pub fn withOne(val: T) @This() {
-            var ret = This{};
-            ret.capacity = 1;
-            ret.data.inlined[0] = val;
-            return ret;
-        }
-
-        pub inline fn getLastUnchecked(this: *const @This()) T {
-            if (this.spilled()) return this.data.heap.ptr[this.data.heap.len - 1];
-            return this.data.inlined[this.capacity - 1];
-        }
-
-        pub inline fn at(this: *const @This(), idx: u32) *const T {
-            return &this.as_const_ptr()[idx];
-        }
-
-        pub inline fn mut(this: *@This(), idx: u32) *T {
-            return &this.as_ptr()[idx];
-        }
-
-        pub inline fn last(this: *const @This()) ?*const T {
-            const sl = this.slice();
-            if (sl.len == 0) return null;
-            return &sl[sl.len - 1];
-        }
-
-        pub inline fn lastMut(this: *@This()) ?*T {
-            const sl = this.slice_mut();
-            if (sl.len == 0) return null;
-            return &sl[sl.len - 1];
-        }
-
-        pub inline fn toOwnedSlice(this: *const @This(), allocator: Allocator) []T {
-            if (this.spilled()) return this.data.heap.ptr[0..this.data.heap.len];
-            return bun.handleOom(allocator.dupe(T, this.data.inlined[0..this.capacity]));
-        }
-
-        /// NOTE: If this is inlined then this will refer to stack memory, if
-        /// need it to be stable then you should use `.toOwnedSlice()`
-        pub inline fn slice(this: *const @This()) []const T {
-            if (this.capacity > N) return this.data.heap.ptr[0..this.data.heap.len];
-            return this.data.inlined[0..this.capacity];
-        }
-
-        /// NOTE: If this is inlined then this will refer to stack memory, if
-        /// need it to be stable then you should use `.toOwnedSlice()`
-        pub inline fn slice_mut(this: *@This()) []T {
-            if (this.capacity > N) return this.data.heap.ptr[0..this.data.heap.len];
-            return this.data.inlined[0..this.capacity];
-        }
-
-        pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers) bool {
-            for (this.slice()) |*v| {
-                if (!v.isCompatible(browsers)) return false;
-            }
-            return true;
-        }
-
-        /// For this function to be called the T here must implement the ImageFallback interface
-        pub fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets) getFallbacksReturnType(T, N) {
-            // Implements ImageFallback interface
-            if (@hasDecl(T, "getImage") and N == 1) {
-                const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
-                // Determine what vendor prefixes and color fallbacks are needed.
-                var prefixes = css.VendorPrefix{};
-                var fallbacks = ColorFallbackKind{};
-                var res: bun.BabyList(@This()) = .{};
-                for (this.slice()) |*item| {
-                    bun.bits.insert(css.VendorPrefix, &prefixes, item.getImage().getNecessaryPrefixes(targets));
-                    bun.bits.insert(css.ColorFallbackKind, &fallbacks, item.getNecessaryFallbacks(targets));
-                }
-
-                // Get RGB fallbacks if needed.
-                const rgb: ?SmallList(T, 1) = if (fallbacks.rgb) brk: {
-                    var shallow_clone = this.shallowClone(allocator);
-                    for (shallow_clone.slice_mut(), this.slice_mut()) |*out, *in| {
-                        out.* = in.getFallback(allocator, ColorFallbackKind{ .rgb = true });
-                    }
-                    break :brk shallow_clone;
-                } else null;
-
-                // Prefixed properties only support RGB.
-                const prefix_images: *const SmallList(T, 1) = if (rgb) |*r| r else this;
-
-                // Legacy -webkit-gradient()
-                if (prefixes.webkit and targets.browsers != null and css.prefixes.Feature.isWebkitGradient(targets.browsers.?)) {
-                    const images = images: {
-                        var images = SmallList(T, 1){};
-                        for (prefix_images.slice()) |*item| {
-                            if (item.getImage().getLegacyWebkit(allocator)) |img| {
-                                images.append(allocator, item.withImage(allocator, img));
-                            }
-                        }
-                        break :images images;
-                    };
-                    if (!images.isEmpty()) {
-                        bun.handleOom(res.append(allocator, images));
-                    }
-                }
-
-                const prefix = struct {
-                    pub inline fn helper(comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(This), alloc: Allocator) void {
-                        if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
-                            var images = SmallList(T, 1).initCapacity(alloc, pfi.len());
-                            images.setLen(pfi.len());
-                            for (images.slice_mut(), pfi.slice()) |*out, *in| {
-                                const image = in.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
-                                out.* = in.withImage(alloc, image);
-                            }
-                            bun.handleOom(r.append(alloc, images));
-                        }
-                    }
-                }.helper;
-
-                prefix("webkit", &prefixes, prefix_images, &res, allocator);
-                prefix("moz", &prefixes, prefix_images, &res, allocator);
-                prefix("o", &prefixes, prefix_images, &res, allocator);
-
-                if (prefixes.none) {
-                    if (rgb) |r| {
-                        bun.handleOom(res.append(allocator, r));
-                    }
-
-                    if (fallbacks.p3) {
-                        var p3_images = this.shallowClone(allocator);
-                        for (p3_images.slice_mut(), this.slice_mut()) |*out, *in| {
-                            out.* = in.getFallback(allocator, ColorFallbackKind{ .p3 = true });
-                        }
-                        bun.handleOom(res.append(allocator, p3_images));
-                    }
-
-                    // Convert to lab if needed (e.g. if oklab is not supported but lab is).
-                    if (fallbacks.lab) {
-                        for (this.slice_mut()) |*item| {
-                            var old = item.*;
-                            item.* = item.getFallback(allocator, ColorFallbackKind{ .lab = true });
-                            old.deinit(allocator);
-                        }
-                    }
-                } else if (res.pop()) |the_last| {
-                    var old = this.*;
-                    // Prefixed property with no unprefixed version.
-                    // Replace self with the last prefixed version so that it doesn't
-                    // get duplicated when the caller pushes the original value.
-                    this.* = the_last;
-                    old.deinit(allocator);
-                }
-                return res;
-            }
-            if (T == TextShadow and N == 1) {
-                var fallbacks = css.ColorFallbackKind{};
-                for (this.slice()) |*shadow| {
-                    bun.bits.insert(css.ColorFallbackKind, &fallbacks, shadow.color.getNecessaryFallbacks(targets));
-                }
-
-                var res = SmallList(SmallList(TextShadow, 1), 2){};
-                if (fallbacks.rgb) {
-                    var rgb = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
-                    for (this.slice()) |*shadow| {
-                        var new_shadow = shadow.*;
-                        // dummy non-alloced color to avoid deep cloning the real one since we will replace it
-                        new_shadow.color = .current_color;
-                        new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = shadow.color.toRGB(allocator).?;
-                        rgb.appendAssumeCapacity(new_shadow);
-                    }
-                    res.append(allocator, rgb);
-                }
-
-                if (fallbacks.p3) {
-                    var p3 = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
-                    for (this.slice()) |*shadow| {
-                        var new_shadow = shadow.*;
-                        // dummy non-alloced color to avoid deep cloning the real one since we will replace it
-                        new_shadow.color = .current_color;
-                        new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = shadow.color.toP3(allocator).?;
-                        p3.appendAssumeCapacity(new_shadow);
-                    }
-                    res.append(allocator, p3);
-                }
-
-                if (fallbacks.lab) {
-                    for (this.slice_mut()) |*shadow| {
-                        const out = shadow.color.toLAB(allocator).?;
-                        shadow.color.deinit(allocator);
-                        shadow.color = out;
-                    }
-                }
-
-                return res;
-            }
-            @compileError("Dunno what to do here.");
-        }
-
-        fn getFallbacksReturnType(comptime Type: type, comptime InlineSize: comptime_int) type {
-            // Implements ImageFallback interface
-            if (@hasDecl(Type, "getImage") and InlineSize == 1) {
-                return bun.BabyList(SmallList(Type, 1));
-            }
-            if (Type == TextShadow and InlineSize == 1) {
-                return SmallList(SmallList(TextShadow, 1), 2);
-            }
-            @compileError("Unhandled for: " ++ @typeName(Type));
-        }
-
-        // TODO: remove this stupid function
-        pub fn map(this: *@This(), comptime func: anytype) void {
-            for (this.slice_mut()) |*item| {
-                func(item);
-            }
-        }
-
-        /// `predicate` must be: `fn(*const T) bool`
-        pub fn any(this: *const @This(), comptime predicate: anytype) bool {
-            for (this.slice()) |*item| {
-                if (predicate(item)) return true;
-            }
-            return false;
-        }
-
-        pub fn orderedRemove(this: *@This(), idx: u32) T {
-            var ptr, const len_ptr, const capp = this.tripleMut();
-            _ = capp; // autofix
-            bun.assert(idx < len_ptr.*);
-
-            const length = len_ptr.*;
-
-            len_ptr.* = len_ptr.* - 1;
-            ptr += idx;
-            const item = ptr[0];
-            std.mem.copyForwards(T, ptr[0 .. length - idx - 1], ptr[1..][0 .. length - idx - 1]);
-
-            return item;
-        }
-
-        pub fn swapRemove(this: *@This(), idx: u32) T {
-            var ptr, const len_ptr, const capp = this.tripleMut();
-            _ = capp; // autofix
-            bun.assert(idx < len_ptr.*);
-
-            const ret = ptr[idx];
-            ptr[idx] = ptr[len_ptr.* -| 1];
-            len_ptr.* = len_ptr.* - 1;
-
-            return ret;
-        }
-
-        pub fn clearRetainingCapacity(this: *@This()) void {
-            if (this.spilled()) {
-                this.data.heap.len = 0;
-            } else {
-                this.capacity = 0;
-            }
-        }
-
-        pub fn shallowClone(this: *const @This(), allocator: Allocator) @This() {
-            if (!this.spilled()) return this.*;
-            var h = HeapData.initCapacity(allocator, this.capacity);
-            h.len = this.data.heap.len;
-            @memcpy(h.ptr[0..h.len], this.data.heap.ptr[0..h.len]);
-            return .{
-                .capacity = this.capacity,
-                .data = .{ .heap = h },
-            };
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-            var ret: @This() = initCapacity(allocator, this.len());
-            ret.setLen(this.len());
-            for (this.slice(), ret.slice_mut()) |*in, *out| {
-                out.* = generic.deepClone(T, in, allocator);
-            }
-            return ret;
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            if (lhs.len() != rhs.len()) return false;
-            for (lhs.slice(), rhs.slice()) |*a, *b| {
-                if (!generic.eql(T, a, b)) return false;
-            }
-            return true;
-        }
-
-        /// Shallow clone
-        pub fn clone(this: *const @This(), allocator: Allocator) @This() {
-            var ret = this.*;
-            if (!this.spilled()) return ret;
-            // Preserve the invariant that the heap allocation holds `capacity` elements,
-            // otherwise a later append that trusts `capacity` would write out of bounds.
-            const buf = bun.handleOom(allocator.alloc(T, this.capacity));
-            @memcpy(buf[0..ret.data.heap.len], ret.data.heap.ptr[0..ret.data.heap.len]);
-            ret.data.heap.ptr = buf.ptr;
-            return ret;
-        }
-
-        pub fn deinit(this: *@This(), allocator: Allocator) void {
-            if (this.spilled()) {
-                allocator.free(this.data.heap.ptr[0..this.capacity]);
-            }
-        }
-
-        pub fn hash(this: *const @This(), hasher: anytype) void {
-            for (this.slice()) |*item| {
-                css.generic.hash(T, item, hasher);
-            }
-        }
-
-        pub inline fn len(this: *const @This()) u32 {
-            if (this.spilled()) return this.data.heap.len;
-            return this.capacity;
-        }
-
-        pub inline fn isEmpty(this: *const @This()) bool {
-            return this.len() == 0;
-        }
-
-        pub fn initCapacity(allocator: Allocator, capacity: u32) @This() {
-            if (capacity > N) {
-                var list: This = .{};
-                list.capacity = capacity;
-                list.data = .{ .heap = HeapData.initCapacity(allocator, capacity) };
-                return list;
-            }
-
-            return .{
-                .capacity = 0,
-            };
-        }
-
-        pub fn ensureTotalCapacity(this: *@This(), allocator: Allocator, new_capacity: u32) void {
-            if (this.capacity >= new_capacity) return;
-            this.tryGrow(allocator, new_capacity);
-        }
-
-        pub fn insert(
-            this: *@This(),
-            allocator: Allocator,
-            index: u32,
-            item: T,
-        ) void {
-            var ptr, var len_ptr, const capp = this.tripleMut();
-            if (len_ptr.* == capp) {
-                this.reserveOneUnchecked(allocator);
-                const heap_ptr, const heap_len_ptr = this.heap();
-                ptr = heap_ptr;
-                len_ptr = heap_len_ptr;
-            }
-            const length = len_ptr.*;
-            ptr += index;
-            if (index < length) {
-                const count = length - index;
-                std.mem.copyBackwards(T, ptr[1..][0..count], ptr[0..count]);
-            } else if (index == length) {
-                // No elements need shifting.
-            } else {
-                @panic("index exceeds length");
-            }
-            len_ptr.* = length + 1;
-            ptr[0] = item;
-        }
-
-        pub fn appendAssumeCapacity(this: *@This(), item: T) void {
-            var ptr, const len_ptr, const capp = this.tripleMut();
-            bun.debugAssert(len_ptr.* < capp);
-            ptr[len_ptr.*] = item;
-            len_ptr.* += 1;
-        }
-
-        pub fn pop(this: *@This()) ?T {
-            const ptr, const len_ptr, _ = this.tripleMut();
-            if (len_ptr.* == 0) return null;
-            const last_index = len_ptr.* - 1;
-            len_ptr.* = last_index;
-            return ptr[last_index];
-        }
-
-        pub fn append(this: *@This(), allocator: Allocator, item: T) void {
-            var ptr, var len_ptr, const capp = this.tripleMut();
-            if (len_ptr.* == capp) {
-                this.reserveOneUnchecked(allocator);
-                const heap_ptr, const heap_len = this.heap();
-                ptr = heap_ptr;
-                len_ptr = heap_len;
-            }
-            ptr[len_ptr.*] = item;
-            len_ptr.* += 1;
-        }
-
-        pub fn appendSlice(this: *@This(), allocator: Allocator, items: []const T) void {
-            this.insertSlice(allocator, this.len(), items);
-        }
-
-        pub fn appendSliceAssumeCapacity(this: *@This(), items: []const T) void {
-            bun.assert(this.len() + items.len <= this.capacity);
-            this.insertSliceAssumeCapacity(this.len(), items);
-        }
-
-        pub inline fn insertSlice(this: *@This(), allocator: Allocator, index: u32, items: []const T) void {
-            this.reserve(allocator, @intCast(items.len));
-            this.insertSliceAssumeCapacity(index, items);
-        }
-
-        pub inline fn insertSliceAssumeCapacity(this: *@This(), index: u32, items: []const T) void {
-            const length = this.len();
-            bun.assert(index <= length);
-            const ptr: [*]T = this.as_ptr()[index..];
-            const count = length - index;
-            std.mem.copyBackwards(T, ptr[items.len..][0..count], ptr[0..count]);
-            @memcpy(ptr[0..items.len], items);
-            this.setLen(length + @as(u32, @intCast(items.len)));
-        }
-
-        pub fn setLen(this: *@This(), new_len: u32) void {
-            const len_ptr = this.lenMut();
-            len_ptr.* = new_len;
-        }
-
-        inline fn heap(this: *@This()) struct { [*]T, *u32 } {
-            return .{ this.data.heap.ptr, &this.data.heap.len };
-        }
-
-        fn as_const_ptr(this: *const @This()) [*]const T {
-            if (this.spilled()) return this.data.heap.ptr;
-            return &this.data.inlined;
-        }
-
-        fn as_ptr(this: *@This()) [*]T {
-            if (this.spilled()) return this.data.heap.ptr;
-            return &this.data.inlined;
-        }
-
-        fn reserve(this: *@This(), allocator: Allocator, additional: u32) void {
-            const ptr, const __len, const capp = this.tripleMut();
-            _ = ptr; // autofix
-            const len_ = __len.*;
-
-            if (capp - len_ >= additional) return;
-            const new_cap = growCapacity(capp, len_ + additional);
-            this.tryGrow(allocator, new_cap);
-        }
-
-        fn reserveOneUnchecked(this: *@This(), allocator: Allocator) void {
-            @branchHint(.cold);
-            bun.assert(this.len() == this.capacity);
-            const new_cap = growCapacity(this.capacity, this.len() + 1);
-            this.tryGrow(allocator, new_cap);
-        }
-
-        fn tryGrow(this: *@This(), allocator: Allocator, new_cap: u32) void {
-            const unspilled = !this.spilled();
-            const ptr, const __len, const cap = this.tripleMut();
-            const length = __len.*;
-            bun.assert(new_cap >= length);
-            if (new_cap <= N) {
-                if (unspilled) return;
-                this.data = .{ .inlined = undefined };
-                @memcpy(this.data.inlined[0..length], ptr[0..length]);
-                this.capacity = length;
-                allocator.free(ptr[0..cap]);
-            } else if (new_cap != cap) {
-                const new_alloc: [*]T = if (unspilled) new_alloc: {
-                    const new_alloc = bun.handleOom(allocator.alloc(T, new_cap));
-                    @memcpy(new_alloc[0..length], ptr[0..length]);
-                    break :new_alloc new_alloc.ptr;
-                } else new_alloc: {
-                    break :new_alloc bun.handleOom(allocator.realloc(ptr[0..cap], new_cap)).ptr;
-                };
-                this.data = .{ .heap = .{ .ptr = new_alloc, .len = length } };
-                this.capacity = new_cap;
-            }
-        }
-
-        /// Returns a tuple with (data ptr, len, capacity)
-        /// Useful to get all SmallVec properties with a single check of the current storage variant.
-        inline fn tripleMut(this: *@This()) struct { [*]T, *u32, u32 } {
-            if (this.spilled()) return .{ this.data.heap.ptr, &this.data.heap.len, this.capacity };
-            return .{ &this.data.inlined, &this.capacity, N };
-        }
-
-        inline fn lenMut(this: *@This()) *u32 {
-            if (this.spilled()) return &this.data.heap.len;
-            return &this.capacity;
-        }
-
-        fn growToHeap(this: *@This(), allocator: Allocator, additional: usize) void {
-            bun.assert(!this.spilled());
-            const new_size = growCapacity(this.capacity, this.capacity + additional);
-            var slc = bun.handleOom(allocator.alloc(T, new_size));
-            @memcpy(slc[0..this.capacity], this.data.inlined[0..this.capacity]);
-            this.data = .{ .heap = HeapData{ .len = this.capacity, .ptr = slc.ptr } };
-            this.capacity = new_size;
-        }
-
-        inline fn spilled(this: *const @This()) bool {
-            return this.capacity > N;
-        }
-
-        /// Copy pasted from Zig std in array list:
-        ///
-        /// Called when memory growth is necessary. Returns a capacity larger than
-        /// minimum that grows super-linearly.
-        fn growCapacity(current: u32, minimum: u32) u32 {
-            var new = current;
-            while (true) {
-                new +|= new / 2 + 8;
-                if (new >= minimum)
-                    return new;
-            }
-        }
-
-        pub const looksLikeContainerTypeSmallList = T;
-    };
-}
-
-const bun = @import("bun");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const Allocator = std.mem.Allocator;
+const string = []const u8;
 
-const css = @import("./css_parser.zig");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+const Allocator = std.mem.Allocator;
 const Delimiters = css.Delimiters;
 const Parser = css.Parser;
 const PrintErr = css.PrintErr;
@@ -670,3 +12,786 @@ const Result = css.Result;
 const generic = css.generic;
 const voidWrap = css.voidWrap;
 const TextShadow = css.css_properties.text.TextShadow;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const css = @import("./css_parser.zig");
+
+pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
+        return struct {
+    capacity: u32 = 0,
+    data: Data = .{ .inlined = undefined },
+
+pub fn initInlined(self: @This(), values: []const T) This {
+            _ = bun.assert((values.len <= N));
+            var this = This{ .capacity = values.len, .data = .{ .inlined = undefined } };
+            _ = &this;
+            _ = @memcpy(self.data.inlined[0..values.len], values);
+            return self;
+    }
+
+pub fn parse(self: @This(), input: *Parser) Result(@This()) {
+        _ = &self;
+            const parseFn = (comptime voidWrap(T, generic.parseFor(T)));
+            var values: @This() = .{};
+            _ = &values;
+            while (true) {
+                _ = input.skipWhitespace();
+                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, .{}, parseFn)) {
+.result => |v| {
+_ = values.append(input.allocator(), v);
+},
+.err => |e| {
+return .{ .err = e };
+},
+}
+                switch (input.next()) {
+.err => {
+return .{ .result = values };
+},
+.result => |t| {
+if ((t.* == .comma)) {
+                    continue;
+                }
+                _ = std.debug.panic("Expected a comma", .{});
+},
+}
+            }
+            _ = unreachable;
+    }
+
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+            const length = self.len();
+            const sl = self.slice();
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_0 = sl.len;
+                while (idx < __end_0) : (idx += 1) {
+                    _ = try sl[@as(usize, @intCast(idx))].toCss(dest);
+                    if ((idx < (length - 1))) {
+                        _ = try dest.delim(44, false);
+                    }
+                }
+            }
+    }
+
+pub fn fromList(self: @This(), allocator: Allocator, list: std.ArrayListUnmanaged(T)) @This() {
+            if ((list.cap > N)) {
+                return .{ .capacity = list.cap, .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } } };
+            }
+            defer {
+            _ = list.deinit(allocator);
+            }
+            var this: @This() = .{ .capacity = list.len, .data = .{ .inlined = undefined } };
+            _ = &this;
+            _ = @memcpy(self.data.inlined[0..list.len], list.items[0..list.len]);
+            return self;
+    }
+
+pub fn fromListNoDeinit(self: @This(), list: std.ArrayListUnmanaged(T)) @This() {
+            if ((list.cap > N)) {
+                return .{ .capacity = list.cap, .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } } };
+            }
+            var this: @This() = .{ .capacity = list.len, .data = .{ .inlined = undefined } };
+            _ = &this;
+            _ = @memcpy(self.data.inlined[0..list.len], list.items[0..list.len]);
+            return self;
+    }
+
+pub fn fromBabyList(self: @This(), allocator: Allocator, list: bun.BabyList(T)) @This() {
+            if ((list.cap > N)) {
+                return .{ .capacity = list.cap, .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } } };
+            }
+            var list_ = list;
+            _ = &list_;
+            defer {
+            _ = list_.deinit(allocator);
+            }
+            var this: @This() = .{ .capacity = list_.len, .data = .{ .inlined = undefined } };
+            _ = &this;
+            _ = @memcpy(self.data.inlined[0..list_.len], list_.items[0..list_.len]);
+            return self;
+    }
+
+pub fn fromBabyListNoDeinit(self: @This(), list: bun.BabyList(T)) @This() {
+            if ((list.cap > N)) {
+                return .{ .capacity = list.cap, .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } } };
+            }
+            var this: @This() = .{ .capacity = list.len, .data = .{ .inlined = undefined } };
+            _ = &this;
+            _ = @memcpy(self.data.inlined[0..list.len], list.ptr[0..list.len]);
+            return self;
+    }
+
+pub fn withOne(self: @This(), val: T) @This() {
+        _ = &self;
+            var ret = This{  };
+            _ = &ret;
+            ret.capacity = 1;
+            ret.data.inlined[cp_cast_int(usize, 0)] = val;
+            return ret;
+    }
+
+pub inline fn getLastUnchecked(self: *const @This()) T {
+            if (self.spilled()) {
+                return self.data.heap.ptr[@as(usize, @intCast((self.data.heap.len - 1)))];
+            }
+            return self.data.inlined[@as(usize, @intCast((self.capacity - 1)))];
+    }
+
+pub inline fn at(self: *const @This(), idx: u32) *const T {
+            return (&self.as_const_ptr()[@as(usize, @intCast(idx))]);
+    }
+
+pub inline fn mut(self: *@This(), idx: u32) *T {
+            return (&self.as_ptr()[@as(usize, @intCast(idx))]);
+    }
+
+pub inline fn last(self: *const @This()) ?*const T {
+            const sl = self.slice();
+            if ((sl.len == 0)) {
+                return null;
+            }
+            return (&sl[@as(usize, @intCast((sl.len - 1)))]);
+    }
+
+pub inline fn lastMut(self: *@This()) ?*T {
+            const sl = self.slice_mut();
+            if ((sl.len == 0)) {
+                return null;
+            }
+            return (&sl[@as(usize, @intCast((sl.len - 1)))]);
+    }
+
+pub inline fn toOwnedSlice(self: *const @This(), allocator: Allocator) []T {
+            if (self.spilled()) {
+                return self.data.heap.ptr[0..self.data.heap.len];
+            }
+            return bun.handleOom(allocator.dupe(T, self.data.inlined[0..self.capacity]));
+    }
+
+pub inline fn slice(self: *const @This()) []const T {
+            if ((self.capacity > N)) {
+                return self.data.heap.ptr[0..self.data.heap.len];
+            }
+            return self.data.inlined[0..self.capacity];
+    }
+
+pub inline fn slice_mut(self: *@This()) []T {
+            if ((self.capacity > N)) {
+                return self.data.heap.ptr[0..self.data.heap.len];
+            }
+            return self.data.inlined[0..self.capacity];
+    }
+
+pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+            for (cp_mut_slice(&self.slice())) |*v| {
+                _ = &v;
+                if ((!(v.*).isCompatible(browsers))) {
+                    return false;
+                }
+            }
+            return true;
+    }
+
+pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.Targets) getFallbacksReturnType(T,N) {
+            if ((@hasDecl(T, "getImage") and (N == 1))) {
+                const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
+                _ = &ColorFallbackKind;
+                var prefixes = css.VendorPrefix{  };
+                _ = &prefixes;
+                var fallbacks = ColorFallbackKind{  };
+                _ = &fallbacks;
+                var res: bun.BabyList(@This()) = .{};
+                _ = &res;
+                for (cp_iter_slice(self.slice())) |item| {
+                    _ = &item;
+                    _ = bun.bits.insert(css.VendorPrefix, (&prefixes), item.getImage().getNecessaryPrefixes(targets));
+                    _ = bun.bits.insert(css.ColorFallbackKind, (&fallbacks), item.getNecessaryFallbacks(targets));
+                }
+                const rgb: ?SmallList(T,1) = (if (fallbacks.rgb) brk: {
+                var shallow_clone = self.shallowClone(allocator);
+                _ = &shallow_clone;
+                var out_sl = shallow_clone.slice_mut();
+                _ = &out_sl;
+                const in_sl = self.slice_mut();
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_3 = out_sl.len;
+                    while (i < __end_3) : (i += 1) {
+                        out_sl[cp_cast_int(usize, i)] = in_sl[@as(usize, @intCast(i))].getFallback(allocator, ColorFallbackKind{ .rgb = true });
+                    }
+                }
+                break :brk shallow_clone;
+} else null);
+                const prefix_images: *const SmallList(T,1) = (if (rgb) |*r| r else self);
+                if (((prefixes.webkit and (targets.browsers != null)) and css.prefixes.Feature.isWebkitGradient(targets.browsers.?))) {
+                    const images = images: {
+                    var images = SmallList(T, 1){  };
+                    _ = &images;
+                    for (cp_mut_slice(&prefix_images.slice())) |*item| {
+                        _ = &item;
+                        if ((item.*).getImage().getLegacyWebkit(allocator)) |img| {
+                            _ = &img;
+                            _ = images.append(allocator, (item.*).withImage(allocator, img));
+                        }
+                    }
+                    break :images images;
+};
+                    if ((!images.isEmpty())) {
+                        _ = bun.handleOom(res.append(allocator, images));
+                    }
+                }
+                const prefix = struct {
+
+pub inline fn helper(comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T,1), r: *bun.BabyList(This), alloc: Allocator) void {
+            if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
+                var images = SmallList(T, 1).initCapacity(alloc, pfi.len());
+                _ = &images;
+                _ = images.setLen(pfi.len());
+                var out_sl = images.slice_mut();
+                _ = &out_sl;
+                const pfi_sl = pfi.slice();
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = out_sl.len;
+                    while (i < __end_0) : (i += 1) {
+                        const image = pfi_sl[@as(usize, @intCast(i))].getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
+                        out_sl[cp_cast_int(usize, i)] = pfi_sl[@as(usize, @intCast(i))].withImage(alloc, image);
+                    }
+                }
+                _ = bun.handleOom(r.append(alloc, images));
+            }
+    }
+}.helper;
+                _ = prefix("webkit", (&prefixes), prefix_images, (&res), allocator);
+                _ = prefix("moz", (&prefixes), prefix_images, (&res), allocator);
+                _ = prefix("o", (&prefixes), prefix_images, (&res), allocator);
+                if (prefixes.none) {
+                    if (rgb) |r| {
+                        _ = &r;
+                        _ = bun.handleOom(res.append(allocator, r));
+                    }
+                    if (fallbacks.p3) {
+                        var p3_images = self.shallowClone(allocator);
+                        _ = &p3_images;
+                        var out_sl = p3_images.slice_mut();
+                        _ = &out_sl;
+                        const in_sl = self.slice_mut();
+                        {
+                            var i: i32 = 0;
+                            _ = &i;
+                            const __end_5 = out_sl.len;
+                            while (i < __end_5) : (i += 1) {
+                                out_sl[cp_cast_int(usize, i)] = in_sl[@as(usize, @intCast(i))].getFallback(allocator, ColorFallbackKind{ .p3 = true });
+                            }
+                        }
+                        _ = bun.handleOom(res.append(allocator, p3_images));
+                    }
+                    if (fallbacks.lab) {
+                        for (cp_mut_slice(&self.slice_mut())) |*item| {
+                            _ = &item;
+                            var old = (item.*).*;
+                            _ = &old;
+                            (item.*).* = (item.*).getFallback(allocator, ColorFallbackKind{ .lab = true });
+                            _ = old.deinit(allocator);
+                        }
+                    }
+                } else {
+                    if (res.pop()) |the_last| {
+                        _ = &the_last;
+                        var old = self.*;
+                        _ = &old;
+                        self.* = the_last;
+                        _ = old.deinit(allocator);
+                    }
+                }
+                return res;
+            }
+            if (((T == TextShadow) and (N == 1))) {
+                var fallbacks = css.ColorFallbackKind{  };
+                _ = &fallbacks;
+                for (cp_mut_slice(&self.slice())) |*shadow| {
+                    _ = &shadow;
+                    _ = bun.bits.insert(css.ColorFallbackKind, (&fallbacks), (shadow.*).color.getNecessaryFallbacks(targets));
+                }
+                var res = SmallList(SmallList(TextShadow, 1), 2){  };
+                _ = &res;
+                if (fallbacks.rgb) {
+                    var rgb = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
+                    _ = &rgb;
+                    for (cp_mut_slice(&self.slice())) |*shadow| {
+                        _ = &shadow;
+                        var new_shadow = (shadow.*).*;
+                        _ = &new_shadow;
+                        new_shadow.color = .current_color;
+                        new_shadow = new_shadow.deepClone(allocator);
+                        new_shadow.color = ((shadow.*).color.toRGB(allocator)).?;
+                        _ = (rgb).?.appendAssumeCapacity(new_shadow);
+                    }
+                    _ = res.append(allocator, rgb);
+                }
+                if (fallbacks.p3) {
+                    var p3 = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
+                    _ = &p3;
+                    for (cp_mut_slice(&self.slice())) |*shadow| {
+                        _ = &shadow;
+                        var new_shadow = (shadow.*).*;
+                        _ = &new_shadow;
+                        new_shadow.color = .current_color;
+                        new_shadow = new_shadow.deepClone(allocator);
+                        new_shadow.color = ((shadow.*).color.toP3(allocator)).?;
+                        _ = p3.appendAssumeCapacity(new_shadow);
+                    }
+                    _ = res.append(allocator, p3);
+                }
+                if (fallbacks.lab) {
+                    for (cp_mut_slice(&self.slice_mut())) |*shadow| {
+                        _ = &shadow;
+                        const out = ((shadow.*).color.toLAB(allocator)).?;
+                        _ = (shadow.*).color.deinit(allocator);
+                        (shadow.*).color = out;
+                    }
+                }
+                return res;
+            }
+            _ = @compileError("Dunno what to do here.");
+    }
+
+pub fn getFallbacksReturnType(self: @This(), comptime Type: type, comptime InlineSize: comptime_int) type {
+        _ = &self;
+            if ((@hasDecl(Type, "getImage") and (InlineSize == 1))) {
+                return bun.BabyList(SmallList(Type, 1));
+            }
+            if (((Type == TextShadow) and (InlineSize == 1))) {
+                return SmallList(SmallList(TextShadow, 1), 2);
+            }
+            _ = @compileError(("Unhandled for: " ++ @typeName(Type)));
+    }
+
+pub fn map(self: *@This(), comptime func: anytype) void {
+            for (cp_mut_slice(&self.slice_mut())) |*item| {
+                _ = &item;
+                _ = func((item.*));
+            }
+    }
+
+pub fn any(self: *const @This(), comptime predicate: anytype) bool {
+            for (cp_mut_slice(&self.slice())) |*item| {
+                _ = &item;
+                if (predicate((item.*))) {
+                    return true;
+                }
+            }
+            return false;
+    }
+
+pub fn orderedRemove(self: *@This(), idx: u32) T {
+            const _tmp_v13 = self.tripleMut();
+            var ptr = cp_unpack_elem(_tmp_v13, 0);
+            _ = &ptr;
+            var len_ptr = cp_unpack_elem(_tmp_v13, 1);
+            _ = &len_ptr;
+            var capp = cp_unpack_elem(_tmp_v13, 2);
+            _ = &capp;
+            _ = bun.assert((idx < len_ptr.*));
+            const length = len_ptr.*;
+            len_ptr.* = (len_ptr.* - 1);
+            ptr = (ptr + idx);
+            const item = ptr[0];
+            _ = std.mem.copyForwards(T, ptr[0..((length - idx) - 1)], ptr[1..][0..((length - idx) - 1)]);
+            return item;
+    }
+
+pub fn swapRemove(self: *@This(), idx: u32) T {
+            const _tmp_v14 = self.tripleMut();
+            var ptr = cp_unpack_elem(_tmp_v14, 0);
+            _ = &ptr;
+            var len_ptr = cp_unpack_elem(_tmp_v14, 1);
+            _ = &len_ptr;
+            var capp = cp_unpack_elem(_tmp_v14, 2);
+            _ = &capp;
+            _ = bun.assert((idx < len_ptr.*));
+            const ret = ptr[@as(usize, @intCast(idx))];
+            ptr[cp_cast_int(usize, idx)] = ptr[@as(usize, @intCast((len_ptr.* -| 1)))];
+            len_ptr.* = (len_ptr.* - 1);
+            return ret;
+    }
+
+pub fn clearRetainingCapacity(self: *@This()) void {
+            if (self.spilled()) {
+                self.data.heap.len = 0;
+            } else {
+                self.capacity = 0;
+            }
+    }
+
+pub fn shallowClone(self: *const @This(), allocator: Allocator) @This() {
+            if ((!self.spilled())) {
+                return self.*;
+            }
+            var h = HeapData.initCapacity(allocator, self.capacity);
+            _ = &h;
+            h.len = self.data.heap.len;
+            _ = @memcpy(h.ptr[0..h.len], self.data.heap.ptr[0..h.len]);
+            return .{ .capacity = self.capacity, .data = .{ .heap = h } };
+    }
+
+pub fn deepClone(self: @This(), allocator: Allocator) @This() {
+            var ret: @This() = initCapacity(allocator, self.len());
+            _ = &ret;
+            _ = ret.setLen(self.len());
+            const in_sl = self.slice();
+            var out_sl = ret.slice_mut();
+            _ = &out_sl;
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_15 = in_sl.len;
+                while (i < __end_15) : (i += 1) {
+                    out_sl[cp_cast_int(usize, i)] = generic.deepClone(T, (&in_sl[@as(usize, @intCast(i))]), allocator);
+                }
+            }
+            return ret;
+    }
+
+pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
+        _ = &self;
+            if ((lhs.len() != rhs.len())) {
+                return false;
+            }
+            const a_sl = lhs.slice();
+            const b_sl = rhs.slice();
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_16 = a_sl.len;
+                while (i < __end_16) : (i += 1) {
+                    if ((!generic.eql(T, (&a_sl[@as(usize, @intCast(i))]), (&b_sl[@as(usize, @intCast(i))])))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+    }
+
+pub fn clone(self: *const @This(), allocator: Allocator) @This() {
+            var ret = self.*;
+            _ = &ret;
+            if ((!self.spilled())) {
+                return ret;
+            }
+            const buf = bun.handleOom(allocator.alloc(T, self.capacity));
+            _ = @memcpy(buf[0..ret.data.heap.len], ret.data.heap.ptr[0..ret.data.heap.len]);
+            ret.data.heap.ptr = buf.ptr;
+            return ret;
+    }
+
+pub fn deinit(self: *@This(), allocator: Allocator) void {
+            if (self.spilled()) {
+                _ = allocator.free(self.data.heap.ptr[0..self.capacity]);
+            }
+    }
+
+pub fn hash(self: *const @This(), hasher: anytype) void {
+            for (cp_mut_slice(&self.slice())) |*item| {
+                _ = &item;
+                _ = css.generic.hash(T, (item.*), hasher);
+            }
+    }
+
+pub inline fn len(self: *const @This()) u32 {
+            if (self.spilled()) {
+                return self.data.heap.len;
+            }
+            return self.capacity;
+    }
+
+pub inline fn isEmpty(self: *const @This()) bool {
+            return (self.len() == 0);
+    }
+
+pub fn initCapacity(self: @This(), allocator: Allocator, capacity: u32) @This() {
+        _ = &self;
+            if ((capacity > N)) {
+                var list: This = .{};
+                _ = &list;
+                list.capacity = capacity;
+                list.data = .{ .heap = HeapData.initCapacity(allocator, capacity) };
+                return list;
+            }
+            return .{ .capacity = 0 };
+    }
+
+pub fn ensureTotalCapacity(self: *@This(), allocator: Allocator, new_capacity: u32) void {
+            if ((self.capacity >= new_capacity)) {
+                return;
+            }
+            _ = self.tryGrow(allocator, new_capacity);
+    }
+
+pub fn insert(self: *@This(), allocator: Allocator, index: u32, item: T) void {
+            const _tmp_v18 = self.tripleMut();
+            var ptr = cp_unpack_elem(_tmp_v18, 0);
+            _ = &ptr;
+            var len_ptr = cp_unpack_elem(_tmp_v18, 1);
+            _ = &len_ptr;
+            var capp = cp_unpack_elem(_tmp_v18, 2);
+            _ = &capp;
+            if ((len_ptr.* == capp)) {
+                _ = self.reserveOneUnchecked(allocator);
+                const _tmp_v19 = self.heap();
+                const heap_ptr = cp_unpack_elem(_tmp_v19, 0);
+                _ = &heap_ptr;
+                const heap_len_ptr = cp_unpack_elem(_tmp_v19, 1);
+                _ = &heap_len_ptr;
+                ptr = heap_ptr;
+                len_ptr = heap_len_ptr;
+            }
+            const length = len_ptr.*;
+            ptr = (ptr + index);
+            if ((index < length)) {
+                const count = (length - index);
+                _ = std.mem.copyBackwards(T, ptr[1..][0..count], ptr[0..count]);
+            } else {
+                if ((index == length)) {
+                } else {
+                    _ = @panic("index exceeds length");
+                }
+            }
+            len_ptr.* = (length + 1);
+            ptr[cp_cast_int(usize, 0)] = item;
+    }
+
+pub fn appendAssumeCapacity(self: *@This(), item: T) void {
+            const _tmp_v20 = self.tripleMut();
+            var ptr = cp_unpack_elem(_tmp_v20, 0);
+            _ = &ptr;
+            var len_ptr = cp_unpack_elem(_tmp_v20, 1);
+            _ = &len_ptr;
+            var capp = cp_unpack_elem(_tmp_v20, 2);
+            _ = &capp;
+            _ = bun.debugAssert((len_ptr.* < capp));
+            ptr[cp_cast_int(usize, len_ptr.*)] = item;
+            len_ptr.* = (len_ptr.* + 1);
+    }
+
+pub fn pop(self: *@This()) ?T {
+            const _tmp_v21 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v21, 0);
+            _ = &ptr;
+            const len_ptr = cp_unpack_elem(_tmp_v21, 1);
+            _ = &len_ptr;
+            const capp = cp_unpack_elem(_tmp_v21, 2);
+            _ = &capp;
+            if ((len_ptr.* == 0)) {
+                return null;
+            }
+            const last_index = (len_ptr.* - 1);
+            len_ptr.* = last_index;
+            return ptr[@as(usize, @intCast(last_index))];
+    }
+
+pub fn append(self: *@This(), allocator: Allocator, item: T) void {
+            const _tmp_v22 = self.tripleMut();
+            var ptr = cp_unpack_elem(_tmp_v22, 0);
+            _ = &ptr;
+            var len_ptr = cp_unpack_elem(_tmp_v22, 1);
+            _ = &len_ptr;
+            var capp = cp_unpack_elem(_tmp_v22, 2);
+            _ = &capp;
+            if ((len_ptr.* == capp)) {
+                _ = self.reserveOneUnchecked(allocator);
+                const _tmp_v23 = self.heap();
+                const heap_ptr = cp_unpack_elem(_tmp_v23, 0);
+                _ = &heap_ptr;
+                const heap_len = cp_unpack_elem(_tmp_v23, 1);
+                _ = &heap_len;
+                ptr = heap_ptr;
+                len_ptr = heap_len;
+            }
+            ptr[cp_cast_int(usize, len_ptr.*)] = item;
+            len_ptr.* = (len_ptr.* + 1);
+    }
+
+pub fn appendSlice(self: *@This(), allocator: Allocator, items: []const T) void {
+            _ = self.insertSlice(allocator, self.len(), items);
+    }
+
+pub fn appendSliceAssumeCapacity(self: *@This(), items: []const T) void {
+            _ = bun.assert(((self.len() + items.len) <= self.capacity));
+            _ = self.insertSliceAssumeCapacity(self.len(), items);
+    }
+
+pub inline fn insertSlice(self: *@This(), allocator: Allocator, index: u32, items: []const T) void {
+            _ = self.reserve(allocator, @intCast(items.len));
+            _ = self.insertSliceAssumeCapacity(index, items);
+    }
+
+pub inline fn insertSliceAssumeCapacity(self: *@This(), index: u32, items: []const T) void {
+            const length = self.len();
+            _ = bun.assert((index <= length));
+            const ptr: [*]T = self.as_ptr()[index..];
+            const count = (length - index);
+            _ = std.mem.copyBackwards(T, ptr[items.len..][0..count], ptr[0..count]);
+            _ = @memcpy(ptr[0..items.len], items);
+            _ = self.setLen((length + @as(u32, @intCast(items.len))));
+    }
+
+pub fn setLen(self: *@This(), new_len: u32) void {
+            var len_ptr = self.lenMut();
+            _ = &len_ptr;
+            len_ptr.* = new_len;
+    }
+
+pub inline fn heap(self: *@This()) struct { [*]T, *u32 } {
+            return .{ self.data.heap.ptr, (&self.data.heap.len) };
+    }
+
+pub fn as_const_ptr(self: *const @This()) [*]const T {
+            if (self.spilled()) {
+                return self.data.heap.ptr;
+            }
+            return (&self.data.inlined);
+    }
+
+pub fn as_ptr(self: *@This()) [*]T {
+            if (self.spilled()) {
+                return self.data.heap.ptr;
+            }
+            return (&self.data.inlined);
+    }
+
+pub fn reserve(self: *@This(), allocator: Allocator, additional: u32) void {
+            const _tmp_v24 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v24, 0);
+            _ = &ptr;
+            const __len = cp_unpack_elem(_tmp_v24, 1);
+            _ = &__len;
+            const capp = cp_unpack_elem(_tmp_v24, 2);
+            _ = &capp;
+            const len_ = __len.*;
+            if (((capp - len_) >= additional)) {
+                return;
+            }
+            const new_cap = growCapacity(capp, (len_ + additional));
+            _ = self.tryGrow(allocator, new_cap);
+    }
+
+pub fn reserveOneUnchecked(self: *@This(), allocator: Allocator) void {
+            @branchHint(.cold);
+            _ = bun.assert((self.len() == self.capacity));
+            const new_cap = growCapacity(self.capacity, (self.len() + 1));
+            _ = self.tryGrow(allocator, new_cap);
+    }
+
+pub fn tryGrow(self: *@This(), allocator: Allocator, new_cap: u32) void {
+            const unspilled = (!self.spilled());
+            const _tmp_v25 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v25, 0);
+            _ = &ptr;
+            const __len = cp_unpack_elem(_tmp_v25, 1);
+            _ = &__len;
+            const cap = cp_unpack_elem(_tmp_v25, 2);
+            _ = &cap;
+            const length = __len.*;
+            _ = bun.assert((new_cap >= length));
+            if ((new_cap <= N)) {
+                if (unspilled) {
+                    return;
+                }
+                self.data = .{ .inlined = undefined };
+                _ = @memcpy(self.data.inlined[0..length], ptr[0..length]);
+                self.capacity = length;
+                _ = allocator.free(ptr[0..cap]);
+            } else {
+                if ((new_cap != cap)) {
+                    const new_alloc: [*]T = (if (unspilled) new_alloc: {
+                    const new_alloc = bun.handleOom(allocator.alloc(T, new_cap));
+                    _ = @memcpy(new_alloc[0..length], ptr[0..length]);
+                    break :new_alloc new_alloc.ptr;
+} else new_alloc: {
+                    break :new_alloc bun.handleOom(allocator.realloc(ptr[0..cap], new_cap)).ptr;
+});
+                    self.data = .{ .heap = .{ .ptr = new_alloc, .len = length } };
+                    self.capacity = new_cap;
+                }
+            }
+    }
+
+pub inline fn tripleMut(self: *@This()) struct { [*]T, *u32, u32 } {
+            if (self.spilled()) {
+                return .{ self.data.heap.ptr, (&self.data.heap.len), self.capacity };
+            }
+            return .{ (&self.data.inlined), (&self.capacity), N };
+    }
+
+pub inline fn lenMut(self: *@This()) *u32 {
+            if (self.spilled()) {
+                return (&self.data.heap.len);
+            }
+            return (&self.capacity);
+    }
+
+pub fn growToHeap(self: *@This(), allocator: Allocator, additional: usize) void {
+            _ = bun.assert((!self.spilled()));
+            const new_size = growCapacity(self.capacity, (self.capacity + additional));
+            var slc = bun.handleOom(allocator.alloc(T, new_size));
+            _ = &slc;
+            _ = @memcpy(slc[0..self.capacity], self.data.inlined[0..self.capacity]);
+            self.data = .{ .heap = HeapData{ .len = self.capacity, .ptr = slc.ptr } };
+            self.capacity = new_size;
+    }
+
+pub inline fn spilled(self: *const @This()) bool {
+            return (self.capacity > N);
+    }
+
+pub fn growCapacity(self: @This(), current: u32, minimum: u32) u32 {
+        _ = &self;
+        _ = minimum;
+            var new = current;
+            _ = &new;
+            while (true) {
+            }
+    }
+    const Data = union {
+        inlined: [N]T,
+        heap: HeapData,
+    };
+    const HeapData = struct {
+        len: u32,
+        ptr: [*]T,
+    
+    pub fn initCapacity(self: @This(), allocator: Allocator, capacity: u32) HeapData {
+            _ = &self;
+                return .{ .len = 0, .ptr = bun.handleOom(allocator.alloc(T, capacity)).ptr };
+        }
+    };
+    const This = @This();
+    pub const looksLikeContainerTypeSmallList = T;
+};
+}

@@ -381,3 +381,12 @@
 ### [Milestone 7 Phase 27] 2026-11-15: 模板直出万行 `properties_generated.cp` 与 `src/css/` 根目录突破
 1. **代码生成器直接面向 CP**：修改 `src/css/properties/generate_properties.ts` 中的 `prelude()`、`generatePropertyIdTag()`、`generateProperty()`、`generatePropertyId()` 模板（`pub enum Name: u16`、显式 `Property{ ... }` / `PropertyId{ ... }` 构造、`*v` -> `=> |*v|`、`: void` union 无载荷字段、`comptime` 块外移），直接输出 11,800+ 行纯 CP 代码并一次通过 `cpc --lib` 与 `zig ast-check`。
 2. **`compat` 与 `prefixes` 等大型根目录模块收口**：完成 5,397 行 `compat.cp` 与 2,203 行 `prefixes.cp` 等 11 个根目录核心模块。
+
+### [Milestone 7 Phase 28] 2026-11-15: `src/css/properties/` 全量闭合 (32) 与内联泛型解析器优化
+1. **`src/css/properties/` 31 个手写模块全量攻坚**：
+   - 彻底梳理 `flex.cp`、`align.cp`、`background.cp`、`transition.cp`、`custom.cp` 中的复杂样式分发逻辑；
+   - 规范化 `static fn` 与实例方法的接收者分离，清理未使用的 `_ctx`、`_idx` 形参；
+   - 针对内联哈希上下文提升为顶层结构体 `pub struct FontFamilyHashMapContext`，彻底根除 Zig 生成代码的虚假 `self` 注入与作用域遮蔽。
+2. **`selectors/parser.cp` 3,754 行泛型内联结构体闭环**：
+   - 将 `ParsedAttrSelectorWithValue` 提炼为独立外层泛型生成函数；
+   - 修正内联标记函数 `__generateEql` / `__generateDeepClone` / `__generateHash` 的 CP 函数声明，实现 4 项门禁全绿通过。

@@ -834,3 +834,19 @@
   - `src/css/values/values.cp` (膨胀率 `1.000x`)
   - `src/css/` 根目录 11/15 PASS：`compat`, `logical`, `prefixes`, `sourcemap`, `dependencies`, `targets`, `error`, `context`, `printer`, `declaration`, `generics.cp`（膨胀率 `0.983x ~ 1.029x`）
 - **全仓累计进度**：**757 / 1,294 (58.50%)** 纯 CP 模块；**141 / 171 (82.46%)** 子目录 100% 闭合。
+
+### 2026-11-15: Milestone 7 Phase 28 闭环提交（`src/css/properties/` 32/32 全量闭合 + `src/css/selectors/` 3/3 + `src/css/` 14/15）
+
+- **用户指令**："cp agy 已经发现cpc 编译期存在问题,在紧急修复, 你可以按你的方案, 继续css 扫尾工作,同时等待 cp agy 完成 cpc 更新"
+- **交付成果（新增 35 个 100% 纯 CP 模块，一举闭合 2 个完整子目录！）**：
+  - `src/css/properties/` (32/32 100% 全目录闭合): 全部 31 个手写属性模块全部通过 4 项硬门禁（膨胀率 `0.970x ~ 1.077x`），加上万行 `properties_generated.cp`，全目录 32 模块全绿！
+  - `src/css/selectors/` (3/3 100% 全目录闭合): 3,754 行核心模块 `parser.cp` 深度修复通过 4 项硬门禁（膨胀率 `1.026x`）！
+  - `src/css/` 根目录新增 3 模块通过 4 项硬门禁：`css_modules.cp` (1.002x), `media_query.cp` (1.007x), `small_list.cp` (0.999x)
+- **4 项硬门禁验收全部通过**：
+  - 全部 35 个模块通过 `cpc --lib` 与 `vendor/zig/zig ast-check` 0 报错；
+  - 静态零违例门禁通过（0 `zig {}`、0 `var`、0 元组字段访问、0 `anyopaque`）；
+  - 代码膨胀率均满足 `<= 1.20x` 红线。
+- **全仓累计最新进度**：
+  - 纯 `.cp` 模块数：**792 个 / 1,294 个（迁移率突破 61.21%！）**；
+  - 100% 闭合子目录总数：**143 个 / 171 个（全库目录闭合率突破 83.63%！）**；
+  - `src/css/` 体系 94 个模块中已有 **86 个模块完全通过 4 项硬门禁（91.5%）**。

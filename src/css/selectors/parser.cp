@@ -53,7 +53,7 @@ pub const attrs = struct {
                 return css.implementDeepClone(@This(), this, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
                 return css.implementHash(@This(), this, hasher);
             }
         };
@@ -108,7 +108,7 @@ pub const attrs = struct {
                 return css.implementDeepClone(@This(), this, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
                 return css.implementHash(@This(), this, hasher);
             }
         };
@@ -125,7 +125,7 @@ pub const attrs = struct {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
                 return css.implementHash(@This(), this, hasher);
             }
 
@@ -135,19 +135,23 @@ pub const attrs = struct {
         };
     }
 
+    static fn ParsedAttrSelectorWithValue(comptime AttrValue: type): type {
+        return struct {
+            operator: AttrSelectorOperator,
+            case_sensitivity: ParsedCaseSensitivity,
+            expected_value: AttrValue,
+
+            fn __generateEql() {}
+            fn __generateDeepClone() {}
+            fn __generateHash() {}
+        };
+    }
+
     static fn ParsedAttrSelectorOperation(comptime AttrValue: type): type {
         * = AttrValue;
         return union(enum) {
             exists,
-            with_value: struct {
-                operator: AttrSelectorOperator,
-                case_sensitivity: ParsedCaseSensitivity,
-                expected_value: AttrValue,
-
-                pub fn __generateEql(): void {}
-                pub fn __generateDeepClone(): void {}
-                pub fn __generateHash(): void {}
-            },
+            with_value: ParsedAttrSelectorWithValue(AttrValue),
 
             pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
                 return css.implementDeepClone(@This(), this, allocator);
@@ -157,7 +161,7 @@ pub const attrs = struct {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
                 return css.implementHash(@This(), this, hasher);
             }
         };
@@ -746,18 +750,18 @@ pub const PseudoClass = union(enum) {
         /// A list of language codes.
         languages: ArrayList([]const u8),
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [:dir()](https://drafts.csswg.org/selectors-4/#the-dir-pseudo) pseudo class.
     dir: struct {
         /// A direction.
         direction: Direction,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
 
     // https://drafts.csswg.org/selectors-4/#useraction-pseudos
@@ -875,18 +879,18 @@ pub const PseudoClass = union(enum) {
         /// A local selector.
         selector: *Selector,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The CSS modules :global() pseudo class.
     global: struct {
         /// A global selector.
         selector: *Selector,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
 
     /// A [webkit scrollbar](https://webkit.org/blog/363/styling-scrollbars/) pseudo class.
@@ -897,9 +901,9 @@ pub const PseudoClass = union(enum) {
         /// The pseudo class name.
         name: []const u8,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// An unknown functional pseudo class.
     custom_function: struct {
@@ -908,9 +912,9 @@ pub const PseudoClass = union(enum) {
         /// The arguments of the pseudo class function.
         arguments: css.TokenList,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
 
     pub const isEquivalent = pseudoClassIsEquivalent;
@@ -1800,9 +1804,9 @@ pub fn GenericComponent(comptime Impl: type): type {
             prefix: Impl.SelectorImpl.NamespacePrefix,
             url: Impl.SelectorImpl.NamespaceUrl,
 
-            pub fn __generateEql(): void {}
-            pub fn __generateDeepClone(): void {}
-            pub fn __generateHash(): void {}
+            pub fn __generateEql() void {}
+            pub fn __generateDeepClone() void {}
+            pub fn __generateHash() void {}
         },
 
         explicit_universal_type,
@@ -1815,9 +1819,9 @@ pub fn GenericComponent(comptime Impl: type): type {
             local_name: Impl.SelectorImpl.LocalName,
             local_name_lower: Impl.SelectorImpl.LocalName,
 
-            pub fn __generateEql(): void {}
-            pub fn __generateDeepClone(): void {}
-            pub fn __generateHash(): void {}
+            pub fn __generateEql() void {}
+            pub fn __generateDeepClone() void {}
+            pub fn __generateHash() void {}
         },
         /// Used only when local_name is already lowercase.
         attribute_in_no_namespace: struct {
@@ -1827,9 +1831,9 @@ pub fn GenericComponent(comptime Impl: type): type {
             case_sensitivity: attrs.ParsedCaseSensitivity,
             never_matches: bool,
 
-            pub fn __generateEql(): void {}
-            pub fn __generateDeepClone(): void {}
-            pub fn __generateHash(): void {}
+            pub fn __generateEql() void {}
+            pub fn __generateDeepClone() void {}
+            pub fn __generateHash() void {}
         },
         /// Use a Box in the less common cases with more data to keep size_of::<Component>() small.
         attribute_other: *attrs.AttrSelectorWithOptionalNamespace(Impl),
@@ -1884,9 +1888,9 @@ pub fn GenericComponent(comptime Impl: type): type {
             vendor_prefix: Impl.SelectorImpl.VendorPrefix,
             selectors: []GenericSelector(Impl),
 
-            pub fn __generateEql(): void {}
-            pub fn __generateDeepClone(): void {}
-            pub fn __generateHash(): void {}
+            pub fn __generateEql() void {}
+            pub fn __generateDeepClone() void {}
+            pub fn __generateHash() void {}
         },
         /// The `:has` pseudo-class.
         ///
@@ -2392,18 +2396,18 @@ pub const PseudoElement = union(enum) {
         /// The selector argument.
         selector: *Selector,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [::cue-region()](https://w3c.github.io/webvtt/#cue-region-selector) functional pseudo element.
     cue_region_function: struct {
         /// The selector argument.
         selector: *Selector,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [::view-transition](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition) pseudo element.
     view_transition,
@@ -2412,45 +2416,45 @@ pub const PseudoElement = union(enum) {
         /// A part name selector.
         part_name: ViewTransitionPartName,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [::view-transition-image-pair()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-image-pair-pt-name-selector) functional pseudo element.
     view_transition_image_pair: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [::view-transition-old()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-old-pt-name-selector) functional pseudo element.
     view_transition_old: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// The [::view-transition-new()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-new-pt-name-selector) functional pseudo element.
     view_transition_new: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// An unknown pseudo element.
     custom: struct {
         /// The name of the pseudo element.
         name: []const u8,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
     /// An unknown functional pseudo element.
     custom_function: struct {
@@ -2459,9 +2463,9 @@ pub const PseudoElement = union(enum) {
         /// The arguments of the pseudo element function.
         arguments: css.TokenList,
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     },
 
     pub const isEquivalent = pseudoElementIsEquivalent;
@@ -3589,9 +3593,9 @@ pub fn LocalName(comptime Impl: type): type {
             return css.IdentFns.toCss(&this.name, dest);
         }
 
-        pub fn __generateEql(): void {}
-        pub fn __generateDeepClone(): void {}
-        pub fn __generateHash(): void {}
+        pub fn __generateEql() void {}
+        pub fn __generateDeepClone() void {}
+        pub fn __generateHash() void {}
     };
 }
 

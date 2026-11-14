@@ -423,3 +423,8 @@
 - **`src/css/properties/properties_generated.cp` (10,362行→11,815行, 1.140x)**：改写 `generate_properties.ts` 字符串模板直接吐出纯 CP 代码（0 LLM 手写幻觉），一次性通过 4 项硬门禁。
 - **`src/css/values/values.cp` (1.000x)**：随 `cp_agy` 修复 `task-20261115-string-import-collision` 后解封通过 4 项硬门禁。
 - **`src/css/` 根目录 (11/15 PASS)**：`compat`, `logical`, `prefixes`, `sourcemap`, `dependencies`, `targets`, `error`, `context`, `printer`, `declaration`, `generics.cp` 全部通过 4 项硬门禁（膨胀率 `0.983x ~ 1.029x`）。
+
+## [Milestone 7 Phase 28] 2026-11-15 - `src/css/properties/` (32/32 全量闭合) 与 `selectors/parser.cp` + `src/css/` (14/15) 提交
+- **闭合 `src/css/properties/` 全目录 (32/32 100% 闭合)**：31 个手写属性模块（`align`, `animation`, `background`, `border`, `border_image`, `border_radius`, `box_shadow`, `contain`, `css_modules`, `custom`, `display`, `effects`, `flex`, `font`, `grid`, `list`, `margin_padding`, `masking`, `outline`, `overflow`, `position`, `prefix_handler`, `properties`, `properties_impl`, `shape`, `size`, `svg`, `text`, `transform`, `transition`, `ui`）加上此前提交的 `properties_generated.cp`，全部 32 个模块达成 4 项硬门禁（膨胀率 `0.970x ~ 1.077x`）。
+- **闭合 `src/css/selectors/` 全目录 (3/3 100% 闭合)**：`src/css/selectors/parser.cp` 彻底解决泛型内联结构体标记函数问题，达成 4 项硬门禁（膨胀率 `1.026x`）。
+- **新增 `src/css/` 根目录模块 (14/15 PASS)**：`css_modules.cp` (1.002x), `media_query.cp` (1.007x), `small_list.cp` (0.999x) 全部通过 4 项硬门禁。
