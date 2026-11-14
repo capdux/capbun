@@ -377,3 +377,7 @@
 1. **顶层提升嵌套解析器**：在 `font_face.cp`、`page.cp`、`supports.cp` 中将 `FontFaceAtRuleParser`、`PageRuleParser`、`SupportsParseClosure` 等辅助结构体提升至模块顶层，彻底避免内联子结构体跳过 CP lowering 的问题。
 2. **`asValue()` / `asErr()` 解耦枚举分支**：在 `page.cp` 中利用 `.asValue()` 与 `.asErr()` 规避 `cpc` 在复杂 Result 枚举推导时的 `E0200` 边界问题。
 3. **纯 CP 借用与解构落地**：在 `rules.cp`、`selector.cp`、`parser.cp` 中全面使用 `let [a, b] = ...`、海象解包 `:=` 与无前缀 `for (v of arr)`，消灭全部遗留 `this`、`self` 与管道符捕获。
+
+### [Milestone 7 Phase 27] 2026-11-15: 模板直出万行 `properties_generated.cp` 与 `src/css/` 根目录突破
+1. **代码生成器直接面向 CP**：修改 `src/css/properties/generate_properties.ts` 中的 `prelude()`、`generatePropertyIdTag()`、`generateProperty()`、`generatePropertyId()` 模板（`pub enum Name: u16`、显式 `Property{ ... }` / `PropertyId{ ... }` 构造、`*v` -> `=> |*v|`、`: void` union 无载荷字段、`comptime` 块外移），直接输出 11,800+ 行纯 CP 代码并一次通过 `cpc --lib` 与 `zig ast-check`。
+2. **`compat` 与 `prefixes` 等大型根目录模块收口**：完成 5,397 行 `compat.cp` 与 2,203 行 `prefixes.cp` 等 11 个根目录核心模块。

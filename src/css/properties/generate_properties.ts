@@ -40,25 +40,20 @@ type PropertyDef = {
   parse_dont_make_unparsed?: boolean;
 };
 
-const OUTPUT_FILE = "src/css/properties/properties_generated.zig";
+const OUTPUT_FILE = "src/css/properties/properties_generated.cp";
 
 async function generateCode(property_defs: Record<string, PropertyDef>) {
-  const EMIT_COMPLETED_MD_FILE = true;
-  if (EMIT_COMPLETED_MD_FILE) {
-    const completed = Object.entries(property_defs)
-      .map(([name, meta]) => `- [x] \`${name}\``)
-      .join("\n");
-    await Bun.$`echo ${completed} > completed.md`;
-  }
-  await Bun.$`echo ${prelude()} > ${OUTPUT_FILE}`;
-  await Bun.$`echo ${generateProperty(property_defs)} >> ${OUTPUT_FILE}`;
-  await Bun.$`echo ${generatePropertyId(property_defs)} >> ${OUTPUT_FILE}`;
-  await Bun.$`echo ${generatePropertyIdTag(property_defs)} >> ${OUTPUT_FILE}`;
-  await Bun.$`vendor/zig/zig.exe fmt ${OUTPUT_FILE}`;
+  const parts = [
+    prelude(),
+    generateProperty(property_defs),
+    generatePropertyId(property_defs),
+    generatePropertyIdTag(property_defs),
+  ];
+  await Bun.write(OUTPUT_FILE, parts.join("\n"));
 }
 
 function generatePropertyIdTag(property_defs: Record<string, PropertyDef>): string {
-  return `pub const PropertyIdTag = enum(u16) {
+  return `pub enum PropertyIdTag: u16 {
   ${Object.keys(property_defs)
     .map(key => `${escapeIdent(key)},`)
     .join("\n")}
@@ -68,8 +63,8 @@ function generatePropertyIdTag(property_defs: Record<string, PropertyDef>): stri
 
     /// Helper function used in comptime code to know whether to access the underlying value
     /// with tuple indexing syntax because it may have a VendorPrefix associated with it.
-    pub fn hasVendorPrefix(this: PropertyIdTag) bool {
-      return switch (this) {
+    fn hasVendorPrefix(): bool {
+      return switch (_.*) {
         ${Object.entries(property_defs)
           .map(([name, meta]) => `.${escapeIdent(name)} => ${meta.valid_prefixes === undefined ? "false" : "true"},`)
           .join("\n")}
@@ -81,8 +76,8 @@ function generatePropertyIdTag(property_defs: Record<string, PropertyDef>): stri
 
     /// Helper function used in comptime code to know whether to access the underlying value
     /// with tuple indexing syntax because it may have a VendorPrefix associated with it.
-    pub fn valueType(this: PropertyIdTag) type {
-      return switch (this) {
+    fn valueType(): type {
+      return switch (_.*) {
         ${Object.entries(property_defs)
           .map(([name, meta]) => `.${escapeIdent(name)} => ${meta.ty},`)
           .join("\n")}
@@ -91,11 +86,12 @@ function generatePropertyIdTag(property_defs: Record<string, PropertyDef>): stri
         .custom => CustomProperty,
       };
     }
-};`;
+}`;
 }
 
 function generateProperty(property_defs: Record<string, PropertyDef>): string {
-  return `pub const Property = union(PropertyIdTag) {
+  const required_functions = ["deepClone", "parse", "toCss", "eql"];
+  return `pub union(PropertyIdTag) Property {
 ${Object.entries(property_defs)
   .map(([name, meta]) => generatePropertyField(name, meta))
   .join("\n")}
@@ -104,64 +100,51 @@ ${Object.entries(property_defs)
   custom: CustomProperty,
 
   ${generatePropertyImpl(property_defs)}
-};`;
+}
+
+comptime {
+  let compile_error: []const u8 = "";
+  ${Object.entries(property_defs)
+    .map(([name, meta]) => {
+      if (meta.ty != "void" && meta.ty != "CSSNumber" && meta.ty != "CSSInteger") {
+        return required_functions
+          .map(
+            fn => `
+        if (!@hasDecl(${meta.ty}, "${fn}")) {
+          compile_error = compile_error ++ @typeName(${meta.ty}) ++ ": does not have a ${fn}() function.\\n";
+        }
+        `,
+          )
+          .join("\n");
+      }
+      return "";
+    })
+    .join("\n")}
+  if (compile_error.len > 0) {
+    @compileError(compile_error);
+  }
+}`;
 }
 
 function generatePropertyImpl(property_defs: Record<string, PropertyDef>): string {
-  const required_functions = ["deepClone", "parse", "toCss", "eql"];
-
   return `
   // Copy manually implemented functions.
-  pub const toCss = properties_impl.property_mixin.toCss
-
-  // Sanity check to make sure all types have the following functions:
-  // - deepClone()
-  // - eql()
-  // - parse()
-  // - toCss()
-  // 
-  // We do this string concatenation thing so we get all the errors at once,
-  // instead of relying on Zig semantic analysis which usually stops at the first error.
-  comptime {
-  const compile_error: []const u8 = compile_error: {
-      var compile_error: []const u8 = "";
-      ${Object.entries(property_defs)
-        .map(([name, meta]) => {
-          if (meta.ty != "void" && meta.ty != "CSSNumber" && meta.ty != "CSSInteger") {
-            return required_functions
-              .map(
-                fn => `
-            if (!@hasDecl(${meta.ty}, "${fn}")) {
-              compile_error = compile_error ++ @typeName(${meta.ty}) ++ ": does not have a ${fn}() function.\\n";
-            }
-            `,
-              )
-              .join("\n");
-          }
-          return "";
-        })
-        .join("\n")}
-      const final_compile_error = compile_error;
-      break :compile_error final_compile_error;
-    };
-    if (compile_error.len > 0) {
-      @compileError(compile_error);
-    }
-  }
+  pub const toCss = properties_impl.property_mixin.toCss;
 
   /// Parses a CSS property by name.
-  pub fn parse(property_id: PropertyId, input: *css.Parser, options: *const css.ParserOptions) Result(Property) {
+  static fn parse(property_id: PropertyId, input: *css.Parser, options: *const css.ParserOptions): Result(Property) {
+    const R = Result(Property);
     const state = input.state();
 
     switch (property_id) {
       ${generatePropertyImplParseCases(property_defs)}
-      .all => return .{ .result = .{ .all = switch (CSSWideKeyword.parse(input)) {
-        .result => |v| v,
-        .err => |e| return .{ .err = e },
+      .all => return R{ result: Property{ all: switch (CSSWideKeyword.parse(input)) {
+        .result v => v,
+        .err e => return R{ err: e },
       } } },
-      .custom => |name| return .{ .result = .{ .custom = switch (CustomProperty.parse(name, input, options)) {
-        .result => |v| v,
-        .err => |e| return .{ .err = e },
+      .custom name => return R{ result: Property{ custom: switch (CustomProperty.parse(name, input, options)) {
+        .result v => v,
+        .err e => return R{ err: e },
       } } },
       else => {},
     }
@@ -171,36 +154,36 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
     // and stored as an enum rather than a string. This lets property handlers more easily deal with it.
     // Ideally we'd only do this if var() or env() references were seen, but err on the safe side for now.
     input.reset(&state);
-    return .{ .result = .{ .unparsed = switch (UnparsedProperty.parse(property_id, input, options)) {
-    .result => |v| v,
-    .err => |e| return .{ .err = e },
+    return R{ result: Property{ unparsed: switch (UnparsedProperty.parse(property_id, input, options)) {
+    .result v => v,
+    .err e => return R{ err: e },
     } } };
   }
 
-  pub fn propertyId(this: *const Property) PropertyId {
-    return switch (this.*) {
+  fn propertyId(): PropertyId {
+    return switch (_.*) {
       ${Object.entries(property_defs)
         .map(([name, meta]) => {
           if (meta.valid_prefixes !== undefined) {
-            return `.${escapeIdent(name)} => |*v| PropertyId{ .${escapeIdent(name)} = v[1]  },`;
+            return `.${escapeIdent(name)} => |*v| PropertyId{ ${escapeIdent(name)}: v[1] },`;
           }
           return `.${escapeIdent(name)} => .${escapeIdent(name)},`;
         })
         .join("\n")}
       .all => PropertyId.all,
       .unparsed => |unparsed| unparsed.property_id,
-      .custom => |c| .{ .custom = c.name },
+      .custom => |c| PropertyId{ custom: c.name },
     };
   }
 
-  pub fn deepClone(this: *const Property, allocator: std.mem.Allocator) Property {
-    return switch (this.*) {
+  fn deepClone(allocator: std.mem.Allocator): Property {
+    return switch (_.*) {
       ${Object.entries(property_defs)
         .map(([name, meta]) => {
           if (meta.valid_prefixes !== undefined) {
             const clone_expr =
               meta.ty === "CSSNumber" || meta.ty === "CSSInteger" ? "v[0]" : "v[0].deepClone(allocator)";
-            return `.${escapeIdent(name)} => |*v| .{ .${escapeIdent(name)} = .{ ${clone_expr}, v[1] } },`;
+            return `.${escapeIdent(name)} => |*v| Property{ ${escapeIdent(name)}: .{ ${clone_expr}, v[1] } },`;
           }
           const clone_expr =
             meta.ty === "CSSNumber" || meta.ty === "CSSInteger"
@@ -208,12 +191,12 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
               : meta.ty.includes("BabyList(")
                 ? `css.generic.deepClone(${meta.ty}, v, allocator)`
                 : "v.deepClone(allocator)";
-          return `.${escapeIdent(name)} => |*v| .{ .${escapeIdent(name)} = ${clone_expr} },`;
+          return `.${escapeIdent(name)} => |*v| Property{ ${escapeIdent(name)}: ${clone_expr} },`;
         })
         .join("\n")}
-      .all => |*a| return .{ .all = a.deepClone(allocator) },
-      .unparsed => |*u| return .{ .unparsed = u.deepClone(allocator) },
-      .custom => |*c| return .{ .custom = c.deepClone(allocator) },
+      .all => |*a| return Property{ all: a.deepClone(allocator) },
+      .unparsed => |*u| return Property{ unparsed: u.deepClone(allocator) },
+      .custom => |*c| return Property{ custom: c.deepClone(allocator) },
     };
   }
 
@@ -222,19 +205,17 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
   /// It's mostly intended as a performance optimization in the case where mimalloc arena is used,
   /// since it can reclaim the memory and use it for subsequent allocations.
   /// I haven't benchmarked that though, so I don't actually know how much faster it would actually make it.
-  pub fn deinit(this: *@This(), allocator: std.mem.Allocator) void {
-      _ = this;
-      _ = allocator;
+  fn deinit(*_, _: std.mem.Allocator) {
   }
 
-  pub inline fn __toCssHelper(this: *const Property) struct{[]const u8, VendorPrefix} {
-    return switch (this.*) {
+  inline fn __toCssHelper(): [[]const u8, VendorPrefix] {
+    return switch (_.*) {
       ${generatePropertyImplToCssHelper(property_defs)}
-      .all => .{ "all", VendorPrefix{ .none = true } },
+      .all => .{ "all", VendorPrefix{ none: true } },
       .unparsed => |*unparsed| brk: {
-        var prefix = unparsed.property_id.prefix();
+        let prefix = unparsed.property_id.prefix();
         if (prefix.isEmpty()) {
-          prefix = VendorPrefix{ .none = true };
+          prefix = VendorPrefix{ none: true };
         }
         break :brk .{ unparsed.property_id.name(), prefix };
       },
@@ -243,8 +224,8 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
   }
 
   /// Serializes the value of a CSS property without its name or \`!important\` flag.
-  pub fn valueToCss(this: *const Property, dest: *css.Printer) PrintErr!void {
-    return switch(this.*) {
+  fn valueToCss(dest: *css.Printer): PrintErr!void {
+    return switch(_.*) {
       ${Object.entries(property_defs)
         .map(([name, meta]) => {
           const value = meta.valid_prefixes === undefined ? "value" : "value[0]";
@@ -266,8 +247,8 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
   }
 
   /// Returns the given longhand property for a shorthand.
-  pub fn longhand(this: *const Property, property_id: *const PropertyId) ?Property {
-    switch (this.*) {
+  fn longhand(property_id: *const PropertyId): Property? {
+    switch (_.*) {
       ${Object.entries(property_defs)
         .filter(([_, meta]) => meta.shorthand)
         .map(([name, meta]) => {
@@ -286,13 +267,13 @@ function generatePropertyImpl(property_defs: Record<string, PropertyDef>): strin
     return null;
   }
 
-  pub fn eql(lhs: *const Property, rhs: *const Property) bool {
+  static fn eql(lhs: *const Property, rhs: *const Property): bool {
     if (@intFromEnum(lhs.*) != @intFromEnum(rhs.*)) return false;
     return switch (lhs.*) {
       ${Object.entries(property_defs)
         .map(([name, meta]) => {
           if (meta.valid_prefixes !== undefined)
-            return `.${escapeIdent(name)} => |*v| css.generic.eql(${meta.ty}, &v[0], &rhs.${escapeIdent(name)}[0]) and v[1].eq(rhs.${escapeIdent(name)}[1]),`;
+            return `.${escapeIdent(name)} => |*v| css.generic.eql(${meta.ty}, &v[0], &rhs.${escapeIdent(name)}[0]) && v[1].eq(rhs.${escapeIdent(name)}[1]),`;
           return `.${escapeIdent(name)} => |*v| css.generic.eql(${meta.ty}, v, &rhs.${escapeIdent(name)}),`;
         })
         .join("\n")}
@@ -308,7 +289,7 @@ function generatePropertyImplToCssHelper(property_defs: Record<string, PropertyD
   return Object.entries(property_defs)
     .map(([name, meta]) => {
       const capture = meta.valid_prefixes === undefined ? "" : "|*x|";
-      const prefix = meta.valid_prefixes === undefined ? "VendorPrefix{ .none = true }" : 'x.@"1"';
+      const prefix = meta.valid_prefixes === undefined ? "VendorPrefix{ none: true }" : "x[1]";
       return `.${escapeIdent(name)} => ${capture} .{"${name}", ${prefix}},`;
     })
     .join("\n");
@@ -317,25 +298,25 @@ function generatePropertyImplToCssHelper(property_defs: Record<string, PropertyD
 function generatePropertyImplParseCases(property_defs: Record<string, PropertyDef>): string {
   return Object.entries(property_defs)
     .map(([name, meta]) => {
-      const capture = meta.valid_prefixes === undefined ? "" : "|pre|";
+      const capture = meta.valid_prefixes === undefined ? "" : "pre";
       const ret =
         meta.valid_prefixes === undefined
-          ? `.{ .${escapeIdent(name)} = c }`
-          : `.{ .${escapeIdent(name)} = .{ c, pre } }`;
+          ? `Property{ ${escapeIdent(name)}: c }`
+          : `Property{ ${escapeIdent(name)}: .{ c, pre } }`;
       if (meta.parse_dont_make_unparsed === true) {
-        return `.${escapeIdent(name)} => ${capture} {
+        return `.${escapeIdent(name)} ${capture} => {
     ${meta.eval_branch_quota !== undefined ? `@setEvalBranchQuota(${meta.eval_branch_quota});` : ""}
   return switch (css.generic.parseWithOptions(${meta.ty}, input, options)) {
-    .result => |c| return .{ .result = ${ret} },
-    .err => |e| return .{ .err = e },
+    .result c => return R{ result: ${ret} },
+    .err e => return R{ err: e },
   };
 },`;
       }
-      return `.${escapeIdent(name)} => ${capture} {
+      return `.${escapeIdent(name)} ${capture} => {
     ${meta.eval_branch_quota !== undefined ? `@setEvalBranchQuota(${meta.eval_branch_quota});` : ""}
-  if (css.generic.parseWithOptions(${meta.ty}, input, options).asValue()) |c| {
+  if (c := css.generic.parseWithOptions(${meta.ty}, input, options).asValue()) {
     if (input.expectExhausted().isOk()) {
-      return .{ .result = ${ret} };
+      return R{ result: ${ret} };
     }
   }
 },`;
@@ -345,18 +326,18 @@ function generatePropertyImplParseCases(property_defs: Record<string, PropertyDe
 
 function generatePropertyField(name: string, meta: PropertyDef): string {
   if (meta.valid_prefixes !== undefined) {
-    return ` ${escapeIdent(name)}: struct{ ${meta.ty}, VendorPrefix },`;
+    return ` ${escapeIdent(name)}: [${meta.ty}, VendorPrefix],`;
   }
   return ` ${escapeIdent(name)}: ${meta.ty},`;
 }
 
 function generatePropertyId(property_defs: Record<string, PropertyDef>): string {
-  return `pub const PropertyId = union(PropertyIdTag) {
+  return `pub union(PropertyIdTag) PropertyId {
 ${Object.entries(property_defs)
   .map(([name, meta]) => generatePropertyIdField(name, meta))
   .join("\n")}
-  all,
-  unparsed,
+  all: void,
+  unparsed: void,
   custom: CustomPropertyName,
 
   // Copy manually implemented functions.
@@ -366,67 +347,67 @@ ${Object.entries(property_defs)
   pub const fromStr = fromString;
 
 ${generatePropertyIdImpl(property_defs)}
-};`;
+}`;
 }
 
 function generatePropertyIdField(name: string, meta: PropertyDef): string {
   if (meta.valid_prefixes !== undefined) {
     return ` ${escapeIdent(name)}: VendorPrefix,`;
   }
-  return ` ${escapeIdent(name)},`;
+  return ` ${escapeIdent(name)}: void,`;
 }
 
 function generatePropertyIdImpl(property_defs: Record<string, PropertyDef>): string {
   return `
   /// Returns the property name, without any vendor prefixes.
-  pub inline fn name(this: *const PropertyId) []const u8 {
-      if (this.* == .custom) return this.custom.asStr();
-      return @tagName(this.*);
+  inline fn name(): []const u8 {
+      if (_.* == .custom) return _.custom.asStr();
+      return @tagName(_.*);
   }
 
   /// Returns the vendor prefix for this property id.
-  pub fn prefix(this: *const PropertyId) VendorPrefix {
-    return switch (this.*) {
+  fn prefix(): VendorPrefix {
+    return switch (_.*) {
       ${generatePropertyIdImplPrefix(property_defs)}
       .all, .custom, .unparsed => VendorPrefix{},
     };
   }
 
-  pub fn fromNameAndPrefix(name1: []const u8, pre: VendorPrefix) ?PropertyId {
+  static fn fromNameAndPrefix(name1: []const u8, pre: VendorPrefix): PropertyId? {
     const Enum = enum { ${Object.entries(property_defs)
       .map(
         ([prop_name, def], i) => `${escapeIdent(prop_name)}${i === Object.keys(property_defs).length - 1 ? "" : ", "}`,
       )
       .join("")} };
     const Map = comptime bun.ComptimeEnumMap(Enum);
-    if (Map.getASCIIICaseInsensitive(name1)) |prop| {
+    if (prop := Map.getASCIIICaseInsensitive(name1)) {
       switch (prop) {
         ${Object.entries(property_defs).map(([name, meta]) => {
           return `.${escapeIdent(name)} => {
             const allowed_prefixes = ${constructVendorPrefix(meta.valid_prefixes)};
-            if (allowed_prefixes.contains(pre)) return ${meta.valid_prefixes === undefined ? `.${escapeIdent(name)}` : `.{ .${escapeIdent(name)} = pre }`};
-          }`;
-        })}
+            if (allowed_prefixes.contains(pre)) return ${meta.valid_prefixes === undefined ? `.${escapeIdent(name)}` : `PropertyId{ ${escapeIdent(name)}: pre }`};
+          },`;
+        }).join("\n")}
       }
     }
 
     return null;
   }
 
-  pub fn withPrefix(this: *const PropertyId, pre: VendorPrefix) PropertyId {
-    return switch (this.*) {
+  fn withPrefix(pre: VendorPrefix): PropertyId {
+    return switch (_.*) {
       ${Object.entries(property_defs)
         .map(([prop_name, def]) => {
           if (def.valid_prefixes === undefined) return `.${escapeIdent(prop_name)} => .${escapeIdent(prop_name)},`;
-          return `.${escapeIdent(prop_name)} => .{ .${escapeIdent(prop_name)} = pre },`;
+          return `.${escapeIdent(prop_name)} => PropertyId{ ${escapeIdent(prop_name)}: pre },`;
         })
         .join("\n")}
-      else => this.*,
+      else => _.*,
     };
   }
 
-  pub fn addPrefix(this: *PropertyId, pre: VendorPrefix) void {
-    return switch (this.*) {
+  fn addPrefix(*_, pre: VendorPrefix) {
+    return switch (_.*) {
       ${Object.entries(property_defs)
         .map(([prop_name, def]) => {
           if (def.valid_prefixes === undefined) return `.${escapeIdent(prop_name)} => {},`;
@@ -437,13 +418,18 @@ function generatePropertyIdImpl(property_defs: Record<string, PropertyDef>): str
     };
   }
 
-  pub inline fn deepClone(this: *const PropertyId, _: std.mem.Allocator) PropertyId {
-    return this.*;
+  inline fn deepClone(_: std.mem.Allocator): PropertyId {
+    return _.*;
   }
 
-  pub fn eql(lhs: *const PropertyId, rhs: *const PropertyId) bool {
+  static fn eql(lhs: *const PropertyId, rhs: *const PropertyId): bool {
     if (@intFromEnum(lhs.*) != @intFromEnum(rhs.*)) return false;
-    inline for (bun.meta.EnumFields(PropertyId), std.meta.fields(PropertyId)) |enum_field, union_field| {
+    const enum_fields = bun.meta.EnumFields(PropertyId);
+    const union_fields = std.meta.fields(PropertyId);
+    comptime let idx: usize = 0;
+    inline while (idx < enum_fields.len) : (idx += 1) {
+      const enum_field = enum_fields[idx];
+      const union_field = union_fields[idx];
       if (enum_field.value == @intFromEnum(lhs.*)) {
         if (comptime union_field.type == css.VendorPrefix) {
           return @field(lhs, union_field.name).eql(@field(rhs, union_field.name));
@@ -455,13 +441,13 @@ function generatePropertyIdImpl(property_defs: Record<string, PropertyDef>): str
     unreachable;
   }
 
-  pub fn hash(this: *const PropertyId, hasher: *std.hash.Wyhash) void {
-    const tag = @intFromEnum(this.*);
+  fn hash(hasher: *std.hash.Wyhash) {
+    const tag = @intFromEnum(_.*);
     hasher.update(std.mem.asBytes(&tag));
   }
 
-  pub fn setPrefixesForTargets(this: *PropertyId, targets: Targets) void {
-    switch (this.*) {
+  fn setPrefixesForTargets(*_, targets: Targets) {
+    switch (_.*) {
       ${Object.entries(property_defs)
         .map(([name, meta]) => {
           if (meta.unprefixed === false || meta.valid_prefixes === undefined) return `.${escapeIdent(name)} => {},`;
@@ -481,7 +467,7 @@ function generatePropertyIdImplPrefix(property_defs: Record<string, PropertyDef>
   return Object.entries(property_defs)
     .map(([name, meta]) => {
       if (meta.valid_prefixes === undefined) return `.${escapeIdent(name)} => VendorPrefix{},`;
-      return `.${escapeIdent(name)} => |p| p,`;
+      return `.${escapeIdent(name)} p => p,`;
     })
     .join("\n");
 }
@@ -493,15 +479,15 @@ function generatePropertyIdImplFromNameAndPrefix(property_defs: Record<string, P
       if (name === "unparsed") return "";
       return `if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name1, "${name}")) {
   const allowed_prefixes = ${constructVendorPrefix(meta.valid_prefixes)};
-  if (allowed_prefixes.contains(pre)) return ${meta.valid_prefixes === undefined ? `.${escapeIdent(name)}` : `.{ .${escapeIdent(name)} = pre }`};
+  if (allowed_prefixes.contains(pre)) return ${meta.valid_prefixes === undefined ? `.${escapeIdent(name)}` : `{ ${escapeIdent(name)}: pre }`};
 } else `;
     })
     .join("\n");
 }
 
 function constructVendorPrefix(prefixes: VendorPrefixes[] | undefined): string {
-  if (prefixes === undefined) return `VendorPrefix{ .none = true }`;
-  return `VendorPrefix{ ${[`.none = true`, ...prefixes.map(prefix => `.${prefix} = true`)].join(", ")} }`;
+  if (prefixes === undefined) return `VendorPrefix{ none: true }`;
+  return `VendorPrefix{ ${[`none: true`, ...prefixes.map(prefix => `${prefix}: true`)].join(", ")} }`;
 }
 
 function needsEscaping(name: string): boolean {
@@ -1784,17 +1770,16 @@ generateCode({
 });
 
 function prelude() {
-  return /* zig */ `const std = @import("std");
-const bun = @import("bun");
+  return /* cp */ `import bun from "bun";
 const Allocator = std.mem.Allocator;
 
-pub const css = @import("../css_parser.zig");
+pub import css from "../css_parser.zig";
 
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const VendorPrefix = css.VendorPrefix;
 
-const properties_impl = @import("./properties_impl.zig");
+import properties_impl from "./properties_impl.zig";
 
 const CSSWideKeyword = css.css_properties.CSSWideKeyword;
 const UnparsedProperty = css.css_properties.custom.UnparsedProperty;
@@ -1848,7 +1833,7 @@ const border_radius = css.css_properties.border_radius;
 const border_image = css.css_properties.border_image;
 const outline = css.css_properties.outline;
 const flex = css.css_properties.flex;
-const @"align" = css.css_properties.@"align";
+const align_mod = css.css_properties.@"align";
 const margin_padding = css.css_properties.margin_padding;
 const transition = css.css_properties.transition;
 const animation = css.css_properties.animation;
@@ -1912,17 +1897,17 @@ const BoxLines = flex.BoxLines;
 const FlexPack = flex.FlexPack;
 const FlexItemAlign = flex.FlexItemAlign;
 const FlexLinePack = flex.FlexLinePack;
-const AlignContent = @"align".AlignContent;
-const JustifyContent = @"align".JustifyContent;
-const PlaceContent = @"align".PlaceContent;
-const AlignSelf = @"align".AlignSelf;
-const JustifySelf = @"align".JustifySelf;
-const PlaceSelf = @"align".PlaceSelf;
-const AlignItems = @"align".AlignItems;
-const JustifyItems = @"align".JustifyItems;
-const PlaceItems = @"align".PlaceItems;
-const GapValue = @"align".GapValue;
-const Gap = @"align".Gap;
+const AlignContent = align_mod.AlignContent;
+const JustifyContent = align_mod.JustifyContent;
+const PlaceContent = align_mod.PlaceContent;
+const AlignSelf = align_mod.AlignSelf;
+const JustifySelf = align_mod.JustifySelf;
+const PlaceSelf = align_mod.PlaceSelf;
+const AlignItems = align_mod.AlignItems;
+const JustifyItems = align_mod.JustifyItems;
+const PlaceItems = align_mod.PlaceItems;
+const GapValue = align_mod.GapValue;
+const Gap = align_mod.Gap;
 const MarginBlock = margin_padding.MarginBlock;
 const Margin = margin_padding.Margin;
 const MarginInline = margin_padding.MarginInline;

@@ -418,3 +418,8 @@
 - **存量纯化 `src/css/selectors/` (3/3 100% 闭合)**：`builder.cp`, `selector.cp`, `parser.cp` 彻底清除 `this`/`: void`/`|capture|`，全部通过 4 项硬门禁（膨胀率 `1.020x ~ 1.025x`）。
 - **新增闭合 `src/css/rules/` (22/22 100% 闭合)**：`container`, `counter_style`, `custom_media`, `document`, `font_face`, `font_palette_values`, `import`, `keyframes`, `layer`, `media`, `namespace`, `nesting`, `page`, `property`, `rules`, `scope`, `starting_style`, `style`, `supports`, `tailwind`, `unknown`, `viewport.cp` 全部通过 4 项硬门禁（膨胀率 `0.930x ~ 1.084x`）。
 - **新增 `src/css/values/` 第一批 (10/22 PASS)**：`alpha`, `rect`, `ratio`, `url`, `size`, `resolution`, `color_generated`, `css_string`, `number`, `easing.cp` 全部通过 4 项硬门禁（膨胀率 `0.956x ~ 1.018x`）。
+
+## [Milestone 7 Phase 27] 2026-11-15 - `src/css/` 根目录 (11/15) + `values.cp` + 模板直出 `properties_generated.cp`
+- **`src/css/properties/properties_generated.cp` (10,362行→11,815行, 1.140x)**：改写 `generate_properties.ts` 字符串模板直接吐出纯 CP 代码（0 LLM 手写幻觉），一次性通过 4 项硬门禁。
+- **`src/css/values/values.cp` (1.000x)**：随 `cp_agy` 修复 `task-20261115-string-import-collision` 后解封通过 4 项硬门禁。
+- **`src/css/` 根目录 (11/15 PASS)**：`compat`, `logical`, `prefixes`, `sourcemap`, `dependencies`, `targets`, `error`, `context`, `printer`, `declaration`, `generics.cp` 全部通过 4 项硬门禁（膨胀率 `0.983x ~ 1.029x`）。

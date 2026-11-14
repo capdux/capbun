@@ -820,3 +820,17 @@
   - `src/css/rules/` (22/22 100% 闭合): 全部 22 个规则模块通过 4 项硬门禁（膨胀率 `0.930x ~ 1.084x`）
   - `src/css/values/` (10/22 第一批 PASS): `alpha`, `rect`, `ratio`, `url`, `size`, `resolution`, `color_generated`, `css_string`, `number`, `easing.cp`（膨胀率 `0.956x ~ 1.018x`）
 - **全仓累计进度**：**744 / 1,294 (57.49%)** 纯 CP 模块；**141 / 171 (82.46%)** 子目录 100% 闭合。
+
+### 2026-11-15: 收到 `cp_agy` 结单通知：`task-20261115-string-import-collision` 已修复
+
+- **Task ID**: `task-20261115-string-import-collision`
+- **Status**: `resolved` (by `cp_agy`, `2026-11-15T05:56:30`)
+- **修复结论 (`note`)**: `has_top_string_decl` 现已检查 `ModuleItem::Import`（含 `string` 与 `@"string"`），当模块显式导入 `string` 时自动抑制顶部 `const string = []const u8;`，同时 parser 支持直接写 `import string from "...";`。已部署至 `cap/bin/cpc`。
+
+### 2026-11-15: Milestone 7 Phase 27 闭环提交（`properties_generated.cp` + `values.cp` + `src/css/` 根目录 11 模块）
+
+- **交付成果（新增 13 个纯 CP 模块）**：
+  - `src/css/properties/properties_generated.cp` + `generate_properties.ts` (膨胀率 `1.140x`，模板直接生成并通过 4 门禁)
+  - `src/css/values/values.cp` (膨胀率 `1.000x`)
+  - `src/css/` 根目录 11/15 PASS：`compat`, `logical`, `prefixes`, `sourcemap`, `dependencies`, `targets`, `error`, `context`, `printer`, `declaration`, `generics.cp`（膨胀率 `0.983x ~ 1.029x`）
+- **全仓累计进度**：**757 / 1,294 (58.50%)** 纯 CP 模块；**141 / 171 (82.46%)** 子目录 100% 闭合。
