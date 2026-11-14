@@ -69,13 +69,13 @@ pub fn isEquivalent(selectors: []const Selector, other: []const Selector): bool 
                     (a_comp.* == Component.is && b_comp.* == Component.is))
                 {
                     const a_selectors = switch (a_comp.*) {
-                        .any => |v| v.selectors,
-                        .is => |v| v,
+                        .any v => v.selectors,
+                        .is v => v,
                         else => unreachable,
                     };
                     const b_selectors = switch (b_comp.*) {
-                        .any => |v| v.selectors,
-                        .is => |v| v,
+                        .any v => v.selectors,
+                        .is v => v,
                         else => unreachable,
                     };
                     break :blk isEquivalent(a_selectors, b_selectors);
@@ -124,7 +124,7 @@ pub fn downlevelComponent(allocator: Allocator, component: *Component, targets: 
                     }
                     return css.VendorPrefix{};
                 },
-                .lang => |l| {
+                .lang l => {
                     // :lang() with multiple languages is not supported everywhere.
                     // compile this to :is(:lang(a), :lang(b)) etc.
                     if (l.languages.items.len > 1 && targets.shouldCompileSame(.lang_selector_list)) {
@@ -137,7 +137,7 @@ pub fn downlevelComponent(allocator: Allocator, component: *Component, targets: 
             };
         },
         .pseudo_element => |*pe| pe.getNecessaryPrefixes(targets),
-        .is => |selectors| {
+        .is selectors => {
             let necessary_prefixes = downlevelSelectors(allocator, selectors, targets);
 
             // Convert :is to :-webkit-any/:-moz-any if needed.
@@ -156,7 +156,7 @@ pub fn downlevelComponent(allocator: Allocator, component: *Component, targets: 
 
             return necessary_prefixes;
         },
-        .negation => |selectors| {
+        .negation selectors => {
             let necessary_prefixes = downlevelSelectors(allocator, selectors, targets);
 
             // Downlevel :not(.a, .b) -> :not(:is(.a, .b)) if not list is unsupported.
@@ -306,7 +306,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
 
                 .attribute_in_no_namespace_exists => F.selectors2,
 
-                .attribute_in_no_namespace => |x| brk: {
+                .attribute_in_no_namespace x => brk: {
                     if (x.case_sensitivity != parser.attrs.ParsedCaseSensitivity.case_sensitive) break :brk F.case_insensitive;
                     break :brk switch (x.operator) {
                         .equal, .includes, .dash_match => F.selectors2,
@@ -314,7 +314,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                     };
                 },
 
-                .attribute_other => |attr| switch (attr.operation) {
+                .attribute_other attr => switch (attr.operation) {
                     .exists => F.selectors2,
                     .with_value => |*x| brk: {
                         if (x.case_sensitivity != parser.attrs.ParsedCaseSensitivity.case_sensitive) break :brk F.case_insensitive;
@@ -327,7 +327,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                 },
 
                 .empty, .root => F.selectors3,
-                .negation => |sels| {
+                .negation sels => {
                     // :not() selector list is not forgiving.
                     if (!targets.isCompatible(F.selectors3) || !isCompatible(sels, targets)) return false;
                     continue;
@@ -344,14 +344,14 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                 },
 
                 // These support forgiving selector lists, so no need to check nested selectors.
-                .is => |sels| brk: {
+                .is sels => brk: {
                     // ... except if we are going to unwrap them.
                     if (shouldUnwrapIs(sels) && isCompatible(sels, targets)) continue;
                     break :brk F.is_selector;
                 },
                 .where, .nesting => F.is_selector,
                 .any => return false,
-                .has => |sels| {
+                .has sels => {
                     if (!targets.isCompatible(F.has_selector) || !isCompatible(sels, targets)) return false;
                     continue;
                 },
@@ -366,12 +366,12 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
 
                         .checked, .disabled, .enabled, .target => break :brk F.selectors3,
 
-                        .any_link => |prefix| {
+                        .any_link prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.any_link;
                         },
                         .indeterminate => break :brk F.indeterminate_pseudo,
 
-                        .fullscreen => |prefix| {
+                        .fullscreen prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.fullscreen;
                         },
 
@@ -380,7 +380,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                         .default => break :brk F.default_pseudo,
                         .dir => break :brk F.dir_selector,
                         .optional => break :brk F.optional_pseudo,
-                        .placeholder_shown => |prefix| {
+                        .placeholder_shown prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.placeholder_shown;
                         },
 
@@ -391,7 +391,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                         .valid, .invalid, .required => break :brk F.form_validation,
                         .in_range, .out_of_range => break :brk F.in_out_of_range,
 
-                        .autofill => |prefix| {
+                        .autofill prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.autofill;
                         },
 
@@ -425,14 +425,14 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
                         .after, .before => break :brk F.gencontent,
                         .first_line => break :brk F.first_line,
                         .first_letter => break :brk F.first_letter,
-                        .selection => |prefix| {
+                        .selection prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.selection;
                         },
-                        .placeholder => |prefix| {
+                        .placeholder prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.placeholder;
                         },
                         .marker => break :brk F.marker_pseudo,
-                        .backdrop => |prefix| {
+                        .backdrop prefix => {
                             if (prefix == css.VendorPrefix{ .none = true }) break :brk F.dialog;
                         },
                         .cue => break :brk F.cue,
@@ -498,7 +498,7 @@ fn isSelectorUnused(
             .is, .where => |is| {
                 if (isUnused(is, unused_symbols, symbols, parent_is_unused)) return true;
             },
-            .any => |a| {
+            .any a => {
                 if (isUnused(a.selectors, unused_symbols, symbols, parent_is_unused)) return true;
             },
             .nesting => {
@@ -603,8 +603,8 @@ pub const serialize = struct {
 
             debug("Compound selector iter\n", {});
             let compound_selectors = CompoundSelectorIter{ .sel = selector };
-            while (compound_selectors.next()) |comp| {
-                for (comp) |c| {
+            while (comp := compound_selectors.next()) {
+                for (c of comp) {
                     debug("  {f}, ", .{c});
                 }
             }
@@ -628,13 +628,13 @@ pub const serialize = struct {
 
         let first = true;
         let combinators_exhausted = false;
-        while (compound_selectors.next()) |_compound_| {
+        while (_compound_ := compound_selectors.next()) {
             bun.debugAssert(!combinators_exhausted);
             let compound = _compound_;
 
             // Skip implicit :scope in relative selectors (e.g. :has(:scope > foo) -> :has(> foo))
             if (is_relative && compound.len >= 1 && compound[0] == .scope) {
-                if (combinators.next()) |*combinator| {
+                if (combinator := combinators.next()) {
                     try serializeCombinator(combinator, dest);
                 }
                 compound = compound[1..];
@@ -760,7 +760,7 @@ pub const serialize = struct {
             //    ">", "+", "~", ">>", "||", as appropriate, followed by another
             //    single SPACE (U+0020) if the combinator was not whitespace, to
             //    s.
-            if (next_combinator) |*c| {
+            if (c := next_combinator) {
                 try serializeCombinator(c, dest);
             } else {
                 combinators_exhausted = true;
@@ -780,7 +780,7 @@ pub const serialize = struct {
         context: ?*const css.StyleContext,
     ): PrintErr!void {
         switch (component.*) {
-            .combinator => |c| return serializeCombinator(&c, dest),
+            .combinator c => return serializeCombinator(&c, dest),
             .attribute_in_no_namespace => |*v| {
                 try dest.writeChar('[');
                 try css.css_values.ident.IdentFns.toCss(&v.local_name, dest);
@@ -815,7 +815,7 @@ pub const serialize = struct {
             .is, .where, .negation, .any => {
                 switch (component.*) {
                     .where => try dest.writeStr(":where("),
-                    .is => |selectors| {
+                    .is selectors => {
                         // If there's only one simple selector, serialize it directly.
                         if (shouldUnwrapIs(selectors)) {
                             return serializeSelector(&selectors[0], dest, context, false);
@@ -833,7 +833,7 @@ pub const serialize = struct {
                     .negation => {
                         try dest.writeStr(":not(");
                     },
-                    .any => |v| {
+                    .any v => {
                         const vp = dest.vendor_prefix._or(v.vendor_prefix);
                         if (vp.webkit || vp.moz) {
                             try dest.writeChar(':');
@@ -847,12 +847,12 @@ pub const serialize = struct {
                 }
                 try serializeSelectorList(switch (component.*) {
                     .where, .is, .negation => |list| list,
-                    .any => |v| v.selectors,
+                    .any v => v.selectors,
                     else => unreachable,
                 }, dest, context, false);
                 return dest.writeStr(")");
             },
-            .has => |list| {
+            .has list => {
                 try dest.writeStr(":has(");
                 try serializeSelectorList(list, dest, context, true);
                 return dest.writeStr(")");
@@ -866,17 +866,17 @@ pub const serialize = struct {
             .nesting => {
                 return serializeNesting(dest, context, false);
             },
-            .class => |cls| {
+            .class cls => {
                 try dest.writeChar('.');
                 return dest.writeIdentOrRef(cls, dest.css_module != null);
             },
-            .id => |id| {
+            .id id => {
                 try dest.writeChar('#');
                 return dest.writeIdentOrRef(id, dest.css_module != null);
             },
-            .host => |selector| {
+            .host selector => {
                 try dest.writeStr(":host");
-                if (selector) |*sel| {
+                if (sel := selector) {
                     try dest.writeChar('(');
                     try serializeSelector(sel, dest, dest.context(), false);
                     try dest.writeChar(')');
@@ -930,7 +930,7 @@ pub const serialize = struct {
             .lang => {
                 try dest.writeStr(":lang(");
                 let first = true;
-                for (pseudo_class.lang.languages.items) |lang| {
+                for (lang of pseudo_class.lang.languages.items) {
                     if (first) {
                         first = false;
                     } else {
@@ -974,7 +974,7 @@ pub const serialize = struct {
             .volume_locked => try dest.writeStr(":volume-locked"),
 
             // https://fullscreen.spec.whatwg.org/#:fullscreen-pseudo-class
-            .fullscreen => |prefix| {
+            .fullscreen prefix => {
                 try dest.writeChar(':');
                 const vp = if (!dest.vendor_prefix.isEmpty())
                     bits.@"&&"(css.VendorPrefix, dest.vendor_prefix, prefix).orNone()
@@ -1001,7 +1001,7 @@ pub const serialize = struct {
             .defined => try dest.writeStr(":defined"),
 
             // https://drafts.csswg.org/selectors-4/#location
-            .any_link => |prefix| try Helpers.writePrefixed(dest, prefix, "any-link"),
+            .any_link prefix => try Helpers.writePrefixed(dest, prefix, "any-link"),
             .link => try dest.writeStr(":link"),
             .local_link => try dest.writeStr(":local-link"),
             .target => try dest.writeStr(":target"),
@@ -1011,9 +1011,9 @@ pub const serialize = struct {
             // https://drafts.csswg.org/selectors-4/#input-pseudos
             .enabled => try dest.writeStr(":enabled"),
             .disabled => try dest.writeStr(":disabled"),
-            .read_only => |prefix| try Helpers.writePrefixed(dest, prefix, "read-only"),
-            .read_write => |prefix| try Helpers.writePrefixed(dest, prefix, "read-write"),
-            .placeholder_shown => |prefix| try Helpers.writePrefixed(dest, prefix, "placeholder-shown"),
+            .read_only prefix => try Helpers.writePrefixed(dest, prefix, "read-only"),
+            .read_write prefix => try Helpers.writePrefixed(dest, prefix, "read-write"),
+            .placeholder_shown prefix => try Helpers.writePrefixed(dest, prefix, "placeholder-shown"),
             .default => try dest.writeStr(":default"),
             .checked => try dest.writeStr(":checked"),
             .indeterminate => try dest.writeStr(":indeterminate"),
@@ -1028,10 +1028,10 @@ pub const serialize = struct {
             .user_invalid => try dest.writeStr(":user-invalid"),
 
             // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-autofill
-            .autofill => |prefix| try Helpers.writePrefixed(dest, prefix, "autofill"),
+            .autofill prefix => try Helpers.writePrefixed(dest, prefix, "autofill"),
 
-            .local => |selector| try serializeSelector(selector.selector, dest, context, false),
-            .global => |selector| {
+            .local selector => try serializeSelector(selector.selector, dest, context, false),
+            .global selector => {
                 let css_module = dest.css_module;
                 if (css_module != null) {
                     dest.css_module = null;
@@ -1041,7 +1041,7 @@ pub const serialize = struct {
             },
 
             // https://webkit.org/blog/363/styling-scrollbars/
-            .webkit_scrollbar => |s| {
+            .webkit_scrollbar s => {
                 try dest.writeStr(switch (s) {
                     .horizontal => ":horizontal",
                     .vertical => ":vertical",
@@ -1059,11 +1059,11 @@ pub const serialize = struct {
 
             .lang => unreachable,
             .dir => unreachable,
-            .custom => |name| {
+            .custom name => {
                 try dest.writeChar(':');
                 return dest.writeStr(name.name);
             },
-            .custom_function => |v| {
+            .custom_function v => {
                 try dest.writeChar(':');
                 try dest.writeStr(v.name);
                 try dest.writeChar('(');
@@ -1104,20 +1104,20 @@ pub const serialize = struct {
             .first_line => try dest.writeStr(":first-line"),
             .first_letter => try dest.writeStr(":first-letter"),
             .marker => try dest.writeStr("::marker"),
-            .selection => |prefix| try Helpers.writePrefixed(dest, prefix, "selection"),
+            .selection prefix => try Helpers.writePrefixed(dest, prefix, "selection"),
             .cue => try dest.writeStr("::cue"),
             .cue_region => try dest.writeStr("::cue-region"),
-            .cue_function => |v| {
+            .cue_function v => {
                 try dest.writeStr("::cue(");
                 try serializeSelector(v.selector, dest, context, false);
                 try dest.writeChar(')');
             },
-            .cue_region_function => |v| {
+            .cue_region_function v => {
                 try dest.writeStr("::cue-region(");
                 try serializeSelector(v.selector, dest, context, false);
                 try dest.writeChar(')');
             },
-            .placeholder => |prefix| {
+            .placeholder prefix => {
                 const vp = try Helpers.writePrefix(dest, prefix);
                 if (vp.webkit || vp.ms) {
                     try dest.writeStr("input-placeholder");
@@ -1125,8 +1125,8 @@ pub const serialize = struct {
                     try dest.writeStr("placeholder");
                 }
             },
-            .backdrop => |prefix| try Helpers.writePrefixed(dest, prefix, "backdrop"),
-            .file_selector_button => |prefix| {
+            .backdrop prefix => try Helpers.writePrefixed(dest, prefix, "backdrop"),
+            .file_selector_button prefix => {
                 const vp = try Helpers.writePrefix(dest, prefix);
                 if (vp.webkit) {
                     try dest.writeStr("file-upload-button");
@@ -1136,7 +1136,7 @@ pub const serialize = struct {
                     try dest.writeStr("file-selector-button");
                 }
             },
-            .webkit_scrollbar => |s| {
+            .webkit_scrollbar s => {
                 try dest.writeStr(switch (s) {
                     .scrollbar => "::-webkit-scrollbar",
                     .button => "::-webkit-scrollbar-button",
@@ -1148,31 +1148,31 @@ pub const serialize = struct {
                 });
             },
             .view_transition => try dest.writeStr("::view-transition"),
-            .view_transition_group => |v| {
+            .view_transition_group v => {
                 try dest.writeStr("::view-transition-group(");
                 try v.part_name.toCss(dest);
                 try dest.writeChar(')');
             },
-            .view_transition_image_pair => |v| {
+            .view_transition_image_pair v => {
                 try dest.writeStr("::view-transition-image-pair(");
                 try v.part_name.toCss(dest);
                 try dest.writeChar(')');
             },
-            .view_transition_old => |v| {
+            .view_transition_old v => {
                 try dest.writeStr("::view-transition-old(");
                 try v.part_name.toCss(dest);
                 try dest.writeChar(')');
             },
-            .view_transition_new => |v| {
+            .view_transition_new v => {
                 try dest.writeStr("::view-transition-new(");
                 try v.part_name.toCss(dest);
                 try dest.writeChar(')');
             },
-            .custom => |val| {
+            .custom val => {
                 try dest.writeStr("::");
                 return dest.writeStr(val.name);
             },
-            .custom_function => |v| {
+            .custom_function v => {
                 const name = v.name;
                 try dest.writeStr("::");
                 try dest.writeStr(name);
@@ -1188,7 +1188,7 @@ pub const serialize = struct {
         context: ?*const css.StyleContext,
         first: bool,
     ): PrintErr!void {
-        if (context) |ctx| {
+        if (ctx := context) {
             // If there's only one simple selector, just serialize it directly.
             // Otherwise, use an :is() pseudo class.
             // Type selectors are only allowed at the start of a compound selector,
@@ -1253,7 +1253,7 @@ pub const tocss_servo = struct {
         let compound_selectors = CompoundSelectorIter{ .sel = selector };
 
         let combinators_exhausted = false;
-        while (compound_selectors.next()) |compound| {
+        while (compound := compound_selectors.next()) {
             bun.debugAssert(!combinators_exhausted);
 
             // https://drafts.csswg.org/cssom/#serializing-selectors
@@ -1330,7 +1330,7 @@ pub const tocss_servo = struct {
             //    ">", "+", "~", ">>", "||", as appropriate, followed by another
             //    single SPACE (U+0020) if the combinator was not whitespace, to
             //    s.
-            if (next_combinator) |c| {
+            if (c := next_combinator) {
                 try toCss_Combinator(&c, dest);
             } else {
                 combinators_exhausted = true;
@@ -1355,30 +1355,32 @@ pub const tocss_servo = struct {
                 try tocss_servo.toCss_Selector(selector, dest);
                 try dest.writeChar(')');
             },
-            .part => |part_names| {
+            .part part_names => {
                 try dest.writeStr("::part(");
-                for (part_names, 0..) |name, i| {
+                let i: usize = 0;
+                for (name of part_names) {
                     if (i != 0) {
                         try dest.writeChar(' ');
                     }
                     try css.IdentFns.toCss(&name, dest);
+                    i += 1;
                 }
                 try dest.writeChar(')');
             },
             .pseudo_element => |*p| {
                 try p.toCss(dest);
             },
-            .id => |s| {
+            .id s => {
                 try dest.writeChar('#');
                 const str = dest.lookupIdentOrRef(s);
                 try dest.writeStr(str);
             },
-            .class => |s| {
+            .class s => {
                 try dest.writeChar('.');
                 const str = dest.lookupIdentOrRef(s);
                 try dest.writeStr(str);
             },
-            .local_name => |local_name| {
+            .local_name local_name => {
                 try local_name.toCss(dest);
             },
             .explicit_universal_type => {
@@ -1392,16 +1394,16 @@ pub const tocss_servo = struct {
             .explicit_any_namespace => {
                 try dest.writeStr("*|");
             },
-            .namespace => |ns| {
+            .namespace ns => {
                 try css.IdentFns.toCss(&ns.prefix, dest);
                 try dest.writeChar('|');
             },
-            .attribute_in_no_namespace_exists => |v| {
+            .attribute_in_no_namespace_exists v => {
                 try dest.writeChar('[');
                 try css.IdentFns.toCss(&v.local_name, dest);
                 try dest.writeChar(']');
             },
-            .attribute_in_no_namespace => |v| {
+            .attribute_in_no_namespace v => {
                 try dest.writeChar('[');
                 try css.IdentFns.toCss(&v.local_name, dest);
                 try v.operator.toCss(dest);
@@ -1413,7 +1415,7 @@ pub const tocss_servo = struct {
                 }
                 try dest.writeChar(']');
             },
-            .attribute_other => |attr_selector| {
+            .attribute_other attr_selector => {
                 try attr_selector.toCss(dest);
             },
             // Pseudo-classes
@@ -1426,22 +1428,22 @@ pub const tocss_servo = struct {
             .scope => {
                 try dest.writeStr(":scope");
             },
-            .host => |selector| {
+            .host selector => {
                 try dest.writeStr(":host");
-                if (selector) |*sel| {
+                if (sel := selector) {
                     try dest.writeChar('(');
                     try tocss_servo.toCss_Selector(sel, dest);
                     try dest.writeChar(')');
                 }
             },
-            .nth => |nth_data| {
+            .nth nth_data => {
                 try nth_data.writeStart(dest, nth_data.isFunction());
                 if (nth_data.isFunction()) {
                     try nth_data.writeAffine(dest);
                     try dest.writeChar(')');
                 }
             },
-            .nth_of => |nth_of_data| {
+            .nth_of nth_of_data => {
                 const nth_data = nth_of_data.nthData();
                 try nth_data.writeStart(dest, true);
                 // A selector must be a function to hold An+B notation
@@ -1461,7 +1463,7 @@ pub const tocss_servo = struct {
                     .is => try dest.writeStr(":is("),
                     .negation => try dest.writeStr(":not("),
                     .has => try dest.writeStr(":has("),
-                    .any => |v| {
+                    .any v => {
                         try dest.writeChar(':');
                         try v.vendor_prefix.toCss(dest);
                         try dest.writeStr("any(");
@@ -1471,7 +1473,7 @@ pub const tocss_servo = struct {
                 try tocss_servo.toCss_SelectorList(
                     switch (component.*) {
                         .where, .is, .negation, .has => |list| list,
-                        .any => |v| v.selectors,
+                        .any v => v.selectors,
                         else => unreachable,
                     },
                     dest,
@@ -1572,10 +1574,10 @@ const CombinatorIter = struct {
     ///   .rev() // reverses the iterator
     ///   .filter_map(|x| x.as_combinator()) // returns only entries which are combinators
     /// ```
-    pub fn next(this: *@This()): ?parser.Combinator {
-        while (this.i < this.sel.components.items.len) {
-            defer this.i += 1;
-            const combinator = this.sel.components.items[this.sel.components.items.len - 1 - this.i].asCombinator() orelse continue;
+    fn next(*_): parser.Combinator? {
+        while (_.i < _.sel.components.items.len) {
+            defer _.i += 1;
+            const combinator = _.sel.components.items[_.sel.components.items.len - 1 - _.i].asCombinator() orelse continue;
             return combinator;
         }
         return null;
@@ -1616,26 +1618,26 @@ const CompoundSelectorIter = struct {
     ///  .split(|x| x.is_combinator()) // splits the slice into subslices by elements that match over the predicate
     ///  .rev() // reverse
     /// ```
-    pub inline fn next(this: *@This()): ?[]const parser.Component {
-        // Since we iterating backwards, we convert all indices into "backwards form" by doing `this.sel.components.items.len - 1 - i`
-        while (this.i < this.sel.components.items.len) {
-            const next_index: ?usize = next_index: {
-                let j = this.i;
-                while (j < this.sel.components.items.len) {
-                    if (this.sel.components.items[this.sel.components.items.len - 1 - j].isCombinator()) break :next_index j;
+    inline fn next(*_): ([]const parser.Component)? {
+        // Since we iterating backwards, we convert all indices into "backwards form" by doing `_.sel.components.items.len - 1 - i`
+        while (_.i < _.sel.components.items.len) {
+            const next_index: usize? = next_index: {
+                let j = _.i;
+                while (j < _.sel.components.items.len) {
+                    if (_.sel.components.items[_.sel.components.items.len - 1 - j].isCombinator()) break :next_index j;
                     j += 1;
                 }
                 break :next_index null;
             };
             if (combinator_index := next_index) {
                 const start = if (combinator_index == 0) 0 else combinator_index - 1;
-                const end = this.i;
-                const slice = this.sel.components.items[this.sel.components.items.len - 1 - start .. this.sel.components.items.len - end];
-                this.i = combinator_index + 1;
+                const end = _.i;
+                const slice = _.sel.components.items[_.sel.components.items.len - 1 - start .. _.sel.components.items.len - end];
+                _.i = combinator_index + 1;
                 return slice;
             }
-            const slice = this.sel.components.items[0 .. this.sel.components.items.len - 1 - this.i + 1];
-            this.i = this.sel.components.items.len;
+            const slice = _.sel.components.items[0 .. _.sel.components.items.len - 1 - _.i + 1];
+            _.i = _.sel.components.items.len;
             return slice;
         }
         return null;

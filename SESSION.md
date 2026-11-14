@@ -805,3 +805,18 @@
 
 
 
+
+### 2026-11-15: 提交 `cp_agy` 异步任务 `task-20261115-string-import-collision`（preamble `const string` 与 `import @"string"` 命名冲突）
+
+- **Task ID**: `task-20261115-string-import-collision`
+- **Repro**: `/data/dev/bun/temp/repro_string_import.cp` (`import @"string" from "./css_string.zig";`)
+- **Error 根因**: `cpc` 在生成的 `.zig` 顶部固定输出 `const string = []const u8;`，当模块内导入并命名为 `@"string"` 时生成 `pub const @"string" = ...;`，触发 Zig `duplicate struct member name 'string'` 错误（阻塞 `src/css/values/values.cp`）。
+- **状态**: `pending`
+
+### 2026-11-15: Milestone 7 Phase 26 闭环提交（`src/css/selectors/` 纯化 + `src/css/rules/` 22/22 全目录闭环 + `src/css/values/` 10/22）
+
+- **交付成果（新增 32 个纯 CP 模块 + 3 个存量纯化，闭合 1 个子目录）**：
+  - `src/css/selectors/` (3/3 纯化 PASS): `builder.cp`, `selector.cp`, `parser.cp`（膨胀率 `1.020x ~ 1.025x`）
+  - `src/css/rules/` (22/22 100% 闭合): 全部 22 个规则模块通过 4 项硬门禁（膨胀率 `0.930x ~ 1.084x`）
+  - `src/css/values/` (10/22 第一批 PASS): `alpha`, `rect`, `ratio`, `url`, `size`, `resolution`, `color_generated`, `css_string`, `number`, `easing.cp`（膨胀率 `0.956x ~ 1.018x`）
+- **全仓累计进度**：**744 / 1,294 (57.49%)** 纯 CP 模块；**141 / 171 (82.46%)** 子目录 100% 闭合。

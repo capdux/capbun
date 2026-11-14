@@ -25,7 +25,8 @@ pub fn NamespaceUrl(comptime Impl: type) type {
     prefix: Impl.SelectorImpl.NamespacePrefix,
     url: Impl.SelectorImpl.NamespaceUrl,
 
-pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
+        _ = &self;
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -85,7 +86,8 @@ _ = try dest.writeStr(" s");
             return dest.writeChar(93);
     }
 
-pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
+        _ = &self;
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -199,17 +201,19 @@ pub fn toU32(self: @This()) u32 {
             return (((if (comptime @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) == .@"enum") cp_cast_int(u32, @intFromEnum(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) else cp_cast_int(u32, cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) | (if (comptime @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10))))) == .@"enum") cp_cast_int(u32, @intFromEnum(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10))))) else cp_cast_int(u32, cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10)))))) | @min(self.element_selectors, MAX_10BIT));
     }
 
-pub fn fromU32(value: u32) Specificity {
+pub fn fromU32(self: @This(), value: u32) Specificity {
+        _ = &self;
             _ = bun.assert((((value <= cp_shl(MAX_10BIT, 20)) | cp_shl(MAX_10BIT, 10)) | MAX_10BIT));
             return Specificity{ .id_selectors = cp_shr(value, 20), .class_like_selectors = (cp_shr(value, 10) & MAX_10BIT), .element_selectors = (value & MAX_10BIT) };
     }
 
-pub fn add(lhs: *Specificity, rhs: Specificity) void {
+pub fn add(self: @This(), lhs: *Specificity, rhs: Specificity) void {
+        _ = &self;
             lhs.id_selectors = (lhs.id_selectors + rhs.id_selectors);
             lhs.element_selectors = (lhs.element_selectors + rhs.element_selectors);
             lhs.class_like_selectors = (lhs.class_like_selectors + rhs.class_like_selectors);
     }
-    const MAX_10BIT: u32 = (1 << 10) - 1;
+    const MAX_10BIT: u32 = (cp_shl(1, 10) - 1);
 };
 pub const Direction = enum {
     /// Left to right
@@ -746,15 +750,18 @@ pub const NthSelectorData = struct {
     a: i32,
     b: i32,
 
-pub fn only(of_type: bool) NthSelectorData {
+pub fn only(self: @This(), of_type: bool) NthSelectorData {
+        _ = &self;
             return NthSelectorData{ .ty = (if (of_type) NthType.only_of_type else NthType.only_child), .is_function = false, .a = 0, .b = 1 };
     }
 
-pub fn first(of_type: bool) NthSelectorData {
+pub fn first(self: @This(), of_type: bool) NthSelectorData {
+        _ = &self;
             return NthSelectorData{ .ty = (if (of_type) NthType.of_type else NthType.child), .is_function = false, .a = 0, .b = 1 };
     }
 
-pub fn last(of_type: bool) NthSelectorData {
+pub fn last(self: @This(), of_type: bool) NthSelectorData {
+        _ = &self;
             return NthSelectorData{ .ty = (if (of_type) NthType.last_of_type else NthType.last_child), .is_function = false, .a = 0, .b = 1 };
     }
 
@@ -775,7 +782,8 @@ pub fn isFunction(self: *const @This()) bool {
             return ((self.a != 0) or (self.b != 1));
     }
 
-pub fn numberSign(num: i32) []const u8 {
+pub fn numberSign(self: @This(), num: i32) []const u8 {
+        _ = &self;
             if ((num >= 0)) {
                 return "+";
             }
@@ -818,7 +826,8 @@ pub fn writeAffine(self: *const @This(), dest: *Printer) PrintErr!void {
             }
     }
 
-pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
+        _ = &self;
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -1918,7 +1927,8 @@ return .{ .err = e };
             }
     }
 
-pub fn fromSelector(allocator: Allocator, selector: GenericSelector(Impl)) This {
+pub fn fromSelector(self: @This(), allocator: Allocator, selector: GenericSelector(Impl)) This {
+        _ = &self;
             var result = This{  };
             _ = &result;
             _ = result.v.append(allocator, selector);
@@ -1929,7 +1939,8 @@ pub fn deepClone(self: *const @This(), allocator: Allocator) This {
             return .{ .v = self.v.deepClone(allocator) };
     }
 
-pub fn eql(lhs: *const This, rhs: *const This) bool {
+pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
+        _ = &self;
             return lhs.v.eql((&rhs.v));
     }
 
@@ -1938,10 +1949,9 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
     const This = @This();
     const DebugFmt = struct {
-                this: *const This,
-    
-                pub const format = selectorListDebugFormat;
-            };
+        this: *const This,
+        pub const format = selectorListDebugFormat;
+    };
 };
 }
 
@@ -1980,7 +1990,8 @@ pub fn debug(self: *const @This()) DebugFmt {
             return DebugFmt{ .this = self };
     }
 
-pub fn parse(parser: *SelectorParser, input: *css.Parser) Result(This) {
+pub fn parse(self: @This(), parser: *SelectorParser, input: *css.Parser) Result(This) {
+        _ = &self;
             var state = SelectorParsingState{  };
             _ = &state;
             return parse_selector(Impl, parser, input, (&state), .none);
@@ -2041,7 +2052,8 @@ pub fn len(self: *const @This()) usize {
             return self.components.items.len;
     }
 
-pub fn fromComponent(allocator: Allocator, component: GenericComponent(Impl)) This {
+pub fn fromComponent(self: @This(), allocator: Allocator, component: GenericComponent(Impl)) This {
+        _ = &self;
             var builder = SelectorBuilder(Impl).init(allocator);
             _ = &builder;
             if (component.asCombinator()) |combinator| {
@@ -2058,7 +2070,8 @@ pub fn specificity(self: *const @This()) u32 {
             return self.specificity_and_flags.specificity;
     }
 
-pub fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions) Result(This) {
+pub fn parseWithOptions(self: @This(), input: *css.Parser, options: *const css.ParserOptions) Result(This) {
+        _ = &self;
             var selector_parser = SelectorParser{ .is_nesting_allowed = true, .options = options };
             _ = &selector_parser;
             return parse((&selector_parser), input);
@@ -2077,32 +2090,35 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
     const This = @This();
     const DebugFmt = struct {
-                this: *const This,
-    
-                pub const format = selectorDebugFormat;
-            };
+        this: *const This,
+        pub const format = selectorDebugFormat;
+    };
     const RawMatchOrderIterator = struct {
-                slice: []const GenericComponent(Impl),
-                i: usize = 0,
+        slice: []const GenericComponent(Impl),
+        i: usize = 0,
     
-                pub fn next(this: *@This()) ?GenericComponent(Impl) {
-                    if (this.i >= this.slice.len) return null;
-                    const result = this.slice[this.i];
-                    this.i += 1;
-                    return result;
+    pub fn next(self: *@This()) ?GenericComponent(Impl) {
+                if ((self.i >= self.slice.len)) {
+                    return null;
                 }
-            };
+                const result = self.slice[@as(usize, @intCast(self.i))];
+                self.i = (self.i + 1);
+                return result;
+        }
+    };
     const RawParseOrderFromIter = struct {
-                slice: []const GenericComponent(Impl),
-                i: usize = 0,
+        slice: []const GenericComponent(Impl),
+        i: usize = 0,
     
-                pub fn next(this: *@This()) ?GenericComponent(Impl) {
-                    if (!(this.i < this.slice.len)) return null;
-                    const result = this.slice[this.slice.len - 1 - this.i];
-                    this.i += 1;
-                    return result;
+    pub fn next(self: *@This()) ?GenericComponent(Impl) {
+                if ((!(self.i < self.slice.len))) {
+                    return null;
                 }
-            };
+                const result = self.slice[@as(usize, @intCast(((self.slice.len - 1) - self.i)))];
+                self.i = (self.i + 1);
+                return result;
+        }
+    };
 };
 }
 
@@ -2297,7 +2313,8 @@ pub fn NthOfSelectorData(comptime Impl: type) type {
     data: NthSelectorData,
     selectors: []GenericSelector(Impl),
 
-pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
+        _ = &self;
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -2443,6 +2460,7 @@ _ = bun.unreachablePanic("Should not be returned with in_attr_selector = false",
         if (local_name) |name| {
             _ = &name;
             const LN = LocalName(Impl);
+            _ = &LN;
             _ = sink.pushSimpleSelector(.{ .local_name = LN{ .lower_name = brk: {
             var lowercase = ((parser.allocator.alloc(u8, name.len)) catch unreachable);
             _ = &lowercase;
@@ -2456,6 +2474,7 @@ _ = bun.unreachablePanic("Should not be returned with in_attr_selector = false",
 
 pub fn parse_one_simple_selector(comptime Impl: type, parser: *SelectorParser, input: *css.Parser, state: *SelectorParsingState) Result(?SimpleSelectorParseResult(Impl)) {
         const S = SimpleSelectorParseResult(Impl);
+        _ = &S;
         const start = input.state();
         const token_location = input.currentSourceLocation();
         const token_loc = input.position();
@@ -2750,6 +2769,7 @@ if ((qname[1] == null)) {
             if (namespace) |ns| {
                 _ = &ns;
                 const AttrWithNs = attrs.AttrSelectorWithOptionalNamespace(Impl);
+                _ = &AttrWithNs;
                 const x = AttrWithNs{ .namespace = ns, .local_name = .{ .v = local_name }, .local_name_lower = .{ .v = local_name_lower }, .never_matches = false, .operation = .exists };
                 return .{ .result = .{ .attribute_other = bun.create(parser.allocator, attrs.AttrSelectorWithOptionalNamespace(Impl), x) } };
             } else {
@@ -2840,6 +2860,7 @@ return .{ .err = e };
         if (((namespace != null) and (!local_name_is_ascii_lowercase))) {
             return .{ .result = .{ .attribute_other = brk: {
             const AttrWithNs = attrs.AttrSelectorWithOptionalNamespace(Impl);
+            _ = &AttrWithNs;
             const x = AttrWithNs{ .namespace = (namespace.?), .local_name = .{ .v = local_name }, .local_name_lower = local_name_lower, .never_matches = never_matches, .operation = .{ .with_value = .{ .operator = operator, .case_sensitivity = case_sensitivity, .expected_value = value } } };
             break :brk bun.create(parser.allocator, @TypeOf(x), x);
 } } };
@@ -3066,6 +3087,7 @@ return .{ .err = e };
 .result => |v| v,
 });
         const NthOf = NthOfSelectorData(Impl);
+        _ = &NthOf;
         return .{ .result = .{ .nth_of = NthOf{ .data = nth_data, .selectors = selectors.v.toOwnedSlice(input.allocator()) } } };
 }
 
@@ -3281,13 +3303,16 @@ pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
             return css.IdentFns.toCss((&self.name), dest);
     }
 
-pub fn __generateEql() void {
+pub fn __generateEql(self: @This()) void {
+        _ = &self;
     }
 
-pub fn __generateDeepClone() void {
+pub fn __generateDeepClone(self: @This()) void {
+        _ = &self;
     }
 
-pub fn __generateHash() void {
+pub fn __generateHash(self: @This()) void {
+        _ = &self;
     }
 };
 }

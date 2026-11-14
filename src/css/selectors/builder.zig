@@ -2,6 +2,7 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const Printer = css.Printer;
 pub const PrintErr = css.PrintErr;
 const parser = css.selector.parser;
@@ -13,164 +14,117 @@ const compute_specificity = parser.compute_specificity;
 const SelectorFlags = parser.SelectorFlags;
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
 
 pub fn SelectorBuilder(comptime Impl: type) type {
         _ = ValidSelectorImpl(Impl);
         return struct {
-        /// The entire sequence of simple selectors, from left to right, without combinators.
-        ///
-        /// We make this large because the result of parsing a selector is fed into a new
-        /// Arc-ed allocation, so any spilled vec would be a wasted allocation. Also,
-        /// Components are large enough that we don't have much cache locality benefit
-        /// from reserving stack space for fewer of them.
-        ///
-        simple_selectors: css.SmallList(GenericComponent(Impl), 32) = .{},
+    simple_selectors: css.SmallList(GenericComponent(Impl),32) = .{},
+    combinators: css.SmallList(struct{Combinator,usize},32) = .{},
+    current_len: usize = 0,
+    allocator: Allocator,
 
-        /// The combinators, && the length of the compound selector to their left.
-        ///
-        combinators: css.SmallList(struct { Combinator, usize }, 32) = .{},
+pub inline fn init(allocator: Allocator) This {
+            return This{ .allocator = allocator };
+    }
 
-        /// The length of the current compound selector.
-        current_len: usize = 0,
+pub inline fn hasCombinators(self: *@This()) bool {
+            return (self.combinators.len() > 0);
+    }
 
-        allocator: Allocator,
+pub inline fn pushCombinator(self: *@This(), combinator: Combinator) void {
+            _ = self.combinators.append(self.allocator, .{ combinator, self.current_len });
+            self.current_len = 0;
+    }
 
-        const This = @This();
+pub fn pushSimpleSelector(self: *@This(), ss: GenericComponent(Impl)) void {
+            _ = bun.assert((!ss.isCombinator()));
+            _ = self.simple_selectors.append(self.allocator, ss);
+            self.current_len = (self.current_len + 1);
+    }
 
-        const BuildResult = struct {
-            specificity_and_flags: SpecificityAndFlags,
-            components: ArrayList(GenericComponent(Impl)),
-        };
+pub fn addNestingPrefix(self: *@This()) void {
+            _ = self.combinators.insert(self.allocator, 0, .{ Combinator.descendant, 1 });
+            _ = self.simple_selectors.insert(self.allocator, 0, .nesting);
+    }
 
-        pub inline fn init(allocator: Allocator) This {
-            return This{
-                .allocator = allocator,
-            };
-        }
+pub fn deinit(self: *@This()) void {
+            _ = self.simple_selectors.deinit(self.allocator);
+            _ = self.combinators.deinit(self.allocator);
+    }
 
-        /// Returns true if combinators have ever been pushed to this builder.
-        pub inline fn hasCombinators(this: *This) bool {
-            return this.combinators.len() > 0;
-        }
+pub fn build(self: *@This(), parsed_pseudo: bool, parsed_slotted: bool, parsed_part: bool) BuildResult {
+            const specificity = compute_specificity(Impl, self.simple_selectors.slice());
+            const flags: SelectorFlags = .{ .has_pseudo = parsed_pseudo, .has_slotted = parsed_slotted, .has_part = parsed_part };
+            defer {
+            _ = self.deinit();
+            }
+            return self.buildWithSpecificityAndFlags(SpecificityAndFlags{ .specificity = specificity, .flags = flags });
+    }
 
-        /// Completes the current compound selector && starts a new one, delimited
-        /// by the given combinator.
-        pub inline fn pushCombinator(this: *This, combinator: Combinator) void {
-            this.combinators.append(this.allocator, .{ combinator, this.current_len });
-            this.current_len = 0;
-        }
-
-        /// Pushes a simple selector onto the current compound selector.
-        pub fn pushSimpleSelector(this: *This, ss: GenericComponent(Impl)) void {
-            bun.assert(!ss.isCombinator());
-            this.simple_selectors.append(this.allocator, ss);
-            this.current_len += 1;
-        }
-
-        pub fn addNestingPrefix(this: *This) void {
-            this.combinators.insert(this.allocator, 0, .{ Combinator.descendant, 1 });
-            this.simple_selectors.insert(this.allocator, 0, .nesting);
-        }
-
-        pub fn deinit(this: *This) void {
-            this.simple_selectors.deinit(this.allocator);
-            this.combinators.deinit(this.allocator);
-        }
-
-        /// Consumes the builder, producing a Selector.
-        ///
-        /// *NOTE*: This will free all allocated memory in the builder
-        pub fn build(
-            this: *This,
-            parsed_pseudo: bool,
-            parsed_slotted: bool,
-            parsed_part: bool,
-        ) BuildResult {
-            const specificity = compute_specificity(Impl, this.simple_selectors.slice());
-            const flags: SelectorFlags = .{
-                .has_pseudo = parsed_pseudo,
-                .has_slotted = parsed_slotted,
-                .has_part = parsed_part,
-            };
-            // `buildWithSpecificityAndFlags()` will
-            defer this.deinit();
-            return this.buildWithSpecificityAndFlags(SpecificityAndFlags{ .specificity = specificity, .flags = flags });
-        }
-
-        /// Builds a selector with the given specificity && flags.
-        ///
-        /// PERF:
-        ///     Recall that this code is ported from servo, which optimizes for matching speed, so
-        ///     the final AST has the components of the selector stored in reverse order, which is
-        ///     optimized for matching.
-        ///
-        ///     We don't really care about matching selectors, && storing the components in reverse
-        ///     order requires additional allocations, && undoing the reversal when serializing the
-        ///     selector. So we could just change this code to store the components in the same order
-        ///     as the source.
-        pub fn buildWithSpecificityAndFlags(this: *This, spec: SpecificityAndFlags) BuildResult {
+pub fn buildWithSpecificityAndFlags(self: *@This(), spec: SpecificityAndFlags) BuildResult {
             const T = GenericComponent(Impl);
-            const split = splitFromEnd(T, this.simple_selectors.slice(), this.current_len);
+            const split = splitFromEnd(T, self.simple_selectors.slice(), self.current_len);
             const rest = split[0];
             const current = split[1];
-            const combinators = this.combinators.slice();
+            const combinators = self.combinators.slice();
             defer {
-                // This function should take every component from `this.simple_selectors`
-                // && place it into `components` && return it.
-                //
-                // This means that we shouldn't leak any `GenericComponent(Impl)`, so
-                // it is safe to just set the length to 0.
-                //
-                // Combinators don't need to be deinitialized because they are simple enums.
-                this.simple_selectors.setLen(0);
-                this.combinators.setLen(0);
+            {
+                _ = self.simple_selectors.setLen(0);
+                _ = self.combinators.setLen(0);
             }
-
-            var components = ArrayList(T){};
-
+            }
+            var components = ArrayList(T);
+            _ = &components;
+            {
+            }
             var current_simple_selectors_i: usize = 0;
-            var combinator_i: i64 = @as(i64, @intCast(this.combinators.len())) - 1;
+            _ = &current_simple_selectors_i;
+            var combinator_i: i64 = (@as(i64, @intCast(self.combinators.len())) - 1);
+            _ = &combinator_i;
             var rest_of_simple_selectors = rest;
+            _ = &rest_of_simple_selectors;
             var current_simple_selectors = current;
-
+            _ = &current_simple_selectors;
             while (true) {
-                if (current_simple_selectors_i < current_simple_selectors.len) {
-                    components.append(
-                        this.allocator,
-                        current_simple_selectors[current_simple_selectors_i],
-                    ) catch unreachable;
-                    current_simple_selectors_i += 1;
+                if ((current_simple_selectors_i < current_simple_selectors.len)) {
+                    _ = ((components.append(self.allocator, current_simple_selectors[@as(usize, @intCast(current_simple_selectors_i))])) catch unreachable);
+                    current_simple_selectors_i = (current_simple_selectors_i + 1);
                 } else {
-                    if (combinator_i >= 0) {
-                        const combo_pair = combinators[@as(usize, @intCast(combinator_i))];
+                    if ((combinator_i >= 0)) {
+                        const combo_pair = combinators[@as(usize, @intCast(@as(usize, @intCast(combinator_i))))];
                         const combo = combo_pair[0];
                         const len = combo_pair[1];
                         const split2 = splitFromEnd(GenericComponent(Impl), rest_of_simple_selectors, len);
                         rest_of_simple_selectors = split2[0];
                         current_simple_selectors_i = 0;
                         current_simple_selectors = split2[1];
-                        combinator_i -= 1;
-                        components.append(
-                            this.allocator,
-                            .{ .combinator = combo },
-                        ) catch unreachable;
+                        combinator_i = (combinator_i - 1);
+                        _ = ((components.append(self.allocator, .{ .combinator = combo })) catch unreachable);
                         continue;
                     }
                     break;
                 }
             }
-
             return .{ .specificity_and_flags = spec, .components = components };
-        }
+    }
 
-        pub fn splitFromEnd(comptime T: type, s: []const T, at: usize) struct { []const T, []const T } {
-            const midpoint = s.len - at;
-            return .{
-                s[0..midpoint],
-                s[midpoint..],
-            };
-        }
+pub fn splitFromEnd(comptime T: type, s: []const T, at: usize) struct { []const T, []const T } {
+            const midpoint = (s.len - at);
+            return .{ s[0..midpoint], s[midpoint..] };
+    }
+    const This = @This();
+    const BuildResult = struct {
+        specificity_and_flags: SpecificityAndFlags,
+        components: ArrayList(GenericComponent(Impl)),
     };
+};
 }

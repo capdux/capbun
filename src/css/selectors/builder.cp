@@ -69,59 +69,59 @@ pub fn SelectorBuilder(comptime Impl: type): type {
             components: ArrayList(GenericComponent(Impl)),
         };
 
-        pub inline fn init(allocator: Allocator): This {
+        inline fn init(allocator: Allocator): This {
             return This{
                 .allocator = allocator,
             };
         }
 
         /// Returns true if combinators have ever been pushed to this builder.
-        pub inline fn hasCombinators(this: *This): bool {
-            return this.combinators.len() > 0;
+        inline fn hasCombinators(*_): bool {
+            return _.combinators.len() > 0;
         }
 
         /// Completes the current compound selector && starts a new one, delimited
         /// by the given combinator.
-        pub inline fn pushCombinator(this: *This, combinator: Combinator): void {
-            this.combinators.append(this.allocator, .{ combinator, this.current_len });
-            this.current_len = 0;
+        inline fn pushCombinator(*_, combinator: Combinator) {
+            _.combinators.append(_.allocator, .{ combinator, _.current_len });
+            _.current_len = 0;
         }
 
         /// Pushes a simple selector onto the current compound selector.
-        pub fn pushSimpleSelector(this: *This, ss: GenericComponent(Impl)): void {
+        fn pushSimpleSelector(*_, ss: GenericComponent(Impl)) {
             bun.assert(!ss.isCombinator());
-            this.simple_selectors.append(this.allocator, ss);
-            this.current_len += 1;
+            _.simple_selectors.append(_.allocator, ss);
+            _.current_len += 1;
         }
 
-        pub fn addNestingPrefix(this: *This): void {
-            this.combinators.insert(this.allocator, 0, .{ Combinator.descendant, 1 });
-            this.simple_selectors.insert(this.allocator, 0, .nesting);
+        fn addNestingPrefix(*_) {
+            _.combinators.insert(_.allocator, 0, .{ Combinator.descendant, 1 });
+            _.simple_selectors.insert(_.allocator, 0, .nesting);
         }
 
-        pub fn deinit(this: *This): void {
-            this.simple_selectors.deinit(this.allocator);
-            this.combinators.deinit(this.allocator);
+        fn deinit(*_) {
+            _.simple_selectors.deinit(_.allocator);
+            _.combinators.deinit(_.allocator);
         }
 
         /// Consumes the builder, producing a Selector.
         ///
         /// *NOTE*: This will free all allocated memory in the builder
-        pub fn build(
-            this: *This,
+        fn build(
+            *_,
             parsed_pseudo: bool,
             parsed_slotted: bool,
             parsed_part: bool,
         ): BuildResult {
-            const specificity = compute_specificity(Impl, this.simple_selectors.slice());
+            const specificity = compute_specificity(Impl, _.simple_selectors.slice());
             const flags: SelectorFlags = .{
                 .has_pseudo = parsed_pseudo,
                 .has_slotted = parsed_slotted,
                 .has_part = parsed_part,
             };
             // `buildWithSpecificityAndFlags()` will
-            defer this.deinit();
-            return this.buildWithSpecificityAndFlags(SpecificityAndFlags{ .specificity = specificity, .flags = flags });
+            defer _.deinit();
+            return _.buildWithSpecificityAndFlags(SpecificityAndFlags{ .specificity = specificity, .flags = flags });
         }
 
         /// Builds a selector with the given specificity && flags.
@@ -135,12 +135,12 @@ pub fn SelectorBuilder(comptime Impl: type): type {
         ///     order requires additional allocations, && undoing the reversal when serializing the
         ///     selector. So we could just change this code to store the components in the same order
         ///     as the source.
-        pub fn buildWithSpecificityAndFlags(this: *This, spec: SpecificityAndFlags): BuildResult {
+        fn buildWithSpecificityAndFlags(*_, spec: SpecificityAndFlags): BuildResult {
             const T = GenericComponent(Impl);
-            const split = splitFromEnd(T, this.simple_selectors.slice(), this.current_len);
+            const split = splitFromEnd(T, _.simple_selectors.slice(), _.current_len);
             const rest = split[0];
             const current = split[1];
-            const combinators = this.combinators.slice();
+            const combinators = _.combinators.slice();
             defer {
                 // This function should take every component from `this.simple_selectors`
                 // && place it into `components` && return it.
@@ -149,21 +149,21 @@ pub fn SelectorBuilder(comptime Impl: type): type {
                 // it is safe to just set the length to 0.
                 //
                 // Combinators don't need to be deinitialized because they are simple enums.
-                this.simple_selectors.setLen(0);
-                this.combinators.setLen(0);
+                _.simple_selectors.setLen(0);
+                _.combinators.setLen(0);
             }
 
             let components = ArrayList(T){};
 
             let current_simple_selectors_i: usize = 0;
-            let combinator_i: i64 = @as(i64, @intCast(this.combinators.len())) - 1;
+            let combinator_i: i64 = @as(i64, @intCast(_.combinators.len())) - 1;
             let rest_of_simple_selectors = rest;
             let current_simple_selectors = current;
 
             while (true) {
                 if (current_simple_selectors_i < current_simple_selectors.len) {
                     components.append(
-                        this.allocator,
+                        _.allocator,
                         current_simple_selectors[current_simple_selectors_i],
                     ) catch unreachable;
                     current_simple_selectors_i += 1;
@@ -178,7 +178,7 @@ pub fn SelectorBuilder(comptime Impl: type): type {
                         current_simple_selectors = split2[1];
                         combinator_i -= 1;
                         components.append(
-                            this.allocator,
+                            _.allocator,
                             .{ .combinator = combo },
                         ) catch unreachable;
                         continue;
@@ -190,7 +190,7 @@ pub fn SelectorBuilder(comptime Impl: type): type {
             return .{ .specificity_and_flags = spec, .components = components };
         }
 
-        pub fn splitFromEnd(comptime T: type, s: []const T, at: usize): struct { []const T, []const T } {
+        static fn splitFromEnd(comptime T: type, s: []const T, at: usize): [[]const T, []const T] {
             const midpoint = s.len - at;
             return .{
                 s[0..midpoint],

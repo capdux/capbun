@@ -60,17 +60,21 @@
 - **职责边界铁律**：
   - **主智能体 (`bun_agy`) 与子智能体严禁直接修改 `/data/dev/cp/cpc/src` 编译器源码！**
   - 所有 `cpc` 编译器 Bug 或缺失特性，必须且只能通过异步任务看板提交给上游 `cp agy` 修复。
-- **任务存储与队列工具**：
+- **任务存储与队列工具（多 AGY 隔离与并发排空）**：
   - 待处理队列：`/data/dev/cp/.tasks/pending/<task-id>.json`
-  - 已解决归档：`/data/dev/cp/.tasks/resolved/<task-id>.json`
+  - 已解决归档（专属收件箱）：`/data/dev/cp/.tasks/resolved/bun_agy/<task-id>.json`（防与 `capsurf_agy` 串台）与 `/data/dev/cp/.tasks/resolved/<task-id>.json`
+  - 持久化已读游标：`/data/dev/cp/.tasks/.ack_bun_agy.json`（替代旧版内存快照，重启间隙到达的结单将在启动第 0 秒立即补发唤醒）
   - 事件流日志：`/data/dev/cp/TASK_QUEUE.jsonl`
 - **标准操作指令**：
   1. **后台常驻监听守护进程（主智能体启动/重启后必检）**：
-     主智能体必须在后台保持运行 `watch_task.py` 守护任务（`IsDaemon: true, WaitMsBeforeAsync: 500`）：
+     主智能体必须在后台保持运行绑定 `bun_agy` 专属身份的 `watch_task.py` 守护任务（`IsDaemon: true, WaitMsBeforeAsync: 500`）：
      ```bash
-     python3 scripts/watch_task.py --status resolved
+     python3 scripts/watch_task.py --status resolved --agent bun_agy
      ```
-     一旦 `cp agy` 结单，守护进程退出并触发 Reactive Wakeup 自动唤醒主智能体（休眠期间 0 Token 消耗）。
+     - **防串台隔离**：仅监听属于 `bun_agy` 的结单（`resolved/bun_agy/`）以及 `cp_agy` 发布的全局语法更新广播（`SYNTAX_BROADCAST`），不会与 `capsurf_agy` 串台。
+     - **200ms 微批排空（Batch Drain）**：内置 200ms 微批聚合窗口；若 `cp_agy` 同秒结单多个任务，一次唤醒即在 `[FOUND_TASKS_BATCH]` 中收到全部结单，彻底根治漏单。
+     - **语法广播同步**：当收到 `[SYNTAX_BROADCAST]` 唤醒通知时，第一时间将新语法规则同步更新到本地 `CP_PITFALLS.md` 与 `GEMINI.md`。
+     - 一旦触发唤醒，守护进程退出并触发 Reactive Wakeup 自动唤醒主智能体（休眠期间 0 Token 消耗）；处理完唤醒后须立即重启该守护进程。
   2. **遇到编译器缺陷时的标准上报流程（绝不单点死锁、绝不用非标语法绕过）**：
      - 单个文件编译修复尝试不超过 **5 轮**（Token 熔断安全阀）；
      - 提炼 `<= 10` 行最小可复现代码写入 `temp/repro_<name>.cp`；

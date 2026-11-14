@@ -372,3 +372,8 @@
 
 
 
+
+### [Milestone 7 Phase 26] 2026-11-15: `src/css/selectors` 纯化与 `src/css/rules` (22) + `src/css/values` (10) 技术经验
+1. **顶层提升嵌套解析器**：在 `font_face.cp`、`page.cp`、`supports.cp` 中将 `FontFaceAtRuleParser`、`PageRuleParser`、`SupportsParseClosure` 等辅助结构体提升至模块顶层，彻底避免内联子结构体跳过 CP lowering 的问题。
+2. **`asValue()` / `asErr()` 解耦枚举分支**：在 `page.cp` 中利用 `.asValue()` 与 `.asErr()` 规避 `cpc` 在复杂 Result 枚举推导时的 `E0200` 边界问题。
+3. **纯 CP 借用与解构落地**：在 `rules.cp`、`selector.cp`、`parser.cp` 中全面使用 `let [a, b] = ...`、海象解包 `:=` 与无前缀 `for (v of arr)`，消灭全部遗留 `this`、`self` 与管道符捕获。

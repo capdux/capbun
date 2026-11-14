@@ -412,3 +412,9 @@
 
 
 
+
+## [Milestone 7 Phase 26] 2026-11-15 - `src/css/selectors/` 存量纯化与 `src/css/rules/` (22/22) + `src/css/values/` (10/22) 闭环提交
+- **固化多 AGY 通信规则**：更新 `GEMINI.md` 第四节（`--agent bun_agy` 隔离、`.ack_bun_agy.json` 持久化游标、200ms 微批排空、`SYNTAX_BROADCAST` 同步）。
+- **存量纯化 `src/css/selectors/` (3/3 100% 闭合)**：`builder.cp`, `selector.cp`, `parser.cp` 彻底清除 `this`/`: void`/`|capture|`，全部通过 4 项硬门禁（膨胀率 `1.020x ~ 1.025x`）。
+- **新增闭合 `src/css/rules/` (22/22 100% 闭合)**：`container`, `counter_style`, `custom_media`, `document`, `font_face`, `font_palette_values`, `import`, `keyframes`, `layer`, `media`, `namespace`, `nesting`, `page`, `property`, `rules`, `scope`, `starting_style`, `style`, `supports`, `tailwind`, `unknown`, `viewport.cp` 全部通过 4 项硬门禁（膨胀率 `0.930x ~ 1.084x`）。
+- **新增 `src/css/values/` 第一批 (10/22 PASS)**：`alpha`, `rect`, `ratio`, `url`, `size`, `resolution`, `color_generated`, `css_string`, `number`, `easing.cp` 全部通过 4 项硬门禁（膨胀率 `0.956x ~ 1.018x`）。

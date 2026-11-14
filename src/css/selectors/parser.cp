@@ -39,7 +39,8 @@ pub fn ValidSelectorImpl(comptime T: type) {
 }
 
 pub const attrs = struct {
-    pub fn NamespaceUrl(comptime Impl: type): type {
+    static fn NamespaceUrl(comptime Impl: type): type {
+        * = Impl;
         return struct {
             prefix: Impl.SelectorImpl.NamespacePrefix,
             url: Impl.SelectorImpl.NamespaceUrl,
@@ -58,7 +59,8 @@ pub const attrs = struct {
         };
     }
 
-    pub fn AttrSelectorWithOptionalNamespace(comptime Impl: type): type {
+    static fn AttrSelectorWithOptionalNamespace(comptime Impl: type): type {
+        * = Impl;
         return struct {
             namespace: (NamespaceConstraint(NamespaceUrl(Impl)))?,
             local_name: Impl.SelectorImpl.LocalName,
@@ -112,7 +114,8 @@ pub const attrs = struct {
         };
     }
 
-    pub fn NamespaceConstraint(comptime NamespaceUrl_: type): type {
+    static fn NamespaceConstraint(comptime NamespaceUrl_: type): type {
+        * = NamespaceUrl_;
         return union(enum) {
             any,
             /// Empty string for no namespace
@@ -132,7 +135,8 @@ pub const attrs = struct {
         };
     }
 
-    pub fn ParsedAttrSelectorOperation(comptime AttrValue: type): type {
+    static fn ParsedAttrSelectorOperation(comptime AttrValue: type): type {
+        * = AttrValue;
         return union(enum) {
             exists,
             with_value: struct {
@@ -1438,7 +1442,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             @compileError("Do not call this! Use `serializer.serializeSelectorList()` or `tocss_servo.toCss_SelectorList()` instead.");
         }
 
-        pub fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions): Result(This) {
+        static fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions): Result(This) {
             let parser = SelectorParser{
                 .options = options,
                 .is_nesting_allowed = true,
@@ -1446,7 +1450,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return parse(&parser, input, .discard_list, .none);
         }
 
-        pub fn parse(
+        static fn parse(
             parser: *SelectorParser,
             input: *css.Parser,
             error_recovery: ParseErrorRecovery,
@@ -1456,7 +1460,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return parseWithState(parser, input, &state, error_recovery, nesting_requirement);
         }
 
-        pub fn parseRelative(
+        static fn parseRelative(
             parser: *SelectorParser,
             input: *css.Parser,
             error_recovery: ParseErrorRecovery,
@@ -1466,7 +1470,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return parseRelativeWithState(parser, input, &state, error_recovery, nesting_requirement);
         }
 
-        pub fn parseWithState(
+        static fn parseWithState(
             parser: *SelectorParser,
             input: *css.Parser,
             state: *SelectorParsingState,
@@ -1526,7 +1530,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
         }
 
         // TODO: this looks exactly the same as `parseWithState()` except it uses `parse_relative_selector()` instead of `parse_selector()`
-        pub fn parseRelativeWithState(
+        static fn parseRelativeWithState(
             parser: *SelectorParser,
             input: *css.Parser,
             state: *SelectorParsingState,
@@ -2067,6 +2071,7 @@ pub const NthSelectorData = struct {
 /// nth-child(An+B [of S]?)).
 /// https://www.w3.org/TR/selectors-4/#nth-child-pseudo
 pub fn NthOfSelectorData(comptime Impl: type): type {
+        * = Impl;
     return struct {
         data: NthSelectorData,
         selectors: []GenericSelector(Impl),
@@ -3424,6 +3429,7 @@ pub fn parse_negation(
 }
 
 pub fn OptionalQName(comptime Impl: type): type {
+        * = Impl;
     return union(enum) {
         some: struct { QNamePrefix(Impl), ?[]const u8 },
         none: css.Token,
@@ -3431,6 +3437,7 @@ pub fn OptionalQName(comptime Impl: type): type {
 }
 
 pub fn QNamePrefix(comptime Impl: type): type {
+        * = Impl;
     return union(enum) {
         implicit_no_namespace, // `foo` in attr selectors
         implicit_any_namespace, // `foo` in type selectors, without a default ns
@@ -3573,6 +3580,7 @@ fn parse_qualified_name_eplicit_namespace_helper(
 }
 
 pub fn LocalName(comptime Impl: type): type {
+        * = Impl;
     return struct {
         name: Impl.SelectorImpl.LocalName,
         lower_name: Impl.SelectorImpl.LocalName,
