@@ -26,13 +26,11 @@ const VersionHashMap = Lockfile.VersionHashMap;
 const StreamType = struct {
     bytes: *std.array_list.Managed(u8),
 
-pub inline fn getPos(self: @This(), s: StreamType) !usize {
-        _ = &self;
+pub inline fn getPos(s: StreamType) !usize {
             return s.bytes.items.len;
     }
 
-pub fn pwrite(self: @This(), s: StreamType, data: []const u8, index: usize) usize {
-        _ = &self;
+pub fn pwrite(s: StreamType, data: []const u8, index: usize) usize {
             _ = @memcpy(s.bytes.items[index..][0..data.len], data);
             return data.len;
     }

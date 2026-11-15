@@ -15,8 +15,7 @@ const DepSortCtx = struct {
     buf: []const u8,
     catalog_deps: [*]const Dependency,
 
-pub fn lessThan(self: @This(), sorter: *const DepSortCtx, l: usize, r: usize) bool {
-        _ = &self;
+pub fn lessThan(sorter: *const DepSortCtx, l: usize, r: usize) bool {
             const deps = sorter.catalog_deps;
             const l_dep = deps[@as(usize, @intCast(l))];
             const r_dep = deps[@as(usize, @intCast(r))];
@@ -28,8 +27,7 @@ const NameSortCtx = struct {
     buf: []const u8,
     catalog_names: [*]const String,
 
-pub fn lessThan(self: @This(), sorter: *const NameSortCtx, l: usize, r: usize) bool {
-        _ = &self;
+pub fn lessThan(sorter: *const NameSortCtx, l: usize, r: usize) bool {
             const buf = sorter.buf;
             const names = sorter.catalog_names;
             const l_name = names[@as(usize, @intCast(l))];
@@ -55,7 +53,7 @@ pub const FromPnpmLockfileError = error{
 pub const CatalogMap = @This();
 
 default: Map = .{},
-groups: std.ArrayHashMapUnmanaged(String,Map,String.ArrayHashContext,true) = .{},
+groups: std.ArrayHashMapUnmanaged(String, Map, String.ArrayHashContext, true) = .{},
 
 pub fn hasAny(self: CatalogMap) bool {
         return ((self.default.count() > 0) or (self.groups.count() > 0));
@@ -96,8 +94,7 @@ pub fn getGroup(self: CatalogMap, map_buf: []const u8, catalog_name: String, cat
         return self.groups.getPtrContext(catalog_name, String.ArrayHashContext{ .arg_buf = catalog_name_buf, .existing_buf = map_buf });
 }
 
-pub fn parseCount(self: CatalogMap, lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
-    _ = &self;
+pub fn parseCount(lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
         if (expr.get("catalog")) |default_catalog| {
             _ = &default_catalog;
             switch (default_catalog.data) {

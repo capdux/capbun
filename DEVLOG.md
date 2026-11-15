@@ -409,3 +409,16 @@
    - `IOWriter.write` 返回 `enum { suspended, failed, is_actually_file }`，CP 严格禁止匿名返回类型。提升为顶层 `pub const WriteStatus = enum { ... };`。
 2. **结构体字段内联 union 提升**：
    - `subproc.cp` 中 `PipeReader.state: union(enum) { ... }` 提升为独立具名联合体 `pub const PipeReaderState = union(enum) { ... };`，并将结构体声明规范为 `pub const PipeReader = struct { ... };`，一举消除全部 7 项编译报错。
+
+## 2026-11-15 [Milestone 7 Phase 30] `src/install/lockfile/` 全子系统 (8/8 模块) 纯 CP 化攻坚经验
+
+### 1. 静态方法与本地作用域 `this` 冲突根除
+- 在 `Buffers.cp` 的静态方法 `static fn load(...)` 中，Zig 原版局部变量名为 `this`。在 CP 语法中，`cpc` 会误将其重写绑定为隐式实例 receiver `self`，进而诱发 ast-check 找不到 identifier 的报错。
+- 解决方案：将局部变量 `this` 显式重命名为语义化标识符 `buffers`，彻底消除语法层冲突。
+
+### 2. 匿名结构体数组与错误集返回类型 CP 纯化
+- 在 `bun.lock.cp` 中，`workspace_dependency_groups` 等匿名结构体切片在 CP 中不可直接内联声明。提取提升为顶层具名结构体 `pub struct WorkspaceDepGroup { ... }`，将解构访问规范为具名字段访问。
+- 错误联合返回类型避免写 Zig 原生 `error{ OutOfMemory, WriteFailed }!void`，统一按 CP 语法写为 `)! {` 或声明具名错误集后返回。
+
+### 3. 空块语法与 Catch 块有效占位
+- 在 `Tree.cp` 中，`catch {}` 会被 parser 误判为不合法的空结构体字面量。补齐有效占位语句 `catch { * = 0; };` 即可平滑通过编译与 ast-check。

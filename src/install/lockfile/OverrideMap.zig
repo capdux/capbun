@@ -19,8 +19,7 @@ const SortCtx = struct {
     buf: []const u8,
     override_deps: [*]const Dependency,
 
-pub fn lessThan(self: @This(), sorter: *const SortCtx, l: usize, r: usize) bool {
-        _ = &self;
+pub fn lessThan(sorter: *const SortCtx, l: usize, r: usize) bool {
             const deps = sorter.override_deps;
             const l_dep = deps[@as(usize, @intCast(l))];
             const r_dep = deps[@as(usize, @intCast(r))];
@@ -40,7 +39,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const bun = @import("bun");
 pub const OverrideMap = @This();
 
-map: std.ArrayHashMapUnmanaged(PackageNameHash,Dependency,ArrayIdentityContext.U64,false) = .{},
+map: std.ArrayHashMapUnmanaged(PackageNameHash, Dependency, ArrayIdentityContext.U64, false) = .{},
 
 pub fn get(self: OverrideMap, name_hash: PackageNameHash) ?Dependency.Version {
         _ = debug("looking up override for {x}", .{ name_hash });
@@ -89,8 +88,7 @@ pub fn clone(self: OverrideMap, pm: *PackageManager, old_lockfile: *Lockfile, ne
         return cloned;
 }
 
-pub fn parseCount(self: OverrideMap, lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
-    _ = &self;
+pub fn parseCount(lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) void {
         if (expr.asProperty("overrides")) |overrides| {
             _ = &overrides;
             if ((overrides.expr.data != .e_object)) {

@@ -895,15 +895,36 @@
 
 ### 2026-11-15 16:06 子智能体 1 (Shell Closer) 结单验收与全子系统闭环
 - **子智能体 1 (dbd06b3e-d5a4-43b9-adcb-76c675ce6eff) 结单汇报**：
-  - （4,645 行）完成重构并 100% 通过 4 项硬门禁验证。
-  - 膨胀率 0.987x（4645 / 4706），0 ，0 ，0 ，0 。
+  - `src/shell/shell.cp`（4,645 行）完成重构并 100% 通过 4 项硬门禁验证。
+  - 膨胀率 0.987x（4645 / 4706），0 `zig {}`，0 `var`，0 `.@"0"`，0 `*anyopaque`。
 - **主智能体全量验收**：
-  - 针对  全子系统 43 个模块进行  端到端全量重编译及 ast-check 扫描。
+  - 针对 `src/shell/` 全子系统 43 个模块进行 `cpc_brief.py` 端到端全量重编译及 ast-check 扫描。
   - 顺带定位并快速修复了 6 个遗留语法点：
-    1. ： 避免未具名参数  与 receiver 重复。
-    2. ： 返回匿名  提升为具名 。
-    3. ： 内匿名  提升为具名 ，声明为 。
-    4. ：switch 分支标量赋值规范化 。
-    5. ：switch 分支标量赋值规范化 。
-    6. ：switch 分支标量赋值规范化 。
-  - **验收结论**： 全部 43 个模块（100%）零警告、零报错全绿通过！
+    1. `src/shell/interpreter.cp`：`onIOWriterChunk` 避免未具名参数 `_` 与 receiver 重复。
+    2. `src/shell/IOWriter.cp`：`fn write()` 返回匿名 `enum` 提升为具名 `pub const WriteStatus = enum { ... };`。
+    3. `src/shell/subproc.cp`：`PipeReader` 内匿名 `state: union(enum)` 提升为具名 `pub const PipeReaderState`，声明为 `pub const PipeReader = struct { ... };`。
+    4. `src/shell/builtin/echo.cp`：switch 分支标量赋值规范化 `(valid = false);`。
+    5. `src/shell/builtin/cp.cp`：switch 分支标量赋值规范化 `(tgt_is_dir = is_dir); (tgt_exists = true);`。
+    6. `src/shell/builtin/mv.cp`：switch 分支标量赋值规范化 `(maybe_fd = open_fd);`。
+  - **验收结论**：`src/shell/` 全部 43 个模块（100%）零警告、零报错全绿通过！
+- **Git 原子提交**：
+  - 提交哈希：`743267cc53f` (`feat(shell): refactor entire shell subsystem (43 modules) to 100% pure CP`)
+  - 83 个文件变更，+31,280 / -9,395 行。
+### 2026-11-15 16:30 子智能体 3 (Lockfile Closer) 结单验收与 lockfile 体系 100% 闭环
+- **子智能体 3 (b87a4dba-afb4-4074-ae4f-d01d2f9aa511) 结单汇报**：
+  - `src/install/lockfile/` 剩余 4 模块（`Buffers.cp`, `Package.cp`, `Tree.cp`, `bun.lock.cp`）全部达成 4 项硬门禁验证并通过。
+  - 膨胀率均 <= 1.022x，0 `zig {}`，0 `var`，0 `.@"0"`，0 `*anyopaque`。
+- **主智能体全量验收**：
+  - 针对 `src/install/lockfile/` 全子系统 8 个模块进行 `cpc_brief.py` 端到端全量重编译及 ast-check 扫描。
+  - 全部 8 模块全绿通过：
+    1. `Buffers.cp`: PASS (ratio: 1.002)
+    2. `bun.lockb.cp`: PASS (ratio: 1.012)
+    3. `bun.lock.cp`: PASS (ratio: 0.985)
+    4. `CatalogMap.cp`: PASS (ratio: 1.021)
+    5. `lockfile_json_stringify_for_debugging.cp`: PASS (ratio: 1.021)
+    6. `OverrideMap.cp`: PASS (ratio: 1.022)
+    7. `Package.cp`: PASS (ratio: 0.991)
+    8. `Tree.cp`: PASS (ratio: 0.959)
+  - **验收结论**：`src/install/lockfile/` 全部 8 个模块（100%）零警告、零报错全绿闭环！
+
+

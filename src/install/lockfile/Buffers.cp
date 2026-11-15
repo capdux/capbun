@@ -319,38 +319,38 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
     }
 
     static fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: (*PackageManager)?): Buffers! {
-        let this = Buffers{};
+        let buffers = Buffers{};
         let external_dependency_list_: ExternalDepList = ExternalDepList{};
 
         inline for (name of sizes.names) {
-            const Type = @TypeOf(@field(this, name));
+            const Type = @TypeOf(@field(buffers, name));
 
             let pos: usize = 0;
             if (comptime Environment.isDebug) {
                 pos = stream.getPos()?;
             }
 
-            if (comptime Type == @TypeOf(this.dependencies)) {
+            if (comptime Type == @TypeOf(buffers.dependencies)) {
                 external_dependency_list_ = (readArray(stream, allocator, ExternalDepList)?);
                 if (pm := pm_) {
                     if (pm.options.log_level.isVerbose()) {
                         Output.prettyErrorln("Loaded {d} {s}", .{ external_dependency_list_.items.len, name });
                     }
                 }
-            } else if (comptime Type == @TypeOf(this.trees)) {
+            } else if (comptime Type == @TypeOf(buffers.trees)) {
                 let tree_list = (readArray(stream, allocator, std.ArrayListUnmanaged(Tree.External))?);
                 defer tree_list.deinit(allocator);
-                this.trees = (Tree.List.initCapacity(allocator, tree_list.items.len)?);
-                this.trees.items.len = tree_list.items.len;
+                buffers.trees = (Tree.List.initCapacity(allocator, tree_list.items.len)?);
+                buffers.trees.items.len = tree_list.items.len;
 
                 for (i of 0..tree_list.items.len) {
-                    this.trees.items[i] = Tree.toTree(tree_list.items[i]);
+                    buffers.trees.items[i] = Tree.toTree(tree_list.items[i]);
                 }
             } else {
-                @field(this, name) = (readArray(stream, allocator, Type)?);
+                @field(buffers, name) = (readArray(stream, allocator, Type)?);
                 if (pm := pm_) {
                     if (pm.options.log_level.isVerbose()) {
-                        Output.prettyErrorln("Loaded {d} {s}", .{ @field(this, name).items.len, name });
+                        Output.prettyErrorln("Loaded {d} {s}", .{ @field(buffers, name).items.len, name });
                     }
                 }
             }
@@ -363,8 +363,8 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
         const external_dependency_list = external_dependency_list_.items;
         // Dependencies are serialized separately.
         // This is unfortunate. However, not using pointers for Semver Range's make the code a lot more complex.
-        this.dependencies = (DependencyList.initCapacity(allocator, external_dependency_list.len)?);
-        const string_buf = this.string_bytes.items;
+        buffers.dependencies = (DependencyList.initCapacity(allocator, external_dependency_list.len)?);
+        const string_buf = buffers.string_bytes.items;
         const extern_context = Dependency.Context{
             log: log,
             allocator: allocator,
@@ -372,36 +372,36 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
             package_manager: pm_,
         };
 
-        this.dependencies.expandToCapacity();
-        this.dependencies.items.len = external_dependency_list.len;
+        buffers.dependencies.expandToCapacity();
+        buffers.dependencies.items.len = external_dependency_list.len;
 
         {
             let external_deps = external_dependency_list.ptr;
-            if (comptime Environment.allow_assert) assert(external_dependency_list.len == this.dependencies.items.len);
-            for (i of 0..this.dependencies.items.len) {
-                this.dependencies.items[i] = Dependency.toDependency(external_deps[0], extern_context);
+            if (comptime Environment.allow_assert) assert(external_dependency_list.len == buffers.dependencies.items.len);
+            for (i of 0..buffers.dependencies.items.len) {
+                buffers.dependencies.items[i] = Dependency.toDependency(external_deps[0], extern_context);
                 external_deps += 1;
             }
         }
 
         // Legacy tree structure stores package IDs instead of dependency IDs
-        if (this.trees.items.len > 0 && this.trees.items[0].dependency_id != Tree.root_dep_id) {
-            let visited = (Bitset.initEmpty(allocator, this.dependencies.items.len)?);
-            for (i of 0..this.trees.items.len) {
-                const package_id = this.trees.items[i].dependency_id;
-                this.trees.items[i].dependency_id = (this.legacyPackageToDependencyID(&visited, package_id)?);
+        if (buffers.trees.items.len > 0 && buffers.trees.items[0].dependency_id != Tree.root_dep_id) {
+            let visited = (Bitset.initEmpty(allocator, buffers.dependencies.items.len)?);
+            for (i of 0..buffers.trees.items.len) {
+                const package_id = buffers.trees.items[i].dependency_id;
+                buffers.trees.items[i].dependency_id = (buffers.legacyPackageToDependencyID(&visited, package_id)?);
             }
             visited.setRangeValue({
                 start: 0,
-                end: this.dependencies.items.len,
+                end: buffers.dependencies.items.len,
             }, false);
-            for (i of 0..this.hoisted_dependencies.items.len) {
-                const pid = this.hoisted_dependencies.items[i];
-                this.hoisted_dependencies.items[i] = (this.legacyPackageToDependencyID(&visited, pid)?);
+            for (i of 0..buffers.hoisted_dependencies.items.len) {
+                const pid = buffers.hoisted_dependencies.items[i];
+                buffers.hoisted_dependencies.items[i] = (buffers.legacyPackageToDependencyID(&visited, pid)?);
             }
             visited.deinit(allocator);
         }
 
-        return this;
+        return buffers;
     }
 }

@@ -37,15 +37,13 @@ const BufferData = struct {
 const BufferSortContext = struct {
     data: []BufferData,
 
-pub fn swap(self: @This(), ctx: BufferSortContext, lhs: usize, rhs: usize) void {
-        _ = &self;
+pub fn swap(ctx: BufferSortContext, lhs: usize, rhs: usize) void {
             const tmp = ctx.data[@as(usize, @intCast(lhs))];
             ctx.data[cp_cast_int(usize, lhs)] = ctx.data[@as(usize, @intCast(rhs))];
             ctx.data[cp_cast_int(usize, rhs)] = tmp;
     }
 
-pub fn lessThan(self: @This(), ctx: BufferSortContext, lhs: usize, rhs: usize) bool {
-        _ = &self;
+pub fn lessThan(ctx: BufferSortContext, lhs: usize, rhs: usize) bool {
             return (ctx.data[@as(usize, @intCast(lhs))].alignment > ctx.data[@as(usize, @intCast(rhs))].alignment);
     }
 };
@@ -235,18 +233,18 @@ else => {
 }
 
 pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*PackageManager) !Buffers {
-        var this = Buffers{  };
-        _ = &this;
+        var buffers = Buffers{  };
+        _ = &buffers;
         var external_dependency_list_: ExternalDepList = ExternalDepList{  };
         _ = &external_dependency_list_;
         inline for (sizes.names) |name| {
-            const Type = @TypeOf(@field(this, name));
+            const Type = @TypeOf(@field(buffers, name));
             var pos: usize = 0;
             _ = &pos;
             if (comptime Environment.isDebug) {
                 pos = try stream.getPos();
             }
-            if (comptime (Type == @TypeOf(this.dependencies))) {
+            if (comptime (Type == @TypeOf(buffers.dependencies))) {
                 external_dependency_list_ = try readArray(stream, allocator, ExternalDepList);
                 if (pm_) |pm| {
                     _ = &pm;
@@ -255,80 +253,80 @@ pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*Pack
                     }
                 }
             } else {
-                if (comptime (Type == @TypeOf(this.trees))) {
+                if (comptime (Type == @TypeOf(buffers.trees))) {
                     var tree_list = try readArray(stream, allocator, std.ArrayListUnmanaged(Tree.External));
                     _ = &tree_list;
                     defer {
                     _ = tree_list.deinit(allocator);
                     }
-                    this.trees = try Tree.List.initCapacity(allocator, tree_list.items.len);
-                    this.trees.items.len = tree_list.items.len;
+                    buffers.trees = try Tree.List.initCapacity(allocator, tree_list.items.len);
+                    buffers.trees.items.len = tree_list.items.len;
                     {
                         var i: i32 = 0;
                         _ = &i;
                         const __end_6 = tree_list.items.len;
                         while (i < __end_6) : (i += 1) {
-                            this.trees.items[cp_cast_int(usize, i)] = Tree.toTree(tree_list.items[@as(usize, @intCast(i))]);
+                            buffers.trees.items[cp_cast_int(usize, i)] = Tree.toTree(tree_list.items[@as(usize, @intCast(i))]);
                         }
                     }
                 } else {
-                    @field(this, name) = try readArray(stream, allocator, Type);
+                    @field(buffers, name) = try readArray(stream, allocator, Type);
                     if (pm_) |pm| {
                         _ = &pm;
                         if (pm.options.log_level.isVerbose()) {
-                            _ = Output.prettyErrorln("Loaded {d} {s}", .{ @field(this, name).items.len, name });
+                            _ = Output.prettyErrorln("Loaded {d} {s}", .{ @field(buffers, name).items.len, name });
                         }
                     }
                 }
             }
         }
         const external_dependency_list = external_dependency_list_.items;
-        this.dependencies = try DependencyList.initCapacity(allocator, external_dependency_list.len);
-        const string_buf = this.string_bytes.items;
+        buffers.dependencies = try DependencyList.initCapacity(allocator, external_dependency_list.len);
+        const string_buf = buffers.string_bytes.items;
         const extern_context = Dependency.Context{ .log = log, .allocator = allocator, .buffer = string_buf, .package_manager = pm_ };
-        _ = this.dependencies.expandToCapacity();
-        this.dependencies.items.len = external_dependency_list.len;
+        _ = buffers.dependencies.expandToCapacity();
+        buffers.dependencies.items.len = external_dependency_list.len;
         {
             var external_deps = external_dependency_list.ptr;
             _ = &external_deps;
             if (comptime Environment.allow_assert) {
-                _ = assert((external_dependency_list.len == this.dependencies.items.len));
+                _ = assert((external_dependency_list.len == buffers.dependencies.items.len));
             }
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_7 = this.dependencies.items.len;
+                const __end_7 = buffers.dependencies.items.len;
                 while (i < __end_7) : (i += 1) {
-                    this.dependencies.items[cp_cast_int(usize, i)] = Dependency.toDependency(external_deps[0], extern_context);
+                    buffers.dependencies.items[cp_cast_int(usize, i)] = Dependency.toDependency(external_deps[0], extern_context);
                     external_deps = (external_deps + 1);
                 }
             }
         }
-        if (((this.trees.items.len > 0) and (this.trees.items[0].dependency_id != Tree.root_dep_id))) {
-            var visited = try Bitset.initEmpty(allocator, this.dependencies.items.len);
+        if (((buffers.trees.items.len > 0) and (buffers.trees.items[0].dependency_id != Tree.root_dep_id))) {
+            var visited = try Bitset.initEmpty(allocator, buffers.dependencies.items.len);
             _ = &visited;
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_8 = this.trees.items.len;
+                const __end_8 = buffers.trees.items.len;
                 while (i < __end_8) : (i += 1) {
-                    const package_id = this.trees.items[@as(usize, @intCast(i))].dependency_id;
-                    this.trees.items[@as(usize, @intCast(i))].dependency_id = try this.legacyPackageToDependencyID((&visited), package_id);
+                    const package_id = buffers.trees.items[@as(usize, @intCast(i))].dependency_id;
+                    buffers.trees.items[@as(usize, @intCast(i))].dependency_id = try buffers.legacyPackageToDependencyID((&visited), package_id);
                 }
             }
-            _ = visited.setRangeValue(.{ .start = 0, .end = this.dependencies.items.len }, false);
+            _ = visited.setRangeValue(.{ .start = 0, .end = buffers.dependencies.items.len }, false);
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_9 = this.hoisted_dependencies.items.len;
+                const __end_9 = buffers.hoisted_dependencies.items.len;
                 while (i < __end_9) : (i += 1) {
-                    const pid = this.hoisted_dependencies.items[@as(usize, @intCast(i))];
-                    this.hoisted_dependencies.items[cp_cast_int(usize, i)] = try this.legacyPackageToDependencyID((&visited), pid);
+                    const pid = buffers.hoisted_dependencies.items[@as(usize, @intCast(i))];
+                    buffers.hoisted_dependencies.items[cp_cast_int(usize, i)] = try buffers.legacyPackageToDependencyID((&visited), pid);
                 }
             }
             _ = visited.deinit(allocator);
         }
-        return this;
+        return buffers;
 }
 
 pub fn readArray(stream: *Stream, allocator: Allocator, comptime ArrayList: type) !ArrayList {
