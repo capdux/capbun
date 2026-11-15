@@ -515,3 +515,13 @@
 ### 3. 可选指针与返回值规范
 - **明确可选切片语义**：将 `PBKDF2.cp` 的返回值类型规范为 `([]u8)?`，明确可选切片语义，消解类型推导歧义。
 - **C-ABI 边界清理**：在 `boringssl_jsc.cp` 与 `crypto.cp` 中全面采用 CP 最简接收者模型，确保与底层 BoringSSL C-ABI 绑定 100% 对应。
+
+## 2026-11-16 [Milestone 7 Phase 39] `src/ptr/` (11/11 指针与内存基础设施 100% 闭环) 技术经验
+
+### 1. 泛型引用计数与原子性类型提权 (`shared.cp` 与 `ref_count.cp`)
+- **前置类型声明消除符号未定义**：在 `FullData` 泛型生成器中，`Count` 字段根据 `options.atomic` 动态绑定 `AtomicCount` 或 `NonAtomicCount`。原 Zig 顺序将辅助计数器放在文件末尾，在 CP 严格按序类型推导下会触发 `E0206: undefined symbol 'AtomicCount'`。通过将 `AtomicCount` 与 `NonAtomicCount` 提升至 `FullData` 之前定义，彻底消除了符号解析依赖冲突。
+- **函数指针参数显式具名化**：在 `ref_count.cp` 中，`Destructor` 包含形参类型 `*T`，在 CP 语法中裸星号未带标识符会被当做非法形参（`E0125`）。规范为 `(ptr: *T, ctx: Ctx): void` 后顺利降解。
+
+### 2. 借用检查与独占可变指针收窄
+- **接收者符号精确绑定**：在 `weak_ptr.cp` 与 `shared.cp` 的递增/递减方法中，纠正自动化修复引入的多余星号 `**_` 为标准的独占可变接收者 `*_`，实例字段通过 `_.` 统一安全解引用。
+- **消解复合 `?? return` 语句**：在智能指针解引用及状态获取中，全面采用 CP 规范的条件解包 `if (v := opt) { ... }`，杜绝语法歧义。

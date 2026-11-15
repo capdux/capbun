@@ -24,7 +24,7 @@ pub struct PointerInfo {
     /// For example, if `Pointer` is `?[]u8`, this is `u8`.
     Child: type;
 
-    pub fn kind(this): PointerKind {
+    pub fn kind(): PointerKind {
         return switch (@typeInfo(this.NonOptionalPointer).pointer.size) {
             .one => .single,
             .slice => .slice,
@@ -32,11 +32,11 @@ pub struct PointerInfo {
         };
     }
 
-    pub fn isOptional(this): bool {
+    pub fn isOptional(): bool {
         return @typeInfo(this.Pointer) == .optional;
     }
 
-    pub fn isConst(this): bool {
+    pub fn isConst(): bool {
         return @typeInfo(this.NonOptionalPointer).pointer.is_const;
     }
 

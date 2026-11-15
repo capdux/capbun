@@ -16,13 +16,6 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 pub const ptr_meta = @import("./meta.zig");
-pub const Options = struct {
-    Allocator: type = bun.DefaultAllocator,
-    atomic: bool = false,
-    allow_weak: bool = false,
-    deinit: bool = true,
-};
-
 pub const NonAtomicCount = struct {
     value: RawCount,
 
@@ -31,7 +24,7 @@ pub fn init(value: RawCount) Self {
     }
 
 pub fn get(self: NonAtomicCount, comptime order: AtomicOrder) RawCount {
-            _ = order;
+            _ = &order;
             return self.value;
     }
 
@@ -67,7 +60,7 @@ pub fn get(self: AtomicCount, comptime order: AtomicOrder) RawCount {
 
 pub fn increment(self: *AtomicCount) void {
             const old = self.value.fetchAdd(1, .monotonic);
-            _ = bun.assertf((old != std.math.maxInt(RawCount)), "overflow of atomic ref count", .{  });
+            _ = bun.assertf((old != std.math.maxInt(RawCount)), "overflow of atomic ref count", &.{});
     }
 
 pub fn tryIncrement(self: *AtomicCount) bool {
@@ -77,16 +70,28 @@ pub fn tryIncrement(self: *AtomicCount) bool {
                 if ((current == 0)) {
                     return false;
                 }
-                current = ((self.value.cmpxchgWeak(current, (current + 1), .monotonic, .monotonic)) orelse { return true; });
+                if (self.value.cmpxchgWeak(current, (current + 1), .monotonic, .monotonic)) |next| {
+                    _ = &next;
+                    current = next;
+                } else {
+                    return true;
+                }
             }
     }
 
 pub fn decrement(self: *AtomicCount) RawCount {
             const old = self.value.fetchSub(1, .acq_rel);
-            _ = bun.assertf((old != 0), "underflow of atomic ref count", .{  });
+            _ = bun.assertf((old != 0), "underflow of atomic ref count", &.{});
             return (old - 1);
     }
     const Self = @This();
+};
+
+pub const Options = struct {
+    Allocator: type = bun.DefaultAllocator,
+    atomic: bool = false,
+    allow_weak: bool = false,
+    deinit: bool = true,
 };
 
 
@@ -94,225 +99,8 @@ pub fn OptionalType(comptime T: type) type {
         return @Type(.{ .optional = .{ .child = T } });
 }
 
-pub fn Shared(comptime Pointer: type) type {
-        return SharedIn(Pointer, bun.DefaultAllocator);
-}
-
-pub fn AtomicShared(comptime Pointer: type) type {
-        return AtomicSharedIn(Pointer, bun.DefaultAllocator);
-}
-
-pub fn SharedIn(comptime Pointer: type, comptime Allocator: type) type {
-        return WithOptions(Pointer, Options{ .Allocator = Allocator });
-}
-
-pub fn AtomicSharedIn(comptime Pointer: type, comptime Allocator: type) type {
-        return WithOptions(Pointer, Options{ .Allocator = Allocator, .atomic = true });
-}
-
-pub fn WithOptions(comptime Pointer: type, comptime options: Options) type {
-        if (options.allow_weak) {
-            _ = bun.assertf(options.deinit, "shared.Options.allow_weak is useless if `deinit` is false", .{  });
-        }
-        return struct {
-    #pointer: Pointer,
-
-pub fn alloc(value: Child) AllocError!Self {
-            return Self.allocImpl(bun.memory.initDefault(Allocator), value);
-    }
-
-pub fn allocIn(value: Child, allocator: Allocator) AllocError!Self {
-            return Self.allocImpl(allocator, value);
-    }
-
-pub fn new(value: Child) Self {
-            return bun.handleOom(Self.alloc(value));
-    }
-
-pub fn get(self: @This()) Pointer {
-            return self.#pointer;
-    }
-
-pub fn clone(self: @This()) Self {
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return Self.initNull(); }) else self.getData());
-            _ = data.incrementStrong();
-            return Self{ .#pointer = data.valuePtr() };
-    }
-
-pub fn cloneWeakImpl(self: @This()) Self.Weak {
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return Self.Weak.initNull(); }) else self.getData());
-            _ = data.incrementWeak();
-            return Self.Weak{ .#pointer = data.valuePtr() };
-    }
-
-pub fn deinit(self: *@This()) void {
-            defer {
-            self.* = undefined;
-            }
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return; }) else self.getData());
-            _ = data.decrementStrong();
-    }
-
-pub fn initNullImpl() Self {
-            return Self{ .#pointer = null };
-    }
-
-pub fn takeImpl(self: *@This()) ?SharedNonOptional {
-            defer {
-            self.* = Self.initNull();
-            }
-            return SharedNonOptional{ .#pointer = ((self.#pointer) orelse { return null; }) };
-    }
-
-pub fn toOptionalImpl(self: *@This()) Optional {
-            defer {
-            self.* = undefined;
-            }
-            return Optional{ .#pointer = self.#pointer };
-    }
-
-pub fn strongCountOpt(self: @This()) ?usize {
-            const data = ((self.getData()) orelse { return null; });
-            return data.strongCount(.acquire);
-    }
-
-pub fn strongCountNonOpt(self: @This()) usize {
-            return self.getData().strongCount(.acquire);
-    }
-
-pub fn weakCountOpt(self: @This()) ?usize {
-            const data = ((self.getData()) orelse { return null; });
-            return (data.rawWeakCount(.acquire) - 1);
-    }
-
-pub fn weakCountNonOpt(self: @This()) usize {
-            return (self.getData().rawWeakCount(.acquire) - 1);
-    }
-
-pub fn allocImpl(allocator: Allocator, value: Child) !Self {
-            const data = try Data.alloc(allocator, value);
-            return Self{ .#pointer = data.valuePtr() };
-    }
-
-pub fn getDataOpt(self: @This()) ?*Data {
-            return Data.fromValuePtrOpt(self.#pointer);
-    }
-
-pub fn getDataNonOpt(self: @This()) *Data {
-            return Data.fromValuePtrNonOpt(self.#pointer);
-    }
-
-pub fn leak(self: *@This()) Pointer {
-            defer {
-            self.* = undefined;
-            }
-            return self.#pointer;
-    }
-
-pub fn adoptRawUnsafe(pointer: Pointer) Self {
-            return Self{ .#pointer = pointer };
-    }
-
-pub fn cloneFromRawUnsafe(pointer: Pointer) Self {
-            const temp = Self{ .#pointer = pointer };
-            return temp.clone();
-    }
-    const Self = @This();
-    const Allocator = options.Allocator;
-    const info = parsePointer(Pointer);
-    const Child = info.Child;
-    const NonOptionalPointer = info.NonOptionalPointer;
-    const Data = FullData(Child, options);
-    pub const Weak = if (options.allow_weak) shared.Weak(Pointer, options);
-    pub const cloneWeak = if (options.allow_weak) cloneWeakImpl;
-    pub const initNull = if (info.isOptional()) initNullImpl;
-    const SharedNonOptional = WithOptions(NonOptionalPointer, options);
-    pub const take = if (info.isOptional()) takeImpl;
-    pub const Optional = WithOptions(OptionalType(Pointer), options);
-    pub const toOptional = if (!info.isOptional()) toOptionalImpl;
-    pub const strongCount = if (info.isOptional()) strongCountOpt else strongCountNonOpt;
-    pub const weakCount = if (info.isOptional()) weakCountOpt else weakCountNonOpt;
-    const getData = if (info.isOptional()) getDataOpt else getDataNonOpt;
-};
-}
-
-pub fn Weak(comptime Pointer: type, comptime options: Options) type {
-        _ = bun.assertf((options.allow_weak and options.deinit), "options incompatible with shared.Weak", .{  });
-        return struct {
-    #pointer: Pointer,
-
-pub fn upgrade(self: @This()) ?SharedNonOptional {
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return null; }) else self.getData());
-            if ((!data.tryIncrementStrong())) {
-                return null;
-            }
-            return SharedNonOptional{ .#pointer = data.valuePtr() };
-    }
-
-pub fn clone(self: @This()) Self {
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return Self.initNull(); }) else self.getData());
-            _ = data.incrementWeak();
-            return Self{ .#pointer = data.valuePtr() };
-    }
-
-pub fn deinit(self: *@This()) void {
-            defer {
-            self.* = undefined;
-            }
-            const data = (if (comptime info.isOptional()) ((self.getData()) orelse { return; }) else self.getData());
-            _ = data.decrementWeak();
-    }
-
-pub fn initNullImpl() Self {
-            return Self{ .#pointer = null };
-    }
-
-pub fn isNullImpl(self: @This()) bool {
-            return (self.#pointer == null);
-    }
-
-pub fn strongCountOpt(self: @This()) ?usize {
-            const data = ((self.getData()) orelse { return null; });
-            return data.strongCount(.acquire);
-    }
-
-pub fn strongCountNonOpt(self: @This()) usize {
-            return self.getData().strongCount(.acquire);
-    }
-
-pub fn weakCountOpt(self: @This()) ?usize {
-            const data = ((self.getData()) orelse { return null; });
-            const raw_weak = data.rawWeakCount(.acquire);
-            const strong = data.strongCount(.monotonic);
-            return (if ((strong > 0)) (raw_weak - 1) else raw_weak);
-    }
-
-pub fn weakCountNonOpt(self: @This()) usize {
-            const data = self.getData();
-            const raw_weak = data.rawWeakCount(.acquire);
-            const strong = data.strongCount(.monotonic);
-            return (if ((strong > 0)) (raw_weak - 1) else raw_weak);
-    }
-
-pub fn getDataOpt(self: @This()) ?*Data {
-            return Data.fromValuePtrOpt(self.#pointer);
-    }
-
-pub fn getDataNonOpt(self: @This()) *Data {
-            return Data.fromValuePtrNonOpt(self.#pointer);
-    }
-    const Self = @This();
-    const info = parsePointer(Pointer);
-    const Child = info.Child;
-    const NonOptionalPointer = info.NonOptionalPointer;
-    const Data = FullData(Child, options);
-    const SharedNonOptional = WithOptions(NonOptionalPointer, options);
-    pub const initNull = if (info.isOptional()) initNullImpl;
-    pub const isNull = if (info.isOptional()) isNullImpl;
-    pub const strongCount = if (info.isOptional()) strongCountOpt else strongCountNonOpt;
-    pub const weakCount = if (info.isOptional()) weakCountOpt else weakCountNonOpt;
-    const getData = if (info.isOptional()) getDataOpt else getDataNonOpt;
-};
+pub fn parsePointer(comptime Pointer: type) PointerInfo {
+        return PointerInfo.parse(Pointer, PointerInfo.ParseOptions{ .allow_const = false, .allow_slices = false });
 }
 
 pub fn FullData(comptime Child: type, comptime options: Options) type {
@@ -329,8 +117,11 @@ pub fn FullData(comptime Child: type, comptime options: Options) type {
     thread_lock: ThreadLockField,
 
 pub fn fromValuePtrOpt(ptr: ?*Child) ?*Self {
-            const non_opt_ptr = ((ptr) orelse { return null; });
-            return @fieldParentPtr("value", non_opt_ptr);
+            if (ptr) |non_opt_ptr| {
+                _ = &non_opt_ptr;
+                return @fieldParentPtr("value", non_opt_ptr);
+            }
+            return null;
     }
 
 pub fn fromValuePtrNonOpt(ptr: *Child) *Self {
@@ -405,6 +196,305 @@ pub fn assertThreadSafety(self: @This()) void {
 };
 }
 
-pub fn parsePointer(comptime Pointer: type) PointerInfo {
-        return PointerInfo.parse(Pointer, PointerInfo.ParseOptions{ .allow_const = false, .allow_slices = false });
+pub fn Shared(comptime Pointer: type) type {
+        return SharedIn(Pointer, bun.DefaultAllocator);
+}
+
+pub fn AtomicShared(comptime Pointer: type) type {
+        return AtomicSharedIn(Pointer, bun.DefaultAllocator);
+}
+
+pub fn SharedIn(comptime Pointer: type, comptime Allocator: type) type {
+        return WithOptions(Pointer, Options{ .Allocator = Allocator });
+}
+
+pub fn AtomicSharedIn(comptime Pointer: type, comptime Allocator: type) type {
+        return WithOptions(Pointer, Options{ .Allocator = Allocator, .atomic = true });
+}
+
+pub fn WithOptions(comptime Pointer: type, comptime options: Options) type {
+        if (options.allow_weak) {
+            _ = bun.assertf(options.deinit, "shared.Options.allow_weak is useless if `deinit` is false", &.{});
+        }
+        return struct {
+    #pointer: Pointer,
+
+pub fn alloc(value: Child) AllocError!Self {
+            return Self.allocImpl(bun.memory.initDefault(Allocator), value);
+    }
+
+pub fn allocIn(value: Child, allocator: Allocator) AllocError!Self {
+            return Self.allocImpl(allocator, value);
+    }
+
+pub fn new(value: Child) Self {
+            return bun.handleOom(Self.alloc(value));
+    }
+
+pub fn get(self: @This()) Pointer {
+            return self.#pointer;
+    }
+
+pub fn clone(self: @This()) Self {
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return Self.initNull();
+                }
+            } else {
+                data = self.getData();
+            }
+            _ = data.incrementStrong();
+            return Self{ .#pointer = data.valuePtr() };
+    }
+
+pub fn cloneWeakImpl(self: @This()) Self.Weak {
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return Self.Weak.initNull();
+                }
+            } else {
+                data = self.getData();
+            }
+            _ = data.incrementWeak();
+            return Self.Weak{ .#pointer = data.valuePtr() };
+    }
+
+pub fn deinit(self: *@This()) void {
+            defer {
+            self.* = undefined;
+            }
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return;
+                }
+            } else {
+                data = self.getData();
+            }
+            _ = data.decrementStrong();
+    }
+
+pub fn initNullImpl() Self {
+            return Self{ .#pointer = null };
+    }
+
+pub fn takeImpl(self: *@This()) ?SharedNonOptional {
+            defer {
+            self.* = Self.initNull();
+            }
+            if (self.#pointer) |ptr| {
+                _ = &ptr;
+                return SharedNonOptional{ .#pointer = ptr };
+            }
+            return null;
+    }
+
+pub fn toOptionalImpl(self: *@This()) Optional {
+            defer {
+            self.* = undefined;
+            }
+            return Optional{ .#pointer = self.#pointer };
+    }
+
+pub fn strongCountOpt(self: @This()) ?usize {
+            if (self.getData()) |data| {
+                _ = &data;
+                return data.strongCount(.acquire);
+            }
+            return null;
+    }
+
+pub fn strongCountNonOpt(self: @This()) usize {
+            return self.getData().strongCount(.acquire);
+    }
+
+pub fn weakCountOpt(self: @This()) ?usize {
+            if (self.getData()) |data| {
+                _ = &data;
+                return (data.rawWeakCount(.acquire) - 1);
+            }
+            return null;
+    }
+
+pub fn weakCountNonOpt(self: @This()) usize {
+            return (self.getData().rawWeakCount(.acquire) - 1);
+    }
+
+pub fn allocImpl(allocator: Allocator, value: Child) !Self {
+            const data = try Data.alloc(allocator, value);
+            return Self{ .#pointer = data.valuePtr() };
+    }
+
+pub fn getDataOpt(self: @This()) ?*Data {
+            return Data.fromValuePtrOpt(self.#pointer);
+    }
+
+pub fn getDataNonOpt(self: @This()) *Data {
+            return Data.fromValuePtrNonOpt(self.#pointer);
+    }
+
+pub fn leak(self: *@This()) Pointer {
+            defer {
+            self.* = undefined;
+            }
+            return self.#pointer;
+    }
+
+pub fn adoptRawUnsafe(pointer: Pointer) Self {
+            return Self{ .#pointer = pointer };
+    }
+
+pub fn cloneFromRawUnsafe(pointer: Pointer) Self {
+            const temp = Self{ .#pointer = pointer };
+            return temp.clone();
+    }
+    const Self = @This();
+    const Allocator = options.Allocator;
+    const info = parsePointer(Pointer);
+    const Child = info.Child;
+    const NonOptionalPointer = info.NonOptionalPointer;
+    const Data = FullData(Child, options);
+    pub const Weak = (if (options.allow_weak) shared.Weak(Pointer, options) else null);
+    pub const cloneWeak = (if (options.allow_weak) cloneWeakImpl else null);
+    pub const initNull = (if (info.isOptional()) initNullImpl else null);
+    const SharedNonOptional = WithOptions(NonOptionalPointer, options);
+    pub const take = (if (info.isOptional()) takeImpl else null);
+    pub const Optional = WithOptions(OptionalType(Pointer), options);
+    pub const toOptional = (if ((!info.isOptional())) toOptionalImpl else null);
+    pub const strongCount = (if (info.isOptional()) strongCountOpt else strongCountNonOpt);
+    pub const weakCount = (if (info.isOptional()) weakCountOpt else weakCountNonOpt);
+    const getData = (if (info.isOptional()) getDataOpt else getDataNonOpt);
+};
+}
+
+pub fn Weak(comptime Pointer: type, comptime options: Options) type {
+        _ = bun.assertf((options.allow_weak and options.deinit), "options incompatible with shared.Weak", &.{});
+        return struct {
+    #pointer: Pointer,
+
+pub fn upgrade(self: @This()) ?SharedNonOptional {
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return null;
+                }
+            } else {
+                data = self.getData();
+            }
+            if ((!data.tryIncrementStrong())) {
+                return null;
+            }
+            return SharedNonOptional{ .#pointer = data.valuePtr() };
+    }
+
+pub fn clone(self: @This()) Self {
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return Self.initNull();
+                }
+            } else {
+                data = self.getData();
+            }
+            _ = data.incrementWeak();
+            return Self{ .#pointer = data.valuePtr() };
+    }
+
+pub fn deinit(self: *@This()) void {
+            defer {
+            self.* = undefined;
+            }
+            var data: *Data = undefined;
+            _ = &data;
+            if (comptime info.isOptional()) {
+                if (self.getData()) |d| {
+                    _ = &d;
+                    data = d;
+                } else {
+                    return;
+                }
+            } else {
+                data = self.getData();
+            }
+            _ = data.decrementWeak();
+    }
+
+pub fn initNullImpl() Self {
+            return Self{ .#pointer = null };
+    }
+
+pub fn isNullImpl(self: @This()) bool {
+            return (self.#pointer == null);
+    }
+
+pub fn strongCountOpt(self: @This()) ?usize {
+            if (self.getData()) |data| {
+                _ = &data;
+                return data.strongCount(.acquire);
+            }
+            return null;
+    }
+
+pub fn strongCountNonOpt(self: @This()) usize {
+            return self.getData().strongCount(.acquire);
+    }
+
+pub fn weakCountOpt(self: @This()) ?usize {
+            if (self.getData()) |data| {
+                _ = &data;
+                const raw_weak = data.rawWeakCount(.acquire);
+                const strong = data.strongCount(.monotonic);
+                return (if ((strong > 0)) (raw_weak - 1) else raw_weak);
+            }
+            return null;
+    }
+
+pub fn weakCountNonOpt(self: @This()) usize {
+            const data = self.getData();
+            const raw_weak = data.rawWeakCount(.acquire);
+            const strong = data.strongCount(.monotonic);
+            return (if ((strong > 0)) (raw_weak - 1) else raw_weak);
+    }
+
+pub fn getDataOpt(self: @This()) ?*Data {
+            return Data.fromValuePtrOpt(self.#pointer);
+    }
+
+pub fn getDataNonOpt(self: @This()) *Data {
+            return Data.fromValuePtrNonOpt(self.#pointer);
+    }
+    const Self = @This();
+    const info = parsePointer(Pointer);
+    const Child = info.Child;
+    const NonOptionalPointer = info.NonOptionalPointer;
+    const Data = FullData(Child, options);
+    const SharedNonOptional = WithOptions(NonOptionalPointer, options);
+    pub const initNull = (if (info.isOptional()) initNullImpl else null);
+    pub const isNull = (if (info.isOptional()) isNullImpl else null);
+    pub const strongCount = (if (info.isOptional()) strongCountOpt else strongCountNonOpt);
+    pub const weakCount = (if (info.isOptional()) weakCountOpt else weakCountNonOpt);
+    const getData = (if (info.isOptional()) getDataOpt else getDataNonOpt);
+};
 }

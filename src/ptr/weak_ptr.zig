@@ -16,7 +16,7 @@ pub fn onFinalize(self: *WeakPtrData) bool {
             self.finalized = true;
             return (self.reference_count == 0);
     }
-    pub const empty: WeakPtrData = initEmpty();
+    pub const empty: WeakPtrData = WeakPtrData.initEmpty();
 };
 
 
@@ -44,7 +44,7 @@ pub fn deref(self: *@This()) void {
 pub fn get(self: *@This()) ?*T {
             if (self.raw_ptr) |value| {
                 _ = &value;
-                if ((!@This().data(value).finalized)) {
+                if ((!data(value).finalized)) {
                     return value;
                 }
                 _ = self.derefInternal(value);
@@ -54,7 +54,7 @@ pub fn get(self: *@This()) ?*T {
 
 pub fn derefInternal(self: *@This(), value: *T) void {
             self.raw_ptr = null;
-            var weak_data = @This().data(value);
+            var weak_data = data(value);
             _ = &weak_data;
             const count = (weak_data.reference_count - 1);
             weak_data.reference_count = count;

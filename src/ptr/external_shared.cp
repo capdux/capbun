@@ -64,8 +64,8 @@ fn ExternalSharedOptional(comptime T: type, comptime NonOptional: type): type {
 ///     };
 pub fn ExternalShared(comptime T: type): type {
     comptime {
-        _ = T.external_shared_descriptor.ref; // must define a `ref` function
-        _ = T.external_shared_descriptor.deref; // must define a `deref` function
+        * = T.external_shared_descriptor.ref; // must define a `ref` function
+        * = T.external_shared_descriptor.deref; // must define a `deref` function
     }
 
     return struct {

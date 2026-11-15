@@ -30,7 +30,7 @@ pub @packed(u64) struct TaggedPointer {
         }
     }
 
-    pub inline fn get(this, comptime Type: type): *Type! {
+    pub inline fn get(comptime Type: type): *Type! {
         unsafe {
             return (usize(this._ptr)) as *Type!;
         }
@@ -47,7 +47,7 @@ pub @packed(u64) struct TaggedPointer {
         }
     }
 
-    pub inline fn to(this): *! {
+    pub inline fn to(): *! {
         unsafe {
             return (@as(u64, @bitCast(this))) as *!;
         }

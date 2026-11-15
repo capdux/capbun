@@ -12,6 +12,94 @@ fn OptionalType(comptime T: type): type {
     return @Type({ optional: { child: T } });
 }
 
+fn parsePointer(comptime Pointer: type): PointerInfo {
+    return PointerInfo.parse(Pointer, PointerInfo.ParseOptions{
+        allow_const: false,
+        allow_slices: false,
+    });
+}
+
+const RawCount = u32;
+
+struct NonAtomicCount {
+    const Self = @This();
+
+    value: RawCount;
+
+    pub static fn init(value: RawCount): Self {
+        return Self{ value: value };
+    }
+
+    pub fn get(comptime order: AtomicOrder): RawCount {
+        * = order;
+        return _.value;
+    }
+
+    pub fn increment(*_) {
+        _.value += 1;
+    }
+
+    pub fn tryIncrement(*_): bool {
+        if (_.value == 0) return false;
+        _.increment();
+        return true;
+    }
+
+    /// Returns the new number of references.
+    pub fn decrement(*_): RawCount {
+        _.value -= 1;
+        return _.value;
+    }
+}
+
+struct AtomicCount {
+    const Self = @This();
+
+    value: std.atomic.Value(RawCount);
+
+    pub static fn init(value: RawCount): Self {
+        return Self{ value: std.atomic.Value(RawCount).init(value) };
+    }
+
+    pub fn get(comptime order: AtomicOrder): RawCount {
+        return _.value.load(order);
+    }
+
+    pub fn increment(*_) {
+        // .monotonic is okay for incrementing the ref count because:
+        // * We don't care about the previous value, so the load can be .monotonic.
+        // * There are no side effects in this thread that other threads depend on, so the
+        //   store can be .monotonic.
+        const old = _.value.fetchAdd(1, .monotonic);
+        bun.assertf(old != std.math.maxInt(RawCount), "overflow of atomic ref count", []);
+    }
+
+    pub fn tryIncrement(*_): bool {
+        // .monotonic is okay for the same reason as the `cmpxchgWeak`.
+        let current = _.value.load(.monotonic);
+        while (true) {
+            if (current == 0) {
+                // No strong refs remain, so the object was already deinitialized.
+                return false;
+            }
+            // The only property we need to ensure is that once `value` is set to 0, its value
+            // never changes. .monotonic is enough to guarantee that.
+            if (next := _.value.cmpxchgWeak(current, current + 1, .monotonic, .monotonic)) {
+                current = next;
+            } else {
+                return true;
+            }
+        }
+    }
+
+    /// Returns the new number of references.
+    pub fn decrement(*_): RawCount {
+        const old = _.value.fetchSub(1, .acq_rel);
+        bun.assertf(old != 0, "underflow of atomic ref count", []);
+        return old - 1;
+    }
+}
+
 /// Options for `WithOptions`.
 pub struct Options {
     // If non-null, the shared pointer will always use the provided allocator. This saves a small
@@ -33,6 +121,108 @@ pub struct Options {
 
     /// Whether to call `deinit` on the data before freeing it, if such a method exists.
     deinit: bool = true;
+}
+
+fn FullData(comptime Child: type, comptime options: Options): type {
+    const Allocator = options.Allocator;
+    const Count = if (options.atomic) AtomicCount else NonAtomicCount;
+    const WeakCountField = if (options.allow_weak) Count else void;
+    const ThreadLockField = if (options.atomic) void else bun.safety.ThreadLock;
+
+    return struct {
+        const Self = @This();
+
+        value: Child;
+        strong_count: Count = Count.init(1);
+        /// Weak count is always >= 1 as long as strong references exist.
+        /// When the last strong pointer is deinitialized, this value is decremented.
+        weak_count: WeakCountField = if (options.allow_weak) Count.init(1) else {};
+        allocator: Allocator;
+        thread_lock: ThreadLockField;
+
+        pub static fn fromValuePtrOpt(ptr: (*Child)?): (*Self)? {
+            if (non_opt_ptr := ptr) {
+                return @fieldParentPtr("value", non_opt_ptr);
+            }
+            return null;
+        }
+
+        pub static fn fromValuePtrNonOpt(ptr: *Child): *Self {
+            return @fieldParentPtr("value", ptr);
+        }
+
+        pub fn valuePtr(*_): *Child {
+            return *_.value;
+        }
+
+        pub static fn alloc(allocator: Allocator, value: Child): (*Self)! {
+            return bun.memory.create(Self, bun.allocators.asStd(allocator), {
+                value: value,
+                allocator: allocator,
+                thread_lock: if (comptime !options.atomic) bun.safety.ThreadLock.initLocked() else {},
+            });
+        }
+
+        pub fn strongCount(comptime order: AtomicOrder): usize {
+            return _.strong_count.get(order);
+        }
+
+        /// Will be 1 greater than the actual number of weak pointers if any strong pointers exist.
+        pub fn rawWeakCount(comptime order: AtomicOrder): usize {
+            return if (comptime options.allow_weak) _.weak_count.get(order) else 1;
+        }
+
+        pub fn incrementStrong(*_) {
+            _.assertThreadSafety();
+            _.strong_count.increment();
+        }
+
+        pub fn tryIncrementStrong(*_): bool {
+            return _.strong_count.tryIncrement();
+        }
+
+        pub fn decrementStrong(*_) {
+            _.assertThreadSafety();
+            // .acq_rel because we need to make sure other threads are done using the object before
+            // we deinit/free it.
+            if (_.strong_count.decrement() == 0) {
+                _.deinitValue();
+                _.decrementWeak();
+            }
+        }
+
+        pub fn incrementWeak(*_) {
+            _.assertThreadSafety();
+            _.weak_count.increment();
+        }
+
+        pub fn decrementWeak(*_) {
+            _.assertThreadSafety();
+            // If `allow_weak` is false, this method is only called when the last strong pointer
+            // is being deinitialized, so unconditionally free the memory in this case.
+            //
+            // .acq_rel because we need to make sure other threads are done using the object before
+            // we free it.
+            if ((comptime !options.allow_weak) || _.weak_count.decrement() == 0) {
+                if (bun.Environment.ci_assert) bun.assert(_.strong_count.get(.monotonic) == 0);
+                _.destroy();
+            }
+        }
+
+        fn deinitValue(*_) {
+            if (comptime options.deinit) {
+                bun.memory.deinit(&_.value);
+            }
+        }
+
+        fn destroy(*_) {
+            bun.memory.destroy(bun.allocators.asStd(_.allocator), _);
+        }
+
+        fn assertThreadSafety() {
+            if (comptime !options.atomic) _.thread_lock.assertLocked();
+        }
+    };
 }
 
 /// A shared pointer, allocated using the default allocator.
@@ -132,26 +322,38 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
         ///
         /// This pointer should usually not be stored directly in a struct, as it could become
         /// invalid once all the shared pointers are deinitialized.
-        pub fn get(this): Pointer {
-            return this.#pointer;
+        pub fn get(): Pointer {
+            return _.#pointer;
         }
 
         /// Clones this shared pointer. This clones the pointer, not the data; the new pointer
         /// points to the same data.
-        pub fn clone(this): Self {
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return Self.initNull())
-            else
-                this.getData();
+        pub fn clone(): Self {
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return Self.initNull();
+                }
+            } else {
+                data = _.getData();
+            }
             data.incrementStrong();
             return Self{ #pointer: data.valuePtr() };
         }
 
-        fn cloneWeakImpl(this): Self.Weak {
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return Self.Weak.initNull())
-            else
-                this.getData();
+        fn cloneWeakImpl(): Self.Weak {
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return Self.Weak.initNull();
+                }
+            } else {
+                data = _.getData();
+            }
             data.incrementWeak();
             return Self.Weak{ #pointer: data.valuePtr() };
         }
@@ -167,12 +369,18 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
         ///
         /// This method invalidates `this`. The default behavior of calling `deinit` on the data can
         /// be changed in the `options`.
-        pub fn deinit(*this) {
-            defer this.* = undefined;
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return)
-            else
-                this.getData();
+        pub fn deinit(*_) {
+            defer _.* = undefined;
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return;
+                }
+            } else {
+                data = _.getData();
+            }
             data.decrementStrong();
         }
 
@@ -188,9 +396,12 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
 
         const SharedNonOptional = WithOptions(NonOptionalPointer, options);
 
-        fn takeImpl(*this): SharedNonOptional? {
-            defer this.* = Self.initNull();
-            return SharedNonOptional{ #pointer: this.#pointer ?? return null };
+        fn takeImpl(*_): SharedNonOptional? {
+            defer _.* = Self.initNull();
+            if (ptr := _.#pointer) {
+                return SharedNonOptional{ #pointer: ptr };
+            }
+            return null;
         }
 
         /// Converts a `Shared(?*T)` into a `?Shared(*T)`.
@@ -201,9 +412,9 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
 
         pub const Optional = WithOptions(OptionalType(Pointer), options);
 
-        fn toOptionalImpl(*this): Optional {
-            defer this.* = undefined;
-            return Optional{ #pointer: this.#pointer };
+        fn toOptionalImpl(*_): Optional {
+            defer _.* = undefined;
+            return Optional{ #pointer: _.#pointer };
         }
 
         /// Converts a `Shared(*T)` into a non-null `Shared(?*T)`.
@@ -211,13 +422,15 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
         /// This method invalidates `this`.
         pub const toOptional = if (!info.isOptional()) toOptionalImpl;
 
-        fn strongCountOpt(this): usize? {
-            const data = this.getData() ?? return null;
-            return data.strongCount(.acquire);
+        fn strongCountOpt(): usize? {
+            if (data := _.getData()) {
+                return data.strongCount(.acquire);
+            }
+            return null;
         }
 
-        fn strongCountNonOpt(this): usize {
-            return this.getData().strongCount(.acquire);
+        fn strongCountNonOpt(): usize {
+            return _.getData().strongCount(.acquire);
         }
 
         /// Gets the number of strong pointers that point to the shared data.
@@ -227,17 +440,19 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
         /// value, the count may have changed.
         pub const strongCount = if (info.isOptional()) strongCountOpt else strongCountNonOpt;
 
-        fn weakCountOpt(this): usize? {
-            const data = this.getData() ?? return null;
-            // `- 1` because this part of the weak count is not actually a weak pointer; it simply
-            // indicates that strong pointers exist.
-            return data.rawWeakCount(.acquire) - 1;
+        fn weakCountOpt(): usize? {
+            if (data := _.getData()) {
+                // `- 1` because this part of the weak count is not actually a weak pointer; it simply
+                // indicates that strong pointers exist.
+                return data.rawWeakCount(.acquire) - 1;
+            }
+            return null;
         }
 
-        fn weakCountNonOpt(this): usize {
+        fn weakCountNonOpt(): usize {
             // `- 1` because this part of the weak count is not actually a weak pointer; it simply
             // indicates that strong pointers exist.
-            return this.getData().rawWeakCount(.acquire) - 1;
+            return _.getData().rawWeakCount(.acquire) - 1;
         }
 
         /// Gets the number of weak pointers that point to the shared data.
@@ -252,12 +467,12 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
             return Self{ #pointer: data.valuePtr() };
         }
 
-        fn getDataOpt(this): (*Data)? {
-            return Data.fromValuePtrOpt(this.#pointer);
+        fn getDataOpt(): (*Data)? {
+            return Data.fromValuePtrOpt(_.#pointer);
         }
 
-        fn getDataNonOpt(this): *Data {
-            return Data.fromValuePtrNonOpt(this.#pointer);
+        fn getDataNonOpt(): *Data {
+            return Data.fromValuePtrNonOpt(_.#pointer);
         }
 
         const getData = if (info.isOptional()) getDataOpt else getDataNonOpt;
@@ -266,9 +481,9 @@ pub fn WithOptions(comptime Pointer: type, comptime options: Options): type {
         ///
         /// This method invalidates `this`. To avoid leaks, the raw pointer should be turned back
         /// into a shared pointer with `adoptRawUnsafe`.
-        pub fn leak(*this): Pointer {
-            defer this.* = undefined;
-            return this.#pointer;
+        pub fn leak(*_): Pointer {
+            defer _.* = undefined;
+            return _.#pointer;
         }
 
         /// Creates a shared pointer from a raw pointer returned by `leak`.
@@ -310,21 +525,33 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         const SharedNonOptional = WithOptions(NonOptionalPointer, options);
 
         /// Clones this weak pointer and upgrades it to a shared pointer. You still need to `deinit` the weak pointer.
-        pub fn upgrade(this): SharedNonOptional? {
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return null)
-            else
-                this.getData();
+        pub fn upgrade(): SharedNonOptional? {
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return null;
+                }
+            } else {
+                data = _.getData();
+            }
             if (!data.tryIncrementStrong()) return null;
             return SharedNonOptional{ #pointer: data.valuePtr() };
         }
 
         /// Clones this weak pointer.
-        pub fn clone(this): Self {
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return Self.initNull())
-            else
-                this.getData();
+        pub fn clone(): Self {
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return Self.initNull();
+                }
+            } else {
+                data = _.getData();
+            }
             data.incrementWeak();
             return Self{ #pointer: data.valuePtr() };
         }
@@ -332,12 +559,18 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         /// Deinitializes this weak pointer.
         ///
         /// This method invalidates `this`.
-        pub fn deinit(*this) {
-            defer this.* = undefined;
-            const data = if (comptime info.isOptional())
-                (this.getData() ?? return)
-            else
-                this.getData();
+        pub fn deinit(*_) {
+            defer _.* = undefined;
+            let data: *Data = undefined;
+            if (comptime info.isOptional()) {
+                if (d := _.getData()) {
+                    data = d;
+                } else {
+                    return;
+                }
+            } else {
+                data = _.getData();
+            }
             data.decrementWeak();
         }
 
@@ -351,8 +584,8 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         /// It is permitted, but not required, to call `deinit` on the returned value.
         pub const initNull = if (info.isOptional()) initNullImpl;
 
-        fn isNullImpl(this): bool {
-            return this.#pointer == null;
+        fn isNullImpl(): bool {
+            return _.#pointer == null;
         }
 
         /// Checks if this weak pointer is null.
@@ -360,13 +593,15 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         /// This method is provided only if `Pointer` is an optional type.
         pub const isNull = if (info.isOptional()) isNullImpl;
 
-        fn strongCountOpt(this): usize? {
-            const data = this.getData() ?? return null;
-            return data.strongCount(.acquire);
+        fn strongCountOpt(): usize? {
+            if (data := _.getData()) {
+                return data.strongCount(.acquire);
+            }
+            return null;
         }
 
-        fn strongCountNonOpt(this): usize {
-            return this.getData().strongCount(.acquire);
+        fn strongCountNonOpt(): usize {
+            return _.getData().strongCount(.acquire);
         }
 
         /// Gets the number of strong pointers that point to the shared data.
@@ -376,18 +611,20 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         /// value, the count may have changed.
         pub const strongCount = if (info.isOptional()) strongCountOpt else strongCountNonOpt;
 
-        fn weakCountOpt(this): usize? {
-            const data = this.getData() ?? return null;
-            const raw_weak = data.rawWeakCount(.acquire);
-            // .monotonic because we just want to see if the strong count was > 0 when we read the
-            // weak count. The .acquire load of the weak count, plus the fact that the strong count
-            // never changes once it reaches 0, is sufficient.
-            const strong = data.strongCount(.monotonic);
-            return if (strong > 0) raw_weak - 1 else raw_weak;
+        fn weakCountOpt(): usize? {
+            if (data := _.getData()) {
+                const raw_weak = data.rawWeakCount(.acquire);
+                // .monotonic because we just want to see if the strong count was > 0 when we read the
+                // weak count. The .acquire load of the weak count, plus the fact that the strong count
+                // never changes once it reaches 0, is sufficient.
+                const strong = data.strongCount(.monotonic);
+                return if (strong > 0) raw_weak - 1 else raw_weak;
+            }
+            return null;
         }
 
-        fn weakCountNonOpt(this): usize {
-            const data = this.getData();
+        fn weakCountNonOpt(): usize {
+            const data = _.getData();
             const raw_weak = data.rawWeakCount(.acquire);
             const strong = data.strongCount(.monotonic);
             return if (strong > 0) raw_weak - 1 else raw_weak;
@@ -401,198 +638,14 @@ fn Weak(comptime Pointer: type, comptime options: Options): type {
         /// off by one.
         pub const weakCount = if (info.isOptional()) weakCountOpt else weakCountNonOpt;
 
-        fn getDataOpt(this): (*Data)? {
-            return Data.fromValuePtrOpt(this.#pointer);
+        fn getDataOpt(): (*Data)? {
+            return Data.fromValuePtrOpt(_.#pointer);
         }
 
-        fn getDataNonOpt(this): *Data {
-            return Data.fromValuePtrNonOpt(this.#pointer);
+        fn getDataNonOpt(): *Data {
+            return Data.fromValuePtrNonOpt(_.#pointer);
         }
 
         const getData = if (info.isOptional()) getDataOpt else getDataNonOpt;
     };
-}
-
-fn FullData(comptime Child: type, comptime options: Options): type {
-    const Allocator = options.Allocator;
-    const Count = if (options.atomic) AtomicCount else NonAtomicCount;
-    const WeakCountField = if (options.allow_weak) Count else void;
-    const ThreadLockField = if (options.atomic) void else bun.safety.ThreadLock;
-
-    return struct {
-        const Self = @This();
-
-        value: Child;
-        strong_count: Count = Count.init(1);
-        /// Weak count is always >= 1 as long as strong references exist.
-        /// When the last strong pointer is deinitialized, this value is decremented.
-        weak_count: WeakCountField = if (options.allow_weak) Count.init(1) else {};
-        allocator: Allocator;
-        thread_lock: ThreadLockField;
-
-        pub static fn fromValuePtrOpt(ptr: (*Child)?): (*Self)? {
-            const non_opt_ptr = ptr ?? return null;
-            return @fieldParentPtr("value", non_opt_ptr);
-        }
-
-        pub static fn fromValuePtrNonOpt(ptr: *Child): *Self {
-            return @fieldParentPtr("value", ptr);
-        }
-
-        pub fn valuePtr(*this): *Child {
-            return *this.value;
-        }
-
-        pub static fn alloc(allocator: Allocator, value: Child): (*Self)! {
-            return bun.memory.create(Self, bun.allocators.asStd(allocator), {
-                value: value,
-                allocator: allocator,
-                thread_lock: if (comptime !options.atomic) bun.safety.ThreadLock.initLocked() else {},
-            });
-        }
-
-        pub fn strongCount(this, comptime order: AtomicOrder): usize {
-            return this.strong_count.get(order);
-        }
-
-        /// Will be 1 greater than the actual number of weak pointers if any strong pointers exist.
-        pub fn rawWeakCount(this, comptime order: AtomicOrder): usize {
-            return if (comptime options.allow_weak) this.weak_count.get(order) else 1;
-        }
-
-        pub fn incrementStrong(*this) {
-            this.assertThreadSafety();
-            this.strong_count.increment();
-        }
-
-        pub fn tryIncrementStrong(*this): bool {
-            return this.strong_count.tryIncrement();
-        }
-
-        pub fn decrementStrong(*this) {
-            this.assertThreadSafety();
-            // .acq_rel because we need to make sure other threads are done using the object before
-            // we deinit/free it.
-            if (this.strong_count.decrement() == 0) {
-                this.deinitValue();
-                this.decrementWeak();
-            }
-        }
-
-        pub fn incrementWeak(*this) {
-            this.assertThreadSafety();
-            this.weak_count.increment();
-        }
-
-        pub fn decrementWeak(*this) {
-            this.assertThreadSafety();
-            // If `allow_weak` is false, this method is only called when the last strong pointer
-            // is being deinitialized, so unconditionally free the memory in this case.
-            //
-            // .acq_rel because we need to make sure other threads are done using the object before
-            // we free it.
-            if ((comptime !options.allow_weak) || this.weak_count.decrement() == 0) {
-                if (bun.Environment.ci_assert) bun.assert(this.strong_count.get(.monotonic) == 0);
-                this.destroy();
-            }
-        }
-
-        fn deinitValue(*this) {
-            if (comptime options.deinit) {
-                bun.memory.deinit(&this.value);
-            }
-        }
-
-        fn destroy(*this) {
-            bun.memory.destroy(bun.allocators.asStd(this.allocator), this);
-        }
-
-        fn assertThreadSafety(this) {
-            if (comptime !options.atomic) this.thread_lock.assertLocked();
-        }
-    };
-}
-
-const RawCount = u32;
-
-struct NonAtomicCount {
-    const Self = @This();
-
-    value: RawCount;
-
-    pub static fn init(value: RawCount): Self {
-        return Self{ value: value };
-    }
-
-    pub fn get(this, comptime order: AtomicOrder): RawCount {
-        _ = order;
-        return this.value;
-    }
-
-    pub fn increment(*this) {
-        this.value += 1;
-    }
-
-    pub fn tryIncrement(*this): bool {
-        if (this.value == 0) return false;
-        this.increment();
-        return true;
-    }
-
-    /// Returns the new number of references.
-    pub fn decrement(*this): RawCount {
-        this.value -= 1;
-        return this.value;
-    }
-}
-
-struct AtomicCount {
-    const Self = @This();
-
-    value: std.atomic.Value(RawCount);
-
-    pub static fn init(value: RawCount): Self {
-        return Self{ value: std.atomic.Value(RawCount).init(value) };
-    }
-
-    pub fn get(this, comptime order: AtomicOrder): RawCount {
-        return this.value.load(order);
-    }
-
-    pub fn increment(*this) {
-        // .monotonic is okay for incrementing the ref count because:
-        // * We don't care about the previous value, so the load can be .monotonic.
-        // * There are no side effects in this thread that other threads depend on, so the
-        //   store can be .monotonic.
-        const old = this.value.fetchAdd(1, .monotonic);
-        bun.assertf(old != std.math.maxInt(RawCount), "overflow of atomic ref count", []);
-    }
-
-    pub fn tryIncrement(*this): bool {
-        // .monotonic is okay for the same reason as the `cmpxchgWeak`.
-        let current = this.value.load(.monotonic);
-        while (true) {
-            if (current == 0) {
-                // No strong refs remain, so the object was already deinitialized.
-                return false;
-            }
-            // The only property we need to ensure is that once `value` is set to 0, its value
-            // never changes. .monotonic is enough to guarantee that.
-            current = this.value.cmpxchgWeak(current, current + 1, .monotonic, .monotonic) ?? return true;
-        }
-    }
-
-    /// Returns the new number of references.
-    pub fn decrement(*this): RawCount {
-        const old = this.value.fetchSub(1, .acq_rel);
-        bun.assertf(old != 0, "underflow of atomic ref count", []);
-        return old - 1;
-    }
-}
-
-fn parsePointer(comptime Pointer: type): PointerInfo {
-    return PointerInfo.parse(Pointer, PointerInfo.ParseOptions{
-        allow_const: false,
-        allow_slices: false,
-    });
 }

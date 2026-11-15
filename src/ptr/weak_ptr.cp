@@ -14,10 +14,10 @@ pub @packed(u32) struct WeakPtrData {
 
     pub const empty: WeakPtrData = initEmpty();
 
-    pub fn onFinalize(*this): bool {
-        bun.debugAssert(!this.finalized);
-        this.finalized = true;
-        return this.reference_count == 0;
+    pub fn onFinalize(*_): bool {
+        bun.debugAssert(!_.finalized);
+        _.finalized = true;
+        return _.reference_count == 0;
     }
 }
 
@@ -44,25 +44,25 @@ pub fn WeakPtr(comptime T: type, comptime data_field: []const u8): type {
             return { raw_ptr: req };
         }
 
-        pub fn deref(*this) {
-            if (value := this.raw_ptr) {
-                this.derefInternal(value);
+        pub fn deref(*_) {
+            if (value := _.raw_ptr) {
+                _.derefInternal(value);
             }
         }
 
-        pub fn get(*this): (*T)? {
-            if (value := this.raw_ptr) {
+        pub fn get(*_): (*T)? {
+            if (value := _.raw_ptr) {
                 if (!data(value).finalized) {
                     return value;
                 }
 
-                this.derefInternal(value);
+                _.derefInternal(value);
             }
             return null;
         }
 
-        fn derefInternal(*this, value: *T) {
-            this.raw_ptr = null;
+        fn derefInternal(*_, value: *T) {
+            _.raw_ptr = null;
             let weak_data = data(value);
             const count = weak_data.reference_count - 1;
             weak_data.reference_count = count;

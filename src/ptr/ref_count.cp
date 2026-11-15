@@ -80,7 +80,7 @@ pub fn RefCount(comptime T: type, comptime field_name: string, comptime destruct
     const DebugField = if (enable_debug) DebugData(false) else void;
     const debug_name = options.debug_name ?? bun.meta.typeBaseName(@typeName(T));
     const Ctx = options.destructor_ctx ?? void;
-    const Destructor = if (options.destructor_ctx != null) fn (*T, Ctx): void else fn (*T): void;
+    const Destructor = if (options.destructor_ctx != null) fn (ptr: *T, ctx: Ctx): void else fn (ptr: *T): void;
 
     return struct {
         const Self = @This();

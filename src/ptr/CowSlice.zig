@@ -12,6 +12,7 @@ const DebugData = (if (cow_str_assertions) CowDebugData else void);
 const DebugField = (if (cow_str_assertions) OptionalType(*DebugData) else void);
 comptime {
     const cow_size = (@sizeOf(CowSlice(u8)) - (if (cow_str_assertions) @sizeOf(OptionalType(*DebugData)) else 0));
+    _ = &cow_size;
     _ = bun.assertf((cow_size == @sizeOf(string)), "CowSlice should be the same size as a native slice, but it was {d} bytes instead of {d}", .{ cow_size, @sizeOf(string) });
 
 }
@@ -49,7 +50,7 @@ pub fn borrowCowDebug(debug: *DebugData) void {
 
 pub fn deinitCowDebug(debug: *DebugData, is_owned: bool, allocator: Allocator) void {
         _ = debug.mutex.lock();
-        _ = bun.assertf((debug.allocator.vtable == allocator.vtable), "CowSlice.deinit called with a different allocator than the one used to create it", .{  });
+        _ = bun.assertf((debug.allocator.vtable == allocator.vtable), "CowSlice.deinit called with a different allocator than the one used to create it", &.{});
         if (is_owned) {
             _ = bun.assertf((debug.borrows == 0), "Cannot deinit() a CowSlice with active borrows. Current borrow count: {d}", .{ debug.borrows });
             _ = bun.destroy(debug);
@@ -117,7 +118,7 @@ pub fn sliceMut(self: *@This(), allocator: Allocator) Allocator.Error!SliceMut {
     }
 
 pub fn sliceMutUnsafe(self: *@This()) SliceMut {
-            _ = bun.assert(self.isOwned(), "CowSlice.sliceMutUnsafe cannot be called on Cows that borrow their data.", .{  });
+            _ = bun.assert(self.isOwned(), "CowSlice.sliceMutUnsafe cannot be called on Cows that borrow their data.", &.{});
             return (blk: {
             break :blk self.ptr[0..self.flags.len];
 
