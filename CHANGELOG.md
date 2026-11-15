@@ -455,3 +455,32 @@
   - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
   - 代码膨胀率：全量 `<= 1.022x`（无冗余膨胀）。
 - **全仓最新进度**：纯 CP 模块数上升至 **759 / 1,294 (58.66%)**，闭环完整子系统上升至 **142 / 171 (83.04%)**。
+
+## [Milestone 7 Phase 31] 2026-11-16 - src/runtime/image/ 全子系统 (12/12 模块 100% 全量闭环) 与 src/resolver/ (6/7 模块 PASS)
+- **src/runtime/image/ 全子系统 12/12 模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `Image.cp` (1,295 行, 0.999x)
+  - `codecs.cp` (507 行, 1.026x)
+  - `exif.cp` (135 行, 1.089x)
+  - `quantize.cp` (515 行, 1.064x)
+  - `thumbhash.cp` (320 行, 1.146x)
+  - `backend_coregraphics.cp` (223 行, 1.032x)
+  - `backend_wic.cp` (230 行, 1.076x)
+  - `codec_bmp.cp` (279 行, 1.032x)
+  - `codec_gif.cp` (215 行, 1.070x)
+  - `codec_jpeg.cp` (324 行, 1.006x)
+  - `codec_png.cp` (201 行, 0.995x)
+  - `codec_webp.cp` (232 行, 1.018x)
+- **4 项硬门禁指标**：
+  - 全部 12 个模块通过 `cpc --lib` 与 `zig ast-check` 双重 0 报错验证。
+  - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
+  - 原始备份：全部 12 个 `<stem>_.zig` 原始备份完好无损。
+  - 代码膨胀率：全部 `<= 1.146x`（均在 `<= 1.20x` 红线内）。
+- **src/resolver/ 突破进展 (6/7 模块 PASS)**：
+  - `data_url.cp` (0.941x, PASS)
+  - `dir_info.cp` (0.812x, PASS)
+  - `fs.cp` (1.005x, PASS)
+  - `node_fallbacks.cp` (0.929x, PASS)
+  - `package_json.cp` (0.989x, PASS)
+  - `tsconfig_json.cp` (0.807x, PASS)
+  - `resolver.cp` 由专属子智能体 `Resolver Core Migrator` 独立攻坚中。
+- **全仓最新进度**：纯 CP 模块数上升至 **777 / 1,294 (60.05%)**，闭环完整子系统上升至 **143 / 171 (83.63%)**。

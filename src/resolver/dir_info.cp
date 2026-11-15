@@ -31,34 +31,34 @@ pub enum Flags {
     abs_real_path: string = "",
     flags: Flags.Set = Flags.Set{},
 
-    @inline pub fn hasNodeModules(this): bool {
-        return this.flags.contains(.has_node_modules);
+    @inline fn hasNodeModules(): bool {
+        return _.flags.contains(.has_node_modules);
     }
 
-    @inline pub fn isNodeModules(this): bool {
-        return this.flags.contains(.is_node_modules);
+    @inline fn isNodeModules(): bool {
+        return _.flags.contains(.is_node_modules);
     }
 
-    @inline pub fn isInsideNodeModules(this): bool {
-        return this.flags.contains(.inside_node_modules);
+    @inline fn isInsideNodeModules(): bool {
+        return _.flags.contains(.inside_node_modules);
     }
 
-    pub fn hasParentPackage(this): bool {
-        const parent = this.getParent() ?? return false;
+    fn hasParentPackage(): bool {
+        const parent = _.getParent() ?? return false;
         return !parent.isNodeModules();
     }
 
-    pub fn getFileDescriptor(this): FD {
+    fn getFileDescriptor(): FD {
         if (FeatureFlags.store_file_descriptors) {
-            if (entries := this.getEntries(0)) {
+            if (entries := _.getEntries(0)) {
                 return entries.fd;
             }
         }
         return .invalid;
     }
 
-    pub fn getEntries(this, generation: bun.Generation): (*Fs.FileSystem.DirEntry)? {
-        const entries_ptr = Fs.FileSystem.instance.fs.entriesAt(this.entries, generation) ?? return null;
+    fn getEntries(generation: bun.Generation): (*Fs.FileSystem.DirEntry)? {
+        const entries_ptr = Fs.FileSystem.instance.fs.entriesAt(_.entries, generation) ?? return null;
         switch (unsafe { entries_ptr.* }) {
             .entries => {
                 return entries_ptr.entries;
@@ -69,8 +69,8 @@ pub enum Flags {
         }
     }
 
-    pub fn getEntriesConst(this): (*const Fs.FileSystem.DirEntry)? {
-        const entries_ptr = Fs.FileSystem.instance.fs.entries.atIndex(this.entries) ?? return null;
+    fn getEntriesConst(): (*const Fs.FileSystem.DirEntry)? {
+        const entries_ptr = Fs.FileSystem.instance.fs.entries.atIndex(_.entries) ?? return null;
         switch (unsafe { entries_ptr.* }) {
             .entries => {
                 return entries_ptr.entries;
@@ -81,22 +81,22 @@ pub enum Flags {
         }
     }
 
-    pub fn getParent(this): (*DirInfo)? {
-        return HashMap.instance.atIndex(this.parent);
+    fn getParent(): (*DirInfo)? {
+        return HashMap.instance.atIndex(_.parent);
     }
 
-    pub fn getEnclosingBrowserScope(this): (*DirInfo)? {
-        return HashMap.instance.atIndex(this.enclosing_browser_scope);
+    fn getEnclosingBrowserScope(): (*DirInfo)? {
+        return HashMap.instance.atIndex(_.enclosing_browser_scope);
     }
 
-    pub fn deinit(*this) {
-        if (p := this.package_json) {
+    fn deinit(*_) {
+        if (p := _.package_json) {
             p.deinit();
-            this.package_json = null;
+            _.package_json = null;
         }
-        if (t := this.tsconfig_json) {
+        if (t := _.tsconfig_json) {
             t.deinit();
-            this.tsconfig_json = null;
+            _.tsconfig_json = null;
         }
     }
 

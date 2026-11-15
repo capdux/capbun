@@ -9,7 +9,7 @@ const js_ast = bun.ast;
 const js_lexer = bun.js_lexer;
 const logger = bun.logger;
 const strings = bun.strings;
-const PathsMap = bun.StringArrayHashMap(.{  }, string);
+const PathsMap = bun.StringArrayHashMap(&.{}, string);
 const JSXFieldSet = FlagSet(options.JSX.Pragma);
 const ImportsNotUsedAsValueList = bun.ComptimeStringMap(ImportsNotUsedAsValueEnum, .{ .{ "preserve", .preserve }, .{ "error", .@"err" }, .{ "remove", .remove } });
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -17,8 +17,23 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
-fn cp_iter_slice(val: anytype) switch (@typeInfo(@TypeOf(val))) { .pointer => |p| switch (p.size) { .slice => @TypeOf(val), .one => switch (@typeInfo(p.child)) { .array => []const @typeInfo(p.child).array.child, .pointer => |sub_p| if (sub_p.size == .slice) p.child else @TypeOf(val), else => @TypeOf(val), }, else => @TypeOf(val), }, .array => []const @typeInfo(@TypeOf(val)).array.child, else => @TypeOf(val), } { const __T = @TypeOf(val); switch (@typeInfo(__T)) { .pointer => |p| switch (p.size) { .slice => return val, .one => switch (@typeInfo(p.child)) { .array => return val[0..], .pointer => |sub_p| if (sub_p.size == .slice) return val.* else return val, else => return val, }, else => return val, }, .array => return val[0..], else => return val, } }
-fn cp_mut_slice(ptr: anytype) switch (@typeInfo(@TypeOf(ptr.*))) { .array => []@typeInfo(@TypeOf(ptr.*)).array.child, .pointer => |p| switch (p.size) { .slice => []if (@typeInfo(p.child) == .pointer) @typeInfo(p.child).pointer.child else p.child, .one => switch (@typeInfo(p.child)) { .pointer => |sub_p| if (sub_p.size == .slice) []sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const ValT = @TypeOf(ptr.*); switch (@typeInfo(ValT)) { .array => return ptr[0..], .pointer => |p| switch (p.size) { .slice => return @constCast(ptr.*), .one => return @constCast(ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const cache = @import("../bundler/cache.zig");
@@ -220,6 +235,18 @@ _ = (blk_catch_3: { break :blk_catch_3 ((log.addRangeWarningFmt(source, source.r
                 if (compiler_opts.expr.asProperty("moduleSuffixes")) |prefixes| {
                     _ = &prefixes;
                     if ((!source.path.isNodeModule())) {
+                        if (prefixes.expr.asArray()) |array| {
+                            _ = &array;
+                            while (array.next()) |*element| {
+                                if ((element.*).asString(allocator)) |str| {
+                                    _ = &str;
+                                    if ((str.len > 0)) {
+                                        _ = (blk_catch_4: { break :blk_catch_4 ((log.addWarning(source, prefixes.loc, "moduleSuffixes is not supported yet")) catch |__ce_4| { _ = &__ce_4;  }); });
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 if (compiler_opts.expr.asProperty("paths")) |paths_prop| {
@@ -258,7 +285,7 @@ const array = value_prop.data.e_array.slice();
                                 _ = &expr;
                                 if (expr.asString(allocator)) |str_| {
                                     _ = &str_;
-                                    const str = (blk_catch_5: { break :blk_catch_5 ((strReplacingTemplates(allocator, str_, source)) catch |__ce_5| { _ = &__ce_5; return null; }); });
+                                    const str = (blk_catch_6: { break :blk_catch_6 ((strReplacingTemplates(allocator, str_, source)) catch |__ce_6| { _ = &__ce_6; return null; }); });
                                     errdefer {
                                     _ = allocator.free(str);
                                     }
@@ -270,7 +297,7 @@ const array = value_prop.data.e_array.slice();
                             }
                             if ((count > 0)) {
                                 if ((count < values.len)) {
-                                    values = (blk_catch_6: { break :blk_catch_6 ((allocator.realloc(values, count)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 values; }); });
+                                    values = (blk_catch_7: { break :blk_catch_7 ((allocator.realloc(values, count)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 values; }); });
                                 }
                                 _ = ((result.paths.put(key, values[0..count])) catch unreachable);
                             } else {
@@ -279,7 +306,7 @@ const array = value_prop.data.e_array.slice();
                         }
 },
 else => {
-_ = (blk_catch_8: { break :blk_catch_8 ((log.addRangeWarningFmt(source, source.rangeOfString(key_prop.loc), allocator, "Substitutions for pattern \"{s}\" should be an array", .{ key })) catch |__ce_8| { _ = &__ce_8;  }); });
+_ = (blk_catch_9: { break :blk_catch_9 ((log.addRangeWarningFmt(source, source.rangeOfString(key_prop.loc), allocator, "Substitutions for pattern \"{s}\" should be an array", .{ key })) catch |__ce_9| { _ = &__ce_9;  }); });
 },
 }
                     }
@@ -304,7 +331,7 @@ pub fn isValidTSConfigPathPattern(text: []const u8, log: *logger.Log, source: *c
                 if ((c == 42)) {
                     if (found_asterisk) {
                         const r = source.rangeOfString(loc);
-                        _ = (blk_catch_9: { break :blk_catch_9 ((log.addRangeWarningFmt(source, r, allocator, "Invalid pattern \"{s}\", must have at most one \"*\" character", .{ text })) catch |__ce_9| { _ = &__ce_9;  }); });
+                        _ = (blk_catch_10: { break :blk_catch_10 ((log.addRangeWarningFmt(source, r, allocator, "Invalid pattern \"{s}\", must have at most one \"*\" character", .{ text })) catch |__ce_10| { _ = &__ce_10;  }); });
                         return false;
                     }
                     found_asterisk = true;
@@ -315,7 +342,7 @@ pub fn isValidTSConfigPathPattern(text: []const u8, log: *logger.Log, source: *c
 
 pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
             if ((text.len == 0)) {
-                return (&.{  });
+                return (&&.{});
             }
             const parts_count = (std.mem.count(u8, text, ".") + (if (comptime @typeInfo(@TypeOf(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) else cp_cast_int(usize, @intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))));
             var parts = ((std.array_list.Managed(string).initCapacity(allocator, parts_count)) catch unreachable);
@@ -323,9 +350,9 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
             if ((parts_count == 1)) {
                 if ((!js_lexer.isIdentifier(text))) {
                     const warn = source.rangeOfString(loc);
-                    _ = (blk_catch_11: { break :blk_catch_11 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_11| { _ = &__ce_11;  }); });
+                    _ = (blk_catch_12: { break :blk_catch_12 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_12| { _ = &__ce_12;  }); });
                     _ = parts.deinit();
-                    return (&.{  });
+                    return (&&.{});
                 }
                 _ = parts.appendAssumeCapacity(text);
                 return parts.items;
@@ -335,9 +362,9 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
             while (iter.next()) |part| {
                 if ((!js_lexer.isIdentifier(part))) {
                     const warn = source.rangeOfString(loc);
-                    _ = (blk_catch_12: { break :blk_catch_12 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_12| { _ = &__ce_12;  }); });
+                    _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_13| { _ = &__ce_13;  }); });
                     _ = parts.deinit();
-                    return (&.{  });
+                    return (&&.{});
                 }
                 _ = parts.appendAssumeCapacity(part);
             }
@@ -389,7 +416,7 @@ else => {
                 return true;
             }
             const r = source.rangeOfString(loc);
-            _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, r, allocator, "Non-relative path \"{s}\" is not allowed when \"baseUrl\" is not set (did you forget a leading \"./\"?)", .{ text })) catch |__ce_13| { _ = &__ce_13;  }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((log.addRangeWarningFmt(source, r, allocator, "Non-relative path \"{s}\" is not allowed when \"baseUrl\" is not set (did you forget a leading \"./\"?)", .{ text })) catch |__ce_14| { _ = &__ce_14;  }); });
             return false;
     }
 

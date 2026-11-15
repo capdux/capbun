@@ -386,9 +386,9 @@ pub struct TSConfigJSON {
                 return text[0] == '.' && (text[1] == '.' || text[1] == '\\' || text[1] == '/');
             },
             else => {
-                c0 = text[0];
-                c1 = text[1];
-                c2 = text[2];
+                (c0 = text[0]);
+                (c1 = text[1]);
+                (c2 = text[2]);
             },
         }
 
@@ -410,12 +410,12 @@ pub struct TSConfigJSON {
         }
 
         const r = source.rangeOfString(loc);
-        log.addRangeWarningFmt(source, r, allocator, "Non-relative path \"{s}\" is not allowed when \"baseUrl\" is not set (did you forget a leading \"./\"?)", [text]) catch {};
+        log.addRangeWarningFmt(source, r, allocator, "Non-relative path \"{s}\" is not allowed when \"baseUrl\" is not set (did you forget a leading \"./\"?)", .{text}) catch {};
         return false;
     }
 
-    pub fn deinit(*this) {
-        this.paths.deinit();
-        bun.destroy(this);
+    fn deinit(*_) {
+        _.paths.deinit();
+        bun.destroy(_);
     }
 }

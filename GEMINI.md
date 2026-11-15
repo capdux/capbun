@@ -40,7 +40,7 @@
 ### 1. 四线文档冷热分离（仅主智能体维护，子智能体严禁修改）
 
 - **热日志文件（仅记录当日活动）**：
-  - `SESSION.md`：按时间顺序追加用户指令、主智能体汇报、**以及与 `cp agy` 的每一次任务发送与接收详情**（严禁覆盖或删减）。
+  - `SESSION.md`：按时间顺序追加用户完整指令、主智能体汇报、**以及与 `cp agy` 的每一次任务发送与接收详情**（严禁覆盖或删减，实时记录）。
   - `CHANGELOG.md`：按里程碑追加新增/修改的 `.cp`、`.zig`、`_.zig` 文件清单。
   - `DEVLOG.md`：按里程碑追加核心技术方案、语法 lowering 经验与问题解决思路。
 - **冷归档文件**：超过当日的历史记录归档至 `SESSION_H.md`、`CHANGELOG_H.md`、`DEVLOG_H.md`（永久保留）。
@@ -68,13 +68,16 @@
 - **标准操作指令**：
   1. **后台常驻监听守护进程（主智能体启动/重启后必检）**：
      主智能体必须在后台保持运行绑定 `bun_agy` 专属身份的 `watch_task.py` 守护任务（`IsDaemon: true, WaitMsBeforeAsync: 500`）：
+
      ```bash
      python3 scripts/watch_task.py --status resolved --agent bun_agy
      ```
+
      - **防串台隔离**：仅监听属于 `bun_agy` 的结单（`resolved/bun_agy/`）以及 `cp_agy` 发布的全局语法更新广播（`SYNTAX_BROADCAST`），不会与 `capsurf_agy` 串台。
      - **200ms 微批排空（Batch Drain）**：内置 200ms 微批聚合窗口；若 `cp_agy` 同秒结单多个任务，一次唤醒即在 `[FOUND_TASKS_BATCH]` 中收到全部结单，彻底根治漏单。
      - **语法广播同步**：当收到 `[SYNTAX_BROADCAST]` 唤醒通知时，第一时间将新语法规则同步更新到本地 `CP_PITFALLS.md` 与 `GEMINI.md`。
      - 一旦触发唤醒，守护进程退出并触发 Reactive Wakeup 自动唤醒主智能体（休眠期间 0 Token 消耗）；处理完唤醒后须立即重启该守护进程。
+
   2. **遇到编译器缺陷时的标准上报流程（绝不单点死锁、绝不用非标语法绕过）**：
      - 单个文件编译修复尝试不超过 **5 轮**（Token 熔断安全阀）；
      - 提炼 `<= 10` 行最小可复现代码写入 `temp/repro_<name>.cp`；
@@ -87,6 +90,7 @@
      ```bash
      python3 scripts/task_queue.py list
      ```
+
 - **双向通信双轨强制留痕规范**：
   - **发送任务给 `cp agy` 时**：必须在对话屏幕显式打印任务摘要（Task ID、Repro 代码、Error 根因），并**第一时间实时追加写入 `SESSION.md`**。
   - **收到 `cp agy` 结单通知时**：必须在对话屏幕显式打印结单详情（Task ID、修复结论、复现验证结果），**第一时间实时追加写入 `SESSION.md`**，并立即用新 `cpc` 编译解封此前 `BLOCKED` 的文件。

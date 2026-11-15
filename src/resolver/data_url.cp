@@ -71,15 +71,15 @@ pub struct PercentEncoding {
 struct CountingBuf {
     len: usize = 0,
 
-    pub fn appendSlice(*this, slice: []const u8): void ! Allocator.Error {
-        this.len += slice.len;
+    fn appendSlice(*_, slice: []const u8): Allocator.Error!void {
+        _.len += slice.len;
     }
 
-    pub fn append(*this, _: u8): void ! Allocator.Error {
-        this.len += 1;
+    fn append(*_, _: u8): Allocator.Error!void {
+        _.len += 1;
     }
 
-    pub fn toOwnedSlice(*this): []u8 ! Allocator.Error {
+    fn toOwnedSlice(): Allocator.Error![]u8 {
         return "";
     }
 }
@@ -114,16 +114,16 @@ pub struct DataURL {
         return parsed;
     }
 
-    pub fn decodeMimeType(this): bun.http.MimeType {
-        return bun.http.MimeType.init(this.mime_type, null, null);
+    fn decodeMimeType(): bun.http.MimeType {
+        return bun.http.MimeType.init(_.mime_type, null, null);
     }
 
-    pub fn decodeData(this, allocator: Allocator): []u8! {
-        const percent_decoded_owned: ([]u8)? = PercentEncoding.decodeUnstrict(allocator, this.data)?;
+    fn decodeData(allocator: Allocator): []u8! {
+        const percent_decoded_owned: ([]u8)? = PercentEncoding.decodeUnstrict(allocator, _.data)?;
         defer if (owned := percent_decoded_owned) allocator.free(owned);
-        const percent_decoded: []const u8 = percent_decoded_owned ?? this.data;
+        const percent_decoded: []const u8 = percent_decoded_owned ?? _.data;
 
-        if (this.is_base64) {
+        if (_.is_base64) {
             const len = bun.base64.decodeLen(percent_decoded);
             const buf = allocator.alloc(u8, len)?;
             errdefer allocator.free(buf);

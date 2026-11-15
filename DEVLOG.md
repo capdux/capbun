@@ -422,3 +422,23 @@
 
 ### 3. 空块语法与 Catch 块有效占位
 - 在 `Tree.cp` 中，`catch {}` 会被 parser 误判为不合法的空结构体字面量。补齐有效占位语句 `catch { * = 0; };` 即可平滑通过编译与 ast-check。
+
+## 2026-11-16 [Milestone 7 Phase 31] `src/runtime/image/` (12/12 模块 100% 闭环) 与 `src/resolver/` (6/7 模块 PASS) 技术经验
+
+### 1. `src/runtime/image/` 图像处理子系统 (12 模块全量通过) 攻坚经验
+1. **根结构体 `@root struct Image` 辅助类型顶层提权**：
+   - 在包含大量图像编解码任务的大型文件 `Image.cp` (1,295 行) 中，若将辅助结构体（`PipelineTaskInput`, `PipelineTaskOutput`, `ImageMetadata`）和错误集（`err PinTaskError`）直接内嵌在 `@root struct Image` 内部，`cpc` 会将其作为实例字段进行类型解析，从而诱发 `expected token 'Colon'` 语法中断。
+   - 解决方案：坚定践行第 36 条组织铁律，将所有辅助类型完整移至模块顶层；`@root struct Image` 内部仅保留根字段和自身方法，确保内部 `_`/`*_` 正确绑定，使全部方法与子类型均能享受完整的 CP 语法 Lowering。
+2. **枚举分支返回具名字面量消除歧义**：
+   - 在 `exif.cp` 的 `transform()` 方法中，`switch (_)` 分支直接返回匿名字面量 `{ flop: false, ... }` 触发 `E0206: undefined symbol 'flop'`。
+   - 解决方案：显式标注类型前缀 `Transform{ flop: false, flip: false, rotate: 0 }`，消除类型推导盲区。
+3. **多层嵌套解构语句级收窄**：
+   - 在 `codecs.cp` 的 `encode()` 函数中，将 Zig 原版表达式级 `if (system_backend) |b|` 与 `catch |e|` 嵌套重构为语句级 `if (b := system_backend) { ... }`，配合 CP 的错误传播，不仅消除了表达式级语法解析冲突，更提升了排他借用的清晰度。
+
+### 2. `src/resolver/` 解析器模块关键 Lowering 经验
+1. **`.*.` 冗余解引用根除与代码生成保真**：
+   - 在 `package_json.cp` 中，由于混入 Zig 风格的指针显式解引用 `e_obj.*.properties.len`，触发 `E0190` 语法错误，导致该语句所在代码块在后续阶段被异常截断。
+   - 解决方案：牢记 CP 语言对指针结构体成员的自动解引用特性，一律书写 `e_obj.properties.len`，彻底消除语法中断并完整保留代码生成。
+2. **单参 `.slice(arg)` 方法调用歧义消解**：
+   - 在 CP 中，单参数的 `obj.slice(arg)` 会被语法解析器优先作为切片操作 `obj[arg..]` 处理。当遇到 AST 节点方法 `str.slice(allocator)` 时，会被误降解为非法切片操作。
+   - 解决方案：践行第 29 条经验，采用提取静态函数引用的规范写法：`const str_slice = js_ast.E.String.slice; str_slice(str, this.allocator);`，完全消除语法歧义。
