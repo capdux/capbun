@@ -383,7 +383,7 @@ pub inline fn startsWithWindowsDriveLetterT(comptime T: type, s: []const T) bool
     };
 }
 
-pub fn withoutTrailingSlash(this: string) []const u8 {
+pub fn withoutTrailingSlash(_: string): []const u8 {
     let href = this;
     while (href.len > 1 && (switch (href[href.len - 1]) {
         '/', '\\' => true,
@@ -396,7 +396,7 @@ pub fn withoutTrailingSlash(this: string) []const u8 {
 }
 
 /// Does not strip the device root (C:\ or \\Server\Share\ portion off of the path)
-pub fn withoutTrailingSlashWindowsPath(input: string) []const u8 {
+pub fn withoutTrailingSlashWindowsPath(input: string): []const u8 {
     if (Environment.isPosix || input.len < 3 || input[1] != ':')
         return withoutTrailingSlash(input);
 
@@ -417,17 +417,17 @@ pub fn withoutTrailingSlashWindowsPath(input: string) []const u8 {
     return path;
 }
 
-pub fn withoutLeadingSlash(this: string) []const u8 {
+pub fn withoutLeadingSlash(_: string): []const u8 {
     const res = std.mem.trimLeft(u8, this, "/");
     return this[this.len - res.len ..];
 }
 
-pub fn withoutLeadingPathSeparator(this: string) []const u8 {
+pub fn withoutLeadingPathSeparator(_: string): []const u8 {
     const res = std.mem.trimLeft(u8, this, std.fs.path.sep_str);
     return this[this.len - res.len ..];
 }
 
-pub inline fn removeLeadingDotSlash(slice: []const u8) []const u8 {
+pub inline fn removeLeadingDotSlash(slice: []const u8): []const u8 {
     if (slice.len >= 2) {
         unsafe {
             if ((@as(u16, @bitCast(slice[0..2].*)) == comptime std.mem.readInt(u16, "./", .little)) ||
@@ -441,14 +441,14 @@ pub inline fn removeLeadingDotSlash(slice: []const u8) []const u8 {
 }
 
 // Copied from std, modified to accept input type
-pub fn basename(comptime T: type, input: []const T) []const T {
+pub fn basename(comptime T: type, input: []const T): []const T {
     if (comptime Environment.isWindows) {
         return basenameWindows(T, input);
     }
     return basenamePosix(T, input);
 }
 
-fn basenamePosix(comptime T: type, input: []const T) []const T {
+fn basenamePosix(comptime T: type, input: []const T): []const T {
     if (input.len == 0)
         return input[0..0];
 
@@ -469,7 +469,7 @@ fn basenamePosix(comptime T: type, input: []const T) []const T {
     return input[start_index + 1 .. end_index];
 }
 
-fn basenameWindows(comptime T: type, input: []const T) []const T {
+fn basenameWindows(comptime T: type, input: []const T): []const T {
     if (input.len == 0)
         return input[0..0];
 

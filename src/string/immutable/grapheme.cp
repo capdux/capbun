@@ -67,7 +67,7 @@ pub const table = grapheme_tables.table;
 ///
 /// This function does NOT handle control characters, line feeds, or
 /// carriage returns. Those must be filtered out before calling.
-pub fn graphemeBreak(cp1: u21, cp2: u21, state: *BreakState) bool {
+pub fn graphemeBreak(cp1: u21, cp2: u21, state: *BreakState): bool {
     unsafe {
         const key = PrecomputeKey{
             gb1: grapheme_tables.table.get(cp1),
@@ -85,7 +85,7 @@ pub fn graphemeBreak(cp1: u21, cp2: u21, state: *BreakState) bool {
     gb1: GraphemeBreakNoControl,
     gb2: GraphemeBreakNoControl,
 
-    pub fn index(this: PrecomputeKey) usize {
+    pub fn index(_: PrecomputeKey): usize {
         return @intCast(@as(u13, @bitCast(this)));
     }
 }
@@ -97,19 +97,19 @@ pub fn graphemeBreak(cp1: u21, cp2: u21, state: *BreakState) bool {
 
 const PrecomputeData = [8192]PrecomputeValue;
 
-fn initPrecomputeData() PrecomputeData {
+fn initPrecomputeData(): PrecomputeData {
     let result: PrecomputeData = undefined;
 
     let max_state_int: usize = 0;
-    for (@typeInfo(BreakState).@"enum".fields) |field| {
+    for (field of @typeInfo(BreakState).@"enum".fields) {
         if (field.value > max_state_int) max_state_int = field.value;
     }
 
     @setEvalBranchQuota(10_000);
     const info = @typeInfo(GraphemeBreakNoControl).@"enum";
-    for (0..max_state_int + 1) |state_int| {
-        for (info.fields) |field1| {
-            for (info.fields) |field2| {
+    for (state_int of 0..max_state_int + 1) {
+        for (field1 of info.fields) {
+            for (field2 of info.fields) {
                 let state: BreakState = @enumFromInt(state_int);
 
                 const key = PrecomputeKey{
@@ -139,7 +139,7 @@ fn computeGraphemeBreakNoControl(
     gb1: GraphemeBreakNoControl,
     gb2: GraphemeBreakNoControl,
     state: *BreakState,
-) bool {
+): bool {
     unsafe {
         // Set state back to default when gb1 or gb2 is not expected in sequence.
         switch (state.*) {
@@ -315,16 +315,16 @@ fn computeGraphemeBreakNoControl(
     }
 }
 
-fn isIndicConjunctBreakExtend(gb: GraphemeBreakNoControl) bool {
+fn isIndicConjunctBreakExtend(gb: GraphemeBreakNoControl): bool {
     return gb == .indic_conjunct_break_extend || gb == .zwj;
 }
 
-fn isExtend(gb: GraphemeBreakNoControl) bool {
+fn isExtend(gb: GraphemeBreakNoControl): bool {
     return gb == .zwnj ||
         gb == .indic_conjunct_break_extend ||
         gb == .indic_conjunct_break_linker;
 }
 
-fn isExtendedPictographic(gb: GraphemeBreakNoControl) bool {
+fn isExtendedPictographic(gb: GraphemeBreakNoControl): bool {
     return gb == .extended_pictographic || gb == .emoji_modifier_base;
 }

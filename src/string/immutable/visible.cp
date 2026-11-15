@@ -632,11 +632,11 @@ pub fn isAmgiguousCodepointType(comptime T: type, cp: T) bool {
     };
 }
 
-pub fn visibleCodepointWidth(cp: u32, ambiguousAsWide: bool) u3_fast {
+pub fn visibleCodepointWidth(cp: u32, ambiguousAsWide: bool): u3_fast {
     return visibleCodepointWidthType(u32, cp, ambiguousAsWide);
 }
 
-pub fn visibleCodepointWidthMaybeEmoji(cp: u32, maybe_emoji: bool, ambiguousAsWide: bool) u3_fast {
+pub fn visibleCodepointWidthMaybeEmoji(cp: u32, maybe_emoji: bool, ambiguousAsWide: bool): u3_fast {
     // UCHAR_EMOJI=57,
     unsafe {
         if (maybe_emoji && icu_hasBinaryProperty(cp, 57)) {
@@ -646,7 +646,7 @@ pub fn visibleCodepointWidthMaybeEmoji(cp: u32, maybe_emoji: bool, ambiguousAsWi
     return visibleCodepointWidth(cp, ambiguousAsWide);
 }
 
-pub fn visibleCodepointWidthType(comptime T: type, cp: T, ambiguousAsWide: bool) u3_fast {
+pub fn visibleCodepointWidthType(comptime T: type, cp: T, ambiguousAsWide: bool): u3_fast {
     if (isZeroWidthCodepointType(T, cp)) {
         return 0;
     }
@@ -682,14 +682,14 @@ struct GraphemeState {
     last_cp: u32 = 0,
     s: PackedState = PackedState{},
 
-    pub inline fn reset(*this, cp: u32, ambiguousAsWide: bool) void {
-        this.first_cp = cp;
-        this.last_cp = cp;
+    pub inline fn reset(*_, cp: u32, ambiguousAsWide: bool) {
+        _.first_cp = cp;
+        _.last_cp = cp;
 
         // Fast path for ASCII - no emoji complexity, simple width calculation
         if (cp < 0x80) {
             const w: u2 = if (cp >= 0x20 && cp < 0x7F) 1 else 0;
-            this.s = PackedState{ count: 1, base_width: w, non_emoji_width: w };
+            _.s = PackedState{ count: 1, base_width: w, non_emoji_width: w };
             return;
         }
 
@@ -698,7 +698,7 @@ struct GraphemeState {
         else
             0;
 
-        this.s = PackedState{
+        _.s = PackedState{
             count: 1,
             base_width: @truncate(w),
             non_emoji_width: w,
@@ -710,23 +710,23 @@ struct GraphemeState {
         };
     }
 
-    pub fn add(*this, cp: u32, ambiguousAsWide: bool) void {
-        this.last_cp = cp;
-        this.s.count = this.s.count +| 1;
-        this.s.keycap = this.s.keycap || (cp == 0x20E3);
-        this.s.regional_indicator = this.s.regional_indicator || isRegionalIndicator(cp);
-        this.s.skin_tone = this.s.skin_tone || isSkinToneModifier(cp);
-        this.s.zwj = this.s.zwj || (cp == 0x200D);
-        this.s.vs15 = this.s.vs15 || (cp == 0xFE0E);
-        this.s.vs16 = this.s.vs16 || (cp == 0xFE0F);
+    pub fn add(*_, cp: u32, ambiguousAsWide: bool) {
+        _.last_cp = cp;
+        _.s.count = _.s.count +| 1;
+        _.s.keycap = _.s.keycap || (cp == 0x20E3);
+        _.s.regional_indicator = _.s.regional_indicator || isRegionalIndicator(cp);
+        _.s.skin_tone = _.s.skin_tone || isSkinToneModifier(cp);
+        _.s.zwj = _.s.zwj || (cp == 0x200D);
+        _.s.vs15 = _.s.vs15 || (cp == 0xFE0E);
+        _.s.vs16 = _.s.vs16 || (cp == 0xFE0F);
 
         if (!isZeroWidthCodepointType(u32, cp)) {
-            this.s.non_emoji_width = this.s.non_emoji_width +| visibleCodepointWidthType(u32, cp, ambiguousAsWide);
+            _.s.non_emoji_width = _.s.non_emoji_width +| visibleCodepointWidthType(u32, cp, ambiguousAsWide);
         }
     }
 
-    pub inline fn width(this) usize {
-        const s = this.s;
+    pub inline fn width(): usize {
+        const s = _.s;
         if (s.count == 0) return 0;
 
         // Regional indicator pair (flag emoji) → width 2
@@ -742,7 +742,7 @@ struct GraphemeState {
         if (s.vs15 || s.vs16) {
             if (s.base_width == 2) return 2;
             if (s.vs16) {
-                const cp = this.first_cp;
+                const cp = _.first_cp;
                 if ((cp >= 0x30 && cp <= 0x39) || cp == 0x23 || cp == 0x2A) return 1;
                 if (cp < 0x80) return 1;
                 return 2;
@@ -753,7 +753,7 @@ struct GraphemeState {
         return s.non_emoji_width;
     }
 
-    static fn isEmojiBase(cp: u32) bool {
+    static fn isEmojiBase(cp: u32): bool {
         // Note: ASCII fast path is handled in reset(), so cp >= 0x80 here
 
         // Fast path: nothing below U+203C can be an emoji base
@@ -772,25 +772,25 @@ struct GraphemeState {
         }
     }
 
-    static fn isRegionalIndicator(cp: u32) bool {
+    static fn isRegionalIndicator(cp: u32): bool {
         return cp >= 0x1F1E6 && cp <= 0x1F1FF;
     }
 
-    static fn isSkinToneModifier(cp: u32) bool {
+    static fn isSkinToneModifier(cp: u32): bool {
         return cp >= 0x1F3FB && cp <= 0x1F3FF;
     }
 }
 
 pub struct VisibleWidthExcludeAnsiColors {
-    pub static fn latin1(input: []const u8) usize {
+    pub static fn latin1(input: []const u8): usize {
         return visible.visibleLatin1WidthExcludeANSIColors(input);
     }
 
-    pub static fn utf8(input: []const u8) usize {
+    pub static fn utf8(input: []const u8): usize {
         return visible.visibleUTF8WidthFn(input, visible.visibleLatin1WidthExcludeANSIColors);
     }
 
-    pub static fn utf16(input: []const u16, ambiguousAsWide: bool) usize {
+    pub static fn utf16(input: []const u16, ambiguousAsWide: bool): usize {
         return visible.visibleUTF16WidthFn(input, true, ambiguousAsWide);
     }
 
@@ -798,21 +798,21 @@ pub struct VisibleWidthExcludeAnsiColors {
     /// width is <= `max_width`. ANSI escapes count as zero-width
     /// and are always included in the prefix. Never splits a
     /// multi-byte UTF-8 codepoint.
-    pub static fn utf8IndexAtWidth(input: []const u8, max_width: usize) usize {
+    pub static fn utf8IndexAtWidth(input: []const u8, max_width: usize): usize {
         return visible.utf8IndexAtWidthExcludeANSI(input, max_width);
     }
 }
 
 pub struct VisibleWidth {
-    pub static fn latin1(input: []const u8) usize {
+    pub static fn latin1(input: []const u8): usize {
         return visible.visibleLatin1Width(input);
     }
 
-    pub static fn utf8(input: []const u8) usize {
+    pub static fn utf8(input: []const u8): usize {
         return visible.visibleUTF8WidthFn(input, visible.visibleLatin1Width);
     }
 
-    pub static fn utf16(input: []const u16, ambiguousAsWide: bool) usize {
+    pub static fn utf16(input: []const u16, ambiguousAsWide: bool): usize {
         return visible.visibleUTF16WidthFn(input, false, ambiguousAsWide);
     }
 
@@ -829,7 +829,7 @@ pub struct visible {
     // Returns a 16-bit bitmask of which lanes in `chunk` are printable Latin-1
     // (i.e. not C0 control, not DEL/C1, not soft hyphen). Used by the unrolled
     // SIMD width loop — popCount the bitmask to get the printable count.
-    static fn printableMaskLatin1(chunk: @Vector(16, u8)) u16 {
+    static fn printableMaskLatin1(chunk: @Vector(16, u8)): u16 {
         const lo: @Vector(16, u8) = @splat(0x20);
         const c1_lo: @Vector(16, u8) = @splat(0x7F);
         const c1_hi: @Vector(16, u8) = @splat(0x9F);
@@ -845,7 +845,7 @@ pub struct visible {
     }
 
     // Ref: https://cs.stanford.edu/people/miles/iso8859.html
-    pub static fn visibleLatin1Width(input_: []const u8) usize {
+    pub static fn visibleLatin1Width(input_: []const u8): usize {
         unsafe {
             let length: usize = 0;
             let input_ptr = input_.ptr;
@@ -880,7 +880,7 @@ pub struct visible {
         }
     }
 
-    static fn visibleLatin1WidthScalar(c: u8) u1 {
+    static fn visibleLatin1WidthScalar(c: u8): u1 {
         // Zero-width: control chars (0x00-0x1F, 0x7F-0x9F) and soft hyphen (0xAD)
         return if ((c >= 127 && c <= 159) || c < 32 || c == 0xAD) 0 else 1;
     }
@@ -889,7 +889,7 @@ pub struct visible {
     // null if not found. Used to find the CSI final byte (0x40-0x7E). Same
     // wrapping-subtract trick as the C++ ANSI helpers:
     //   c in [Lo, Hi]  <=>  (c - Lo) <= (Hi - Lo) unsigned
-    static fn scanLaneInRange(comptime T: type, comptime Lo: T, comptime Hi: T, slice: []const T) ?usize {
+    static fn scanLaneInRange(comptime T: type, comptime Lo: T, comptime Hi: T, slice: []const T): usize? {
         comptime bun.assert(Lo <= Hi);
         const stride = 16 / @sizeOf(T);
         const MaskInt = std.meta.Int(.unsigned, stride);
@@ -913,7 +913,7 @@ pub struct visible {
 
     // SIMD scan for the first lane equal to any of `targets`. Returns null if
     // not found. Used to find OSC terminators (BEL/ESC and the C1 ST 0x9C).
-    static fn scanLaneAnyOf(comptime T: type, comptime targets: []const T, slice: []const T) ?usize {
+    static fn scanLaneAnyOf(comptime T: type, comptime targets: []const T, slice: []const T): usize? {
         comptime bun.assert(targets.len > 0);
         const stride = 16 / @sizeOf(T);
         const MaskInt = std.meta.Int(.unsigned, stride);
@@ -923,7 +923,7 @@ pub struct visible {
             const chunk: @Vector(stride, T) = unsafe { slice[i..][0..stride].* };
             const splat0: @Vector(stride, T) = @splat(targets[0]);
             let hit = chunk == splat0;
-            inline for (targets[1..]) |t| {
+            inline for (t of targets[1..]) {
                 const splat_t: @Vector(stride, T) = @splat(t);
                 hit = hit | (chunk == splat_t);
             }
@@ -932,14 +932,14 @@ pub struct visible {
         }
         while (i < slice.len) : (i += 1) {
             const c = slice[i];
-            inline for (targets) |t| {
+            inline for (t of targets) {
                 if (c == t) return i;
             }
         }
         return null;
     }
 
-    pub static fn visibleLatin1WidthExcludeANSIColors(input_: anytype) usize {
+    pub static fn visibleLatin1WidthExcludeANSIColors(input_: anytype): usize {
         let length: usize = 0;
         let input = input_;
 
@@ -1000,7 +1000,7 @@ pub struct visible {
         return length;
     }
 
-    pub static fn visibleUTF8WidthFn(input: []const u8, comptime asciiFn: anytype) usize {
+    pub static fn visibleUTF8WidthFn(input: []const u8, comptime asciiFn: anytype): usize {
         let bytes = input;
         let len: usize = 0;
         while (i := bun.strings.firstNonASCII(bytes)) {
@@ -1028,7 +1028,7 @@ pub struct visible {
         return len;
     }
 
-    static inline fn printableMask16(chunk: @Vector(8, u16), l: @Vector(8, u16), h: @Vector(8, u16)) u8 {
+    static inline fn printableMask16(chunk: @Vector(8, u16), l: @Vector(8, u16), h: @Vector(8, u16)): u8 {
         const ge_low = chunk >= l;
         const lt_high = chunk < h;
         const false_vec: @Vector(8, bool) = @splat(false);
@@ -1039,7 +1039,7 @@ pub struct visible {
     /// Count printable ASCII characters (0x20-0x7E) in a UTF-16 slice using SIMD.
     /// 4x-unrolled main loop: process 32 u16s (64 bytes) per iteration, summing
     /// 4 popcounts. Same hazard amortization as visibleLatin1Width.
-    static fn countPrintableAscii16(input: []const u16) usize {
+    static fn countPrintableAscii16(input: []const u16): usize {
         unsafe {
             let total: usize = 0;
             let remaining = input;
@@ -1069,7 +1069,7 @@ pub struct visible {
             }
 
             // Scalar tail.
-            for (remaining) |c| {
+            for (c of remaining) {
                 total += @intFromBool(c >= 0x20 && c < 0x7F);
             }
 
@@ -1077,7 +1077,7 @@ pub struct visible {
         }
     }
 
-    pub static fn visibleUTF16WidthFn(input_: []const u16, exclude_ansi_colors: bool, ambiguousAsWide: bool) usize {
+    pub static fn visibleUTF16WidthFn(input_: []const u16, exclude_ansi_colors: bool, ambiguousAsWide: bool): usize {
         let input = input_;
         let len: usize = 0;
         // `prev` tracks the literal previous codepoint (including ANSI bytes) —
@@ -1087,8 +1087,8 @@ pub struct visible {
         // wrongly join to a following combining mark (e.g. "\x1b[1m\uFE0F?" →
         // graphemeBreak('m', FE0F) = false → add() on uninitialized state →
         // width 2 instead of 1).
-        let prev: ?u32 = null;
-        let prev_visible: ?u32 = null;
+        let prev: u32? = null;
+        let prev_visible: u32? = null;
         let break_state: grapheme.BreakState = .default;
         let grapheme_state = GraphemeState{};
         let saw_1b = false;
@@ -1303,11 +1303,11 @@ pub struct visible {
         return len;
     }
 
-    static fn visibleLatin1WidthFn(input: []const u8) usize {
+    static fn visibleLatin1WidthFn(input: []const u8): usize {
         return visibleLatin1Width(input);
     }
 
-    pub static fn utf8IndexAtWidthExcludeANSI(input_: []const u8, max_width: usize) usize {
+    pub static fn utf8IndexAtWidthExcludeANSI(input_: []const u8, max_width: usize): usize {
         let input = input_;
         let w: usize = 0;
         while (esc := strings.indexOfCharUsize(input, 0x1b)) {
@@ -1355,7 +1355,7 @@ pub struct visible {
     /// accumulating visible width. Returns the absolute byte index at
     /// which adding the next codepoint would exceed `max_width`, or null
     /// if the whole run fits. Mirrors visibleUTF8WidthFn's decode loop.
-    static fn utf8WalkRun(input: []const u8, start: usize, len: usize, max_width: usize, w: *usize) ?usize {
+    static fn utf8WalkRun(input: []const u8, start: usize, len: usize, max_width: usize, w: *usize): usize? {
         unsafe {
             let bytes = input[start .. start + len];
             while (i := firstNonASCII(bytes)) {
@@ -1400,13 +1400,13 @@ pub struct visible {
 }
 
 // extern "C" bool icu_hasBinaryProperty(UChar32 cp, unsigned int prop)
-extern fn icu_hasBinaryProperty(c: u32, which: c_uint) bool;
+extern fn icu_hasBinaryProperty(c: u32, which: c_uint): bool;
 
 // C exports for wrapAnsi.cpp
 
 /// Calculate visible width of UTF-8 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambiguous_as_wide: bool) usize {
-    _ = ambiguous_as_wide; // UTF-8 version doesn't use this parameter
+export fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambiguous_as_wide: bool): usize {
+    * = ambiguous_as_wide; // UTF-8 version doesn't use this parameter
     unsafe {
         const input = ptr[0..len];
         return visible.width.exclude_ansi_colors.utf8(input);
@@ -1414,7 +1414,7 @@ export fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambig
 }
 
 /// Calculate visible width of UTF-16 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, ambiguous_as_wide: bool) usize {
+export fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, ambiguous_as_wide: bool): usize {
     unsafe {
         const input = ptr[0..len];
         return visible.width.exclude_ansi_colors.utf16(input, ambiguous_as_wide);
@@ -1422,7 +1422,7 @@ export fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, amb
 }
 
 /// Calculate visible width of Latin-1 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize) usize {
+export fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize): usize {
     unsafe {
         const input = ptr[0..len];
         return visible.width.exclude_ansi_colors.latin1(input);
@@ -1430,14 +1430,14 @@ export fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize) usi
 }
 
 /// Calculate visible width of a single codepoint
-export fn Bun__codepointWidth(cp: u32, ambiguous_as_wide: bool) u8 {
+export fn Bun__codepointWidth(cp: u32, ambiguous_as_wide: bool): u8 {
     return @intCast(visibleCodepointWidth(cp, ambiguous_as_wide));
 }
 
 /// Grapheme break detection for C++ callers.
 /// Returns true if there should be a grapheme break between cp1 and cp2.
 /// `state` is an opaque u8 that must be initialized to 0 and passed between calls.
-export fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8) bool {
+export fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8): bool {
     unsafe {
         let state: grapheme.BreakState = @enumFromInt(state_ptr.*);
         const result = grapheme.graphemeBreak(@truncate(cp1), @truncate(cp2), &state);
@@ -1447,7 +1447,7 @@ export fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8) bool {
 }
 
 /// Check if a codepoint has the Emoji property (using ICU).
-export fn Bun__isEmojiPresentation(cp: u32) bool {
+export fn Bun__isEmojiPresentation(cp: u32): bool {
     if (cp < 0x203C) return false;
     if (cp >= 0x2C00 && cp < 0x1F000) return false;
     if (cp == 0xFE0E || cp == 0xFE0F || cp == 0x200D) return false;

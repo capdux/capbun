@@ -576,3 +576,12 @@
 ### 1. 结构体静态查找与枚举映射 (`HardcodedModule.cp`)
 - **查找函数 `static fn` 声明规范**：`find` 函数作为模块名解析分发器，显式声明为 `static fn find(name: string): ?HardcodedModule`，消除默认合成 `self` 接收者形参导致的未用参数警告。
 - **纯正 CP 静态门禁全绿**：全面遵循 0 `var`、0 `*anyopaque`，字符串切片安全匹配，保障了内置 Node.js 与 Bun 专属模块的高效解析与零内存悬垂。
+
+## 2026-11-16 [Milestone 7 Phase 46] `src/string/immutable/` (5/5 核心不可变字符串与字素解析 100% 闭环) 技术经验
+
+### 1. 复杂字素分割与宽度推导纯化 (`visible.cp` 与 `grapheme.cp`)
+- **返回值类型冒号补齐与接收者降级**：在 `visibleCodepointWidth` 与 `graphemeBreak` 中，全面补齐 CP 函数定义所要求的返回类型冒号声明 `): ReturnType`，消除 `E0116` 报错；在实例状态更新中采用纯正 CP 独占可变借用 `*_` 与字段 `_.` 访问，消除已废弃的 `this` / `*this`。
+- **循环解构与丢弃值标准化**：将 `for (collection) |item|` 改写为符合 CP 规范的 `for (item of collection)`；将调试宏与环境参数的未用丢弃表达统一改为 `* = expr;`。
+
+### 2. 路径处理与切片边界安全 (`paths.cp`)
+- **纯切片借用与零拷贝安全性**：在 `withoutTrailingSlash`、`withoutLeadingSlash` 等路径裁剪函数中，接收者直接省略首参并以 `_` 进行只读借用，杜绝不必要的内存分配与浅拷贝别名破坏。
