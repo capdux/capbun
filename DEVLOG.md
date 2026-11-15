@@ -585,3 +585,15 @@
 
 ### 2. 路径处理与切片边界安全 (`paths.cp`)
 - **纯切片借用与零拷贝安全性**：在 `withoutTrailingSlash`、`withoutLeadingSlash` 等路径裁剪函数中，接收者直接省略首参并以 `_` 进行只读借用，杜绝不必要的内存分配与浅拷贝别名破坏。
+
+## 2026-11-16 [Milestone 7 Phase 47] `src/base64/` (1/1 Base64 核心算法 100% 闭环) 技术经验
+
+### 1. 消除形参前缀星号与切片传递纯化 (`base64.cp`)
+- **形参星号语法纠正**：在 `encodeWithoutSizeCheck`、`decode` 等关键算法中，原版使用了形如 `*dest: u8[]`、`*wrote: usize` 的非标前缀星号声明，触发 CP 语法 `E0125`。重构规范为标准切片类型与后置指针声明（`dest: []u8`、`wrote: *usize`），消除了符号歧义。
+- **编码器/解码器统一实例接收者**：在 `Base64Encoder` 与 `Base64Decoder` 内部，通过 `_` 安全访问 `alphabet_chars` 与 `pad_char`，消除了全局作用域标识符未定义隐患。
+
+## 2026-11-16 [Milestone 7 Phase 48] `src/dns/` (1/1 异步 DNS 解析引擎 100% 闭环) 技术经验
+
+### 1. 系统地址族与关键字转义 (`dns.cp`)
+- **关键字转义与阴影命名隔离**：将 `address.in` 安全转义为 `address.@"in"` 并将局部变量规范为 `addr_in`，消除 CP 保留关键字 `in` 的解析冲突；消除全文件 11 处残留的 `var`，全量纯化为 `let`。
+- **可选系统链表迭代安全**：在 `Result.toList` 中，将 C-ABI 系统结构体 `addrinfo` 的链表遍历重构为规范的 `while (a := addr) : (addr = a.next)`，配合后缀可选指针 `(*std.c.addrinfo)?`，彻底消除空指针解引用隐患。

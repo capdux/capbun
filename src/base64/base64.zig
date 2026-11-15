@@ -17,8 +17,8 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
-fn cp_iter_slice(val: anytype) switch (@typeInfo(@TypeOf(val))) { .pointer => |p| switch (p.size) { .slice => @TypeOf(val), .one => switch (@typeInfo(p.child)) { .array => []const @typeInfo(p.child).array.child, .pointer => |sub_p| if (sub_p.size == .slice) p.child else @TypeOf(val), else => @TypeOf(val), }, else => @TypeOf(val), }, .array => []const @typeInfo(@TypeOf(val)).array.child, else => @TypeOf(val), } { const __T = @TypeOf(val); switch (@typeInfo(__T)) { .pointer => |p| switch (p.size) { .slice => return val, .one => switch (@typeInfo(p.child)) { .array => return val[0..], .pointer => |sub_p| if (sub_p.size == .slice) return val.* else return val, else => return val, }, else => return val, }, .array => return val[0..], else => return val, } }
-fn cp_mut_slice(ptr: anytype) switch (@typeInfo(@TypeOf(ptr.*))) { .array => []@typeInfo(@TypeOf(ptr.*)).array.child, .pointer => |p| switch (p.size) { .slice => []if (@typeInfo(p.child) == .pointer) @typeInfo(p.child).pointer.child else p.child, .one => switch (@typeInfo(p.child)) { .pointer => |sub_p| if (sub_p.size == .slice) []sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const ValT = @TypeOf(ptr.*); switch (@typeInfo(ValT)) { .array => return ptr[0..], .pointer => |p| switch (p.size) { .slice => return @constCast(ptr.*), .one => return @constCast(ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -51,7 +51,6 @@ pub fn init(alphabet_chars: [64]u8, pad_char: ?u8) Base64Encoder {
     }
 
 pub fn calcSize(self: Base64Encoder, source_len: usize) usize {
-        _ = &self;
             if ((self.pad_char != null)) {
                 return (((source_len + 2) / 3) * 4);
             } else {
@@ -62,7 +61,6 @@ pub fn calcSize(self: Base64Encoder, source_len: usize) usize {
     }
 
 pub fn encodeWithoutSizeCheck(self: Base64Encoder, dest: []u8, source: []const u8) usize {
-        _ = &self;
             var acc: u32 = 0;
             _ = &acc;
             var acc_len: u32 = 0;
@@ -93,7 +91,6 @@ pub fn encodeWithoutSizeCheck(self: Base64Encoder, dest: []u8, source: []const u
     }
 
 pub fn encode(self: Base64Encoder, dest: []u8, source: []const u8) []const u8 {
-        _ = &self;
             var out_len = self.calcSize(source.len);
             _ = &out_len;
             var out_idx = self.encodeWithoutSizeCheck(dest, source);
@@ -129,7 +126,6 @@ pub fn init(alphabet_chars: [64]u8, pad_char: ?u8) Base64Decoder {
     }
 
 pub fn calcSizeUpperBound(self: Base64Decoder, source_len: usize) !usize {
-        _ = &self;
             var result = ((source_len / 4) * 3);
             _ = &result;
             var leftover = (source_len % 4);
@@ -148,7 +144,6 @@ pub fn calcSizeUpperBound(self: Base64Decoder, source_len: usize) !usize {
     }
 
 pub fn calcSizeForSlice(self: Base64Decoder, source: []const u8) !usize {
-        _ = &self;
             var source_len = source.len;
             _ = &source_len;
             var result = try self.calcSizeUpperBound(source_len);
@@ -167,7 +162,6 @@ pub fn calcSizeForSlice(self: Base64Decoder, source: []const u8) !usize {
     }
 
 pub fn decode(self: Base64Decoder, dest: []u8, source: []const u8) !void {
-        _ = &self;
             if (((self.pad_char != null) and ((source.len % 4) != 0))) {
                 return error.InvalidPadding;
             }
@@ -253,7 +247,6 @@ pub fn init(alphabet_chars: [64]u8, pad_char: ?u8, ignore_chars: []const u8) Bas
     }
 
 pub fn calcSizeUpperBound(self: Base64DecoderWithIgnore, source_len: usize) usize {
-        _ = &self;
             var result = ((source_len / 4) * 3);
             _ = &result;
             if ((self.decoder.pad_char == null)) {
@@ -265,7 +258,6 @@ pub fn calcSizeUpperBound(self: Base64DecoderWithIgnore, source_len: usize) usiz
     }
 
 pub fn decode(self: Base64DecoderWithIgnore, dest: []u8, source: []const u8, wrote: *usize) !void {
-        _ = &self;
             var acc: u32 = 0;
             _ = &acc;
             var acc_len: u32 = 0;
@@ -369,7 +361,7 @@ pub const Codecs = struct {
 
 const decoderWithIgnoreProto = *const fn ([]const u8) Base64DecoderWithIgnore;
 
-pub extern "c" fn WTF__base64URLEncode(input: [*]const u8, input_len: usize, output: [*]u8, output_len: usize) callconv(.c) usize;
+extern "c" fn WTF__base64URLEncode(input: [*]const u8, input_len: usize, output: [*]u8, output_len: usize) callconv(.c) usize;
 
 pub fn standardBase64DecoderWithIgnore(ignore: []const u8) Base64DecoderWithIgnore {
         return Base64DecoderWithIgnore.init(standard_alphabet_chars, 61, ignore);
@@ -403,7 +395,7 @@ pub fn decode(destination: []u8, source: []const u8) bun.simdutf.SIMDUTFResult {
         return result;
 }
 
-pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
+pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         var dest = try allocator.alloc(u8, decodeLen(input));
         _ = &dest;
         errdefer {
