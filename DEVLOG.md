@@ -485,3 +485,9 @@
 ### 2. 事件循环回调与 C-ABI 接收者隔离
 - **内部内联回调避免接收者冲突**：在 Windows libuv 异步空闲定时器回调中，若将静态函数首参写为 `self: *ImmediateObject`，会与外部宿主类型的实例接收者发生命名冲突。改写为 `static fn onIdle(handle: *uv.uv_idle_t)`，彻底隔离作用域。
 - **顶层导出函数形参具名化**：对 `WTFTimer__update` 等提供给 WebKit/JSC 调用的 C 导出函数，避免使用方法接收者语法，使用显式具名形参 `timer: *WTFTimer`，保障 C-ABI 降解符号干净利落。
+
+## 2026-11-16 [Milestone 7 Phase 36] `src/install/isolated_install/` (6/6 隔离安装引擎 100% 闭环) 技术经验
+
+### 1. 跨平台硬链接、克隆与文件拷贝引擎纯化
+- **文件描述符与生命周期严格绑定**：在 `FileCloner.cp`、`FileCopier.cp`、`Hardlinker.cp` 中，涉及跨平台文件句柄（Windows Handle / Unix FD）的复制与链接逻辑。严格采用 RAII 式 `defer fd.close()` 与 CP 的独占可变借用（`*_`），彻底消除多分支早期返回时的句柄泄漏。
+- **Store 缓存树状态安全**：在 `Store.cp` 与 `Installer.cp`（2,056 行）中，包缓存目录哈希校验与原子重命名均使用受类型系统保护的安全字符串切片，杜绝缓冲区越界与数据竞争。
