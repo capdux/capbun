@@ -597,3 +597,14 @@
 ### 1. 系统地址族与关键字转义 (`dns.cp`)
 - **关键字转义与阴影命名隔离**：将 `address.in` 安全转义为 `address.@"in"` 并将局部变量规范为 `addr_in`，消除 CP 保留关键字 `in` 的解析冲突；消除全文件 11 处残留的 `var`，全量纯化为 `let`。
 - **可选系统链表迭代安全**：在 `Result.toList` 中，将 C-ABI 系统结构体 `addrinfo` 的链表遍历重构为规范的 `while (a := addr) : (addr = a.next)`，配合后缀可选指针 `(*std.c.addrinfo)?`，彻底消除空指针解引用隐患。
+
+## 2026-11-16 [Milestone 7 Phase 49] `src/test_runner/` 第一批 (7/7 核心模块 100% 闭环) 技术经验
+
+### 1. 文件级根结构体包裹与辅助结构体外提 (`Collection.cp`, `ScopeFunctions.cp`)
+- **`@root struct` 组织铁律落地**：对于 Zig 顶层字段直接作为结构体定义的模块，将 imports 与辅助辅助结构体（如 `QueuedDescribe`, `Measure`, `Write`, `ParseArgumentsConfig`, `DescriptionCallbackOptions`）提升至模块顶层，避免嵌套二级结构体被代码生成跳过或解析异常；核心字段与生命周期方法完整包裹于 `@root struct` 中，确保实例方法接收者 `_` / `*_` 准确绑定。
+- **匿名枚举与参数类型声明**：在 `parseArguments` 中，将内联匿名枚举 `enum { three, two, one, zero }` 提升为顶层具名枚举 `ArgCount`；参数解包使用规范的 `callframe.argumentsAsArray(3)` 数组索引，消除多重 Zig `var` 变量绑定。
+
+### 2. C-ABI 调用约定与修饰器规范 (`DoneCallback.cp`, `jest.cp`)
+- **调用约定修饰器规范**：在 `finalize` 与 C 导出函数中，严格采用 `@callconv("c")` 与 `@callconv(jsc.conv)` 前置修饰器，废除后置 `: callconv(...)` 伪类型语法，消除 Zig 生成代码丢失 `void` 导致的 ast-check 报错。
+- **打印元组与类型别名**：在格式化日志中，格式化参数元组统一规范为 `.{ a, b }`（带前导点），消解 CP 对匿名键值对结构体与元组的词法歧义；类型别名规范为 `type string = []const u8;`，消除 `const string = []const u8` 触发的空数组与遮蔽推导冲突。
+

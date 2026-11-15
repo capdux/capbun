@@ -1608,3 +1608,23 @@ Options:
   - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
   - 代码膨胀率全量 `<= 0.956x`（显著净压缩）。
 - 验收完成后立即执行 `manage_subagents kill` 回收该子智能体（用完即弃）。
+
+---
+
+## 2026-11-16 08:10:00 - `src/test_runner/` 核心测试运行器第一批 (7/7 核心模块 100% 全量闭环) 验收与入库
+
+### 1. 独立严密验收
+- 主智能体调用 `python3 scripts/cpc_brief.py` 对 `src/test_runner/` 第一批 7 个模块执行独立严密验收：
+  1. `src/test_runner/DoneCallback.cp` (48 行, 1.043x, PASS)
+  2. `src/test_runner/diff_format.cp` (69 行, 1.000x, PASS)
+  3. `src/test_runner/debug.cp` (122 行, 1.130x, PASS)
+  4. `src/test_runner/Order.cp` (147 行, 0.790x, PASS)
+  5. `src/test_runner/Collection.cp` (179 行, 1.041x, PASS)
+  6. `src/test_runner/ScopeFunctions.cp` (538 行, 1.082x, PASS)
+  7. `src/test_runner/jest.cp` (502 行, 0.967x, PASS)
+- **4 项硬门禁指标 100% 全绿**：
+  - 全部 7 个 `<stem>_.zig` 原始备份完好无损；
+  - `cpc --lib` + `vendor/zig/zig ast-check` 双重 0 报错；
+  - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
+  - 代码膨胀率全量 `<= 1.130x`（均在 `<= 1.20x` 红线内）。
+- 集中完成 Milestone 7 Phase 49 Git 原子提交。

@@ -1,186 +1,181 @@
-//! take Collection phase output and convert to Execution phase input
-
-groups: std.array_list.Managed(ConcurrentGroup),
-sequences: std.array_list.Managed(ExecutionSequence),
-arena: std.mem.Allocator,
-previous_group_was_concurrent: bool = false,
-cfg: Config,
-
-pub fn init(gpa: std.mem.Allocator, arena: std.mem.Allocator, cfg: Config) Order {
-    return .{
-        .groups = std.array_list.Managed(ConcurrentGroup).init(gpa),
-        .sequences = std.array_list.Managed(ExecutionSequence).init(gpa),
-        .cfg = cfg,
-        .arena = arena,
-    };
-}
-pub fn deinit(this: *Order) void {
-    this.groups.deinit();
-    this.sequences.deinit();
-}
-
-pub fn generateOrderSub(this: *Order, current: TestScheduleEntry) bun.JSError!void {
-    switch (current) {
-        .describe => |describe| try generateOrderDescribe(this, describe),
-        .test_callback => |test_callback| try generateOrderTest(this, test_callback),
-    }
-}
-pub const AllOrderResult = struct {
-    start: usize,
-    end: usize,
-    pub const empty: AllOrderResult = .{ .start = 0, .end = 0 };
-    pub fn setFailureSkipTo(aor: AllOrderResult, this: *Order) void {
-        if (aor.start == 0 and aor.end == 0) return;
-        const skip_to = this.groups.items.len;
-        for (this.groups.items[aor.start..aor.end]) |*group| {
-            group.failure_skip_to = skip_to;
-        }
-    }
-};
-pub const Config = struct {
-    always_use_hooks: bool,
-    randomize: ?std.Random,
-};
-pub fn generateAllOrder(this: *Order, entries: []const *ExecutionEntry) bun.JSError!AllOrderResult {
-    const start = this.groups.items.len;
-    for (entries) |entry| {
-        if (bun.Environment.ci_assert and entry.added_in_phase != .preload) bun.assert(entry.next == null);
-        entry.next = null;
-        entry.failure_skip_past = null;
-        const sequences_start = this.sequences.items.len;
-        try this.sequences.append(.init(.{
-            .first_entry = entry,
-            .test_entry = null,
-        })); // add sequence to concurrentgroup
-        const sequences_end = this.sequences.items.len;
-        try this.groups.append(.init(sequences_start, sequences_end, this.groups.items.len + 1)); // add a new concurrentgroup to order
-        this.previous_group_was_concurrent = false;
-    }
-    const end = this.groups.items.len;
-    return .{ .start = start, .end = end };
-}
-pub fn generateOrderDescribe(this: *Order, current: *DescribeScope) bun.JSError!void {
-    if (current.failed) return; // do not schedule any tests in a failed describe scope
-    const use_hooks = this.cfg.always_use_hooks or current.base.has_callback;
-
-    // gather beforeAll
-    const beforeall_order: AllOrderResult = if (use_hooks) try generateAllOrder(this, current.beforeAll.items) else .empty;
-
-    // shuffle entries if randomize flag is set
-    if (this.cfg.randomize) |random| {
-        random.shuffle(TestScheduleEntry, current.entries.items);
-    }
-
-    // gather children
-    for (current.entries.items) |entry| {
-        if (current.base.only == .contains and entry.base().only == .no) continue;
-        try generateOrderSub(this, entry);
-    }
-
-    // update skip_to values for beforeAll to skip to the first afterAll
-    beforeall_order.setFailureSkipTo(this);
-
-    // gather afterAll
-    const afterall_order: AllOrderResult = if (use_hooks) try generateAllOrder(this, current.afterAll.items) else .empty;
-
-    // update skip_to values for afterAll to skip the remaining afterAll items
-    afterall_order.setFailureSkipTo(this);
-}
-
-const EntryList = struct {
-    first: ?*ExecutionEntry = null,
-    last: ?*ExecutionEntry = null,
-    pub fn prepend(this: *EntryList, current: *ExecutionEntry) void {
-        current.next = this.first;
-        this.first = current;
-        if (this.last == null) this.last = current;
-    }
-    pub fn append(this: *EntryList, current: *ExecutionEntry) void {
-        if (bun.Environment.ci_assert and current.added_in_phase != .preload) bun.assert(current.next == null);
-        current.next = null;
-        if (this.last) |last| {
-            if (bun.Environment.ci_assert and last.added_in_phase != .preload) bun.assert(last.next == null);
-            last.next = current;
-            this.last = current;
-        } else {
-            this.first = current;
-            this.last = current;
-        }
-    }
-};
-
-pub fn generateOrderTest(this: *Order, current: *ExecutionEntry) bun.JSError!void {
-    bun.assert(current.base.has_callback == (current.callback != null));
-    const use_each_hooks = current.base.has_callback;
-
-    var list: EntryList = .{};
-
-    // gather beforeEach (alternatively, this could be implemented recursively to make it less complicated)
-    if (use_each_hooks) {
-        var parent: ?*DescribeScope = current.base.parent;
-        while (parent) |p| : (parent = p.base.parent) {
-            // prepend in reverse so they end up in forwards order
-            var i: usize = p.beforeEach.items.len;
-            while (i > 0) : (i -= 1) {
-                list.prepend(bun.create(this.arena, ExecutionEntry, p.beforeEach.items[i - 1].*));
-            }
-        }
-    }
-
-    // append test
-    list.append(current); // add entry to sequence
-
-    // gather afterEach
-    if (use_each_hooks) {
-        var parent: ?*DescribeScope = current.base.parent;
-        while (parent) |p| : (parent = p.base.parent) {
-            for (p.afterEach.items) |entry| {
-                list.append(bun.create(this.arena, ExecutionEntry, entry.*));
-            }
-        }
-    }
-
-    // set skip_to values
-    var index = list.first;
-    var failure_skip_past: ?*ExecutionEntry = current;
-    while (index) |entry| : (index = entry.next) {
-        entry.failure_skip_past = failure_skip_past; // we could consider matching skip_to in beforeAll to skip directly to the first afterAll from its own scope rather than skipping to the first afterAll from any scope
-        if (entry == failure_skip_past) failure_skip_past = null;
-    }
-
-    // add these as a single sequence
-    const sequences_start = this.sequences.items.len;
-    try this.sequences.append(.init(.{
-        .first_entry = list.first,
-        .test_entry = current,
-        .retry_count = current.retry_count,
-        .repeat_count = current.repeat_count,
-    })); // add sequence to concurrentgroup
-    const sequences_end = this.sequences.items.len;
-    try appendOrExtendConcurrentGroup(this, current.base.concurrent, sequences_start, sequences_end); // add or extend the concurrent group
-}
-
-pub fn appendOrExtendConcurrentGroup(this: *Order, concurrent: bool, sequences_start: usize, sequences_end: usize) bun.JSError!void {
-    defer this.previous_group_was_concurrent = concurrent;
-    if (concurrent and this.groups.items.len > 0) {
-        const previous_group = &this.groups.items[this.groups.items.len - 1];
-        if (this.previous_group_was_concurrent) {
-            // extend the previous group to include this sequence
-            if (previous_group.tryExtend(sequences_start, sequences_end)) return;
-        }
-    }
-    try this.groups.append(.init(sequences_start, sequences_end, this.groups.items.len + 1)); // otherwise, add a new concurrentgroup to order
-}
-
-const bun = @import("bun");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
 const bun_test = bun.jsc.Jest.bun_test;
 const DescribeScope = bun_test.DescribeScope;
 const ExecutionEntry = bun_test.ExecutionEntry;
-const Order = bun_test.Order;
 const TestScheduleEntry = bun_test.TestScheduleEntry;
-
 const Execution = bun_test.Execution;
 const ConcurrentGroup = bun_test.Execution.ConcurrentGroup;
 const ExecutionSequence = bun_test.Execution.ExecutionSequence;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const Config = struct {
+    always_use_hooks: bool,
+    randomize: ?std.Random,
+};
+
+pub const AllOrderResult = struct {
+    start: usize,
+    end: usize,
+
+pub fn setFailureSkipTo(aor: AllOrderResult, order: *Order) void {
+            if (((aor.start == 0) and (aor.end == 0))) {
+                return;
+            }
+            const skip_to = order.groups.items.len;
+            for (cp_mut_slice(&order.groups.items[aor.start..aor.end])) |*group| {
+                _ = &group;
+                (group.*).failure_skip_to = skip_to;
+            }
+    }
+    pub const empty: AllOrderResult = .{ .start = 0, .end = 0 };
+};
+
+pub const Order = @This();
+
+groups: std.array_list.Managed(ConcurrentGroup),
+sequences: std.array_list.Managed(ExecutionSequence),
+@"arena": std.mem.Allocator,
+previous_group_was_concurrent: bool = false,
+cfg: Config,
+
+pub fn init(gpa: std.mem.Allocator, arena_allocator: std.mem.Allocator, cfg: Config) Order {
+        return .{ .groups = std.array_list.Managed(ConcurrentGroup).init(gpa), .sequences = std.array_list.Managed(ExecutionSequence).init(gpa), .cfg = cfg, .@"arena" = arena_allocator };
+}
+
+pub fn deinit(self: *Order) void {
+        _ = self.groups.deinit();
+        _ = self.sequences.deinit();
+}
+
+pub fn generateOrderSub(self: *Order, current: TestScheduleEntry) bun.JSError!void {
+        switch (current) {
+.describe => |describe| {
+_ = try self.generateOrderDescribe(describe);
+},
+.test_callback => |test_callback| {
+_ = try self.generateOrderTest(test_callback);
+},
+}
+}
+
+pub fn generateAllOrder(self: *Order, entries: []const *ExecutionEntry) bun.JSError!AllOrderResult {
+        const start = self.groups.items.len;
+        for (cp_iter_slice(entries)) |entry| {
+            _ = &entry;
+            if ((bun.Environment.ci_assert and (entry.added_in_phase != .preload))) {
+                _ = bun.assert((entry.next == null));
+            }
+            entry.next = null;
+            entry.failure_skip_past = null;
+            const sequences_start = self.sequences.items.len;
+            _ = try self.sequences.append(.init(.{ .first_entry = entry, .test_entry = entry, .retry_count = entry.retry_count, .repeat_count = entry.repeat_count }));
+            const sequences_end = self.sequences.items.len;
+            _ = try self.appendOrExtendConcurrentGroup(entry.base.concurrent, sequences_start, sequences_end);
+        }
+        const end = self.groups.items.len;
+        return AllOrderResult{ .start = start, .end = end };
+}
+
+pub fn generateOrderDescribe(self: *Order, describe: *DescribeScope) bun.JSError!void {
+        var before_all = AllOrderResult.empty;
+        _ = &before_all;
+        var before_each = AllOrderResult.empty;
+        _ = &before_each;
+        var after_each = AllOrderResult.empty;
+        _ = &after_each;
+        var after_all = AllOrderResult.empty;
+        _ = &after_all;
+        if ((describe.beforeAll.items.len > 0)) {
+            before_all = try self.generateAllOrder(describe.beforeAll.items);
+        }
+        if ((describe.beforeEach.items.len > 0)) {
+            before_each = try self.generateAllOrder(describe.beforeEach.items);
+        }
+        if ((describe.afterEach.items.len > 0)) {
+            after_each = try self.generateAllOrder(describe.afterEach.items);
+        }
+        if ((describe.afterAll.items.len > 0)) {
+            after_all = try self.generateAllOrder(describe.afterAll.items);
+        }
+        _ = before_all.setFailureSkipTo(self);
+        _ = before_each.setFailureSkipTo(self);
+        _ = after_each.setFailureSkipTo(self);
+        _ = after_all.setFailureSkipTo(self);
+        for (describe.entries.items) |entry| {
+            _ = &entry;
+            _ = try self.generateOrderSub(entry);
+        }
+}
+
+pub fn generateOrderTest(self: *Order, current: *ExecutionEntry) bun.JSError!void {
+        var list: ExecutionEntry.LinkedList = .{};
+        _ = &list;
+        current.next = null;
+        current.failure_skip_past = null;
+        if (self.cfg.always_use_hooks) {
+            var scope: ?*DescribeScope = current.scope;
+            _ = &scope;
+            while (scope) |sc| : (scope = sc.parent) {
+                for (sc.beforeEach.items) |entry| {
+                    _ = &entry;
+                    _ = list.append(entry);
+                }
+            }
+        }
+        _ = list.append(current);
+        if (self.cfg.always_use_hooks) {
+            var scope: ?*DescribeScope = current.scope;
+            _ = &scope;
+            while (scope) |sc| : (scope = sc.parent) {
+                for (sc.afterEach.items) |entry| {
+                    _ = &entry;
+                    _ = list.append(entry);
+                }
+            }
+        }
+        const sequences_start = self.sequences.items.len;
+        _ = try self.sequences.append(.init(.{ .first_entry = list.first, .test_entry = current, .retry_count = current.retry_count, .repeat_count = current.repeat_count }));
+        const sequences_end = self.sequences.items.len;
+        _ = try self.appendOrExtendConcurrentGroup(current.base.concurrent, sequences_start, sequences_end);
+}
+
+pub fn appendOrExtendConcurrentGroup(self: *Order, concurrent: bool, sequences_start: usize, sequences_end: usize) bun.JSError!void {
+        defer {
+        self.previous_group_was_concurrent = concurrent;
+        }
+        if ((concurrent and (self.groups.items.len > 0))) {
+            const previous_group = (&self.groups.items[@as(usize, @intCast((self.groups.items.len - 1)))]);
+            if (self.previous_group_was_concurrent) {
+                if (previous_group.tryExtend(sequences_start, sequences_end)) {
+                    return;
+                }
+            }
+        }
+        _ = try self.groups.append(.init(sequences_start, sequences_end, (self.groups.items.len + 1)));
+}
