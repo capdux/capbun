@@ -38,75 +38,68 @@ pub const PushAction = enum {
     moved,
 };
 pub const Result = union(enum) {
-    array_of_slice: *std.array_list.Managed([:0]const u8),
+    array_of_slice: *std.array_list.Managed(StringZ),
     array_of_ptr: *std.array_list.Managed(ArgStr),
-    single: struct {
-        list: *std.array_list.Managed(u8),
-        done: bool = false,
-    },
+    single: __CpObj_list__std_array_list_Managed_u8__done_bool,
 
-    fn pushResultSliceOwned(res: *Result, buf: [:0]const u8) PushAction {
-        if (comptime bun.Environment.allow_assert) {
-            assert(buf[buf.len] == 0);
-        }
-
-        switch (res.*) {
-            .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf));
-                return .moved;
-            },
-            .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.ptr))));
-                return .moved;
-            },
-            .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf[0 .. buf.len + 1]));
-                res.single.done = true;
+pub fn pushResultSliceOwned(res: *Result, buf: [:0]const u8) PushAction {
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((buf[@as(usize, @intCast(buf.len))] == 0));
+            }
+            switch (res.*) {
+.array_of_slice => {
+_ = bun.handleOom(res.array_of_slice.append(buf));
+            return .moved;
+},
+.array_of_ptr => {
+_ = bun.handleOom(res.array_of_ptr.append(@as([*:0]u8, @ptrCast(buf.ptr))));
+            return .moved;
+},
+.single => {
+if (res.single.done) {
                 return .copied;
-            },
-        }
+            }
+            _ = bun.handleOom(res.single.list.appendSlice(buf[0..(buf.len + 1)]));
+            res.single.done = true;
+            return .copied;
+},
+}
     }
 
-    fn pushResult(res: *Result, buf: *std.array_list.Managed(u8)) PushAction {
-        if (comptime bun.Environment.allow_assert) {
-            assert(buf.items[buf.items.len - 1] == 0);
-        }
-
-        switch (res.*) {
-            .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf.items[0 .. buf.items.len - 1 :0]));
-                return .moved;
-            },
-            .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.items.ptr))));
-                return .moved;
-            },
-            .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf.items[0..]));
+pub fn pushResult(res: *Result, buf: *std.array_list.Managed(u8)) PushAction {
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((buf.items[@as(usize, @intCast((buf.items.len - 1)))] == 0));
+            }
+            switch (res.*) {
+.array_of_slice => {
+_ = bun.handleOom(res.array_of_slice.append(buf.items[0..(buf.items.len - 1) :0]));
+            return .moved;
+},
+.array_of_ptr => {
+_ = bun.handleOom(res.array_of_ptr.append(@as([*:0]u8, @ptrCast(buf.items.ptr))));
+            return .moved;
+},
+.single => {
+if (res.single.done) {
                 return .copied;
-            },
-        }
+            }
+            _ = bun.handleOom(res.single.list.appendSlice(buf.items[0..]));
+            return .copied;
+},
+}
     }
 };
 pub const ExpansionState = union(enum) {
-    normal,
-    braces,
-    glob,
-    done,
+    normal: void,
+    braces: void,
+    glob: void,
+    done: void,
     @"err": bun.shell.ShellErr,
 };
 pub const ChildState = union(enum) {
-    idle,
-    cmd_subst: struct {
-        cmd: *Script,
-        quoted: bool = false,
-    },
-    glob: struct {
-        initialized: bool = false,
-        walker: GlobWalker,
-    },
+    idle: void,
+    cmd_subst: __CpObj_cmd__Script_quoted_bool,
+    glob: __CpObj_initialized_bool_walker_GlobWalker,
 };
 pub const ShellGlobTaskErr = union(enum) {
     syscall: Syscall.Error,
@@ -416,7 +409,7 @@ pub fn transitionToGlobState(self: *Expansion) Yield {
         self.child_state = .{ .glob = .{ .walker = undefined } };
         const pattern = self.current_out.items[0..];
         const cwd = self.base.shell.cwd();
-        switch ((blk_catch_2: { break :blk_catch_2 ((GlobWalker.initWithCwd((&self.child_state.glob.walker), (&arena_), pattern, cwd, false, false, false, false, false)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); })) {
+        switch ((blk_catch_2: { break :blk_catch_2 ((GlobWalker.initWithCwd((&self.child_state.glob.walker), arena_, pattern, cwd, false, false, false, false, false)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); })) {
 .result => {
 
 },
@@ -564,12 +557,12 @@ pub fn convertNewlinesToSpaces(stdout_: []u8) []u8 {
             _ = Expansion.convertNewlinesToSpacesSlow(0, stdout);
             return stdout[0..];
         }
-        const needles: @Vector(16,u8) = @splat(10);
-        const spaces: @Vector(16,u8) = @splat(32);
+        const needles: @Vector(16, u8) = @splat(10);
+        const spaces: @Vector(16, u8) = @splat(32);
         var i: usize = 0;
         _ = &i;
         while (((i + 16) <= stdout.len)) : (i = (i + 16)) {
-            const haystack: @Vector(16,u8) = (stdout[i..][0..16]).*;
+            const haystack: @Vector(16, u8) = (stdout[i..][0..16]).*;
             (stdout[i..][0..16]).* = @select(u8, (haystack == needles), spaces, haystack);
         }
         if ((i < stdout.len)) {
@@ -860,3 +853,6 @@ _ = bun.handleOom(self.out.array_of_slice.ensureUnusedCapacity(additional));
 }
 pub const ArgStr = ?[*:0]u8;
 pub const StringZ = [:0]const u8;
+pub const __CpObj_cmd__Script_quoted_bool = struct { cmd: *Script, quoted: bool };
+pub const __CpObj_initialized_bool_walker_GlobWalker = struct { initialized: bool, walker: GlobWalker };
+pub const __CpObj_list__std_array_list_Managed_u8__done_bool = struct { list: *std.array_list.Managed(u8), done: bool };

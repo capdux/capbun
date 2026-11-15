@@ -48,7 +48,7 @@ const State = union(enum) {
                 '-' => {
                     switch (_.bltn().parentCmd().base.shell.changePrevCwd(_.bltn().parentCmd().base.interpreter)) {
                         .result => {},
-                        .@"err" => |e| {
+                        .err => |e| {
                             return _.handleChangeCwdErr(
                                 e,
                                 _.bltn().parentCmd().base.shell.prevCwdZ(),
@@ -61,13 +61,17 @@ const State = union(enum) {
                     homedir.deref();
                     switch (_.bltn().parentCmd().base.shell.changeCwd(_.bltn().parentCmd().base.interpreter, homedir.slice())) {
                         .result => {},
-                        .@"err" => |e| return _.handleChangeCwdErr(e, homedir.slice()),
+                        .err => |e| {
+                            return _.handleChangeCwdErr(e, homedir.slice());
+                        },
                     }
                 },
                 else => {
                     switch (_.bltn().parentCmd().base.shell.changeCwd(_.bltn().parentCmd().base.interpreter, first_arg)) {
                         .result => {},
-                        .@"err" => |e| return _.handleChangeCwdErr(e, first_arg),
+                        .err => |e| {
+                            return _.handleChangeCwdErr(e, first_arg);
+                        },
                     }
                 },
             }

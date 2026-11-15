@@ -24,19 +24,19 @@ pub const ShellLsResultKind = enum {
     idk,
 };
 pub const ParseFlagResult = union(enum) {
-    continue_parsing,
-    done,
+    continue_parsing: void,
+    done: void,
     illegal_option: []const u8,
 };
 pub const OptsParseError = union(enum) {
     illegal_option: []const u8,
-    show_usage,
+    show_usage: void,
 };
 pub const State = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 const ShellLsOutputTaskVTable = struct {
 
@@ -180,8 +180,7 @@ pub fn schedule(self: *ShellLsTask) void {
             _ = jsc.WorkPool.schedule((&self.task));
     }
 
-pub fn create(self: ShellLsTask, ls: *Ls, opts: Opts, task_count: *std.atomic.Value(usize), cwd: bun.FD, path: [:0]const u8, owned_string: bool, event_loop: jsc.EventLoopHandle) *ShellLsTask {
-        _ = &self;
+pub fn create(ls: *Ls, opts: Opts, task_count: *std.atomic.Value(usize), cwd: bun.FD, path: [:0]const u8, owned_string: bool, event_loop: jsc.EventLoopHandle) *ShellLsTask {
             if (owned_string) {
                 _ = ls.alloc_scope.assertInScope(path);
             }
@@ -327,19 +326,18 @@ pub fn addEntryLong(self: *ShellLsTask, name: [:0]const u8, dir_fd: bun.FD) void
             var writer = self.output.writer();
             _ = &writer;
             const mode: u32 = @intCast(stat.mode);
-            const file_type = self.getFileTypeChar(mode);
-            const perms = self.formatPermissions(mode);
+            const file_type = ShellLsTask.getFileTypeChar(mode);
+            const perms = ShellLsTask.formatPermissions(mode);
             const nlink: u64 = @intCast(stat.nlink);
             const uid: u64 = @intCast(stat.uid);
             const gid: u64 = @intCast(stat.gid);
             const size: i64 = @intCast(stat.size);
             const mtime = stat.mtime();
-            const time_str = self.formatTime(@intCast(mtime.sec), self.now_secs);
+            const time_str = ShellLsTask.formatTime(@intCast(mtime.sec), self.now_secs);
             _ = bun.handleOom(writer.print("{c}{s} {d: >3} {d: >5} {d: >5} {d: >8} {s} {s}\n", .{ file_type, (&perms), nlink, uid, gid, size, (&time_str), name }));
     }
 
-pub fn getFileTypeChar(self: ShellLsTask, mode: u32) u8 {
-        _ = &self;
+pub fn getFileTypeChar(mode: u32) u8 {
             const file_type = (mode & bun.S.IFMT);
             if ((file_type == bun.S.IFDIR)) {
                 return 100;
@@ -362,8 +360,7 @@ pub fn getFileTypeChar(self: ShellLsTask, mode: u32) u8 {
             return 45;
     }
 
-pub fn formatPermissions(self: ShellLsTask, mode: u32) [9]u8 {
-        _ = &self;
+pub fn formatPermissions(mode: u32) [9]u8 {
             var perms: [9]u8 = undefined;
             _ = &perms;
             perms[cp_cast_int(usize, 0)] = (if (((mode & bun.S.IRUSR) != 0)) (if (comptime @typeInfo(@TypeOf(114)) == .@"enum") cp_cast_int(u8, @intFromEnum(114)) else cp_cast_int(u8, 114)) else (if (comptime @typeInfo(@TypeOf(45)) == .@"enum") cp_cast_int(u8, @intFromEnum(45)) else cp_cast_int(u8, 45)));
@@ -384,8 +381,7 @@ pub fn formatPermissions(self: ShellLsTask, mode: u32) [9]u8 {
             return perms;
     }
 
-pub fn formatTime(self: ShellLsTask, timestamp: i64, now_secs: u64) [12]u8 {
-        _ = &self;
+pub fn formatTime(timestamp: i64, now_secs: u64) [12]u8 {
             var buf: [12]u8 = undefined;
             _ = &buf;
             const epoch_secs: u64 = (if ((timestamp < 0)) 0 else @intCast(timestamp));
@@ -419,10 +415,10 @@ pub fn errorWithPath(self: *ShellLsTask, err: Syscall.Error, path: [:0]const u8)
     }
 
 pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
-            var this: *ShellLsTask = @fieldParentPtr("task", task);
-            _ = &this;
-            _ = this.run();
-            _ = this.doneLogic();
+            var task_self: *ShellLsTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = task_self.run();
+            _ = task_self.doneLogic();
     }
 
 pub fn doneLogic(self: *ShellLsTask) void {
@@ -445,7 +441,7 @@ pub fn runFromMainThread(self: *ShellLsTask) void {
             _ = self.ls.onShellLsTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *ShellLsTask) void {
+pub fn runFromMainThreadMini(self: *ShellLsTask, _: *void) void {
             _ = self.runFromMainThread();
     }
 
@@ -552,7 +548,7 @@ pub fn deinit(self: *Ls) void {
         _ = self.alloc_scope.endScope();
 }
 
-pub fn onIOWriterChunk(self: *Ls, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Ls, _: usize, e: ?jsc.SystemError) Yield {
         if (e) |err| {
             _ = &err;
             _ = err.deref();
@@ -595,11 +591,11 @@ pub fn onShellLsTaskDone(self: *Ls, task: *ShellLsTask) void {
         _ = output_task.start(null).run();
 }
 
-pub fn parseOpts(self: *Ls) Result(FilepathArgs,Opts.ParseError) {
+pub fn parseOpts(self: *Ls) Result(FilepathArgs, Opts.ParseError) {
         return self.parseFlags();
 }
 
-pub fn parseFlags(self: *Ls) Result(FilepathArgs,Opts.ParseError) {
+pub fn parseFlags(self: *Ls) Result(FilepathArgs, Opts.ParseError) {
         const args = self.bltn().argsSlice();
         var idx: usize = 0;
         _ = &idx;

@@ -77,7 +77,7 @@ pub fn print(self: *Dirname, msg: []const u8) Maybe(void) {
         return .success;
 }
 
-pub fn onIOWriterChunk(self: *Dirname, maybe_e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Dirname, _: usize, maybe_e: ?jsc.SystemError) Yield {
         if (maybe_e) |e| {
             _ = &e;
             defer {

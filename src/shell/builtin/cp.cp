@@ -268,10 +268,10 @@ pub struct ShellCpTask {
 
     static fn runFromThreadPool(task: *WorkPoolTask) {
         task_debug("runFromThreadPool", .{});
-        let this: *ShellCpTask = @fieldParentPtr("task", task);
-        if (e := this.runFromThreadPoolImpl()) {
-            this.err = e;
-            this.enqueueToEventLoop();
+        let task_self: *ShellCpTask = @fieldParentPtr("task", task);
+        if (e := task_self.runFromThreadPoolImpl()) {
+            task_self.err = e;
+            task_self.enqueueToEventLoop();
             return;
         }
     }
@@ -317,13 +317,13 @@ pub struct ShellCpTask {
         let tgt_exists: bool = false;
         switch (_.isDir(tgt)) {
             .result => |is_dir| {
-                tgt_is_dir = is_dir;
-                tgt_exists = true;
+                (tgt_is_dir = is_dir);
+                (tgt_exists = true);
             },
             .err => |e| {
                 if (e.getErrno() == .NOENT) {
-                    tgt_is_dir = hasTrailingSep(tgt);
-                    tgt_exists = false;
+                    (tgt_is_dir = hasTrailingSep(tgt));
+                    (tgt_exists = false);
                 } else {
                     return bun.shell.ShellErr.newSys(e);
                 }

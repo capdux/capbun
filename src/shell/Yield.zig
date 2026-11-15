@@ -1,161 +1,12 @@
-/// There are constraints on Bun's shell interpreter which are unique to shells in
-/// general:
-/// 1. We try to keep everything in the Bun process as much as possible for
-///    performance reasons and also to leverage Bun's existing IO/FS code
-/// 2. We try to use non-blocking IO as much as possible so the shell
-///    does not block the main JS thread
-/// 3. Zig does not have coroutines (yet)
-///
-/// These cause two problems:
-/// 1. Unbounded recursion, if we keep calling .next() on state machine structs
-///    then the call stack could get really deep, we need some mechanism to allow
-///    execution to continue without blowing up the call stack
-///
-/// 2. Correctly handling suspension points. These occur when IO would block so
-///    we must, for example, wait for epoll/kqueue. The easiest solution is to have
-///    functions return some value indicating that they suspended execution of the
-///    interpreter.
-///
-/// This `Yield` struct solves these problems. It represents a "continuation" of
-/// the shell interpreter. Shell interpreter functions must return this value.
-/// At the top-level of execution, `Yield.run(...)` serves as a "trampoline" to
-/// drive execution without blowing up the callstack.
-///
-/// Note that the "top-level of execution" could be in `Interpreter.run` or when
-/// shell execution resumes after suspension in a task callback (for example in
-/// IOWriter.onWritePoll).
-pub const Yield = union(enum) {
-    script: *Script,
-    stmt: *Stmt,
-    pipeline: *Pipeline,
-    cmd: *Cmd,
-    assigns: *Assigns,
-    expansion: *Expansion,
-    @"if": *If,
-    subshell: *Subshell,
-    cond_expr: *CondExpr,
-
-    /// This can occur if data is written using IOWriter and it immediately
-    /// completes (e.g. the buf to write was empty or the fd was immediately
-    /// writeable).
-    ///
-    /// When that happens, we return this variant to ensure that the
-    /// `.onIOWriterChunk` is called at the top of the callstack.
-    ///
-    /// TODO: this struct is massive, also I think we can remove this since
-    ///       it is only used in 2 places. we might need to implement signals
-    ///       first tho.
-    on_io_writer_chunk: struct {
-        err: ?jsc.SystemError,
-        written: usize,
-        /// This type is actually `IOWriterChildPtr`, but because
-        /// of an annoying cyclic Zig compile error we're doing this
-        /// quick fix of making it `*anyopaque`.
-        child: *anyopaque,
-    },
-
-    suspended,
-    /// Failed and threw a JS error
-    failed,
-    done,
-
-    /// Used in debug builds to ensure the shell is not creating a callstack
-    /// that is too deep.
-    threadlocal var _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
-
-    /// Ideally this should be 1, but since we actually call the `resolve` of the Promise in
-    /// Interpreter.finish it could actually result in another shell script running.
-    const MAX_DEPTH = 2;
-
-    pub fn isDone(this: *const Yield) bool {
-        return this.* == .done;
-    }
-
-    pub fn run(this: Yield) void {
-        if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} + 1 = {d}", .{ @tagName(this), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec + 1 });
-        bun.debugAssert(_dbg_catch_exec_within_exec <= MAX_DEPTH);
-        if (comptime Environment.isDebug) _dbg_catch_exec_within_exec += 1;
-        defer {
-            if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} - 1 = {d}", .{ @tagName(this), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec - 1 });
-            if (comptime Environment.isDebug) _dbg_catch_exec_within_exec -= 1;
-        }
-
-        // A pipeline creates multiple "threads" of execution:
-        //
-        // ```bash
-        // cmd1 | cmd2 | cmd3
-        // ```
-        //
-        // We need to start cmd1, go back to the pipeline, start cmd2, and so
-        // on.
-        //
-        // This means we need to store a reference to the pipeline. And
-        // there can be nested pipelines, so we need a stack.
-        var sfb = std.heap.stackFallback(@sizeOf(*Pipeline) * 4, bun.default_allocator);
-        const alloc = sfb.get();
-        var pipeline_stack = bun.handleOom(std.array_list.Managed(*Pipeline).initCapacity(alloc, 4));
-        defer pipeline_stack.deinit();
-
-        // Note that we're using labelled switch statements but _not_
-        // re-assigning `this`, so the `this` variable is stale after the first
-        // execution. Don't touch it.
-        state: switch (this) {
-            .pipeline => |x| {
-                if (x.state == .done) {
-                    // remove it from the pipeline stack as calling `.next()` will now deinit it
-                    if (std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x)) |idx| {
-                        _ = pipeline_stack.orderedRemove(idx);
-                    }
-                    continue :state x.next();
-                }
-                bun.assert_eql(std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x), null);
-                bun.handleOom(pipeline_stack.append(x));
-                continue :state x.next();
-            },
-            .cmd => |x| continue :state x.next(),
-            .script => |x| continue :state x.next(),
-            .stmt => |x| continue :state x.next(),
-            .assigns => |x| continue :state x.next(),
-            .expansion => |x| continue :state x.next(),
-            .@"if" => |x| continue :state x.next(),
-            .subshell => |x| continue :state x.next(),
-            .cond_expr => |x| continue :state x.next(),
-            .on_io_writer_chunk => |x| {
-                const child = IOWriterChildPtr.fromAnyOpaque(x.child);
-                continue :state child.onIOWriterChunk(x.written, x.err);
-            },
-            .failed, .suspended, .done => {
-                if (drainPipelines(&pipeline_stack)) |yield| {
-                    continue :state yield;
-                }
-                return;
-            },
-        }
-    }
-
-    pub fn drainPipelines(pipeline_stack: *std.array_list.Managed(*Pipeline)) ?Yield {
-        if (pipeline_stack.items.len == 0) return null;
-        var i: i64 = @as(i64, @intCast(pipeline_stack.items.len)) - 1;
-        while (i >= 0 and i < pipeline_stack.items.len) : (i -= 1) {
-            const pipeline = pipeline_stack.items[@intCast(i)];
-            if (pipeline.state == .starting_cmds) return pipeline.next();
-            _ = pipeline_stack.pop();
-            if (pipeline.state == .done) {
-                return pipeline.next();
-            }
-        }
-        return null;
-    }
-};
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 const shell = bun.shell;
 const log = bun.shell.interpret.log;
-
 const Interpreter = bun.shell.Interpreter;
 const Assigns = bun.shell.Interpreter.Assigns;
 const Cmd = bun.shell.Interpreter.Cmd;
@@ -167,6 +18,156 @@ const Pipeline = bun.shell.Interpreter.Pipeline;
 const Script = bun.shell.Interpreter.Script;
 const Stmt = bun.shell.Interpreter.Stmt;
 const Subshell = bun.shell.Interpreter.Subshell;
-
 const IOWriter = bun.shell.Interpreter.IOWriter;
 const IOWriterChildPtr = IOWriter.IOWriterChildPtr;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const OnIOWriterChunk = struct {
+    e: ?jsc.SystemError,
+    written: usize,
+    child: *anyopaque,
+};
+
+pub const Yield = union(enum) {
+    script: *Script,
+    stmt: *Stmt,
+    pipeline: *Pipeline,
+    cmd: *Cmd,
+    assigns: *Assigns,
+    expansion: *Expansion,
+    @"if": *If,
+    subshell: *Subshell,
+    cond_expr: *CondExpr,
+    on_io_writer_chunk: OnIOWriterChunk,
+    suspended: void,
+    failed: void,
+    done: void,
+    pub threadlocal var _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
+
+pub fn isDone(self: *const Yield) bool {
+            return (self.* == .done);
+    }
+
+pub fn run(self: *Yield) void {
+            if (comptime Environment.isDebug) {
+                _ = log("Yield({s}) _dbg_catch_exec_within_exec = {d} + 1 = {d}", .{ @tagName(self), self._dbg_catch_exec_within_exec, (self._dbg_catch_exec_within_exec + 1) });
+            }
+            _ = bun.debugAssert((self._dbg_catch_exec_within_exec <= MAX_DEPTH));
+            if (comptime Environment.isDebug) {
+                self._dbg_catch_exec_within_exec = (self._dbg_catch_exec_within_exec + 1);
+            }
+            defer {
+            {
+                if (comptime Environment.isDebug) {
+                    _ = log("Yield({s}) _dbg_catch_exec_within_exec = {d} - 1 = {d}", .{ @tagName(self), self._dbg_catch_exec_within_exec, (self._dbg_catch_exec_within_exec - 1) });
+                }
+                if (comptime Environment.isDebug) {
+                    self._dbg_catch_exec_within_exec = (self._dbg_catch_exec_within_exec - 1);
+                }
+            }
+            }
+            var sfb = std.heap.stackFallback((@sizeOf(*Pipeline) * 4), bun.default_allocator);
+            _ = &sfb;
+            const alloc = sfb.get();
+            var pipeline_stack = bun.handleOom(std.array_list.Managed(*Pipeline).initCapacity(alloc, 4));
+            _ = &pipeline_stack;
+            defer {
+            _ = pipeline_stack.deinit();
+            }
+            var cur = self;
+            _ = &cur;
+            while (true) {
+                switch (cur) {
+.pipeline => |x| {
+if ((x.state == .done)) {
+                    if (std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x)) |idx| {
+                        _ = &idx;
+                        _ = pipeline_stack.orderedRemove(idx);
+                    }
+                    cur = x.next();
+                    continue;
+                }
+                _ = bun.assert_eql(std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x), null);
+                _ = bun.handleOom(pipeline_stack.append(x));
+                cur = x.next();
+},
+.cmd => |x| {
+cur = x.next();
+},
+.script => |x| {
+cur = x.next();
+},
+.stmt => |x| {
+cur = x.next();
+},
+.assigns => |x| {
+cur = x.next();
+},
+.expansion => |x| {
+cur = x.next();
+},
+.@"if" => |x| {
+cur = x.next();
+},
+.subshell => |x| {
+cur = x.next();
+},
+.cond_expr => |x| {
+cur = x.next();
+},
+.on_io_writer_chunk => |x| {
+const child = IOWriterChildPtr.fromAnyOpaque(x.child);
+                cur = child.onIOWriterChunk(x.written, x.e);
+},
+.failed, .suspended, .done => {
+if (Yield.drainPipelines(pipeline_stack)) |yield| {
+                    _ = &yield;
+                    cur = yield;
+                    continue;
+                }
+                return;
+},
+}
+            }
+    }
+
+pub fn drainPipelines(pipeline_stack: *std.array_list.Managed(*Pipeline)) ?Yield {
+            if ((pipeline_stack.items.len == 0)) {
+                return null;
+            }
+            var i: i64 = (@as(i64, @intCast(pipeline_stack.items.len)) - 1);
+            _ = &i;
+            while (((i >= 0) and (i < pipeline_stack.items.len))) : (i = (i - 1)) {
+                const pipeline = pipeline_stack.items[@as(usize, @intCast(i))];
+                if ((pipeline.state == .starting_cmds)) {
+                    return pipeline.next();
+                }
+                _ = pipeline_stack.pop();
+                if ((pipeline.state == .done)) {
+                    return pipeline.next();
+                }
+            }
+            return null;
+    }
+    const MAX_DEPTH = 2;
+};
+

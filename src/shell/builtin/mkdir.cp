@@ -169,32 +169,32 @@ pub const ShellMkdirTask = struct {
     }
 
     pub static fn runFromThreadPool(task: *jsc.WorkPoolTask) {
-        let this: *ShellMkdirTask = @fieldParentPtr("task", task);
-        debug("{f} runFromThreadPool", .{this});
+        let task_self: *ShellMkdirTask = @fieldParentPtr("task", task);
+        debug("{f} runFromThreadPool", .{task_self});
 
-        let filepath: [:0]const u8 = this.filepath;
-        if (!ResolvePath.Platform.auto.isAbsolute(this.filepath)) {
+        let filepath: [:0]const u8 = task_self.filepath;
+        if (!ResolvePath.Platform.auto.isAbsolute(task_self.filepath)) {
             const parts: [2][]const u8 = [
-                this.cwd_path[0..],
-                this.filepath[0..],
+                task_self.cwd_path[0..],
+                task_self.filepath[0..],
             ];
             filepath = ResolvePath.joinZ(&parts, .auto);
         }
 
         let node_fs = jsc.Node.fs.NodeFS{};
-        if (this.opts.parents) {
+        if (task_self.opts.parents) {
             const args = jsc.Node.fs.Arguments.Mkdir{
                 .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) },
                 .recursive = true,
                 .always_return_none = true,
             };
 
-            let vtable = MkdirVerboseVTable{ .inner = this, .active = this.opts.verbose };
+            let vtable = MkdirVerboseVTable{ .inner = task_self, .active = task_self.opts.verbose };
 
             switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, &vtable)) {
                 .result => {},
                 .err => |e| {
-                    this.err = e.withPath(filepath).toShellSystemError();
+                    task_self.err = e.withPath(filepath).toShellSystemError();
                     std.mem.doNotOptimizeAway(&node_fs);
                 },
             }
@@ -206,22 +206,22 @@ pub const ShellMkdirTask = struct {
             };
             switch (node_fs.mkdirNonRecursive(args)) {
                 .result => {
-                    if (this.opts.verbose) {
-                        bun.handleOom(this.created_directories.appendSlice(filepath[0..filepath.len]));
-                        bun.handleOom(this.created_directories.append('\n'));
+                    if (task_self.opts.verbose) {
+                        bun.handleOom(task_self.created_directories.appendSlice(filepath[0..filepath.len]));
+                        bun.handleOom(task_self.created_directories.append('\n'));
                     }
                 },
                 .err => |e| {
-                    this.err = e.withPath(filepath).toShellSystemError();
+                    task_self.err = e.withPath(filepath).toShellSystemError();
                     std.mem.doNotOptimizeAway(&node_fs);
                 },
             }
         }
 
-        if (this.event_loop == .js) {
-            this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+        if (task_self.event_loop == .js) {
+            task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
         } else {
-            this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+            task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
         }
     }
 };

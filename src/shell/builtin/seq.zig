@@ -170,7 +170,7 @@ pub fn print(self: *Seq, msg: []const u8) void {
         _ = self.bltn().writeNoIO(.stdout, msg);
 }
 
-pub fn onIOWriterChunk(self: *Seq, maybe_e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Seq, _: usize, maybe_e: ?jsc.SystemError) Yield {
         if (maybe_e) |e| {
             _ = &e;
             defer {

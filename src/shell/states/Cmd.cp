@@ -703,12 +703,12 @@ pub struct ShellAsyncSubprocessDone {
                 return null;
             },
             .bltn => {
-                switch (_.exec.bltn.stdout) {
-                    .buf => return _.exec.bltn.stdout.buf.items[0..],
-                    .arraybuf => return _.exec.bltn.stdout.arraybuf.buf.slice(),
-                    .blob => return _.exec.bltn.stdout.blob.sharedView(),
-                    else => return null,
-                }
+                return switch (_.exec.bltn.stdout) {
+                    .buf => _.exec.bltn.stdout.buf.items[0..],
+                    .arraybuf => _.exec.bltn.stdout.arraybuf.buf.slice(),
+                    .blob => _.exec.bltn.stdout.blob.sharedView(),
+                    else => null,
+                };
             },
         }
     }

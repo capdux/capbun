@@ -16,10 +16,10 @@ const WaitingIo = struct {
     kind: OutputKind,
 };
 const State = union(enum) {
-    idle,
+    idle: void,
     waiting_io: WaitingIo,
-    @"err",
-    done,
+    @"err": void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -85,7 +85,7 @@ _ = unreachable;
 }
 }
 
-pub fn onIOWriterChunk(self: *Pwd, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Pwd, _: usize, e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert((self.state == .waiting_io));
         }

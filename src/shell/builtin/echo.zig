@@ -11,10 +11,10 @@ const ExitCode = bun.shell.ExitCode;
 const Yield = bun.shell.Yield;
 const log = bun.Output.scoped(.echo, .hidden);
 pub const State = union(enum) {
-    idle,
-    waiting,
-    waiting_write_err,
-    done,
+    idle: void,
+    waiting: void,
+    waiting_write_err: void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -137,7 +137,7 @@ _ = unreachable;
         return self.bltn().done(0);
 }
 
-pub fn onIOWriterChunk(self: *Echo, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Echo, _: usize, e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert(((self.state == .waiting) or (self.state == .waiting_write_err)));
         }

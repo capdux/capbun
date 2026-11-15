@@ -22,14 +22,11 @@ const log = bun.shell.interpret.log;
 pub const ParentPtr = StatePtrUnion(.{ Pipeline, Binary, Stmt });
 pub const ChildPtr = StatePtrUnion(.{ Script, Expansion });
 pub const RunState = union(enum) {
-    idle,
-    expanding_redirect: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    exec,
-    wait_write_err,
-    done,
+    idle: void,
+    expanding_redirect: __CpObj_idx_u32_expansion_Expansion,
+    exec: void,
+    wait_write_err: void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -174,3 +171,4 @@ pub fn enqueueCb(ctx: *Subshell) void {
 pub fn writeFailingError(self: *Subshell, comptime fmt: []const u8, args: anytype) Yield {
         return self.base.shell.writeFailingErrorFmt(self, Subshell.enqueueCb, fmt, args);
 }
+pub const __CpObj_idx_u32_expansion_Expansion = struct { idx: u32, expansion: Expansion };

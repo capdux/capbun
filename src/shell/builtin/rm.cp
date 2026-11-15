@@ -170,8 +170,8 @@ pub struct ShellDirTask {
     }
 
     pub static fn runFromThreadPool(task: *jsc.WorkPoolTask) {
-        let this: *ShellDirTask = @fieldParentPtr("task", task);
-        this.runFromThreadPoolImpl();
+        let task_self: *ShellDirTask = @fieldParentPtr("task", task);
+        task_self.runFromThreadPoolImpl();
     }
 
     pub fn runFromThreadPoolImpl(*_) {
@@ -795,8 +795,8 @@ pub struct ShellRmTask {
     }
 
     pub static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-        let this: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
-        this.root_task.runFromThreadPoolImpl();
+        let task_self: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
+        task_self.root_task.runFromThreadPoolImpl();
     }
 
     pub fn runFromMainThread(*_) {

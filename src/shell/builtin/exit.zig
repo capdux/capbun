@@ -82,7 +82,7 @@ return self.bltn().done(1);
 }
 }
 
-pub fn onIOWriterChunk(self: *Exit, maybe_e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Exit, _: usize, maybe_e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert((self.state == .waiting_io));
         }

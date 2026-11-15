@@ -34,13 +34,13 @@ const stdout_no = bun.shell.interpret.stdout_no;
 pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Pipeline, Async });
 pub const ChildPtr = StatePtrUnion(.{ Assigns, Expansion });
 pub const BufferedIoStateUnion = union(enum) {
-    open,
+    open: void,
     closed: bun.ByteList,
 };
 pub const BufferedIoCloseTarget = union(enum) {
     stdout: *Subprocess.Readable,
     stderr: *Subprocess.Readable,
-    stdin,
+    stdin: void,
 };
 pub const IoKind = enum {
     stdout,
@@ -48,27 +48,18 @@ pub const IoKind = enum {
     stdin,
 };
 pub const Exec = union(enum) {
-    none,
+    none: void,
     bltn: Builtin,
-    subproc: struct {
-        child: *Subprocess,
-        buffered_closed: BufferedIoClosed = .{},
-    },
+    subproc: __CpObj_child__Subprocess_buffered_closed_BufferedIoClosed,
 };
 pub const CmdState = union(enum) {
-    idle,
+    idle: void,
     expanding_assigns: Assigns,
-    expanding_redirect: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    expanding_args: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    exec,
-    done,
-    waiting_write_err,
+    expanding_redirect: __CpObj_idx_u32_expansion_Expansion,
+    expanding_args: __CpObj_idx_u32_expansion_Expansion,
+    exec: void,
+    done: void,
+    waiting_write_err: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -527,6 +518,7 @@ if ((self.base.eventLoop() != .js)) {
                     } else {
                         if (try jsc.WebCore.ReadableStream.fromJS(self.base.interpreter.jsobjs[@as(usize, @intCast(val.idx))], global)) |rstream| {
                             _ = &rstream;
+                            _ = &rstream;
                             _ = @panic("TODO SHELL READABLE STREAM");
                         } else {
                             if (self.base.interpreter.jsobjs[@as(usize, @intCast(val.idx))].as(jsc.WebCore.Response)) |req| {
@@ -616,20 +608,12 @@ if (((self.exec.subproc.buffered_closed.stdout != null) and (self.exec.subproc.b
         return null;
 },
 .bltn => {
-switch (self.exec.bltn.stdout) {
-.buf => {
-return self.exec.bltn.stdout.buf.items[0..];
-},
-.arraybuf => {
-return self.exec.bltn.stdout.arraybuf.buf.slice();
-},
-.blob => {
-return self.exec.bltn.stdout.blob.sharedView();
-},
-else => {
-return null;
-},
-}
+return (switch (self.exec.bltn.stdout) {
+.buf => self.exec.bltn.stdout.buf.items[0..],
+.arraybuf => self.exec.bltn.stdout.arraybuf.buf.slice(),
+.blob => self.exec.bltn.stdout.blob.sharedView(),
+else => null,
+});
 },
 }
 }
@@ -768,3 +752,5 @@ pub fn bufferedOutputCloseStderr(self: *Cmd, err_opt: ?jsc.SystemError) void {
         _ = self.exec.subproc.child.closeIO(.stderr);
 }
 pub const ArgStr = ?[*:0]u8;
+pub const __CpObj_child__Subprocess_buffered_closed_BufferedIoClosed = struct { child: *Subprocess, buffered_closed: BufferedIoClosed };
+pub const __CpObj_idx_u32_expansion_Expansion = struct { idx: u32, expansion: Expansion };

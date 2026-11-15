@@ -50,7 +50,7 @@ pub fn writeOutput(self: *Export, comptime io_kind: @Type(.enum_literal), compti
         return self.bltn().done(0);
 }
 
-pub fn onIOWriterChunk(self: *Export, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Export, _: usize, e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert(self.printing);
         }

@@ -47,11 +47,11 @@ pub fn deinit(self: *@This()) void {
 pub const EbusyExecState = (if (bun.Environment.isWindows) EbusyState else struct {
 });
 pub const State = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
     ebusy: EbusySubState,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 pub const ShellCpKind = enum {
     file,
@@ -140,7 +140,7 @@ pub const Opts = packed struct(u16) {
     overwrite_existing_file: bool = true,
     _padding: u7 = 0,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs, ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -229,8 +229,7 @@ pub fn schedule(self: *ShellCpTask) void {
             _ = WorkPool.schedule((&self.task));
     }
 
-pub fn create(self: ShellCpTask, cp: *Cp, evtloop: jsc.EventLoopHandle, opts: Opts, operands: usize, src: [:0]const u8, tgt: [:0]const u8, cwd_path: [:0]const u8) *ShellCpTask {
-        _ = &self;
+pub fn create(cp: *Cp, evtloop: jsc.EventLoopHandle, opts: Opts, operands: usize, src: [:0]const u8, tgt: [:0]const u8, cwd_path: [:0]const u8) *ShellCpTask {
             return bun.new(ShellCpTask, ShellCpTask{ .cp = cp, .operands = operands, .opts = opts, .src = src, .tgt = tgt, .cwd_path = cwd_path, .event_loop = evtloop, .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop) });
     }
 
@@ -240,16 +239,14 @@ pub fn takeOutput(self: *ShellCpTask) ArrayList(u8) {
             return out;
     }
 
-pub fn ensureDest(self: ShellCpTask, nodefs: *jsc.Node.fs.NodeFS, dest: bun.OSPathSliceZ) Maybe(void) {
-        _ = &self;
+pub fn ensureDest(nodefs: *jsc.Node.fs.NodeFS, dest: bun.OSPathSliceZ) Maybe(void) {
             return (switch (nodefs.mkdirRecursiveOSPath(dest, jsc.Node.Arguments.Mkdir.DefaultMode, false)) {
 .err => |e| .{ .err = e },
 .result => .success,
 });
     }
 
-pub fn hasTrailingSep(self: ShellCpTask, path: [:0]const u8) bool {
-        _ = &self;
+pub fn hasTrailingSep(path: [:0]const u8) bool {
             if ((path.len == 0)) {
                 return false;
             }
@@ -289,18 +286,18 @@ pub fn runFromMainThread(self: *ShellCpTask) void {
             _ = self.cp.onShellCpTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *ShellCpTask) void {
+pub fn runFromMainThreadMini(self: *ShellCpTask, _: *void) void {
             _ = self.runFromMainThread();
     }
 
 pub fn runFromThreadPool(task: *WorkPoolTask) void {
             _ = task_debug("runFromThreadPool", .{});
-            var this: *ShellCpTask = @fieldParentPtr("task", task);
-            _ = &this;
-            if (this.runFromThreadPoolImpl()) |e| {
+            var task_self: *ShellCpTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            if (task_self.runFromThreadPoolImpl()) |e| {
                 _ = &e;
-                this.err = e;
-                _ = this.enqueueToEventLoop();
+                task_self.err = e;
+                _ = task_self.enqueueToEventLoop();
                 return;
             }
     }
@@ -347,7 +344,7 @@ tgt_is_dir = is_dir;
 },
 .err => |e| {
 if ((e.getErrno() == .NOENT)) {
-                tgt_is_dir = self.hasTrailingSep(tgt);
+                tgt_is_dir = ShellCpTask.hasTrailingSep(tgt);
                 tgt_exists = false;
             } else {
                 return bun.shell.ShellErr.newSys(e);
@@ -384,6 +381,7 @@ if ((e.getErrno() == .NOENT)) {
                     copying_many = true;
                 }
             }
+            _ = &copying_many;
             self.src_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, src[0..src.len]));
             self.tgt_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, tgt[0..tgt.len]));
             const args = jsc.Node.fs.Arguments.Cp{ .src = jsc.Node.PathLike{ .string = bun.PathString.init(self.src_absolute.?) }, .dest = jsc.Node.PathLike{ .string = bun.PathString.init(self.tgt_absolute.?) }, .flags = .{ .mode = @enumFromInt(0), .recursive = self.opts.recursive, .force = true, .errorOnExist = false, .deinit_paths = false } };
@@ -490,10 +488,12 @@ pub fn ignoreEbusyErrorIfPossible(self: *Cp) Yield {
                 const failure_tgt = task.tgt_absolute.?;
                 if (self.state.ebusy.state.absolute_targets.get(failure_tgt)) |entry| {
                     _ = &entry;
+                    _ = &entry;
                     _ = task.deinit();
                     continue;
                 }
                 if (self.state.ebusy.state.absolute_srcs.get(failure_src)) |entry| {
+                    _ = &entry;
                     _ = &entry;
                     _ = task.deinit();
                     continue;
@@ -581,7 +581,7 @@ pub fn writeFailingError(self: *Cp, buf: []const u8, exit_code: ExitCode) Yield 
         return self.bltn().done(exit_code);
 }
 
-pub fn onIOWriterChunk(self: *Cp, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Cp, _: usize, e: ?jsc.SystemError) Yield {
         if (e) |err| {
             _ = &err;
             _ = err.deref();

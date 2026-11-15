@@ -96,12 +96,12 @@ pub struct ShellCondExprStatTask {
         io: IO,
     ): *CondExpr {
         let condexpr = parent.create(CondExpr);
-        condexpr.* = .{
-            .base = State.initWithNewAllocScope(.condexpr, interpreter, shell_state),
-            .node = node,
-            .parent = parent,
-            .io = io,
-            .args = undefined,
+        condexpr.* = {
+            base: State.initWithNewAllocScope(.condexpr, interpreter, shell_state),
+            node: node,
+            parent: parent,
+            io: io,
+            args: undefined,
         };
         condexpr.args = std.array_list.Managed([:0]const u8).init(condexpr.base.allocator());
         return condexpr;
@@ -113,14 +113,14 @@ pub struct ShellCondExprStatTask {
 
     fn start(*_): Yield {
         log("{f} start", .{_});
-        return .{ .cond_expr = _ };
+        return { cond_expr: _ };
     }
 
     fn next(*_): Yield {
         while (_.state != .done) {
             switch (_.state) {
                 .idle => {
-                    _.state = .{ .expanding_args = .{ .expansion = undefined } };
+                    _.state = { expanding_args: { expansion: undefined } };
                     continue;
                 },
                 .expanding_args => {
@@ -135,61 +135,51 @@ pub struct ShellCondExprStatTask {
                         &_.state.expanding_args.expansion,
                         _.node.args.getConst(_.state.expanding_args.idx),
                         Expansion.ParentPtr.init(_),
-                        .{
-                            .array_of_slice = &_.args,
+                        {
+                            array_of_slice: &_.args,
                         },
                         _.io.copy(),
                     );
                     _.state.expanding_args.idx += 1;
                     return _.state.expanding_args.expansion.start();
                 },
-                .waiting_stat => return .suspended,
+                .waiting_stat => {
+                    return .suspended;
+                },
                 .stat_complete => {
-                    switch (_.node.op) {
-                        .@"-f" => {
-                            const st: bun.Stat = switch (_.state.stat_complete.stat) {
-                                .result => |s| s,
-                                .err => {
-                                    // It seems that bash always gives exit code 1
-                                    return _.parent.childDone(_, 1);
+                    switch (_.state.stat_complete.stat) {
+                        .result => |st| {
+                            switch (_.node.op) {
+                                .@"-f" => {
+                                    return _.parent.childDone(_, if (bun.S.ISREG(@intCast(st.mode))) 0 else 1);
                                 },
-                            };
-                            return _.parent.childDone(_, if (bun.S.ISREG(@intCast(st.mode))) 0 else 1);
-                        },
-                        .@"-d" => {
-                            const st: bun.Stat = switch (_.state.stat_complete.stat) {
-                                .result => |s| s,
-                                .err => {
-                                    // It seems that bash always gives exit code 1
-                                    return _.parent.childDone(_, 1);
+                                .@"-d" => {
+                                    return _.parent.childDone(_, if (bun.S.ISDIR(@intCast(st.mode))) 0 else 1);
                                 },
-                            };
-                            return _.parent.childDone(_, if (bun.S.ISDIR(@intCast(st.mode))) 0 else 1);
-                        },
-                        .@"-c" => {
-                            const st: bun.Stat = switch (_.state.stat_complete.stat) {
-                                .result => |s| s,
-                                .err => {
-                                    // It seems that bash always gives exit code 1
-                                    return _.parent.childDone(_, 1);
+                                .@"-c" => {
+                                    return _.parent.childDone(_, if (bun.S.ISCHR(@intCast(st.mode))) 0 else 1);
                                 },
-                            };
-                            return _.parent.childDone(_, if (bun.S.ISCHR(@intCast(st.mode))) 0 else 1);
-                        },
-                        .@"-z", .@"-n", .@"==", .@"!=" => @panic("This conditional expression op does not need `stat()`. This indicates a bug in Bun. Please file a GitHub issue."),
-                        else => {
-                            if (bun.Environment.allow_assert) {
-                                inline for (supported of ast.CondExpr.Op.SUPPORTED) {
-                                    if (supported == _.node.op) {
-                                        @panic("DEV: You did not support the \"" ++ @tagName(supported) ++ "\" conditional expression operation here.");
+                                .@"-z", .@"-n", .@"==", .@"!=" => @panic("This conditional expression op does not need `stat()`. This indicates a bug in Bun. Please file a GitHub issue."),
+                                else => {
+                                    if (bun.Environment.allow_assert) {
+                                        inline for (supported of ast.CondExpr.Op.SUPPORTED) {
+                                            if (supported == _.node.op) {
+                                                @panic("DEV: You did not support the \"" ++ @tagName(supported) ++ "\" conditional expression operation here.");
+                                            }
+                                        }
                                     }
-                                }
+                                    @panic("Invalid conditional expression op, this indicates a bug in Bun. Please file a GithHub issue.");
+                                },
                             }
-                            @panic("Invalid conditional expression op, this indicates a bug in Bun. Please file a GithHub issue.");
+                        },
+                        .err => {
+                            return _.parent.childDone(_, 1);
                         },
                     }
                 },
-                .waiting_write_err => return .suspended,
+                .waiting_write_err => {
+                    return .suspended;
+                },
                 .done => assert(false),
             }
         }
@@ -234,14 +224,14 @@ pub struct ShellCondExprStatTask {
     }
 
     fn doStat(*_): Yield {
-        const stat_task = bun.new(ShellCondExprStatTask, .{
-            .task = .{
-                .event_loop = _.base.eventLoop(),
-                .concurrent_task = jsc.EventLoopTask.fromEventLoop(_.base.eventLoop()),
+        const stat_task = bun.new(ShellCondExprStatTask, {
+            task: {
+                event_loop: _.base.eventLoop(),
+                concurrent_task: jsc.EventLoopTask.fromEventLoop(_.base.eventLoop()),
             },
-            .condexpr = _,
-            .path = _.args.items[0],
-            .cwdfd = _.base.shell.cwd_fd,
+            condexpr: _,
+            path: _.args.items[0],
+            cwdfd: _.base.shell.cwd_fd,
         });
         stat_task.task.schedule();
         return .suspended;
@@ -275,8 +265,8 @@ pub struct ShellCondExprStatTask {
     fn onStatTaskComplete(*_, result: Maybe(bun.Stat)) {
         if (bun.Environment.allow_assert) assert(_.state == .waiting_stat);
 
-        _.state = .{
-            .stat_complete = .{ .stat = result },
+        _.state = {
+            stat_complete: { stat: result },
         };
         _.next().run();
     }

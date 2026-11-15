@@ -22,10 +22,10 @@ const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellTouch, .hidden);
 const log = debug;
 pub const State = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 pub const ShellTouchTask = struct {
     touch: *Touch,
@@ -51,8 +51,7 @@ pub fn deinit(self: *@This()) void {
             _ = bun.default_allocator.destroy(self);
     }
 
-pub fn create(self: @This(), touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
-        _ = &self;
+pub fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
             var task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
             _ = &task;
             task.* = ShellTouchTask{ .touch = touch, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .event_loop = touch.bltn().eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(touch.bltn().eventLoop()) };
@@ -69,18 +68,18 @@ pub fn runFromMainThread(self: *@This()) void {
             _ = self.touch.onShellTouchTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *@This()) void {
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
             _ = self.runFromMainThread();
     }
 
 pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-            var this: *ShellTouchTask = @fieldParentPtr("task", task);
-            _ = &this;
-            _ = debug("{f} runFromThreadPool", .{ this });
-            var filepath: [:0]const u8 = this.filepath;
+            var task_self: *ShellTouchTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = debug("{f} runFromThreadPool", .{ task_self });
+            var filepath: [:0]const u8 = task_self.filepath;
             _ = &filepath;
-            if ((!ResolvePath.Platform.auto.isAbsolute(this.filepath))) {
-                const parts: [2][]const u8 = .{ this.cwd_path[0..], this.filepath[0..] };
+            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
+                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
                 filepath = ResolvePath.joinZ((&parts), .auto);
             }
             var node_fs = jsc.Node.fs.NodeFS{  };
@@ -98,17 +97,17 @@ pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
 _ = fd.close();
 },
 .err => |e| {
-this.err = e.withPath(filepath).toShellSystemError();
+task_self.err = e.withPath(filepath).toShellSystemError();
 },
 }
                 } else {
-                    this.err = err_.withPath(filepath).toShellSystemError();
+                    task_self.err = err_.withPath(filepath).toShellSystemError();
                 }
             }
-            if ((this.event_loop == .js)) {
-                _ = this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+            if ((task_self.event_loop == .js)) {
+                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
             } else {
-                _ = this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
             }
     }
 };
@@ -181,7 +180,7 @@ pub const Opts = struct {
     timestamp: []const ?u8 = null,
     time: []const ?u8 = null,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs, ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -311,7 +310,7 @@ return self.bltn().done(0);
 }
 }
 
-pub fn onIOWriterChunk(self: *Touch, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Touch, _: usize, e: ?jsc.SystemError) Yield {
         if (e) |err| {
             _ = &err;
             _ = err.deref();

@@ -18,11 +18,11 @@ const IOReader = shell.IOReader;
 const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellCat, .hidden);
 pub const State = union(enum) {
-    idle,
+    idle: void,
     exec_stdin: ExecStdin,
     exec_filepath_args: ExecFilePathArgs,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -66,7 +66,7 @@ pub const Opts = struct {
     disable_output_buffering: bool = false,
     show_nonprinting: bool = false,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs, ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -210,7 +210,7 @@ return self.bltn().done(0);
 }
 }
 
-pub fn onIOWriterChunk(self: *Cat, err: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Cat, _: usize, err: ?jsc.SystemError) Yield {
         _ = debug("onIOWriterChunk(0x{x}, {s}, had_err={})", .{ @intFromPtr(self), @tagName(self.state), (err != null) });
         if (err) |e| {
             _ = &e;

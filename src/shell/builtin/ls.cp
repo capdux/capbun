@@ -421,9 +421,9 @@ pub struct ShellLsTask {
     }
 
     static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-        let this: *ShellLsTask = @fieldParentPtr("task", task);
-        this.run();
-        this.doneLogic();
+        let task_self: *ShellLsTask = @fieldParentPtr("task", task);
+        task_self.run();
+        task_self.doneLogic();
     }
 
     fn doneLogic(*_) {

@@ -36,14 +36,10 @@ pub const CmdOrResult = union(enum) {
     result: ExitCode,
 };
 pub const PipelineState = union(enum) {
-    starting_cmds: struct {
-        idx: u32,
-    },
-    pending,
-    waiting_write_err,
-    done: struct {
-        exit_code: ExitCode = 0,
-    },
+    starting_cmds: __CpObj_idx_u32,
+    pending: void,
+    waiting_write_err: void,
+    done: __CpObj_exit_code_ExitCode,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -368,3 +364,5 @@ pub fn readPipe(pipes: []Pipe, proc_idx: usize, io: *IO, evtloop: jsc.EventLoopH
         }
         return .{ .fd = IOReader.init(pipes[@as(usize, @intCast((proc_idx - 1)))][0], evtloop) };
 }
+pub const __CpObj_exit_code_ExitCode = struct { exit_code: ExitCode };
+pub const __CpObj_idx_u32 = struct { idx: u32 };

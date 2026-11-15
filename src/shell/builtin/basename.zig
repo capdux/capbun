@@ -72,7 +72,7 @@ pub fn print(self: *Basename, msg: []const u8) void {
         _ = self.bltn().writeNoIO(.stdout, msg);
 }
 
-pub fn onIOWriterChunk(self: *Basename, maybe_e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Basename, _: usize, maybe_e: ?jsc.SystemError) Yield {
         if (maybe_e) |e| {
             _ = &e;
             defer {

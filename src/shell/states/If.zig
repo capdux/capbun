@@ -20,16 +20,16 @@ const log = bun.shell.interpret.log;
 pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Pipeline, Async });
 pub const ChildPtr = StatePtrUnion(.{ Stmt });
 pub const ExecInnerState = union(enum) {
-    cond,
-    then,
+    cond: void,
+    then: void,
     elif: ElifState,
-    @"else",
+    @"else": void,
 };
 pub const IfState = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -45,7 +45,7 @@ pub const ElifState = struct {
 
 pub const ExecState = struct {
     state: ExecInnerState,
-    stmts: *const SmolList(ast.Stmt,1),
+    stmts: *const SmolList(ast.Stmt, 1),
     stmt_idx: u32 = 0,
     last_exit_code: ExitCode = 0,
 };

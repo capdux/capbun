@@ -89,7 +89,8 @@ const assign = Assigns.init(self.base.interpreter, self.base.shell, assigns, .sh
         return ChildPtr.init(assign);
 },
 .subshell => {
-switch (Subshell.initDupeShellState(self.base.interpreter, self.base.shell, node.subshell, Subshell.ParentPtr.init(self), self.io.copy())) {
+const init_res = Subshell.initDupeShellState(self.base.interpreter, self.base.shell, node.subshell, Subshell.ParentPtr.init(self), self.io.copy());
+        switch (init_res) {
 .result => |subshell| {
 return ChildPtr.init(subshell);
 },

@@ -26,14 +26,10 @@ pub const AssignCtx = enum {
 pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Cmd, Pipeline });
 pub const ChildPtr = StatePtrUnion(.{ Expansion });
 pub const AssignState = union(enum) {
-    idle,
-    expanding: struct {
-        idx: u32 = 0,
-        current_expansion_result: std.array_list.Managed([:0]const u8),
-        expansion: Expansion,
-    },
+    idle: void,
+    expanding: __CpObj_idx_u32_current_expansion_result_std_array_list_Managed___0_const_u8__expansion_Expansion,
     err: bun.shell.ShellErr,
-    done,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -198,3 +194,4 @@ pub fn childDone(self: *Assigns, child: ChildPtr, exit_code: ExitCode) Yield {
         }
         _ = @panic("Invalid child to Assigns expression, this indicates a bug in Bun. Please file a report on Github.");
 }
+pub const __CpObj_idx_u32_current_expansion_result_std_array_list_Managed___0_const_u8__expansion_Expansion = struct { idx: u32, current_expansion_result: std.array_list.Managed([:0]const u8), expansion: Expansion };

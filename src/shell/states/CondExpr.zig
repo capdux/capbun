@@ -25,18 +25,12 @@ const log = bun.shell.interpret.log;
 pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Pipeline, Async });
 pub const ChildPtr = StatePtrUnion(.{ Expansion });
 pub const CondExprState = union(enum) {
-    idle,
-    expanding_args: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-        last_exit_code: ExitCode = 0,
-    },
-    waiting_stat,
-    stat_complete: struct {
-        stat: Maybe(bun.Stat),
-    },
-    waiting_write_err,
-    done,
+    idle: void,
+    expanding_args: __CpObj_idx_u32_expansion_Expansion_last_exit_code_ExitCode,
+    waiting_stat: void,
+    stat_complete: __CpObj_stat_Maybe_bun_Stat_,
+    waiting_write_err: void,
+    done: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -49,7 +43,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 pub const ShellCondExprStatTask = struct {
-    task: ShellTask(ShellCondExprStatTask,runFromThreadPool,runFromMainThread,log),
+    task: ShellTask(ShellCondExprStatTask, runFromThreadPool, runFromMainThread, log),
     condexpr: *CondExpr,
     result: ?Maybe(bun.Stat) = null,
     path: [:0]const u8,
@@ -124,33 +118,17 @@ if ((self.state.expanding_args.idx >= self.node.args.len())) {
 return .suspended;
 },
 .stat_complete => {
+switch (self.state.stat_complete.stat) {
+.result => |st| {
 switch (self.node.op) {
 .@"-f" => {
-const st: bun.Stat = (switch (self.state.stat_complete.stat) {
-.result => |s| s,
-.err => {
-return self.parent.childDone(self, 1);
-},
-});
-            return self.parent.childDone(self, (if (bun.S.ISREG(@intCast(st.mode))) 0 else 1));
+return self.parent.childDone(self, (if (bun.S.ISREG(@intCast(st.mode))) 0 else 1));
 },
 .@"-d" => {
-const st: bun.Stat = (switch (self.state.stat_complete.stat) {
-.result => |s| s,
-.err => {
-return self.parent.childDone(self, 1);
-},
-});
-            return self.parent.childDone(self, (if (bun.S.ISDIR(@intCast(st.mode))) 0 else 1));
+return self.parent.childDone(self, (if (bun.S.ISDIR(@intCast(st.mode))) 0 else 1));
 },
 .@"-c" => {
-const st: bun.Stat = (switch (self.state.stat_complete.stat) {
-.result => |s| s,
-.err => {
-return self.parent.childDone(self, 1);
-},
-});
-            return self.parent.childDone(self, (if (bun.S.ISCHR(@intCast(st.mode))) 0 else 1));
+return self.parent.childDone(self, (if (bun.S.ISCHR(@intCast(st.mode))) 0 else 1));
 },
 .@"-z", .@"-n", .@"==", .@"!=" => {
 _ = @panic("This conditional expression op does not need `stat()`. This indicates a bug in Bun. Please file a GitHub issue.");
@@ -164,6 +142,11 @@ if (bun.Environment.allow_assert) {
                 }
             }
             _ = @panic("Invalid conditional expression op, this indicates a bug in Bun. Please file a GithHub issue.");
+},
+}
+},
+.err => {
+return self.parent.childDone(self, 1);
 },
 }
 },
@@ -279,3 +262,5 @@ pub fn onIOWriterChunk(self: *CondExpr, _len: usize, err_opt: ?jsc.SystemError) 
         _ = bun.shell.unreachableState("CondExpr.onIOWriterChunk", @tagName(self.state));
 }
 pub const StringZ = [:0]const u8;
+pub const __CpObj_idx_u32_expansion_Expansion_last_exit_code_ExitCode = struct { idx: u32, expansion: Expansion, last_exit_code: ExitCode };
+pub const __CpObj_stat_Maybe_bun_Stat_ = struct { stat: Maybe(bun.Stat) };

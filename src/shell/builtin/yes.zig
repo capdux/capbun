@@ -52,7 +52,7 @@ pub fn runFromMainThread(self: *YesTask) void {
             _ = yes.writeNoIO().run();
     }
 
-pub fn runFromMainThreadMini(self: *YesTask) void {
+pub fn runFromMainThreadMini(self: *YesTask, _: *void) void {
             _ = self.runFromMainThread();
     }
 };
@@ -181,7 +181,7 @@ pub fn writeFailingError(self: *Yes, buf: []const u8, exit_code: shell.ExitCode)
         return self.bltn().done(exit_code);
 }
 
-pub fn onIOWriterChunk(self: *Yes, maybe_e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Yes, _: usize, maybe_e: ?jsc.SystemError) Yield {
         if (maybe_e) |e| {
             _ = &e;
             defer {

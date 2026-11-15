@@ -12,9 +12,9 @@ const jsc = bun.jsc;
 const shell = bun.shell;
 const Yield = shell.Yield;
 const State = union(enum) {
-    idle,
-    waiting_write_stderr,
-    done,
+    idle: void,
+    waiting_write_stderr: void,
+    done: void,
     @"err": Syscall.Error,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -55,7 +55,7 @@ switch (self.bltn().parentCmd().base.shell.changePrevCwd(self.bltn().parentCmd()
 .result => {
 
 },
-.@"err" => |e| {
+.err => |e| {
 return self.handleChangeCwdErr(e, self.bltn().parentCmd().base.shell.prevCwdZ());
 },
 }
@@ -67,7 +67,7 @@ const homedir = self.bltn().parentCmd().base.shell.getHomedir();
 .result => {
 
 },
-.@"err" => |e| {
+.err => |e| {
 return self.handleChangeCwdErr(e, homedir.slice());
 },
 }
@@ -77,7 +77,7 @@ switch (self.bltn().parentCmd().base.shell.changeCwd(self.bltn().parentCmd().bas
 .result => {
 
 },
-.@"err" => |e| {
+.err => |e| {
 return self.handleChangeCwdErr(e, first_arg);
 },
 }
@@ -119,7 +119,7 @@ pub fn handleChangeCwdErr(self: *Cd, err_val: Syscall.Error, new_cwd_: []const u
         }
 }
 
-pub fn onIOWriterChunk(self: *Cd, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Cd, _: usize, e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert((self.state == .waiting_write_stderr));
         }

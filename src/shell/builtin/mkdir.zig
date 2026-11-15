@@ -21,17 +21,16 @@ const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellMkdir, .hidden);
 const log = debug;
 pub const State = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
+    waiting_write_err: void,
+    done: void,
 };
 pub const MkdirVerboseVTable = struct {
     inner: *ShellMkdirTask,
     active: bool,
 
-pub fn onCreateDir(self: @This(), vtable: *MkdirVerboseVTable, dirpath: bun.OSPathSliceZ) void {
-        _ = &self;
+pub fn onCreateDir(vtable: *MkdirVerboseVTable, dirpath: bun.OSPathSliceZ) void {
             if ((!vtable.active)) {
                 return;
             }
@@ -74,8 +73,7 @@ pub fn format(self: *const @This(), writer: anytype) !void {
             _ = try writer.print("ShellMkdirTask(0x{x}, filepath={s})", .{ @intFromPtr(self), self.filepath });
     }
 
-pub fn create(self: @This(), mkdir: *Mkdir, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellMkdirTask {
-        _ = &self;
+pub fn create(mkdir: *Mkdir, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellMkdirTask {
             var task = bun.handleOom(bun.default_allocator.create(ShellMkdirTask));
             _ = &task;
             const evtloop = mkdir.bltn().parentCmd().base.eventLoop();
@@ -93,32 +91,32 @@ pub fn runFromMainThread(self: *@This()) void {
             _ = self.mkdir.onShellMkdirTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *@This()) void {
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
             _ = self.runFromMainThread();
     }
 
 pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-            var this: *ShellMkdirTask = @fieldParentPtr("task", task);
-            _ = &this;
-            _ = debug("{f} runFromThreadPool", .{ this });
-            var filepath: [:0]const u8 = this.filepath;
+            var task_self: *ShellMkdirTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = debug("{f} runFromThreadPool", .{ task_self });
+            var filepath: [:0]const u8 = task_self.filepath;
             _ = &filepath;
-            if ((!ResolvePath.Platform.auto.isAbsolute(this.filepath))) {
-                const parts: [2][]const u8 = .{ this.cwd_path[0..], this.filepath[0..] };
+            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
+                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
                 filepath = ResolvePath.joinZ((&parts), .auto);
             }
             var node_fs = jsc.Node.fs.NodeFS{  };
             _ = &node_fs;
-            if (this.opts.parents) {
+            if (task_self.opts.parents) {
                 const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = true, .always_return_none = true };
-                var vtable = MkdirVerboseVTable{ .inner = this, .active = this.opts.verbose };
+                var vtable = MkdirVerboseVTable{ .inner = task_self, .active = task_self.opts.verbose };
                 _ = &vtable;
                 switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, (&vtable))) {
 .result => {
 
 },
 .err => |e| {
-this.err = e.withPath(filepath).toShellSystemError();
+task_self.err = e.withPath(filepath).toShellSystemError();
                 _ = std.mem.doNotOptimizeAway((&node_fs));
 },
 }
@@ -126,21 +124,21 @@ this.err = e.withPath(filepath).toShellSystemError();
                 const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = false, .always_return_none = true };
                 switch (node_fs.mkdirNonRecursive(args)) {
 .result => {
-if (this.opts.verbose) {
-                    _ = bun.handleOom(this.created_directories.appendSlice(filepath[0..filepath.len]));
-                    _ = bun.handleOom(this.created_directories.append(10));
+if (task_self.opts.verbose) {
+                    _ = bun.handleOom(task_self.created_directories.appendSlice(filepath[0..filepath.len]));
+                    _ = bun.handleOom(task_self.created_directories.append(10));
                 }
 },
 .err => |e| {
-this.err = e.withPath(filepath).toShellSystemError();
+task_self.err = e.withPath(filepath).toShellSystemError();
                 _ = std.mem.doNotOptimizeAway((&node_fs));
 },
 }
             }
-            if ((this.event_loop == .js)) {
-                _ = this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+            if ((task_self.event_loop == .js)) {
+                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
             } else {
-                _ = this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
             }
     }
 };
@@ -207,7 +205,7 @@ pub const Opts = struct {
     parents: bool = false,
     verbose: bool = false,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs, ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -253,7 +251,7 @@ pub const Mkdir = @This();
 opts: Opts = .{},
 state: State = .idle,
 
-pub fn onIOWriterChunk(self: *Mkdir, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Mkdir, _: usize, e: ?jsc.SystemError) Yield {
         if (e) |err| {
             _ = &err;
             _ = err.deref();

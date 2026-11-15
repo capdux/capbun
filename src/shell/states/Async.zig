@@ -22,7 +22,7 @@ const log = bun.shell.interpret.log;
 pub const ParentPtr = StatePtrUnion(.{ Binary, Stmt });
 pub const ChildPtr = StatePtrUnion(.{ Pipeline, Cmd, If, CondExpr });
 pub const AsyncState = union(enum) {
-    idle,
+    idle: void,
     exec: ExecState,
     done: ExitCode,
 };

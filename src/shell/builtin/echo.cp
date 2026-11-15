@@ -136,7 +136,7 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
                 switch (c) {
                     'n', 'e', 'E' => {},
                     else => {
-                        valid = false;
+                        (valid = false);
                         break;
                     },
                 }

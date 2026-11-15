@@ -428,3 +428,14 @@
 - **闭合 `src/css/properties/` 全目录 (32/32 100% 闭合)**：31 个手写属性模块（`align`, `animation`, `background`, `border`, `border_image`, `border_radius`, `box_shadow`, `contain`, `css_modules`, `custom`, `display`, `effects`, `flex`, `font`, `grid`, `list`, `margin_padding`, `masking`, `outline`, `overflow`, `position`, `prefix_handler`, `properties`, `properties_impl`, `shape`, `size`, `svg`, `text`, `transform`, `transition`, `ui`）加上此前提交的 `properties_generated.cp`，全部 32 个模块达成 4 项硬门禁（膨胀率 `0.970x ~ 1.077x`）。
 - **闭合 `src/css/selectors/` 全目录 (3/3 100% 闭合)**：`src/css/selectors/parser.cp` 彻底解决泛型内联结构体标记函数问题，达成 4 项硬门禁（膨胀率 `1.026x`）。
 - **新增 `src/css/` 根目录模块 (14/15 PASS)**：`css_modules.cp` (1.002x), `media_query.cp` (1.007x), `small_list.cp` (0.999x) 全部通过 4 项硬门禁。
+
+## [Milestone 7 Phase 29] 2026-11-15 - src/shell/ 全子系统 (43/43 模块 100% 全量闭环) 攻坚完成
+- **src/shell/ 全子系统 43/43 模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - 核心解析与引擎 (14 模块)：`shell.cp` (4,645 行, 0.987x), `interpreter.cp` (2,229 行, 0.999x), `subproc.cp` (1,497 行, 1.008x), `IOWriter.cp` (942 行, 1.031x), `AllocScope.cp` (1.023x), `Builtin.cp` (0.973x), `EnvMap.cp` (1.034x), `EnvStr.cp` (1.017x), `IO.cp` (1.014x), `IOReader.cp` (0.994x), `ParsedShellScript.cp` (1.009x), `RefCountedStr.cp` (1.043x), `Yield.cp` (1.035x), `util.cp` (0.952x)。
+  - 执行状态机 `src/shell/states/` (12 模块 100% 闭合)：`Assigns`, `Async`, `Base`, `Binary`, `Cmd`, `CondExpr`, `Expansion`, `If`, `Pipeline`, `Script`, `Stmt`, `Subshell`.cp。
+  - 内建命令集 `src/shell/builtin/` (17 模块 100% 闭合)：`basename`, `cat`, `cd`, `cp`, `dirname`, `echo`, `exit`, `export`, `false_`, `ls`, `mkdir`, `mv`, `pwd`, `rm`, `seq`, `touch`, `true_`, `which`, `yes`.cp。
+- **4 项硬门禁指标**：
+  - 全部 43 个模块通过 `cpc --lib` 与 `zig ast-check` 双重 0 报错验证。
+  - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
+  - 代码膨胀率：全量 `<= 1.05x`（`shell.cp` 0.987x，无冗余膨胀）。
+- **全仓最新进度**：纯 CP 模块数上升至 **755 / 1,294 (58.35%)**，闭环完整子系统上升至 **141 / 171 (82.46%)**。

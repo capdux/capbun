@@ -69,17 +69,17 @@ pub const ShellMvCheckTargetTask = struct {
             .err => |e| {
                 switch (e.getErrno()) {
                     .NOTDIR => {
-                        _.result = .{ .result = null };
+                        _.result = { result: null };
                     },
                     else => {
-                        _.result = .{ .err = e };
+                        _.result = { err: e };
                     },
                 }
                 return;
             },
             .result => |open_fd| open_fd,
         };
-        _.result = .{ .result = fd };
+        _.result = { result: fd };
     }
 
     pub fn runFromMainThread(*_) {
@@ -223,7 +223,7 @@ pub const State = union(enum) {
 
     pub fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
         if (safeguard := _.bltn().stderr.needsIO()) {
-            _.state = .{ .waiting_write_err = .{ .exit_code = exit_code } };
+            _.state = { waiting_write_err: { exit_code: exit_code } };
             return _.bltn().stderr.enqueue(_, buf, safeguard);
         }
 
@@ -244,18 +244,18 @@ pub const State = union(enum) {
 
                         return _.writeFailingError(buf, 1);
                     }
-                    _.state = .{
-                        .check_target = .{
-                            .task = ShellMvCheckTargetTask{
-                                .mv = _,
-                                .cwd = _.bltn().parentCmd().base.shell.cwd_fd,
-                                .target = _.args.target,
-                                .task = .{
-                                    .event_loop = _.bltn().parentCmd().base.eventLoop(),
-                                    .concurrent_task = jsc.EventLoopTask.fromEventLoop(_.bltn().parentCmd().base.eventLoop()),
+                    _.state = {
+                        check_target: {
+                            task: ShellMvCheckTargetTask{
+                                mv: _,
+                                cwd: _.bltn().parentCmd().base.shell.cwd_fd,
+                                target: _.args.target,
+                                task: {
+                                    event_loop: _.bltn().parentCmd().base.eventLoop(),
+                                    concurrent_task: jsc.EventLoopTask.fromEventLoop(_.bltn().parentCmd().base.eventLoop()),
                                 },
                             },
-                            .state = .running,
+                            state: .running,
                         },
                     };
                     _.state.check_target.task.task.schedule();
@@ -272,23 +272,21 @@ pub const State = union(enum) {
                     let maybe_fd: bun.FD? = null;
                     switch (check_target.task.result.?) {
                         .err => |e| {
-                            switch (e.getErrno()) {
-                                .NOENT => {
-                                    if (_.args.sources.len != 1) {
-                                        const buf = _.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{_.args.target});
-                                        return _.writeFailingError(buf, 1);
-                                    }
-                                },
-                                else => {
-                                    const sys_err = e.toShellSystemError();
-                                    defer sys_err.deref();
-                                    const buf = _.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
+                            const errno = e.getErrno();
+                            if (errno == .NOENT) {
+                                if (_.args.sources.len != 1) {
+                                    const buf = _.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{_.args.target});
                                     return _.writeFailingError(buf, 1);
-                                },
+                                }
+                            } else {
+                                const sys_err = e.toShellSystemError();
+                                defer sys_err.deref();
+                                const buf = _.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
+                                return _.writeFailingError(buf, 1);
                             }
                         },
                         .result => |open_fd| {
-                            maybe_fd = open_fd;
+                            (maybe_fd = open_fd);
                         },
                     }
 
@@ -314,26 +312,26 @@ pub const State = union(enum) {
                             const sources = _.args.sources[start_idx..end_idx];
 
                             tasks[i] = ShellMvBatchedTask{
-                                .mv = _,
-                                .cwd = cwd_fd,
-                                .target = _.args.target,
-                                .target_fd = _.args.target_fd,
-                                .sources = sources,
-                                .error_signal = undefined,
-                                .task = .{
-                                    .event_loop = _.bltn().parentCmd().base.eventLoop(),
-                                    .concurrent_task = jsc.EventLoopTask.fromEventLoop(_.bltn().parentCmd().base.eventLoop()),
+                                mv: _,
+                                cwd: cwd_fd,
+                                target: _.args.target,
+                                target_fd: _.args.target_fd,
+                                sources: sources,
+                                error_signal: undefined,
+                                task: {
+                                    event_loop: _.bltn().parentCmd().base.eventLoop(),
+                                    concurrent_task: jsc.EventLoopTask.fromEventLoop(_.bltn().parentCmd().base.eventLoop()),
                                 },
-                                .event_loop = _.bltn().parentCmd().base.eventLoop(),
+                                event_loop: _.bltn().parentCmd().base.eventLoop(),
                             };
                         }
                     }
 
-                    _.state = .{
-                        .executing = .{
-                            .task_count = task_count,
-                            .error_signal = std.atomic.Value(bool).init(false),
-                            .tasks = tasks,
+                    _.state = {
+                        executing: {
+                            task_count: task_count,
+                            error_signal: std.atomic.Value(bool).init(false),
+                            tasks: tasks,
                         },
                     };
 
@@ -431,11 +429,11 @@ pub const State = union(enum) {
     pub fn parseOpts(*_): Result(void, Opts.ParseError) {
         const filepath_args = switch (_.parseFlags()) {
             .ok => |args| args,
-            .err => |e| return .{ .err = e },
+            .err => |e| return { err: e },
         };
 
         if (filepath_args.len < 2) {
-            return .{ .err = .show_usage };
+            return { err: .show_usage };
         }
 
         _.args.sources = filepath_args[0 .. filepath_args.len - 1];
@@ -448,7 +446,7 @@ pub const State = union(enum) {
         const args = _.bltn().argsSlice();
         let idx: usize = 0;
         if (args.len == 0) {
-            return .{ .err = .show_usage };
+            return { err: .show_usage };
         }
 
         while (idx < args.len) : (idx += 1) {
@@ -456,14 +454,14 @@ pub const State = union(enum) {
             switch (_.parseFlag(flag[0..std.mem.len(flag)])) {
                 .done => {
                     const filepath_args = args[idx..];
-                    return .{ .ok = filepath_args };
+                    return { ok: filepath_args };
                 },
                 .continue_parsing => {},
-                .illegal_option => |opt_str| return .{ .err = .{ .illegal_option = opt_str } },
+                .illegal_option => |opt_str| return { err: { illegal_option: opt_str } },
             }
         }
 
-        return .{ .err = .show_usage };
+        return { err: .show_usage };
     }
 
     pub fn parseFlag(*_, flag: []const u8): ParseFlagResult {
@@ -495,7 +493,7 @@ pub const State = union(enum) {
                     _.opts.verbose_output = true;
                 },
                 else => {
-                    return .{ .illegal_option = "-" };
+                    return { illegal_option: "-" };
                 },
             }
         }

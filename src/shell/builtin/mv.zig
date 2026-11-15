@@ -19,20 +19,20 @@ const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
 const debug = bun.Output.scoped(.ShellCat, .hidden);
 pub const ParseFlagResult = union(enum) {
-    continue_parsing,
-    done,
+    continue_parsing: void,
+    done: void,
     illegal_option: []const u8,
 };
 pub const CheckTargetState = union(enum) {
-    running,
-    done,
+    running: void,
+    done: void,
 };
 pub const ShellMvCheckTargetTask = struct {
     mv: *Mv,
     cwd: bun.FD,
     target: [:0]const u8,
     result: ?Maybe(OptionalFD) = null,
-    task: ShellTask(ShellMvCheckTargetTask,runFromThreadPool,runFromMainThread,debug),
+    task: ShellTask(ShellMvCheckTargetTask, runFromThreadPool, runFromMainThread, debug),
 
 pub fn runFromThreadPool(self: *@This()) void {
             const fd = (switch (ShellSyscall.openat(self.cwd, self.target, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
@@ -58,7 +58,7 @@ pub fn runFromMainThread(self: *@This()) void {
             _ = self.mv.checkTargetTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *@This()) void {
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
             _ = self.runFromMainThread();
     }
 };
@@ -71,7 +71,7 @@ pub const ShellMvBatchedTask = struct {
     error_signal: *std.atomic.Value(bool),
     err: ?Syscall.Error = null,
     err_path_owned: bool = false,
-    task: ShellTask(ShellMvBatchedTask,runFromThreadPool,runFromMainThread,debug),
+    task: ShellTask(ShellMvBatchedTask, runFromThreadPool, runFromMainThread, debug),
     event_loop: jsc.EventLoopHandle,
 
 pub fn runFromThreadPool(self: *@This()) void {
@@ -80,6 +80,7 @@ pub fn runFromThreadPool(self: *@This()) void {
             }
             const src = self.sources[0][0..std.mem.len(self.sources[0]) :0];
             if (self.target_fd) |fd| {
+                _ = &fd;
                 _ = &fd;
                 var buf: bun.PathBuffer = undefined;
                 _ = &buf;
@@ -153,18 +154,18 @@ pub fn runFromMainThread(self: *@This()) void {
             _ = self.mv.batchedMoveTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *@This()) void {
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
             _ = self.runFromMainThread();
     }
     pub const BATCH_SIZE = 5;
 };
 pub const State = union(enum) {
-    idle,
+    idle: void,
     check_target: CheckTargetTaskState,
     executing: ExecutingState,
-    done,
+    done: void,
     waiting_write_err: WaitingWriteErrState,
-    err,
+    err: void,
 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -184,9 +185,9 @@ pub const Opts = struct {
     no_overwrite: bool = false,
     verbose_output: bool = false,
     pub const ParseError = union(enum) {
-            illegal_option: []const u8,
-            show_usage,
-        };
+        illegal_option: []const u8,
+        show_usage: void,
+    };
 };
 
 pub const Args = struct {
@@ -261,22 +262,20 @@ if ((self.state.check_target.state == .running)) {
             _ = &maybe_fd;
             switch (check_target.task.result.?) {
 .err => |e| {
-switch (e.getErrno()) {
-.NOENT => {
-if ((std.mem.span(self.args.sources).len != 1)) {
-                const buf = self.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{ self.args.target });
+const errno = e.getErrno();
+            if ((errno == .NOENT)) {
+                if ((std.mem.span(self.args.sources).len != 1)) {
+                    const buf = self.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{ self.args.target });
+                    return self.writeFailingError(buf, 1);
+                }
+            } else {
+                const sys_err = e.toShellSystemError();
+                defer {
+                _ = sys_err.deref();
+                }
+                const buf = self.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
                 return self.writeFailingError(buf, 1);
             }
-},
-else => {
-const sys_err = e.toShellSystemError();
-            defer {
-            _ = sys_err.deref();
-            }
-            const buf = self.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
-            return self.writeFailingError(buf, 1);
-},
-}
 },
 .result => |open_fd| {
 maybe_fd = open_fd;
@@ -333,7 +332,7 @@ return self.bltn().done(1);
 }
 }
 
-pub fn onIOWriterChunk(self: *Mv, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Mv, _: usize, e: ?jsc.SystemError) Yield {
         defer {
         if (e) |err| {
             _ = &err;
@@ -419,7 +418,7 @@ pub fn deinit(self: *Mv) void {
         }
 }
 
-pub fn parseOpts(self: *Mv) Result(void,Opts.ParseError) {
+pub fn parseOpts(self: *Mv) Result(void, Opts.ParseError) {
         const filepath_args = (switch (self.parseFlags()) {
 .ok => |args| args,
 .err => |e| {
@@ -434,7 +433,7 @@ return .{ .err = e };
         return .ok;
 }
 
-pub fn parseFlags(self: *Mv) Result(FilepathSlice,Opts.ParseError) {
+pub fn parseFlags(self: *Mv) Result(FilepathSlice, Opts.ParseError) {
         const args = self.bltn().argsSlice();
         var idx: usize = 0;
         _ = &idx;

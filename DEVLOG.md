@@ -390,3 +390,22 @@
 2. **`selectors/parser.cp` 3,754 行泛型内联结构体闭环**：
    - 将 `ParsedAttrSelectorWithValue` 提炼为独立外层泛型生成函数；
    - 修正内联标记函数 `__generateEql` / `__generateDeepClone` / `__generateHash` 的 CP 函数声明，实现 4 项门禁全绿通过。
+
+## 2026-11-15 [Milestone 7 Phase 29] `src/shell/` 全子系统 (43/43 模块) 纯 CP 化攻坚经验
+
+### 1. 超大复杂解析器模块 `shell.cp` (4,645 行) 攻坚经验
+1. **Parser 结构体声明与嵌套声明提升**：
+   - 当文件内包含多个一级结构体时，若将其写作 `pub struct Parser {`，由于语法分析器优先模式匹配根级 `@root struct`，会导致后续结构体内部成员方法降级为顶层自由函数且丢失 `self` 接收者指针（退化为 `_: *anyopaque`）。
+   - 解决方案：必须显式声明为 `pub const Parser = struct { ... };`，并将原本交织在字段定义内部的子枚举与子结构体（如 `SubshellKind`、`ParserError`、`IfClauseTok`、`ParsedRedirect`）提取提升至模块顶层。
+2. **Switch 分支标量赋值在 CP 中的消除歧义**：
+   - 在 `switch` 分支中，裸写标量赋值（如 `valid = false;` 或 `tgt_is_dir = is_dir;`）会被 `cpc` 误判为带标签模式解构，引发连带的 syntax error 或语法截断。
+   - 解决方案：包裹圆括号 `(valid = false);`，CP 语法解析器将其正确识别为表达式语句，消除所有假性 parser 报错。
+3. **空结构体字面量与 brace depth 截断规避**：
+   - 在表达式位置出现 `let flags: AST.RedirectFlags = {};` 时，由于行首包含 `{}` 会诱发底层花括号深度计数异常（brace_depth 漏增），导致后续方法被过早截断闭合。
+   - 解决方案：统一显式带默认字段初始化，如 `let flags = AST.RedirectFlags{ stdin: false };`。
+
+### 2. 子系统管道与内建命令的匿名类型具名化
+1. **函数返回匿名枚举提升**：
+   - `IOWriter.write` 返回 `enum { suspended, failed, is_actually_file }`，CP 严格禁止匿名返回类型。提升为顶层 `pub const WriteStatus = enum { ... };`。
+2. **结构体字段内联 union 提升**：
+   - `subproc.cp` 中 `PipeReader.state: union(enum) { ... }` 提升为独立具名联合体 `pub const PipeReaderState = union(enum) { ... };`，并将结构体声明规范为 `pub const PipeReader = struct { ... };`，一举消除全部 7 项编译报错。

@@ -60,7 +60,7 @@ pub const PushAction = enum {
 };
 
 pub const Result = union(enum) {
-    array_of_slice: *std.array_list.Managed([:0]const u8),
+    array_of_slice: *std.array_list.Managed(StringZ),
     array_of_ptr: *std.array_list.Managed(ArgStr),
     single: struct {
         list: *std.array_list.Managed(u8),

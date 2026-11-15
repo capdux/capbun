@@ -173,14 +173,14 @@ pub const ShellTouchTask = struct {
     }
 
     pub static fn runFromThreadPool(task: *jsc.WorkPoolTask) {
-        let this: *ShellTouchTask = @fieldParentPtr("task", task);
-        debug("{f} runFromThreadPool", .{this});
+        let task_self: *ShellTouchTask = @fieldParentPtr("task", task);
+        debug("{f} runFromThreadPool", .{task_self});
 
-        let filepath: [:0]const u8 = this.filepath;
-        if (!ResolvePath.Platform.auto.isAbsolute(this.filepath)) {
+        let filepath: [:0]const u8 = task_self.filepath;
+        if (!ResolvePath.Platform.auto.isAbsolute(task_self.filepath)) {
             const parts: [2][]const u8 = [
-                this.cwd_path[0..],
-                this.filepath[0..],
+                task_self.cwd_path[0..],
+                task_self.filepath[0..],
             ];
             filepath = ResolvePath.joinZ(&parts, .auto);
         }
@@ -205,18 +205,18 @@ pub const ShellTouchTask = struct {
                         fd.close();
                     },
                     .err => |e| {
-                        this.err = e.withPath(filepath).toShellSystemError();
+                        task_self.err = e.withPath(filepath).toShellSystemError();
                     },
                 }
             } else {
-                this.err = err_.withPath(filepath).toShellSystemError();
+                task_self.err = err_.withPath(filepath).toShellSystemError();
             }
         }
 
-        if (this.event_loop == .js) {
-            this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(this, .manual_deinit));
+        if (task_self.event_loop == .js) {
+            task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
         } else {
-            this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(this, "runFromMainThreadMini"));
+            task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
         }
     }
 };

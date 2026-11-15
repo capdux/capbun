@@ -103,13 +103,14 @@ pub const ParentPtr = StatePtrUnion(.{
                 return ChildPtr.init(assign);
             },
             .subshell => {
-                switch (Subshell.initDupeShellState(
+                const init_res = Subshell.initDupeShellState(
                     _.base.interpreter,
                     _.base.shell,
                     node.subshell,
                     Subshell.ParentPtr.init(_),
                     _.io.copy(),
-                )) {
+                );
+                switch (init_res) {
                     .result => |subshell| {
                         return ChildPtr.init(subshell);
                     },

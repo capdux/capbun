@@ -19,38 +19,41 @@ const Allocator = std.mem.Allocator;
 const log = bun.Output.scoped(.Rm, .hidden);
 const debug = bun.Output.scoped(.AsyncRmTask, .hidden);
 pub const OptsPromptBehaviour = union(enum) {
-    never,
+    never: void,
     once: PromptOnceState,
-    always,
+    always: void,
 };
 pub const PromptBehaviour = OptsPromptBehaviour;
 pub const ParseOptsSubState = union(enum) {
-    normal,
-    wait_write_err,
+    normal: void,
+    wait_write_err: void,
 };
 pub const ExecSubState = union(enum) {
-    idle,
+    idle: void,
     waiting: WaitingTasksState,
 };
 pub const State = union(enum) {
-    idle,
+    idle: void,
     parse_opts: ParseOptsState,
     exec: ExecState,
     done: DoneState,
-    waiting_write_err,
+    waiting_write_err: void,
     e: ExitCode,
 };
 pub const ShellJoinStyle = union(enum) {
-    posix,
-    windows,
+    posix: void,
+    windows: void,
 
-    pub fn fromPath(p: bun.PathString) ShellJoinStyle {
-        if (comptime bun.Environment.isPosix) return .posix;
-        const backslash = std.mem.indexOfScalar(u8, p.slice(), '\\') orelse std.math.maxInt(usize);
-        const forwardslash = std.mem.indexOfScalar(u8, p.slice(), '/') orelse std.math.maxInt(usize);
-        if (forwardslash <= backslash)
-            return .posix;
-        return .windows;
+pub fn fromPath(p: bun.PathString) ShellJoinStyle {
+            if (comptime bun.Environment.isPosix) {
+                return .posix;
+            }
+            const backslash = ((std.mem.indexOfScalar(u8, p.slice(), 92)) orelse (std.math.maxInt(usize)));
+            const forwardslash = ((std.mem.indexOfScalar(u8, p.slice(), 47)) orelse (std.math.maxInt(usize)));
+            if ((forwardslash <= backslash)) {
+                return .posix;
+            }
+            return .windows;
     }
 };
 pub const JoinStyle = ShellJoinStyle;
@@ -172,14 +175,14 @@ pub fn runFromMainThread(self: *ShellDirTask) void {
             _ = self.task_manager.rm.writeVerbose(self).run();
     }
 
-pub fn runFromMainThreadMini(self: *ShellDirTask) void {
+pub fn runFromMainThreadMini(self: *ShellDirTask, _: *void) void {
             _ = self.runFromMainThread();
     }
 
 pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-            var this: *ShellDirTask = @fieldParentPtr("task", task);
-            _ = &this;
-            _ = this.runFromThreadPoolImpl();
+            var task_self: *ShellDirTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = task_self.runFromThreadPoolImpl();
     }
 
 pub fn runFromThreadPoolImpl(self: *ShellDirTask) void {
@@ -350,14 +353,16 @@ pub fn deinit(self: *ShellDirTask) void {
 pub const DummyRemoveFile = struct {
     dummy: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile),
 
-pub fn onIsDir(self: *DummyRemoveFile) Maybe(void) {
+pub fn onIsDir(self: *DummyRemoveFile, _: *ShellDirTask, _: [:0]const u8, _: bool, _: *bun.PathBuffer) Maybe(void) {
             var s = self;
+            _ = &s;
             _ = &s;
             return .success;
     }
 
-pub fn onDirNotEmpty(self: *DummyRemoveFile) Maybe(void) {
+pub fn onDirNotEmpty(self: *DummyRemoveFile, _: *ShellDirTask, _: [:0]const u8, _: bool, _: *bun.PathBuffer) Maybe(void) {
             var s = self;
+            _ = &s;
             _ = &s;
             return .success;
     }
@@ -389,12 +394,12 @@ pub const RemoveFileParent = struct {
     allow_enqueue: bool = true,
     enqueued: bool = false,
 
-pub fn onIsDir(self: *RemoveFileParent) Maybe(void) {
+pub fn onIsDir(self: *RemoveFileParent, _: *ShellDirTask, _: [:0]const u8, _: bool, _: *bun.PathBuffer) Maybe(void) {
             self.treat_as_dir = true;
             return .success;
     }
 
-pub fn onDirNotEmpty(self: *RemoveFileParent, parent_dir_task: *ShellDirTask, path: [:0]const u8) Maybe(void) {
+pub fn onDirNotEmpty(self: *RemoveFileParent, parent_dir_task: *ShellDirTask, path: [:0]const u8, _: bool, _: *bun.PathBuffer) Maybe(void) {
             self.treat_as_dir = true;
             if (self.allow_enqueue) {
                 _ = self.task.enqueueNoJoin(parent_dir_task, bun.handleOom(bun.default_allocator.dupeZ(u8, path)), .dir);
@@ -501,7 +506,7 @@ pub fn finishConcurrently(self: *ShellRmTask) void {
             }
     }
 
-pub fn bufJoin(self: *ShellRmTask, buf: *bun.PathBuffer, parts: []const []const u8) Maybe(PathStringZ) {
+pub fn bufJoin(self: *ShellRmTask, buf: *bun.PathBuffer, parts: []const []const u8, _: Syscall.Tag) Maybe(PathStringZ) {
             if ((self.join_style == .posix)) {
                 return .{ .result = ResolvePath.joinZBuf(buf, parts, .posix) };
             } else {
@@ -811,11 +816,13 @@ return .{ .err = self.errorWithPath(e, path) };
 pub fn errorWithPath(self: *ShellRmTask, e: Syscall.Error, path: [:0]const u8) Syscall.Error {
             var s = self;
             _ = &s;
+            _ = &s;
             return e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, path[0..path.len])));
     }
 
 pub inline fn join(self: *ShellRmTask, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool) [:0]const u8 {
             var s = self;
+            _ = &s;
             _ = &s;
             if ((!is_absolute)) {
                 return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
@@ -825,16 +832,16 @@ pub inline fn join(self: *ShellRmTask, alloc: Allocator, subdir_parts: []const [
     }
 
 pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
-            var this: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
-            _ = &this;
-            _ = this.root_task.runFromThreadPoolImpl();
+            var task_self: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
+            _ = &task_self;
+            _ = task_self.root_task.runFromThreadPoolImpl();
     }
 
 pub fn runFromMainThread(self: *ShellRmTask) void {
             _ = self.rm.onShellRmTaskDone(self);
     }
 
-pub fn runFromMainThreadMini(self: *ShellRmTask) void {
+pub fn runFromMainThreadMini(self: *ShellRmTask, _: *void) void {
             _ = self.rm.onShellRmTaskDone(self);
     }
 
@@ -1026,7 +1033,7 @@ _ = unreachable;
 }
 }
 
-pub fn onIOWriterChunk(self: *Rm, e: ?jsc.SystemError) Yield {
+pub fn onIOWriterChunk(self: *Rm, _: usize, e: ?jsc.SystemError) Yield {
         _ = log("Rm(0x{x}).onIOWriterChunk()", .{ @intFromPtr(self) });
         defer {
         if (e) |err| {
@@ -1056,6 +1063,7 @@ pub fn onIOWriterChunk(self: *Rm, e: ?jsc.SystemError) Yield {
 
 pub fn deinit(self: *Rm) void {
         var s = self;
+        _ = &s;
         _ = &s;
 }
 
