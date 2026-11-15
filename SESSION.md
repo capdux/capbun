@@ -1560,3 +1560,16 @@ Options:
   - `cpc --lib` + `vendor/zig/zig ast-check` 双重 0 报错；
   - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
   - 代码膨胀率 0.955x（净压缩）。
+
+---
+
+## 2026-11-16 04:13:00 - `src/resolve_builtins/` 全量子系统 1/1 模块 100% 闭环收割与独立严密验收
+
+### 1. 独立严密验收与门禁确认
+- 主智能体调用 `python3 scripts/cpc_brief.py` 对 `src/resolve_builtins/` 执行独立严密验收：
+  1. `HardcodedModule.cp` (438 行, 1.002x, PASS)
+- **4 项硬门禁指标 100% 全绿**：
+  - `HardcodedModule_.zig` 原始备份完好无损；
+  - `cpc --lib` + `vendor/zig/zig ast-check` 双重 0 报错；
+  - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
+  - 代码膨胀率 1.002x。

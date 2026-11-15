@@ -146,7 +146,7 @@ pub fn get(name: []const u8, target: options.Target, cfg: Cfg) ?HardcodedModuleA
     }
     pub const Cfg = HardcodedModuleAliasCfg;
     const node_aliases = bun.ComptimeStringMap(HardcodedModuleAlias, common_alias_kvs);
-    pub const bun_aliases = bun.ComptimeStringMap(HardcodedModuleAlias, common_alias_kvs ++ bun_extra_alias_kvs);
-    const bun_test_aliases = bun.ComptimeStringMap(HardcodedModuleAlias, common_alias_kvs ++ bun_extra_alias_kvs ++ bun_test_extra_alias_kvs);
+    pub const bun_aliases = bun.ComptimeStringMap(HardcodedModuleAlias, (common_alias_kvs ++ bun_extra_alias_kvs));
+    const bun_test_aliases = bun.ComptimeStringMap(HardcodedModuleAlias, ((common_alias_kvs ++ bun_extra_alias_kvs) ++ bun_test_extra_alias_kvs));
 };
 
