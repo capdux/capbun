@@ -1,7 +1,7 @@
 // src/http/h3_client/callbacks.cp
 // lsquic -> Zig callbacks for the HTTP/3 client in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const quic = bun.uws.quic;
 
 import { ClientContext } from "./ClientContext.cp";
@@ -47,7 +47,7 @@ export fn register(qctx: *quic.Context) {
         session.qsocket = null;
 
         let buf: [u8; 256] = [0; 256];
-        _ = qs.status(&buf);
+        * = qs.status(&buf);
         if (ctx := ClientContext.get()) {
             ctx.unregister(session);
         }
@@ -69,7 +69,7 @@ export fn register(qctx: *quic.Context) {
 
     if (qs := s.socket()) {
         if (session := qs.ext(ClientSession).*) {
-            let target: ?*Stream = null;
+            let target: (*Stream)? = null;
             for (st of session.pending.items) {
                 if (st.qstream == null) {
                     target = st;
@@ -80,8 +80,8 @@ export fn register(qctx: *quic.Context) {
                 let st = target.?;
                 st.qstream = s;
                 s.ext(Stream).* = st;
-                encode.writeRequest(session, st, s) catch (err) {
-                    session.fail(st, err);
+                encode.writeRequest(session, st, s) catch (e) {
+                    session.fail(st, e);
                 };
             } else {
                 s.close();

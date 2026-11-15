@@ -2,7 +2,6 @@
 const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
 const quic = bun.uws.quic;
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -11,6 +10,7 @@ fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (compti
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 pub const ClientContext = @import("./ClientContext.zig").ClientContext;
 pub const ClientSession = @import("./ClientSession.zig").ClientSession;
 pub const Stream = @import("./Stream.zig").Stream;
@@ -27,7 +27,7 @@ pub fn register(qctx: *quic.Context) void {
         _ = qctx.onStreamClose(onStreamClose);
 }
 
-pub export fn onHskDone(qs: *quic.Socket, ok: i32) callconv(.c) void {
+pub fn onHskDone(qs: *quic.Socket, ok: i32) callconv(.c) void {
         if ((qs.ext(ClientSession)).*) |session| {
             _ = &session;
             if ((ok == 0)) {
@@ -44,14 +44,14 @@ pub export fn onHskDone(qs: *quic.Socket, ok: i32) callconv(.c) void {
         }
 }
 
-pub export fn onGoaway(qs: *quic.Socket) callconv(.c) void {
+pub fn onGoaway(qs: *quic.Socket) callconv(.c) void {
         if ((qs.ext(ClientSession)).*) |session| {
             _ = &session;
             session.closed = true;
         }
 }
 
-pub export fn onConnClose(qs: *quic.Socket) callconv(.c) void {
+pub fn onConnClose(qs: *quic.Socket) callconv(.c) void {
         if ((qs.ext(ClientSession)).*) |session| {
             _ = &session;
             session.closed = true;
@@ -76,7 +76,7 @@ pub export fn onConnClose(qs: *quic.Socket) callconv(.c) void {
         }
 }
 
-pub export fn onStreamOpen(s: *quic.Stream, is_client: i32) callconv(.c) void {
+pub fn onStreamOpen(s: *quic.Stream, is_client: i32) callconv(.c) void {
         (s.ext(Stream)).* = null;
         if ((is_client == 0)) {
             return;
@@ -99,7 +99,7 @@ pub export fn onStreamOpen(s: *quic.Stream, is_client: i32) callconv(.c) void {
                     _ = &st;
                     st.qstream = s;
                     (s.ext(Stream)).* = st;
-                    _ = (blk_catch_0: { break :blk_catch_0 ((encode.writeRequest(session, st, s)) catch |err| { _ = &err; break :blk_catch_0 session.fail(st, err); }); });
+                    _ = (blk_catch_0: { break :blk_catch_0 ((encode.writeRequest(session, st, s)) catch |e| { _ = &e; break :blk_catch_0 session.fail(st, e); }); });
                 } else {
                     _ = s.close();
                     return;
@@ -113,7 +113,7 @@ pub export fn onStreamOpen(s: *quic.Stream, is_client: i32) callconv(.c) void {
         }
 }
 
-pub export fn onStreamHeaders(s: *quic.Stream) callconv(.c) void {
+pub fn onStreamHeaders(s: *quic.Stream) callconv(.c) void {
         if ((s.ext(Stream)).*) |stream| {
             _ = &stream;
             const n = s.headerCount();
@@ -126,8 +126,8 @@ pub export fn onStreamHeaders(s: *quic.Stream) callconv(.c) void {
             while ((i < n)) {
                 if (s.header(i)) |h| {
                     _ = &h;
-                    const name = (if (comptime @typeInfo(@TypeOf(h)) == .@"enum" or @typeInfo(@TypeOf(h)) == .@"union") @tagName(h) else h.name)[0..h.name_len];
-                    const value = (if (comptime @typeInfo(@TypeOf(h)) == .@"enum") @intFromEnum(h) else h.value)[0..h.value_len];
+                    const name = (if (@typeInfo(@TypeOf(h)) == .@"enum" or @typeInfo(@TypeOf(h)) == .@"union") @tagName(h) else h.name)[0..h.name_len];
+                    const value = (if (@typeInfo(@TypeOf(h)) == .@"enum") @intFromEnum(h) else h.value)[0..h.value_len];
                     if (bun.strings.hasPrefixComptime(name, ":")) {
                         if (bun.strings.eqlComptime(name, ":status")) {
                             status = (blk_catch_1: { break :blk_catch_1 ((std.fmt.parseInt(u16, value, 10)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 0; }); });
@@ -154,7 +154,7 @@ pub export fn onStreamHeaders(s: *quic.Stream) callconv(.c) void {
         }
 }
 
-pub export fn onStreamData(s: *quic.Stream, data: [*]u8, len: u32, fin: i32) callconv(.c) void {
+pub fn onStreamData(s: *quic.Stream, data: [*]u8, len: u32, fin: i32) callconv(.c) void {
         if ((s.ext(Stream)).*) |stream| {
             _ = &stream;
             if ((len > 0)) {
@@ -164,14 +164,14 @@ pub export fn onStreamData(s: *quic.Stream, data: [*]u8, len: u32, fin: i32) cal
         }
 }
 
-pub export fn onStreamWritable(s: *quic.Stream) callconv(.c) void {
+pub fn onStreamWritable(s: *quic.Stream) callconv(.c) void {
         if ((s.ext(Stream)).*) |stream| {
             _ = &stream;
             _ = encode.drainSendBody(stream, s);
         }
 }
 
-pub export fn onStreamClose(s: *quic.Stream) callconv(.c) void {
+pub fn onStreamClose(s: *quic.Stream) callconv(.c) void {
         if ((s.ext(Stream)).*) |stream| {
             _ = &stream;
             (s.ext(Stream)).* = null;

@@ -2,15 +2,15 @@
 const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
 const quic = bun.uws.quic;
+pub const bun = @import("bun");
 pub const ClientSession = @import("./ClientSession.zig").ClientSession;
 pub const H3Client = @import("../H3Client.zig").H3Client;
 pub const HTTPClient = @import("../http.zig").HTTPClient;
 pub const Stream = @This();
 
 session: *ClientSession,
-client: ?*HTTPClient,
+client: ?*HTTPClient = null,
 qstream: ?*quic.Stream = null,
 decoded_headers: std.ArrayListUnmanaged(bun.picohttp.Header) = .{},
 body_buffer: std.ArrayListUnmanaged(u8) = .{},
@@ -20,21 +20,17 @@ request_body_done: bool = false,
 is_streaming_body: bool = false,
 headers_delivered: bool = false,
 
-pub fn release(self: *Stream) void {
+pub fn deinit(self: *Stream) void {
         _ = self.decoded_headers.deinit(bun.default_allocator);
         _ = self.body_buffer.deinit(bun.default_allocator);
         _ = bun.http.H3.live_streams.fetchSub(1, .monotonic);
         _ = bun.destroy(self);
 }
 
-pub fn deinit(self: *Stream) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-}
-
-pub fn abort(self: *Stream) void {
+pub fn abort(self: Stream) void {
         if (self.qstream) |qs| {
             _ = &qs;
-            _ = (qs).?.close();
+            _ = qs.close();
         }
 }
 pub const new = bun.TrivialNew(@This());

@@ -1,7 +1,7 @@
 // src/http/h3_client/encode.cp
 // Request-side framing for the HTTP/3 client in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const quic = bun.uws.quic;
 
 import { ClientSession } from "./ClientSession.cp";
@@ -43,7 +43,7 @@ export fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Strea
                 switch (qpack_class) {
                     .forbidden => {},
                     .host => authority = h.value,
-                    .indexed(i) => _ = headers.appendAssumeCapacity(bun.uws.quic.Header.init(i.name, h.value, i.index)),
+                    .indexed(i) => headers.appendAssumeCapacity(bun.uws.quic.Header.init(i.name, h.value, i.index)),
                 }
             } else {
                 const dst = lower[lower_len..lower_len + h.name.len];

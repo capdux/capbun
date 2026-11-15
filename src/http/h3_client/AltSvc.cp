@@ -75,7 +75,7 @@ export fn parse(field_value: string): !Entry? {
     return null;
 }
 
-export fn record(origin_host: string, origin_port: u16, field_value: string): void {
+export fn record(origin_host: string, origin_port: u16, field_value: string) {
     let buf: [u8; 264] = undefined;
     if (origin_host.len > 256) return;
     const k = key(&buf, origin_host, origin_port);

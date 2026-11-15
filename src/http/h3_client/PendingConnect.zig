@@ -2,11 +2,11 @@
 const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
 const uws = bun.uws;
 const quic = uws.quic;
 var resolved_mutex: bun.Mutex = .{};
 var resolved_head: ?*PendingConnect = null;
+pub const bun = @import("bun");
 pub const ClientSession = @import("./ClientSession.zig").ClientSession;
 pub const PendingConnect = @This();
 
@@ -18,10 +18,13 @@ next: ?*PendingConnect = null,
 pub fn register(session: *ClientSession, pc: *quic.PendingConnect, l: *uws.Loop) void {
         _ = session.ref();
         const item = bun.new(PendingConnect, .{ .session = session, .pc = pc, .loop_ptr = l });
-        _ = bun.dns.internal.registerQuic(@ptrCast(@alignCast(pc.addrinfo())), item);
+        _ = bun.dns.internal.registerQuic((blk: {
+        break :blk @ptrCast(@alignCast(pc.addrinfo()));
+
+}), item);
 }
 
-pub fn loop(self: *PendingConnect) *uws.Loop {
+pub fn loop(self: PendingConnect) *uws.Loop {
         return self.loop_ptr;
 }
 
@@ -70,7 +73,7 @@ pub fn drainResolved() void {
         }
 }
 
-pub fn failSession(session: *ClientSession, err: anyerror) void {
+pub fn failSession(session: *ClientSession, e: anyerror) void {
         session.closed = true;
         if (bun.http.H3.ClientContext.get()) |ctx| {
             _ = &ctx;
@@ -82,7 +85,7 @@ pub fn failSession(session: *ClientSession, err: anyerror) void {
             _ = session.detach(stream);
             if (cl) |cl_| {
                 _ = &cl_;
-                _ = cl_.failFromH2(err);
+                _ = cl_.failFromH2(e);
             }
         }
         _ = bun.http.H3.live_sessions.fetchSub(1, .monotonic);

@@ -1,7 +1,7 @@
 // src/http/h3_client/ClientContext.cp
 // Process-global lazily-initialised on the HTTP thread in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const uws = bun.uws;
 const quic = uws.quic;
 
@@ -10,22 +10,25 @@ import { PendingConnect } from "./PendingConnect.cp";
 import { Stream } from "./Stream.cp";
 import * as callbacks from "./callbacks.cp";
 
-let instance: ?*ClientContext = null;
+let instance: (*ClientContext)? = null;
 let lsquic_init_once = bun.once(quic.globalInit);
 
-pub fn get(): ?*ClientContext {
+pub fn get(): (*ClientContext)? {
     return instance;
 }
 
-pub fn getOrCreate(loop: *uws.Loop): ?*ClientContext {
+pub fn getOrCreate(loop: *uws.Loop): (*ClientContext)? {
     if (i := instance) return i;
     lsquic_init_once.call({});
-    const qctx = quic.Context.createClient(
+    const maybe_qctx = quic.Context.createClient(
         loop,
         0,
         @sizeOf(*ClientSession),
         @sizeOf(*Stream),
-    ) orelse return null;
+    );
+    if (maybe_qctx == null) return null;
+    const qctx = maybe_qctx.?;
+
     callbacks.register(qctx);
     let self = bun.handleOom(bun.default_allocator.create(ClientContext));
     self.* = ClientContext { qctx: qctx };
@@ -37,9 +40,9 @@ export @root struct ClientContext {
     qctx: *bun.uws.quic.Context,
     sessions: std.ArrayListUnmanaged(*ClientSession) = {},
 
-    fn connect(*this, client: *bun.http.HTTPClient, hostname: string, port: u16): bool {
+    fn connect(*_, client: *bun.http.HTTPClient, hostname: string, port: u16): bool {
         const reject = client.flags.reject_unauthorized;
-        for (s of this.sessions.items) {
+        for (s of _.sessions.items) {
             if (s.matches(hostname, port, reject) && s.hasHeadroom()) {
                 s.enqueue(client);
                 return true;
@@ -53,21 +56,21 @@ export @root struct ClientContext {
             port: port,
             reject_unauthorized: reject,
         });
-        bun.http.H3.live_sessions.fetchAdd(1, .monotonic);
-        session.registry_index = @intCast(this.sessions.items.len);
-        bun.handleOom(this.sessions.append(bun.default_allocator, session));
+        * = bun.http.H3.live_sessions.fetchAdd(1, .monotonic);
+        session.registry_index = @intCast(_.sessions.items.len);
+        bun.handleOom(_.sessions.append(bun.default_allocator, session));
         session.enqueue(client);
 
-        switch (this.qctx.connect(host_z.ptr, port, host_z.ptr, reject, session)) {
+        switch (_.qctx.connect(host_z.ptr, port, host_z.ptr, reject, session)) {
             .socket(qs) => {
                 session.qsocket = qs;
                 qs.ext(ClientSession).* = session;
             },
             .pending(pending) => {
-                PendingConnect.register(session, pending, this.qctx.loop());
+                PendingConnect.register(session, pending, _.qctx.loop());
             },
             .err => {
-                this.unregister(session);
+                _.unregister(session);
                 PendingConnect.failSession(session, error.ConnectionRefused);
                 return false;
             },
@@ -75,12 +78,12 @@ export @root struct ClientContext {
         return true;
     }
 
-    fn unregister(*this, session: *ClientSession) {
+    fn unregister(*_, session: *ClientSession) {
         const i = session.registry_index;
-        if (i >= this.sessions.items.len || this.sessions.items[i] != session) return;
-        this.sessions.swapRemove(i);
-        if (i < this.sessions.items.len) {
-            this.sessions.items[i].registry_index = i;
+        if (i >= _.sessions.items.len || _.sessions.items[i] != session) return;
+        * = _.sessions.swapRemove(i);
+        if (i < _.sessions.items.len) {
+            _.sessions.items[i].registry_index = i;
         }
         session.registry_index = std.math.maxInt(u32);
     }

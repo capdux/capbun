@@ -1,7 +1,7 @@
 // src/http/h3_client/ClientSession.cp
 // One QUIC connection to an origin in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const quic = bun.uws.quic;
 
 import { ClientContext } from "./ClientContext.cp";
@@ -21,60 +21,56 @@ export @root struct ClientSession {
     pub const deref = RefCount.deref;
 
     ref_count: RefCount,
-    qsocket: *quic.Socket? = null,
+    qsocket: (*quic.Socket)? = null,
     hostname: string,
     port: u16,
     reject_unauthorized: bool,
     handshake_done: bool = false,
     closed: bool = false,
     registry_index: u32 = 4294967295,
-    pending: std.ArrayListUnmanaged(*Stream),
+    pending: std.ArrayListUnmanaged(*Stream) = {},
 
-    fn release(*this) {
-        bun.debugAssert(this.pending.items.len == 0);
-        this.pending.deinit(bun.default_allocator);
-        bun.default_allocator.free(this.hostname);
-        bun.destroy(this);
+    fn deinit(*_) {
+        bun.debugAssert(_.pending.items.len == 0);
+        _.pending.deinit(bun.default_allocator);
+        bun.default_allocator.free(_.hostname);
+        bun.destroy(_);
     }
 
-    fn deinit(*this) {
-        this.release();
+    fn matches(hostname: string, port: u16, reject_unauthorized: bool): bool {
+        return !_.closed && _.port == port &&
+            _.reject_unauthorized == reject_unauthorized &&
+            bun.strings.eqlLong(_.hostname, hostname, true);
     }
 
-    fn matches(this, hostname: string, port: u16, reject_unauthorized: bool): bool {
-        return !this.closed && this.port == port &&
-            this.reject_unauthorized == reject_unauthorized &&
-            bun.strings.eqlLong(this.hostname, hostname, true);
-    }
-
-    fn hasHeadroom(this): bool {
-        if (this.closed) return false;
-        if (qs := this.qsocket) {
-            if (!this.handshake_done) return this.pending.items.len < 64;
+    fn hasHeadroom(): bool {
+        if (_.closed) return false;
+        if (qs := _.qsocket) {
+            if (!_.handshake_done) return _.pending.items.len < 64;
             return qs.streamsAvail() > 0;
         }
-        return this.pending.items.len < 64;
+        return _.pending.items.len < 64;
     }
 
-    fn enqueue(*this, client: *HTTPClient) {
-        bun.debugAssert(!this.closed);
+    fn enqueue(*_, client: *HTTPClient) {
+        bun.debugAssert(!_.closed);
         client.h3 = null;
         client.flags.protocol = .http3;
         client.allow_retry = false;
 
-        let stream = Stream.new({ session: this, client: client });
-        bun.http.H3.live_streams.fetchAdd(1, .monotonic);
+        let stream = Stream.new({ session: _, client: client });
+        * = bun.http.H3.live_streams.fetchAdd(1, .monotonic);
         client.h3 = stream;
-        bun.handleOom(this.pending.append(bun.default_allocator, stream));
-        this.ref();
+        bun.handleOom(_.pending.append(bun.default_allocator, stream));
+        _.ref();
 
-        if (this.handshake_done) {
-            if (qs := this.qsocket) qs.makeStream();
+        if (_.handshake_done) {
+            if (qs := _.qsocket) qs.makeStream();
         }
     }
 
-    fn streamBodyByHttpId(*this, async_http_id: u32, ended: bool) {
-        for (let stream of this.pending.items) {
+    fn streamBodyByHttpId(async_http_id: u32, ended: bool) {
+        for (stream of _.pending.items) {
             if (client := stream.client) {
                 if (client.async_http_id != async_http_id) continue;
                 if (client.state.original_request_body != .stream) return;
@@ -85,7 +81,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn detach(*this, stream: *Stream) {
+    fn detach(*_, stream: *Stream) {
         if (cl := stream.client) cl.h3 = null;
         stream.client = null;
         if (qs := stream.qstream) {
@@ -93,48 +89,46 @@ export @root struct ClientSession {
             if (!stream.request_body_done) qs.reset();
         }
         stream.qstream = null;
-        if (i := std.mem.indexOfScalar(*Stream, this.pending.items, stream)) {
-            _ = this.pending.orderedRemove(i);
+        if (i := std.mem.indexOfScalar(*Stream, _.pending.items, stream)) {
+            * = _.pending.orderedRemove(i);
         }
         stream.deinit();
-        this.deref();
+        _.deref();
     }
 
-    fn fail(*this, stream: *Stream, err: anyerror) {
+    fn fail(*_, stream: *Stream, e: anyerror) {
         let client = stream.client;
         stream.abort();
-        this.detach(stream);
-        if (cl := client) cl.failFromH2(err);
+        _.detach(stream);
+        if (cl := client) cl.failFromH2(e);
     }
 
-    fn retryOrFail(*this, stream: *Stream, err: anyerror) {
-        if (client := stream.client) {
-            if (client.flags.h3_retried || stream.is_streaming_body) {
-                return this.fail(stream, err);
-            }
-            if (ctx := ClientContext.get()) {
-                client.flags.h3_retried = true;
-                this.closed = true;
-                const host = bun.handleOom(bun.default_allocator.dupe(u8, this.hostname));
-                defer bun.default_allocator.free(host);
-                stream.abort();
-                this.detach(stream);
-                if (!ctx.connect(client, host, this.port)) {
-                    client.failFromH2(err);
-                }
-            } else {
-                return this.fail(stream, err);
-            }
-        } else {
-            return this.fail(stream, err);
+    fn retryOrFail(*_, stream: *Stream, e: anyerror) {
+        let client_opt = stream.client;
+        if (client_opt == null) return _.fail(stream, e);
+        const client = client_opt.?;
+        if (client.flags.h3_retried || stream.is_streaming_body) {
+            return _.fail(stream, e);
+        }
+        let ctx_opt = ClientContext.get();
+        if (ctx_opt == null) return _.fail(stream, e);
+        const ctx = ctx_opt.?;
+        client.flags.h3_retried = true;
+        _.closed = true;
+        const host = bun.handleOom(bun.default_allocator.dupe(u8, _.hostname));
+        defer bun.default_allocator.free(host);
+        stream.abort();
+        _.detach(stream);
+        if (!ctx.connect(client, host, _.port)) {
+            client.failFromH2(e);
         }
     }
 
-    fn abortByHttpId(*this, async_http_id: u32): bool {
-        for (let stream of this.pending.items) {
+    fn abortByHttpId(*_, async_http_id: u32): bool {
+        for (stream of _.pending.items) {
             if (cl := stream.client) {
                 if (cl.async_http_id == async_http_id) {
-                    this.fail(stream, error.Aborted);
+                    _.fail(stream, error.Aborted);
                     return true;
                 }
             }
@@ -142,36 +136,36 @@ export @root struct ClientSession {
         return false;
     }
 
-    fn deliver(*this, stream: *Stream, done: bool) {
+    fn deliver(*_, stream: *Stream, done: bool) {
         let client_opt = stream.client;
         if (client_opt == null) {
-            if (done) this.detach(stream);
+            if (done) _.detach(stream);
             return;
         }
         let client = client_opt.?;
 
         if (client.signals.get(.aborted)) {
-            return this.fail(stream, error.Aborted);
+            return _.fail(stream, error.Aborted);
         }
 
         if (stream.status_code != 0 && !stream.headers_delivered) {
             stream.headers_delivered = true;
-            let result = this.applyHeaders(stream, client) catch (err) {
-                return this.fail(stream, err);
+            let result = applyHeaders(stream, client) catch (e) {
+                return _.fail(stream, e);
             };
             if (client.state.flags.is_redirect_pending) {
-                this.detach(stream);
+                _.detach(stream);
                 return client.doRedirectH3();
             }
             if (result == .finished || (done && stream.body_buffer.items.len == 0)) {
                 if (client.state.flags.is_redirect_pending) {
-                    this.detach(stream);
+                    _.detach(stream);
                     return client.doRedirectH3();
                 }
                 client.cloneMetadata();
                 client.state.flags.received_last_chunk = true;
                 if (result == .finished) client.state.content_length = 0;
-                this.detach(stream);
+                _.detach(stream);
                 return finish(client);
             }
             client.cloneMetadata();
@@ -184,7 +178,7 @@ export @root struct ClientSession {
                 if (stream.status_code == 0) {
                     err_kind = error.HTTP3StreamReset;
                 }
-                return this.retryOrFail(stream, err_kind);
+                return _.retryOrFail(stream, err_kind);
             }
             return;
         }
@@ -193,18 +187,18 @@ export @root struct ClientSession {
             if (done) {
                 client.state.flags.received_last_chunk = true;
             }
-            const report = client.handleResponseBody(stream.body_buffer.items, false) catch (err) {
+            const report = client.handleResponseBody(stream.body_buffer.items, false) catch (e) {
                 stream.body_buffer.clearRetainingCapacity();
-                return this.fail(stream, err);
+                return _.fail(stream, e);
             };
             stream.body_buffer.clearRetainingCapacity();
             if (done) {
-                this.detach(stream);
+                _.detach(stream);
                 return finish(client);
             }
             if (report) {
                 if (client.state.isDone()) {
-                    this.detach(stream);
+                    _.detach(stream);
                     return client.progressUpdateH3();
                 }
                 client.progressUpdateH3();
@@ -213,13 +207,13 @@ export @root struct ClientSession {
         }
 
         if (done) {
-            this.detach(stream);
+            _.detach(stream);
             client.state.flags.received_last_chunk = true;
             return finish(client);
         }
     }
 
-    fn applyHeaders(_: *ClientSession, stream: *Stream, client: *HTTPClient): !HeaderResult {
+    static fn applyHeaders(stream: *Stream, client: *HTTPClient): !HeaderResult {
         let response: bun.picohttp.Response = {
             minor_version: 0,
             status_code: stream.status_code,
