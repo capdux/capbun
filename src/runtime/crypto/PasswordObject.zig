@@ -25,6 +25,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 const Message = anyopaque;
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
 pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
@@ -57,9 +72,7 @@ pub const Algorithm_Value = union(enum) {
     
     pub const bcrpyt_default = 10;
     
-    pub const default = Algorithm_Value{
-            .argon2id = .{},
-        };
+    pub const default = Algorithm_Value{ .argon2id = .{} };
 };
 
 pub const HashJobResultValue = union(enum) {
@@ -119,8 +132,7 @@ pub fn toParams(self: Argon2Params_) std.crypto.pwhash.argon2.Params {
 
 pub const AlgorithmDef_ = struct {
 
-pub fn get(self: AlgorithmDef_, pw: []const u8) ?AlgorithmEnum {
-        _ = &self;
+pub fn get(pw: []const u8) ?AlgorithmEnum {
             if ((pw[0] != 36)) {
                 return null;
             }
@@ -148,15 +160,7 @@ pub fn get(self: AlgorithmDef_, pw: []const u8) ?AlgorithmEnum {
     pub const Value = Algorithm_Value;
     pub const Argon2Params = Argon2Params_;
     pub const argon2 = AlgorithmEnum.argon2id;
-    pub const label = bun.ComptimeStringMap(
-            AlgorithmEnum,
-            .{
-                .{ "argon2i", .argon2i },
-                .{ "argon2d", .argon2d },
-                .{ "argon2id", .argon2id },
-                .{ "bcrypt", .bcrypt },
-            },
-        );
+    pub const label = bun.ComptimeStringMap(AlgorithmEnum, .{ .{ "argon2i", .argon2i }, .{ "argon2d", .argon2d }, .{ "argon2id", .argon2id }, .{ "bcrypt", .bcrypt } });
     pub const default = AlgorithmEnum.argon2id;
 };
 
@@ -164,8 +168,7 @@ pub const PasswordObject = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn hash(self: *const PasswordObject, allocator: std.mem.Allocator, password: []const u8, algorithm: Algorithm_Value) anyerror![]const u8 {
-        _ = &self;
+pub fn hash(allocator: std.mem.Allocator, password: []const u8, algorithm: Algorithm_Value) anyerror![]const u8 {
             switch (algorithm) {
 .argon2i => |argon| {
 var outbuf: [4096]u8 = undefined;
@@ -201,7 +204,7 @@ var outbuf: [4096]u8 = undefined;
 var outbuf: [4096]u8 = undefined;
             _ = &outbuf;
             _ = @memset((&outbuf), 0);
-            var outbuf_slice: []const u8 = outbuf[0..];
+            var outbuf_slice: []u8 = outbuf[0..];
             _ = &outbuf_slice;
             var password_to_use = password;
             _ = &password_to_use;
@@ -226,22 +229,20 @@ var outbuf: [4096]u8 = undefined;
 }
     }
 
-pub fn verify(self: *const PasswordObject, allocator: std.mem.Allocator, password: []const u8, previous_hash: []const u8, algorithm: ?AlgorithmEnum) anyerror!bool {
-        _ = &self;
+pub fn verify(allocator: std.mem.Allocator, password: []const u8, previous_hash: []const u8, algorithm: ?AlgorithmEnum) anyerror!bool {
             if ((previous_hash.len == 0)) {
                 return false;
             }
-            return self.verifyWithAlgorithm(allocator, password, previous_hash, ((algorithm) orelse (((AlgorithmDef_.get(previous_hash)) orelse { return .{ .ok = error.UnsupportedAlgorithm }; }))));
+            return verifyWithAlgorithm(allocator, password, previous_hash, ((algorithm) orelse (((AlgorithmDef_.get(previous_hash)) orelse { return .{ .ok = error.UnsupportedAlgorithm }; }))));
     }
 
-pub fn verifyWithAlgorithm(self: *const PasswordObject, allocator: std.mem.Allocator, password: []const u8, previous_hash: []const u8, algorithm: AlgorithmEnum) anyerror!bool {
-        _ = &self;
+pub fn verifyWithAlgorithm(allocator: std.mem.Allocator, password: []const u8, previous_hash: []const u8, algorithm: AlgorithmEnum) anyerror!bool {
             switch (algorithm) {
 .argon2id, .argon2d, .argon2i => {
-_ = (blk_catch_0: { break :blk_catch_0 ((pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator })) catch |err| { _ = &err; if ((err == error.PasswordVerificationFailed)) {
+_ = (blk_catch_0: { break :blk_catch_0 ((pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
                 return false;
             }
-            return err; }); });
+            return e; }); });
             return true;
 },
 .bcrypt => {
@@ -261,17 +262,17 @@ var password_to_use = password;
                 _ = sha_512.final(outbuf[0..64]);
                 password_to_use = outbuf[0..64];
             }
-            _ = (blk_catch_1: { break :blk_catch_1 ((pwhash.bcrypt.strVerify(previous_hash, password_to_use, .{ .allocator = allocator, .silently_truncate_password = true })) catch |err| { _ = &err; if ((err == error.PasswordVerificationFailed)) {
+            _ = (blk_catch_1: { break :blk_catch_1 ((pwhash.bcrypt.strVerify(previous_hash, password_to_use, .{ .allocator = allocator, .silently_truncate_password = true })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
                 return false;
             }
-            return err; }); });
+            return e; }); });
             return true;
 },
 }
     }
     pub const pwhash = std.crypto.pwhash;
     pub const Algorithm = AlgorithmDef_;
-    pub const HashError = pwhash.Error || error{UnsupportedAlgorithm};
+    pub const HashError = (pwhash.Error or error{UnsupportedAlgorithm});
 };
 
 pub const HashJobResult_ = struct {
@@ -334,21 +335,21 @@ pub fn deinit(self: *HashJob_) void {
     }
 
 pub fn getValue(password: []const u8, algorithm: Algorithm_Value) HashJobResultValue {
-            const value = (blk_catch_2: { break :blk_catch_2 ((PasswordObject.hash(bun.default_allocator, password, algorithm)) catch |err| { _ = &err; return HashJobResultValue{ .err = err }; }); });
+            const value = (blk_catch_2: { break :blk_catch_2 ((PasswordObject.hash(bun.default_allocator, password, algorithm)) catch |e| { _ = &e; return HashJobResultValue{ .err = e }; }); });
             return HashJobResultValue{ .hash = value };
     }
 
 pub fn run(task: *bun.ThreadPool.Task) void {
-            var this: *HashJob_ = @fieldParentPtr("task", task);
-            _ = &this;
-            var result = HashJobResult_.new(.{ .value = HashJob_.getValue(this.password, this.algorithm), .task = undefined, .promise = this.promise, .global = this.global, .ref = this.ref });
+            var job: *HashJob_ = @fieldParentPtr("task", task);
+            _ = &job;
+            var result = HashJobResult_.new(.{ .value = HashJob_.getValue(job.password, job.algorithm), .task = undefined, .promise = job.promise, .global = job.global, .ref = job.ref });
             var __result_moved = false; _ = &__result_moved;
             defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
-            this.promise = .empty;
+            job.promise = .empty;
             result.task = jsc.AnyTask.New(HashJobResult_, HashJobResult_.runFromJS).init(result);
-            this.ref = .{};
-            _ = this.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
-            _ = (if (comptime @typeInfo(@TypeOf(this)) == .pointer) (this) else &(this)).release();
+            job.ref = .{};
+            _ = job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
+            _ = (if (comptime @typeInfo(@TypeOf(job)) == .pointer) (job) else &(job)).release();
     }
     pub const new = bun.TrivialNew(@This());
     pub const Result = HashJobResult_;
@@ -410,21 +411,21 @@ pub fn deinit(self: *VerifyJob_) void {
     }
 
 pub fn getValue(password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum) VerifyJobResultValue {
-            const pass = (blk_catch_3: { break :blk_catch_3 ((PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm)) catch |err| { _ = &err; return VerifyJobResultValue{ .err = err }; }); });
+            const pass = (blk_catch_3: { break :blk_catch_3 ((PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm)) catch |e| { _ = &e; return VerifyJobResultValue{ .err = e }; }); });
             return VerifyJobResultValue{ .pass = pass };
     }
 
 pub fn run(task: *bun.ThreadPool.Task) void {
-            var this: *VerifyJob_ = @fieldParentPtr("task", task);
-            _ = &this;
-            var result = VerifyJobResult_.new(.{ .value = VerifyJob_.getValue(this.password, this.prev_hash, this.algorithm), .task = undefined, .promise = this.promise, .global = this.global, .ref = this.ref });
+            var job: *VerifyJob_ = @fieldParentPtr("task", task);
+            _ = &job;
+            var result = VerifyJobResult_.new(.{ .value = VerifyJob_.getValue(job.password, job.prev_hash, job.algorithm), .task = undefined, .promise = job.promise, .global = job.global, .ref = job.ref });
             var __result_moved = false; _ = &__result_moved;
             defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
-            this.promise = .empty;
+            job.promise = .empty;
             result.task = jsc.AnyTask.New(VerifyJobResult_, VerifyJobResult_.runFromJS).init(result);
-            this.ref = .{};
-            _ = this.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
-            _ = (if (comptime @typeInfo(@TypeOf(this)) == .pointer) (this) else &(this)).release();
+            job.ref = .{};
+            _ = job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
+            _ = (if (comptime @typeInfo(@TypeOf(job)) == .pointer) (job) else &(job)).release();
     }
     pub const new = bun.TrivialNew(@This());
     pub const Result = VerifyJobResult_;
@@ -434,19 +435,19 @@ pub const JSPasswordObject = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn JSPasswordObject__create(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-        _ = &self;
+pub fn JSPasswordObject__create(globalObject: *jsc.JSGlobalObject) jsc.JSValue {
             var object = JSValue.createEmptyObject(globalObject, 4);
-            _ = &object;
+            var __object_moved = false; _ = &__object_moved;
+            defer if (!__object_moved) { const __T = @TypeOf(object); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = object.release() catch {}; } else { object.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = object; _drop_val.release(); } };
             _ = object.put(globalObject, ZigString.static("hash"), jsc.JSFunction.create(globalObject, "hash", JSPasswordObject__hash, 2, .{}));
             _ = object.put(globalObject, ZigString.static("hashSync"), jsc.JSFunction.create(globalObject, "hashSync", JSPasswordObject__hashSync, 2, .{}));
             _ = object.put(globalObject, ZigString.static("verify"), jsc.JSFunction.create(globalObject, "verify", JSPasswordObject__verify, 2, .{}));
             _ = object.put(globalObject, ZigString.static("verifySync"), jsc.JSFunction.create(globalObject, "verifySync", JSPasswordObject__verifySync, 2, .{}));
+            __object_moved = true;
             return object;
     }
 
-pub fn hash(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, password: []const u8, algorithm: Algorithm_Value, comptime sync: bool) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn hash(globalObject: *jsc.JSGlobalObject, password: []const u8, algorithm: Algorithm_Value, comptime sync: bool) anyerror!jsc.JSValue {
             _ = assert((password.len > 0));
             if (comptime sync) {
                 const value = HashJob_.getValue(password, algorithm);
@@ -474,11 +475,10 @@ defer {
             defer if (!__job_moved) { const __T = @TypeOf(job); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = job.release() catch {}; } else { job.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = job; _drop_val.release(); } };
             _ = job.ref.ref(globalObject.bunVM());
             _ = jsc.WorkPool.schedule((&job.task));
-            return (if (comptime @typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            return (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
     }
 
-pub fn verify(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum, comptime sync: bool) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum, comptime sync: bool) anyerror!jsc.JSValue {
             _ = assert((password.len > 0));
             if (comptime sync) {
                 const value = VerifyJob_.getValue(password, prev_hash, algorithm);
@@ -503,11 +503,10 @@ return jsc.JSValue.jsBoolean(pass);
             defer if (!__job_moved) { const __T = @TypeOf(job); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = job.release() catch {}; } else { job.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = job; _drop_val.release(); } };
             _ = job.ref.ref(globalObject.bunVM());
             _ = jsc.WorkPool.schedule((&job.task));
-            return (if (comptime @typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            return (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
     }
 
-pub fn JSPasswordObject__hash(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
             const arguments_ = callframe.arguments_old(2);
             var __arguments__moved = false; _ = &__arguments__moved;
             defer if (!__arguments__moved) { const __T = @TypeOf(arguments_); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = arguments_.release() catch {}; } else { arguments_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments_; _drop_val.release(); } };
@@ -529,11 +528,10 @@ pub fn JSPasswordObject__hash(self: *const JSPasswordObject, globalObject: *jsc.
             if ((password_to_hash.len == 0)) {
                 return globalObject.throwInvalidArguments("password must not be empty", .{});
             }
-            return self.hash(globalObject, password_to_hash, algorithm, false);
+            return hash(globalObject, password_to_hash, algorithm, false);
     }
 
-pub fn JSPasswordObject__hashSync(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
             const arguments_ = callframe.arguments_old(2);
             var __arguments__moved = false; _ = &__arguments__moved;
             defer if (!__arguments__moved) { const __T = @TypeOf(arguments_); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = arguments_.release() catch {}; } else { arguments_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments_; _drop_val.release(); } };
@@ -561,11 +559,10 @@ pub fn JSPasswordObject__hashSync(self: *const JSPasswordObject, globalObject: *
             if ((string_or_buffer.slice().len == 0)) {
                 return globalObject.throwInvalidArguments("password must not be empty", .{});
             }
-            return self.hash(globalObject, string_or_buffer.slice(), algorithm, true);
+            return hash(globalObject, string_or_buffer.slice(), algorithm, true);
     }
 
-pub fn JSPasswordObject__verify(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
             const arguments_ = callframe.arguments_old(3);
             var __arguments__moved = false; _ = &__arguments__moved;
             defer if (!__arguments__moved) { const __T = @TypeOf(arguments_); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = arguments_.release() catch {}; } else { arguments_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments_; _drop_val.release(); } };
@@ -596,8 +593,8 @@ pub fn JSPasswordObject__verify(self: *const JSPasswordObject, globalObject: *js
             const owned_password = try jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[0], bun.default_allocator);
             var __owned_password_moved = false; _ = &__owned_password_moved;
             defer if (!__owned_password_moved) { const __T = @TypeOf(owned_password); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = owned_password.release() catch {}; } else { owned_password.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned_password; _drop_val.release(); } };
-            const owned_hash = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator)) catch |err| { _ = &err; _ = bun.default_allocator.free(owned_password);
-            return err; }); });
+            const owned_hash = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator)) catch |e| { _ = &e; _ = bun.default_allocator.free(owned_password);
+            return e; }); });
             var __owned_hash_moved = false; _ = &__owned_hash_moved;
             defer if (!__owned_hash_moved) { const __T = @TypeOf(owned_hash); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = owned_hash.release() catch {}; } else { owned_hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned_hash; _drop_val.release(); } };
             if ((owned_hash.len == 0)) {
@@ -608,11 +605,10 @@ pub fn JSPasswordObject__verify(self: *const JSPasswordObject, globalObject: *js
                 _ = bun.default_allocator.free(owned_hash);
                 return jsc.JSPromise.resolvedPromiseValue(globalObject, .false);
             }
-            return self.verify(globalObject, owned_password, owned_hash, algorithm, false);
+            return verify(globalObject, owned_password, owned_hash, algorithm, false);
     }
 
-pub fn JSPasswordObject__verifySync(self: *const JSPasswordObject, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
-        _ = &self;
+pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {
             const arguments_ = callframe.arguments_old(3);
             var __arguments__moved = false; _ = &__arguments__moved;
             defer if (!__arguments__moved) { const __T = @TypeOf(arguments_); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = arguments_.release() catch {}; } else { arguments_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments_; _drop_val.release(); } };
@@ -671,7 +667,7 @@ pub fn JSPasswordObject__verifySync(self: *const JSPasswordObject, globalObject:
             if ((password.slice().len == 0)) {
                 return error.false;
             }
-            return self.verify(globalObject, password.slice(), hash_.slice(), algorithm, true);
+            return verify(globalObject, password.slice(), hash_.slice(), algorithm, true);
     }
     pub const HashJob = HashJob_;
     pub const VerifyJob = VerifyJob_;

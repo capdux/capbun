@@ -23,13 +23,13 @@ pub struct Job_ {
     task: jsc.WorkPoolTask = .{ .callback = &runTask },
     promise: jsc.JSPromise.Strong = .{},
     vm: *jsc.VirtualMachine,
-    err: ?u32 = null,
+    err: u32? = null,
     any_task: jsc.AnyTask = undefined,
     poll: Async.KeepAlive = .{},
 
     pub const new = bun.TrivialNew(@This());
 
-    pub fn init(this: *Job_) {}
+    pub fn init(*_: *Job_) {}
 
     pub static fn runTask(task: *jsc.WorkPoolTask) {
         let job: *Job_ = @fieldParentPtr("task", task);
@@ -47,7 +47,7 @@ pub struct Job_ {
         }
     }
 
-    pub fn runFromJS(this: *Job_): anyerror!void {
+    pub fn runFromJS(*_: *Job_): anyerror!void {
         defer this.release();
         if (this.vm.isShuttingDown()) {
             return;
@@ -67,7 +67,7 @@ pub struct Job_ {
         promise.resolve(globalThis, buffer_value)?;
     }
 
-    pub fn release(this: *Job_) {
+    pub fn release(*_: *Job_) {
         this.poll.unref(this.vm);
         this.pbkdf2.deinitAndUnprotect();
         this.promise.deinit();
@@ -75,7 +75,7 @@ pub struct Job_ {
         bun.destroy(this);
     }
 
-    pub fn deinit(this: *Job_) {
+    pub fn deinit(*_: *Job_) {
         this.release();
     }
 
@@ -106,7 +106,7 @@ export class PBKDF2 {
 
     pub const Job = Job_;
 
-    pub fn run(this: *PBKDF2, output: []u8): bool {
+    pub fn run(*_: *PBKDF2, output: []u8): bool {
         const password = this.password.slice();
         const salt = this.salt.slice();
         const algorithm = this.algorithm;
@@ -134,17 +134,17 @@ export class PBKDF2 {
         return true;
     }
 
-    pub fn deinitAndUnprotect(this: *PBKDF2) {
+    pub fn deinitAndUnprotect(*_: *PBKDF2) {
         this.password.deinitAndUnprotect();
         this.salt.deinitAndUnprotect();
     }
 
-    pub fn release(this: *PBKDF2) {
+    pub fn release(*_: *PBKDF2) {
         this.password.deinit();
         this.salt.deinit();
     }
 
-    pub fn deinit(this: *PBKDF2) {
+    pub fn deinit(*_: *PBKDF2) {
         this.release();
     }
 }
@@ -256,7 +256,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 }
 
 /// For usage in Zig
-pub fn pbkdf2(output: []u8, password: []const u8, salt: []const u8, iteration_count: u32, algorithm: Algorithm) ?[]u8 {
+pub fn pbkdf2(output: []u8, password: []const u8, salt: []const u8, iteration_count: u32, algorithm: Algorithm): ([]u8)? {
     let pbk = PBKDF2{
         .algorithm = algorithm,
         .password = jsc.Node.StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.fromUTF8NeverFree(password) },

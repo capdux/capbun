@@ -179,7 +179,7 @@ pub const CryptoHasher = union(enum) {
     }
 
     fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        var output_digest_buf: Digest = undefined;
+        let output_digest_buf: Digest = undefined;
         @memset(&output_digest_buf, 0);
         defer input.deinit();
 
@@ -188,8 +188,8 @@ pub const CryptoHasher = union(enum) {
         }
 
         const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-            const err = BoringSSL.ERR_get_error();
-            const instance = createCryptoError(globalThis, err);
+            const e = BoringSSL.ERR_get_error();
+            const instance = createCryptoError(globalThis, e);
             BoringSSL.ERR_clear_error();
             return globalThis.throwValue(instance);
         };
@@ -197,9 +197,6 @@ pub const CryptoHasher = union(enum) {
     }
 
     fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        var output_digest_buf: Digest = undefined;
-        @memset(&output_digest_buf, 0);
-        var output_digest_slice: []u8 = &output_digest_buf;
         defer input.deinit();
 
         if (input == .blob and input.blob.isBunFile()) {
@@ -208,24 +205,28 @@ pub const CryptoHasher = union(enum) {
 
         if (output) |output_buf| {
             const size = evp.size();
-            var bytes = output_buf.byteSlice();
+            let bytes = output_buf.byteSlice();
             if (bytes.len < size) {
                 return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
             }
-            output_digest_slice = bytes[0..size];
-        }
-
-        const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), output_digest_slice) orelse {
-            const err = BoringSSL.ERR_get_error();
-            const instance = createCryptoError(globalThis, err);
-            BoringSSL.ERR_clear_error();
-            return globalThis.throwValue(instance);
-        };
-
-        if (output) |output_buf| {
+            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]) orelse {
+                const e = BoringSSL.ERR_get_error();
+                const instance = createCryptoError(globalThis, e);
+                BoringSSL.ERR_clear_error();
+                return globalThis.throwValue(instance);
+            };
+            _ = len;
             return output_buf.value;
         } else {
-            return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_slice[0..len]);
+            let output_digest_buf: Digest = undefined;
+            @memset(&output_digest_buf, 0);
+            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
+                const e = BoringSSL.ERR_get_error();
+                const instance = createCryptoError(globalThis, e);
+                BoringSSL.ERR_clear_error();
+                return globalThis.throwValue(instance);
+            };
+            return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
         }
     }
 
@@ -235,7 +236,7 @@ pub const CryptoHasher = union(enum) {
         input: jsc.Node.BlobOrStringOrBuffer,
         output: ?jsc.Node.StringOrBuffer,
     ) bun.JSError!jsc.JSValue {
-        var evp = EVP.byName(algorithm, globalThis) orelse return try CryptoHasherZig.hashByName(globalThis, algorithm, input, output) orelse {
+        let evp = EVP.byName(algorithm, globalThis) orelse return try CryptoHasherZig.hashByName(globalThis, algorithm, input, output) orelse {
             return globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
         };
         defer evp.deinit();
@@ -276,7 +277,7 @@ pub const CryptoHasher = union(enum) {
         }
 
         const hmac_value = arguments.ptr[1];
-        var hmac_key: ?jsc.Node.StringOrBuffer = null;
+        let hmac_key: ?jsc.Node.StringOrBuffer = null;
         defer {
             if (hmac_key) |key| {
                 key.deinit();
@@ -296,9 +297,9 @@ pub const CryptoHasher = union(enum) {
                 break :brk .{
                     .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {
                         if (!globalThis.hasException()) {
-                            const err = BoringSSL.ERR_get_error();
-                            if (err != 0) {
-                                const instance = createCryptoError(globalThis, err);
+                            const e = BoringSSL.ERR_get_error();
+                            if (e != 0) {
+                                const instance = createCryptoError(globalThis, e);
                                 BoringSSL.ERR_clear_error();
                                 return globalThis.throwValue(instance);
                             } else {
@@ -345,9 +346,9 @@ pub const CryptoHasher = union(enum) {
         switch (this.*) {
             .evp => {
                 this.evp.update(buffer.slice());
-                const err = BoringSSL.ERR_get_error();
-                if (err != 0) {
-                    const instance = createCryptoError(globalThis, err);
+                const e = BoringSSL.ERR_get_error();
+                if (e != 0) {
+                    const instance = createCryptoError(globalThis, e);
                     BoringSSL.ERR_clear_error();
                     return globalThis.throwValue(instance);
                 }
@@ -358,9 +359,9 @@ pub const CryptoHasher = union(enum) {
                 };
 
                 hmac.update(buffer.slice());
-                const err = BoringSSL.ERR_get_error();
-                if (err != 0) {
-                    const instance = createCryptoError(globalThis, err);
+                const e = BoringSSL.ERR_get_error();
+                if (e != 0) {
+                    const instance = createCryptoError(globalThis, e);
                     BoringSSL.ERR_clear_error();
                     return globalThis.throwValue(instance);
                 }
@@ -387,9 +388,9 @@ pub const CryptoHasher = union(enum) {
                 };
                 break :brk .{
                     .hmac = hmac.copy() catch {
-                        const err = createCryptoError(globalObject, BoringSSL.ERR_get_error());
+                        const e = createCryptoError(globalObject, BoringSSL.ERR_get_error());
                         BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(err);
+                        return globalObject.throwValue(e);
                     },
                 };
             },
@@ -422,35 +423,29 @@ pub const CryptoHasher = union(enum) {
     }
 
     fn digestToBytes(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        var output_digest_buf: EVP.Digest = undefined;
-        @memset(&output_digest_buf, 0);
-        var output_digest_slice: []u8 = &output_digest_buf;
         if (output) |output_buf| {
-            var bytes = output_buf.byteSlice();
-            if (bytes.len < output_digest_buf.len) {
-                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{output_digest_buf.len}), .{});
+            let bytes = output_buf.byteSlice();
+            if (bytes.len < BoringSSL.EVP_MAX_MD_SIZE) {
+                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{BoringSSL.EVP_MAX_MD_SIZE}), .{});
             }
-            output_digest_slice = bytes[0..bytes.len];
-        } else {
-            output_digest_buf = std.mem.zeroes(EVP.Digest);
-        }
-
-        const result = this.final(globalThis, output_digest_slice) catch return .zero;
-        if (globalThis.hasException()) {
-            return error.JSError;
-        }
-
-        if (output) |output_buf| {
+            _ = this.final(globalThis, bytes[0..bytes.len]) catch return .zero;
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
             return output_buf.value;
         } else {
+            let output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
+            const result = this.final(globalThis, &output_digest_buf) catch return .zero;
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
             return jsc.ArrayBuffer.createBuffer(globalThis, result);
         }
     }
 
     fn digestToEncoding(this: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-        const output_digest_slice: []u8 = &output_digest_buf;
-        const out = this.final(globalThis, output_digest_slice) catch return .zero;
+        let output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
+        const out = this.final(globalThis, &output_digest_buf) catch return .zero;
         if (globalThis.hasException()) {
             return error.JSError;
         }
@@ -497,7 +492,7 @@ pub struct AlgoEntry {
 
 const CryptoHasherZig = struct {
     algorithm: EVP.Algorithm,
-    state: *anyopaque,
+    state: *!,
     digest_length: u8,
 
     const algo_map = [_]AlgoEntry{
@@ -555,10 +550,10 @@ const CryptoHasherZig = struct {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
-        var h = Algorithm.init(.{});
+        let h = Algorithm.init(.{});
         h.update(input.slice());
 
-        var out: [digestLength(Algorithm)]u8 = undefined;
+        let out: [digestLength(Algorithm)]u8 = undefined;
         h.final(&out);
 
         return encoding.encodeWithSize(globalThis, digestLength(Algorithm), &out);
@@ -571,7 +566,7 @@ const CryptoHasherZig = struct {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
-        var h = Algorithm.init(.{});
+        let h = Algorithm.init(.{});
         const digest_length_comptime = digestLength(Algorithm);
 
         if (output) |output_buf| {
@@ -586,7 +581,7 @@ const CryptoHasherZig = struct {
             h.final(output_buf.slice()[0..digest_length_comptime]);
             return output_buf.value;
         } else {
-            var out: [digestLength(Algorithm)]u8 = undefined;
+            let out: [digestLength(Algorithm)]u8 = undefined;
             h.final(&out);
             return jsc.ArrayBuffer.createBuffer(globalThis, &out);
         }
@@ -660,7 +655,7 @@ const CryptoHasherZig = struct {
     pub fn release(this: *CryptoHasherZig) void {
         inline for (CryptoHasherZig.algo_map) |item| {
             if (this.algorithm == @field(EVP.Algorithm, item.name)) {
-                return bun.destroy(@as(*item.T, @ptrCast(@alignCast(this.state))));
+                return bun.destroy(@as(*item.T, this.state));
             }
         }
         @panic("unreachable");
@@ -702,7 +697,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         }
 
         fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = undefined;
+            let output_digest_buf: Hasher.Digest = undefined;
 
             if (input == .blob and input.blob.isBunFile()) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
@@ -718,26 +713,26 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         }
 
         fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = undefined;
-            var output_digest_slice: *Hasher.Digest = &output_digest_buf;
             if (output) |output_buf| {
                 const bytes = output_buf.byteSlice();
                 if (bytes.len < Hasher.digest) {
                     return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
                 }
-                output_digest_slice = bytes[0..Hasher.digest];
-            }
-
-            if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
-                Hasher.hash(input.slice(), output_digest_slice, jsc.VirtualMachine.get().rareData().boringEngine());
-            } else {
-                Hasher.hash(input.slice(), output_digest_slice);
-            }
-
-            if (output) |output_buf| {
+                const slice = bytes[0..Hasher.digest];
+                if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
+                    Hasher.hash(input.slice(), slice, jsc.VirtualMachine.get().rareData().boringEngine());
+                } else {
+                    Hasher.hash(input.slice(), slice);
+                }
                 return output_buf.value;
             } else {
-                const array_buffer_out = jsc.ArrayBuffer.fromBytes(bun.default_allocator.dupe(u8, output_digest_slice) catch unreachable, .Uint8Array);
+                let output_digest_buf: Hasher.Digest = undefined;
+                if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
+                    Hasher.hash(input.slice(), &output_digest_buf, jsc.VirtualMachine.get().rareData().boringEngine());
+                } else {
+                    Hasher.hash(input.slice(), &output_digest_buf);
+                }
+                const array_buffer_out = jsc.ArrayBuffer.fromBytes(bun.default_allocator.dupe(u8, &output_digest_buf) catch unreachable, .Uint8Array);
                 return array_buffer_out.toJSUnchecked(globalThis);
             }
         }
@@ -834,37 +829,29 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         }
 
         fn digestToBytes(this: *@This(), globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = undefined;
-            var output_digest_slice: *Hasher.Digest = &output_digest_buf;
             if (output) |output_buf| {
                 const bytes = output_buf.byteSlice();
                 if (bytes.len < Hasher.digest) {
                     return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
                 }
-                output_digest_slice = bytes[0..Hasher.digest];
-            } else {
-                output_digest_buf = std.mem.zeroes(Hasher.Digest);
-            }
-
-            this.hashing.final(output_digest_slice);
-            this.digested = true;
-
-            if (output) |output_buf| {
+                this.hashing.final(bytes[0..Hasher.digest]);
+                this.digested = true;
                 return output_buf.value;
             } else {
+                let output_digest_buf: Hasher.Digest = std.mem.zeroes(Hasher.Digest);
+                this.hashing.final(&output_digest_buf);
+                this.digested = true;
                 const array_buffer_out = jsc.ArrayBuffer.fromBytes(bun.default_allocator.dupe(u8, &output_digest_buf) catch unreachable, .Uint8Array);
                 return array_buffer_out.toJSUnchecked(globalThis);
             }
         }
 
         fn digestToEncoding(this: *@This(), globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = std.mem.zeroes(Hasher.Digest);
-            const output_digest_slice: *Hasher.Digest = &output_digest_buf;
-
-            this.hashing.final(output_digest_slice);
+            let output_digest_buf: Hasher.Digest = std.mem.zeroes(Hasher.Digest);
+            this.hashing.final(&output_digest_buf);
             this.digested = true;
 
-            return encoding.encodeWithSize(globalThis, Hasher.digest, output_digest_slice);
+            return encoding.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
         }
 
         pub fn release(this: *@This()) void {

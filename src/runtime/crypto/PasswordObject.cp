@@ -16,7 +16,7 @@ pub struct Argon2Params_ {
     memory_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.m;
     time_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.t;
 
-    pub fn toParams(this: Argon2Params_): std.crypto.pwhash.argon2.Params {
+    pub fn toParams(_: Argon2Params_): std.crypto.pwhash.argon2.Params {
         return std.crypto.pwhash.argon2.Params{
             .t = this.time_cost,
             .m = this.memory_cost,
@@ -221,7 +221,7 @@ pub struct AlgorithmDef_ {
 
     pub const default = AlgorithmEnum.argon2id;
 
-    pub fn get(pw: []const u8): ?AlgorithmEnum {
+    pub fn get(pw: []const u8): AlgorithmEnum? {
         if (pw[0] != '$') {
             return null;
         }
@@ -329,7 +329,7 @@ pub class PasswordObject {
         allocator: std.mem.Allocator,
         password: []const u8,
         previous_hash: []const u8,
-        algorithm: ?AlgorithmEnum,
+        algorithm: AlgorithmEnum?,
     ): anyerror!bool {
         if (previous_hash.len == 0) {
             return false;
@@ -351,12 +351,12 @@ pub class PasswordObject {
     ): anyerror!bool {
         switch (algorithm) {
             .argon2id, .argon2d, .argon2i => {
-                pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator }) catch err => {
-                    if (err == error.PasswordVerificationFailed) {
+                pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator }) catch e => {
+                    if (e == error.PasswordVerificationFailed) {
                         return false;
                     }
 
-                    return err;
+                    return e;
                 };
                 return true;
             },
@@ -375,12 +375,12 @@ pub class PasswordObject {
                 pwhash.bcrypt.strVerify(previous_hash, password_to_use, .{
                     .allocator = allocator,
                     .silently_truncate_password = true,
-                }) catch err => {
-                    if (err == error.PasswordVerificationFailed) {
+                }) catch e => {
+                    if (e == error.PasswordVerificationFailed) {
                         return false;
                     }
 
-                    return err;
+                    return e;
                 };
                 return true;
             },
@@ -414,7 +414,7 @@ pub enum HashJobResultValue {
     err: PasswordObject.HashError,
     hash: []const u8,
 
-    pub fn toErrorInstance(this: HashJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+    pub fn toErrorInstance(_: HashJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(this.err);
         const error_code = formatPasswordErrorCode(err_name);
         defer bun.default_allocator.free(error_code);
@@ -435,7 +435,7 @@ pub struct HashJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = HashJobResultValue;
 
-    pub fn runFromJS(this: *HashJobResult_): anyerror!void {
+    pub fn runFromJS(*_: *HashJobResult_): anyerror!void {
         let promise = this.promise;
         defer promise.deinit();
         this.promise = .{};
@@ -470,39 +470,39 @@ pub struct HashJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = HashJobResult_;
 
-    pub fn release(this: *HashJob_) {
+    pub fn release(*_: *HashJob_) {
         this.promise.deinit();
         bun.freeSensitive(bun.default_allocator, this.password);
         bun.destroy(this);
     }
 
-    pub fn deinit(this: *HashJob_) {
+    pub fn deinit(*_: *HashJob_) {
         this.release();
     }
 
     pub static fn getValue(password: []const u8, algorithm: Algorithm_Value): HashJobResultValue {
-        const value = PasswordObject.hash(bun.default_allocator, password, algorithm) catch err => {
-            return HashJobResultValue{ .err = err };
+        const value = PasswordObject.hash(bun.default_allocator, password, algorithm) catch e => {
+            return HashJobResultValue{ .err = e };
         };
         return HashJobResultValue{ .hash = value };
     }
 
     pub static fn run(task: *bun.ThreadPool.Task) {
-        let this: *HashJob_ = @fieldParentPtr("task", task);
+        let job: *HashJob_ = @fieldParentPtr("task", task);
 
         let result = HashJobResult_.new(.{
-            .value = HashJob_.getValue(this.password, this.algorithm),
+            .value = HashJob_.getValue(job.password, job.algorithm),
             .task = undefined,
-            .promise = this.promise,
-            .global = this.global,
-            .ref = this.ref,
+            .promise = job.promise,
+            .global = job.global,
+            .ref = job.ref,
         });
-        this.promise = .empty;
+        job.promise = .empty;
 
         result.task = jsc.AnyTask.New(HashJobResult_, HashJobResult_.runFromJS).init(result);
-        this.ref = .{};
-        this.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
-        this.release();
+        job.ref = .{};
+        job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
+        job.release();
     }
 }
 pub const HashJob = HashJob_;
@@ -511,7 +511,7 @@ pub enum VerifyJobResultValue {
     err: PasswordObject.HashError,
     pass: bool,
 
-    pub fn toErrorInstance(this: VerifyJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+    pub fn toErrorInstance(_: VerifyJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(this.err);
         const error_code = formatPasswordErrorCode(err_name);
         defer bun.default_allocator.free(error_code);
@@ -532,7 +532,7 @@ pub struct VerifyJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = VerifyJobResultValue;
 
-    pub fn runFromJS(this: *VerifyJobResult_): anyerror!void {
+    pub fn runFromJS(*_: *VerifyJobResult_): anyerror!void {
         let promise = this.promise;
         defer promise.deinit();
         this.promise = .{};
@@ -554,7 +554,7 @@ pub struct VerifyJobResult_ {
 pub const VerifyJobResult = VerifyJobResult_;
 
 pub struct VerifyJob_ {
-    algorithm: ?AlgorithmEnum = null,
+    algorithm: AlgorithmEnum? = null,
     password: []const u8,
     prev_hash: []const u8,
     promise: jsc.JSPromise.Strong,
@@ -566,40 +566,40 @@ pub struct VerifyJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = VerifyJobResult_;
 
-    pub fn release(this: *VerifyJob_) {
+    pub fn release(*_: *VerifyJob_) {
         this.promise.deinit();
         bun.freeSensitive(bun.default_allocator, this.password);
         bun.freeSensitive(bun.default_allocator, this.prev_hash);
         bun.destroy(this);
     }
 
-    pub fn deinit(this: *VerifyJob_) {
+    pub fn deinit(*_: *VerifyJob_) {
         this.release();
     }
 
-    pub static fn getValue(password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum): VerifyJobResultValue {
-        const pass = PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm) catch err => {
-            return VerifyJobResultValue{ .err = err };
+    pub static fn getValue(password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?): VerifyJobResultValue {
+        const pass = PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm) catch e => {
+            return VerifyJobResultValue{ .err = e };
         };
         return VerifyJobResultValue{ .pass = pass };
     }
 
     pub static fn run(task: *bun.ThreadPool.Task) {
-        let this: *VerifyJob_ = @fieldParentPtr("task", task);
+        let job: *VerifyJob_ = @fieldParentPtr("task", task);
 
         let result = VerifyJobResult_.new(.{
-            .value = VerifyJob_.getValue(this.password, this.prev_hash, this.algorithm),
+            .value = VerifyJob_.getValue(job.password, job.prev_hash, job.algorithm),
             .task = undefined,
-            .promise = this.promise,
-            .global = this.global,
-            .ref = this.ref,
+            .promise = job.promise,
+            .global = job.global,
+            .ref = job.ref,
         });
-        this.promise = .empty;
+        job.promise = .empty;
 
         result.task = jsc.AnyTask.New(VerifyJobResult_, VerifyJobResult_.runFromJS).init(result);
-        this.ref = .{};
-        this.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
-        this.release();
+        job.ref = .{};
+        job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
+        job.release();
     }
 }
 pub const VerifyJob = VerifyJob_;
@@ -651,7 +651,7 @@ pub class JSPasswordObject {
         return promise.value();
     }
 
-    pub fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum, comptime sync: bool): anyerror!jsc.JSValue {
+    pub fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?, comptime sync: bool): anyerror!jsc.JSValue {
         assert(password.len > 0);
 
         if (comptime sync) {
@@ -745,7 +745,7 @@ pub class JSPasswordObject {
             return globalObject.throwNotEnoughArguments("verify", 2, 0);
         }
 
-        let algorithm: ?AlgorithmEnum = null;
+        let algorithm: AlgorithmEnum? = null;
 
         if (arguments.len > 2 and !arguments[2].isEmptyOrUndefinedOrNull()) {
             if (!arguments[2].isString()) {
@@ -766,9 +766,9 @@ pub class JSPasswordObject {
 
         const owned_password = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[0], bun.default_allocator)?;
 
-        const owned_hash = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator) catch err => {
+        const owned_hash = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator) catch e => {
             bun.default_allocator.free(owned_password);
-            return err;
+            return e;
         };
 
         if (owned_hash.len == 0) {
@@ -792,7 +792,7 @@ pub class JSPasswordObject {
             return globalObject.throwNotEnoughArguments("verify", 2, 0);
         }
 
-        let algorithm: ?AlgorithmEnum = null;
+        let algorithm: AlgorithmEnum? = null;
 
         if (arguments.len > 2 and !arguments[2].isEmptyOrUndefinedOrNull()) {
             if (!arguments[2].isString()) {

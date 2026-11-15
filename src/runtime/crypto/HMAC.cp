@@ -11,9 +11,9 @@ pub const HMAC = struct {
 
     pub const new = bun.TrivialNew(@This());
 
-    pub fn init(algorithm: EVP.Algorithm, key: []const u8) ?*HMAC {
-        const md = algorithm.md() orelse return null;
-        var ctx: BoringSSL.HMAC_CTX = undefined;
+    pub fn init(algorithm: EVP.Algorithm, key: []const u8): (*HMAC)? {
+        const md = algorithm.md() ?? return null;
+        let ctx: BoringSSL.HMAC_CTX = undefined;
         BoringSSL.HMAC_CTX_init(&ctx);
         if (BoringSSL.HMAC_Init_ex(&ctx, key.ptr, @intCast(key.len), md, null) != 1) {
             BoringSSL.HMAC_CTX_cleanup(&ctx);
@@ -25,35 +25,35 @@ pub const HMAC = struct {
         });
     }
 
-    pub fn update(this: *HMAC, data: []const u8) void {
-        _ = BoringSSL.HMAC_Update(&this.ctx, data.ptr, data.len);
+    pub fn update(*_, data: []const u8) {
+        * = BoringSSL.HMAC_Update(&_.ctx, data.ptr, data.len);
     }
 
-    pub fn size(this: *const HMAC) usize {
-        return BoringSSL.HMAC_size(&this.ctx);
+    pub fn size(): usize {
+        return BoringSSL.HMAC_size(&_.ctx);
     }
 
-    pub fn copy(this: *HMAC) anyerror!*HMAC {
-        var ctx: BoringSSL.HMAC_CTX = undefined;
+    pub fn copy(*_): *HMAC! {
+        let ctx: BoringSSL.HMAC_CTX = undefined;
         BoringSSL.HMAC_CTX_init(&ctx);
-        if (BoringSSL.HMAC_CTX_copy(&ctx, &this.ctx) != 1) {
+        if (BoringSSL.HMAC_CTX_copy(&ctx, &_.ctx) != 1) {
             BoringSSL.HMAC_CTX_cleanup(&ctx);
             return error.BoringSSLError;
         }
         return HMAC.new(.{
             .ctx = ctx,
-            .algorithm = this.algorithm,
+            .algorithm = _.algorithm,
         });
     }
 
-    pub fn final(this: *HMAC, out: []u8) []u8 {
-        var outlen: c_uint = undefined;
-        _ = BoringSSL.HMAC_Final(&this.ctx, out.ptr, &outlen);
+    pub fn final(*_, out: []u8): []u8 {
+        let outlen: c_uint = undefined;
+        * = BoringSSL.HMAC_Final(&_.ctx, out.ptr, &outlen);
         return out[0..outlen];
     }
 
-    pub fn deinit(this: *HMAC) void {
-        BoringSSL.HMAC_CTX_cleanup(&this.ctx);
-        bun.destroy(this);
+    pub fn deinit(*_) {
+        BoringSSL.HMAC_CTX_cleanup(&_.ctx);
+        bun.destroy(_);
     }
 };

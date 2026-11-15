@@ -22,12 +22,27 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 pub const Job_ = struct {
     pbkdf2: *PBKDF2,
-    output: []const u8 = (&.{}),
+    output: []u8 = (&.{}),
     task: jsc.WorkPoolTask = .{ .callback = (&runTask) },
     promise: jsc.JSPromise.Strong = .{},
     vm: *jsc.VirtualMachine,
@@ -36,7 +51,7 @@ pub const Job_ = struct {
     poll: Async.KeepAlive = .{},
 
 pub fn init(self: *Job_) void {
-        _ = &self;
+        _ = self;
     }
 
 pub fn runTask(task: *jsc.WorkPoolTask) void {
@@ -115,7 +130,7 @@ pub const PBKDF2 = struct {
     length: i32 = 0,
     algorithm: EVP.Algorithm,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.password = jsc.Node.StringOrBuffer.empty; self_ptr.salt = jsc.Node.StringOrBuffer.empty; self_ptr.iteration_count = 1; self_ptr.length = 0; return self_ptr; }
 
 pub fn init(self: *PBKDF2, password: jsc.Node.StringOrBuffer, salt: jsc.Node.StringOrBuffer, iteration_count: u32, length: i32, algorithm: EVP.Algorithm) void {
         var __password_moved = false; _ = &__password_moved;
@@ -131,7 +146,7 @@ pub fn init(self: *PBKDF2, password: jsc.Node.StringOrBuffer, salt: jsc.Node.Str
             self.algorithm = algorithm;
     }
 
-pub fn run(self: *PBKDF2, output: []const u8) bool {
+pub fn run(self: *PBKDF2, output: []u8) bool {
             const password = self.password.slice();
             var __password_moved = false; _ = &__password_moved;
             defer if (!__password_moved) { const __T = @TypeOf(password); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = password.release() catch {}; } else { password.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = password; _drop_val.release(); } };
@@ -297,7 +312,7 @@ else => alg,
         return out;
 }
 
-pub fn pbkdf2(output: []const u8, password: []const u8, salt: []const u8, iteration_count: u32, algorithm: Algorithm) ?[]const u8 {
+pub fn pbkdf2(output: []u8, password: []const u8, salt: []const u8, iteration_count: u32, algorithm: Algorithm) ?[]u8 {
         var pbk = PBKDF2{ .algorithm = algorithm, .password = jsc.Node.StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.fromUTF8NeverFree(password) }, .salt = jsc.Node.StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.fromUTF8NeverFree(salt) }, .iteration_count = iteration_count, .length = @intCast(output.len) };
         var __pbk_moved = false; _ = &__pbk_moved;
         defer if (!__pbk_moved) { const __T = @TypeOf(pbk); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = pbk.release() catch {}; } else { pbk.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pbk; _drop_val.release(); } };

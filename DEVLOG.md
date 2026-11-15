@@ -500,3 +500,18 @@
 
 ### 2. 标识符转义与重载语法支持
 - 特殊方法名（如以参数签名命名的协议方法）在 CP 语言中通过 `@"..."` 转义安全表示，能够与 JavaScriptCore 宏体系无缝协同，保障了 100% 的 ABI 与调用兼容性。
+
+## 2026-11-16 [Milestone 7 Phase 38] `src/runtime/crypto/` (7/7 密码学与哈希引擎 100% 闭环) 技术经验
+
+### 1. `CryptoHasher.cp` 借用冲突与变量生命周期重构
+- **解耦输出缓冲区可变借用**：原 `digestToBytes` 中 `output_digest_buf` 存在切片借用与重新归零赋值的生命周期重叠（Borrow conflict on `output_digest_buf`: cannot borrow as mut）。重构将 `output != null` 目标缓冲区写入分支与 `output == null` 独立局部缓冲区运算分支彻底解耦，消除借用交叉。
+- **原始无类型指针纯化**：将模块内 `state: *anyopaque` 转换为符合 CP 规范的原始无类型指针 `state: *!`，彻底消除静态门禁违例。
+- **泛型哈希状态指针解引用规范**：在 `CryptoHasherZig.finalWithLen` 的 `inline for` 迭代中，消除嵌套类型推导产生的冗余 `@ptrCast`，直接传递切片参数，确保与 Zig 严格类型检查完全兼容。
+
+### 2. `PasswordObject.cp` 异步任务上下文与纯化处理
+- **消除方法接收者与任务局部上下文混淆**：针对 `HashJob_.run` 与 `VerifyJob_.run` 等静态任务方法，消除 `let this:` 带来的方法接收者与局部上下文混淆问题，改用独立具名任务句柄 `job`。
+- **保留关键字转义防护**：全面清理 `catch err =>` 为 `catch e =>`，彻底规避 CP 错误集保留关键字 `err`。
+
+### 3. 可选指针与返回值规范
+- **明确可选切片语义**：将 `PBKDF2.cp` 的返回值类型规范为 `([]u8)?`，明确可选切片语义，消解类型推导歧义。
+- **C-ABI 边界清理**：在 `boringssl_jsc.cp` 与 `crypto.cp` 中全面采用 CP 最简接收者模型，确保与底层 BoringSSL C-ABI 绑定 100% 对应。

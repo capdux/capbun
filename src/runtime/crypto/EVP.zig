@@ -9,7 +9,7 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const ZigString = jsc.ZigString;
 pub const Algorithm = Algorithm_;
-pub const Digest = .{ BoringSSL.EVP_MAX_MD_SIZE };
+pub const Digest = [BoringSSL.EVP_MAX_MD_SIZE]u8;
 pub const PBKDF2 = @import("./PBKDF2.zig");
 pub const pbkdf2 = PBKDF2.pbkdf2;
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -17,6 +17,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -67,8 +82,7 @@ else => null,
 });
     }
 
-pub fn getNames(self: Algorithm_) std.EnumArray(Algorithm_,bun.String) {
-        _ = &self;
+pub fn getNames() std.EnumArray(Algorithm_,bun.String) {
             var all = std.EnumArray(Algorithm_, bun.String).initUndefined();
             var __all_moved = false; _ = &__all_moved;
             defer if (!__all_moved) { const __T = @TypeOf(all); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = all.release() catch {}; } else { all.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = all; _drop_val.release(); } };
@@ -76,49 +90,15 @@ pub fn getNames(self: Algorithm_) std.EnumArray(Algorithm_,bun.String) {
             var __iter_moved = false; _ = &__iter_moved;
             defer if (!__iter_moved) { const __T = @TypeOf(iter); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = iter.release() catch {}; } else { iter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = iter; _drop_val.release(); } };
             while (iter.next()) |entry| {
-                (if (comptime @typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).* = bun.String.init(@tagName(entry.key));
+                (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).* = bun.String.init(@tagName(entry.key));
             }
             __all_moved = true;
             return all;
     }
     
-    pub const names: std.EnumArray(Algorithm_, bun.String) = getNames();
+    pub const names: std.EnumArray(Algorithm_,bun.String) = getNames();
     
-    pub const map = bun.ComptimeStringMap(Algorithm_, .{
-            .{ "blake2b256", .blake2b256 },
-            .{ "blake2b512", .blake2b512 },
-            .{ "blake2s256", .blake2s256 },
-            .{ "ripemd160", .ripemd160 },
-            .{ "rmd160", .ripemd160 },
-            .{ "md4", .md4 },
-            .{ "md5", .md5 },
-            .{ "sha1", .sha1 },
-            .{ "sha128", .sha1 },
-            .{ "sha224", .sha224 },
-            .{ "sha256", .sha256 },
-            .{ "sha384", .sha384 },
-            .{ "sha512", .sha512 },
-            .{ "sha-1", .sha1 },
-            .{ "sha-224", .sha224 },
-            .{ "sha-256", .sha256 },
-            .{ "sha-384", .sha384 },
-            .{ "sha-512", .sha512 },
-            .{ "sha-512/224", .@"sha512-224" },
-            .{ "sha-512_224", .@"sha512-224" },
-            .{ "sha-512224", .@"sha512-224" },
-            .{ "sha512-224", .@"sha512-224" },
-            .{ "sha-512/256", .@"sha512-256" },
-            .{ "sha-512_256", .@"sha512-256" },
-            .{ "sha-512256", .@"sha512-256" },
-            .{ "sha512-256", .@"sha512-256" },
-            .{ "sha384", .sha384 },
-            .{ "sha3-224", .@"sha3-224" },
-            .{ "sha3-256", .@"sha3-256" },
-            .{ "sha3-384", .@"sha3-384" },
-            .{ "sha3-512", .@"sha3-512" },
-            .{ "shake128", .shake128 },
-            .{ "shake256", .shake256 },
-        });
+    pub const map = bun.ComptimeStringMap(Algorithm_, .{ .{ "blake2b256", .blake2b256 }, .{ "blake2b512", .blake2b512 }, .{ "blake2s256", .blake2s256 }, .{ "ripemd160", .ripemd160 }, .{ "rmd160", .ripemd160 }, .{ "md4", .md4 }, .{ "md5", .md5 }, .{ "sha1", .sha1 }, .{ "sha128", .sha1 }, .{ "sha224", .sha224 }, .{ "sha256", .sha256 }, .{ "sha384", .sha384 }, .{ "sha512", .sha512 }, .{ "sha-1", .sha1 }, .{ "sha-224", .sha224 }, .{ "sha-256", .sha256 }, .{ "sha-384", .sha384 }, .{ "sha-512", .sha512 }, .{ "sha-512/224", .@"sha512-224" }, .{ "sha-512_224", .@"sha512-224" }, .{ "sha-512224", .@"sha512-224" }, .{ "sha512-224", .@"sha512-224" }, .{ "sha-512/256", .@"sha512-256" }, .{ "sha-512_256", .@"sha512-256" }, .{ "sha-512256", .@"sha512-256" }, .{ "sha512-256", .@"sha512-256" }, .{ "sha384", .sha384 }, .{ "sha3-224", .@"sha3-224" }, .{ "sha3-256", .@"sha3-256" }, .{ "sha3-384", .@"sha3-384" }, .{ "sha3-512", .@"sha3-512" }, .{ "shake128", .shake128 }, .{ "shake256", .shake256 } });
 };
 
 pub const EVP = struct {
@@ -126,7 +106,7 @@ pub const EVP = struct {
     md: *const BoringSSL.EVP_MD = undefined,
     algorithm: Algorithm_,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ctx = undefined; self_ptr.md = undefined; return self_ptr; }
 
 pub fn init(algorithm: Algorithm_, md: *const BoringSSL.EVP_MD, engine: *BoringSSL.ENGINE) EVP {
             _ = bun.BoringSSL.load();
@@ -143,7 +123,7 @@ pub fn reset(self: *EVP, engine: *BoringSSL.ENGINE) void {
             _ = BoringSSL.EVP_DigestInit_ex((&self.ctx), self.md, engine);
     }
 
-pub fn hash(self: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []const u8) ?u32 {
+pub fn hash(self: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []u8) ?u32 {
             _ = BoringSSL.ERR_clear_error;
             var outsize: c_uint = @min(@as(u16, @truncate(output.len)), self.size());
             _ = &outsize;
@@ -153,7 +133,7 @@ pub fn hash(self: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []
             return outsize;
     }
 
-pub fn final(self: *EVP, engine: *BoringSSL.ENGINE, output: []const u8) []const u8 {
+pub fn final(self: *EVP, engine: *BoringSSL.ENGINE, output: []u8) []u8 {
             _ = BoringSSL.ERR_clear_error;
             var outsize: u32 = @min(@as(u16, @truncate(output.len)), self.size());
             _ = &outsize;

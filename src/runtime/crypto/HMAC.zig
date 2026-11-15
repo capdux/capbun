@@ -9,52 +9,48 @@ pub const HMAC = struct {
     ctx: BoringSSL.HMAC_CTX,
     algorithm: EVP.Algorithm,
 
+pub fn init(algorithm: EVP.Algorithm, key: []const u8) ?*HMAC {
+            const md = ((algorithm.md()) orelse { return null; });
+            var ctx: BoringSSL.HMAC_CTX = undefined;
+            _ = &ctx;
+            _ = BoringSSL.HMAC_CTX_init((&ctx));
+            if ((BoringSSL.HMAC_Init_ex((&ctx), key.ptr, @intCast(key.len), md, null) != 1)) {
+                _ = BoringSSL.HMAC_CTX_cleanup((&ctx));
+                return null;
+            }
+            return HMAC.new(.{ .ctx = ctx, .algorithm = algorithm });
+    }
+
+pub fn update(self: *@This(), data: []const u8) void {
+            _ = BoringSSL.HMAC_Update((&self.ctx), data.ptr, data.len);
+    }
+
+pub fn size(self: @This()) usize {
+            return BoringSSL.HMAC_size((&self.ctx));
+    }
+
+pub fn copy(self: *@This()) *HMAC {
+            var ctx: BoringSSL.HMAC_CTX = undefined;
+            _ = &ctx;
+            _ = BoringSSL.HMAC_CTX_init((&ctx));
+            if ((BoringSSL.HMAC_CTX_copy((&ctx), (&self.ctx)) != 1)) {
+                _ = BoringSSL.HMAC_CTX_cleanup((&ctx));
+                return error.BoringSSLError;
+            }
+            return HMAC.new(.{ .ctx = ctx, .algorithm = self.algorithm });
+    }
+
+pub fn final(self: *@This(), out: []u8) []u8 {
+            var outlen: c_uint = undefined;
+            _ = &outlen;
+            _ = BoringSSL.HMAC_Final((&self.ctx), out.ptr, (&outlen));
+            return out[0..outlen];
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = BoringSSL.HMAC_CTX_cleanup((&self.ctx));
+            _ = bun.destroy(self);
+    }
     pub const new = bun.TrivialNew(@This());
-
-    pub fn init(algorithm: EVP.Algorithm, key: []const u8) ?*HMAC {
-        const md = algorithm.md() orelse return null;
-        var ctx: BoringSSL.HMAC_CTX = undefined;
-        BoringSSL.HMAC_CTX_init(&ctx);
-        if (BoringSSL.HMAC_Init_ex(&ctx, key.ptr, @intCast(key.len), md, null) != 1) {
-            BoringSSL.HMAC_CTX_cleanup(&ctx);
-            return null;
-        }
-        return HMAC.new(.{
-            .ctx = ctx,
-            .algorithm = algorithm,
-        });
-    }
-
-    pub fn update(this: *HMAC, data: []const u8) void {
-        _ = BoringSSL.HMAC_Update(&this.ctx, data.ptr, data.len);
-    }
-
-    pub fn size(this: *const HMAC) usize {
-        return BoringSSL.HMAC_size(&this.ctx);
-    }
-
-    pub fn copy(this: *HMAC) anyerror!*HMAC {
-        var ctx: BoringSSL.HMAC_CTX = undefined;
-        BoringSSL.HMAC_CTX_init(&ctx);
-        if (BoringSSL.HMAC_CTX_copy(&ctx, &this.ctx) != 1) {
-            BoringSSL.HMAC_CTX_cleanup(&ctx);
-            return error.BoringSSLError;
-        }
-        return HMAC.new(.{
-            .ctx = ctx,
-            .algorithm = this.algorithm,
-        });
-    }
-
-    pub fn final(this: *HMAC, out: []u8) []u8 {
-        var outlen: c_uint = undefined;
-        _ = BoringSSL.HMAC_Final(&this.ctx, out.ptr, &outlen);
-        return out[0..outlen];
-    }
-
-    pub fn deinit(this: *HMAC) void {
-        BoringSSL.HMAC_CTX_cleanup(&this.ctx);
-        bun.destroy(this);
-    }
 };
 pub const bun = @import("bun");

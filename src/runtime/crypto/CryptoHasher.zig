@@ -2,6 +2,7 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const default_allocator = bun.default_allocator;
 const strings = bun.strings;
 const BoringSSL = bun.BoringSSL.c;
@@ -182,8 +183,8 @@ pub const CryptoHasher = union(enum) {
         }
 
         const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-            const err = BoringSSL.ERR_get_error();
-            const instance = createCryptoError(globalThis, err);
+            const e = BoringSSL.ERR_get_error();
+            const instance = createCryptoError(globalThis, e);
             BoringSSL.ERR_clear_error();
             return globalThis.throwValue(instance);
         };
@@ -191,9 +192,6 @@ pub const CryptoHasher = union(enum) {
     }
 
     fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        var output_digest_buf: Digest = undefined;
-        @memset(&output_digest_buf, 0);
-        var output_digest_slice: []u8 = &output_digest_buf;
         defer input.deinit();
 
         if (input == .blob and input.blob.isBunFile()) {
@@ -206,20 +204,24 @@ pub const CryptoHasher = union(enum) {
             if (bytes.len < size) {
                 return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
             }
-            output_digest_slice = bytes[0..size];
-        }
-
-        const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), output_digest_slice) orelse {
-            const err = BoringSSL.ERR_get_error();
-            const instance = createCryptoError(globalThis, err);
-            BoringSSL.ERR_clear_error();
-            return globalThis.throwValue(instance);
-        };
-
-        if (output) |output_buf| {
+            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]) orelse {
+                const e = BoringSSL.ERR_get_error();
+                const instance = createCryptoError(globalThis, e);
+                BoringSSL.ERR_clear_error();
+                return globalThis.throwValue(instance);
+            };
+            _ = len;
             return output_buf.value;
         } else {
-            return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_slice[0..len]);
+            var output_digest_buf: Digest = undefined;
+            @memset(&output_digest_buf, 0);
+            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
+                const e = BoringSSL.ERR_get_error();
+                const instance = createCryptoError(globalThis, e);
+                BoringSSL.ERR_clear_error();
+                return globalThis.throwValue(instance);
+            };
+            return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
         }
     }
 
@@ -290,9 +292,9 @@ pub const CryptoHasher = union(enum) {
                 break :brk .{
                     .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {
                         if (!globalThis.hasException()) {
-                            const err = BoringSSL.ERR_get_error();
-                            if (err != 0) {
-                                const instance = createCryptoError(globalThis, err);
+                            const e = BoringSSL.ERR_get_error();
+                            if (e != 0) {
+                                const instance = createCryptoError(globalThis, e);
                                 BoringSSL.ERR_clear_error();
                                 return globalThis.throwValue(instance);
                             } else {
@@ -339,9 +341,9 @@ pub const CryptoHasher = union(enum) {
         switch (this.*) {
             .evp => {
                 this.evp.update(buffer.slice());
-                const err = BoringSSL.ERR_get_error();
-                if (err != 0) {
-                    const instance = createCryptoError(globalThis, err);
+                const e = BoringSSL.ERR_get_error();
+                if (e != 0) {
+                    const instance = createCryptoError(globalThis, e);
                     BoringSSL.ERR_clear_error();
                     return globalThis.throwValue(instance);
                 }
@@ -352,9 +354,9 @@ pub const CryptoHasher = union(enum) {
                 };
 
                 hmac.update(buffer.slice());
-                const err = BoringSSL.ERR_get_error();
-                if (err != 0) {
-                    const instance = createCryptoError(globalThis, err);
+                const e = BoringSSL.ERR_get_error();
+                if (e != 0) {
+                    const instance = createCryptoError(globalThis, e);
                     BoringSSL.ERR_clear_error();
                     return globalThis.throwValue(instance);
                 }
@@ -381,9 +383,9 @@ pub const CryptoHasher = union(enum) {
                 };
                 break :brk .{
                     .hmac = hmac.copy() catch {
-                        const err = createCryptoError(globalObject, BoringSSL.ERR_get_error());
+                        const e = createCryptoError(globalObject, BoringSSL.ERR_get_error());
                         BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(err);
+                        return globalObject.throwValue(e);
                     },
                 };
             },
@@ -416,35 +418,29 @@ pub const CryptoHasher = union(enum) {
     }
 
     fn digestToBytes(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        var output_digest_buf: EVP.Digest = undefined;
-        @memset(&output_digest_buf, 0);
-        var output_digest_slice: []u8 = &output_digest_buf;
         if (output) |output_buf| {
             var bytes = output_buf.byteSlice();
-            if (bytes.len < output_digest_buf.len) {
-                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{output_digest_buf.len}), .{});
+            if (bytes.len < BoringSSL.EVP_MAX_MD_SIZE) {
+                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{BoringSSL.EVP_MAX_MD_SIZE}), .{});
             }
-            output_digest_slice = bytes[0..bytes.len];
-        } else {
-            output_digest_buf = std.mem.zeroes(EVP.Digest);
-        }
-
-        const result = this.final(globalThis, output_digest_slice) catch return .zero;
-        if (globalThis.hasException()) {
-            return error.JSError;
-        }
-
-        if (output) |output_buf| {
+            _ = this.final(globalThis, bytes[0..bytes.len]) catch return .zero;
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
             return output_buf.value;
         } else {
+            var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
+            const result = this.final(globalThis, &output_digest_buf) catch return .zero;
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
             return jsc.ArrayBuffer.createBuffer(globalThis, result);
         }
     }
 
     fn digestToEncoding(this: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
         var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-        const output_digest_slice: []u8 = &output_digest_buf;
-        const out = this.final(globalThis, output_digest_slice) catch return .zero;
+        const out = this.final(globalThis, &output_digest_buf) catch return .zero;
         if (globalThis.hasException()) {
             return error.JSError;
         }
@@ -488,175 +484,183 @@ const CryptoHasherZig = struct {
     state: *anyopaque,
     digest_length: u8,
 
+pub fn digestLength(comptime Algorithm: type) comptime_int {
+            if ((Algorithm == std.crypto.hash.sha3.Shake128)) {
+                return 16;
+            }
+            if ((Algorithm == std.crypto.hash.sha3.Shake256)) {
+                return 32;
+            }
+            return Algorithm.digest_length;
+    }
+
+pub fn hashByName(globalThis: *JSGlobalObject, algorithm: ZigString, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!?jsc.JSValue {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if (bun.strings.eqlComptime(algorithm.slice(), (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
+                    return try hashByNameInner(globalThis, item.T, input, output);
+                }
+            }
+            return null;
+    }
+
+pub fn hashByNameInner(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
+            if (output) |string_or_buffer| {
+                _ = &string_or_buffer;
+                switch (string_or_buffer) {
+.buffer => |buffer| {
+return hashByNameInnerToBytes(globalThis, Algorithm, input, buffer.buffer);
+},
+else => {
+defer {
+                _ = string_or_buffer.deinit();
+                }
+                const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse (({
+                return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
+})));
+                var __encoding_moved = false; _ = &__encoding_moved;
+                defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
+                if ((encoding == .buffer)) {
+                    return hashByNameInnerToBytes(globalThis, Algorithm, input, null);
+                }
+                return hashByNameInnerToString(globalThis, Algorithm, input, encoding);
+},
+}
+            }
+            return hashByNameInnerToBytes(globalThis, Algorithm, input, null);
+    }
+
+pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+            defer {
+            _ = input.deinit();
+            }
+            if (((input == .blob) and input.blob.isBunFile())) {
+                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            }
+            var h = Algorithm.init(.{});
+            var __h_moved = false; _ = &__h_moved;
+            defer if (!__h_moved) { const __T = @TypeOf(h); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = h.release() catch {}; } else { h.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = h; _drop_val.release(); } };
+            _ = h.update(input.slice());
+            var out: struct { digestLength(Algorithm) } = undefined;
+            _ = &out;
+            u8 = undefined;
+            _ = h.final((&out));
+            return encoding.encodeWithSize(globalThis, digestLength(Algorithm), (&out));
+    }
+
+pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
+            defer {
+            _ = input.deinit();
+            }
+            if (((input == .blob) and input.blob.isBunFile())) {
+                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            }
+            var h = Algorithm.init(.{});
+            var __h_moved = false; _ = &__h_moved;
+            defer if (!__h_moved) { const __T = @TypeOf(h); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = h.release() catch {}; } else { h.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = h; _drop_val.release(); } };
+            const digest_length_comptime = digestLength(Algorithm);
+            var __digest_length_comptime_moved = false; _ = &__digest_length_comptime_moved;
+            defer if (!__digest_length_comptime_moved) { const __T = @TypeOf(digest_length_comptime); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = digest_length_comptime.release() catch {}; } else { digest_length_comptime.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = digest_length_comptime; _drop_val.release(); } };
+            if (output) |output_buf| {
+                _ = &output_buf;
+                if ((output_buf.byteSlice().len < digest_length_comptime)) {
+                    return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{ digest_length_comptime });
+                }
+            }
+            _ = h.update(input.slice());
+            if (output) |output_buf| {
+                _ = &output_buf;
+                _ = h.final(output_buf.slice()[0..digest_length_comptime]);
+                return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
+            } else {
+                var out: struct { digestLength(Algorithm) } = undefined;
+                _ = &out;
+                u8 = undefined;
+                _ = h.final((&out));
+                return jsc.ArrayBuffer.createBuffer(globalThis, (&out));
+            }
+    }
+
+pub fn constructor(algorithm: ZigString) ?*CryptoHasher {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if (bun.strings.eqlComptime(algorithm.slice(), (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
+                    return CryptoHasher.new(.{ .zig = .{ .algorithm = @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)), .state = bun.new(item.T, item.T.init(.{})), .digest_length = digestLength(item.T) } });
+                }
+            }
+            return null;
+    }
+
+pub fn init(algorithm: []const u8) ?CryptoHasherZig {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if (bun.strings.eqlComptime(algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
+                    const handle: CryptoHasherZig = .{ .algorithm = @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)), .state = bun.new(item.T, item.T.init(.{})), .digest_length = digestLength(item.T) };
+                    return handle;
+                }
+            }
+            return null;
+    }
+
+pub fn update(self: *@This(), bytes: []const u8) void {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
+                    return item.T.update(@ptrCast(@alignCast(self.state)), bytes);
+                }
+            }
+            _ = @panic("unreachable");
+    }
+
+pub fn copy(self: *const @This()) CryptoHasherZig {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
+                    return .{ .algorithm = self.algorithm, .state = bun.dupe(item.T, @ptrCast(@alignCast(self.state))), .digest_length = self.digest_length };
+                }
+            }
+            _ = @panic("unreachable");
+    }
+
+pub fn finalWithLen(self: *@This(), output_digest_slice: []u8, res_len: usize) []u8 {
+            inline for (CryptoHasherZig.algo_map) |pair| {
+                _ = &pair;
+                if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(pair)) == .@"enum" or @typeInfo(@TypeOf(pair)) == .@"union") @tagName(pair) else pair.name)))) {
+                    _ = pair.T.final(@ptrCast(@alignCast(self.state)), @ptrCast(output_digest_slice));
+                    const reset: *pair.T = @ptrCast(@alignCast(self.state));
+                    reset.* = pair.T.init(.{});
+                    return output_digest_slice[0..res_len];
+                }
+            }
+            _ = @panic("unreachable");
+    }
+
+pub fn final(self: *@This(), output_digest_slice: []u8) []u8 {
+            return self.finalWithLen(output_digest_slice, self.digest_length);
+    }
+
+pub fn release(self: *@This()) void {
+            inline for (CryptoHasherZig.algo_map) |item| {
+                _ = &item;
+                if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
+                    return bun.destroy(@as(*item.T, @ptrCast(@alignCast(self.state))));
+                }
+            }
+            _ = @panic("unreachable");
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+    }
     const algo_map = [_]AlgoEntry{
-        .{ .name = "sha3-224", .T = std.crypto.hash.sha3.Sha3_224 },
-        .{ .name = "sha3-256", .T = std.crypto.hash.sha3.Sha3_256 },
-        .{ .name = "sha3-384", .T = std.crypto.hash.sha3.Sha3_384 },
-        .{ .name = "sha3-512", .T = std.crypto.hash.sha3.Sha3_512 },
-        .{ .name = "shake128", .T = std.crypto.hash.sha3.Shake128 },
-        .{ .name = "shake256", .T = std.crypto.hash.sha3.Shake256 },
-        .{ .name = "blake2s256", .T = std.crypto.hash.blake2.Blake2s256 },
-    };
-
-    fn digestLength(comptime Algorithm: type) comptime_int {
-        if (Algorithm == std.crypto.hash.sha3.Shake128) return 16;
-        if (Algorithm == std.crypto.hash.sha3.Shake256) return 32;
-        return Algorithm.digest_length;
-    }
-
-    pub fn hashByName(globalThis: *JSGlobalObject, algorithm: ZigString, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!?jsc.JSValue {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (bun.strings.eqlComptime(algorithm.slice(), item.name)) {
-                return try hashByNameInner(globalThis, item.T, input, output);
-            }
-        }
-        return null;
-    }
-
-    fn hashByNameInner(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
-        if (output) |string_or_buffer| {
-            switch (string_or_buffer) {
-                .buffer => |buffer| {
-                    return hashByNameInnerToBytes(globalThis, Algorithm, input, buffer.buffer);
-                },
-                else => {
-                    defer string_or_buffer.deinit();
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
-                        return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
-
-                    if (encoding == .buffer) {
-                        return hashByNameInnerToBytes(globalThis, Algorithm, input, null);
-                    }
-
-                    return hashByNameInnerToString(globalThis, Algorithm, input, encoding);
-                },
-            }
-        }
-        return hashByNameInnerToBytes(globalThis, Algorithm, input, null);
-    }
-
-    fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        defer input.deinit();
-
-        if (input == .blob and input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
-        }
-
-        var h = Algorithm.init(.{});
-        h.update(input.slice());
-
-        var out: [digestLength(Algorithm)]u8 = undefined;
-        h.final(&out);
-
-        return encoding.encodeWithSize(globalThis, digestLength(Algorithm), &out);
-    }
-
-    fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        defer input.deinit();
-
-        if (input == .blob and input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
-        }
-
-        var h = Algorithm.init(.{});
-        const digest_length_comptime = digestLength(Algorithm);
-
-        if (output) |output_buf| {
-            if (output_buf.byteSlice().len < digest_length_comptime) {
-                return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{digest_length_comptime});
-            }
-        }
-
-        h.update(input.slice());
-
-        if (output) |output_buf| {
-            h.final(output_buf.slice()[0..digest_length_comptime]);
-            return output_buf.value;
-        } else {
-            var out: [digestLength(Algorithm)]u8 = undefined;
-            h.final(&out);
-            return jsc.ArrayBuffer.createBuffer(globalThis, &out);
-        }
-    }
-
-    fn constructor(algorithm: ZigString) ?*CryptoHasher {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (bun.strings.eqlComptime(algorithm.slice(), item.name)) {
-                return CryptoHasher.new(.{ .zig = .{
-                    .algorithm = @field(EVP.Algorithm, item.name),
-                    .state = bun.new(item.T, item.T.init(.{})),
-                    .digest_length = digestLength(item.T),
-                } });
-            }
-        }
-        return null;
-    }
-
-    pub fn init(algorithm: string) ?CryptoHasherZig {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (bun.strings.eqlComptime(algorithm, item.name)) {
-                const handle: CryptoHasherZig = .{
-                    .algorithm = @field(EVP.Algorithm, item.name),
-                    .state = bun.new(item.T, item.T.init(.{})),
-                    .digest_length = digestLength(item.T),
-                };
-                return handle;
-            }
-        }
-        return null;
-    }
-
-    fn update(this: *CryptoHasherZig, bytes: string) void {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (this.algorithm == @field(EVP.Algorithm, item.name)) {
-                return item.T.update(@ptrCast(@alignCast(this.state)), bytes);
-            }
-        }
-        @panic("unreachable");
-    }
-
-    fn copy(this: *const CryptoHasherZig) CryptoHasherZig {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (this.algorithm == @field(EVP.Algorithm, item.name)) {
-                return .{
-                    .algorithm = this.algorithm,
-                    .state = bun.dupe(item.T, @ptrCast(@alignCast(this.state))),
-                    .digest_length = this.digest_length,
-                };
-            }
-        }
-        @panic("unreachable");
-    }
-
-    fn finalWithLen(this: *CryptoHasherZig, output_digest_slice: []u8, res_len: usize) []u8 {
-        inline for (CryptoHasherZig.algo_map) |pair| {
-            if (this.algorithm == @field(EVP.Algorithm, pair.name)) {
-                pair.T.final(@ptrCast(@alignCast(this.state)), @ptrCast(output_digest_slice));
-                const reset: *pair.T = @ptrCast(@alignCast(this.state));
-                reset.* = pair.T.init(.{});
-                return output_digest_slice[0..res_len];
-            }
-        }
-        @panic("unreachable");
-    }
-
-    fn final(this: *CryptoHasherZig, output_digest_slice: []u8) []u8 {
-        return this.finalWithLen(output_digest_slice, this.digest_length);
-    }
-
-    pub fn release(this: *CryptoHasherZig) void {
-        inline for (CryptoHasherZig.algo_map) |item| {
-            if (this.algorithm == @field(EVP.Algorithm, item.name)) {
-                return bun.destroy(@as(*item.T, @ptrCast(@alignCast(this.state))));
-            }
-        }
-        @panic("unreachable");
-    }
-
-    pub fn deinit(this: *CryptoHasherZig) void {
-        this.release();
-    }
+            .{ .name = "sha3-224", .T = std.crypto.hash.sha3.Sha3_224 },
+            .{ .name = "sha3-256", .T = std.crypto.hash.sha3.Sha3_256 },
+            .{ .name = "sha3-384", .T = std.crypto.hash.sha3.Sha3_384 },
+            .{ .name = "sha3-512", .T = std.crypto.hash.sha3.Sha3_512 },
+            .{ .name = "shake128", .T = std.crypto.hash.sha3.Shake128 },
+            .{ .name = "shake256", .T = std.crypto.hash.sha3.Shake256 },
+            .{ .name = "blake2s256", .T = std.crypto.hash.blake2.Blake2s256 },
+        };
 };
 pub const MD4 = StaticCryptoHasher(Hashers.MD4, "MD4");
 pub const MD5 = StaticCryptoHasher(Hashers.MD5, "MD5");
@@ -666,6 +670,30 @@ pub const SHA256 = StaticCryptoHasher(Hashers.SHA256, "SHA256");
 pub const SHA384 = StaticCryptoHasher(Hashers.SHA384, "SHA384");
 pub const SHA512 = StaticCryptoHasher(Hashers.SHA512, "SHA512");
 pub const SHA512_256 = StaticCryptoHasher(Hashers.SHA512_256, "SHA512_256");
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
 pub const Hashers = @import("../../sha_hmac/sha.zig");
 pub const bun = @import("bun");
 pub const AlgoEntry = struct {
@@ -676,210 +704,210 @@ pub const AlgoEntry = struct {
 
 pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8) type {
         return struct {
-        hashing: Hasher = .{},
-        digested: bool = false,
+    hashing: Hasher = .{},
+    digested: bool = false,
 
-        const ThisHasher = @This();
+pub fn getByteLength(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
+        _ = self;
+            return jsc.JSValue.jsNumber((if (comptime @typeInfo(@TypeOf(Hasher.digest)) == .@"enum") cp_cast_int(u16, @intFromEnum(Hasher.digest)) else cp_cast_int(u16, Hasher.digest)));
+    }
 
-        pub const js = @field(jsc.Codegen, "JS" ++ name);
-        pub const toJS = js.toJS;
-        pub const fromJS = js.fromJS;
-        pub const fromJSDirect = js.fromJSDirect;
+pub fn getByteLengthStatic(self: *@This(), _: *jsc.JSGlobalObject, _: JSValue, _: JSValue) jsc.JSValue {
+        _ = self;
+            return jsc.JSValue.jsNumber((if (comptime @typeInfo(@TypeOf(Hasher.digest)) == .@"enum") cp_cast_int(u16, @intFromEnum(Hasher.digest)) else cp_cast_int(u16, Hasher.digest)));
+    }
 
-        pub const digest = host_fn.wrapInstanceMethod(ThisHasher, "digest_", false);
-        pub const hash = host_fn.wrapStaticMethod(ThisHasher, "hash_", false);
-
-        pub fn getByteLength(
-            _: *@This(),
-            _: *jsc.JSGlobalObject,
-        ) jsc.JSValue {
-            return jsc.JSValue.jsNumber(@as(u16, Hasher.digest));
-        }
-
-        pub fn getByteLengthStatic(
-            _: *jsc.JSGlobalObject,
-            _: JSValue,
-            _: JSValue,
-        ) jsc.JSValue {
-            return jsc.JSValue.jsNumber(@as(u16, Hasher.digest));
-        }
-
-        fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+pub fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
             var output_digest_buf: Hasher.Digest = undefined;
-
-            if (input == .blob and input.blob.isBunFile()) {
+            _ = &output_digest_buf;
+            if (((input == .blob) and input.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
-
-            if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
-                Hasher.hash(input.slice(), &output_digest_buf, jsc.VirtualMachine.get().rareData().boringEngine());
+            if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
+                _ = Hasher.hash(input.slice(), (&output_digest_buf), (jsc.VirtualMachine.get()).?.rareData().boringEngine());
             } else {
-                Hasher.hash(input.slice(), &output_digest_buf);
+                _ = Hasher.hash(input.slice(), (&output_digest_buf));
             }
+            return encoding.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
+    }
 
-            return encoding.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
-        }
-
-        fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = undefined;
-            var output_digest_slice: *Hasher.Digest = &output_digest_buf;
+pub fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
             if (output) |output_buf| {
+                _ = &output_buf;
                 const bytes = output_buf.byteSlice();
-                if (bytes.len < Hasher.digest) {
-                    return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
+                var __bytes_moved = false; _ = &__bytes_moved;
+                defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
+                if ((bytes.len < Hasher.digest)) {
+                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ Hasher.digest })), .{});
                 }
-                output_digest_slice = bytes[0..Hasher.digest];
-            }
-
-            if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
-                Hasher.hash(input.slice(), output_digest_slice, jsc.VirtualMachine.get().rareData().boringEngine());
+                const slice = bytes[0..Hasher.digest];
+                if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
+                    _ = Hasher.hash(input.slice(), slice, (jsc.VirtualMachine.get()).?.rareData().boringEngine());
+                } else {
+                    _ = Hasher.hash(input.slice(), slice);
+                }
+                return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
             } else {
-                Hasher.hash(input.slice(), output_digest_slice);
-            }
-
-            if (output) |output_buf| {
-                return output_buf.value;
-            } else {
-                const array_buffer_out = jsc.ArrayBuffer.fromBytes(bun.default_allocator.dupe(u8, output_digest_slice) catch unreachable, .Uint8Array);
+                var output_digest_buf: Hasher.Digest = undefined;
+                _ = &output_digest_buf;
+                if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
+                    _ = Hasher.hash(input.slice(), (&output_digest_buf), (jsc.VirtualMachine.get()).?.rareData().boringEngine());
+                } else {
+                    _ = Hasher.hash(input.slice(), (&output_digest_buf));
+                }
+                const array_buffer_out = jsc.ArrayBuffer.fromBytes(((bun.default_allocator.dupe(u8, (&output_digest_buf))) catch unreachable), .Uint8Array);
+                var __array_buffer_out_moved = false; _ = &__array_buffer_out_moved;
+                defer if (!__array_buffer_out_moved) { const __T = @TypeOf(array_buffer_out); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = array_buffer_out.release() catch {}; } else { array_buffer_out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = array_buffer_out; _drop_val.release(); } };
                 return array_buffer_out.toJSUnchecked(globalThis);
             }
-        }
+    }
 
-        pub fn hash_(
-            globalThis: *JSGlobalObject,
-            input: jsc.Node.BlobOrStringOrBuffer,
-            output: ?jsc.Node.StringOrBuffer,
-        ) bun.JSError!jsc.JSValue {
-            defer input.deinit();
-
-            if (input == .blob and input.blob.isBunFile()) {
+pub fn hash_(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
+            defer {
+            _ = input.deinit();
+            }
+            if (((input == .blob) and input.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
-
             if (output) |string_or_buffer| {
+                _ = &string_or_buffer;
                 switch (string_or_buffer) {
-                    .buffer => |buffer| {
-                        return hashToBytes(globalThis, input, buffer.buffer);
-                    },
-                    else => {
-                        defer string_or_buffer.deinit();
-                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
-                            return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                        };
-
-                        return hashToEncoding(globalThis, input, encoding);
-                    },
+.buffer => |buffer| {
+return hashToBytes(globalThis, input, buffer.buffer);
+},
+else => {
+defer {
+                _ = string_or_buffer.deinit();
                 }
+                const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse (({
+                return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
+})));
+                var __encoding_moved = false; _ = &__encoding_moved;
+                defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
+                return hashToEncoding(globalThis, input, encoding);
+},
+}
             } else {
                 return hashToBytes(globalThis, input, null);
             }
-        }
+    }
 
-        pub fn constructor(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*@This() {
+pub fn constructor(self: *@This(), _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*@This() {
+        _ = self;
             const obj = try bun.default_allocator.create(@This());
+            var __obj_moved = false; _ = &__obj_moved;
+            defer if (!__obj_moved) { const __T = @TypeOf(obj); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = obj.release() catch {}; } else { obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = obj; _drop_val.release(); } };
             obj.* = .{ .hashing = Hasher.init() };
+            __obj_moved = true;
             return obj;
-        }
+    }
 
-        pub fn getter(
-            globalObject: *jsc.JSGlobalObject,
-            _: *jsc.JSObject,
-        ) jsc.JSValue {
+pub fn getter(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
             return ThisHasher.js.getConstructor(globalObject);
-        }
+    }
 
-        pub fn update(this: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            if (this.digested) {
-                return globalThis.ERR(.INVALID_STATE, name ++ " hasher already digested, create a new instance to update", .{}).throw();
+pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            if (self.digested) {
+                return globalThis.ERR(.INVALID_STATE, (name ++ " hasher already digested, create a new instance to update"), .{}).throw();
             }
             const thisValue = callframe.this();
+            var __thisValue_moved = false; _ = &__thisValue_moved;
+            defer if (!__thisValue_moved) { const __T = @TypeOf(thisValue); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = thisValue.release() catch {}; } else { thisValue.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = thisValue; _drop_val.release(); } };
             const input = callframe.argument(0);
-            const buffer = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input) orelse {
-                return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
-            };
-            defer buffer.deinit();
-
-            if (buffer == .blob and buffer.blob.isBunFile()) {
+            var __input_moved = false; _ = &__input_moved;
+            defer if (!__input_moved) { const __T = @TypeOf(input); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = input.release() catch {}; } else { input.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = input; _drop_val.release(); } };
+            const buffer = try ((jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input)) orelse (({
+            return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
+})));
+            var __buffer_moved = false; _ = &__buffer_moved;
+            defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
+            defer {
+            _ = buffer.deinit();
+            }
+            if (((buffer == .blob) and buffer.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
-            this.hashing.update(buffer.slice());
+            _ = self.hashing.update(buffer.slice());
+            __thisValue_moved = true;
             return thisValue;
-        }
+    }
 
-        pub fn digest_(
-            this: *@This(),
-            globalThis: *JSGlobalObject,
-            output: ?jsc.Node.StringOrBuffer,
-        ) bun.JSError!jsc.JSValue {
-            if (this.digested) {
-                return globalThis.ERR(.INVALID_STATE, name ++ " hasher already digested, create a new instance to digest again", .{}).throw();
+pub fn digest_(self: *@This(), globalThis: *JSGlobalObject, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
+            if (self.digested) {
+                return globalThis.ERR(.INVALID_STATE, (name ++ " hasher already digested, create a new instance to digest again"), .{}).throw();
             }
             if (output) |string_or_buffer| {
+                _ = &string_or_buffer;
                 switch (string_or_buffer) {
-                    .buffer => |buffer| {
-                        return this.digestToBytes(
-                            globalThis,
-                            buffer.buffer,
-                        );
-                    },
-                    else => {
-                        defer string_or_buffer.deinit();
-                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
-                            return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                        };
-
-                        return this.digestToEncoding(globalThis, encoding);
-                    },
+.buffer => |buffer| {
+return self.digestToBytes(globalThis, buffer.buffer);
+},
+else => {
+defer {
+                _ = string_or_buffer.deinit();
                 }
+                const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse (({
+                return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
+})));
+                var __encoding_moved = false; _ = &__encoding_moved;
+                defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
+                return self.digestToEncoding(globalThis, encoding);
+},
+}
             } else {
-                return this.digestToBytes(globalThis, null);
+                return self.digestToBytes(globalThis, null);
             }
-        }
+    }
 
-        fn digestToBytes(this: *@This(), globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-            var output_digest_buf: Hasher.Digest = undefined;
-            var output_digest_slice: *Hasher.Digest = &output_digest_buf;
+pub fn digestToBytes(self: *@This(), globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
             if (output) |output_buf| {
+                _ = &output_buf;
                 const bytes = output_buf.byteSlice();
-                if (bytes.len < Hasher.digest) {
-                    return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
+                var __bytes_moved = false; _ = &__bytes_moved;
+                defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
+                if ((bytes.len < Hasher.digest)) {
+                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ Hasher.digest })), .{});
                 }
-                output_digest_slice = bytes[0..Hasher.digest];
+                _ = self.hashing.final(bytes[0..Hasher.digest]);
+                self.digested = true;
+                return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
             } else {
-                output_digest_buf = std.mem.zeroes(Hasher.Digest);
-            }
-
-            this.hashing.final(output_digest_slice);
-            this.digested = true;
-
-            if (output) |output_buf| {
-                return output_buf.value;
-            } else {
-                const array_buffer_out = jsc.ArrayBuffer.fromBytes(bun.default_allocator.dupe(u8, &output_digest_buf) catch unreachable, .Uint8Array);
+                var output_digest_buf: Hasher.Digest = std.mem.zeroes(Hasher.Digest);
+                _ = &output_digest_buf;
+                _ = self.hashing.final((&output_digest_buf));
+                self.digested = true;
+                const array_buffer_out = jsc.ArrayBuffer.fromBytes(((bun.default_allocator.dupe(u8, (&output_digest_buf))) catch unreachable), .Uint8Array);
+                var __array_buffer_out_moved = false; _ = &__array_buffer_out_moved;
+                defer if (!__array_buffer_out_moved) { const __T = @TypeOf(array_buffer_out); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = array_buffer_out.release() catch {}; } else { array_buffer_out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = array_buffer_out; _drop_val.release(); } };
                 return array_buffer_out.toJSUnchecked(globalThis);
             }
-        }
+    }
 
-        fn digestToEncoding(this: *@This(), globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+pub fn digestToEncoding(self: *@This(), globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
             var output_digest_buf: Hasher.Digest = std.mem.zeroes(Hasher.Digest);
-            const output_digest_slice: *Hasher.Digest = &output_digest_buf;
+            _ = &output_digest_buf;
+            _ = self.hashing.final((&output_digest_buf));
+            self.digested = true;
+            return encoding.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
+    }
 
-            this.hashing.final(output_digest_slice);
-            this.digested = true;
+pub fn release(self: *@This()) void {
+            _ = (VirtualMachine.get()).?.allocator.destroy(self);
+    }
 
-            return encoding.encodeWithSize(globalThis, Hasher.digest, output_digest_slice);
-        }
+pub fn finalize(self: *@This()) void {
+            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+    }
 
-        pub fn release(this: *@This()) void {
-            VirtualMachine.get().allocator.destroy(this);
-        }
-
-        pub fn finalize(this: *@This()) void {
-            this.release();
-        }
-
-        pub fn deinit(this: *@This()) void {
-            this.release();
-        }
-    };
+pub fn deinit(self: *@This()) void {
+            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+    }
+    const ThisHasher = @This();
+    pub const js = @field(jsc.Codegen, ("JS" ++ name));
+    pub const toJS = js.toJS;
+    pub const fromJS = js.fromJS;
+    pub const fromJSDirect = js.fromJSDirect;
+    pub const digest = host_fn.wrapInstanceMethod(ThisHasher, "digest_", false);
+    pub const hash = host_fn.wrapStaticMethod(ThisHasher, "hash_", false);
+};
 }

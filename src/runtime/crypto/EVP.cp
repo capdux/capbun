@@ -28,7 +28,7 @@ pub enum Algorithm_ {
     shake128,
     shake256,
 
-    pub fn md(this: Algorithm_): ?*const BoringSSL.EVP_MD {
+    pub fn md(_: Algorithm_): *const BoringSSL.EVP_MD? {
         return switch (this) {
             .blake2b256 => BoringSSL.EVP_blake2b256(),
             .blake2b512 => BoringSSL.EVP_blake2b512(),
@@ -112,7 +112,7 @@ export class EVP {
         let ctx: BoringSSL.EVP_MD_CTX = undefined;
         @memset(&ctx, 0);
         BoringSSL.EVP_MD_CTX_init(&ctx);
-        _ = BoringSSL.EVP_DigestInit_ex(&ctx, md, engine);
+        * = BoringSSL.EVP_DigestInit_ex(&ctx, md, engine);
         return .{
             .ctx = ctx,
             .md = md,
@@ -120,12 +120,12 @@ export class EVP {
         };
     }
 
-    pub fn reset(this: *EVP, engine: *BoringSSL.ENGINE) {
+    pub fn reset(*_: *EVP, engine: *BoringSSL.ENGINE) {
         BoringSSL.ERR_clear_error();
-        _ = BoringSSL.EVP_DigestInit_ex(&this.ctx, this.md, engine);
+        * = BoringSSL.EVP_DigestInit_ex(&this.ctx, this.md, engine);
     }
 
-    pub fn hash(this: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []u8): ?u32 {
+    pub fn hash(*_: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []u8): u32? {
         BoringSSL.ERR_clear_error();
         let outsize: c_uint = @min(@as(u16, @truncate(output.len)), this.size());
         if (BoringSSL.EVP_Digest(input.ptr, input.len, output.ptr, &outsize, this.md, engine) != 1) {
@@ -135,7 +135,7 @@ export class EVP {
         return outsize;
     }
 
-    pub fn final(this: *EVP, engine: *BoringSSL.ENGINE, output: []u8): []u8 {
+    pub fn final(*_: *EVP, engine: *BoringSSL.ENGINE, output: []u8): []u8 {
         BoringSSL.ERR_clear_error();
         let outsize: u32 = @min(@as(u16, @truncate(output.len)), this.size());
         if (BoringSSL.EVP_DigestFinal_ex(
@@ -151,16 +151,16 @@ export class EVP {
         return output[0..outsize];
     }
 
-    pub fn update(this: *EVP, input: []const u8) {
+    pub fn update(*_: *EVP, input: []const u8) {
         BoringSSL.ERR_clear_error();
-        _ = BoringSSL.EVP_DigestUpdate(&this.ctx, input.ptr, input.len);
+        * = BoringSSL.EVP_DigestUpdate(&this.ctx, input.ptr, input.len);
     }
 
-    pub fn size(this: *const EVP): u16 {
+    pub fn size(_: *const EVP): u16 {
         return @as(u16, @truncate(BoringSSL.EVP_MD_CTX_size(&this.ctx)));
     }
 
-    pub fn copy(this: *const EVP, engine: *BoringSSL.ENGINE): anyerror!EVP {
+    pub fn copy(_: *const EVP, engine: *BoringSSL.ENGINE): anyerror!EVP {
         BoringSSL.ERR_clear_error();
         let new_evp = init(this.algorithm, this.md, engine);
         if (BoringSSL.EVP_MD_CTX_copy_ex(&new_evp.ctx, &this.ctx) == 0) {
@@ -169,7 +169,7 @@ export class EVP {
         return new_evp;
     }
 
-    pub static fn byNameAndEngine(engine: *BoringSSL.ENGINE, name: []const u8): ?EVP {
+    pub static fn byNameAndEngine(engine: *BoringSSL.ENGINE, name: []const u8): EVP? {
         if (algorithm := Algorithm_.map.getWithEql(name, strings.eqlCaseInsensitiveASCIIIgnoreLength)) {
             if (md := algorithm.md()) {
                 return EVP.init(algorithm, md, engine);
@@ -183,17 +183,17 @@ export class EVP {
         return null;
     }
 
-    pub static fn byName(name: ZigString, global: *jsc.JSGlobalObject): ?EVP {
+    pub static fn byName(name: ZigString, global: *jsc.JSGlobalObject): EVP? {
         let name_str = name.toSlice(global.allocator());
         defer name_str.deinit();
         return byNameAndEngine(global.bunVM().rareData().boringEngine(), name_str.slice());
     }
 
-    pub fn release(this: *EVP) {
-        _ = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
+    pub fn release(*_: *EVP) {
+        * = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
     }
 
-    pub fn deinit(this: *EVP) {
+    pub fn deinit(*_: *EVP) {
         this.release();
     }
 }
