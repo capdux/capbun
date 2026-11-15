@@ -1,433 +1,516 @@
-pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
-    const object = JSValue.createEmptyObject(globalThis, 2);
-    object.put(
-        globalThis,
-        ZigString.static("parse"),
-        jsc.JSFunction.create(globalThis, "parse", parse, 1, .{}),
-    );
-    object.put(
-        globalThis,
-        ZigString.static("stringify"),
-        jsc.JSFunction.create(globalThis, "stringify", stringify, 3, .{}),
-    );
-    return object;
-}
-
-pub fn stringify(
-    global: *jsc.JSGlobalObject,
-    callFrame: *jsc.CallFrame,
-) bun.JSError!jsc.JSValue {
-    const value, const replacer, const space_value = callFrame.argumentsAsArray(3);
-
-    value.ensureStillAlive();
-
-    if (value.isUndefined() or value.isSymbol() or value.isFunction()) {
-        return .js_undefined;
-    }
-
-    if (!replacer.isUndefinedOrNull()) {
-        return global.throw("JSON5.stringify does not support the replacer argument", .{});
-    }
-
-    var stringifier: Stringifier = try .init(global, space_value);
-    defer stringifier.deinit();
-
-    stringifier.stringifyValue(global, value) catch |err| return switch (err) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => |js_err| js_err,
-        error.StackOverflow => global.throwStackOverflow(),
-    };
-
-    return stringifier.builder.toString(global);
-}
-
-pub fn parse(
-    global: *jsc.JSGlobalObject,
-    callFrame: *jsc.CallFrame,
-) bun.JSError!jsc.JSValue {
-    var arena: bun.ArenaAllocator = .init(bun.default_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
-    var ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
-
-    const input_value = callFrame.argument(0);
-
-    if (input_value.isEmptyOrUndefinedOrNull()) {
-        return global.throwInvalidArguments("Expected a string to parse", .{});
-    }
-
-    const input: jsc.Node.BlobOrStringOrBuffer =
-        try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value) orelse input: {
-            var str = try input_value.toBunString(global);
-            defer str.deref();
-            break :input .{ .string_or_buffer = .{ .string = str.toSlice(allocator) } };
-        };
-    defer input.deinit();
-
-    var log = logger.Log.init(bun.default_allocator);
-    defer log.deinit();
-
-    const source = &logger.Source.initPathString("input.json5", input.slice());
-
-    const root = json5.JSON5Parser.parse(source, &log, allocator) catch |err| return switch (err) {
-        error.OutOfMemory => |oom| oom,
-        error.StackOverflow => global.throwStackOverflow(),
-        else => {
-            if (log.msgs.items.len > 0) {
-                const first_msg = log.msgs.items[0];
-                return global.throwValue(global.createSyntaxErrorInstance(
-                    "JSON5 Parse error: {s}",
-                    .{first_msg.data.text},
-                ));
-            }
-            return global.throwValue(global.createSyntaxErrorInstance(
-                "JSON5 Parse error: Unable to parse JSON5 string",
-                .{},
-            ));
-        },
-    };
-
-    return exprToJS(root, global);
-}
-
-const Stringifier = struct {
-    stack_check: bun.StackCheck,
-    builder: wtf.StringBuilder,
-    indent: usize,
-    space: Space,
-    visiting: std.AutoHashMapUnmanaged(JSValue, void),
-    allocator: std.mem.Allocator,
-
-    const StringifyError = bun.JSError || bun.StackOverflow;
-
-    const Space = union(enum) {
-        minified,
-        number: u32,
-        str: bun.String,
-
-        pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Space {
-            const space = try space_value.unwrapBoxedPrimitive(global);
-            if (space.isNumber()) {
-                // Clamp on the float to match the spec's min(10, ToIntegerOrInfinity(space)).
-                // toInt32() wraps large values and Infinity to 0, which is wrong.
-                const num_f = space.asNumber();
-                if (!(num_f >= 1)) return .minified; // handles NaN, -Infinity, 0, negatives
-                return .{ .number = if (num_f > 10) 10 else @intFromFloat(num_f) };
-            }
-            if (space.isString()) {
-                const str = try space.toBunString(global);
-                if (str.length() == 0) {
-                    str.deref();
-                    return .minified;
-                }
-                return .{ .str = str };
-            }
-            return .minified;
-        }
-
-        pub fn deinit(this: *const Space) void {
-            switch (this.*) {
-                .str => |str| str.deref(),
-                .minified, .number => {},
-            }
-        }
-    };
-
-    pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Stringifier {
-        return .{
-            .stack_check = .init(),
-            .builder = .init(),
-            .indent = 0,
-            .space = try Space.init(global, space_value),
-            .visiting = .empty,
-            .allocator = bun.default_allocator,
-        };
-    }
-
-    pub fn deinit(this: *Stringifier) void {
-        this.builder.deinit();
-        this.space.deinit();
-        this.visiting.deinit(this.allocator);
-    }
-
-    pub fn stringifyValue(this: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
-        if (!this.stack_check.isSafeToRecurse()) {
-            return error.StackOverflow;
-        }
-
-        const unwrapped = try value.unwrapBoxedPrimitive(global);
-
-        if (unwrapped.isNull()) {
-            this.builder.append(.latin1, "null");
-            return;
-        }
-
-        if (unwrapped.isNumber()) {
-            if (unwrapped.isInt32()) {
-                this.builder.append(.int, unwrapped.asInt32());
-                return;
-            }
-            const num = unwrapped.asNumber();
-            if (std.math.isNegativeInf(num)) {
-                this.builder.append(.latin1, "-Infinity");
-            } else if (std.math.isInf(num)) {
-                this.builder.append(.latin1, "Infinity");
-            } else if (std.math.isNan(num)) {
-                this.builder.append(.latin1, "NaN");
-            } else {
-                this.builder.append(.double, num);
-            }
-            return;
-        }
-
-        if (unwrapped.isBigInt()) {
-            return global.throw("JSON5.stringify cannot serialize BigInt", .{});
-        }
-
-        if (unwrapped.isBoolean()) {
-            this.builder.append(.latin1, if (unwrapped.asBoolean()) "true" else "false");
-            return;
-        }
-
-        if (unwrapped.isString()) {
-            const str = try unwrapped.toBunString(global);
-            defer str.deref();
-            this.appendQuotedString(str);
-            return;
-        }
-
-        // Object or array — check for circular references
-        const gop = try this.visiting.getOrPut(this.allocator, unwrapped);
-        if (gop.found_existing) {
-            return global.throw("Converting circular structure to JSON5", .{});
-        }
-        defer _ = this.visiting.remove(unwrapped);
-
-        if (unwrapped.isArray()) {
-            try this.stringifyArray(global, unwrapped);
-        } else {
-            try this.stringifyObject(global, unwrapped);
-        }
-    }
-
-    fn stringifyArray(this: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
-        var iter = try value.arrayIterator(global);
-
-        if (iter.len == 0) {
-            this.builder.append(.latin1, "[]");
-            return;
-        }
-
-        this.builder.append(.lchar, '[');
-
-        switch (this.space) {
-            .minified => {
-                var first = true;
-                while (try iter.next()) |item| {
-                    if (!first) this.builder.append(.lchar, ',');
-                    first = false;
-                    if (item.isUndefined() or item.isSymbol() or item.isFunction()) {
-                        this.builder.append(.latin1, "null");
-                    } else {
-                        try this.stringifyValue(global, item);
-                    }
-                }
-            },
-            .number, .str => {
-                this.indent += 1;
-                var first = true;
-                while (try iter.next()) |item| {
-                    if (!first) this.builder.append(.lchar, ',');
-                    first = false;
-                    this.newline();
-                    if (item.isUndefined() or item.isSymbol() or item.isFunction()) {
-                        this.builder.append(.latin1, "null");
-                    } else {
-                        try this.stringifyValue(global, item);
-                    }
-                }
-                // Trailing comma
-                this.builder.append(.lchar, ',');
-                this.indent -= 1;
-                this.newline();
-            },
-        }
-
-        this.builder.append(.lchar, ']');
-    }
-
-    fn stringifyObject(this: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
-        var iter: jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }) = try .init(
-            global,
-            try value.toObject(global),
-        );
-        defer iter.deinit();
-
-        if (iter.len == 0) {
-            this.builder.append(.latin1, "{}");
-            return;
-        }
-
-        this.builder.append(.lchar, '{');
-
-        switch (this.space) {
-            .minified => {
-                var first = true;
-                while (try iter.next()) |prop_name| {
-                    if (iter.value.isUndefined() or iter.value.isSymbol() or iter.value.isFunction()) {
-                        continue;
-                    }
-                    if (!first) this.builder.append(.lchar, ',');
-                    first = false;
-                    this.appendKey(prop_name);
-                    this.builder.append(.lchar, ':');
-                    try this.stringifyValue(global, iter.value);
-                }
-            },
-            .number, .str => {
-                this.indent += 1;
-                var first = true;
-                while (try iter.next()) |prop_name| {
-                    if (iter.value.isUndefined() or iter.value.isSymbol() or iter.value.isFunction()) {
-                        continue;
-                    }
-                    if (!first) this.builder.append(.lchar, ',');
-                    first = false;
-                    this.newline();
-                    this.appendKey(prop_name);
-                    this.builder.append(.latin1, ": ");
-                    try this.stringifyValue(global, iter.value);
-                }
-                this.indent -= 1;
-                if (!first) {
-                    // Trailing comma
-                    this.builder.append(.lchar, ',');
-                    this.newline();
-                }
-            },
-        }
-
-        this.builder.append(.lchar, '}');
-    }
-
-    fn appendKey(this: *Stringifier, name: bun.String) void {
-        const is_identifier = is_identifier: {
-            if (name.length() == 0) break :is_identifier false;
-            if (!bun.js_lexer.isIdentifierStart(@intCast(name.charAt(0)))) break :is_identifier false;
-            for (1..name.length()) |i| {
-                if (!bun.js_lexer.isIdentifierContinue(@intCast(name.charAt(i)))) break :is_identifier false;
-            }
-            break :is_identifier true;
-        };
-
-        if (is_identifier) {
-            this.builder.append(.string, name);
-        } else {
-            this.appendQuotedString(name);
-        }
-    }
-
-    fn appendQuotedString(this: *Stringifier, str: bun.String) void {
-        this.builder.append(.lchar, '\'');
-        for (0..str.length()) |i| {
-            const c = str.charAt(i);
-            switch (c) {
-                0x00 => this.builder.append(.latin1, "\\0"),
-                0x08 => this.builder.append(.latin1, "\\b"),
-                0x09 => this.builder.append(.latin1, "\\t"),
-                0x0a => this.builder.append(.latin1, "\\n"),
-                0x0b => this.builder.append(.latin1, "\\v"),
-                0x0c => this.builder.append(.latin1, "\\f"),
-                0x0d => this.builder.append(.latin1, "\\r"),
-                0x27 => this.builder.append(.latin1, "\\'"), // single quote
-                0x5c => this.builder.append(.latin1, "\\\\"), // backslash
-                0x2028 => this.builder.append(.latin1, "\\u2028"),
-                0x2029 => this.builder.append(.latin1, "\\u2029"),
-                0x01...0x07, 0x0e...0x1f, 0x7f => {
-                    // Other control chars → \xHH
-                    this.builder.append(.latin1, "\\x");
-                    this.builder.append(.lchar, hexDigit(c >> 4));
-                    this.builder.append(.lchar, hexDigit(c & 0x0f));
-                },
-                else => this.builder.append(.uchar, c),
-            }
-        }
-        this.builder.append(.lchar, '\'');
-    }
-
-    fn hexDigit(v: u16) u8 {
-        const nibble: u8 = @intCast(v & 0x0f);
-        return if (nibble < 10) '0' + nibble else 'a' + nibble - 10;
-    }
-
-    fn newline(this: *Stringifier) void {
-        switch (this.space) {
-            .minified => {},
-            .number => |space_num| {
-                this.builder.append(.lchar, '\n');
-                for (0..this.indent * space_num) |_| {
-                    this.builder.append(.lchar, ' ');
-                }
-            },
-            .str => |space_str| {
-                this.builder.append(.lchar, '\n');
-                const clamped = if (space_str.length() > 10)
-                    space_str.substringWithLen(0, 10)
-                else
-                    space_str;
-                for (0..this.indent) |_| {
-                    this.builder.append(.string, clamped);
-                }
-            },
-        }
-    }
-};
-
-fn exprToJS(expr: Expr, global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-    switch (expr.data) {
-        .e_null => return .null,
-        .e_boolean => |boolean| return .jsBoolean(boolean.value),
-        .e_number => |number| return .jsNumber(number.value),
-        .e_string => |str| {
-            return str.toJS(bun.default_allocator, global);
-        },
-        .e_array => |arr| {
-            var js_arr = try JSValue.createEmptyArray(global, arr.items.len);
-            for (arr.slice(), 0..) |item, _i| {
-                const i: u32 = @intCast(_i);
-                const value = try exprToJS(item, global);
-                try js_arr.putIndex(global, i, value);
-            }
-            return js_arr;
-        },
-        .e_object => |obj| {
-            var js_obj = JSValue.createEmptyObject(global, obj.properties.len);
-            for (obj.properties.slice()) |prop| {
-                const key_expr = prop.key.?;
-                const value = try exprToJS(prop.value.?, global);
-                const key_js = try exprToJS(key_expr, global);
-                const key_str = try key_js.toBunString(global);
-                defer key_str.deref();
-                try js_obj.putMayBeIndex(global, &key_str, value);
-            }
-            return js_obj;
-        },
-        else => return .js_undefined,
-    }
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+pub const Space = union(enum) {
+    minified,
+    number: u32,
+    str: bun.String,
+
+    pub const init = spaceInit;
+    pub const deinit = spaceDeinit;
+};
 const logger = bun.logger;
 const json5 = bun.interchange.json5;
-
 const ast = bun.ast;
 const Expr = ast.Expr;
-
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const wtf = jsc.wtf;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const Stringifier = struct {
+    stack_check: bun.StackCheck,
+    builder: wtf.StringBuilder,
+    indent: usize,
+    space: Space,
+    visiting: std.AutoHashMapUnmanaged(JSValue,void),
+    allocator: std.mem.Allocator,
+
+pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Stringifier {
+            return .{ .stack_check = .init(), .builder = .init(), .indent = 0, .space = try Space.init(global, space_value), .visiting = .empty, .allocator = bun.default_allocator };
+    }
+
+pub fn deinit(self: *Stringifier) void {
+            _ = self.builder.deinit();
+            _ = self.space.deinit();
+            _ = self.visiting.deinit(self.allocator);
+    }
+
+pub fn stringifyValue(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            const unwrapped = try value.unwrapBoxedPrimitive(global);
+            if (unwrapped.isNull()) {
+                _ = self.builder.append(.latin1, "null");
+                return;
+            }
+            if (unwrapped.isNumber()) {
+                if (unwrapped.isInt32()) {
+                    _ = self.builder.append(.int, unwrapped.asInt32());
+                    return;
+                }
+                const num = unwrapped.asNumber();
+                if (std.math.isNegativeInf(num)) {
+                    _ = self.builder.append(.latin1, "-Infinity");
+                } else {
+                    if (std.math.isInf(num)) {
+                        _ = self.builder.append(.latin1, "Infinity");
+                    } else {
+                        if (std.math.isNan(num)) {
+                            _ = self.builder.append(.latin1, "NaN");
+                        } else {
+                            _ = self.builder.append(.double, num);
+                        }
+                    }
+                }
+                return;
+            }
+            if (unwrapped.isBigInt()) {
+                return global.throw("JSON5.stringify cannot serialize BigInt", .{});
+            }
+            if (unwrapped.isBoolean()) {
+                _ = self.builder.append(.latin1, (if (unwrapped.asBoolean()) "true" else "false"));
+                return;
+            }
+            if (unwrapped.isString()) {
+                const str = try unwrapped.toBunString(global);
+                defer {
+                _ = str.deref();
+                }
+                _ = self.appendQuotedString(str);
+                return;
+            }
+            const gop = try self.visiting.getOrPut(self.allocator, unwrapped);
+            if (gop.found_existing) {
+                return global.throw("Converting circular structure to JSON5", .{});
+            }
+            defer {
+            _ = self.visiting.remove(unwrapped);
+            }
+            if (unwrapped.isArray()) {
+                _ = try self.stringifyArray(global, unwrapped);
+            } else {
+                _ = try self.stringifyObject(global, unwrapped);
+            }
+    }
+
+pub fn stringifyArray(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            var iter = try value.arrayIterator(global);
+            _ = &iter;
+            if ((iter.len == 0)) {
+                _ = self.builder.append(.latin1, "[]");
+                return;
+            }
+            _ = self.builder.append(.lchar, 91);
+            switch (self.space) {
+.minified => {
+var first = true;
+            _ = &first;
+            while (try iter.next()) |item| {
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 44);
+                }
+                first = false;
+                if (((item.isUndefined() or item.isSymbol()) or item.isFunction())) {
+                    _ = self.builder.append(.latin1, "null");
+                } else {
+                    _ = try self.stringifyValue(global, item);
+                }
+            }
+},
+.number, .str => {
+self.indent = (self.indent + 1);
+            var first = true;
+            _ = &first;
+            while (try iter.next()) |item| {
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 44);
+                }
+                first = false;
+                _ = self.newline();
+                if (((item.isUndefined() or item.isSymbol()) or item.isFunction())) {
+                    _ = self.builder.append(.latin1, "null");
+                } else {
+                    _ = try self.stringifyValue(global, item);
+                }
+            }
+            _ = self.builder.append(.lchar, 44);
+            self.indent = (self.indent - 1);
+            _ = self.newline();
+},
+}
+            _ = self.builder.append(.lchar, 93);
+    }
+
+pub fn stringifyObject(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
+            var iter: PropIter = try PropIter.init(global, try value.toObject(global));
+            _ = &iter;
+            defer {
+            _ = iter.deinit();
+            }
+            if ((iter.len == 0)) {
+                _ = self.builder.append(.latin1, "{}");
+                return;
+            }
+            _ = self.builder.append(.lchar, 123);
+            switch (self.space) {
+.minified => {
+var first = true;
+            _ = &first;
+            while (try iter.next()) |prop_name| {
+                if ((((if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isUndefined() or (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isSymbol()) or (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isFunction())) {
+                    continue;
+                }
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 44);
+                }
+                first = false;
+                _ = self.appendKey(prop_name);
+                _ = self.builder.append(.lchar, 58);
+                _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value));
+            }
+},
+.number, .str => {
+self.indent = (self.indent + 1);
+            var first = true;
+            _ = &first;
+            while (try iter.next()) |prop_name| {
+                if ((((if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isUndefined() or (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isSymbol()) or (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).isFunction())) {
+                    continue;
+                }
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 44);
+                }
+                first = false;
+                _ = self.newline();
+                _ = self.appendKey(prop_name);
+                _ = self.builder.append(.latin1, ": ");
+                _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value));
+            }
+            self.indent = (self.indent - 1);
+            if ((!first)) {
+                _ = self.builder.append(.lchar, 44);
+                _ = self.newline();
+            }
+},
+}
+            _ = self.builder.append(.lchar, 125);
+    }
+
+pub fn appendKey(self: *Stringifier, name: bun.String) void {
+            const is_identifier = is_identifier: {
+            if ((name.length() == 0)) {
+                break :is_identifier false;
+            }
+            if ((!bun.js_lexer.isIdentifierStart((if (comptime @typeInfo(@TypeOf(name.charAt(0))) == .@"enum") cp_cast_int(i32, @intFromEnum(name.charAt(0))) else cp_cast_int(i32, name.charAt(0)))))) {
+                break :is_identifier false;
+            }
+            {
+                var i: i32 = 1;
+                _ = &i;
+                const __end_0 = name.length();
+                while (i < __end_0) : (i += 1) {
+                    if ((!bun.js_lexer.isIdentifierContinue((if (comptime @typeInfo(@TypeOf(name.charAt(i))) == .@"enum") cp_cast_int(i32, @intFromEnum(name.charAt(i))) else cp_cast_int(i32, name.charAt(i)))))) {
+                        break :is_identifier false;
+                    }
+                }
+            }
+            break :is_identifier true;
+};
+            if (is_identifier) {
+            } else {
+                _ = self.appendQuotedString(name);
+            }
+    }
+
+pub fn appendQuotedString(self: *Stringifier, str: bun.String) void {
+            _ = self.builder.append(.lchar, 39);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_1 = str.length();
+                while (i < __end_1) : (i += 1) {
+                    const c = str.charAt(i);
+                    switch (c) {
+0 => {
+_ = self.builder.append(.latin1, "\\0");
+},
+8 => {
+_ = self.builder.append(.latin1, "\\b");
+},
+9 => {
+_ = self.builder.append(.latin1, "\\t");
+},
+10 => {
+_ = self.builder.append(.latin1, "\\n");
+},
+11 => {
+_ = self.builder.append(.latin1, "\\v");
+},
+12 => {
+_ = self.builder.append(.latin1, "\\f");
+},
+13 => {
+_ = self.builder.append(.latin1, "\\r");
+},
+'\'' => {
+_ = self.builder.append(.latin1, "\\'");
+},
+'\\' => {
+_ = self.builder.append(.latin1, "\\\\");
+},
+8232 => {
+_ = self.builder.append(.latin1, "\\u2028");
+},
+8233 => {
+_ = self.builder.append(.latin1, "\\u2029");
+},
+1...7, 14...31, 127 => {
+_ = self.builder.append(.latin1, "\\x");
+                    _ = self.builder.append(.lchar, Stringifier.hexDigit(cp_shr(c, 4)));
+                    _ = self.builder.append(.lchar, Stringifier.hexDigit((c & 15)));
+},
+else => {
+_ = self.builder.append(.uchar, c);
+},
+}
+                }
+            }
+            _ = self.builder.append(.lchar, 39);
+    }
+
+pub fn hexDigit(v: u16) u8 {
+            const nibble: u8 = @as(u8, @truncate((v & 15)));
+            return (if ((nibble < 10)) (48 + nibble) else ((97 + nibble) - 10));
+    }
+
+pub fn newline(self: *Stringifier) void {
+            switch (self.space) {
+.minified => {
+
+},
+.number => |space_num| {
+_ = self.builder.append(.lchar, 10);
+            {
+                var loop_i: i32 = 0;
+                _ = &loop_i;
+                const __end_2 = (self.indent * space_num);
+                while (loop_i < __end_2) : (loop_i += 1) {
+                    _ = self.builder.append(.lchar, 32);
+                }
+            }
+},
+.str => |space_str| {
+_ = self.builder.append(.lchar, 10);
+            const clamped = (if ((space_str.length() > 10)) space_str.substringWithLen(0, 10) else space_str);
+            {
+                var loop_i: i32 = 0;
+                _ = &loop_i;
+                const __end_3 = self.indent;
+                while (loop_i < __end_3) : (loop_i += 1) {
+                    _ = self.builder.append(.@"string", clamped);
+                }
+            }
+},
+}
+    }
+    const StringifyError = (bun.JSError or bun.StackOverflow);
+};
+
+
+pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+        const object = JSValue.createEmptyObject(globalThis, 2);
+        _ = object.put(globalThis, ZigString.static("parse"), jsc.JSFunction.create(globalThis, "parse", parse, 1, .{}));
+        _ = object.put(globalThis, ZigString.static("stringify"), jsc.JSFunction.create(globalThis, "stringify", stringify, 3, .{}));
+        return object;
+}
+
+pub fn stringify(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const value = undefined;
+        const replacer = undefined;
+        const space_value = callFrame.argumentsAsArray(3);
+        _ = value.ensureStillAlive();
+        if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
+            return error.js_undefined;
+        }
+        if ((!replacer.isUndefinedOrNull())) {
+            return global.throw("JSON5.stringify does not support the replacer argument", .{});
+        }
+        var stringifier: Stringifier = try .init(global, space_value);
+        _ = &stringifier;
+        defer {
+        _ = stringifier.deinit();
+        }
+        _ = (blk_catch_0: { break :blk_catch_0 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return (switch (e) {
+error.OutOfMemory, error.JSError, error.JSTerminated => |js_err| js_err,
+error.StackOverflow => global.throwStackOverflow(),
+}); }); });
+        return stringifier.builder.toString(global);
+}
+
+pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        var arena_alloc: bun.ArenaAllocator = .init(bun.default_allocator);
+        _ = &arena_alloc;
+        defer {
+        _ = arena_alloc.deinit();
+        }
+        const allocator = arena_alloc.allocator();
+        var ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
+        _ = &ast_memory_allocator;
+        var ast_scope = ast_memory_allocator.enter(allocator);
+        _ = &ast_scope;
+        defer {
+        _ = ast_scope.exit();
+        }
+        const input_value = callFrame.argument(0);
+        if (input_value.isEmptyOrUndefinedOrNull()) {
+            return global.throwInvalidArguments("Expected a string to parse", .{});
+        }
+        const input: jsc.Node.BlobOrStringOrBuffer = ((try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value)) orelse (input: {
+        var str = try input_value.toBunString(global);
+        _ = &str;
+        defer {
+        _ = str.deref();
+        }
+        break :input .{ .string_or_buffer = .{ .string = str.toSlice(allocator) } };
+}));
+        defer {
+        _ = input.deinit();
+        }
+        var log = logger.Log.init(bun.default_allocator);
+        _ = &log;
+        defer {
+        _ = log.deinit();
+        }
+        const source = (&logger.Source.initPathString("input.json5", input.slice()));
+        _ = &source;
+}
+
+pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Space {
+        const space = try space_value.unwrapBoxedPrimitive(global);
+        if (space.isNumber()) {
+            const num_f = space.asNumber();
+            if ((!(num_f >= 1))) {
+                return error.minified;
+            }
+            return Space{ .number = (if ((num_f > 10)) 10 else @intFromFloat(num_f)) };
+        }
+        if (space.isString()) {
+            const str = try space.toBunString(global);
+            if ((str.length() == 0)) {
+                _ = str.deref();
+                return error.minified;
+            }
+            return Space{ .str = str };
+        }
+        return error.minified;
+}
+
+pub fn spaceDeinit(this_space: *Space) void {
+        switch (this_space.*) {
+.str => |str| {
+_ = str.deref();
+},
+.minified, .number => {
+
+},
+}
+}
+
+pub fn exprToJS(expr: Expr, global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        switch (expr.data) {
+.e_null => {
+return JSValue.null;
+},
+.e_boolean => |boolean| {
+return JSValue.jsBoolean((if (@typeInfo(@TypeOf(boolean)) == .@"enum") @intFromEnum(boolean) else boolean.value));
+},
+.e_number => |number| {
+return JSValue.jsNumber((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value));
+},
+.e_string => |str| {
+return str.toJS(bun.default_allocator, global);
+},
+.e_array => |arr| {
+var js_arr = try JSValue.createEmptyArray(global, arr.items.len);
+        _ = &js_arr;
+        var _i: usize = 0;
+        _ = &_i;
+        for (cp_iter_slice(arr.slice())) |item| {
+            _ = &item;
+            const i: u32 = @as(u32, @truncate(_i));
+            const value = try exprToJS(item, global);
+            _ = try js_arr.putIndex(global, i, value);
+            _i = (_i + 1);
+        }
+        return js_arr;
+},
+.e_object => |obj| {
+var js_obj = JSValue.createEmptyObject(global, obj.properties.len);
+        _ = &js_obj;
+        for (cp_iter_slice(obj.properties.slice())) |prop| {
+            _ = &prop;
+            const key_expr = prop.key.?;
+            const value = try exprToJS((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?, global);
+            const key_js = try exprToJS(key_expr, global);
+            const key_str = try key_js.toBunString(global);
+            defer {
+            _ = key_str.deref();
+            }
+            _ = try js_obj.putMayBeIndex(global, key_str, value);
+        }
+        return js_obj;
+},
+else => {
+return JSValue.js_undefined;
+},
+}
+}

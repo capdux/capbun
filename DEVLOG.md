@@ -442,3 +442,14 @@
 2. **单参 `.slice(arg)` 方法调用歧义消解**：
    - 在 CP 中，单参数的 `obj.slice(arg)` 会被语法解析器优先作为切片操作 `obj[arg..]` 处理。当遇到 AST 节点方法 `str.slice(allocator)` 时，会被误降解为非法切片操作。
    - 解决方案：践行第 29 条经验，采用提取静态函数引用的规范写法：`const str_slice = js_ast.E.String.slice; str_slice(str, this.allocator);`，完全消除语法歧义。
+
+## 2026-11-16 [Milestone 7 Phase 32] `src/runtime/api/` (15/15 核心运行时 API 模块 100% 全量子系统闭环) 技术经验
+
+### 1. `Archive.cp` (1,148 行) 归档解析与生命周期纯化
+- **规范丢弃返回值**：在流式解压与归档读取中，原版使用了多处 `defer _ = archive.readFree();`，全面转换为 CP 标准的 `defer * = archive.readFree();`，根除 `E0120` 错误。
+- **解构元组与具名字面量**：将参数提取 `callframe.argumentsAsArray(2)` 的解构赋值重写为清晰的单变量获取，结构体字面量显式标注类型，杜绝由于隐式类型推导引起的 parser 括号栈紊乱。
+
+### 2. `YAMLObject.cp` (1,087 行) 复杂 AST 映射与 C-ABI 调用约定
+- **C-ABI 导出签名修复**：在 JSC 扩展函数 `static fn run(...)` 中，Zig 原版缺少冒号直接紧接 `callconv(.c)`。在 CP 中严格要求返回类型前置冒号：`static fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer): callconv(.c) { ... }`，消除 `E0116` 语法报错。
+- **Switch 模式解构规范**：消除 switch arm 中直接 `return` 表达式破坏语法栈的缺陷（如 `.e_boolean => |boolean| return ...`），改写为花括号块语句或外部赋初值，彻底杜绝语法歧义。
+- **枚举字面量上下文推导安全**：对 `base == .dec` 这类未带类型前缀的枚举比较，引入显式枚举类型绑定，规避 `cpc` 将前导点误识别为管道占位符（`E0190`）的语法局限。

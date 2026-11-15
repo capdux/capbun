@@ -1,1074 +1,1034 @@
-pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
-    const object = JSValue.createEmptyObject(globalThis, 2);
-    object.put(
-        globalThis,
-        ZigString.static("parse"),
-        jsc.JSFunction.create(
-            globalThis,
-            "parse",
-            parse,
-            1,
-            .{},
-        ),
-    );
-    object.put(
-        globalThis,
-        ZigString.static("stringify"),
-        jsc.JSFunction.create(
-            globalThis,
-            "stringify",
-            stringify,
-            3,
-            .{},
-        ),
-    );
-
-    return object;
-}
-
-pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
-    const value, const replacer, const space_value = callFrame.argumentsAsArray(3);
-
-    value.ensureStillAlive();
-
-    if (value.isUndefined() or value.isSymbol() or value.isFunction()) {
-        return .js_undefined;
-    }
-
-    if (!replacer.isUndefinedOrNull()) {
-        return global.throw("YAML.stringify does not support the replacer argument", .{});
-    }
-
-    var scope: bun.AllocationScope = .init(bun.default_allocator);
-    defer scope.deinit();
-
-    var stringifier: Stringifier = try .init(scope.allocator(), global, space_value);
-    defer stringifier.deinit();
-
-    stringifier.findAnchorsAndAliases(global, value, .root) catch |err| return switch (err) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => |js_err| js_err,
-        error.StackOverflow => global.throwStackOverflow(),
-    };
-
-    stringifier.stringify(global, value) catch |err| return switch (err) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => |js_err| js_err,
-        error.StackOverflow => global.throwStackOverflow(),
-    };
-
-    return stringifier.builder.toString(global);
-}
-
-const Stringifier = struct {
-    stack_check: bun.StackCheck,
-    builder: wtf.StringBuilder,
-    indent: usize,
-
-    known_collections: std.AutoHashMap(JSValue, AnchorAlias),
-    array_item_counter: usize,
-    prop_names: bun.StringHashMap(usize),
-
-    space: Space,
-
-    pub const Space = union(enum) {
-        minified,
-        number: u32,
-        str: String,
-
-        pub fn init(global: *JSGlobalObject, space_value: JSValue) JSError!Space {
-            const space = try space_value.unwrapBoxedPrimitive(global);
-            if (space.isNumber()) {
-                // Clamp on the float to match the spec's min(10, ToIntegerOrInfinity(space)).
-                // toInt32() wraps large values and Infinity to 0, which is wrong.
-                const num_f = space.asNumber();
-                if (!(num_f >= 1)) return .minified; // handles NaN, -Infinity, 0, negatives
-                return .{ .number = if (num_f > 10) 10 else @intFromFloat(num_f) };
-            }
-
-            if (space.isString()) {
-                const str = try space.toBunString(global);
-                if (str.length() == 0) {
-                    str.deref();
-                    return .minified;
-                }
-                return .{ .str = str };
-            }
-
-            return .minified;
-        }
-
-        pub fn deinit(this: *const Space) void {
-            switch (this.*) {
-                .minified => {},
-                .number => {},
-                .str => |str| {
-                    str.deref();
-                },
-            }
-        }
-    };
-
-    const AnchorOrigin = enum {
-        root,
-        array_item,
-        prop_value,
-    };
-
-    const AnchorAlias = struct {
-        anchored: bool,
-        used: bool,
-        name: Name,
-
-        pub fn init(origin: ValueOrigin) AnchorAlias {
-            return .{
-                .anchored = false,
-                .used = false,
-                .name = switch (origin) {
-                    .root => .root,
-                    .array_item => .{ .array_item = 0 },
-                    .prop_value => .{ .prop_value = .{ .prop_name = origin.prop_value, .counter = 0 } },
-                },
-            };
-        }
-
-        pub const Name = union(AnchorOrigin) {
-            // only one root anchor is possible
-            root,
-            array_item: usize,
-            prop_value: struct {
-                prop_name: String,
-                // added after the name
-                counter: usize,
-            },
-        };
-    };
-
-    pub fn init(allocator: std.mem.Allocator, global: *JSGlobalObject, space_value: JSValue) JSError!Stringifier {
-        var prop_names: bun.StringHashMap(usize) = .init(allocator);
-        // always rename anchors named "root" to avoid collision with
-        // root anchor/alias
-        try prop_names.put("root", 0);
-
-        return .{
-            .stack_check = .init(),
-            .builder = .init(),
-            .indent = 0,
-            .known_collections = .init(allocator),
-            .array_item_counter = 0,
-            .prop_names = prop_names,
-            .space = try .init(global, space_value),
-        };
-    }
-
-    pub fn deinit(this: *Stringifier) void {
-        this.builder.deinit();
-        this.known_collections.deinit();
-        this.prop_names.deinit();
-        this.space.deinit();
-    }
-
-    const ValueOrigin = union(AnchorOrigin) {
-        root,
-        array_item,
-        prop_value: String,
-    };
-
-    pub fn findAnchorsAndAliases(this: *Stringifier, global: *JSGlobalObject, value: JSValue, origin: ValueOrigin) StringifyError!void {
-        if (!this.stack_check.isSafeToRecurse()) {
-            return error.StackOverflow;
-        }
-
-        const unwrapped = try value.unwrapBoxedPrimitive(global);
-
-        if (unwrapped.isNull()) {
-            return;
-        }
-
-        if (unwrapped.isNumber()) {
-            return;
-        }
-
-        if (unwrapped.isBigInt()) {
-            return global.throw("YAML.stringify cannot serialize BigInt", .{});
-        }
-
-        if (unwrapped.isBoolean()) {
-            return;
-        }
-
-        if (unwrapped.isString()) {
-            return;
-        }
-
-        if (comptime Environment.ci_assert) {
-            bun.assertWithLocation(unwrapped.isObject(), @src());
-        }
-
-        const object_entry = try this.known_collections.getOrPut(unwrapped);
-        if (object_entry.found_existing) {
-            // this will become an alias. increment counters here because
-            // now the anchor/alias is confirmed used.
-
-            if (object_entry.value_ptr.used) {
-                return;
-            }
-
-            object_entry.value_ptr.used = true;
-
-            switch (object_entry.value_ptr.name) {
-                .root => {
-                    // only one possible
-                },
-                .array_item => |*counter| {
-                    counter.* = this.array_item_counter;
-                    this.array_item_counter += 1;
-                },
-                .prop_value => |*prop_value| {
-                    const name_entry = try this.prop_names.getOrPut(prop_value.prop_name.byteSlice());
-                    if (name_entry.found_existing) {
-                        name_entry.value_ptr.* += 1;
-                    } else {
-                        name_entry.value_ptr.* = 0;
-                    }
-
-                    prop_value.counter = name_entry.value_ptr.*;
-                },
-            }
-            return;
-        }
-
-        object_entry.value_ptr.* = .init(origin);
-
-        if (unwrapped.isArray()) {
-            var iter = try unwrapped.arrayIterator(global);
-            while (try iter.next()) |item| {
-                if (item.isUndefined() or item.isSymbol() or item.isFunction()) {
-                    continue;
-                }
-
-                try this.findAnchorsAndAliases(global, item, .array_item);
-            }
-            return;
-        }
-
-        var iter: jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }) = try .init(
-            global,
-            try unwrapped.toObject(global),
-        );
-        defer iter.deinit();
-
-        while (try iter.next()) |prop_name| {
-            if (iter.value.isUndefined() or iter.value.isSymbol() or iter.value.isFunction()) {
-                continue;
-            }
-            try this.findAnchorsAndAliases(global, iter.value, .{ .prop_value = prop_name });
-        }
-    }
-
-    const StringifyError = JSError || bun.StackOverflow;
-
-    pub fn stringify(this: *Stringifier, global: *JSGlobalObject, value: JSValue) StringifyError!void {
-        if (!this.stack_check.isSafeToRecurse()) {
-            return error.StackOverflow;
-        }
-
-        const unwrapped = try value.unwrapBoxedPrimitive(global);
-
-        if (unwrapped.isNull()) {
-            this.builder.append(.latin1, "null");
-            return;
-        }
-
-        if (unwrapped.isNumber()) {
-            if (unwrapped.isInt32()) {
-                this.builder.append(.int, unwrapped.asInt32());
-                return;
-            }
-
-            const num = unwrapped.asNumber();
-            if (std.math.isNegativeInf(num)) {
-                this.builder.append(.latin1, "-.inf");
-                // } else if (std.math.isPositiveInf(num)) {
-                //     builder.append(.latin1, "+.inf");
-            } else if (std.math.isInf(num)) {
-                this.builder.append(.latin1, ".inf");
-            } else if (std.math.isNan(num)) {
-                this.builder.append(.latin1, ".nan");
-            } else if (std.math.isNegativeZero(num)) {
-                this.builder.append(.latin1, "-0");
-            } else if (std.math.isPositiveZero(num)) {
-                this.builder.append(.latin1, "+0");
-            } else {
-                this.builder.append(.double, num);
-            }
-            return;
-        }
-
-        if (unwrapped.isBigInt()) {
-            return global.throw("YAML.stringify cannot serialize BigInt", .{});
-        }
-
-        if (unwrapped.isBoolean()) {
-            if (unwrapped.asBoolean()) {
-                this.builder.append(.latin1, "true");
-            } else {
-                this.builder.append(.latin1, "false");
-            }
-            return;
-        }
-
-        if (unwrapped.isString()) {
-            const value_str = try unwrapped.toBunString(global);
-            defer value_str.deref();
-
-            this.appendString(value_str);
-            return;
-        }
-
-        if (comptime Environment.ci_assert) {
-            bun.assertWithLocation(unwrapped.isObject(), @src());
-        }
-
-        const has_anchor: ?*AnchorAlias = has_anchor: {
-            const anchor = this.known_collections.getPtr(unwrapped) orelse {
-                break :has_anchor null;
-            };
-
-            if (!anchor.used) {
-                break :has_anchor null;
-            }
-
-            break :has_anchor anchor;
-        };
-
-        if (has_anchor) |anchor| {
-            this.builder.append(.lchar, if (anchor.anchored) '*' else '&');
-
-            switch (anchor.name) {
-                .root => {
-                    this.builder.append(.latin1, "root");
-                },
-                .array_item => {
-                    this.builder.append(.latin1, "item");
-                    this.builder.append(.usize, anchor.name.array_item);
-                },
-                .prop_value => |prop_value| {
-                    if (prop_value.prop_name.length() == 0) {
-                        this.builder.append(.latin1, "value");
-                        this.builder.append(.usize, prop_value.counter);
-                    } else {
-                        this.builder.append(.string, anchor.name.prop_value.prop_name);
-                        if (anchor.name.prop_value.counter != 0) {
-                            this.builder.append(.usize, anchor.name.prop_value.counter);
-                        }
-                    }
-                },
-            }
-
-            if (anchor.anchored) {
-                return;
-            }
-
-            switch (this.space) {
-                .minified => {
-                    this.builder.append(.lchar, ' ');
-                },
-                .number, .str => {
-                    this.newline();
-                },
-            }
-            anchor.anchored = true;
-        }
-
-        if (unwrapped.isArray()) {
-            var iter = try unwrapped.arrayIterator(global);
-
-            if (iter.len == 0) {
-                this.builder.append(.latin1, "[]");
-                return;
-            }
-
-            switch (this.space) {
-                .minified => {
-                    this.builder.append(.lchar, '[');
-                    var first = true;
-                    while (try iter.next()) |item| {
-                        if (item.isUndefined() or item.isSymbol() or item.isFunction()) {
-                            continue;
-                        }
-
-                        if (!first) {
-                            this.builder.append(.lchar, ',');
-                        }
-                        first = false;
-
-                        try this.stringify(global, item);
-                    }
-                    this.builder.append(.lchar, ']');
-                },
-                .number, .str => {
-                    this.builder.ensureUnusedCapacity(iter.len * "- ".len);
-                    var first = true;
-                    while (try iter.next()) |item| {
-                        if (item.isUndefined() or item.isSymbol() or item.isFunction()) {
-                            continue;
-                        }
-
-                        if (!first) {
-                            this.newline();
-                        }
-                        first = false;
-
-                        this.builder.append(.latin1, "- ");
-
-                        // don't need to print a newline here for any value
-
-                        this.indent += 1;
-                        try this.stringify(global, item);
-                        this.indent -= 1;
-                    }
-                },
-            }
-
-            return;
-        }
-
-        var iter: jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }) = try .init(
-            global,
-            try unwrapped.toObject(global),
-        );
-        defer iter.deinit();
-
-        if (iter.len == 0) {
-            this.builder.append(.latin1, "{}");
-            return;
-        }
-
-        switch (this.space) {
-            .minified => {
-                this.builder.append(.lchar, '{');
-                var first = true;
-                while (try iter.next()) |prop_name| {
-                    if (iter.value.isUndefined() or iter.value.isSymbol() or iter.value.isFunction()) {
-                        continue;
-                    }
-
-                    if (!first) {
-                        this.builder.append(.lchar, ',');
-                    }
-                    first = false;
-
-                    this.appendString(prop_name);
-                    this.builder.append(.latin1, ": ");
-
-                    try this.stringify(global, iter.value);
-                }
-                this.builder.append(.lchar, '}');
-            },
-            .number, .str => {
-                this.builder.ensureUnusedCapacity(iter.len * ": ".len);
-
-                var first = true;
-                while (try iter.next()) |prop_name| {
-                    if (iter.value.isUndefined() or iter.value.isSymbol() or iter.value.isFunction()) {
-                        continue;
-                    }
-
-                    if (!first) {
-                        this.newline();
-                    }
-                    first = false;
-
-                    this.appendString(prop_name);
-                    this.builder.append(.latin1, ": ");
-
-                    this.indent += 1;
-
-                    if (propValueNeedsNewline(iter.value)) {
-                        this.newline();
-                    }
-
-                    try this.stringify(global, iter.value);
-                    this.indent -= 1;
-                }
-                if (first) {
-                    this.builder.append(.latin1, "{}");
-                }
-            },
-        }
-    }
-
-    /// Does this object property value need a newline? True for arrays and objects.
-    fn propValueNeedsNewline(value: JSValue) bool {
-        return !value.isNumber() and !value.isBoolean() and !value.isNull() and !value.isString();
-    }
-
-    fn newline(this: *Stringifier) void {
-        const indent_count = this.indent;
-
-        switch (this.space) {
-            .minified => {},
-            .number => |space_num| {
-                this.builder.append(.lchar, '\n');
-                this.builder.ensureUnusedCapacity(indent_count * space_num);
-                for (0..indent_count * space_num) |_| {
-                    this.builder.append(.lchar, ' ');
-                }
-            },
-            .str => |space_str| {
-                this.builder.append(.lchar, '\n');
-
-                const clamped = if (space_str.length() > 10)
-                    space_str.substringWithLen(0, 10)
-                else
-                    space_str;
-
-                this.builder.ensureUnusedCapacity(indent_count * clamped.length());
-                for (0..indent_count) |_| {
-                    this.builder.append(.string, clamped);
-                }
-            },
-        }
-    }
-
-    fn appendDoubleQuotedString(this: *Stringifier, str: String) void {
-        this.builder.append(.lchar, '"');
-
-        for (0..str.length()) |i| {
-            const c = str.charAt(i);
-
-            switch (c) {
-                0x00 => this.builder.append(.latin1, "\\0"),
-                0x01 => this.builder.append(.latin1, "\\x01"),
-                0x02 => this.builder.append(.latin1, "\\x02"),
-                0x03 => this.builder.append(.latin1, "\\x03"),
-                0x04 => this.builder.append(.latin1, "\\x04"),
-                0x05 => this.builder.append(.latin1, "\\x05"),
-                0x06 => this.builder.append(.latin1, "\\x06"),
-                0x07 => this.builder.append(.latin1, "\\a"), // bell
-                0x08 => this.builder.append(.latin1, "\\b"), // backspace
-                0x09 => this.builder.append(.latin1, "\\t"), // tab
-                0x0a => this.builder.append(.latin1, "\\n"), // line feed
-                0x0b => this.builder.append(.latin1, "\\v"), // vertical tab
-                0x0c => this.builder.append(.latin1, "\\f"), // form feed
-                0x0d => this.builder.append(.latin1, "\\r"), // carriage return
-                0x0e => this.builder.append(.latin1, "\\x0e"),
-                0x0f => this.builder.append(.latin1, "\\x0f"),
-                0x10 => this.builder.append(.latin1, "\\x10"),
-                0x11 => this.builder.append(.latin1, "\\x11"),
-                0x12 => this.builder.append(.latin1, "\\x12"),
-                0x13 => this.builder.append(.latin1, "\\x13"),
-                0x14 => this.builder.append(.latin1, "\\x14"),
-                0x15 => this.builder.append(.latin1, "\\x15"),
-                0x16 => this.builder.append(.latin1, "\\x16"),
-                0x17 => this.builder.append(.latin1, "\\x17"),
-                0x18 => this.builder.append(.latin1, "\\x18"),
-                0x19 => this.builder.append(.latin1, "\\x19"),
-                0x1a => this.builder.append(.latin1, "\\x1a"),
-                0x1b => this.builder.append(.latin1, "\\e"), // escape
-                0x1c => this.builder.append(.latin1, "\\x1c"),
-                0x1d => this.builder.append(.latin1, "\\x1d"),
-                0x1e => this.builder.append(.latin1, "\\x1e"),
-                0x1f => this.builder.append(.latin1, "\\x1f"),
-                0x22 => this.builder.append(.latin1, "\\\""), // "
-                0x5c => this.builder.append(.latin1, "\\\\"), // \
-                0x7f => this.builder.append(.latin1, "\\x7f"), // delete
-                0x85 => this.builder.append(.latin1, "\\N"), // next line
-                0xa0 => this.builder.append(.latin1, "\\_"), // non-breaking space
-                0xa8 => this.builder.append(.latin1, "\\L"), // line separator
-                0xa9 => this.builder.append(.latin1, "\\P"), // paragraph separator
-
-                0x20...0x21,
-                0x23...0x5b,
-                0x5d...0x7e,
-                0x80...0x84,
-                0x86...0x9f,
-                0xa1...0xa7,
-                0xaa...std.math.maxInt(u16),
-                => this.builder.append(.uchar, c),
-            }
-        }
-
-        this.builder.append(.lchar, '"');
-    }
-
-    fn appendString(this: *Stringifier, str: String) void {
-        if (stringNeedsQuotes(str)) {
-            this.appendDoubleQuotedString(str);
-            return;
-        }
-        this.builder.append(.string, str);
-    }
-
-    fn stringNeedsQuotes(str: String) bool {
-        if (str.isEmpty()) {
-            return true;
-        }
-
-        switch (str.charAt(str.length() - 1)) {
-            // whitespace characters
-            ' ',
-            '\t',
-            '\n',
-            '\r',
-            // trailing colon can be misinterpreted as a mapping indicator
-            // https://github.com/oven-sh/bun/issues/25439
-            ':',
-            => return true,
-            else => {},
-        }
-
-        switch (str.charAt(0)) {
-            // starting with an indicator character requires quotes
-            '&',
-            '*',
-            '?',
-            '|',
-            '-',
-            '<',
-            '>',
-            '!',
-            '%',
-            '@',
-            ':',
-            ',',
-            '[',
-            ']',
-            '{',
-            '}',
-            '#',
-            '\'',
-            '"',
-            '`',
-            // starting with whitespace requires quotes
-            ' ',
-            '\t',
-            '\n',
-            '\r',
-            => return true,
-
-            else => {},
-        }
-
-        const keywords = &.{
-            "true",
-            "True",
-            "TRUE",
-            "false",
-            "False",
-            "FALSE",
-            "yes",
-            "Yes",
-            "YES",
-            "no",
-            "No",
-            "NO",
-            "on",
-            "On",
-            "ON",
-            "off",
-            "Off",
-            "OFF",
-            "n",
-            "N",
-            "y",
-            "Y",
-            "null",
-            "Null",
-            "NULL",
-            "~",
-            ".inf",
-            ".Inf",
-            ".INF",
-            ".nan",
-            ".NaN",
-            ".NAN",
-        };
-
-        inline for (keywords) |keyword| {
-            if (str.eqlComptime(keyword)) {
-                return true;
-            }
-        }
-
-        var i: usize = 0;
-        while (i < str.length()) {
-            switch (str.charAt(i)) {
-                // flow indicators need to be quoted always
-                '{',
-                '}',
-                '[',
-                ']',
-                ',',
-                => return true,
-
-                ':',
-                => {
-                    if (i + 1 < str.length()) {
-                        switch (str.charAt(i + 1)) {
-                            ' ',
-                            '\t',
-                            '\n',
-                            '\r',
-                            => return true,
-                            else => {},
-                        }
-                    }
-                    i += 1;
-                },
-
-                '#',
-                '`',
-                '\'',
-                => return true,
-
-                '-' => {
-                    if (i + 2 < str.length() and str.charAt(i + 1) == '-' and str.charAt(i + 2) == '-') {
-                        if (i + 3 >= str.length()) {
-                            return true;
-                        }
-                        switch (str.charAt(i + 3)) {
-                            ' ',
-                            '\t',
-                            '\r',
-                            '\n',
-                            '[',
-                            ']',
-                            '{',
-                            '}',
-                            ',',
-                            => return true,
-                            else => {},
-                        }
-                    }
-
-                    if (i == 0 and stringIsNumber(str)) {
-                        return true;
-                    }
-                    i += 1;
-                },
-                '.' => {
-                    if (i + 2 < str.length() and str.charAt(i + 1) == '.' and str.charAt(i + 2) == '.') {
-                        if (i + 3 >= str.length()) {
-                            return true;
-                        }
-                        switch (str.charAt(i + 3)) {
-                            ' ',
-                            '\t',
-                            '\r',
-                            '\n',
-                            '[',
-                            ']',
-                            '{',
-                            '}',
-                            ',',
-                            => return true,
-                            else => {},
-                        }
-                    }
-
-                    if (i == 0 and stringIsNumber(str)) {
-                        return true;
-                    }
-                    i += 1;
-                },
-
-                '0'...'9' => {
-                    if (i == 0 and stringIsNumber(str)) {
-                        return true;
-                    }
-                    i += 1;
-                },
-
-                '+' => {
-                    // Leading '+' followed by digits/dot parses as a positive number.
-                    if (i == 0 and stringIsNumber(str)) {
-                        return true;
-                    }
-                    i += 1;
-                },
-
-                0x00...0x1f,
-                0x22,
-                0x7f,
-                0x85,
-                0xa0,
-                0xa8,
-                0xa9,
-                => return true,
-
-                else => {
-                    i += 1;
-                },
-            }
-        }
-
-        return false;
-    }
-
-    /// Returns true when `str` would be parsed back as a number by `YAML.parse`.
-    ///
-    /// This mirrors the rules in `src/interchange/yaml.zig`'s `tryResolveNumber`:
-    /// - Optional leading sign, optionally followed by `.inf`/`.Inf`/`.INF` for signed infinity.
-    /// - Otherwise a numeric mantissa: digits/`.`/`e`/`E`/hex letters, plus additional `+`/`-`
-    ///   (the parser accepts any number of `+` after the leading sign as long as no `x` was
-    ///   seen, and at most one additional `-`).
-    /// - `0x` / `0X` → hex digits; `0o` / `0O` → octal digits.
-    /// - Additionally, `wtf.parseDouble` is a prefix parser, so a leading numeric prefix is
-    ///   enough for `YAML.parse` to resolve a number — e.g. `"1+5"` round-trips to `1`.
-    ///   We err on the side of quoting when the parser's scanner would accept the full token
-    ///   as `valid`.
-    fn stringIsNumber(str: String) bool {
-        const len = str.length();
-        if (len == 0) return false;
-
-        var i: usize = 0;
-
-        // Optional leading sign.
-        const first = str.charAt(0);
-        const signed = first == '+' or first == '-';
-        if (signed) {
-            i = 1;
-            if (i >= len) return false; // bare "+" / "-" isn't a number
-            // Signed special floats: "+.inf", "+.Inf", "+.INF" (and the '-' variants).
-            // The parser also rejects ".nan" after a sign, so we only check ".inf" here.
-            if (str.charAt(i) == '.' and isInfSuffix(str, i)) return true;
-        }
-
-        // Hex / octal base prefix.
-        var base: enum { dec, hex, oct } = .dec;
-        if (i + 1 < len and str.charAt(i) == '0') {
-            switch (str.charAt(i + 1)) {
-                'x', 'X' => {
-                    base = .hex;
-                    i += 2;
-                    if (i >= len) return false; // "0x" alone isn't hex
-                },
-                'o', 'O' => {
-                    base = .oct;
-                    i += 2;
-                    if (i >= len) return false; // "0o" alone isn't oct
-                },
-                else => {},
-            }
-        }
-
-        // Scan the rest. Track the minimal state the parser uses to decide validity.
-        var saw_dot = false;
-        var saw_exp = false;
-        var saw_minus_after_sign = false;
-
-        while (i < len) : (i += 1) {
-            const c = str.charAt(i);
-            switch (c) {
-                '0'...'9' => {},
-                'a'...'d', 'f', 'A'...'D', 'F' => {
-                    // Hex digits only valid in hex base.
-                    if (base != .hex) return false;
-                },
-                'e', 'E' => {
-                    if (base == .dec) {
-                        if (saw_exp) return false;
-                        saw_exp = true;
-                    }
-                    // In hex base, 'e'/'E' are just hex digits.
-                },
-                '.' => {
-                    if (saw_dot or base != .dec) return false;
-                    saw_dot = true;
-                },
-                '+' => {
-                    // Parser rule: '+' accepted unless we're in hex base.
-                    if (base == .hex) return false;
-                },
-                '-' => {
-                    // Parser rule: at most one '-' after the leading sign.
-                    if (saw_minus_after_sign) return false;
-                    saw_minus_after_sign = true;
-                },
-                else => return false,
-            }
-        }
-        return true;
-    }
-
-    /// True if the three chars after position `i` (which is a `.`) spell "inf", "Inf",
-    /// or "INF" — the suffix the YAML parser accepts after a signed `.` to mean
-    /// +/- infinity. Over-matches `+.infX` etc., which is harmless for the quoting
-    /// decision.
-    fn isInfSuffix(str: String, i: usize) bool {
-        if (i + 4 > str.length()) return false;
-        const a = str.charAt(i + 1);
-        const b = str.charAt(i + 2);
-        const c = str.charAt(i + 3);
-        return (a == 'i' and b == 'n' and c == 'f') or
-            (a == 'I' and b == 'n' and c == 'f') or
-            (a == 'I' and b == 'N' and c == 'F');
-    }
-};
-
-pub fn parse(
-    global: *jsc.JSGlobalObject,
-    callFrame: *jsc.CallFrame,
-) bun.JSError!jsc.JSValue {
-    var arena: bun.ArenaAllocator = .init(bun.default_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
-    var ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
-
-    const input_value = callFrame.argumentsAsArray(1)[0];
-
-    const input: jsc.Node.BlobOrStringOrBuffer = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena.allocator(), input_value) orelse input: {
-        var str = try input_value.toBunString(global);
-        defer str.deref();
-        break :input .{ .string_or_buffer = .{ .string = str.toSlice(arena.allocator()) } };
-    };
-    defer input.deinit();
-
-    var log = logger.Log.init(bun.default_allocator);
-    defer log.deinit();
-
-    const source = &logger.Source.initPathString("input.yaml", input.slice());
-
-    const root = bun.interchange.yaml.YAML.parse(source, &log, arena.allocator()) catch |err| return switch (err) {
-        error.OutOfMemory => |oom| oom,
-        error.StackOverflow => global.throwStackOverflow(),
-        else => {
-            if (log.msgs.items.len > 0) {
-                const first_msg = log.msgs.items[0];
-                const error_text = first_msg.data.text;
-                return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: {s}", .{error_text}));
-            }
-            return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: Unable to parse YAML string", .{}));
-        },
-    };
-
-    var ctx: ParserCtx = .{
-        .seen_objects = .init(arena.allocator()),
-        .stack_check = .init(),
-        .global = global,
-        .root = root,
-        .result = .zero,
-    };
-    defer ctx.deinit();
-
-    MarkedArgumentBuffer.run(ParserCtx, &ctx, &ParserCtx.run);
-
-    return ctx.result;
-}
-
-const ParserCtx = struct {
-    seen_objects: std.AutoHashMap(*const anyopaque, JSValue),
-    stack_check: bun.StackCheck,
-
-    global: *JSGlobalObject,
-    root: Expr,
-
-    result: JSValue,
-
-    pub fn deinit(ctx: *ParserCtx) void {
-        ctx.seen_objects.deinit();
-    }
-
-    pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
-        ctx.result = ctx.toJS(args, ctx.root) catch |err| switch (err) {
-            error.OutOfMemory => {
-                ctx.result = ctx.global.throwOutOfMemoryValue();
-                return;
-            },
-            error.JSError, error.JSTerminated => {
-                ctx.result = .zero;
-                return;
-            },
-            error.StackOverflow => {
-                ctx.result = ctx.global.throwStackOverflow() catch .zero;
-                return;
-            },
-        };
-    }
-
-    const ToJSError = JSError || bun.StackOverflow;
-
-    pub fn toJS(ctx: *ParserCtx, args: *MarkedArgumentBuffer, expr: Expr) ToJSError!JSValue {
-        if (!ctx.stack_check.isSafeToRecurse()) {
-            return error.StackOverflow;
-        }
-        switch (expr.data) {
-            .e_null => return .null,
-            .e_boolean => |boolean| return .jsBoolean(boolean.value),
-            .e_number => |number| return .jsNumber(number.value),
-            .e_string => |str| {
-                return str.toJS(bun.default_allocator, ctx.global);
-            },
-            .e_array => {
-                if (ctx.seen_objects.get(expr.data.e_array)) |arr| {
-                    return arr;
-                }
-
-                var arr = try JSValue.createEmptyArray(ctx.global, expr.data.e_array.items.len);
-
-                args.append(arr);
-                try ctx.seen_objects.put(expr.data.e_array, arr);
-
-                for (expr.data.e_array.slice(), 0..) |item, _i| {
-                    const i: u32 = @intCast(_i);
-                    const value = try ctx.toJS(args, item);
-                    try arr.putIndex(ctx.global, i, value);
-                }
-
-                return arr;
-            },
-            .e_object => {
-                if (ctx.seen_objects.get(expr.data.e_object)) |obj| {
-                    return obj;
-                }
-
-                var obj = JSValue.createEmptyObject(ctx.global, expr.data.e_object.properties.len);
-
-                args.append(obj);
-                try ctx.seen_objects.put(expr.data.e_object, obj);
-
-                for (expr.data.e_object.properties.slice()) |prop| {
-                    const key_expr = prop.key.?;
-                    const value_expr = prop.value.?;
-
-                    const key = try ctx.toJS(args, key_expr);
-                    const value = try ctx.toJS(args, value_expr);
-
-                    const key_str = try key.toBunString(ctx.global);
-                    defer key_str.deref();
-
-                    try obj.putMayBeIndex(ctx.global, &key_str, value);
-                }
-
-                return obj;
-            },
-
-            // unreachable. the yaml AST does not use any other
-            // expr types
-            else => return .js_undefined,
-        }
-    }
-};
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+pub const Name = union(AnchorOrigin) {
+    root,
+    array_item: usize,
+    prop_value: PropValue,
+};
+pub const ValueOrigin = union(AnchorOrigin) {
+    root,
+    array_item,
+    prop_value: String,
+};
+pub const Space = union(enum) {
+    minified,
+    number: u32,
+    str: String,
+
+    pub const init = spaceInit;
+    pub const deinit = spaceDeinit;
+};
+pub const StringifyError = (JSError or bun.StackOverflow);
+pub const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
 const Environment = bun.Environment;
 const JSError = bun.JSError;
 const String = bun.String;
 const default_allocator = bun.default_allocator;
 const logger = bun.logger;
 const YAML = bun.interchange.yaml.YAML;
-
 const ast = bun.ast;
 const Expr = ast.Expr;
-
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const MarkedArgumentBuffer = jsc.MarkedArgumentBuffer;
 const ZigString = jsc.ZigString;
 const wtf = bun.jsc.wtf;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const YamlBase = enum {
+    dec,
+    hex,
+    oct,
+    pub fn get(s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), s); }
+    pub fn has(s: []const u8) bool { return std.meta.stringToEnum(@This(), s) != null; }
+    pub fn fromName(s: []const u8) ?@This() { return get(s); }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+};
+
+pub const AnchorOrigin = enum {
+    root,
+    array_item,
+    prop_value,
+    pub fn get(s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), s); }
+    pub fn has(s: []const u8) bool { return std.meta.stringToEnum(@This(), s) != null; }
+    pub fn fromName(s: []const u8) ?@This() { return get(s); }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+};
+
+pub const PropValue = struct {
+    prop_name: String,
+    counter: usize,
+};
+
+pub const AnchorAlias = struct {
+    anchored: bool,
+    used: bool,
+    name: Name,
+
+pub fn init(origin: ValueOrigin) AnchorAlias {
+            return .{ .anchored = false, .used = false, .name = (switch (origin) {
+.root => .root,
+.array_item => Name{ .array_item = 0 },
+.prop_value => Name{ .prop_value = PropValue{ .prop_name = origin.prop_value, .counter = 0 } },
+}) };
+    }
+};
+
+pub const Stringifier = struct {
+    stack_check: bun.StackCheck,
+    builder: wtf.StringBuilder,
+    indent: usize,
+    known_collections: std.AutoHashMap(JSValue,AnchorAlias),
+    array_item_counter: usize,
+    prop_names: bun.StringHashMap(usize),
+    space: Space,
+
+pub fn init(allocator: std.mem.Allocator, global: *JSGlobalObject, space_value: JSValue) JSError!Stringifier {
+            var prop_names: bun.StringHashMap(usize) = bun.StringHashMap(usize).init(allocator);
+            _ = &prop_names;
+            _ = try prop_names.put("root", 0);
+            return .{ .stack_check = .init(), .builder = .init(), .indent = 0, .known_collections = .init(allocator), .array_item_counter = 0, .prop_names = prop_names, .space = try Space.init(global, space_value) };
+    }
+
+pub fn deinit(self: *Stringifier) void {
+            _ = self.builder.deinit();
+            _ = self.known_collections.deinit();
+            _ = self.prop_names.deinit();
+            _ = self.space.deinit();
+    }
+
+pub fn findAnchorsAndAliases(self: *Stringifier, global: *JSGlobalObject, value: JSValue, origin: ValueOrigin) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            const unwrapped = try value.unwrapBoxedPrimitive(global);
+            if (unwrapped.isNull()) {
+                return;
+            }
+            if (unwrapped.isNumber()) {
+                return;
+            }
+            if (unwrapped.isBigInt()) {
+                return global.throw("YAML.stringify cannot serialize BigInt", .{});
+            }
+            if (unwrapped.isBoolean()) {
+                return;
+            }
+            if (unwrapped.isString()) {
+                return;
+            }
+            if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation(unwrapped.isObject(), @src());
+            }
+            const object_entry = try self.known_collections.getOrPut(unwrapped);
+            if (object_entry.found_existing) {
+                if (object_entry.value_ptr.used) {
+                    return;
+                }
+                object_entry.value_ptr.used = true;
+                switch ((if (@typeInfo(@TypeOf(object_entry.value_ptr)) == .@"enum" or @typeInfo(@TypeOf(object_entry.value_ptr)) == .@"union") @tagName(object_entry.value_ptr) else object_entry.value_ptr.name)) {
+.root => {
+
+},
+.array_item => {
+(if (@typeInfo(@TypeOf(object_entry.value_ptr)) == .@"enum" or @typeInfo(@TypeOf(object_entry.value_ptr)) == .@"union") @tagName(object_entry.value_ptr) else object_entry.value_ptr.name).array_item = self.array_item_counter;
+                self.array_item_counter = (self.array_item_counter + 1);
+},
+.prop_value => {
+const name_entry = try self.prop_names.getOrPut((if (@typeInfo(@TypeOf(object_entry.value_ptr)) == .@"enum" or @typeInfo(@TypeOf(object_entry.value_ptr)) == .@"union") @tagName(object_entry.value_ptr) else object_entry.value_ptr.name).prop_value.prop_name.byteSlice());
+                if (name_entry.found_existing) {
+                    name_entry.value_ptr.* = (name_entry.value_ptr.* + 1);
+                } else {
+                    name_entry.value_ptr.* = 0;
+                }
+                (if (@typeInfo(@TypeOf(object_entry.value_ptr)) == .@"enum" or @typeInfo(@TypeOf(object_entry.value_ptr)) == .@"union") @tagName(object_entry.value_ptr) else object_entry.value_ptr.name).prop_value.counter = name_entry.value_ptr.*;
+},
+}
+                return;
+            }
+            object_entry.value_ptr.* = AnchorAlias.init(origin);
+            if (unwrapped.isArray()) {
+                var iter = try unwrapped.arrayIterator(global);
+                _ = &iter;
+                while (try iter.next()) |item| {
+                    if (((item.isUndefined() or item.isSymbol()) or item.isFunction())) {
+                        continue;
+                    }
+                    _ = try self.findAnchorsAndAliases(global, item, .array_item);
+                }
+                return;
+            }
+            var iter_props: PropIter = try PropIter.init(global, try unwrapped.toObject(global));
+            _ = &iter_props;
+            defer {
+            _ = iter_props.deinit();
+            }
+            while (try iter_props.next()) |prop_name| {
+                if ((((if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isUndefined() or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isSymbol()) or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isFunction())) {
+                    continue;
+                }
+                _ = try self.findAnchorsAndAliases(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value), ValueOrigin{ .prop_value = prop_name });
+            }
+    }
+
+pub fn stringifyValue(self: *Stringifier, global: *JSGlobalObject, value: JSValue) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            const unwrapped = try value.unwrapBoxedPrimitive(global);
+            if (unwrapped.isNull()) {
+                _ = self.builder.append(.latin1, "null");
+                return;
+            }
+            if (unwrapped.isNumber()) {
+                if (unwrapped.isInt32()) {
+                    _ = self.builder.append(.@"int", unwrapped.asInt32());
+                    return;
+                }
+                const num = unwrapped.asNumber();
+                if (std.math.isNegativeInf(num)) {
+                    _ = self.builder.append(.latin1, "-.inf");
+                } else {
+                    if (std.math.isInf(num)) {
+                        _ = self.builder.append(.latin1, ".inf");
+                    } else {
+                        if (std.math.isNan(num)) {
+                            _ = self.builder.append(.latin1, ".nan");
+                        } else {
+                            if (std.math.isNegativeZero(num)) {
+                                _ = self.builder.append(.latin1, "-0");
+                            } else {
+                                if (std.math.isPositiveZero(num)) {
+                                    _ = self.builder.append(.latin1, "+0");
+                                } else {
+                                    _ = self.builder.append(.@"double", num);
+                                }
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+            if (unwrapped.isBigInt()) {
+                return global.throw("YAML.stringify cannot serialize BigInt", .{});
+            }
+            if (unwrapped.isBoolean()) {
+                if (unwrapped.asBoolean()) {
+                    _ = self.builder.append(.latin1, "true");
+                } else {
+                    _ = self.builder.append(.latin1, "false");
+                }
+                return;
+            }
+            if (unwrapped.isString()) {
+                const value_str = try unwrapped.toBunString(global);
+                defer {
+                _ = value_str.deref();
+                }
+                _ = self.appendString(value_str);
+                return;
+            }
+            if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation(unwrapped.isObject(), @src());
+            }
+            var has_anchor: ?*AnchorAlias = null;
+            _ = &has_anchor;
+            if (self.known_collections.getPtr(unwrapped)) |anchor| {
+                _ = &anchor;
+                if (anchor.used) {
+                    has_anchor = anchor;
+                }
+            }
+            if (has_anchor) |anchor| {
+                _ = &anchor;
+                _ = self.builder.append(.lchar, (if (anchor.anchored) 42 else 38));
+                switch (anchor.name) {
+.root => {
+_ = self.builder.append(.latin1, "root");
+},
+.array_item => {
+_ = self.builder.append(.latin1, "item");
+                _ = self.builder.append(.@"usize", anchor.name.array_item);
+},
+.prop_value => |prop_value| {
+if ((prop_value.prop_name.length() == 0)) {
+                    _ = self.builder.append(.latin1, "value");
+                    _ = self.builder.append(.@"usize", prop_value.counter);
+                } else {
+                    _ = self.builder.append(.@"string", anchor.name.prop_value.prop_name);
+                    if ((anchor.name.prop_value.counter != 0)) {
+                        _ = self.builder.append(.@"usize", anchor.name.prop_value.counter);
+                    }
+                }
+},
+}
+                if (anchor.anchored) {
+                    return;
+                }
+                switch (self.space) {
+.minified => {
+_ = self.builder.append(.lchar, 32);
+},
+.number, .str => {
+_ = self.newline();
+},
+}
+                anchor.anchored = true;
+            }
+            if (unwrapped.isArray()) {
+                var iter = try unwrapped.arrayIterator(global);
+                _ = &iter;
+                if ((iter.len == 0)) {
+                    _ = self.builder.append(.latin1, "[]");
+                    return;
+                }
+                switch (self.space) {
+.minified => {
+_ = self.builder.append(.lchar, 91);
+                var first = true;
+                _ = &first;
+                while (try iter.next()) |item| {
+                    if (((item.isUndefined() or item.isSymbol()) or item.isFunction())) {
+                        continue;
+                    }
+                    if ((!first)) {
+                        _ = self.builder.append(.lchar, 44);
+                    }
+                    first = false;
+                    _ = try self.stringifyValue(global, item);
+                }
+                _ = self.builder.append(.lchar, 93);
+},
+.number, .str => {
+_ = self.builder.ensureUnusedCapacity((iter.len * "- ".len));
+                var first = true;
+                _ = &first;
+                while (try iter.next()) |item| {
+                    if (((item.isUndefined() or item.isSymbol()) or item.isFunction())) {
+                        continue;
+                    }
+                    if ((!first)) {
+                        _ = self.newline();
+                    }
+                    first = false;
+                    _ = self.builder.append(.latin1, "- ");
+                    self.indent = (self.indent + 1);
+                    _ = try self.stringifyValue(global, item);
+                    self.indent = (self.indent - 1);
+                }
+},
+}
+                return;
+            }
+            var iter_props: PropIter = try PropIter.init(global, try unwrapped.toObject(global));
+            _ = &iter_props;
+            defer {
+            _ = iter_props.deinit();
+            }
+            if ((iter_props.len == 0)) {
+                _ = self.builder.append(.latin1, "{}");
+                return;
+            }
+            switch (self.space) {
+.minified => {
+_ = self.builder.append(.lchar, 123);
+            var first = true;
+            _ = &first;
+            while (try iter_props.next()) |prop_name| {
+                if ((((if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isUndefined() or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isSymbol()) or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isFunction())) {
+                    continue;
+                }
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 44);
+                }
+                first = false;
+                _ = self.appendString(prop_name);
+                _ = self.builder.append(.latin1, ": ");
+                _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value));
+            }
+            _ = self.builder.append(.lchar, 125);
+},
+.number, .str => {
+_ = self.builder.ensureUnusedCapacity((iter_props.len * ": ".len));
+            var first = true;
+            _ = &first;
+            while (try iter_props.next()) |prop_name| {
+                if ((((if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isUndefined() or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isSymbol()) or (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isFunction())) {
+                    continue;
+                }
+                if ((!first)) {
+                    _ = self.newline();
+                }
+                first = false;
+                _ = self.appendString(prop_name);
+                _ = self.builder.append(.latin1, ": ");
+                self.indent = (self.indent + 1);
+                if (Stringifier.propValueNeedsNewline((if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value))) {
+                    _ = self.newline();
+                }
+                _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value));
+                self.indent = (self.indent - 1);
+            }
+            if (first) {
+                _ = self.builder.append(.latin1, "{}");
+            }
+},
+}
+    }
+
+pub fn propValueNeedsNewline(value: JSValue) bool {
+            return ((((!value.isNumber()) and (!value.isBoolean())) and (!value.isNull())) and (!value.isString()));
+    }
+
+pub fn newline(self: *Stringifier) void {
+            const indent_count = self.indent;
+            switch (self.space) {
+.minified => {
+
+},
+.number => |space_num| {
+_ = self.builder.append(.lchar, 10);
+            _ = self.builder.ensureUnusedCapacity((indent_count * space_num));
+            {
+                var loop_num: i32 = 0;
+                _ = &loop_num;
+                const __end_0 = (indent_count * space_num);
+                while (loop_num < __end_0) : (loop_num += 1) {
+                    _ = self.builder.append(.lchar, 32);
+                }
+            }
+},
+.str => |space_str| {
+_ = self.builder.append(.lchar, 10);
+            const clamped = (if ((space_str.length() > 10)) space_str.substringWithLen(0, 10) else space_str);
+            _ = self.builder.ensureUnusedCapacity((indent_count * clamped.length()));
+            {
+                var loop_str: i32 = 0;
+                _ = &loop_str;
+                const __end_1 = indent_count;
+                while (loop_str < __end_1) : (loop_str += 1) {
+                    _ = self.builder.append(.@"string", clamped);
+                }
+            }
+},
+}
+    }
+
+pub fn appendDoubleQuotedString(self: *Stringifier, str: String) void {
+            _ = self.builder.append(.lchar, 34);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_2 = str.length();
+                while (i < __end_2) : (i += 1) {
+                    const c = str.charAt(i);
+                    switch (c) {
+0 => {
+_ = self.builder.append(.latin1, "\\0");
+},
+1 => {
+_ = self.builder.append(.latin1, "\\x01");
+},
+2 => {
+_ = self.builder.append(.latin1, "\\x02");
+},
+3 => {
+_ = self.builder.append(.latin1, "\\x03");
+},
+4 => {
+_ = self.builder.append(.latin1, "\\x04");
+},
+5 => {
+_ = self.builder.append(.latin1, "\\x05");
+},
+6 => {
+_ = self.builder.append(.latin1, "\\x06");
+},
+7 => {
+_ = self.builder.append(.latin1, "\\a");
+},
+8 => {
+_ = self.builder.append(.latin1, "\\b");
+},
+9 => {
+_ = self.builder.append(.latin1, "\\t");
+},
+10 => {
+_ = self.builder.append(.latin1, "\\n");
+},
+11 => {
+_ = self.builder.append(.latin1, "\\v");
+},
+12 => {
+_ = self.builder.append(.latin1, "\\f");
+},
+13 => {
+_ = self.builder.append(.latin1, "\\r");
+},
+14 => {
+_ = self.builder.append(.latin1, "\\x0e");
+},
+15 => {
+_ = self.builder.append(.latin1, "\\x0f");
+},
+16 => {
+_ = self.builder.append(.latin1, "\\x10");
+},
+17 => {
+_ = self.builder.append(.latin1, "\\x11");
+},
+18 => {
+_ = self.builder.append(.latin1, "\\x12");
+},
+19 => {
+_ = self.builder.append(.latin1, "\\x13");
+},
+20 => {
+_ = self.builder.append(.latin1, "\\x14");
+},
+21 => {
+_ = self.builder.append(.latin1, "\\x15");
+},
+22 => {
+_ = self.builder.append(.latin1, "\\x16");
+},
+23 => {
+_ = self.builder.append(.latin1, "\\x17");
+},
+24 => {
+_ = self.builder.append(.latin1, "\\x18");
+},
+25 => {
+_ = self.builder.append(.latin1, "\\x19");
+},
+26 => {
+_ = self.builder.append(.latin1, "\\x1a");
+},
+27 => {
+_ = self.builder.append(.latin1, "\\e");
+},
+28 => {
+_ = self.builder.append(.latin1, "\\x1c");
+},
+29 => {
+_ = self.builder.append(.latin1, "\\x1d");
+},
+30 => {
+_ = self.builder.append(.latin1, "\\x1e");
+},
+31 => {
+_ = self.builder.append(.latin1, "\\x1f");
+},
+'"' => {
+_ = self.builder.append(.latin1, "\\\"");
+},
+'\\' => {
+_ = self.builder.append(.latin1, "\\\\");
+},
+127 => {
+_ = self.builder.append(.latin1, "\\x7f");
+},
+133 => {
+_ = self.builder.append(.latin1, "\\N");
+},
+160 => {
+_ = self.builder.append(.latin1, "\\_");
+},
+168 => {
+_ = self.builder.append(.latin1, "\\L");
+},
+169 => {
+_ = self.builder.append(.latin1, "\\P");
+},
+32...33, 35...91, 93...126, 128...132, 134...159, 161...167, 170...65535 => {
+_ = self.builder.append(.uchar, c);
+},
+else => unreachable,
+}
+                }
+            }
+            _ = self.builder.append(.lchar, 34);
+    }
+
+pub fn appendString(self: *Stringifier, str: String) void {
+            if (Stringifier.stringNeedsQuotes(str)) {
+                _ = self.appendDoubleQuotedString(str);
+                return;
+            }
+            _ = self.builder.append(.@"string", str);
+    }
+
+pub fn stringNeedsQuotes(str: String) bool {
+            if (str.isEmpty()) {
+                return true;
+            }
+            switch (str.charAt((str.length() - 1))) {
+' ', 9, 10, 13, ':' => {
+return true;
+},
+else => {
+
+},
+}
+            switch (str.charAt(0)) {
+'&', '*', '?', '|', '-', '<', '>', '!', '%', '@', ':', ',', '[', ']', '{', '}', '#', '\'', '"', '`', ' ', 9, 10, 13 => {
+return true;
+},
+else => {
+
+},
+}
+            const keywords: [][]const u8 = .{ "true", "True", "TRUE", "false", "False", "FALSE", "yes", "Yes", "YES", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF", "n", "N", "y", "Y", "null", "Null", "NULL", "~", ".inf", ".Inf", ".INF", ".nan", ".NaN", ".NAN" };
+            inline for (keywords) |keyword| {
+                if (str.eqlComptime(keyword)) {
+                    return true;
+                }
+            }
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.length())) {
+                switch (str.charAt(i)) {
+'{', '}', '[', ']', ',' => {
+return true;
+},
+':' => {
+if (((i + 1) < str.length())) {
+                    switch (str.charAt((i + 1))) {
+' ', 9, 10, 13 => {
+return true;
+},
+else => {
+
+},
+}
+                }
+                i = (i + 1);
+},
+'#', '`', '\'' => {
+return true;
+},
+'-' => {
+if (((((i + 2) < str.length()) and (str.charAt((i + 1)) == 45)) and (str.charAt((i + 2)) == 45))) {
+                    if (((i + 3) >= str.length())) {
+                        return true;
+                    }
+                    switch (str.charAt((i + 3))) {
+' ', 9, 13, 10, '[', ']', '{', '}', ',' => {
+return true;
+},
+else => {
+
+},
+}
+                }
+                if (((i == 0) and stringIsNumber(str))) {
+                    return true;
+                }
+                i = (i + 1);
+},
+'.' => {
+if (((((i + 2) < str.length()) and (str.charAt((i + 1)) == 46)) and (str.charAt((i + 2)) == 46))) {
+                    if (((i + 3) >= str.length())) {
+                        return true;
+                    }
+                    switch (str.charAt((i + 3))) {
+' ', 9, 13, 10, '[', ']', '{', '}', ',' => {
+return true;
+},
+else => {
+
+},
+}
+                }
+                if (((i == 0) and stringIsNumber(str))) {
+                    return true;
+                }
+                i = (i + 1);
+},
+48...57 => {
+if (((i == 0) and stringIsNumber(str))) {
+                    return true;
+                }
+                i = (i + 1);
+},
+'+' => {
+if (((i == 0) and stringIsNumber(str))) {
+                    return true;
+                }
+                i = (i + 1);
+},
+0...31, '"', 127, 133, 160, 168, 169 => {
+return true;
+},
+else => {
+i = (i + 1);
+},
+}
+            }
+            return false;
+    }
+};
+
+pub const ParserCtx = struct {
+    seen_objects: std.AutoHashMap(*void,JSValue),
+    stack_check: bun.StackCheck,
+    global: *JSGlobalObject,
+    root: Expr,
+    result: JSValue,
+
+pub fn deinit(ctx: *ParserCtx) void {
+            _ = ctx.seen_objects.deinit();
+    }
+
+pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
+            ctx.result = (blk_catch_0: { break :blk_catch_0 ((ctx.toJS(args, ctx.root)) catch |e| { _ = &e; break :blk_catch_0 @as(JSValue, (switch (e) {
+error.OutOfMemory => {
+{
+                ctx.result = ctx.global.throwOutOfMemoryValue();
+                return;
+            }
+},
+error.JSError, error.JSTerminated => {
+{
+                ctx.result = .zero;
+                return;
+            }
+},
+error.StackOverflow => {
+{
+                ctx.result = (blk_catch_1: { break :blk_catch_1 ((ctx.global.throwStackOverflow()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+                return;
+            }
+},
+})); }); });
+    }
+
+pub fn toJS(ctx: *ParserCtx, args: *MarkedArgumentBuffer, expr: Expr) ToJSError!JSValue {
+            if ((!ctx.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            switch (expr.data) {
+.e_null => {
+return JSValue.null;
+},
+.e_boolean => |boolean| {
+return JSValue.jsBoolean((if (@typeInfo(@TypeOf(boolean)) == .@"enum") @intFromEnum(boolean) else boolean.value));
+},
+.e_number => |number| {
+return JSValue.jsNumber((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value));
+},
+.e_string => |str| {
+return str.toJS(bun.default_allocator, ctx.global);
+},
+.e_array => {
+if (ctx.seen_objects.get(expr.data.e_array)) |arr| {
+                _ = &arr;
+                return arr;
+            }
+            var arr = try JSValue.createEmptyArray(ctx.global, expr.data.e_array.items.len);
+            _ = &arr;
+            _ = args.append(arr);
+            _ = try ctx.seen_objects.put(expr.data.e_array, arr);
+            var idx: usize = 0;
+            _ = &idx;
+            for (cp_iter_slice(expr.data.e_array.slice())) |item| {
+                _ = &item;
+                const i: u32 = @as(u32, @truncate(idx));
+                const value = try ctx.toJS(args, item);
+                _ = try arr.putIndex(ctx.global, i, value);
+                idx = (idx + 1);
+            }
+            return arr;
+},
+.e_object => {
+if (ctx.seen_objects.get(expr.data.e_object)) |obj| {
+                _ = &obj;
+                return obj;
+            }
+            var obj = JSValue.createEmptyObject(ctx.global, expr.data.e_object.properties.len);
+            _ = &obj;
+            _ = args.append(obj);
+            _ = try ctx.seen_objects.put(expr.data.e_object, obj);
+            for (cp_iter_slice(expr.data.e_object.properties.slice())) |prop| {
+                _ = &prop;
+                const key_expr = prop.key.?;
+                const value_expr = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+                const key = try ctx.toJS(args, key_expr);
+                const value = try ctx.toJS(args, value_expr);
+                const key_str = try key.toBunString(ctx.global);
+                defer {
+                _ = key_str.deref();
+                }
+                _ = try obj.putMayBeIndex(ctx.global, key_str, value);
+            }
+            return obj;
+},
+else => {
+return JSValue.js_undefined;
+},
+}
+    }
+    const ToJSError = (JSError or bun.StackOverflow);
+};
+
+
+pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+        const object = JSValue.createEmptyObject(globalThis, 2);
+        _ = object.put(globalThis, ZigString.static("parse"), jsc.JSFunction.create(globalThis, "parse", parse, 1, .{}));
+        _ = object.put(globalThis, ZigString.static("stringify"), jsc.JSFunction.create(globalThis, "stringify", stringify, 3, .{}));
+        return object;
+}
+
+pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
+        const value = undefined;
+        const replacer = undefined;
+        const space_value = callFrame.argumentsAsArray(3);
+        _ = value.ensureStillAlive();
+        if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
+            return error.js_undefined;
+        }
+        if ((!replacer.isUndefinedOrNull())) {
+            return global.throw("YAML.stringify does not support the replacer argument", .{});
+        }
+        var scope: bun.AllocationScope = .init(bun.default_allocator);
+        _ = &scope;
+        defer {
+        _ = scope.deinit();
+        }
+        var stringifier: Stringifier = try .init(scope.allocator(), global, space_value);
+        _ = &stringifier;
+        defer {
+        _ = stringifier.deinit();
+        }
+        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return (switch (e) {
+error.OutOfMemory, error.JSError, error.JSTerminated => e,
+error.StackOverflow => global.throwStackOverflow(),
+}); }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return (switch (e) {
+error.OutOfMemory, error.JSError, error.JSTerminated => e,
+error.StackOverflow => global.throwStackOverflow(),
+}); }); });
+        return stringifier.builder.toString(global);
+}
+
+pub fn spaceInit(global: *JSGlobalObject, space_value: JSValue) JSError!Space {
+        const space = try space_value.unwrapBoxedPrimitive(global);
+        if (space.isNumber()) {
+            const num_f = space.asNumber();
+            if ((!(num_f >= 1))) {
+                return error.minified;
+            }
+            return Space{ .number = (if ((num_f > 10)) 10 else @intFromFloat(num_f)) };
+        }
+        if (space.isString()) {
+            const str = try space.toBunString(global);
+            if ((str.length() == 0)) {
+                _ = str.deref();
+                return error.minified;
+            }
+            return Space{ .str = str };
+        }
+        return error.minified;
+}
+
+pub fn spaceDeinit(this_space: *Space) void {
+        switch (this_space.*) {
+.minified, .number => {
+
+},
+.str => |str| {
+_ = str.deref();
+},
+}
+}
+
+pub fn stringIsNumber(str: String) bool {
+        const len = str.length();
+        if ((len == 0)) {
+            return false;
+        }
+        var i: usize = 0;
+        _ = &i;
+        const first = str.charAt(0);
+        const signed = ((first == 43) or (first == 45));
+        if (signed) {
+            i = 1;
+            if ((i >= len)) {
+                return false;
+            }
+            if (((str.charAt(i) == 46) and isInfSuffix(str, i))) {
+                return true;
+            }
+        }
+        var base: YamlBase = YamlBase.dec;
+        _ = &base;
+        if ((((i + 1) < len) and (str.charAt(i) == 48))) {
+            switch (str.charAt((i + 1))) {
+'x', 'X' => {
+base = YamlBase.hex;
+            i = (i + 2);
+            if ((i >= len)) {
+                return false;
+            }
+},
+'o', 'O' => {
+base = YamlBase.oct;
+            i = (i + 2);
+            if ((i >= len)) {
+                return false;
+            }
+},
+else => {
+
+},
+}
+        }
+        var saw_dot = false;
+        _ = &saw_dot;
+        var saw_exp = false;
+        _ = &saw_exp;
+        var saw_minus_after_sign = false;
+        _ = &saw_minus_after_sign;
+        while ((i < len)) : (i = (i + 1)) {
+            const c = str.charAt(i);
+            switch (c) {
+48...57 => {
+
+},
+97...100, 'f', 65...68, 'F' => {
+if ((base != YamlBase.hex)) {
+                return false;
+            }
+},
+'e', 'E' => {
+if ((base == YamlBase.dec)) {
+                if (saw_exp) {
+                    return false;
+                }
+                saw_exp = true;
+            }
+},
+'.' => {
+if ((saw_dot or (base != YamlBase.dec))) {
+                return false;
+            }
+            saw_dot = true;
+},
+'+' => {
+if ((base == YamlBase.hex)) {
+                return false;
+            }
+},
+'-' => {
+if (saw_minus_after_sign) {
+                return false;
+            }
+            saw_minus_after_sign = true;
+},
+else => {
+return false;
+},
+}
+        }
+        return true;
+}
+
+pub fn isInfSuffix(str: String, i: usize) bool {
+        if (((i + 4) > str.length())) {
+            return false;
+        }
+        const a = str.charAt((i + 1));
+        const b = str.charAt((i + 2));
+        const c = str.charAt((i + 3));
+        return (((((a == 105) and (b == 110)) and (c == 102)) or (((a == 73) and (b == 110)) and (c == 102))) or (((a == 73) and (b == 78)) and (c == 70)));
+}
+
+pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        var arena_allocator = bun.ArenaAllocator.init(bun.default_allocator);
+        _ = &arena_allocator;
+        defer {
+        _ = arena_allocator.deinit();
+        }
+        const allocator = arena_allocator.allocator();
+        var ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
+        _ = &ast_memory_allocator;
+        var ast_scope = ast_memory_allocator.enter(allocator);
+        _ = &ast_scope;
+        defer {
+        _ = ast_scope.exit();
+        }
+        const input_value = callFrame.argumentsAsArray(1)[0];
+        const input: jsc.Node.BlobOrStringOrBuffer = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 input: {
+        var str = try input_value.toBunString(global);
+        _ = &str;
+        defer {
+        _ = str.deref();
+        }
+        break :input jsc.Node.BlobOrStringOrBuffer{ .string_or_buffer = .{ .string = str.toSlice(arena_allocator.allocator()) } };
+}; }); });
+        defer {
+        _ = input.deinit();
+        }
+        var log = logger.Log.init(bun.default_allocator);
+        _ = &log;
+        defer {
+        _ = log.deinit();
+        }
+        const source = (&logger.Source.initPathString("input.yaml", input.slice()));
+        const root = (blk_catch_5: { break :blk_catch_5 ((bun.interchange.yaml.YAML.parse(source, log, arena_allocator.allocator())) catch |e| { _ = &e; return (switch (e) {
+error.OutOfMemory => |oom| oom,
+error.StackOverflow => global.throwStackOverflow(),
+else => {
+{
+            if ((log.msgs.items.len > 0)) {
+                const first_msg = log.msgs.items[0];
+                const error_text = first_msg.data.text;
+                return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: {s}", .{ .error_text = error_text }));
+            }
+            return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: Unable to parse YAML string", .{}));
+        }
+},
+}); }); });
+        var ctx: ParserCtx = .{ .seen_objects = .init(arena_allocator.allocator()), .stack_check = .init(), .global = global, .root = root, .result = .zero };
+        _ = &ctx;
+        defer {
+        _ = ctx.deinit();
+        }
+        _ = MarkedArgumentBuffer.run(ParserCtx, (&ctx), (&ParserCtx.run));
+        return ctx.result;
+}

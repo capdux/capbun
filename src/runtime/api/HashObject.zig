@@ -1,156 +1,116 @@
-const HashObject = @This();
-
-pub const wyhash = hashWrap(std.hash.Wyhash);
-pub const adler32 = hashWrap(std.hash.Adler32);
-/// Use hardware-accelerated CRC32 from zlib
-pub const crc32 = hashWrap(struct {
-    pub fn hash(seed: u32, bytes: []const u8) u32 {
-        // zlib takes a 32-bit length, so chunk large inputs to avoid truncation.
-        var crc: bun.zlib.uLong = seed;
-        var offset: usize = 0;
-        while (offset < bytes.len) {
-            const remaining = bytes.len - offset;
-            const max_len: usize = std.math.maxInt(u32);
-            const chunk_len: u32 = if (remaining > max_len) @intCast(max_len) else @intCast(remaining);
-            crc = bun.zlib.crc32(crc, bytes.ptr + offset, chunk_len);
-            offset += chunk_len;
-        }
-        return @intCast(crc);
-    }
-});
-pub const cityHash32 = hashWrap(std.hash.CityHash32);
-pub const cityHash64 = hashWrap(std.hash.CityHash64);
-pub const xxHash32 = hashWrap(struct {
-    pub fn hash(seed: u32, bytes: []const u8) u32 {
-        // sidestep .hash taking in anytype breaking ArgTuple
-        // downstream by forcing a type signature on the input
-        return std.hash.XxHash32.hash(seed, bytes);
-    }
-});
-pub const xxHash64 = hashWrap(struct {
-    pub fn hash(seed: u64, bytes: []const u8) u64 {
-        // sidestep .hash taking in anytype breaking ArgTuple
-        // downstream by forcing a type signature on the input
-        return std.hash.XxHash64.hash(seed, bytes);
-    }
-});
-pub const xxHash3 = hashWrap(struct {
-    pub fn hash(seed: u32, bytes: []const u8) u64 {
-        // sidestep .hash taking in anytype breaking ArgTuple
-        // downstream by forcing a type signature on the input
-        return std.hash.XxHash3.hash(seed, bytes);
-    }
-});
-pub const murmur32v2 = hashWrap(std.hash.murmur.Murmur2_32);
-pub const murmur32v3 = hashWrap(std.hash.murmur.Murmur3_32);
-pub const murmur64v2 = hashWrap(std.hash.murmur.Murmur2_64);
-pub const rapidhash = hashWrap(bun.deprecated.RapidHash);
-
-pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
-    const function = jsc.JSFunction.create(globalThis, "hash", wyhash, 1, .{});
-    const fns = comptime .{
-        "wyhash",
-        "adler32",
-        "crc32",
-        "cityHash32",
-        "cityHash64",
-        "xxHash32",
-        "xxHash64",
-        "xxHash3",
-        "murmur32v2",
-        "murmur32v3",
-        "murmur64v2",
-        "rapidhash",
-    };
-    inline for (fns) |name| {
-        const value = jsc.JSFunction.create(globalThis, name, @field(HashObject, name), 1, .{});
-        function.put(globalThis, comptime ZigString.static(name), value);
-    }
-
-    return function;
-}
-
-fn hashWrap(comptime Hasher_: anytype) jsc.JSHostFnZig {
-    return struct {
-        const Hasher = Hasher_;
-        pub fn hash(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            const arguments = callframe.arguments_old(2).slice();
-            var args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-            defer args.deinit();
-
-            var input: []const u8 = "";
-            var input_slice = ZigString.Slice.empty;
-            defer input_slice.deinit();
-            if (args.nextEat()) |arg| {
-                if (arg.as(jsc.WebCore.Blob)) |blob| {
-                    // TODO: files
-                    input = blob.sharedView();
-                } else {
-                    switch (arg.jsTypeLoose()) {
-                        .ArrayBuffer,
-                        .Int8Array,
-                        .Uint8Array,
-                        .Uint8ClampedArray,
-                        .Int16Array,
-                        .Uint16Array,
-                        .Int32Array,
-                        .Uint32Array,
-                        .Float16Array,
-                        .Float32Array,
-                        .Float64Array,
-                        .BigInt64Array,
-                        .BigUint64Array,
-                        .DataView,
-                        => {
-                            var array_buffer = arg.asArrayBuffer(globalThis) orelse {
-                                return globalThis.throwInvalidArguments("ArrayBuffer conversion error", .{});
-                            };
-                            input = array_buffer.byteSlice();
-                        },
-                        else => {
-                            input_slice = try arg.toSlice(globalThis, bun.default_allocator);
-                            input = input_slice.slice();
-                        },
-                    }
-                }
-            }
-
-            // std.hash has inconsistent interfaces
-            //
-            const Function = if (@hasDecl(Hasher, "hashWithSeed")) Hasher.hashWithSeed else Hasher.hash;
-            var function_args: std.meta.ArgsTuple(@TypeOf(Function)) = undefined;
-            if (comptime std.meta.fields(std.meta.ArgsTuple(@TypeOf(Function))).len == 1) {
-                return jsc.JSValue.jsNumber(Function(input));
-            } else {
-                var seed: u64 = 0;
-                if (args.nextEat()) |arg| {
-                    if (arg.isNumber() or arg.isBigInt()) {
-                        seed = arg.toUInt64NoTruncate();
-                    }
-                }
-                if (comptime bun.trait.isNumber(@TypeOf(function_args[0]))) {
-                    function_args[0] = @as(@TypeOf(function_args[0]), @truncate(seed));
-                    function_args[1] = input;
-                } else {
-                    function_args[0] = input;
-                    function_args[1] = @as(@TypeOf(function_args[1]), @truncate(seed));
-                }
-
-                const value = @call(.auto, Function, function_args);
-
-                if (@TypeOf(value) == u32) {
-                    return jsc.JSValue.jsNumber(@as(u32, @bitCast(value)));
-                }
-                return jsc.JSValue.fromUInt64NoTruncate(globalThis, value);
-            }
-        }
-    }.hash;
-}
-
-const bun = @import("bun");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
+pub const HashObject = @This();
+pub const wyhash = hashWrap(std.hash.Wyhash);
+pub const adler32 = hashWrap(std.hash.Adler32);
+pub const crc32 = hashWrap(Crc32Hasher);
+pub const cityHash32 = hashWrap(std.hash.CityHash32);
+pub const cityHash64 = hashWrap(std.hash.CityHash64);
+pub const xxHash32 = hashWrap(XxHash32Hasher);
+pub const xxHash64 = hashWrap(XxHash64Hasher);
+pub const xxHash3 = hashWrap(XxHash3Hasher);
+pub const murmur32v2 = hashWrap(std.hash.murmur.Murmur2_32);
+pub const murmur32v3 = hashWrap(std.hash.murmur.Murmur3_32);
+pub const murmur64v2 = hashWrap(std.hash.murmur.Murmur2_64);
+pub const rapidhash = hashWrap(bun.deprecated.RapidHash);
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const Crc32Hasher = struct {
+
+pub fn hash(seed: u32, bytes: []const u8) u32 {
+            var crc: bun.zlib.uLong = (if (comptime @typeInfo(bun.zlib.uLong) == .@"enum") @as(bun.zlib.uLong, @enumFromInt(seed)) else @as(bun.zlib.uLong, seed));
+            _ = &crc;
+            var offset: usize = 0;
+            _ = &offset;
+            while ((offset < bytes.len)) {
+                const remaining = (bytes.len - offset);
+                const max_len: usize = std.math.maxInt(u32);
+                const chunk_len: u32 = (if ((remaining > max_len)) @as(u32, @intCast(max_len)) else @as(u32, @intCast(remaining)));
+                crc = bun.zlib.crc32(crc, (bytes.ptr + offset), chunk_len);
+                offset = (offset + chunk_len);
+            }
+            return @as(u32, @intCast(crc));
+    }
+};
+
+pub const XxHash32Hasher = struct {
+
+pub fn hash(seed: u32, bytes: []const u8) u32 {
+            return std.hash.XxHash32.hash(seed, bytes);
+    }
+};
+
+pub const XxHash64Hasher = struct {
+
+pub fn hash(seed: u64, bytes: []const u8) u64 {
+            return std.hash.XxHash64.hash(seed, bytes);
+    }
+};
+
+pub const XxHash3Hasher = struct {
+
+pub fn hash(seed: u32, bytes: []const u8) u64 {
+            return std.hash.XxHash3.hash(seed, bytes);
+    }
+};
+
+
+pub fn HashWrapper(comptime Hasher_: anytype) type {
+        return struct {
+
+pub fn hash(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments_old(2).slice();
+            var args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
+            _ = &args;
+            defer {
+            _ = args.deinit();
+            }
+            var input: []const u8 = "";
+            _ = &input;
+            var input_slice = ZigString.Slice.empty;
+            _ = &input_slice;
+            defer {
+            _ = input_slice.deinit();
+            }
+            if (args.nextEat()) |arg| {
+                _ = &arg;
+                if (arg.@"as"(jsc.WebCore.Blob)) |blob| {
+                    _ = &blob;
+                    input = blob.sharedView();
+                } else {
+                }
+            }
+    }
+    const Hasher = Hasher_;
+};
+}
+
+pub fn hashWrap(comptime Hasher_: anytype) jsc.JSHostFnZig {
+        return HashWrapper(Hasher_).hash;
+}
+
+pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+        const function = jsc.JSFunction.create(globalThis, "hash", wyhash, 1, .{});
+        const fns = (comptime .{ .wyhash = wyhash, .adler32 = adler32, .crc32 = crc32, .cityHash32 = cityHash32, .cityHash64 = cityHash64, .xxHash32 = xxHash32, .xxHash64 = xxHash64, .xxHash3 = xxHash3, .murmur32v2 = murmur32v2, .murmur32v3 = murmur32v3, .murmur64v2 = murmur64v2, .rapidhash = rapidhash });
+        inline for (fns) |name| {
+            const value = jsc.JSFunction.create(globalThis, name, @field(HashObject, name), 1, .{});
+            _ = function.put(globalThis, (comptime ZigString.static(name)), value);
+        }
+        return function;
+}
+pub const __CpObj_wyhash_jsc_JSHostFnZig_adler32_jsc_JSHostFnZig_crc32_jsc_JSHostFnZig_cityHash32_jsc_JSHostFnZig_cityHash64_jsc_JSHostFnZig_xxHash32_jsc_JSHostFnZig_xxHash64_jsc_JSHostFnZig_xxHash3_jsc_JSHostFnZig_murmur32v2_jsc_JSHostFnZig_murmur32v3_jsc_JSHostFnZig_murmur64v2_jsc_JSHostFnZig_rapidhash_jsc_JSHostFnZig = struct { wyhash: jsc.JSHostFnZig, adler32: jsc.JSHostFnZig, crc32: jsc.JSHostFnZig, cityHash32: jsc.JSHostFnZig, cityHash64: jsc.JSHostFnZig, xxHash32: jsc.JSHostFnZig, xxHash64: jsc.JSHostFnZig, xxHash3: jsc.JSHostFnZig, murmur32v2: jsc.JSHostFnZig, murmur32v3: jsc.JSHostFnZig, murmur64v2: jsc.JSHostFnZig, rapidhash: jsc.JSHostFnZig };

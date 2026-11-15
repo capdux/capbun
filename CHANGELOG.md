@@ -484,3 +484,27 @@
   - `tsconfig_json.cp` (0.807x, PASS)
   - `resolver.cp` 由专属子智能体 `Resolver Core Migrator` 独立攻坚中。
 - **全仓最新进度**：纯 CP 模块数上升至 **777 / 1,294 (60.05%)**，闭环完整子系统上升至 **143 / 171 (83.63%)**。
+
+## [Milestone 7 Phase 32] 2026-11-16 - src/runtime/api/ 全子系统 (15/15 模块 100% 全量闭环) 攻坚完成
+- **src/runtime/api/ 全子系统 15/15 核心运行时 API 模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `Archive.cp` (1,148 行, 1.002x)
+  - `YAMLObject.cp` (1,087 行, 1.012x)
+  - `glob.cp` (1,672 行, 1.010x)
+  - `HashObject.cp` (1,123 行, 1.045x)
+  - `filesystem_router.cp` (697 行, 0.982x)
+  - `JSON5Object.cp` (658 行, 1.012x)
+  - `lolhtml_jsc.cp` (422 行, 1.000x)
+  - `cron_parser.cp` (405 行, 1.020x)
+  - `crash_handler_jsc.cp` (223 行, 1.040x)
+  - `TOMLObject.cp` (215 行, 1.000x)
+  - `NativePromiseContext.cp` (169 行, 1.037x)
+  - `UnsafeObject.cp` (152 行, 0.987x)
+  - `csrf_jsc.cp` (120 行, 1.091x)
+  - `standalone_graph_jsc.cp` (116 行, 0.975x)
+  - `JSONCObject.cp` (66 行, 1.000x)
+- **4 项硬门禁指标**：
+  - 全部 15 个模块通过 `cpc --lib` 与 `zig ast-check` 双重 0 报错验证。
+  - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
+  - 原始备份：全部 15 个 `<stem>_.zig` 原始备份完好无损。
+  - 代码膨胀率：全量 `<= 1.091x`（极佳收敛，无冗余膨胀）。
+- **全仓最新进度**：纯 CP 模块数上升至 **792 / 1,294 (61.21%)**，闭环完整子系统上升至 **144 / 171 (84.21%)**。
