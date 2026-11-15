@@ -245,8 +245,11 @@ pub fn takeOutput(self: *BrotliDecoder) []const u8 {
             var max_size: usize = std.math.maxInt(usize);
             _ = &max_size;
             {
-                const ptr = ((BrotliDecoderTakeOutput(self, @as(*usize, @ptrCast(@alignCast(&(max_size)))))) orelse { return ""; });
-                return ptr[0..max_size];
+                if (BrotliDecoderTakeOutput(self, (&max_size))) |ptr| {
+                    _ = &ptr;
+                    return ptr[0..max_size];
+                }
+                return "";
             }
     }
 
@@ -312,7 +315,7 @@ pub fn takeOutput(self: *BrotliEncoder) []const u8 {
             var size: usize = 0;
             _ = &size;
             {
-                if (BrotliEncoderTakeOutput(self, @as(*usize, @ptrCast(@alignCast(&(size)))))) |ptr| {
+                if (BrotliEncoderTakeOutput(self, (&size))) |ptr| {
                     _ = &ptr;
                     return ptr[0..size];
                 }
@@ -330,7 +333,7 @@ pub fn compressStream(self: *BrotliEncoder, op: Operation, data: []const u8) Com
             var result = CompressionResult{  };
             _ = &result;
             {
-                result.success = (BrotliEncoderCompressStream(self, op, @as(*usize, @ptrCast(@alignCast(&(available_in)))), @as(*OptConstBytesPtr, @ptrCast(@alignCast(&(next_in)))), @as(*usize, @ptrCast(@alignCast(&(available_out)))), null, null) > 0);
+                result.success = (BrotliEncoderCompressStream(self, op, (&available_in), (&next_in), (&available_out), null, null) > 0);
             }
             if (result.success) {
                 result.output = self.takeOutput();
@@ -353,10 +356,10 @@ pub fn setParameter(self: *BrotliEncoder, param: BrotliEncoderParameter, value: 
             emit_metadata = 3,
         };
     pub const CompressionResult = struct {
-            success: bool = false,
-            has_more: bool = false,
-            output: string = "",
-        };
+        success: bool = false,
+        has_more: bool = false,
+        output: []const u8 = "",
+    };
 };
 
 pub const brotli_alloc_func = ?*const fn (?*anyopaque, usize) callconv(.c) ?*anyopaque;
@@ -394,11 +397,11 @@ pub extern "c" fn BrotliDecoderErrorString(c: BrotliDecoderErrorCode) callconv(.
 
 pub extern "c" fn BrotliDecoderVersion() callconv(.c) u32;
 
-pub extern "c" fn BrotliSharedDictionaryCreateInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: ?*anyopaque) callconv(.c) ?*BrotliSharedDictionary;
+extern "c" fn BrotliSharedDictionaryCreateInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: ?*anyopaque) callconv(.c) ?*BrotliSharedDictionary;
 
-pub extern "c" fn BrotliSharedDictionaryDestroyInstance(dict: ?*BrotliSharedDictionary) callconv(.c) void;
+extern "c" fn BrotliSharedDictionaryDestroyInstance(dict: ?*BrotliSharedDictionary) callconv(.c) void;
 
-pub extern "c" fn BrotliSharedDictionaryAttach(dict: ?*BrotliSharedDictionary, dict_type: BrotliSharedDictionaryType, data_size: usize, data: [*c]const u8) callconv(.c) c_int;
+extern "c" fn BrotliSharedDictionaryAttach(dict: ?*BrotliSharedDictionary, dict_type: BrotliSharedDictionaryType, data_size: usize, data: [*c]const u8) callconv(.c) c_int;
 
 pub extern "c" fn BrotliEncoderSetParameter(state: *BrotliEncoder, param: c_uint, value: u32) callconv(.c) c_int;
 

@@ -554,3 +554,13 @@
 ### 2. 进度条引擎与并发异步状态机 (`Progress.cp`)
 - **多重间接指针与原子计数纠偏**：针对 `unprotected_completed_items` 与节点生命周期状态，消除工具自动转化引入的冗余 `**_` 语法，规范为合法的独占借用 `*_`；针对多分支提前返回，将 `?? return` 改写为前置语句级可选解包。
 - **单位类型精确推导**：将 `setUnit` 的参数类型精确对齐为枚举 `Unit`，消解跨模块重载推导分歧。
+
+## 2026-11-16 [Milestone 7 Phase 43] `src/brotli_sys/` (1/1 Brotli 压缩系统绑定 100% 闭环) 技术经验
+
+### 1. 实例方法接收者排他收窄与只读精简
+- **只读实例访问省略首参**：在 `hasMoreOutput`、`isUsed`、`isFinished`、`getErrorCode` 等解码器状态查询方法中，彻底废弃 `this: BrotliDecoder` 声明，体内通过 `_` 纯粹借用实例，杜绝指针悬垂。
+- **独占可变方法显式借用**：在 `destroyInstance`、`decompressStream`、`takeOutput`、`compressStream` 等方法中，采用独占可变借用 `*_`，确保在 C-ABI 边界状态机流转时的线程与内存排他安全。
+
+### 2. 控制流纯化与 C-ABI 映射
+- **消解 `?? return` 语法**：将 `takeOutput` 中的 `?? return ""` 改写为合法的语句级可选绑定 `if (ptr := Brotli*TakeOutput(_, &size)) { return ptr[0..size]; } return "";`，消除 parser 级联中断。
+- **移除冗余 `: void`**：在 extern 声明与无返回值方法中全面剥离 `: void` 显式标注，确保纯正 CP 表达。

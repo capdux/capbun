@@ -17,7 +17,7 @@ pub const BrotliSharedDictionaryType = enum_BrotliSharedDictionaryType;
 pub extern fn BrotliDecoderSetParameter(state: *BrotliDecoder, param: c_uint, value: u32): c_int;
 pub extern fn BrotliDecoderAttachDictionary(state: *BrotliDecoder, dict_type: BrotliSharedDictionaryType, data_size: usize, data: [*]const u8): c_int;
 pub extern fn BrotliDecoderCreateInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): (*BrotliDecoder)?;
-pub extern fn BrotliDecoderDestroyInstance(state: *BrotliDecoder): void;
+pub extern fn BrotliDecoderDestroyInstance(state: *BrotliDecoder);
 pub extern fn BrotliDecoderDecompress(encoded_size: usize, encoded_buffer: [*]const u8, decoded_size: *usize, decoded_buffer: [*]u8): BrotliDecoderResult;
 pub extern fn BrotliDecoderDecompressStream(state: *BrotliDecoder, available_in: *usize, next_in: *OptConstBytesPtr, available_out: *usize, next_out: *OptBytesPtr, total_out: (*usize)?): BrotliDecoderResult;
 pub extern fn BrotliDecoderHasMoreOutput(state: *const BrotliDecoder): c_int;
@@ -34,52 +34,54 @@ type BrotliDecoderSetMetadataCallbacks = @c fn (*BrotliDecoder, brotli_decoder_m
 
 export @opaque class BrotliDecoder {
 
-    pub fn setParameter(*this, param: BrotliDecoderParameter, value: u32): bool {
-        unsafe { return BrotliDecoderSetParameter(this, @intFromEnum(param), value) > 0; }
+    pub fn setParameter(*_, param: BrotliDecoderParameter, value: u32): bool {
+        unsafe { return BrotliDecoderSetParameter(_, @intFromEnum(param), value) > 0; }
     }
 
-    pub fn attachDictionary(*this, dict_type: BrotliSharedDictionaryType, data: []const u8): c_int {
-        unsafe { return BrotliDecoderAttachDictionary(this, dict_type, data.len, data.ptr); }
+    pub fn attachDictionary(*_, dict_type: BrotliSharedDictionaryType, data: []const u8): c_int {
+        unsafe { return BrotliDecoderAttachDictionary(_, dict_type, data.len, data.ptr); }
     }
 
     pub static fn createInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): (*BrotliDecoder)? {
         unsafe { return BrotliDecoderCreateInstance(alloc_func, free_func, opaque_ctx); }
     }
 
-    pub fn destroyInstance(*this): void {
-        unsafe { BrotliDecoderDestroyInstance(this); }
+    pub fn destroyInstance(*_) {
+        unsafe { BrotliDecoderDestroyInstance(_); }
     }
 
     pub static fn decompress(encoded: []const u8, decoded: *MutByteSlice): BrotliDecoderResult {
         unsafe { return BrotliDecoderDecompress(encoded.len, encoded.ptr, &decoded.len, decoded.ptr); }
     }
 
-    pub fn decompressStream(*this, available_in: *usize, next_in: *OptConstBytesPtr, available_out: *usize, next_out: *OptBytesPtr, total_out: (*usize)?): BrotliDecoderResult {
-        unsafe { return BrotliDecoderDecompressStream(this, available_in, next_in, available_out, next_out, total_out); }
+    pub fn decompressStream(*_, available_in: *usize, next_in: *OptConstBytesPtr, available_out: *usize, next_out: *OptBytesPtr, total_out: (*usize)?): BrotliDecoderResult {
+        unsafe { return BrotliDecoderDecompressStream(_, available_in, next_in, available_out, next_out, total_out); }
     }
 
-    pub fn hasMoreOutput(this): bool {
-        unsafe { return BrotliDecoderHasMoreOutput(this) != 0; }
+    pub fn hasMoreOutput(): bool {
+        unsafe { return BrotliDecoderHasMoreOutput(_) != 0; }
     }
 
-    pub fn takeOutput(*this): []const u8 {
+    pub fn takeOutput(*_): []const u8 {
         let max_size: usize = std.math.maxInt(usize);
         unsafe {
-            const ptr = BrotliDecoderTakeOutput(this, *max_size!) ?? return "";
-            return ptr[0..max_size];
+            if (ptr := BrotliDecoderTakeOutput(_, &max_size)) {
+                return ptr[0..max_size];
+            }
+            return "";
         }
     }
 
-    pub fn isUsed(this): bool {
-        unsafe { return BrotliDecoderIsUsed(this) != 0; }
+    pub fn isUsed(): bool {
+        unsafe { return BrotliDecoderIsUsed(_) != 0; }
     }
 
-    pub fn isFinished(this): bool {
-        unsafe { return BrotliDecoderIsFinished(this) != 0; }
+    pub fn isFinished(): bool {
+        unsafe { return BrotliDecoderIsFinished(_) != 0; }
     }
 
-    pub fn getErrorCode(this): BrotliDecoderErrorCode {
-        unsafe { return @enumFromInt(@intFromEnum(BrotliDecoderGetErrorCode(this))); }
+    pub fn getErrorCode(): BrotliDecoderErrorCode {
+        unsafe { return @enumFromInt(@intFromEnum(BrotliDecoderGetErrorCode(_))); }
     }
 
     pub static fn errorString(c: BrotliDecoderErrorCode): [:0]const u8 {
@@ -209,7 +211,7 @@ pub const BrotliSharedDictionaryStruct = struct_BrotliSharedDictionaryStruct;
 export @opaque class struct_BrotliEncoderPreparedDictionaryStruct {}
 pub const BrotliEncoderPreparedDictionary = struct_BrotliEncoderPreparedDictionaryStruct;
 extern fn BrotliSharedDictionaryCreateInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): (*BrotliSharedDictionary)?;
-extern fn BrotliSharedDictionaryDestroyInstance(dict: (*BrotliSharedDictionary)?): void;
+extern fn BrotliSharedDictionaryDestroyInstance(dict: (*BrotliSharedDictionary)?);
 extern fn BrotliSharedDictionaryAttach(dict: (*BrotliSharedDictionary)?, dict_type: BrotliSharedDictionaryType, data_size: usize, data: [*c]const u8): c_int;
 pub const BROTLI_MODE_GENERIC: c_int = 0;
 pub const BROTLI_MODE_TEXT: c_int = 1;
@@ -251,9 +253,9 @@ export enum BrotliEncoderParameter: c_uint {
 
 pub extern fn BrotliEncoderSetParameter(state: *BrotliEncoder, param: c_uint, value: u32): c_int;
 pub extern fn BrotliEncoderCreateInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): (*BrotliEncoder)?;
-pub extern fn BrotliEncoderDestroyInstance(state: *BrotliEncoder): void;
+pub extern fn BrotliEncoderDestroyInstance(state: *BrotliEncoder);
 pub extern fn BrotliEncoderPrepareDictionary(dict_type: BrotliSharedDictionaryType, data_size: usize, data: [*c]const u8, quality: c_int, alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): *BrotliEncoderPreparedDictionary;
-pub extern fn BrotliEncoderDestroyPreparedDictionary(dictionary: *BrotliEncoderPreparedDictionary): void;
+pub extern fn BrotliEncoderDestroyPreparedDictionary(dictionary: *BrotliEncoderPreparedDictionary);
 pub extern fn BrotliEncoderAttachPreparedDictionary(state: *BrotliEncoder, dictionary: (*const BrotliEncoderPreparedDictionary)?): c_int;
 pub extern fn BrotliEncoderMaxCompressedSize(input_size: usize): usize;
 pub extern fn BrotliEncoderCompress(quality: c_int, lgwin: c_int, mode: BrotliEncoderMode, input_size: usize, input_buffer: [*]const u8, encoded_size: *usize, encoded_buffer: [*]u8): c_int;
@@ -277,18 +279,18 @@ export @opaque class BrotliEncoder {
         unsafe { return BrotliEncoderCreateInstance(alloc_func, free_func, opaque_ctx); }
     }
 
-    pub fn destroyInstance(*this): void {
-        unsafe { BrotliEncoderDestroyInstance(this); }
+    pub fn destroyInstance(*_) {
+        unsafe { BrotliEncoderDestroyInstance(_); }
     }
 
-    pub fn hasMoreOutput(*this): bool {
-        unsafe { return BrotliEncoderHasMoreOutput(this) > 0; }
+    pub fn hasMoreOutput(*_): bool {
+        unsafe { return BrotliEncoderHasMoreOutput(_) > 0; }
     }
 
-    pub fn takeOutput(*this): []const u8 {
+    pub fn takeOutput(*_): []const u8 {
         let size: usize = 0;
         unsafe {
-            if (ptr := BrotliEncoderTakeOutput(this, *size!)) {
+            if (ptr := BrotliEncoderTakeOutput(_, &size)) {
                 return ptr[0..size];
             }
         }
@@ -302,29 +304,29 @@ export @opaque class BrotliEncoder {
     };
 
     // https://github.com/google/brotli/blob/2ad58d8603294f5ee33d23bb725e0e6a17c1de50/go/cbrotli/writer.go#L23-L40
-    pub fn compressStream(*this, op: Operation, data: []const u8): CompressionResult {
+    pub fn compressStream(*_, op: Operation, data: []const u8): CompressionResult {
         let available_in = data.len;
         let next_in: OptConstBytesPtr = data.ptr;
         let available_out: usize = 0;
         let result = CompressionResult{};
 
         unsafe {
-            result.success = BrotliEncoderCompressStream(this, op, *available_in!, *next_in!, *available_out!, null, null) > 0;
+            result.success = BrotliEncoderCompressStream(_, op, &available_in, &next_in, &available_out, null, null) > 0;
         }
 
         if (result.success) {
-            result.output = this.takeOutput();
+            result.output = _.takeOutput();
         }
 
         unsafe {
-            result.has_more = BrotliEncoderHasMoreOutput(this) > 0;
+            result.has_more = BrotliEncoderHasMoreOutput(_) > 0;
         }
 
         return result;
     }
 
-    pub fn setParameter(*this, param: BrotliEncoderParameter, value: u32): bool {
-        unsafe { return BrotliEncoderSetParameter(this, @intFromEnum(param), value) > 0; }
+    pub fn setParameter(*_, param: BrotliEncoderParameter, value: u32): bool {
+        unsafe { return BrotliEncoderSetParameter(_, @intFromEnum(param), value) > 0; }
     }
 }
 
