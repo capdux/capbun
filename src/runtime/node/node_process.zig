@@ -1,381 +1,435 @@
-//! Process information and control APIs (`globalThis.process` / `node:process`)
-comptime {
-    @export(&getTitle, .{ .name = "Bun__Process__getTitle" });
-    @export(&setTitle, .{ .name = "Bun__Process__setTitle" });
-    @export(&createArgv, .{ .name = "Bun__Process__createArgv" });
-    @export(&getCwd, .{ .name = "Bun__Process__getCwd" });
-    @export(&setCwd, .{ .name = "Bun__Process__setCwd" });
-    @export(&exit, .{ .name = "Bun__Process__exit" });
-    @export(&createArgv0, .{ .name = "Bun__Process__createArgv0" });
-    @export(&getExecPath, .{ .name = "Bun__Process__getExecPath" });
-    @export(&bun.jsc.host_fn.wrap1(createExecArgv), .{ .name = "Bun__Process__createExecArgv" });
-    @export(&getEval, .{ .name = "Bun__Process__getEval" });
-}
-
-var title_mutex = bun.Mutex{};
-
-pub fn getTitle(_: *JSGlobalObject, title: *bun.String) callconv(.c) void {
-    title_mutex.lock();
-    defer title_mutex.unlock();
-    const str = bun.cli.Bun__Node__ProcessTitle;
-    title.* = bun.String.cloneUTF8(str orelse "bun");
-}
-
-// TODO: https://github.com/nodejs/node/blob/master/deps/uv/src/unix/darwin-proctitle.c
-pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) callconv(.c) void {
-    defer newvalue.deref();
-    title_mutex.lock();
-    defer title_mutex.unlock();
-
-    const new_title = newvalue.toOwnedSlice(bun.default_allocator) catch {
-        globalObject.throwOutOfMemory() catch {};
-        return;
-    };
-
-    if (bun.cli.Bun__Node__ProcessTitle) |slice| bun.default_allocator.free(slice);
-    bun.cli.Bun__Node__ProcessTitle = new_title;
-}
-
-pub fn createArgv0(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-    return jsc.ZigString.fromUTF8(bun.argv[0]).toJS(globalObject);
-}
-
-pub fn getExecPath(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-    const out = bun.selfExePath() catch {
-        // if for any reason we are unable to get the executable path, we just return argv[0]
-        return createArgv0(globalObject);
-    };
-
-    return jsc.ZigString.fromUTF8(out).toJS(globalObject);
-}
-
-fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-    var sfb = std.heap.stackFallback(4096, globalObject.allocator());
-    const temp_alloc = sfb.get();
-    const vm = globalObject.bunVM();
-
-    if (vm.worker) |worker| {
-        // was explicitly overridden for the worker?
-        if (worker.execArgv) |execArgv| {
-            const array = try jsc.JSValue.createEmptyArray(globalObject, execArgv.len);
-            for (0..execArgv.len) |i| {
-                try array.putIndex(globalObject, @intCast(i), try bun.String.init(execArgv[i]).toJS(globalObject));
-            }
-            return array;
-        }
-    }
-
-    // For compiled/standalone executables, execArgv should contain compile_exec_argv and BUN_OPTIONS.
-    // Use appendOptionsEnv for BUN_OPTIONS to correctly handle quoted values.
-    if (vm.standalone_module_graph) |graph| {
-        if (graph.compile_exec_argv.len > 0 or bun.bun_options_argc > 0) {
-            var args = std.array_list.Managed(bun.String).init(temp_alloc);
-            defer args.deinit();
-            defer for (args.items) |*arg| arg.deref();
-
-            // Process BUN_OPTIONS first using appendOptionsEnv for proper quote handling.
-            // appendOptionsEnv inserts starting at index 1, so we need a placeholder.
-            if (bun.bun_options_argc > 0) {
-                if (bun.env_var.BUN_OPTIONS.get()) |opts| {
-                    try args.append(bun.String.empty); // placeholder for insert-at-1
-                    try bun.appendOptionsEnv(opts, bun.String, &args);
-                    _ = args.orderedRemove(0); // remove placeholder
-                }
-            }
-
-            if (graph.compile_exec_argv.len > 0) {
-                var tokenizer = std.mem.tokenizeAny(u8, graph.compile_exec_argv, " \t\n\r");
-                while (tokenizer.next()) |token| {
-                    try args.append(bun.String.cloneUTF8(token));
-                }
-            }
-
-            const array = try jsc.JSValue.createEmptyArray(globalObject, args.items.len);
-            for (0..args.items.len) |idx| {
-                try array.putIndex(globalObject, @intCast(idx), try args.items[idx].toJS(globalObject));
-            }
-            return array;
-        }
-        return try jsc.JSValue.createEmptyArray(globalObject, 0);
-    }
-
-    var args = try std.array_list.Managed(bun.String).initCapacity(temp_alloc, bun.argv.len - 1);
-    defer args.deinit();
-    defer for (args.items) |*arg| arg.deref();
-
-    var seen_run = false;
-    var prev: ?[]const u8 = null;
-
-    // we re-parse the process argv to extract execArgv, since this is a very uncommon operation
-    // it isn't worth doing this as a part of the CLI
-    for (bun.argv[@min(1, bun.argv.len)..]) |arg| {
-        defer prev = arg;
-
-        if (arg.len >= 1 and arg[0] == '-') {
-            try args.append(bun.String.cloneUTF8(arg));
-            continue;
-        }
-
-        if (!seen_run and bun.strings.eqlComptime(arg, "run")) {
-            seen_run = true;
-            continue;
-        }
-
-        // A set of execArgv args consume an extra argument, so we do not want to
-        // confuse these with script names.
-        const map = bun.ComptimeStringMap(void, comptime brk: {
-            const auto_params = bun.cli.Arguments.auto_params;
-            const KV = struct { []const u8, void };
-            var entries: [auto_params.len]KV = undefined;
-            var i = 0;
-            for (auto_params) |param| {
-                if (param.takes_value != .none) {
-                    if (param.names.long) |name| {
-                        entries[i] = .{ "--" ++ name, {} };
-                        i += 1;
-                    }
-                    if (param.names.short) |name| {
-                        entries[i] = .{ &[_]u8{ '-', name }, {} };
-                        i += 1;
-                    }
-                }
-            }
-
-            var result: [i]KV = undefined;
-            @memcpy(&result, entries[0..i]);
-            break :brk result;
-        });
-
-        if (prev) |p| if (map.has(p)) {
-            try args.append(bun.String.cloneUTF8(arg));
-            continue;
-        };
-
-        // we hit the script name
-        break;
-    }
-
-    return bun.String.toJSArray(globalObject, args.items);
-}
-
-fn createArgv(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-    const vm = globalObject.bunVM();
-
-    // Allocate up to 32 strings in stack
-    var stack_fallback_allocator = std.heap.stackFallback(
-        32 * @sizeOf(jsc.ZigString) + (bun.MAX_PATH_BYTES + 1) + 32,
-        bun.default_allocator,
-    );
-    const allocator = stack_fallback_allocator.get();
-
-    var args_count: usize = vm.argv.len;
-    if (vm.worker) |worker| {
-        args_count = worker.argv.len;
-    }
-
-    const args = allocator.alloc(
-        bun.String,
-        // argv omits "bun" because it could be "bun run" or "bun" and it's kind of ambiguous
-        // argv also omits the script name
-        args_count + 2,
-    ) catch |err| bun.handleOom(err);
-    defer allocator.free(args);
-
-    var args_list: std.ArrayListUnmanaged(bun.String) = .initBuffer(args);
-
-    if (vm.standalone_module_graph != null) {
-        // Don't break user's code because they did process.argv.slice(2)
-        // Even if they didn't type "bun", we still want to add it as argv[0]
-        args_list.appendAssumeCapacity(
-            bun.String.static("bun"),
-        );
-    } else {
-        const exe_path = bun.selfExePath() catch null;
-        args_list.appendAssumeCapacity(
-            if (exe_path) |str| bun.String.borrowUTF8(str) else bun.String.static("bun"),
-        );
-    }
-
-    if (vm.main.len > 0 and
-        !strings.endsWithComptime(vm.main, bun.pathLiteral("/[eval]")) and
-        !strings.endsWithComptime(vm.main, bun.pathLiteral("/[stdin]")))
-    {
-        if (vm.worker != null and vm.worker.?.eval_mode) {
-            args_list.appendAssumeCapacity(bun.String.static("[worker eval]"));
-        } else {
-            args_list.appendAssumeCapacity(bun.String.borrowUTF8(vm.main));
-        }
-    }
-
-    if (vm.worker) |worker| {
-        for (worker.argv) |arg| {
-            args_list.appendAssumeCapacity(bun.String.init(arg));
-        }
-    } else {
-        for (vm.argv) |arg| {
-            const str = bun.String.borrowUTF8(arg);
-            // https://github.com/yargs/yargs/blob/adb0d11e02c613af3d9427b3028cc192703a3869/lib/utils/process-argv.ts#L1
-            args_list.appendAssumeCapacity(str);
-        }
-    }
-
-    return bun.String.toJSArray(globalObject, args_list.items) catch .zero;
-}
-
-extern fn Bun__Process__getArgv(global: *JSGlobalObject) JSValue;
-pub fn getArgv(global: *JSGlobalObject) callconv(.c) JSValue {
-    return Bun__Process__getArgv(global);
-}
-
-extern fn Bun__Process__getExecArgv(global: *JSGlobalObject) JSValue;
-pub fn getExecArgv(global: *JSGlobalObject) callconv(.c) JSValue {
-    return Bun__Process__getExecArgv(global);
-}
-
-pub fn getEval(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-    const vm = globalObject.bunVM();
-    if (vm.module_loader.eval_source) |source| {
-        return jsc.ZigString.init(source.contents).toJS(globalObject);
-    }
-    return .js_undefined;
-}
-
-pub const getCwd = jsc.host_fn.wrap1(getCwd_);
-fn getCwd_(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-    var buf: bun.PathBuffer = undefined;
-    switch (bun.api.node.path.getCwd(&buf)) {
-        .result => |r| return jsc.ZigString.init(r).withEncoding().toJS(globalObject),
-        .err => |e| {
-            return globalObject.throwValue(try e.toJS(globalObject));
-        },
-    }
-}
-
-pub const setCwd = jsc.host_fn.wrap2(setCwd_);
-fn setCwd_(globalObject: *jsc.JSGlobalObject, to: *jsc.ZigString) bun.JSError!jsc.JSValue {
-    if (to.len == 0) {
-        return globalObject.throwInvalidArguments("Expected path to be a non-empty string", .{});
-    }
-    const vm = globalObject.bunVM();
-    const fs = vm.transpiler.fs;
-
-    var buf: bun.PathBuffer = undefined;
-    const slice = to.sliceZBuf(&buf) catch return globalObject.throw("Invalid path", .{});
-
-    switch (Syscall.chdir(fs.top_level_dir, slice)) {
-        .result => {
-            // When we update the cwd from JS, we have to update the bundler's version as well
-            // However, this might be called many times in a row, so we use a pre-allocated buffer
-            // that way we don't have to worry about garbage collector
-            const into_cwd_buf = switch (bun.sys.getcwd(&buf)) {
-                .result => |r| r,
-                .err => |err| {
-                    _ = Syscall.chdir(fs.top_level_dir, fs.top_level_dir);
-                    return globalObject.throwValue(try err.toJS(globalObject));
-                },
-            };
-            @memcpy(fs.top_level_dir_buf[0..into_cwd_buf.len], into_cwd_buf);
-            fs.top_level_dir_buf[into_cwd_buf.len] = 0;
-            fs.top_level_dir = fs.top_level_dir_buf[0..into_cwd_buf.len :0];
-
-            const len = fs.top_level_dir.len;
-            // Ensure the path ends with a slash
-            if (fs.top_level_dir_buf[len - 1] != std.fs.path.sep) {
-                fs.top_level_dir_buf[len] = std.fs.path.sep;
-                fs.top_level_dir_buf[len + 1] = 0;
-                fs.top_level_dir = fs.top_level_dir_buf[0 .. len + 1 :0];
-            }
-            const withoutTrailingSlash = if (Environment.isWindows) strings.withoutTrailingSlashWindowsPath else strings.withoutTrailingSlash;
-            var str = bun.String.cloneUTF8(withoutTrailingSlash(fs.top_level_dir));
-            return str.transferToJS(globalObject);
-        },
-        .err => |e| {
-            return globalObject.throwValue(try e.toJS(globalObject));
-        },
-    }
-}
-
-// TODO(@190n) this may need to be noreturn
-pub fn exit(globalObject: *jsc.JSGlobalObject, code: u8) callconv(.c) void {
-    var vm = globalObject.bunVM();
-    vm.exit_handler.exit_code = code;
-    if (vm.worker) |worker| {
-        // TODO(@190n) we may need to use requestTerminate or throwTerminationException
-        // instead to terminate the worker sooner
-        worker.exit();
-    } else {
-        vm.onExit();
-        vm.globalExit();
-    }
-}
-
-// TODO: switch this to using *bun.wtf.String when it is added
-pub fn Bun__Process__editWindowsEnvVar(k: bun.String, v: bun.String) callconv(.c) void {
-    comptime bun.assert(bun.Environment.isWindows);
-    if (k.tag == .Empty) return;
-    const wtf1 = k.value.WTFStringImpl;
-    var fixed_stack_allocator = std.heap.stackFallback(1025, bun.default_allocator);
-    const allocator = fixed_stack_allocator.get();
-    var buf1 = bun.handleOom(allocator.alloc(u16, k.utf16ByteLength() + 1));
-    defer allocator.free(buf1);
-    var buf2 = bun.handleOom(allocator.alloc(u16, v.utf16ByteLength() + 1));
-    defer allocator.free(buf2);
-    const len1: usize = switch (wtf1.is8Bit()) {
-        true => bun.strings.copyLatin1IntoUTF16([]u16, buf1, wtf1.latin1Slice()).written,
-        false => b: {
-            @memcpy(buf1[0..wtf1.length()], wtf1.utf16Slice());
-            break :b wtf1.length();
-        },
-    };
-    buf1[len1] = 0;
-    const str2: ?[*:0]const u16 = if (v.tag != .Dead) str: {
-        if (v.tag == .Empty) break :str (&[_]u16{0})[0..0 :0];
-        const wtf2 = v.value.WTFStringImpl;
-        const len2: usize = switch (wtf2.is8Bit()) {
-            true => bun.strings.copyLatin1IntoUTF16([]u16, buf2, wtf2.latin1Slice()).written,
-            false => b: {
-                @memcpy(buf2[0..wtf2.length()], wtf2.utf16Slice());
-                break :b wtf2.length();
-            },
-        };
-        buf2[len2] = 0;
-        break :str buf2[0..len2 :0].ptr;
-    } else null;
-    _ = bun.c.SetEnvironmentVariableW(buf1[0..len1 :0].ptr, str2);
-}
-
-comptime {
-    if (Environment.export_cpp_apis and Environment.isWindows) {
-        @export(&Bun__Process__editWindowsEnvVar, .{ .name = "Bun__Process__editWindowsEnvVar" });
-    }
-}
-
-pub export fn Bun__NODE_NO_WARNINGS() bool {
-    return bun.feature_flag.NODE_NO_WARNINGS.get();
-}
-
-pub export fn Bun__suppressCrashOnProcessKillSelfIfDesired() void {
-    if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_PROCESS_KILL_SELF.get()) {
-        bun.crash_handler.suppressReporting();
-    }
-}
-
-pub export const Bun__version: [*:0]const u8 = "v" ++ bun.Global.package_json_version;
-pub export const Bun__version_with_sha: [*:0]const u8 = "v" ++ bun.Global.package_json_version_with_sha;
-// Version exports removed - now handled by build-generated header (bun_dependency_versions.h)
-// The C++ code in BunProcess.cpp uses the generated header directly
-pub export const Bun__versions_uws: [*:0]const u8 = bun.Environment.git_sha;
-pub export const Bun__versions_usockets: [*:0]const u8 = bun.Environment.git_sha;
-pub export const Bun__version_sha: [*:0]const u8 = bun.Environment.git_sha;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+var title_mutex = bun.Mutex{  };
+pub const getCwd = jsc.host_fn.wrap1(getCwd_);
+pub const setCwd = jsc.host_fn.wrap2(setCwd_);
+const empty_u16_buf: [1]u16 = .{ 0 };
+pub const Bun__version: [*:0]u8 = ("v" ++ bun.Global.package_json_version).ptr;
+pub const Bun__version_with_sha: [*:0]u8 = ("v" ++ bun.Global.package_json_version_with_sha).ptr;
+pub const Bun__versions_uws: [*:0]u8 = bun.Environment.git_sha.ptr;
+pub const Bun__versions_usockets: [*:0]u8 = bun.Environment.git_sha.ptr;
+pub const Bun__version_sha: [*:0]u8 = bun.Environment.git_sha.ptr;
 const Environment = bun.Environment;
 const Syscall = bun.sys;
 const strings = bun.strings;
-
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
+comptime {
+    _ = @export((&getTitle), .{ .name = "Bun__Process__getTitle" });
+    _ = @export((&setTitle), .{ .name = "Bun__Process__setTitle" });
+    _ = @export((&createArgv), .{ .name = "Bun__Process__createArgv" });
+    _ = @export((&getCwd), .{ .name = "Bun__Process__getCwd" });
+    _ = @export((&setCwd), .{ .name = "Bun__Process__setCwd" });
+    _ = @export((&exit), .{ .name = "Bun__Process__exit" });
+    _ = @export((&createArgv0), .{ .name = "Bun__Process__createArgv0" });
+    _ = @export((&getExecPath), .{ .name = "Bun__Process__getExecPath" });
+    _ = @export((&bun.jsc.host_fn.wrap1(createExecArgv)), .{ .name = "Bun__Process__createExecArgv" });
+    _ = @export((&getEval), .{ .name = "Bun__Process__getEval" });
+
+}
+comptime {
+    if ((Environment.export_cpp_apis and Environment.isWindows)) {
+        _ = @export(*const Bun__Process__editWindowsEnvVar, .{ .name = "Bun__Process__editWindowsEnvVar" });
+    }
+
+}
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const ProcessParamKV = struct {
+    key: []const u8,
+    val: void,
+};
+
+
+pub fn getTitle(_: *JSGlobalObject, title: *bun.String) callconv(.c) void {
+        _ = title_mutex.lock();
+        defer {
+        _ = title_mutex.unlock();
+        }
+        const str = bun.cli.Bun__Node__ProcessTitle;
+        title.* = bun.String.cloneUTF8(((str) orelse ("bun")));
+}
+
+pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) callconv(.c) void {
+        defer {
+        _ = newvalue.deref();
+        }
+        _ = title_mutex.lock();
+        defer {
+        _ = title_mutex.unlock();
+        }
+        const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; _ = (blk_catch_1: { break :blk_catch_1 ((globalObject.throwOutOfMemory()) catch |__ce_1| { _ = &__ce_1;  }); });
+        return; }); });
+        if (bun.cli.Bun__Node__ProcessTitle) |slice| {
+            _ = &slice;
+            _ = bun.default_allocator.free(slice);
+        }
+        bun.cli.Bun__Node__ProcessTitle = new_title;
+}
+
+pub fn createArgv0(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+        return jsc.ZigString.fromUTF8(bun.argv[0]).toJS(globalObject);
+}
+
+pub fn getExecPath(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+        const out = (blk_catch_2: { break :blk_catch_2 ((bun.selfExePath()) catch |__ce_2| { _ = &__ce_2; return createArgv0(globalObject); }); });
+        return jsc.ZigString.fromUTF8(out).toJS(globalObject);
+}
+
+pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        var sfb = std.heap.stackFallback(4096, globalObject.allocator());
+        _ = &sfb;
+        const temp_alloc = sfb.get();
+        const vm = globalObject.bunVM();
+        if (vm.worker) |worker| {
+            _ = &worker;
+            if (worker.execArgv) |execArgv| {
+                _ = &execArgv;
+                const array = try jsc.JSValue.createEmptyArray(globalObject, execArgv.len);
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = execArgv.len;
+                    while (i < __end_0) : (i += 1) {
+                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)), try bun.String.init(execArgv[@as(usize, @intCast(i))]).toJS(globalObject));
+                    }
+                }
+                return array;
+            }
+        }
+        if (vm.standalone_module_graph) |graph| {
+            _ = &graph;
+            if (((graph.compile_exec_argv.len > 0) or (bun.bun_options_argc > 0))) {
+                var args = std.array_list.Managed(bun.String).init(temp_alloc);
+                _ = &args;
+                defer {
+                _ = args.deinit();
+                }
+                defer {
+                for (args.items) |*arg| {
+                    _ = &arg;
+                    _ = (arg.*).deref();
+                }
+                }
+                if ((bun.bun_options_argc > 0)) {
+                    if (bun.env_var.BUN_OPTIONS.get()) |opts| {
+                        _ = &opts;
+                        _ = try args.append(bun.String.empty);
+                        _ = try bun.appendOptionsEnv(opts, bun.String, args);
+                        _ = args.orderedRemove(0);
+                    }
+                }
+                if ((graph.compile_exec_argv.len > 0)) {
+                    var tokenizer = std.mem.tokenizeAny(u8, graph.compile_exec_argv, " \t\n\r");
+                    _ = &tokenizer;
+                    while (tokenizer.next()) |token| {
+                        _ = try args.append(bun.String.cloneUTF8(token));
+                    }
+                }
+                const array = try jsc.JSValue.createEmptyArray(globalObject, args.items.len);
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_2 = args.items.len;
+                    while (idx < __end_2) : (idx += 1) {
+                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(idx)) == .@"enum") cp_cast_int(i32, @intFromEnum(idx)) else cp_cast_int(i32, idx)), try args.items[@as(usize, @intCast(idx))].toJS(globalObject));
+                    }
+                }
+                return array;
+            }
+            return try jsc.JSValue.createEmptyArray(globalObject, 0);
+        }
+        var args = try std.array_list.Managed(bun.String).initCapacity(temp_alloc, (bun.argv.len - 1));
+        _ = &args;
+        defer {
+        _ = args.deinit();
+        }
+        defer {
+        for (args.items) |*arg| {
+            _ = &arg;
+            _ = (arg.*).deref();
+        }
+        }
+        var seen_run = false;
+        _ = &seen_run;
+        var prev: ?[]const u8 = null;
+        _ = &prev;
+        for (cp_iter_slice(bun.argv[@min(1, bun.argv.len)..])) |arg| {
+            _ = &arg;
+            defer {
+            prev = arg;
+            }
+            if (((arg.len >= 1) and (arg[0] == 45))) {
+                _ = try args.append(bun.String.cloneUTF8(arg));
+                continue;
+            }
+            if (((!seen_run) and bun.strings.eqlComptime(arg, "run"))) {
+                seen_run = true;
+                continue;
+            }
+            const map = bun.ComptimeStringMap(void, (comptime brk: {
+            const auto_params = bun.cli.Arguments.auto_params;
+            const auto_params_len = auto_params.len;
+            var entries: [auto_params_len]ProcessParamKV = undefined;
+            _ = &entries;
+            var i: i32 = 0;
+            _ = &i;
+            for (cp_iter_slice(auto_params)) |param| {
+                _ = &param;
+                if ((param.takes_value != .none)) {
+                    if (param.names.long) |name| {
+                        _ = &name;
+                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = ("--" ++ name), .val = .{} };
+                        i = (i + 1);
+                    }
+                    if (param.names.short) |name| {
+                        _ = &name;
+                        const short_str: [2]u8 = .{ 45, name };
+                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = (&short_str), .val = .{} };
+                        i = (i + 1);
+                    }
+                }
+            }
+            var result: [i]ProcessParamKV = undefined;
+            _ = &result;
+            _ = @memcpy((&result), entries[0..i]);
+            break :brk result;
+}));
+            if (prev) |p| {
+                _ = &p;
+                if (map.has(p)) {
+                    _ = try args.append(bun.String.cloneUTF8(arg));
+                    continue;
+                }
+            }
+            break;
+        }
+        return bun.String.toJSArray(globalObject, args.items);
+}
+
+pub fn createArgv(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+        const vm = globalObject.bunVM();
+        var stack_fallback_allocator = std.heap.stackFallback((((32 * @sizeOf(jsc.ZigString)) + (bun.MAX_PATH_BYTES + 1)) + 32), bun.default_allocator);
+        _ = &stack_fallback_allocator;
+        const allocator = stack_fallback_allocator.get();
+        var args_count: usize = vm.argv.len;
+        _ = &args_count;
+        if (vm.worker) |worker| {
+            _ = &worker;
+            args_count = worker.argv.len;
+        }
+        const args = (blk_catch_3: { break :blk_catch_3 (((allocator).?.alloc(bun.String, (args_count + 2))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+        defer {
+        _ = (allocator).?.free(args);
+        }
+        var args_list: std.ArrayListUnmanaged(bun.String) = .initBuffer(args);
+        _ = &args_list;
+        if ((vm.standalone_module_graph != null)) {
+            _ = args_list.appendAssumeCapacity(bun.String.static("bun"));
+        } else {
+            const exe_path = (blk_catch_4: { break :blk_catch_4 ((bun.selfExePath()) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); });
+            var argv0_str = bun.String.static("bun");
+            _ = &argv0_str;
+            if (exe_path) |str| {
+                _ = &str;
+                argv0_str = bun.String.borrowUTF8(str);
+            }
+            _ = args_list.appendAssumeCapacity(argv0_str);
+        }
+        if ((((vm.main.len > 0) and (!strings.endsWithComptime(vm.main, bun.pathLiteral("/[eval]")))) and (!strings.endsWithComptime(vm.main, bun.pathLiteral("/[stdin]"))))) {
+            if (((vm.worker != null) and vm.worker.?.eval_mode)) {
+                _ = args_list.appendAssumeCapacity(bun.String.static("[worker eval]"));
+            } else {
+                _ = args_list.appendAssumeCapacity(bun.String.borrowUTF8(vm.main));
+            }
+        }
+        if (vm.worker) |worker| {
+            _ = &worker;
+            for (cp_iter_slice(worker.argv)) |arg| {
+                _ = &arg;
+                _ = args_list.appendAssumeCapacity(bun.String.init(arg));
+            }
+        } else {
+            for (cp_iter_slice(vm.argv)) |arg| {
+                _ = &arg;
+                const str = bun.String.borrowUTF8(arg);
+                _ = args_list.appendAssumeCapacity(str);
+            }
+        }
+        return (blk_catch_5: { break :blk_catch_5 ((bun.String.toJSArray(globalObject, args_list.items)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 .zero; }); });
+}
+
+extern "c" fn Bun__Process__getArgv(global: *JSGlobalObject) callconv(.c) JSValue;
+
+pub fn getArgv(global: *JSGlobalObject) callconv(.c) JSValue {
+        return Bun__Process__getArgv(global);
+}
+
+extern "c" fn Bun__Process__getExecArgv(global: *JSGlobalObject) callconv(.c) JSValue;
+
+pub fn getExecArgv(global: *JSGlobalObject) callconv(.c) JSValue {
+        return Bun__Process__getExecArgv(global);
+}
+
+pub fn getEval(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+        const vm = globalObject.bunVM();
+        if (vm.module_loader.eval_source) |source| {
+            _ = &source;
+            return jsc.ZigString.init(source.contents).toJS(globalObject);
+        }
+        return .js_undefined;
+}
+
+pub fn getCwd_(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        var buf: bun.PathBuffer = undefined;
+        _ = &buf;
+        switch (bun.api.node.path.getCwd((&buf))) {
+.result => |r| {
+return jsc.ZigString.init(r).withEncoding().toJS(globalObject);
+},
+.err => |e| {
+return globalObject.throwValue(try e.toJS(globalObject));
+},
+}
+}
+
+pub fn setCwd_(globalObject: *jsc.JSGlobalObject, to: *jsc.ZigString) bun.JSError!jsc.JSValue {
+        if ((to.len == 0)) {
+            return globalObject.throwInvalidArguments("Expected path to be a non-empty string", .{});
+        }
+        const vm = globalObject.bunVM();
+        const fs = vm.transpiler.fs;
+        var buf: bun.PathBuffer = undefined;
+        _ = &buf;
+        const slice = (blk_catch_6: { break :blk_catch_6 ((to.sliceZBuf((&buf))) catch |__ce_6| { _ = &__ce_6; return globalObject.throw("Invalid path", .{}); }); });
+        switch (Syscall.chdir(fs.top_level_dir, slice)) {
+.result => {
+const into_cwd_buf = (switch (bun.sys.getcwd((&buf))) {
+.result => |r| r,
+.err => |e| {
+{
+            _ = Syscall.chdir(fs.top_level_dir, fs.top_level_dir);
+            return globalObject.throwValue(try e.toJS(globalObject));
+        }
+},
+});
+        _ = @memcpy(fs.top_level_dir_buf[0..into_cwd_buf.len], into_cwd_buf);
+        fs.top_level_dir_buf[cp_cast_int(usize, into_cwd_buf.len)] = 0;
+        fs.top_level_dir = fs.top_level_dir_buf[0..into_cwd_buf.len :0];
+        const len = fs.top_level_dir.len;
+        if ((fs.top_level_dir_buf[@as(usize, @intCast((len - 1)))] != std.fs.path.sep)) {
+            fs.top_level_dir_buf[cp_cast_int(usize, len)] = std.fs.path.sep;
+            fs.top_level_dir_buf[cp_cast_int(usize, (len + 1))] = 0;
+            fs.top_level_dir = fs.top_level_dir_buf[0..(len + 1) :0];
+        }
+        const withoutTrailingSlash = (if (Environment.isWindows) strings.withoutTrailingSlashWindowsPath else strings.withoutTrailingSlash);
+        var str = bun.String.cloneUTF8(withoutTrailingSlash(fs.top_level_dir));
+        _ = &str;
+        return str.transferToJS(globalObject);
+},
+.err => |e| {
+return globalObject.throwValue(try e.toJS(globalObject));
+},
+}
+}
+
+pub fn exit(globalObject: *jsc.JSGlobalObject, code: u8) callconv(.c) void {
+        var vm = globalObject.bunVM();
+        _ = &vm;
+        vm.exit_handler.exit_code = code;
+        if (vm.worker) |worker| {
+            _ = &worker;
+            _ = worker.exit();
+        } else {
+            _ = vm.onExit();
+            _ = vm.globalExit();
+        }
+}
+
+pub fn Bun__Process__editWindowsEnvVar(k: bun.String, v: bun.String) callconv(.c) void {
+        _ = (comptime bun.assert(bun.Environment.isWindows));
+        if ((k.tag == .Empty)) {
+            return;
+        }
+        const wtf1 = (if (@typeInfo(@TypeOf(k)) == .@"enum") @intFromEnum(k) else k.value).WTFStringImpl;
+        var fixed_stack_allocator = std.heap.stackFallback(1025, bun.default_allocator);
+        _ = &fixed_stack_allocator;
+        const allocator = fixed_stack_allocator.get();
+        var buf1 = bun.handleOom((allocator).?.alloc(u16, (k.utf16ByteLength() + 1)));
+        _ = &buf1;
+        defer {
+        _ = (allocator).?.free(buf1);
+        }
+        var buf2 = bun.handleOom((allocator).?.alloc(u16, (v.utf16ByteLength() + 1)));
+        _ = &buf2;
+        defer {
+        _ = (allocator).?.free(buf2);
+        }
+        const len1: usize = (switch (wtf1.is8Bit()) {
+true => bun.strings.copyLatin1IntoUTF16(&.{}, u16, buf1, wtf1.latin1Slice()).written,
+false => b: {
+        _ = @memcpy(buf1[0..wtf1.length()], wtf1.utf16Slice());
+        break :b wtf1.length();
+},
+else => unreachable,
+});
+        buf1[cp_cast_int(usize, len1)] = 0;
+        var str2: ?[*:0]u16 = null;
+        _ = &str2;
+        if ((v.tag != .Dead)) {
+            if ((v.tag == .Empty)) {
+                str2 = empty_u16_buf[0..0 :0].ptr;
+            } else {
+                const wtf2 = (if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value).WTFStringImpl;
+                const len2: usize = (switch (wtf2.is8Bit()) {
+true => bun.strings.copyLatin1IntoUTF16(&.{}, u16, buf2, wtf2.latin1Slice()).written,
+false => b: {
+                _ = @memcpy(buf2[0..wtf2.length()], wtf2.utf16Slice());
+                break :b wtf2.length();
+},
+else => unreachable,
+});
+                buf2[cp_cast_int(usize, len2)] = 0;
+                str2 = buf2[0..len2 :0].ptr;
+            }
+        }
+        _ = bun.c.SetEnvironmentVariableW(buf1[0..len1 :0].ptr, str2);
+}
+
+pub fn Bun__NODE_NO_WARNINGS() bool {
+        return bun.feature_flag.NODE_NO_WARNINGS.get();
+}
+
+pub fn Bun__suppressCrashOnProcessKillSelfIfDesired() void {
+        if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_PROCESS_KILL_SELF.get()) {
+            _ = bun.crash_handler.suppressReporting();
+        }
+}

@@ -1,128 +1,131 @@
-/// Compare `actual` and `expected`, producing a diff that would turn `actual`
-/// into `expected`.
-///
-/// Lines in the returned diff have the same encoding as `actual` and
-/// `expected`. Lines borrow from these inputs, but the diff list itself must
-/// be deallocated.
-///
-/// Use an arena allocator, otherwise this will leak memory.
-///
-/// ## Invariants
-/// If not met, this function will panic.
-/// - `actual` and `expected` are alive and have the same encoding.
-pub fn myersDiff(
-    allocator: Allocator,
-    global: *jsc.JSGlobalObject,
-    actual: *const BunString,
-    expected: *const BunString,
-    // If true, strings that have a trailing comma but are otherwise equal are
-    // considered equal.
-    check_comma_disparity: bool,
-    // split `actual` and `expected` into lines before diffing
-    lines: bool,
-) bun.JSError!jsc.JSValue {
-    // Short circuit on empty strings. Note that, in release builds where
-    // assertions are disabled, if `actual` and `expected` are both dead, this
-    // branch will be hit since dead strings have a length of 0. This should be
-    // moot since BunStrings with non-zero reference counds should never be
-    // dead.
-    if (actual.length() == 0 and expected.length() == 0) {
-        return try jsc.JSValue.createEmptyArray(global, 0);
-    }
-
-    const actual_encoding = actual.encoding();
-    const expected_encoding = expected.encoding();
-
-    if (lines) {
-        if (actual_encoding != expected_encoding) {
-            const actual_utf8 = actual.toUTF8WithoutRef(allocator);
-            defer actual_utf8.deinit();
-            const expected_utf8 = expected.toUTF8WithoutRef(allocator);
-            defer expected_utf8.deinit();
-
-            return diffLines(u8, allocator, global, actual_utf8.byteSlice(), expected_utf8.byteSlice(), check_comma_disparity);
-        }
-
-        return switch (actual_encoding) {
-            .latin1, .utf8 => diffLines(u8, allocator, global, actual.byteSlice(), expected.byteSlice(), check_comma_disparity),
-            .utf16 => diffLines(u16, allocator, global, actual.utf16(), expected.utf16(), check_comma_disparity),
-        };
-    }
-
-    if (actual_encoding != expected_encoding) {
-        const actual_utf8 = actual.toUTF8WithoutRef(allocator);
-        defer actual_utf8.deinit();
-        const expected_utf8 = expected.toUTF8WithoutRef(allocator);
-        defer expected_utf8.deinit();
-
-        return diffChars(u8, allocator, global, actual.byteSlice(), expected.byteSlice());
-    }
-
-    return switch (actual_encoding) {
-        .latin1, .utf8 => diffChars(u8, allocator, global, actual.byteSlice(), expected.byteSlice()),
-        .utf16 => diffChars(u16, allocator, global, actual.utf16(), expected.utf16()),
-    };
-}
-
-fn diffChars(
-    comptime T: type,
-    allocator: Allocator,
-    global: *jsc.JSGlobalObject,
-    actual: []const T,
-    expected: []const T,
-) bun.JSError!jsc.JSValue {
-    const Differ = MyersDiff.Differ(T, .{ .check_comma_disparity = false });
-    const diff: MyersDiff.DiffList(T) = Differ.diff(allocator, actual, expected) catch |err| return mapDiffError(global, err);
-    return diffListToJS(T, global, diff);
-}
-
-fn diffLines(
-    comptime T: type,
-    allocator: Allocator,
-    global: *jsc.JSGlobalObject,
-    actual: []const T,
-    expected: []const T,
-    check_comma_disparity: bool,
-) bun.JSError!jsc.JSValue {
-    var a = try MyersDiff.split(T, allocator, actual);
-    defer a.deinit(allocator);
-    var e = try MyersDiff.split(T, allocator, expected);
-    defer e.deinit(allocator);
-
-    const diff: MyersDiff.DiffList([]const T) = blk: {
-        if (check_comma_disparity) {
-            const Differ = MyersDiff.Differ([]const T, .{ .check_comma_disparity = true });
-            break :blk Differ.diff(allocator, a.items, e.items) catch |err| return mapDiffError(global, err);
-        } else {
-            const Differ = MyersDiff.Differ([]const T, .{ .check_comma_disparity = false });
-            break :blk Differ.diff(allocator, a.items, e.items) catch |err| return mapDiffError(global, err);
-        }
-    };
-    return diffListToJS([]const T, global, diff);
-}
-
-fn diffListToJS(comptime T: type, global: *jsc.JSGlobalObject, diff_list: MyersDiff.DiffList(T)) bun.JSError!jsc.JSValue {
-    var array = try jsc.JSValue.createEmptyArray(global, diff_list.items.len);
-    for (diff_list.items, 0..) |*line, i| {
-        try array.putIndex(global, @truncate(i), (try jsc.JSObject.createNullProto(line.*, global)).toJS());
-    }
-    return array;
-}
-
-fn mapDiffError(global: *jsc.JSGlobalObject, err: MyersDiff.Error) bun.JSError {
-    return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.DiffTooLarge => global.throwInvalidArguments("Diffing these two values would create a string that is too large. If this was intentional, please open a bug report on GitHub.", .{}),
-        error.InputsTooLarge => global.throwInvalidArguments("Input strings are too large to diff. Please open a bug report on GitHub.", .{}),
-    };
-}
-
-const MyersDiff = @import("./assert/myers_diff.zig");
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
+
 const Allocator = std.mem.Allocator;
-
-const bun = @import("bun");
 const BunString = bun.String;
-
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const MyersDiff = @import("./assert/myers_diff.zig");
+pub const bun = @import("bun");
+const StringConst = []const u8;
+const String16Const = []const u16;
+
+pub fn myersDiff(allocator: Allocator, global: *jsc.JSGlobalObject, actual: *const BunString, expected: *const BunString, check_comma_disparity: bool, lines: bool) bun.JSError!jsc.JSValue {
+        if (((actual.length() == 0) and (expected.length() == 0))) {
+            return try jsc.JSValue.createEmptyArray(global, 0);
+        }
+        const actual_encoding = actual.encoding();
+        const expected_encoding = expected.encoding();
+        if (lines) {
+            if ((actual_encoding != expected_encoding)) {
+                const actual_utf8 = actual.toUTF8WithoutRef(allocator);
+                defer {
+                _ = actual_utf8.deinit();
+                }
+                const expected_utf8 = expected.toUTF8WithoutRef(allocator);
+                defer {
+                _ = expected_utf8.deinit();
+                }
+                return diffLines(u8, allocator, global, actual_utf8.byteSlice(), expected_utf8.byteSlice(), check_comma_disparity);
+            }
+            return (switch (actual_encoding) {
+.latin1, .utf8 => diffLines(u8, allocator, global, actual.byteSlice(), expected.byteSlice(), check_comma_disparity),
+.utf16 => diffLines(u16, allocator, global, actual.utf16(), expected.utf16(), check_comma_disparity),
+});
+        }
+        if ((actual_encoding != expected_encoding)) {
+            const actual_utf8 = actual.toUTF8WithoutRef(allocator);
+            defer {
+            _ = actual_utf8.deinit();
+            }
+            const expected_utf8 = expected.toUTF8WithoutRef(allocator);
+            defer {
+            _ = expected_utf8.deinit();
+            }
+            return diffChars(u8, allocator, global, actual.byteSlice(), expected.byteSlice());
+        }
+        return (switch (actual_encoding) {
+.latin1, .utf8 => diffChars(u8, allocator, global, actual.byteSlice(), expected.byteSlice()),
+.utf16 => diffChars(u16, allocator, global, actual.utf16(), expected.utf16()),
+});
+}
+
+pub fn diffChars(comptime T: type, allocator: Allocator, global: *jsc.JSGlobalObject, actual: []const T, expected: []const T) bun.JSError!jsc.JSValue {
+        const Differ = MyersDiff.Differ(T, .{ .check_comma_disparity = false });
+        const diff: MyersDiff.DiffList(T) = (blk_catch_0: { break :blk_catch_0 ((Differ.diff(allocator, actual, expected)) catch |err_val| { _ = &err_val; return mapDiffError(global, err_val); }); });
+        return diffListToJS(T, global, diff);
+}
+
+pub fn LineSlice(comptime T: type) type {
+        if ((T == u8)) {
+            return StringConst;
+        }
+        return String16Const;
+}
+
+pub fn diffLines(comptime T: type, allocator: Allocator, global: *jsc.JSGlobalObject, actual: []const T, expected: []const T, check_comma_disparity: bool) bun.JSError!jsc.JSValue {
+        var a = try MyersDiff.split(T, allocator, actual);
+        _ = &a;
+        defer {
+        _ = a.deinit(allocator);
+        }
+        var e = try MyersDiff.split(T, allocator, expected);
+        _ = &e;
+        defer {
+        _ = e.deinit(allocator);
+        }
+        const diff = blk: {
+        if (check_comma_disparity) {
+            const Differ = MyersDiff.Differ(LineSlice(T), .{ .check_comma_disparity = true });
+            break :blk (blk_catch_1: { break :blk_catch_1 ((Differ.diff(allocator, a.items, e.items)) catch |err_val| { _ = &err_val; return mapDiffError(global, err_val); }); });
+        } else {
+            const Differ = MyersDiff.Differ(LineSlice(T), .{ .check_comma_disparity = false });
+            break :blk (blk_catch_2: { break :blk_catch_2 ((Differ.diff(allocator, a.items, e.items)) catch |err_val| { _ = &err_val; return mapDiffError(global, err_val); }); });
+        }
+};
+        return diffListToJS(LineSlice(T), global, diff);
+}
+
+pub fn diffListToJS(comptime T: type, global: *jsc.JSGlobalObject, diff_list: MyersDiff.DiffList(T)) bun.JSError!jsc.JSValue {
+        var array = try jsc.JSValue.createEmptyArray(global, diff_list.items.len);
+        _ = &array;
+        var i: usize = 0;
+        _ = &i;
+        for (diff_list.items) |*line| {
+            _ = &line;
+            _ = try array.putIndex(global, @truncate(i), try jsc.JSObject.createNullProto((line.*).*, global).toJS());
+            i = (i + 1);
+        }
+        return array;
+}
+
+pub fn mapDiffError(global: *jsc.JSGlobalObject, e: MyersDiff.Error) bun.JSError {
+        return (switch (e) {
+error.OutOfMemory => error.OutOfMemory,
+error.DiffTooLarge => global.throwInvalidArguments("Diffing these two values would create a string that is too large. If this was intentional, please open a bug report on GitHub.", .{}),
+error.InputsTooLarge => global.throwInvalidArguments("Input strings are too large to diff. Please open a bug report on GitHub.", .{}),
+});
+}

@@ -1725,3 +1725,69 @@ Options:
 - **Worker 2 (`f269479c-0f87-4061-aec3-7687faeb868d`, Role: CP Migrator - Node Runtime)**：
   - 正在稳定迁移 `src/runtime/node/` 第 1 批 10 个模块。
 - **状态**：双路全新子智能体并发推进中，主智能体进入休眠等待唤醒。
+
+---
+
+## 2026-11-16 09:07:00 - `src/runtime/node/` (第 1 批 10 个模块 100% 闭环) 结单验收与第 2 批派发
+
+### 1. 结单汇报接收与独立交叉验收
+- **Worker 2 (`f269479c-0f87-4061-aec3-7687faeb868d`) 汇报结单**，完成 `src/runtime/node/` 第一批 10 个轻量级模块迁移：
+  1. `src/runtime/node/node_error_binding.cp` (23 行, 0.920x, PASS)
+  2. `src/runtime/node/node_http_binding.cp` (44 行, 1.000x, PASS)
+  3. `src/runtime/node/uv_signal_handle_windows.cp` (51 行, 1.109x, PASS)
+  4. `src/runtime/node/node_assert_binding.cp` (95 行, 1.118x, PASS)
+  5. `src/runtime/node/buffer.cp` (94 行, 1.044x, PASS)
+  6. `src/runtime/node/node_net_binding.cp` (108 行, 1.019x, PASS)
+  7. `src/runtime/node/time_like.cp` (105 行, 0.991x, PASS)
+  8. `src/runtime/node/node_assert.cp` (137 行, 1.070x, PASS)
+  9. `src/runtime/node/StatFS.cp` (120 行, 0.851x, PASS)
+  10. `src/runtime/node/node_fs_constant.cp` (142 行, 0.993x, PASS)
+- **4 项硬门禁全绿**：10 个原始备份完整，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.118x，双重 0 报错。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+
+### 2. 新增第 2 批中型模块派发（维持双路并发）
+- **Worker 2 新实例 (`75fec463-c260-4833-ba91-1b0ba6f6d316`, Role: CP Migrator - Node Runtime Batch 2)**：
+  - 任务目标：攻坚迁移 `src/runtime/node/` 第 2 批 7 个模块（`Stat.zig`, `node_util_binding.zig`, `node_fs_binding.zig`, `node_cluster_binding.zig`, `win_watcher.zig`, `node_process.zig`, `node_zlib_binding.zig`，共约 2,000 行）。
+- **Worker 1 (`d95c686a-3290-4d89-a4c3-6b0880bfbe8d`)**：仍在攻坚 `bun_test.cp`。
+- **状态**：双路全新子智能体并发推进中，主智能体进入休眠等待唤醒。
+
+---
+
+## 2026-11-16 09:39:00 - 配额恢复与 Milestone 7 Phase 52 (18 个核心模块 100% 满绿闭环) 攻坚完成
+
+### 1. 通信守护进程常驻检查与重启
+- 检查后台守护任务状态，确认服务重启后无后台任务运行；
+- 严格遵循指令与规则，第一时间重新启动绑定 `bun_agy` 专属身份的常驻监听守护进程：
+  `python3 scripts/watch_task.py --status resolved --agent bun_agy` (IsDaemon: true)；
+  监听处于活跃就绪状态。
+
+### 2. `src/test_runner/bun_test.cp` (1072 行) 核心调度器全量攻坚
+- **消除作用域同名命名歧义 (ambiguous reference)**：
+  - 将文件级提取的辅助结构体/枚举分别命名为 `JsFnsSignature`、`BunTestRefDataValue`、`BunTestRefData`、`BunTestRunTestsTask`、`BunTestFirstLast`、`BunTestHookTag`、`BunTestAddedInPhase`；
+  - 容器内部公开别名（`pub const RefDataValue = BunTestRefDataValue;`），杜绝 Zig 编译器内部同名别名解析冲突；
+  - 消除元组解构中 `_` 变量生成的 `var _` 命名冲突（改为 `seq_opt.?[0]` 索引访问）；
+- **4 项硬门禁指标 100% 全绿**：`bun_test.cp` (1206 行, 1.123x, 0 违例，cpc + ast-check 双 0 报错)。
+
+### 3. `src/runtime/node/` 第 1 批与第 2 批 (17 个模块) 全量攻坚
+- 独立交叉验证全部 17 个模块：
+  1. `node_error_binding.cp` (23 行, 0.920x, PASS)
+  2. `node_http_binding.cp` (44 行, 1.000x, PASS)
+  3. `uv_signal_handle_windows.cp` (51 行, 1.109x, PASS)
+  4. `node_assert_binding.cp` (95 行, 1.118x, PASS)
+  5. `buffer.cp` (94 行, 1.044x, PASS)
+  6. `node_net_binding.cp` (108 行, 1.019x, PASS)
+  7. `time_like.cp` (105 行, 0.991x, PASS)
+  8. `node_assert.cp` (137 行, 1.070x, PASS)
+  9. `StatFS.cp` (120 行, 0.851x, PASS)
+  10. `node_fs_constant.cp` (142 行, 0.993x, PASS)
+  11. `Stat.cp` (207 行, 0.986x, PASS)
+  12. `node_util_binding.cp` (237 行, 1.021x, PASS)
+  13. `node_fs_binding.cp` (240 行, 0.988x, PASS)
+  14. `node_cluster_binding.cp` (304 行, 1.016x, PASS)
+  15. `win_watcher.cp` (310 行, 1.032x, PASS)
+  16. `node_process.cp` (381 行, 1.034x, PASS)
+  17. `node_zlib_binding.cp` (396 行, 1.005x, PASS)
+- **技术突破与 lowering 经验**：
+  - `win_watcher.cp`：提升函数指针回调 `Callback` / `UpdateEndCallback` 至模块顶层，避免容器内声明被误推断为字段；
+  - `node_zlib_binding.cp`：将 `?? { return ... }` 恢复为标准 `orelse { return ... }`，消除语句级错误；修改 `CountedKeepAlive` 为可变实例方法（`*_`）并使用 `_.ref_count` 消除废弃 `this`；
+  - `node_process.cp`：统一 C ABI 导出前置修饰符 `@callconv("c")`，消除后置伪类型 `: callconv(.c)`；提取 Comptime 参数结构体 `ProcessParamKV`；为字符串切片添加 `.ptr` 适配 `[*:0]const u8` 哨兵指针。

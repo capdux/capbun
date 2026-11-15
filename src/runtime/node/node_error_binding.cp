@@ -1,0 +1,23 @@
+pub const ERR_INVALID_HANDLE_TYPE = createSimpleError(createTypeError, .ERR_INVALID_HANDLE_TYPE, "This handle type cannot be sent");
+pub const ERR_CHILD_CLOSED_BEFORE_REPLY = createSimpleError(createError, .ERR_CHILD_CLOSED_BEFORE_REPLY, "Child closed before reply received");
+
+fn createSimpleError(comptime createFn: auto, comptime code: jsc.Node.ErrorCode, comptime message: []const u8): jsc.JS2NativeFunctionType {
+    const R = struct {
+        pub fn cbb(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+            const S = struct {
+                fn cb(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+                    * = callframe;
+                    return createFn(globalThis, code, message, {});
+                }
+            };
+            return jsc.JSFunction.create(global, @tagName(code), S.cb, 0, {});
+        }
+    };
+    return R.cbb;
+}
+
+import bun from "bun";
+const jsc = bun.jsc;
+
+const createError = jsc.JSGlobalObject.createErrorInstanceWithCode;
+const createTypeError = jsc.JSGlobalObject.createTypeErrorInstanceWithCode;

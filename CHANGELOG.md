@@ -793,3 +793,31 @@
   - 原始备份：全部 78 个 `<stem>_.zig` 原始备份完好无损。
   - 代码膨胀率：78 模块综合膨胀率 **0.999x**（5,756 行 CP / 5,759 行 Zig 原代码，净压缩）。
 - **全仓最新进度**：纯 CP 模块数上升至 **967 / 1,294 (74.73%)**，闭环完整子系统上升至 **161 / 171 (94.15%)**。
+
+## [Milestone 7 Phase 52] 2026-11-16 - src/test_runner/bun_test.cp (1072 行核心调度器) 与 src/runtime/node/ (17 个模块) 纯 CP 重构完成
+- **src/test_runner/bun_test.cp 核心测试运行器调度器 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `bun_test.cp` (1,206 行, 1.123x)
+- **src/runtime/node/ 17 个轻中型运行时模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `node_error_binding.cp` (23 行, 0.920x)
+  - `node_http_binding.cp` (44 行, 1.000x)
+  - `uv_signal_handle_windows.cp` (51 行, 1.109x)
+  - `node_assert_binding.cp` (95 行, 1.118x)
+  - `buffer.cp` (94 行, 1.044x)
+  - `node_net_binding.cp` (108 行, 1.019x)
+  - `time_like.cp` (105 行, 0.991x)
+  - `node_assert.cp` (137 行, 1.070x)
+  - `StatFS.cp` (120 行, 0.851x)
+  - `node_fs_constant.cp` (142 行, 0.993x)
+  - `Stat.cp` (207 行, 0.986x)
+  - `node_util_binding.cp` (237 行, 1.021x)
+  - `node_fs_binding.cp` (240 行, 0.988x)
+  - `node_cluster_binding.cp` (304 行, 1.016x)
+  - `win_watcher.cp` (310 行, 1.032x)
+  - `node_process.cp` (381 行, 1.034x)
+  - `node_zlib_binding.cp` (396 行, 1.005x)
+- **4 项硬门禁指标**：
+  - 全部 18 个模块通过 `cpc --lib` 与 `zig ast-check` 双重 0 报错验证。
+  - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
+  - 原始备份：全部 18 个 `<stem>_.zig` 原始备份完好无损。
+  - 代码膨胀率：18 模块综合膨胀率 **1.041x**（4,227 行 CP / 4,061 行 Zig 原代码，严格控制在 <= 1.20x 内）。
+- **全仓最新进度**：纯 CP 模块数上升至 **974 / 1,294 (75.27%)**，闭环完整子系统保持 **161 / 171 (94.15%)**。

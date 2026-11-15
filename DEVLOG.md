@@ -629,3 +629,17 @@
 ### 2. 枚举深度匹配与忽略返回值语法 (`color_js.cp`, `css_internals.cp`)
 - **枚举字面量与数值匹配**：对于 `SourceColorDepth` 中可能存在的数字命名标签（如 `@"16"`, `@"256"`），通过 `@intFromEnum(depth)` 判定或条件分支替换直接的 `.@"16"` 模式匹配，避免触发 `tuple.@N` 静态安全扫描误报。
 - **丢弃表达式规范**：废除 Zig 风格的 `_ = allocator;`，统一收窄为 CP 标准的 `* = allocator;`，消除保留接收者标识符 `_` 的语法冲突。
+
+## 2026-11-16 [Milestone 7 Phase 52] `src/test_runner/bun_test.cp` (1072 行调度器) 与 `src/runtime/node/` (17 个模块) 技术经验
+
+### 1. 结构体作用域同名命名歧义与顶层类型提升 (`bun_test.cp`)
+- **同名别名解析冲突 (`ambiguous reference`) 根治**：当将原 Zig 嵌套在 `BunTestRoot`、`BunTest`、`DescribeScope` 内部的类型提取至顶层声明时，若在顶层命名为 `FirstLast`，且容器内部又声明 `pub const FirstLast = FirstLast;`，Zig 语法检查器会在方法签名中判定为自引用或同名歧义。标准方案是将外提定义命名为 `BunTestFirstLast`、`BunTestRefDataValue`、`BunTestRefData` 等，容器内仅作为别名转发（`pub const FirstLast = BunTestFirstLast;`），彻底消除歧义。
+- **解构赋值中的保留标识符**：元组解构中若出现忽略位 `_`（如 `let [sequence, _] = seq;`），编译器会生成临时代码 `var _ = ...; _ = &_;` 触发 Zig 保留标识符语法报错。改写为直接索引取值 `const sequence = seq[0];`，杜绝非法代码生成。
+
+### 2. 回调函数指针提升与 C-ABI 调用约定规范 (`win_watcher.cp`, `node_process.cp`)
+- **结构体中函数指针类型外提**：在 `win_watcher.cp` 中，`PathWatcher` 内部嵌套声明函数指针类型 `type Callback = fn ...` 会被编译器误当作字段生成在方法后，触发 Zig `declarations are not allowed between container fields`。将回调类型规范为顶层 `pub const PathWatcherCallback = fn (ctx: (*void)?, event: Event, is_file: bool) void;`，容器内通过常量引用。
+- **C-ABI 函数修饰符规范**：Node 兼容层中的系统级导出函数（如 `getTitle`, `setTitle`, `createArgv0`, `exit`）废除后缀 `: callconv(.c)` 伪返回类型，统一采用 CP 标准前置修饰符 `@callconv("c") pub fn ...`。
+
+### 3. 空值合并与语句级控制流规范 (`node_zlib_binding.cp`)
+- **`??` 与 `orelse` 语义区分**：CP 中 `??` 为二元纯表达式合并运算符，当右操作数包含多语句代码块 `{ const x = ...; return ...; }` 时，必须使用 `orelse { ... }` 语句块，保证语句级控制流安全执行。
+- **实例状态可变借用排他性**：在 `CountedKeepAlive` 中消除误用的 `static fn ref(*_: *@This())`，改写为规范的独占可变方法 `fn @"ref"(*_, vm: *jsc.VirtualMachine)`，通过 `_.ref_count` 直接访问当前实例字段，彻底根绝废弃的 `this` 关键字。
