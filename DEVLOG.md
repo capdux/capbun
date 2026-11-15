@@ -491,3 +491,12 @@
 ### 1. 跨平台硬链接、克隆与文件拷贝引擎纯化
 - **文件描述符与生命周期严格绑定**：在 `FileCloner.cp`、`FileCopier.cp`、`Hardlinker.cp` 中，涉及跨平台文件句柄（Windows Handle / Unix FD）的复制与链接逻辑。严格采用 RAII 式 `defer fd.close()` 与 CP 的独占可变借用（`*_`），彻底消除多分支早期返回时的句柄泄漏。
 - **Store 缓存树状态安全**：在 `Store.cp` 与 `Installer.cp`（2,056 行）中，包缓存目录哈希校验与原子重命名均使用受类型系统保护的安全字符串切片，杜绝缓冲区越界与数据竞争。
+
+## 2026-11-16 [Milestone 7 Phase 37] `src/runtime/valkey_jsc/` (7/7 内存数据缓存客户端 100% 闭环) 技术经验
+
+### 1. 结构体静态函数与实例函数声明边界
+- **工厂函数显式标注 `static fn`**：在 `js_valkey_functions.cp` 中，`compile` 命名空间内部声明了 7 处协议指令元编程工厂函数（如 `@"()"`、`@"(key: RedisKey)"` 等）。如果直接写为 `pub fn @"..."(...)`，`cpc` 默认将其识别为实例方法，并在输出 Zig 代码时自动合成首参 `self: @This()`，进而引发 ast-check 报错 `unused function parameter`。
+- **消解未使用接收者**：全部显式修正为 `static fn @"..."(...)` 后，`cpc` 精确降解为无接收者的纯静态顶层/命名空间函数，7 处 `ast-check` 报错彻底清除。
+
+### 2. 标识符转义与重载语法支持
+- 特殊方法名（如以参数签名命名的协议方法）在 CP 语言中通过 `@"..."` 转义安全表示，能够与 JavaScriptCore 宏体系无缝协同，保障了 100% 的 ABI 与调用兼容性。

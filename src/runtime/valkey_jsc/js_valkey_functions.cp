@@ -1327,7 +1327,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"()"(
+    static fn @"()"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime client_state_requirement: ClientStateRequirement,
@@ -1351,7 +1351,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"(key: RedisKey)"(
+    static fn @"(key: RedisKey)"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime arg0_name: []const u8,
@@ -1381,7 +1381,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"(key: RedisKey, ...args: RedisKey[])"(
+    static fn @"(key: RedisKey, ...args: RedisKey[])"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime arg0_name: []const u8,
@@ -1429,7 +1429,7 @@ const compile = struct {
             }
         };
     }
-    pub fn @"(key: RedisKey, value: RedisValue)"(
+    static fn @"(key: RedisKey, value: RedisValue)"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime arg0_name: []const u8,
@@ -1464,7 +1464,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"(key: RedisKey, value: RedisValue, value2: RedisValue)"(
+    static fn @"(key: RedisKey, value: RedisValue, value2: RedisValue)"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime arg0_name: []const u8,
@@ -1504,7 +1504,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"(...strings: string[])"(
+    static fn @"(...strings: string[])"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime client_state_requirement: ClientStateRequirement,
@@ -1543,7 +1543,7 @@ const compile = struct {
         };
     }
 
-    pub fn @"(key: RedisKey, value: RedisValue, ...args: RedisValue)"(
+    static fn @"(key: RedisKey, value: RedisValue, ...args: RedisValue)"(
         comptime name: []const u8,
         comptime command: []const u8,
         comptime client_state_requirement: ClientStateRequirement,
