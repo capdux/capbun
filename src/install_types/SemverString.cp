@@ -428,8 +428,8 @@ pub struct SemverStringBuilder {
         };
     }
 
-    @inline pub fn isInline(this): bool {
-        return (this.bytes[7] & 0x80) == 0;
+    @inline pub fn isInline(): bool {
+        return (_.bytes[7] & 0x80) == 0;
     }
 
     @inline pub static fn sliced(str: &SemverString, buf: []const u8): SlicedString {
@@ -511,7 +511,7 @@ pub struct SemverStringBuilder {
         return @as(SemverString, @bitCast((@as(u64, @bitCast(Pointer.init(buf.items, in_buf))) & 0x7fffffffffffffff) | (1 << 63)));
     }
 
-    pub fn eql(this, that: SemverString, this_buf: []const u8, that_buf: []const u8): bool {
+    pub fn eql(that: SemverString, this_buf: []const u8, that_buf: []const u8): bool {
         if (this.isInline() && that.isInline()) {
             return @as(u64, @bitCast(this.bytes)) == @as(u64, @bitCast(that.bytes));
         } else if (this.isInline() != that.isInline()) {
@@ -523,11 +523,11 @@ pub struct SemverStringBuilder {
         }
     }
 
-    @inline pub fn isEmpty(this): bool {
+    @inline pub fn isEmpty(): bool {
         return @as(u64, @bitCast(this.bytes)) == 0;
     }
 
-    pub fn len(this): usize {
+    pub fn len(): usize {
         switch (this.bytes[7] & 128) {
             0 => {
                 if (this.bytes[0] == 0) return 0;
@@ -544,7 +544,7 @@ pub struct SemverStringBuilder {
         }
     }
 
-    @inline pub fn ptr(this): Pointer {
+    @inline pub fn ptr(): Pointer {
         return @as(Pointer, @bitCast(@as(u64, @bitCast(this)) & 0x7fffffffffffffff));
     }
 

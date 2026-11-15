@@ -24,16 +24,16 @@ pub @c struct ExternalString {
         };
     }
 
-    @inline pub fn isInline(this): bool {
-        return this.value.isInline();
+    @inline pub fn isInline(): bool {
+        return _.value.isInline();
     }
 
-    @inline pub fn isEmpty(this): bool {
-        return this.value.isEmpty();
+    @inline pub fn isEmpty(): bool {
+        return _.value.isEmpty();
     }
 
-    @inline pub fn len(this): usize {
-        return this.value.len();
+    @inline pub fn len(): usize {
+        return _.value.len();
     }
 
     @inline pub static fn init(buf: string, in_str: string, hash: u64): ExternalString {
