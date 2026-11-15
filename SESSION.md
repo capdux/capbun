@@ -1791,3 +1791,71 @@ Options:
   - `win_watcher.cp`：提升函数指针回调 `Callback` / `UpdateEndCallback` 至模块顶层，避免容器内声明被误推断为字段；
   - `node_zlib_binding.cp`：将 `?? { return ... }` 恢复为标准 `orelse { return ... }`，消除语句级错误；修改 `CountedKeepAlive` 为可变实例方法（`*_`）并使用 `_.ref_count` 消除废弃 `this`；
   - `node_process.cp`：统一 C ABI 导出前置修饰符 `@callconv("c")`，消除后置伪类型 `: callconv(.c)`；提取 Comptime 参数结构体 `ProcessParamKV`；为字符串切片添加 `.ptr` 适配 `[*:0]const u8` 哨兵指针。
+
+### 4. 新批次并发派发（严格双路并发）
+- **Worker 1 (`2fd33771-c418-43e3-ab60-d2b13aaa2aab`, Role: CP Migrator - Expect Core)**：
+  - 任务目标：攻坚完成 `src/test_runner/expect.cp`（2271 行核心断言系统）。
+  - 下发捕获转换、饱和加法、元组传参规范及 4 项硬门禁。
+- **Worker 2 (`eb90d12c-fcf9-46a4-86d8-4335a528d441`, Role: CP Migrator - Node Runtime Batch 3)**：
+  - 任务目标：攻坚迁移 `src/runtime/node/` 第 3 批 3 个中型模块（`dir_iterator.zig` 564 行、`node_fs_stat_watcher.zig` 577 行、`fs_events.zig` 659 行，共约 1,800 行）。
+- **常驻通信**：常驻监听守护进程（Task `67761`）稳定运行于后台。
+- **状态**：双路全新子智能体并发执行中，主智能体进入休眠等待结单唤醒。
+
+---
+
+## 2026-11-16 10:02:00 - `src/test_runner/expect.cp` (2271 行核心断言系统) 结单验收与最终收尾模块派发
+
+### 1. 结单汇报接收与独立交叉验收
+- **Worker 1 (`2fd33771-c418-43e3-ab60-d2b13aaa2aab`) 汇报结单**，完成 `src/test_runner/expect.cp` (2271 行) 全量攻坚；
+- 主智能体调用 `scripts/cpc_brief.py` 执行独立严密全量扫描：
+  - 模块：`src/test_runner/expect.cp`
+  - 验收结果：**PASS（0 违例，0 报错）**；
+  - 4 项门禁全绿：0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率 **0.999x**（2,269 行 CP / 2,271 行 Zig，净压缩）。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+
+### 2. 新增任务派发（维持双路并发）
+- **Worker 1 新实例 (`044e86c8-2f07-4857-916f-d84e686668a3`, Role: CP Migrator - Pretty Format)**：
+  - 任务目标：攻坚完成 `src/test_runner/` 最后一个未迁移模块 `src/test_runner/pretty_format.cp`（2144 行），一旦完成将使 `src/test_runner` 全子系统（全部 92 个模块）达到 100% 满绿闭环。
+- **Worker 2 (`8c376a5c-0640-4bf6-bd10-c3527a6b77c1`, Role: CP Migrator - Node Runtime Files)**：
+  - 正在稳定迁移 `src/runtime/node/` 第 3 批 3 个中型模块（`dir_iterator.zig`, `node_fs_stat_watcher.zig`, `fs_events.zig`）。
+- **状态**：双路全新子智能体并发执行中，主智能体进入休眠等待唤醒。
+
+---
+
+## 2026-11-16 10:14:00 - `src/runtime/node/` (第 3 批 3 个模块 100% 闭环) 结单验收与第 4 批派发
+
+### 1. 结单汇报接收与独立交叉验收
+- **Worker 2 (`8c376a5c-0640-4bf6-bd10-c3527a6b77c1`) 汇报结单**，完成 `src/runtime/node/` 第 3 批 3 个中型模块迁移：
+  1. `src/runtime/node/dir_iterator.cp` (564 行, 1.023x, PASS)
+  2. `src/runtime/node/node_fs_stat_watcher.cp` (577 行, 1.047x, PASS)
+  3. `src/runtime/node/fs_events.cp` (659 行, 1.032x, PASS)
+- **4 项硬门禁全绿**：3 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.047x，双重 0 报错。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+
+### 2. 新增第 4 批核心模块派发（维持双路并发）
+- **Worker 2 新实例 (`6d079d47-e5ca-47c3-bf80-ea2978d63a22`, Role: CP Migrator - Node Watcher & Crypto)**：
+  - 任务目标：攻坚迁移 `src/runtime/node/` 第 4 批 2 个核心模块（`node_fs_watcher.zig` 713 行、`node_crypto_binding.zig` 815 行，共约 1,500 行）。
+- **Worker 1 (`044e86c8-2f07-4857-916f-d84e686668a3`)**：正在攻坚 `src/test_runner/pretty_format.cp`（2144 行）。
+- **状态**：双路全新子智能体并发执行中，主智能体进入休眠等待唤醒。
+
+---
+
+## 2026-11-16 10:31:00 - `src/test_runner` 全子系统 (92 模块 100% 满绿大闭环) 与 `src/runtime/node/nodejs_error_code.cp` 验收
+
+### 1. 结单汇报接收与独立交叉验收
+- **Worker 1 (`044e86c8-2f07-4857-916f-d84e686668a3`) 汇报结单**，完成 `src/test_runner/pretty_format.cp` (2144 行) 纯 CP 迁移；
+- 主智能体调用 `scripts/cpc_brief.py` 执行独立全量验证：
+  - `src/test_runner/pretty_format.cp` (2168 行, 1.011x, PASS)
+  - 4 项硬门禁全绿：0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率 <= 1.011x，双重 0 报错。
+- **`src/test_runner/` 全系统达成 100% 闭环**：
+  - 扫描整个 `src/test_runner` 目录（含根目录模块、`expect/` 75 个匹配器模块、`diff/`、`harness/`、`timers/`）：
+  - **总模块数：92 / 92，未迁移数：0，PASS 率：100% (92 PASS / 0 FAIL)**！
+- **`src/runtime/node/nodejs_error_code.cp`** (1109 行)：初稿预转换并通过独立门禁验证（1.000x, PASS）。
+- 立即执行 `manage_subagents kill` 回收已完成智能体（用完即弃）。
+
+### 2. 新增模块派发（维持双路并发）
+- **Worker 1 新实例 (`225ba16e-c7d7-4d4c-971a-0111a43c50dc`, Role: CP Migrator - Path Watcher)**：
+  - 任务目标：迁移 `src/runtime/node/path_watcher.cp` (958 行)。
+- **Worker 2 (`6d079d47-e5ca-47c3-bf80-ea2978d63a22`, Role: CP Migrator - Node Watcher & Crypto)**：
+  - 正在稳定迁移 `src/runtime/node/node_fs_watcher.zig` (713 行) 与 `src/runtime/node/node_crypto_binding.zig` (815 行)。
+- **状态**：双路全新子智能体并发执行中，主智能体进入休眠等待结单唤醒。

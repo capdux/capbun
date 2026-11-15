@@ -643,3 +643,13 @@
 ### 3. 空值合并与语句级控制流规范 (`node_zlib_binding.cp`)
 - **`??` 与 `orelse` 语义区分**：CP 中 `??` 为二元纯表达式合并运算符，当右操作数包含多语句代码块 `{ const x = ...; return ...; }` 时，必须使用 `orelse { ... }` 语句块，保证语句级控制流安全执行。
 - **实例状态可变借用排他性**：在 `CountedKeepAlive` 中消除误用的 `static fn ref(*_: *@This())`，改写为规范的独占可变方法 `fn @"ref"(*_, vm: *jsc.VirtualMachine)`，通过 `_.ref_count` 直接访问当前实例字段，彻底根绝废弃的 `this` 关键字。
+
+## 2026-11-16 [Milestone 7 Phase 53] `src/test_runner/` (92 模块全量大闭环) 与 `nodejs_error_code.cp` 技术经验
+
+### 1. 结构体单遍解析顺序与类型前置声明 (`pretty_format.cp`)
+- **内部辅助类型声明前置**：在 `Formatter` 结构体中，包含循环引用的类型 `Visited` 与 `Tag` 必须前置声明在实例字段 `remaining_values` 与 `map` 之前，解决单遍类型解析阶段由于符号未决引发的推导失败；提取 `VisitedInit` 辅助静态结构体，消除匿名内联结构体无法进行 CP 语义 lowering 的问题。
+- **泛型结构体构造与作用域隔离**：在泛型构造函数 `WrappedWriter(comptime Writer: type): type` 中显式标注为 `static fn`，杜绝实例方法推导自动注入外层接收者；通过中间别名 `const WW = WrappedWriter(Writer); let w = WW{ ... };` 实例化，解决复合泛型字面量的词法歧义。
+
+### 2. 核心断言系统转义与控制流净化 (`expect.cp`)
+- **饱和运算与计数器溢出防护**：原 Zig 的 `+|=` 饱和加法重构为标准的 `std.math.add(u32, count, 1) catch std.math.maxInt(u32)`，彻底消除非标操作符。
+- **关键字与保留字转义防护**：针对 JSC 对象的 `@"this"` 方法调用添加显式转义；重命名局部变量 `any` 避免触发向 Zig `anytype` 的错误转换；将文件末尾 `test` 块规整为顶层标准测试函数。
