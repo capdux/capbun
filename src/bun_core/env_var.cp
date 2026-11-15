@@ -222,7 +222,7 @@ const StringOutput = CacheOutput(string);
 type StringPointerType = ([*]const u8)?;
 
 fn StringCache(comptime ip: StringInput): type {
-    _ = ip;
+    * = ip;
     return struct {
         const Self = @This();
         const LenType = usize;

@@ -377,7 +377,7 @@ pub static struct RapidHash {
         return RapidHash.mix(a ^ sc[0] ^ len, b ^ sc[1]);
     }
 
-    inline fn mum(a: *u64!, b: *u64!): void {
+    inline fn mum(a: *u64!, b: *u64!) {
         unsafe {
             const r = (a.* as u128) * b.*;
             a.* = r as u64;

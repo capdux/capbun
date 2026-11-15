@@ -42,6 +42,10 @@ pub enum SourceColorDepth {
     @"16m",
 }
 
+const depth_16: SourceColorDepth = @enumFromInt(1);
+const depth_256: SourceColorDepth = @enumFromInt(2);
+const depth_16m: SourceColorDepth = .@"16m";
+
 let lazy_color_depth: SourceColorDepth = .none;
 let color_depth_once = std.once(Source.getColorDepthOnce);
 
@@ -71,7 +75,7 @@ pub struct Source {
     pub err_buffer: []u8 = &[],
 
     pub fn init(
-        *this,
+        *_,
         stream: Source.StreamType,
         err_stream: Source.StreamType,
     ) {
@@ -80,7 +84,7 @@ pub struct Source {
         }
         source_set = true;
 
-        this.* = {
+        _.* = {
             raw_stream: stream,
             raw_error_stream: err_stream,
 
@@ -97,15 +101,15 @@ pub struct Source {
             error_stream: undefined,
         };
 
-        this.buffered_stream_backing = this.raw_stream.quietWriter().adaptToNewApi(&this.stdout_buffer);
-        this.buffered_error_stream_backing = this.raw_error_stream.quietWriter().adaptToNewApi(&this.stderr_buffer);
-        this.buffered_stream = &this.buffered_stream_backing.new_interface;
-        this.buffered_error_stream = &this.buffered_error_stream_backing.new_interface;
+        _.buffered_stream_backing = _.raw_stream.quietWriter().adaptToNewApi(&_.stdout_buffer);
+        _.buffered_error_stream_backing = _.raw_error_stream.quietWriter().adaptToNewApi(&_.stderr_buffer);
+        _.buffered_stream = &_.buffered_stream_backing.new_interface;
+        _.buffered_error_stream = &_.buffered_error_stream_backing.new_interface;
 
-        this.stream_backing = this.raw_stream.quietWriter().adaptToNewApi(&[]);
-        this.error_stream_backing = this.raw_error_stream.quietWriter().adaptToNewApi(&[]);
-        this.stream = &this.stream_backing.new_interface;
-        this.error_stream = &this.error_stream_backing.new_interface;
+        _.stream_backing = _.raw_stream.quietWriter().adaptToNewApi(&[]);
+        _.error_stream_backing = _.raw_error_stream.quietWriter().adaptToNewApi(&[]);
+        _.stream = &_.stream_backing.new_interface;
+        _.error_stream = &_.error_stream_backing.new_interface;
     }
 
     pub static fn configureThread() {
@@ -133,9 +137,9 @@ pub struct Source {
         // - "3" to indicate 16 million-color support
         return switch (force_color) {
             0 => .none,
-            1 => .@"16",
-            2 => .@"256",
-            else => .@"16m",
+            1 => depth_16,
+            2 => depth_256,
+            else => depth_16m,
         };
     }
 
@@ -171,12 +175,12 @@ pub struct Source {
         }
 
         if (bun.env_var.TMUX.get() != null) {
-            lazy_color_depth = .@"256";
+            lazy_color_depth = depth_256;
             return;
         }
 
         if (bun.env_var.CI.get() != null) {
-            lazy_color_depth = .@"16";
+            lazy_color_depth = depth_16;
             return;
         }
 
@@ -190,7 +194,7 @@ pub struct Source {
             ];
             inline for (program of use_16m) {
                 if (strings.eqlComptime(term_program, program)) {
-                    lazy_color_depth = .@"16m";
+                    lazy_color_depth = depth_16m;
                     return;
                 }
             }
@@ -200,7 +204,7 @@ pub struct Source {
 
         if (color_term := bun.env_var.COLORTERM.get()) {
             if (strings.eqlComptime(color_term, "truecolor") || strings.eqlComptime(color_term, "24bit")) {
-                lazy_color_depth = .@"16m";
+                lazy_color_depth = depth_16m;
                 return;
             }
             has_color_term_set = true;
@@ -208,27 +212,27 @@ pub struct Source {
 
         if (term.len > 0) {
             if (strings.hasPrefixComptime(term, "xterm-256")) {
-                lazy_color_depth = .@"256";
+                lazy_color_depth = depth_256;
                 return;
             }
             const pairs = [
-                ["st", SourceColorDepth.@"16"],
-                ["hurd", SourceColorDepth.@"16"],
-                ["eterm", SourceColorDepth.@"16"],
-                ["gnome", SourceColorDepth.@"16"],
-                ["kterm", SourceColorDepth.@"16"],
-                ["mosh", SourceColorDepth.@"16m"],
-                ["putty", SourceColorDepth.@"16"],
-                ["cons25", SourceColorDepth.@"16"],
-                ["cygwin", SourceColorDepth.@"16"],
-                ["dtterm", SourceColorDepth.@"16"],
-                ["mlterm", SourceColorDepth.@"16"],
-                ["console", SourceColorDepth.@"16"],
-                ["jfbterm", SourceColorDepth.@"16"],
-                ["konsole", SourceColorDepth.@"16"],
-                ["terminator", SourceColorDepth.@"16m"],
-                ["xterm-ghostty", SourceColorDepth.@"16m"],
-                ["rxvt-unicode-24bit", SourceColorDepth.@"16m"],
+                ["st", depth_16],
+                ["hurd", depth_16],
+                ["eterm", depth_16],
+                ["gnome", depth_16],
+                ["kterm", depth_16],
+                ["mosh", depth_16m],
+                ["putty", depth_16],
+                ["cons25", depth_16],
+                ["cygwin", depth_16],
+                ["dtterm", depth_16],
+                ["mlterm", depth_16],
+                ["console", depth_16],
+                ["jfbterm", depth_16],
+                ["konsole", depth_16],
+                ["terminator", depth_16m],
+                ["xterm-ghostty", depth_16m],
+                ["rxvt-unicode-24bit", depth_16m],
             ];
 
             inline for (pair of pairs) {
@@ -247,13 +251,13 @@ pub struct Source {
                 strings.includes(term, "xterm") ||
                 strings.includes(term, "screen"))
             {
-                lazy_color_depth = .@"16";
+                lazy_color_depth = depth_16;
                 return;
             }
         }
 
         if (has_color_term_set) {
-            lazy_color_depth = .@"16";
+            lazy_color_depth = depth_16;
             return;
         }
 
@@ -529,8 +533,8 @@ struct EnableBufferingScope {
     }
 
     /// Does not call Output.flush().
-    pub fn deinit(this) {
-        enable_buffering = this.prev_buffering;
+    pub fn deinit() {
+        enable_buffering = _.prev_buffering;
     }
 }
 
@@ -625,26 +629,26 @@ pub struct ElapsedFormatter {
     pub colors: bool,
     pub duration_ns: u64 = 0,
 
-    pub fn format(this, writer_: *std.Io.Writer): ! {
-        const ns_f: f64 = @floatFromInt(this.duration_ns);
+    pub fn format(writer_: *std.Io.Writer): ! {
+        const ns_f: f64 = @floatFromInt(_.duration_ns);
         const ms = ns_f / std.time.ns_per_ms;
-        if (this.duration_ns <= std.time.ns_per_ms * 10) {
+        if (_.duration_ns <= std.time.ns_per_ms * 10) {
             const fmt_str = "<r><d>[{d:>.2}ms<r><d>]<r>";
-            if (this.colors) {
+            if (_.colors) {
                 writer_.print(comptime prettyFmt(fmt_str, true), [ms])?;
             } else {
                 writer_.print(comptime prettyFmt(fmt_str, false), [ms])?;
             }
-        } else if (this.duration_ns >= std.time.ns_per_ms * 8_000) {
+        } else if (_.duration_ns >= std.time.ns_per_ms * 8_000) {
             const fmt_str = "<r><d>[<r><yellow>{d:>.2}ms<r><d>]<r>";
-            if (this.colors) {
+            if (_.colors) {
                 writer_.print(comptime prettyFmt(fmt_str, true), [ms])?;
             } else {
                 writer_.print(comptime prettyFmt(fmt_str, false), [ms])?;
             }
         } else {
             const fmt_str = "<r><d>[<b>{d:>.2}ms<r><d>]<r>";
-            if (this.colors) {
+            if (_.colors) {
                 writer_.print(comptime prettyFmt(fmt_str, true), [ms])?;
             } else {
                 writer_.print(comptime prettyFmt(fmt_str, false), [ms])?;
@@ -1177,9 +1181,9 @@ pub struct DebugTimer {
 
     pub const WriteError = error{};
 
-    pub fn format(this, w: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(w: *std.Io.Writer): !std.Io.Writer.Error {
         if (comptime Environment.isDebug) {
-            let timer = this.timer;
+            let timer = _.timer;
             const ns_f: f64 = @floatFromInt(timer.read());
             w.print("{d:.3}ms", [ns_f / std.time.ns_per_ms])?;
         }
@@ -1351,7 +1355,7 @@ pub fn initScopedDebugWriterAtStartup() {
                 panic("Failed to open file for debug output: {s} ({s})", [@errorName(open_err), path]);
             };
             const fd: bun.FD = .fromStdFile(created);
-            _ = fd.truncate(0); // windows
+            * = fd.truncate(0); // windows
             ScopedDebugWriter.scoped_file_writer = fd.quietWriter();
             return;
         }
@@ -1403,8 +1407,7 @@ pub struct Synchronized {
         return {};
     }
 
-    pub fn end(this) {
-        _ = this;
+    pub fn end() {
         if (Environment.isPosix) {
             print(synchronized_end, {});
         }

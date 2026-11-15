@@ -1052,7 +1052,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
         return false;
     }
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(_, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let txt = this.text[0..];
         if (this.opts.check_for_unhighlighted_write) {
             if (!this.opts.enable_colors || txt.len > 2048 || txt.len == 0 || !strings.isAllASCII(txt)) {
@@ -1375,7 +1375,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
     }
 }
 
-pub fn quote(self: string): bun.fmt.QuotedFormatter {
+pub fn quote(_: string): bun.fmt.QuotedFormatter {
     return bun.fmt.QuotedFormatter{
         text: self,
     };
@@ -1487,7 +1487,7 @@ pub struct SizeFormatter {
 
     pub const Options = SizeFormatterOptions;
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         const math = std.math;
         const value = this.value;
         if (value == 0) {
@@ -1676,7 +1676,7 @@ fn formatDurationOneDecimal(data: FormatDurationData, writer: *std.Io.Writer): !
             const frac = @divFloor(kunits % 1000, 100);
             if (frac > 0) {
                 let decimal_buf: [2]u8 = ['.', 0];
-                _ = std.fmt.printInt(decimal_buf[1..], frac, 10, .lower, .{ .fill = '0', .width = 1 });
+                * = std.fmt.printInt(decimal_buf[1..], frac, 10, .lower, .{ .fill = '0', .width = 1 });
                 buf_writer.writeAll(&decimal_buf) catch unreachable;
             }
             buf_writer.writeAll(unit.sep) catch unreachable;
@@ -1740,7 +1740,7 @@ pub struct FormatDouble {
         }
     }
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         let buf: [124]u8 = undefined;
         const slice = unsafe { FormatDouble.dtoa(*buf!, this.number) };
         writer.writeAll(slice)?;

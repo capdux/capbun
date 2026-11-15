@@ -61,7 +61,7 @@ pub const codegen_embed = build_options.codegen_embed;
 pub const version: std.SemanticVersion = build_options.version;
 pub const version_string = std.fmt.comptimePrint("{d}.{d}.{d}", [version.major, version.minor, version.patch]);
 
-pub inline fn onlyMac(): void {
+pub inline fn onlyMac() {
     if (comptime !isMac) {
         unreachable;
     }
@@ -96,7 +96,7 @@ pub enum OperatingSystem {
     });
 
     /// user-facing name with capitalization
-    pub fn displayString(this): string {
+    pub fn displayString(): string {
         return switch (this) {
             .mac => "macOS",
             .linux => "Linux",
@@ -107,7 +107,7 @@ pub enum OperatingSystem {
     }
 
     /// same format as `process.platform`
-    pub fn nameString(this): string {
+    pub fn nameString(): string {
         return switch (this) {
             .mac => "darwin",
             .linux => "linux",
@@ -117,7 +117,7 @@ pub enum OperatingSystem {
         };
     }
 
-    pub fn stdOSTag(this): std.Target.Os.Tag {
+    pub fn stdOSTag(): std.Target.Os.Tag {
         return switch (this) {
             .mac => .macos,
             .linux => .linux,
@@ -128,7 +128,7 @@ pub enum OperatingSystem {
     }
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
-    pub fn npmName(this): string {
+    pub fn npmName(): string {
         return switch (this) {
             .mac => "darwin",
             .linux => "linux",
@@ -158,7 +158,7 @@ pub enum Architecture {
     wasm,
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
-    pub fn npmName(this): string {
+    pub fn npmName(): string {
         return switch (this) {
             .x64 => "x64",
             .arm64 => "aarch64",

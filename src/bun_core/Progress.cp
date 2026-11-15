@@ -27,24 +27,24 @@ type OptNode = (*Node)?;
 /// Represents one unit of progress. Each node can have children nodes, or
 /// one can use integers with `update`.
 pub struct Node {
-    pub context: *Progress,
-    pub parent: (*Node)?,
-    pub name: []const u8,
-    pub unit: Unit = .none,
+    context: *Progress,
+    parent: (*Node)?,
+    name: []const u8,
+    unit: Unit = .none,
     /// Must be handled atomically to be thread-safe.
-    pub recently_updated_child: (*Node)? = null,
+    recently_updated_child: (*Node)? = null,
     /// Must be handled atomically to be thread-safe. 0 means null.
-    pub unprotected_estimated_total_items: usize,
+    unprotected_estimated_total_items: usize,
     /// Must be handled atomically to be thread-safe.
-    pub unprotected_completed_items: usize,
+    unprotected_completed_items: usize,
 
     /// Create a new child progress node. Thread-safe.
     /// Call `Node.end` when done.
     /// Passing 0 for `estimated_total_items` means unknown.
-    pub fn start(*this, name: []const u8, estimated_total_items: usize): Node {
+    pub fn start(*_, name: []const u8, estimated_total_items: usize): Node {
         return Node{
-            context: this.context,
-            parent: this,
+            context: _.context,
+            parent: _,
             name: name,
             unprotected_estimated_total_items: estimated_total_items,
             unprotected_completed_items: 0,
@@ -52,48 +52,48 @@ pub struct Node {
     }
 
     /// This is the same as calling `start` and then `end` on the returned `Node`. Thread-safe.
-    pub fn completeOne(*this) {
-        if (parent := this.parent) {
-            @atomicStore(OptNode, &parent.recently_updated_child, this, .release);
+    pub fn completeOne(*_) {
+        if (parent := _.parent) {
+            @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
         }
-        _ = @atomicRmw(usize, &this.unprotected_completed_items, .Add, 1, .monotonic);
-        this.context.maybeRefresh();
+        * = @atomicRmw(usize, &_.unprotected_completed_items, .Add, 1, .monotonic);
+        _.context.maybeRefresh();
     }
 
     /// Finish a started `Node`. Thread-safe.
-    pub fn end(*this) {
-        this.context.maybeRefresh();
-        if (parent := this.parent) {
+    pub fn end(*_) {
+        _.context.maybeRefresh();
+        if (parent := _.parent) {
             {
-                this.context.update_mutex.lock();
-                defer this.context.update_mutex.unlock();
-                _ = @cmpxchgStrong(OptNode, &parent.recently_updated_child, this, null, .monotonic, .monotonic);
+                _.context.update_mutex.lock();
+                defer _.context.update_mutex.unlock();
+                * = @cmpxchgStrong(OptNode, &parent.recently_updated_child, _, null, .monotonic, .monotonic);
             }
             parent.completeOne();
         } else {
-            this.context.update_mutex.lock();
-            defer this.context.update_mutex.unlock();
-            this.context.done = true;
-            this.context.refreshWithHeldLock();
+            _.context.update_mutex.lock();
+            defer _.context.update_mutex.unlock();
+            _.context.done = true;
+            _.context.refreshWithHeldLock();
         }
     }
 
     /// Tell the parent node that this node is actively being worked on. Thread-safe.
-    pub fn activate(*this) {
-        if (parent := this.parent) {
-            @atomicStore(OptNode, &parent.recently_updated_child, this, .release);
-            this.context.maybeRefresh();
+    pub fn activate(*_) {
+        if (parent := _.parent) {
+            @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
+            _.context.maybeRefresh();
         }
     }
 
     /// Thread-safe.
-    pub fn setName(*this, name: []const u8) {
-        const progress = this.context;
+    pub fn setName(*_, name: []const u8) {
+        const progress = _.context;
         progress.update_mutex.lock();
         defer progress.update_mutex.unlock();
-        this.name = name;
-        if (parent := this.parent) {
-            @atomicStore(OptNode, &parent.recently_updated_child, this, .release);
+        _.name = name;
+        if (parent := _.parent) {
+            @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
             if (grand_parent := parent.parent) {
                 @atomicStore(OptNode, &grand_parent.recently_updated_child, parent, .release);
             }
@@ -104,13 +104,13 @@ pub struct Node {
     }
 
     /// Thread-safe.
-    pub fn setUnit(*this, unit: []const u8) {
-        const progress = this.context;
+    pub fn setUnit(*_, unit: Unit) {
+        const progress = _.context;
         progress.update_mutex.lock();
         defer progress.update_mutex.unlock();
-        this.unit = unit;
-        if (parent := this.parent) {
-            @atomicStore(OptNode, &parent.recently_updated_child, this, .release);
+        _.unit = unit;
+        if (parent := _.parent) {
+            @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
             if (grand_parent := parent.parent) {
                 @atomicStore(OptNode, &grand_parent.recently_updated_child, parent, .release);
             }
@@ -121,13 +121,13 @@ pub struct Node {
     }
 
     /// Thread-safe. 0 means unknown.
-    pub fn setEstimatedTotalItems(*this, count: usize) {
-        @atomicStore(usize, &this.unprotected_estimated_total_items, count, .monotonic);
+    pub fn setEstimatedTotalItems(*_, count: usize) {
+        @atomicStore(usize, &_.unprotected_estimated_total_items, count, .monotonic);
     }
 
     /// Thread-safe.
-    pub fn setCompletedItems(*this, completed_items: usize) {
-        @atomicStore(usize, &this.unprotected_completed_items, completed_items, .monotonic);
+    pub fn setCompletedItems(*_, completed_items: usize) {
+        @atomicStore(usize, &_.unprotected_completed_items, completed_items, .monotonic);
     }
 }
 
@@ -184,83 +184,84 @@ export @root struct Progress {
     /// Create a new progress node.
     /// Call `Node.end` when done.
     /// `estimated_total_items` value of 0 means unknown.
-    pub fn start(*this, name: []const u8, estimated_total_items: usize): *Node {
+    pub fn start(*_, name: []const u8, estimated_total_items: usize): *Node {
         const stderr = std.fs.File.stderr();
-        this.terminal = null;
+        _.terminal = null;
         if (stderr.supportsAnsiEscapeCodes()) {
-            this.terminal = stderr;
-            this.supports_ansi_escape_codes = true;
+            _.terminal = stderr;
+            _.supports_ansi_escape_codes = true;
         } else if (builtin.os.tag == .windows && stderr.isTty()) {
-            this.is_windows_terminal = true;
-            this.terminal = stderr;
+            _.is_windows_terminal = true;
+            _.terminal = stderr;
         } else if (builtin.os.tag != .windows) {
             // we are in a "dumb" terminal like in acme or writing to a file
-            this.terminal = stderr;
+            _.terminal = stderr;
         }
-        this.root = Node{
-            context: this,
+        _.root = Node{
+            context: _,
             parent: null,
             name: name,
             unprotected_estimated_total_items: estimated_total_items,
             unprotected_completed_items: 0,
         };
-        this.columns_written = 0;
-        this.prev_refresh_timestamp = 0;
-        this.timer = std.time.Timer.start() catch null;
-        this.done = false;
-        return &this.root;
+        _.columns_written = 0;
+        _.prev_refresh_timestamp = 0;
+        _.timer = std.time.Timer.start() catch null;
+        _.done = false;
+        return &_.root;
     }
 
     /// Updates the terminal if enough time has passed since last update. Thread-safe.
-    pub fn maybeRefresh(*this) {
-        if (*timer := this.timer) {
-            if (!this.update_mutex.tryLock()) return;
-            defer this.update_mutex.unlock();
-            this.maybeRefreshWithHeldLock(timer);
+    pub fn maybeRefresh(*_) {
+        if (*timer := _.timer) {
+            if (!_.update_mutex.tryLock()) return;
+            defer _.update_mutex.unlock();
+            _.maybeRefreshWithHeldLock(timer);
         }
     }
 
-    fn maybeRefreshWithHeldLock(*this, timer: *std.time.Timer) {
+    fn maybeRefreshWithHeldLock(*_, timer: *std.time.Timer) {
         const now = timer.read();
-        if (now < this.initial_delay_ns) return;
+        if (now < _.initial_delay_ns) return;
         // TODO I have observed this to happen sometimes. I think we need to follow Rust's
         // lead and guarantee monotonically increasing times in the std lib itself.
-        if (now < this.prev_refresh_timestamp) return;
-        if (now - this.prev_refresh_timestamp < this.refresh_rate_ns) return;
-        return this.refreshWithHeldLock();
+        if (now < _.prev_refresh_timestamp) return;
+        if (now - _.prev_refresh_timestamp < _.refresh_rate_ns) return;
+        return _.refreshWithHeldLock();
     }
 
     /// Updates the terminal and resets `self.next_refresh_timestamp`. Thread-safe.
-    pub fn refresh(*this) {
-        if (!this.update_mutex.tryLock()) return;
-        defer this.update_mutex.unlock();
+    pub fn refresh(*_) {
+        if (!_.update_mutex.tryLock()) return;
+        defer _.update_mutex.unlock();
 
-        return this.refreshWithHeldLock();
+        return _.refreshWithHeldLock();
     }
 
-    fn clearWithHeldLock(*this, end_ptr: *usize) {
-        const file = this.terminal ?? return;
+    fn clearWithHeldLock(*_, end_ptr: *usize) {
+        if (_.terminal == null) return;
+        const file = _.terminal.?;
         let end = end_ptr.*;
-        if (this.columns_written > 0) {
+        if (_.columns_written > 0) {
             // restore the cursor position by moving the cursor
             // `columns_written` cells to the left, then clear the rest of the
             // line
-            if (this.supports_ansi_escape_codes) {
-                end += (std.fmt.bufPrint(this.output_buffer[end..], "\x1b[{d}D", [this.columns_written]) catch unreachable).len;
-                end += (std.fmt.bufPrint(this.output_buffer[end..], "\x1b[0K", {}) catch unreachable).len;
+            if (_.supports_ansi_escape_codes) {
+                end += (std.fmt.bufPrint(_.output_buffer[end..], "\x1b[{d}D", [_.columns_written]) catch unreachable).len;
+                end += (std.fmt.bufPrint(_.output_buffer[end..], "\x1b[0K", {}) catch unreachable).len;
             } else if (builtin.os.tag == .windows) {
                 winapi: {
-                    assert(this.is_windows_terminal);
+                    assert(_.is_windows_terminal);
 
                     let info: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
                     if (windows.kernel32.GetConsoleScreenBufferInfo(file.handle, &info) != windows.TRUE) {
                         // stop trying to write to this file
-                        this.terminal = null;
+                        _.terminal = null;
                         break :winapi;
                     }
 
                     let cursor_pos = windows.COORD{
-                        X: info.dwCursorPosition.X - i16(this.columns_written),
+                        X: info.dwCursorPosition.X - i16(_.columns_written),
                         Y: info.dwCursorPosition.Y,
                     };
 
@@ -278,7 +279,7 @@ export @root struct Progress {
                         &written,
                     ) != windows.TRUE) {
                         // stop trying to write to this file
-                        this.terminal = null;
+                        _.terminal = null;
                         break :winapi;
                     }
                     if (windows.kernel32.FillConsoleOutputCharacterW(
@@ -289,41 +290,42 @@ export @root struct Progress {
                         &written,
                     ) != windows.TRUE) {
                         // stop trying to write to this file
-                        this.terminal = null;
+                        _.terminal = null;
                         break :winapi;
                     }
                     if (windows.kernel32.SetConsoleCursorPosition(file.handle, cursor_pos) != windows.TRUE) {
                         // stop trying to write to this file
-                        this.terminal = null;
+                        _.terminal = null;
                         break :winapi;
                     }
                 }
             } else {
                 // we are in a "dumb" terminal like in acme or writing to a file
-                this.output_buffer[end] = '\n';
+                _.output_buffer[end] = '\n';
                 end += 1;
             }
 
-            this.columns_written = 0;
+            _.columns_written = 0;
         }
         end_ptr.* = end;
     }
 
-    fn refreshWithHeldLock(*this) {
-        const is_dumb = !this.supports_ansi_escape_codes && !this.is_windows_terminal;
-        if (is_dumb && this.dont_print_on_dumb) return;
+    fn refreshWithHeldLock(*_) {
+        const is_dumb = !_.supports_ansi_escape_codes && !_.is_windows_terminal;
+        if (is_dumb && _.dont_print_on_dumb) return;
 
-        const file = this.terminal ?? return;
+        if (_.terminal == null) return;
+        const file = _.terminal.?;
 
         let end: usize = 0;
-        this.clearWithHeldLock(&end);
+        _.clearWithHeldLock(&end);
 
-        if (!this.done) {
+        if (!_.done) {
             let need_ellipse = false;
-            let maybe_node: (*Node)? = *this.root;
+            let maybe_node: (*Node)? = &_.root;
             while (node := maybe_node) {
                 if (need_ellipse) {
-                    this.bufWrite(&end, "... ", {});
+                    _.bufWrite(&end, "... ", {});
                 }
                 need_ellipse = false;
                 const eti = @atomicLoad(usize, &node.unprotected_estimated_total_items, .monotonic);
@@ -331,23 +333,23 @@ export @root struct Progress {
                 const current_item = completed_items + 1;
                 if (node.name.len != 0 || eti > 0) {
                     if (node.name.len != 0) {
-                        this.bufWrite(&end, "{s}", [node.name]);
+                        _.bufWrite(&end, "{s}", [node.name]);
                         need_ellipse = true;
                     }
                     if (eti > 0) {
-                        if (need_ellipse) this.bufWrite(&end, " ", {});
+                        if (need_ellipse) _.bufWrite(&end, " ", {});
                         switch (node.unit) {
-                            .none => this.bufWrite(&end, "[{d}/{d}] ", [current_item, eti]),
-                            .files => this.bufWrite(&end, "[{d}/{d} files] ", [current_item, eti]),
-                            .bytes => this.bufWrite(&end, "[{Bi:.2}/{Bi:.2}] ", [current_item, eti]),
+                            .none => _.bufWrite(&end, "[{d}/{d}] ", [current_item, eti]),
+                            .files => _.bufWrite(&end, "[{d}/{d} files] ", [current_item, eti]),
+                            .bytes => _.bufWrite(&end, "[{Bi:.2}/{Bi:.2}] ", [current_item, eti]),
                         }
                         need_ellipse = false;
                     } else if (completed_items != 0) {
-                        if (need_ellipse) this.bufWrite(&end, " ", {});
+                        if (need_ellipse) _.bufWrite(&end, " ", {});
                         switch (node.unit) {
-                            .none => this.bufWrite(&end, "[{d}] ", [current_item]),
-                            .files => this.bufWrite(&end, "[{d} files] ", [current_item]),
-                            .bytes => this.bufWrite(&end, "[{Bi:.2}] ", [current_item]),
+                            .none => _.bufWrite(&end, "[{d}] ", [current_item]),
+                            .files => _.bufWrite(&end, "[{d} files] ", [current_item]),
+                            .bytes => _.bufWrite(&end, "[{Bi:.2}] ", [current_item]),
                         }
                         need_ellipse = false;
                     }
@@ -355,29 +357,29 @@ export @root struct Progress {
                 maybe_node = @atomicLoad(OptNode, &node.recently_updated_child, .acquire);
             }
             if (need_ellipse) {
-                this.bufWrite(&end, "... ", {});
+                _.bufWrite(&end, "... ", {});
             }
         }
 
-        _ = file.write(this.output_buffer[0..end]) catch {
+        * = file.write(_.output_buffer[0..end]) catch {
             // stop trying to write to this file
-            this.terminal = null;
+            _.terminal = null;
         };
-        if (*timer := this.timer) {
-            this.prev_refresh_timestamp = timer.read();
+        if (*timer := _.timer) {
+            _.prev_refresh_timestamp = timer.read();
         }
     }
 
-    pub fn log(*this, comptime format: []const u8, args: auto) {
-        if (file := this.terminal) {
+    pub fn log(*_, comptime format: []const u8, args: auto) {
+        if (file := _.terminal) {
             let file_writer = file.writerStreaming(&[]);
             const writer = &file_writer.interface;
-            this.refresh();
+            _.refresh();
             writer.print(format, args) catch {
-                this.terminal = null;
+                _.terminal = null;
                 return;
             };
-            this.columns_written = 0;
+            _.columns_written = 0;
         } else {
             std.debug.print(format, args);
         }
@@ -385,38 +387,38 @@ export @root struct Progress {
 
     /// Allows the caller to freely write to stderr until unlock_stderr() is called.
     /// During the lock, the progress information is cleared from the terminal.
-    pub fn lock_stderr(*this) {
-        this.update_mutex.lock();
-        if (file := this.terminal) {
+    pub fn lock_stderr(*_) {
+        _.update_mutex.lock();
+        if (file := _.terminal) {
             let end: usize = 0;
-            this.clearWithHeldLock(&end);
-            _ = file.write(this.output_buffer[0..end]) catch {
+            _.clearWithHeldLock(&end);
+            * = file.write(_.output_buffer[0..end]) catch {
                 // stop trying to write to this file
-                this.terminal = null;
+                _.terminal = null;
             };
         }
         std.debug.getStderrMutex().lock();
     }
 
-    pub fn unlock_stderr(*this) {
+    pub fn unlock_stderr(*_) {
         std.debug.getStderrMutex().unlock();
-        this.update_mutex.unlock();
+        _.update_mutex.unlock();
     }
 
-    fn bufWrite(*this, end: *usize, comptime format: []const u8, args: auto) {
-        const written = std.fmt.bufPrint(this.output_buffer[end.*..], format, args) catch err => {
-            switch (err) {
+    fn bufWrite(*_, end: *usize, comptime format: []const u8, args: auto) {
+        const written = std.fmt.bufPrint(_.output_buffer[end.*..], format, args) catch e => {
+            switch (e) {
                 .NoSpaceLeft => {
-                    this.columns_written += this.output_buffer.len - end.*;
-                    end.* = this.output_buffer.len;
+                    _.columns_written += _.output_buffer.len - end.*;
+                    end.* = _.output_buffer.len;
                     const suffix = "... ";
-                    @memcpy(this.output_buffer[this.output_buffer.len - suffix.len ..], suffix);
+                    @memcpy(_.output_buffer[_.output_buffer.len - suffix.len ..], suffix);
                 },
             }
             return;
         };
         const amt = written.len;
         end.* += amt;
-        this.columns_written += amt;
+        _.columns_written += amt;
     }
 }

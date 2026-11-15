@@ -17,6 +17,9 @@ var stdout_stream: Source.StreamType = undefined;
 var stdout_stream_set = false;
 pub var bun_stdio_tty: [3]i32 = .{ 0, 0, 0 };
 pub var terminal_size: std.posix.winsize = .{ .row = 0, .col = 0, .xpixel = 0, .ypixel = 0 };
+const depth_16: SourceColorDepth = @enumFromInt(1);
+const depth_256: SourceColorDepth = @enumFromInt(2);
+const depth_16m: SourceColorDepth = .@"16m";
 var lazy_color_depth: SourceColorDepth = .none;
 var color_depth_once = std.once(Source.getColorDepthOnce);
 var win_console_mode: [3]?u32 = .{ null, null, null };
@@ -71,11 +74,11 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(val: anytype) switch (@typeInfo(@TypeOf(val))) { .pointer => |p| switch (p.size) { .slice => @TypeOf(val), .one => switch (@typeInfo(p.child)) { .array => []const @typeInfo(p.child).array.child, .pointer => |sub_p| if (sub_p.size == .slice) p.child else @TypeOf(val), else => @TypeOf(val), }, else => @TypeOf(val), }, .array => []const @typeInfo(@TypeOf(val)).array.child, else => @TypeOf(val), } { const __T = @TypeOf(val); switch (@typeInfo(__T)) { .pointer => |p| switch (p.size) { .slice => return val, .one => switch (@typeInfo(p.child)) { .array => return val[0..], .pointer => |sub_p| if (sub_p.size == .slice) return val.* else return val, else => return val, }, else => return val, }, .array => return val[0..], else => return val, } }
-fn cp_mut_slice(ptr: anytype) switch (@typeInfo(@TypeOf(ptr.*))) { .array => []@typeInfo(@TypeOf(ptr.*)).array.child, .pointer => |p| switch (p.size) { .slice => []if (@typeInfo(p.child) == .pointer) @typeInfo(p.child).pointer.child else p.child, .one => switch (@typeInfo(p.child)) { .pointer => |sub_p| if (sub_p.size == .slice) []sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const ValT = @TypeOf(ptr.*); switch (@typeInfo(ValT)) { .array => return ptr[0..], .pointer => |p| switch (p.size) { .slice => return @constCast(ptr.*), .one => return @constCast(ptr.*.*), else => unreachable, }, else => unreachable, } }
-fn cp_index_of(container: anytype, needle: anytype) i32 { const cp_slice = cp_iter_slice(container); const SliceT = @TypeOf(cp_slice); if (comptime is_string_like(SliceT) and is_string_like(@TypeOf(needle))) { if (std.mem.indexOf(u8, to_string_slice(cp_slice), to_string_slice(needle))) |i| return @intCast(i); return -1; } for (cp_slice, 0..) |item, idx| { if (cp_eq(item, needle)) return @intCast(idx); } return -1; }
-fn cp_last_index_of(container: anytype, needle: anytype) i32 { const cp_slice = cp_iter_slice(container); const SliceT = @TypeOf(cp_slice); if (comptime is_string_like(SliceT) and is_string_like(@TypeOf(needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(cp_slice), to_string_slice(needle))) |i| return @intCast(i); return -1; } var i: usize = cp_slice.len; while (i > 0) { i -= 1; if (cp_eq(cp_slice[i], needle)) return @intCast(i); } return -1; }
-fn cp_includes(container: anytype, needle: anytype) bool { return cp_index_of(container, needle) != -1; }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.indexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } for (__cp_slice, 0..) |__item, __idx| { if (cp_eq(__item, __needle)) return @intCast(__idx); } return -1; }
+fn cp_last_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } var __idx: usize = __cp_slice.len; while (__idx > 0) { __idx -= 1; if (cp_eq(__cp_slice[__idx], __needle)) return @intCast(__idx); } return -1; }
+fn cp_includes(__container: anytype, __needle: anytype) bool { return cp_index_of(__container, __needle) != -1; }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const Environment = @import("./env.zig");
@@ -136,8 +139,8 @@ pub const Source = struct {
     error_stream: *std.Io.Writer,
     raw_stream: StreamType,
     raw_error_stream: StreamType,
-    out_buffer: []u8 = (&.{  }),
-    err_buffer: []u8 = (&.{  }),
+    out_buffer: []u8 = (&&.{}),
+    err_buffer: []u8 = (&&.{}),
 
 pub fn init(self: *Source, stream: Source.StreamType, err_stream: Source.StreamType) void {
             if ((((comptime Environment.isDebug) and use_mimalloc) and (!source_set))) {
@@ -149,8 +152,8 @@ pub fn init(self: *Source, stream: Source.StreamType, err_stream: Source.StreamT
             self.buffered_error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&self.stderr_buffer));
             self.buffered_stream = (&self.buffered_stream_backing.new_interface);
             self.buffered_error_stream = (&self.buffered_error_stream_backing.new_interface);
-            self.stream_backing = self.raw_stream.quietWriter().adaptToNewApi((&.{  }));
-            self.error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&.{  }));
+            self.stream_backing = self.raw_stream.quietWriter().adaptToNewApi((&&.{}));
+            self.error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&&.{}));
             self.stream = (&self.stream_backing.new_interface);
             self.error_stream = (&self.error_stream_backing.new_interface);
     }
@@ -177,9 +180,9 @@ pub fn getForceColorDepth() ?SourceColorDepth {
             const force_color = ((bun.env_var.FORCE_COLOR.get()) orelse { return null; });
             return (switch (force_color) {
 0 => .none,
-1 => .@"16",
-2 => .@"256",
-else => .@"16m",
+1 => depth_16,
+2 => depth_256,
+else => depth_16m,
 });
     }
 
@@ -208,11 +211,11 @@ pub fn getColorDepthOnce() void {
                 return;
             }
             if ((bun.env_var.TMUX.get() != null)) {
-                lazy_color_depth = .@"256";
+                lazy_color_depth = depth_256;
                 return;
             }
             if ((bun.env_var.CI.get() != null)) {
-                lazy_color_depth = .@"16";
+                lazy_color_depth = depth_16;
                 return;
             }
             if (bun.env_var.TERM_PROGRAM.get()) |term_program| {
@@ -220,7 +223,7 @@ pub fn getColorDepthOnce() void {
                 const use_16m: [][]const u8 = .{ "ghostty", "MacTerm", "WezTerm", "HyperTerm", "iTerm.app" };
                 inline for (use_16m) |program| {
                     if (strings.eqlComptime(term_program, program)) {
-                        lazy_color_depth = .@"16m";
+                        lazy_color_depth = depth_16m;
                         return;
                     }
                 }
@@ -230,17 +233,17 @@ pub fn getColorDepthOnce() void {
             if (bun.env_var.COLORTERM.get()) |color_term| {
                 _ = &color_term;
                 if ((strings.eqlComptime(color_term, "truecolor") or strings.eqlComptime(color_term, "24bit"))) {
-                    lazy_color_depth = .@"16m";
+                    lazy_color_depth = depth_16m;
                     return;
                 }
                 has_color_term_set = true;
             }
             if ((term.len > 0)) {
                 if (strings.hasPrefixComptime(term, "xterm-256")) {
-                    lazy_color_depth = .@"256";
+                    lazy_color_depth = depth_256;
                     return;
                 }
-                const pairs: [][][]const u8 = .{ .{ "st", SourceColorDepth.@"16" }, .{ "hurd", SourceColorDepth.@"16" }, .{ "eterm", SourceColorDepth.@"16" }, .{ "gnome", SourceColorDepth.@"16" }, .{ "kterm", SourceColorDepth.@"16" }, .{ "mosh", SourceColorDepth.@"16m" }, .{ "putty", SourceColorDepth.@"16" }, .{ "cons25", SourceColorDepth.@"16" }, .{ "cygwin", SourceColorDepth.@"16" }, .{ "dtterm", SourceColorDepth.@"16" }, .{ "mlterm", SourceColorDepth.@"16" }, .{ "console", SourceColorDepth.@"16" }, .{ "jfbterm", SourceColorDepth.@"16" }, .{ "konsole", SourceColorDepth.@"16" }, .{ "terminator", SourceColorDepth.@"16m" }, .{ "xterm-ghostty", SourceColorDepth.@"16m" }, .{ "rxvt-unicode-24bit", SourceColorDepth.@"16m" } };
+                const pairs: [][][]const u8 = .{ .{ "st", depth_16 }, .{ "hurd", depth_16 }, .{ "eterm", depth_16 }, .{ "gnome", depth_16 }, .{ "kterm", depth_16 }, .{ "mosh", depth_16m }, .{ "putty", depth_16 }, .{ "cons25", depth_16 }, .{ "cygwin", depth_16 }, .{ "dtterm", depth_16 }, .{ "mlterm", depth_16 }, .{ "console", depth_16 }, .{ "jfbterm", depth_16 }, .{ "konsole", depth_16 }, .{ "terminator", depth_16m }, .{ "xterm-ghostty", depth_16m }, .{ "rxvt-unicode-24bit", depth_16m } };
                 inline for (pairs) |pair| {
                     if (strings.eqlComptime(term, pair[0])) {
                         lazy_color_depth = pair[1];
@@ -248,12 +251,12 @@ pub fn getColorDepthOnce() void {
                     }
                 }
                 if ((((((((strings.includes(term, "con") or strings.includes(term, "ansi")) or strings.includes(term, "rxvt")) or strings.includes(term, "color")) or strings.includes(term, "linux")) or strings.includes(term, "vt100")) or strings.includes(term, "xterm")) or strings.includes(term, "screen"))) {
-                    lazy_color_depth = .@"16";
+                    lazy_color_depth = depth_16;
                     return;
                 }
             }
             if (has_color_term_set) {
-                lazy_color_depth = .@"16";
+                lazy_color_depth = depth_16;
                 return;
             }
             lazy_color_depth = .none;
@@ -298,7 +301,7 @@ pub fn setInit(stdout: Source.StreamType, stderr: Source.StreamType) void {
                 stderr_stream = stderr;
             }
     }
-    pub const StreamType: type = if (Environment.isWasm) std.io.FixedBufferStream(ByteSlice) else File;
+    pub const StreamType: type = (if (Environment.isWasm) std.io.FixedBufferStream(ByteSlice) else File);
     pub const ColorDepth = SourceColorDepth;
     pub const Stdio = SourceStdio;
 };
@@ -501,11 +504,11 @@ pub inline fn start() DebugTimer {
             }
     }
 
-pub fn format(self: DebugTimer, w: *std.Io.Writer) std.Io.Writer.Error!void {
+pub fn format(self: DebugTimer, w: *std.Io.Writer) !std.Io.Writer.Error {
             if (comptime Environment.isDebug) {
                 var timer = self.timer;
                 _ = &timer;
-                const ns_f: f64 = @floatFromInt(self.timer.read());
+                const ns_f: f64 = @floatFromInt(timer.read());
                 _ = try w.print("{d:.3}ms", .{ (ns_f / std.time.ns_per_ms) });
             }
     }
@@ -526,8 +529,7 @@ pub fn begin() Synchronized {
             return .{};
     }
 
-pub fn end(self: Synchronized) void {
-            _ = self;
+pub fn end() void {
             if (Environment.isPosix) {
                 _ = print(synchronized_end, .{});
             }
@@ -940,6 +942,7 @@ pub fn clearToEnd() void {
 
 pub fn prettyFmt(comptime fmt: []const u8, comptime is_enabled: bool) [:0]const u8 {
         const max_len = (fmt.len * 4);
+        _ = &max_len;
         comptime var new_fmt: [max_len]u8 = undefined;
         _ = &new_fmt;
         comptime var new_fmt_i: usize = 0;
@@ -1120,6 +1123,7 @@ pub fn TupleCatType(comptime AT: type, comptime BT: type) type {
         const af = @typeInfo(AT).@"struct".fields;
         const bf = @typeInfo(BT).@"struct".fields;
         const total = (af.len + bf.len);
+        _ = &total;
         var types: [total]type = undefined;
         _ = &types;
         inline for (0..af.len) |i| {
@@ -1231,7 +1235,7 @@ pub fn enableScopedDebugWriter() void {
         }
 }
 
-pub extern "c" fn getpid() callconv(.c) c_int;
+extern "c" fn getpid() callconv(.c) c_int;
 
 pub fn initScopedDebugWriterAtStartup() void {
         _ = bun.debugAssert(source_set);

@@ -28,8 +28,23 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
-fn cp_iter_slice(val: anytype) switch (@typeInfo(@TypeOf(val))) { .pointer => |p| switch (p.size) { .slice => @TypeOf(val), .one => switch (@typeInfo(p.child)) { .array => []const @typeInfo(p.child).array.child, .pointer => |sub_p| if (sub_p.size == .slice) p.child else @TypeOf(val), else => @TypeOf(val), }, else => @TypeOf(val), }, .array => []const @typeInfo(@TypeOf(val)).array.child, else => @TypeOf(val), } { const __T = @TypeOf(val); switch (@typeInfo(__T)) { .pointer => |p| switch (p.size) { .slice => return val, .one => switch (@typeInfo(p.child)) { .array => return val[0..], .pointer => |sub_p| if (sub_p.size == .slice) return val.* else return val, else => return val, }, else => return val, }, .array => return val[0..], else => return val, } }
-fn cp_mut_slice(ptr: anytype) switch (@typeInfo(@TypeOf(ptr.*))) { .array => []@typeInfo(@TypeOf(ptr.*)).array.child, .pointer => |p| switch (p.size) { .slice => []if (@typeInfo(p.child) == .pointer) @typeInfo(p.child).pointer.child else p.child, .one => switch (@typeInfo(p.child)) { .pointer => |sub_p| if (sub_p.size == .slice) []sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const ValT = @TypeOf(ptr.*); switch (@typeInfo(ValT)) { .array => return ptr[0..], .pointer => |p| switch (p.size) { .slice => return @constCast(ptr.*), .one => return @constCast(ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -265,58 +280,47 @@ pub const HighlighterRedactedKeyword = enum {
 pub const TableSymbols = struct {
     enable_ansi_colors: bool,
 
-pub fn topLeftSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn topLeftSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┌" else "|");
     }
 
-pub fn topRightSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn topRightSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┐" else "|");
     }
 
-pub fn topColumnSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn topColumnSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┬" else "-");
     }
 
-pub fn bottomLeftSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn bottomLeftSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "└" else "|");
     }
 
-pub fn bottomRightSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn bottomRightSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┘" else "|");
     }
 
-pub fn bottomColumnSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn bottomColumnSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┴" else "-");
     }
 
-pub fn middleLeftSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn middleLeftSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "├" else "|");
     }
 
-pub fn middleRightSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn middleRightSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┤" else "|");
     }
 
-pub fn middleColumnSep(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn middleColumnSep(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "┼" else "|");
     }
 
-pub fn horizontalEdge(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn horizontalEdge(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "─" else "-");
     }
 
-pub fn verticalEdge(self: TableSymbols, comptime s: TableSymbols) []const u8 {
-        _ = &self;
+pub fn verticalEdge(comptime s: TableSymbols) []const u8 {
             return (if (s.enable_ansi_colors) "│" else "|");
     }
     pub const unicode = TABLE_SYMBOLS_UNICODE;
@@ -619,8 +623,7 @@ pub const QuickAndDirtyJavaScriptSyntaxHighlighter = struct {
     text: []const u8,
     opts: HighlighterOptions,
 
-pub fn highlightStringLit(self: QuickAndDirtyJavaScriptSyntaxHighlighter, comptime char: u8, writer: *std.Io.Writer, text_ptr: []u8, should_redact_ptr: *bool, opts: HighlighterOptions) !bool {
-        _ = &self;
+pub fn highlightStringLit(comptime char: u8, writer: *std.Io.Writer, text_ptr: []u8, should_redact_ptr: *bool, opts: HighlighterOptions) !bool {
             var txt: []const u8 = text_ptr.*;
             _ = &txt;
             var i: usize = 1;
@@ -956,7 +959,7 @@ prev_keyword = null;
                         txt = txt[len..];
                         continue;
                     }
-                    _ = try writer.print(Output.prettyFmt("<r><d>;<r>", true), .{  });
+                    _ = try writer.print(Output.prettyFmt("<r><d>;<r>", true), &.{});
                     txt = txt[1..];
 },
 '.' => {
@@ -1203,7 +1206,7 @@ pub fn printColumnNames(self: @This()) void {
                         _ = &j;
                         const __end_3 = column_left_pad;
                         while (j < __end_3) : (j += 1) {
-                            _ = Output.pretty(" ", .{  });
+                            _ = Output.pretty(" ", &.{});
                         }
                     }
                     _ = Output.pretty(col_fmt, .{ self.column_names[@as(usize, @intCast(i))] });
@@ -1212,7 +1215,7 @@ pub fn printColumnNames(self: @This()) void {
                         _ = &j;
                         const __end_4 = (column_inside_length + column_right_pad);
                         while (j < __end_4) : (j += 1) {
-                            _ = Output.pretty(" ", .{  });
+                            _ = Output.pretty(" ", &.{});
                         }
                     }
                     if ((i == (self.column_inside_lengths.len - 1))) {
@@ -1582,26 +1585,29 @@ pub fn getOutBuf(value: Int) BufType {
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             const value = self.value;
-            const out_buf = @This().getOutBuf(value);
-            _ = try writer.writeAll((&out_buf));
+            const out_buf = getOutBuf(value);
+            _ = try writer.writeAll(out_buf);
     }
-    const table = if (lower) lower_hex_table else upper_hex_table;
+    const table = (if (lower) lower_hex_table else upper_hex_table);
     const BufType = [@bitSizeOf(Int) / 4]u8;
 };
 }
 
 pub fn HexInt(comptime Int: type, comptime lower: std.fmt.Case, value: Int) HexIntFormatter(Int,lower==std.fmt.Case.lower) {
         const Formatter = HexIntFormatter(Int, (lower == std.fmt.Case.lower));
+        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
 pub fn hexIntLower(value: anytype) HexIntFormatter(@TypeOf(value),true) {
         const Formatter = HexIntFormatter(@TypeOf(value), true);
+        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
 pub fn hexIntUpper(value: anytype) HexIntFormatter(@TypeOf(value),false) {
         const Formatter = HexIntFormatter(@TypeOf(value), false);
+        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
@@ -1616,6 +1622,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             const rem = (self.num - whole);
             if ((rem != 0)) {
                 const buf_len = (2 + precision);
+                _ = &buf_len;
                 var buf: [buf_len]u8 = undefined;
                 _ = &buf;
                 const fmt_str = (comptime std.fmt.comptimePrint("{{d:.{d}}}", .{ precision }));
@@ -1631,6 +1638,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
 
 pub fn trimmedPrecision(value: f64, comptime precision: usize) TrimmedPrecisionFormatter(precision) {
         const Formatter = TrimmedPrecisionFormatter(precision);
+        _ = &Formatter;
         return Formatter{ .num = value, .precision = precision };
 }
 

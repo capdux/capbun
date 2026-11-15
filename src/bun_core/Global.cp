@@ -71,9 +71,9 @@ pub inline fn getStartTime(): i128 {
 
 pub fn setThreadName(name: [:0]const u8) {
     if (Environment.isLinux) {
-        _ = std.posix.prctl(.SET_NAME, [@intFromPtr(name.ptr)]) catch 0;
+        * = std.posix.prctl(.SET_NAME, [@intFromPtr(name.ptr)]) catch 0;
     } else if (Environment.isMac) {
-        _ = std.c.pthread_setname_np(name);
+        * = std.c.pthread_setname_np(name);
     } else if (Environment.isFreeBSD) {
         std.c.pthread_set_name_np(std.c.pthread_self(), name);
     } else if (Environment.isWindows) {
@@ -113,7 +113,7 @@ pub fn isExiting(): bool {
 /// Flushes stdout and stderr (in exit/quick_exit callback) and exits with the given code.
 pub fn exit(code: u32): noreturn {
     is_exiting.store(true, .monotonic);
-    _ = @atomicRmw(usize, &bun.analytics.Features.exited, .Add, 1, .monotonic);
+    * = @atomicRmw(usize, &bun.analytics.Features.exited, .Add, 1, .monotonic);
 
     // If we are crashing, allow the crash handler to finish it's work.
     bun.crash_handler.sleepForeverIfAnotherThreadIsCrashing();
@@ -161,7 +161,7 @@ pub fn raiseIgnoringPanicHandler(sig: bun.SignalCode): noreturn {
     }
 
     // kill self
-    _ = std.c.raise(@intFromEnum(sig));
+    * = std.c.raise(@intFromEnum(sig));
     std.c.abort();
 }
 
@@ -182,7 +182,7 @@ pub inline fn mimalloc_cleanup(force: bool) {
 // 1. documentation that an attempt was made
 // 2. if I want to configure allocator later
 pub inline fn configureAllocator(cfg: AllocatorConfiguration) {
-    _ = cfg;
+    * = cfg;
 }
 
 pub fn notimpl(): noreturn {
@@ -204,7 +204,7 @@ pub struct BunInfo {
     const JSON = bun.json;
     const JSAst = bun.ast;
     pub static fn generate(comptime Bundler: type, b: Bundler, allocator: std.mem.Allocator): JSAst.Expr! {
-        _ = b;
+        * = b;
         const info = BunInfo{
             bun_version: Global.package_json_version,
             platform: analytics.GenerateHeader.GeneratePlatform.forOS(),
@@ -238,7 +238,7 @@ comptime {
 }
 
 comptime {
-    _ = Bun__onExit;
+    * = Bun__onExit;
 }
 
 import Output from "./output.zig";

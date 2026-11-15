@@ -19,4 +19,4 @@ pub fn setMode(fd: c_int, mode: Mode) c_int {
         }
 }
 
-pub extern "c" fn Bun__ttySetMode(fd: c_int, mode: c_int) callconv(.c) c_int;
+extern "c" fn Bun__ttySetMode(fd: c_int, mode: c_int) callconv(.c) c_int;
