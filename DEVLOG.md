@@ -453,3 +453,14 @@
 - **C-ABI 导出签名修复**：在 JSC 扩展函数 `static fn run(...)` 中，Zig 原版缺少冒号直接紧接 `callconv(.c)`。在 CP 中严格要求返回类型前置冒号：`static fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer): callconv(.c) { ... }`，消除 `E0116` 语法报错。
 - **Switch 模式解构规范**：消除 switch arm 中直接 `return` 表达式破坏语法栈的缺陷（如 `.e_boolean => |boolean| return ...`），改写为花括号块语句或外部赋初值，彻底杜绝语法歧义。
 - **枚举字面量上下文推导安全**：对 `base == .dec` 这类未带类型前缀的枚举比较，引入显式枚举类型绑定，规避 `cpc` 将前导点误识别为管道占位符（`E0190`）的语法局限。
+
+## 2026-11-16 [Milestone 7 Phase 33] `src/resolver/` 全子系统 (7/7 模块 100% 闭环) 技术经验
+
+### 1. `resolver.cp` (4,448 行超大模块) 核心解析引擎攻坚经验
+1. **类型表达式乘法长度外移常量化**：
+   - 在 Windows 环境缓存字段中，原版使用了 `[bun.MAX_PATH_BYTES * 2]u8`。在 CP 语法中，类型内部不允许直接包含复杂算术乘法表达式，导致 `E0111: expected token 'RBracket', found 'Star'`。
+   - 解决方案：在模块顶层声明显式常量 `const WIN32_CACHE_LEN: usize = bun.MAX_PATH_BYTES * 2;`，将结构体字段定义规范为 `[WIN32_CACHE_LEN]u8`，彻底消除语法解析中断。
+2. **辅助枚举与结果联合体顶层提权**：
+   - 将嵌套在解析器内部的 9 个辅助类型（`PathPairIter`, `ResultFlags`, `ResultDebugMeta`, `ResultUnion`, `DebugLogsFlushMode`, `MatchResultUnion`, `PendingResolutionTag`, `TSConfigMatch`, `BrowserMapPath`）提升至顶层定义，使 `cpc` 能够无死角对所有联合体与方法进行纯 CP 降解。
+3. **消解复合 `?? return / break` 语句**：
+   - 在高频路径解析逻辑中，原始代码存在大量的 `r.dirInfoCached(...) ?? return ...`。全面改写为合法的条件解包模式：`if (opt == null) return ...;` 与 `if (v := opt) { ... }`，消除 parser 级联报错并提升借用检查准确率。

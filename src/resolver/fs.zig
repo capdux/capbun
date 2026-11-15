@@ -56,7 +56,7 @@ pub fn hash(self: @This()) u64 {
     }
 
 pub fn generate(self: *@This(), _: *RealFS, _: []const u8, file: std.fs.File) anyerror!ModKey {
-        _ = &self;
+        _ = self;
             const stat = try file.stat();
             const seconds = @divTrunc(stat.mtime, (if (comptime @typeInfo(@TypeOf(stat.mtime)) == .@"enum") @as(@TypeOf(stat.mtime), @enumFromInt(std.time.ns_per_s)) else @as(@TypeOf(stat.mtime), std.time.ns_per_s)));
             if (((seconds == 0) and (std.time.ns_per_s == 0))) {
@@ -314,7 +314,7 @@ pub const NodeJSPathName = struct {
     filename: []const u8,
 
 pub fn init(self: *NodeJSPathName, _path: []const u8, comptime isWindows: bool) NodeJSPathName {
-        _ = &self;
+        _ = self;
             const platform: path_handler.Platform = (if (isWindows) .windows else .posix);
             const getLastSep = (comptime platform.getLastSeparatorFunc());
             var path = _path;
@@ -433,7 +433,7 @@ pub inline fn dirWithTrailingSlash(self: PathName) []const u8 {
     }
 
 pub fn init(self: *PathName, _path: []const u8) PathName {
-        _ = &self;
+        _ = self;
             if (comptime (Environment.isWindows and Environment.isDebug)) {
                 _ = bun.assert((!strings.startsWith(_path, "/:/")));
                 _ = bun.assert((!strings.startsWith(_path, "\\:\\")));
@@ -852,12 +852,12 @@ pub fn getComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) ?En
             const result = ((entry.data.getAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
 
 pub fn hash(self: @This(), _: []const u8) @TypeOf(query_hashed) {
-        _ = &self;
+        _ = self;
             return query_hashed;
     }
 
 pub fn eql(self: @This(), _: []const u8, b: []const u8) bool {
-        _ = &self;
+        _ = self;
             return strings.eqlComptime(b, query);
     }
 }, .{})) orelse { return null; });
@@ -875,12 +875,12 @@ pub fn hasComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) boo
             return entry.data.containsAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
 
 pub fn hash(self: @This(), _: []const u8) @TypeOf(query_hashed) {
-        _ = &self;
+        _ = self;
             return query_hashed;
     }
 
 pub fn eql(self: @This(), _: []const u8, b: []const u8) bool {
-        _ = &self;
+        _ = self;
             return strings.eqlComptime(b, (&query));
     }
 }, .{});
@@ -1098,7 +1098,7 @@ pub fn tmpdirPath() []const u8 {
     }
 
 pub fn openTmpDir(self: *const RealFS) !std.fs.Dir {
-        _ = &self;
+        _ = self;
             if (comptime Environment.isWindows) {
                 return try bun.sys.openDirAtWindowsA(bun.invalid_fd, RealFS.tmpdirPath(), .{ .iterable = true, .can_rename_or_delete = false, .read_only = true }).unwrap().stdDir();
             }
@@ -1192,7 +1192,7 @@ pub fn modKey(fs: *RealFS, path: []const u8) anyerror!ModKey {
     }
 
 pub fn openDir(self: *RealFS, unsafe_dir_string: []const u8) !std.fs.Dir {
-        _ = &self;
+        _ = self;
             const dirfd = (if (Environment.isWindows) bun.sys.openDirAtWindowsA(bun.invalid_fd, unsafe_dir_string, .{ .iterable = true, .no_follow = false, .read_only = true }) else bun.sys.openA(unsafe_dir_string, bun.O.DIRECTORY, 0));
             const fd = try dirfd.unwrap();
             return fd.stdDir();
@@ -1322,7 +1322,7 @@ pub fn readDirectoryWithIterator(fs: *RealFS, dir_maybe_trail_slash: []const u8,
     }
 
 pub fn readFileError(self: *RealFS, _: []const u8, _: anyerror) void {
-        _ = &self;
+        _ = self;
     }
 
 pub fn readFileWithHandle(fs: *RealFS, path: []const u8, _size: ?usize, file: std.fs.File, comptime use_shared_buffer: bool, shared_buffer: *MutableString, comptime stream: bool) !PathContentsPair {
@@ -1642,32 +1642,32 @@ pub fn deinit(self: FileSystem) void {
     }
 
 pub fn normalize(self: *FileSystem, str: []const u8) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.normalizeString, .{ str, true, bun.path.Platform.auto });
     }
 
 pub fn normalizeBuf(self: *FileSystem, buf: []u8, str: []const u8) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.normalizeStringBuf, .{ str, buf, false, bun.path.Platform.auto, false });
     }
 
 pub fn join(self: *FileSystem, parts: anytype) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.joinStringBuf, .{ (&join_buf), parts, bun.path.Platform.loose });
     }
 
 pub fn joinBuf(self: *FileSystem, parts: anytype, buf: []u8) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.joinStringBuf, .{ buf, parts, bun.path.Platform.loose });
     }
 
 pub fn relative(self: *FileSystem, from_path: []const u8, to: []const u8) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.relative, .{ from_path, to });
     }
 
 pub fn relativePlatform(self: *FileSystem, from_path: []const u8, to: []const u8, comptime platform: path_handler.Platform) []const u8 {
-        _ = &self;
+        _ = self;
             return @call(bun.callmod_inline, path_handler.relativePlatform, .{ from_path, to, platform, false });
     }
 
