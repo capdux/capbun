@@ -22,17 +22,32 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 pub const TimerObjectInternals = struct {
     id: i32 = -1,
     interval: u31 = 0,
-    this_value: jsc.JSRef = .empty,
+    this_value: jsc.JSRef = .empty(),
     flags: Flags = .{},
     generation: u32 = 0,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.id = -1; self_ptr.interval = 0; self_ptr.this_value = .empty(); self_ptr.flags = .{}; self_ptr.generation = 0; return self_ptr; }
 
 pub fn eventLoopTimer(self: *TimerObjectInternals) *EventLoopTimer {
             switch (self.flags.kind) {
@@ -133,7 +148,7 @@ pub fn asyncID(self: *const TimerObjectInternals) u64 {
             return ID.asyncID(.{ .id = self.id, .kind = self.flags.kind.big() });
     }
 
-pub fn fire(self: *TimerObjectInternals, vm: *jsc.VirtualMachine) void {
+pub fn fire(self: *TimerObjectInternals, _: *const timespec, vm: *jsc.VirtualMachine) void {
             const id = self.id;
             const kind = self.flags.kind.big();
             var __kind_moved = false; _ = &__kind_moved;
@@ -308,7 +323,7 @@ pub fn init(self: *TimerObjectInternals, timer: JSValue, global: *JSGlobalObject
             var vm = global.bunVM();
             var __vm_moved = false; _ = &__vm_moved;
             defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
-            self.* = .{ .id = id, .flags = .{ .kind = kind, .epoch = vm.timer.epoch }, .interval = interval, .generation = vm.test_isolation_generation, .this_value = .empty };
+            self.* = .{ .id = id, .flags = .{ .kind = kind, .epoch = vm.timer.epoch }, .interval = interval, .generation = vm.test_isolation_generation, .this_value = .empty() };
             if ((kind == .setImmediate)) {
                 _ = ImmediateObject.js.argumentsSetCached(timer, global, arguments);
                 _ = ImmediateObject.js.callbackSetCached(timer, global, callback);
@@ -326,7 +341,7 @@ pub fn init(self: *TimerObjectInternals, timer: JSValue, global: *JSGlobalObject
             _ = self.this_value.setStrong(timer, global);
     }
 
-pub fn doRef(self: *TimerObjectInternals, this_value: JSValue) JSValue {
+pub fn doRef(self: *TimerObjectInternals, _: *jsc.JSGlobalObject, this_value: JSValue) JSValue {
             _ = this_value.ensureStillAlive();
             const did_have_js_ref = self.flags.has_js_ref;
             var __did_have_js_ref_moved = false; _ = &__did_have_js_ref_moved;
@@ -348,7 +363,7 @@ pub fn doRefresh(self: *TimerObjectInternals, globalObject: *jsc.JSGlobalObject,
             return this_value;
     }
 
-pub fn doUnref(self: *TimerObjectInternals, this_value: JSValue) JSValue {
+pub fn doUnref(self: *TimerObjectInternals, _: *jsc.JSGlobalObject, this_value: JSValue) JSValue {
             _ = this_value.ensureStillAlive();
             const did_have_js_ref = self.flags.has_js_ref;
             var __did_have_js_ref_moved = false; _ = &__did_have_js_ref_moved;
@@ -416,7 +431,7 @@ pub fn reschedule(self: *TimerObjectInternals, timer: JSValue, vm: *VirtualMachi
             }
             _ = vm.timer.update(self.eventLoopTimer(), scheduled_time);
             self.flags.has_cleared_timer = false;
-            _ = TimeoutObject.js.idleStartSetCached(timer, globalThis, .{ .jsNumber = now.msUnsigned() });
+            _ = TimeoutObject.js.idleStartSetCached(timer, globalThis, .jsNumber(now.msUnsigned()));
             if (self.flags.has_js_ref) {
                 _ = self.setEnableKeepingEventLoopAlive(vm, true);
             }
@@ -519,4 +534,4 @@ const parent: *TimeoutObject = @fieldParentPtr("internals", self);
 };
 
 
-pub extern "c" fn Bun__JSTimeout__call(globalObject: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue) callconv(.c) bool;
+extern "c" fn Bun__JSTimeout__call(globalObject: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue) callconv(.c) bool;

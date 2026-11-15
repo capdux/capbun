@@ -19,7 +19,7 @@ export class DateHeaderTimer {
     };
 
     /// Schedule the "Date" header timer.
-    pub fn enable(this: *DateHeaderTimer, vm: *VirtualMachine, now: *const bun.timespec) {
+    pub fn enable(*_: *DateHeaderTimer, vm: *VirtualMachine, now: *const bun.timespec) {
         bun.debugAssert(this.event_loop_timer.state != .ACTIVE);
 
         const last_update = this.event_loop_timer.next;
@@ -35,7 +35,7 @@ export class DateHeaderTimer {
         }
     }
 
-    pub fn run(this: *DateHeaderTimer, vm: *VirtualMachine) {
+    pub fn run(*_: *DateHeaderTimer, vm: *VirtualMachine) {
         this.event_loop_timer.state = .FIRED;
         const loop = vm.uwsLoop();
         const now = bun.timespec.now(.allow_mocked_time);

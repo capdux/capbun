@@ -23,10 +23,10 @@ pub const ImmediateObject = struct {
     event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .ImmediateObject },
     internals: TimerObjectInternals = undefined,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ref_count = undefined; self_ptr.event_loop_timer = .{ .next = .epoch, .tag = .ImmediateObject }; self_ptr.internals = undefined; return self_ptr; }
 
 pub fn init(globalThis: *JSGlobalObject, id: i32, callback: JSValue, arguments: JSValue) JSValue {
-            const immediate = bun.new(ImmediateObject, .{ .ref_count = .init, .internals = undefined });
+            const immediate = bun.new(ImmediateObject, .{ .ref_count = .init(), .internals = undefined });
             var __immediate_moved = false; _ = &__immediate_moved;
             defer if (!__immediate_moved) { const __T = @TypeOf(immediate); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = immediate.release() catch {}; } else { immediate.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = immediate; _drop_val.release(); } };
             const js_value = immediate.toJS(globalThis);
@@ -53,7 +53,7 @@ pub fn deinit(self: *ImmediateObject) void {
     }
 
 pub fn constructor(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) !*ImmediateObject {
-            _ = callFrame;
+            _ = &callFrame;
             return globalObject.throw("Immediate is not constructible", .{});
     }
 
@@ -66,8 +66,8 @@ pub fn runImmediateTask(self: *ImmediateObject, vm: *VirtualMachine) bool {
     }
 
 pub fn toPrimitive(self: *ImmediateObject, globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = globalObject;
-            _ = callFrame;
+            _ = &globalObject;
+            _ = &callFrame;
             return self.internals.toPrimitive();
     }
 
@@ -80,8 +80,8 @@ pub fn doUnref(self: *ImmediateObject, globalThis: *JSGlobalObject, callFrame: *
     }
 
 pub fn hasRef(self: *ImmediateObject, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = globalObject;
-            _ = callFrame;
+            _ = &globalObject;
+            _ = &callFrame;
             return self.internals.hasRef();
     }
 
@@ -90,12 +90,12 @@ pub fn finalize(self: *ImmediateObject) void {
     }
 
 pub fn getDestroyed(self: *ImmediateObject, globalThis: *JSGlobalObject) JSValue {
-            _ = globalThis;
+            _ = &globalThis;
             return JSValue.jsBoolean(self.internals.getDestroyed());
     }
 
 pub fn dispose(self: *ImmediateObject, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = callFrame;
+            _ = &callFrame;
             _ = self.internals.cancel(globalThis.bunVM());
             return JSValue.js_undefined;
     }

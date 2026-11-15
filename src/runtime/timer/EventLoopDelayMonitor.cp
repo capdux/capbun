@@ -4,7 +4,7 @@ const VirtualMachine = jsc.VirtualMachine;
 
 // Record delay to histogram
 @c {
-    fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64): void;
+    fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64);
 }
 
 export class EventLoopDelayMonitor {

@@ -475,3 +475,13 @@
 ### 2. 命令行与配置系统 (`PackageManagerOptions.cp`) 纯 CP 改造
 - **配置与能力联合体顶层提权**：将 `PatchFeatures`、`PublishConfig`、`Update`、`Do`、`Enable` 提升至顶层定义，消除嵌套匿名结构体导致的方法降解缺失。
 - **消除空指针数组语法**：将 Zig 原生 `&[_]string{}` 替换为纯正 CP 空切片 `[]`；字典多切片同步遍历统一改写为受边界保护的安全单索引循环 `for (i of 0..keys.len)`，杜绝切片错位与指针别名竞争。
+
+## 2026-11-16 [Milestone 7 Phase 35] `src/runtime/timer/` (7/7 定时器全子系统 100% 闭环) 技术经验
+
+### 1. 指针类型修饰优先级与可空指针纯化
+- **显式包裹避免结合歧义**：在 CP 语法中，后缀修饰符的结合优先级使得 `*EventLoopTimer?` 会被解析为“指向可空对象的非空指针 `*(EventLoopTimer?)`”。在返回值与字段类型定义中，严格规范为外层括号包裹 `(*EventLoopTimer)?` 与 `(*TimeoutObject)?`，彻底杜绝类型不匹配与空指针解引用隐患。
+- **裸指针类型彻底纯化**：将跨平台事件循环底层的 `*anyopaque` / `?*anyopaque` 全面收窄替换为 CP 规范的 `*!`（非空裸指针）与 `*!?`（可空裸指针），消除静态门禁违例。
+
+### 2. 事件循环回调与 C-ABI 接收者隔离
+- **内部内联回调避免接收者冲突**：在 Windows libuv 异步空闲定时器回调中，若将静态函数首参写为 `self: *ImmediateObject`，会与外部宿主类型的实例接收者发生命名冲突。改写为 `static fn onIdle(handle: *uv.uv_idle_t)`，彻底隔离作用域。
+- **顶层导出函数形参具名化**：对 `WTFTimer__update` 等提供给 WebKit/JSC 调用的 C 导出函数，避免使用方法接收者语法，使用显式具名形参 `timer: *WTFTimer`，保障 C-ABI 降解符号干净利落。

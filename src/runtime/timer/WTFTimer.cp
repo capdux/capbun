@@ -7,13 +7,13 @@ const VirtualMachine = jsc.VirtualMachine;
 /// This is WTF::RunLoop::TimerBase from WebKit
 @opaque
 export struct RunLoopTimer {
-    pub fn fire(this: *RunLoopTimer) {
-        WTFTimer__fire(this);
+    pub fn fire(*_) {
+        WTFTimer__fire(_);
     }
 }
 
 @c {
-    fn WTFTimer__fire(this: *RunLoopTimer): void;
+    fn WTFTimer__fire(timer: *RunLoopTimer);
 }
 
 /// A timer created by WTF code and invoked by Bun's event loop
@@ -28,23 +28,23 @@ export class WTFTimer {
 
     const new = bun.TrivialNew(WTFTimer);
 
-    pub fn run(self: *WTFTimer, vm: *VirtualMachine) {
-        if (self.event_loop_timer.state == .ACTIVE) {
-            vm.timer.remove(&self.event_loop_timer);
+    pub fn run(*_: *WTFTimer, vm: *VirtualMachine) {
+        if (_.event_loop_timer.state == .ACTIVE) {
+            vm.timer.remove(&_.event_loop_timer);
         }
-        self.runWithoutRemoving();
+        _.runWithoutRemoving();
     }
 
-    inline fn runWithoutRemoving(self: *const WTFTimer) {
-        self.run_loop_timer.fire();
+    inline fn runWithoutRemoving(_: *const WTFTimer) {
+        _.run_loop_timer.fire();
     }
 
-    pub fn update(self: *WTFTimer, seconds: f64, repeat: bool) {
+    pub fn update(*_: *WTFTimer, seconds: f64, repeat: bool) {
         if (!(seconds > 0)) {
-            _ = self.imminent.cmpxchgStrong(null, self, .seq_cst, .seq_cst);
+            * = _.imminent.cmpxchgStrong(null, _, .seq_cst, .seq_cst);
             return;
         }
-        _ = self.imminent.cmpxchgStrong(self, null, .seq_cst, .seq_cst);
+        * = _.imminent.cmpxchgStrong(_, null, .seq_cst, .seq_cst);
 
         const clamped = @min(seconds, @as(f64, std.math.maxInt(i32)));
 
@@ -57,34 +57,34 @@ export class WTFTimer {
             interval.nsec -= std.time.ns_per_s;
         }
 
-        self.vm.timer.update(&self.event_loop_timer, &interval);
-        self.repeat = repeat;
+        _.vm.timer.update(&_.event_loop_timer, &interval);
+        _.repeat = repeat;
     }
 
-    pub fn cancel(self: *WTFTimer) {
-        self.lock.lock();
-        defer self.lock.unlock();
+    pub fn cancel(*_: *WTFTimer) {
+        _.lock.lock();
+        defer _.lock.unlock();
 
-        if (self.script_execution_context_id.valid()) {
-            _ = self.imminent.cmpxchgStrong(self, null, .seq_cst, .seq_cst);
+        if (_.script_execution_context_id.valid()) {
+            * = _.imminent.cmpxchgStrong(_, null, .seq_cst, .seq_cst);
 
-            if (self.event_loop_timer.state == .ACTIVE) {
-                self.vm.timer.remove(&self.event_loop_timer);
+            if (_.event_loop_timer.state == .ACTIVE) {
+                _.vm.timer.remove(&_.event_loop_timer);
             }
         }
     }
 
-    pub fn fire(self: *WTFTimer, now: *const bun.timespec, vm: *VirtualMachine) {
-        _ = now;
-        _ = vm;
-        self.event_loop_timer.state = .FIRED;
-        _ = self.imminent.cmpxchgStrong(self, null, .seq_cst, .seq_cst);
-        self.runWithoutRemoving();
+    pub fn fire(*_: *WTFTimer, now: *const bun.timespec, vm: *VirtualMachine) {
+        * = now;
+        * = vm;
+        _.event_loop_timer.state = .FIRED;
+        * = _.imminent.cmpxchgStrong(_, null, .seq_cst, .seq_cst);
+        _.runWithoutRemoving();
     }
 
-    pub fn deinit(self: *WTFTimer) {
-        self.cancel();
-        bun.destroy(self);
+    pub fn deinit(*_: *WTFTimer) {
+        _.cancel();
+        bun.destroy(_);
     }
 }
 
@@ -92,14 +92,14 @@ pub export fn WTFTimer__runIfImminent(vm: *VirtualMachine) {
     vm.eventLoop().runImminentGCTimer();
 }
 
-pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer): ?*anyopaque {
+pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer): *!? {
     if (VirtualMachine.is_bundler_thread_for_bytecode_cache) {
         return null;
     }
 
     const vm = VirtualMachine.get();
 
-    const this = WTFTimer.new(.{
+    const timer = WTFTimer.new(.{
         .vm = vm,
         .imminent = &vm.eventLoop().imminent_gc_timer,
         .event_loop_timer = .{
@@ -115,30 +115,30 @@ pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer): ?*anyopaque {
         .script_execution_context_id = @enumFromInt(vm.initial_script_execution_context_identifier),
     });
 
-    return this;
+    return timer;
 }
 
-pub export fn WTFTimer__update(this: *WTFTimer, seconds: f64, repeat: bool) {
-    this.update(seconds, repeat);
+pub export fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) {
+    timer.update(seconds, repeat);
 }
 
-pub export fn WTFTimer__deinit(this: *WTFTimer) {
-    this.deinit();
+pub export fn WTFTimer__deinit(timer: *WTFTimer) {
+    timer.deinit();
 }
 
-pub export fn WTFTimer__isActive(this: *const WTFTimer): bool {
-    return this.event_loop_timer.state == .ACTIVE or (this.imminent.load(.seq_cst) orelse return false) == this;
+pub export fn WTFTimer__isActive(timer: *const WTFTimer): bool {
+    return timer.event_loop_timer.state == .ACTIVE or (timer.imminent.load(.seq_cst) orelse return false) == timer;
 }
 
-pub export fn WTFTimer__cancel(this: *WTFTimer) {
-    this.cancel();
+pub export fn WTFTimer__cancel(timer: *WTFTimer) {
+    timer.cancel();
 }
 
-pub export fn WTFTimer__secondsUntilTimer(this: *WTFTimer): f64 {
-    this.lock.lock();
-    defer this.lock.unlock();
-    if (this.event_loop_timer.state == .ACTIVE) {
-        const until = this.event_loop_timer.next.duration(&bun.timespec.now(.force_real_time));
+pub export fn WTFTimer__secondsUntilTimer(timer: *WTFTimer): f64 {
+    timer.lock.lock();
+    defer timer.lock.unlock();
+    if (timer.event_loop_timer.state == .ACTIVE) {
+        const until = timer.event_loop_timer.next.duration(&bun.timespec.now(.force_real_time));
         const sec: f64 = @floatFromInt(until.sec);
         const nsec: f64 = @floatFromInt(until.nsec);
         return sec + nsec / std.time.ns_per_s;

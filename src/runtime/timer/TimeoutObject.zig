@@ -23,10 +23,10 @@ pub const TimeoutObject = struct {
     event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .TimeoutObject },
     internals: TimerObjectInternals = undefined,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ref_count = undefined; self_ptr.event_loop_timer = .{ .next = .epoch, .tag = .TimeoutObject }; self_ptr.internals = undefined; return self_ptr; }
 
 pub fn init(globalThis: *JSGlobalObject, id: i32, kind: Kind, interval: u31, callback: JSValue, arguments: JSValue) JSValue {
-            const timeout = bun.new(TimeoutObject, .{ .ref_count = .init, .internals = undefined });
+            const timeout = bun.new(TimeoutObject, .{ .ref_count = .init(), .internals = undefined });
             var __timeout_moved = false; _ = &__timeout_moved;
             defer if (!__timeout_moved) { const __T = @TypeOf(timeout); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = timeout.release() catch {}; } else { timeout.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = timeout; _drop_val.release(); } };
             const js_value = timeout.toJS(globalThis);
@@ -53,7 +53,7 @@ pub fn deinit(self: *TimeoutObject) void {
     }
 
 pub fn constructor(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) !*TimeoutObject {
-            _ = callFrame;
+            _ = &callFrame;
             return globalObject.throw("Timeout is not constructible", .{});
     }
 
@@ -62,8 +62,8 @@ pub fn getEventLoopTimer(self: *TimeoutObject) *EventLoopTimer {
     }
 
 pub fn toPrimitive(self: *TimeoutObject, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = globalObject;
-            _ = callFrame;
+            _ = &globalObject;
+            _ = &callFrame;
             return self.internals.toPrimitive();
     }
 
@@ -80,8 +80,8 @@ pub fn doRefresh(self: *TimeoutObject, globalThis: *JSGlobalObject, callFrame: *
     }
 
 pub fn hasRef(self: *TimeoutObject, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = globalObject;
-            _ = callFrame;
+            _ = &globalObject;
+            _ = &callFrame;
             return self.internals.hasRef();
     }
 
@@ -90,7 +90,7 @@ pub fn finalize(self: *TimeoutObject) void {
     }
 
 pub fn getDestroyed(self: *TimeoutObject, globalThis: *JSGlobalObject) JSValue {
-            _ = globalThis;
+            _ = &globalThis;
             return JSValue.jsBoolean(self.internals.getDestroyed());
     }
 
@@ -100,51 +100,51 @@ pub fn close(self: *TimeoutObject, globalThis: *JSGlobalObject, callFrame: *jsc.
     }
 
 pub fn get_onTimeout(self: *TimeoutObject, thisValue: JSValue, globalObject: *JSGlobalObject) JSValue {
-            _ = self;
-            _ = globalObject;
+        _ = self;
+            _ = &globalObject;
             return (TimeoutObject.js.callbackGetCached(thisValue)).?;
     }
 
 pub fn set_onTimeout(self: *TimeoutObject, thisValue: JSValue, globalThis: *JSGlobalObject, value: JSValue) void {
-            _ = self;
+        _ = self;
             _ = TimeoutObject.js.callbackSetCached(thisValue, globalThis, value);
     }
 
 pub fn get_idleTimeout(self: *TimeoutObject, thisValue: JSValue, globalObject: *JSGlobalObject) JSValue {
-            _ = self;
-            _ = globalObject;
+        _ = self;
+            _ = &globalObject;
             return (TimeoutObject.js.idleTimeoutGetCached(thisValue)).?;
     }
 
 pub fn set_idleTimeout(self: *TimeoutObject, thisValue: JSValue, globalThis: *JSGlobalObject, value: JSValue) void {
-            _ = self;
+        _ = self;
             _ = TimeoutObject.js.idleTimeoutSetCached(thisValue, globalThis, value);
     }
 
 pub fn get_repeat(self: *TimeoutObject, thisValue: JSValue, globalObject: *JSGlobalObject) JSValue {
-            _ = self;
-            _ = globalObject;
+        _ = self;
+            _ = &globalObject;
             return (TimeoutObject.js.repeatGetCached(thisValue)).?;
     }
 
 pub fn set_repeat(self: *TimeoutObject, thisValue: JSValue, globalThis: *JSGlobalObject, value: JSValue) void {
-            _ = self;
+        _ = self;
             _ = TimeoutObject.js.repeatSetCached(thisValue, globalThis, value);
     }
 
 pub fn get_idleStart(self: *TimeoutObject, thisValue: JSValue, globalObject: *JSGlobalObject) JSValue {
-            _ = self;
-            _ = globalObject;
+        _ = self;
+            _ = &globalObject;
             return (TimeoutObject.js.idleStartGetCached(thisValue)).?;
     }
 
 pub fn set_idleStart(self: *TimeoutObject, thisValue: JSValue, globalThis: *JSGlobalObject, value: JSValue) void {
-            _ = self;
+        _ = self;
             _ = TimeoutObject.js.idleStartSetCached(thisValue, globalThis, value);
     }
 
 pub fn dispose(self: *TimeoutObject, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = callFrame;
+            _ = &callFrame;
             _ = self.internals.cancel(globalThis.bunVM());
             return JSValue.js_undefined;
     }

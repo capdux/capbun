@@ -23,7 +23,7 @@ pub const WTFTimer = struct {
     lock: bun.Mutex = .{},
     script_execution_context_id: bun.webcore.ScriptExecutionContext.Identifier,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.lock = .{}; return self_ptr; }
 
 pub fn init(self: *WTFTimer, vm: *VirtualMachine, run_loop_timer: *RunLoopTimer, event_loop_timer: EventLoopTimer, imminent: *std.atomic.Value(?*WTFTimer), repeat: bool, lock: bun.Mutex, script_execution_context_id: bun.webcore.ScriptExecutionContext.Identifier) void {
         var __event_loop_timer_moved = false; _ = &__event_loop_timer_moved;
@@ -86,8 +86,8 @@ pub fn cancel(self: *WTFTimer) void {
     }
 
 pub fn fire(self: *WTFTimer, now: *const bun.timespec, vm: *VirtualMachine) void {
-            _ = now;
-            _ = vm;
+            _ = &now;
+            _ = &vm;
             self.event_loop_timer.state = .FIRED;
             _ = self.imminent.cmpxchgStrong(self, null, .seq_cst, .seq_cst);
             _ = self.runWithoutRemoving();
@@ -101,7 +101,7 @@ pub fn deinit(self: *WTFTimer) void {
 };
 
 
-pub extern "c" fn WTFTimer__fire(this: *RunLoopTimer) callconv(.c) void;
+extern "c" fn WTFTimer__fire(timer: *RunLoopTimer) callconv(.c) void;
 
 pub fn WTFTimer__runIfImminent(vm: *VirtualMachine) void {
         _ = vm.eventLoop().runImminentGCTimer();
@@ -112,33 +112,33 @@ pub fn WTFTimer__create(run_loop_timer: *RunLoopTimer) ?*anyopaque {
             return null;
         }
         const vm = VirtualMachine.get();
-        const this = WTFTimer.new(.{ .vm = vm, .imminent = (&(vm).?.eventLoop().imminent_gc_timer), .event_loop_timer = .{ .next = .{ .sec = std.math.maxInt(i64), .nsec = 0 }, .tag = .WTFTimer, .state = .CANCELLED }, .run_loop_timer = run_loop_timer, .repeat = false, .script_execution_context_id = @enumFromInt((vm).?.initial_script_execution_context_identifier) });
-        return this;
+        const timer = WTFTimer.new(.{ .vm = vm, .imminent = (&(vm).?.eventLoop().imminent_gc_timer), .event_loop_timer = .{ .next = .{ .sec = std.math.maxInt(i64), .nsec = 0 }, .tag = .WTFTimer, .state = .CANCELLED }, .run_loop_timer = run_loop_timer, .repeat = false, .script_execution_context_id = @enumFromInt((vm).?.initial_script_execution_context_identifier) });
+        return timer;
 }
 
-pub fn WTFTimer__update(this: *WTFTimer, seconds: f64, repeat: bool) void {
-        _ = this.update(seconds, repeat);
+pub fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) void {
+        _ = timer.update(seconds, repeat);
 }
 
-pub fn WTFTimer__deinit(this: *WTFTimer) void {
-        _ = this.deinit();
+pub fn WTFTimer__deinit(timer: *WTFTimer) void {
+        _ = timer.deinit();
 }
 
-pub fn WTFTimer__isActive(this: *const WTFTimer) bool {
-        return ((this.event_loop_timer.state == .ACTIVE) or (((this.imminent.load(.seq_cst)) orelse { return false; }) == this));
+pub fn WTFTimer__isActive(timer: *const WTFTimer) bool {
+        return ((timer.event_loop_timer.state == .ACTIVE) or (((timer.imminent.load(.seq_cst)) orelse { return false; }) == timer));
 }
 
-pub fn WTFTimer__cancel(this: *WTFTimer) void {
-        _ = this.cancel();
+pub fn WTFTimer__cancel(timer: *WTFTimer) void {
+        _ = timer.cancel();
 }
 
-pub fn WTFTimer__secondsUntilTimer(this: *WTFTimer) f64 {
-        _ = this.lock.lock();
+pub fn WTFTimer__secondsUntilTimer(timer: *WTFTimer) f64 {
+        _ = timer.lock.lock();
         defer {
-        _ = this.lock.unlock();
+        _ = timer.lock.unlock();
         }
-        if ((this.event_loop_timer.state == .ACTIVE)) {
-            const until = this.event_loop_timer.next.duration((&bun.timespec.now(.force_real_time)));
+        if ((timer.event_loop_timer.state == .ACTIVE)) {
+            const until = timer.event_loop_timer.next.duration((&bun.timespec.now(.force_real_time)));
             const sec: f64 = @floatFromInt(until.sec);
             const nsec: f64 = @floatFromInt(until.nsec);
             return (sec + (nsec / std.time.ns_per_s));

@@ -83,7 +83,7 @@ export class TimerObjectInternals {
     }
 
     /// returns true if an exception was thrown
-    pub fn runImmediateTask(_: *TimerObjectInternals, *vm: VirtualMachine): bool {
+    pub fn runImmediateTask(_: *TimerObjectInternals, vm: *VirtualMachine): bool {
         if (_.flags.has_cleared_timer or
             _.generation != vm.test_isolation_generation or
             (!_.flags.is_keeping_event_loop_alive and !vm.isEventLoopAliveExcludingImmediates()))
@@ -134,7 +134,7 @@ export class TimerObjectInternals {
         return ID.asyncID(.{ .id = _.id, .kind = _.flags.kind.big() });
     }
 
-    pub fn fire(_: *TimerObjectInternals, _: *const timespec, *vm: jsc.VirtualMachine) {
+    pub fn fire(_: *TimerObjectInternals, _: *const timespec, vm: *jsc.VirtualMachine) {
         const id = _.id;
         const kind = _.flags.kind.big();
         const async_id: ID = .{ .id = id, .kind = kind };
@@ -197,7 +197,7 @@ export class TimerObjectInternals {
             _.ref();
             defer _.deref();
 
-            _ = _.run(globalThis, this_object, callback, arguments, ID.asyncID(async_id), vm);
+            * = _.run(globalThis, this_object, callback, arguments, ID.asyncID(async_id), vm);
 
             switch (kind) {
                 .setTimeout, .setInterval => {
@@ -372,7 +372,7 @@ export class TimerObjectInternals {
         return this_value;
     }
 
-    pub fn cancel(_: *TimerObjectInternals, *vm: VirtualMachine) {
+    pub fn cancel(_: *TimerObjectInternals, vm: *VirtualMachine) {
         _.setEnableKeepingEventLoopAlive(vm, false);
         _.flags.has_cleared_timer = true;
 
@@ -400,7 +400,7 @@ export class TimerObjectInternals {
         return true;
     }
 
-    pub fn reschedule(_: *TimerObjectInternals, timer: JSValue, *vm: VirtualMachine, globalThis: *JSGlobalObject) {
+    pub fn reschedule(_: *TimerObjectInternals, timer: JSValue, vm: *VirtualMachine, globalThis: *JSGlobalObject) {
         if (_.flags.kind == .setImmediate) return;
 
         const idle_timeout = TimeoutObject.js.idleTimeoutGetCached(timer).?;
@@ -427,7 +427,7 @@ export class TimerObjectInternals {
         }
     }
 
-    fn setEnableKeepingEventLoopAlive(_: *TimerObjectInternals, *vm: VirtualMachine, enable: bool) {
+    fn setEnableKeepingEventLoopAlive(_: *TimerObjectInternals, vm: *VirtualMachine, enable: bool) {
         if (_.flags.is_keeping_event_loop_alive == enable) {
             return;
         }

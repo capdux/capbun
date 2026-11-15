@@ -37,8 +37,8 @@ pub enum Kind: u2 {
 
     pub const Big = Kind_Big;
 
-    pub fn big(this: Kind): Big {
-        return @enumFromInt(@intFromEnum(this));
+    pub fn big(_: Kind): Big {
+        return @enumFromInt(@intFromEnum(_));
     }
 }
 
@@ -48,12 +48,12 @@ pub struct ID {
     id: i32,
     kind: Kind.Big = .setTimeout,
 
-    pub inline fn asyncID(this: ID): u64 {
-        return @bitCast(this);
+    pub inline fn asyncID(_: ID): u64 {
+        return @bitCast(_);
     }
 
-    pub fn repeats(this: ID): bool {
-        return this.kind == .setInterval;
+    pub fn repeats(_: ID): bool {
+        return _.kind == .setInterval;
     }
 }
 
@@ -62,11 +62,11 @@ pub struct Maps {
     setInterval: TimeoutMap = .{},
     setImmediate: TimeoutMap = .{},
 
-    pub inline fn get(this: *Maps, kind: Kind): *TimeoutMap {
+    pub inline fn get(*_: *Maps, kind: Kind): *TimeoutMap {
         return switch (kind) {
-            .setTimeout => &this.setTimeout,
-            .setInterval => &this.setInterval,
-            .setImmediate => &this.setImmediate,
+            .setTimeout => &_.setTimeout,
+            .setInterval => &_.setInterval,
+            .setImmediate => &_.setImmediate,
         };
     }
 }
@@ -173,7 +173,7 @@ export class All {
     fn ensureUVTimer(_: *All, vm: *VirtualMachine) {
         if (_.uv_timer.data == null) {
             _.uv_timer.init(vm.uvLoop());
-            _.uv_timer.data = @as(?*anyopaque, @ptrCast(vm));
+            _.uv_timer.data = @as(*!?, @ptrCast(vm));
             _.uv_timer.unref();
         }
 
@@ -203,29 +203,29 @@ export class All {
         all.ensureUVTimer(vm);
     }
 
-    pub fn incrementImmediateRef(this: *All, delta: i32) {
-        const old = this.immediate_ref_count;
+    pub fn incrementImmediateRef(*_: *All, delta: i32) {
+        const old = _.immediate_ref_count;
         const new_count = old + delta;
-        this.immediate_ref_count = new_count;
-        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("timer", this));
+        _.immediate_ref_count = new_count;
+        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("timer", _));
 
-        if (old <= 0 and new_count > 0) {
+        if (old <= 0 && new_count > 0) {
             if (comptime Environment.isWindows) {
-                if (this.uv_idle.data == null) {
-                    this.uv_idle.init(uv.Loop.get());
-                    this.uv_idle.data = @as(?*anyopaque, @ptrCast(vm));
+                if (_.uv_idle.data == null) {
+                    _.uv_idle.init(uv.Loop.get());
+                    _.uv_idle.data = @as(*!?, @ptrCast(vm));
                 }
 
-                this.uv_idle.start(struct {
-                    fn cb(_: *uv.uv_idle_t) void {}
+                _.uv_idle.start(struct {
+                    static fn cb(_: *uv.uv_idle_t) {}
                 }.cb);
             } else {
                 vm.uwsLoop().ref();
             }
-        } else if (old > 0 and new_count <= 0) {
+        } else if (old > 0 && new_count <= 0) {
             if (comptime Environment.isWindows) {
-                if (this.uv_idle.data != null) {
-                    this.uv_idle.stop();
+                if (_.uv_idle.data != null) {
+                    _.uv_idle.stop();
                 }
             } else {
                 vm.uwsLoop().unref();
@@ -233,27 +233,27 @@ export class All {
         }
     }
 
-    pub fn incrementTimerRef(this: *All, delta: i32) {
-        const vm: *jsc.VirtualMachine = @alignCast(@fieldParentPtr("timer", this));
+    pub fn incrementTimerRef(*_: *All, delta: i32) {
+        const vm: *jsc.VirtualMachine = @alignCast(@fieldParentPtr("timer", _));
 
-        const old = this.active_timer_count;
+        const old = _.active_timer_count;
         const new_count = old + delta;
 
         if (comptime Environment.isDebug) {
             assert(new_count >= 0);
         }
 
-        this.active_timer_count = new_count;
+        _.active_timer_count = new_count;
 
-        if (old <= 0 and new_count > 0) {
+        if (old <= 0 && new_count > 0) {
             if (comptime Environment.isWindows) {
-                this.uv_timer.ref();
+                _.uv_timer.ref();
             } else {
                 vm.uwsLoop().ref();
             }
-        } else if (old > 0 and new_count <= 0) {
+        } else if (old > 0 && new_count <= 0) {
             if (comptime Environment.isWindows) {
-                this.uv_timer.unref();
+                _.uv_timer.unref();
             } else {
                 vm.uwsLoop().unref();
             }
@@ -280,7 +280,7 @@ export class All {
         }
     }
 
-    pub fn getTimeout(_: *All, *spec: timespec, vm: *VirtualMachine): bool {
+    pub fn getTimeout(_: *All, spec: *timespec, vm: *VirtualMachine): bool {
         if (comptime Environment.isPosix) {
             if (vm.event_loop.immediate_tasks.items.len > 0) {
                 spec.* = .{ .nsec = 0, .sec = 0 };
@@ -288,7 +288,7 @@ export class All {
             }
         }
 
-        const quic_us: ?i64 = if (comptime Environment.isPosix) blk: {
+        const quic_us: i64? = if (comptime Environment.isPosix) blk: {
             if (loop := vm.event_loop_handle) {
                 if (loop.internal_loop_data.quic_head != null) {
                     break :blk loop.internal_loop_data.quic_next_tick_us;
@@ -297,7 +297,7 @@ export class All {
             break :blk null;
         } else null;
 
-        let maybe_now: ?timespec = null;
+        let maybe_now: timespec? = null;
         while (min := _.timers.peek()) {
             if (maybe_now == null) {
                 maybe_now = timespec.now(.allow_mocked_time);
@@ -307,7 +307,7 @@ export class All {
             switch (now.order(&min.next)) {
                 .gt, .eq => {
                     if (min.tag == .WTFTimer) {
-                        _ = _.timers.deleteMin();
+                        * = _.timers.deleteMin();
                         min.fire(&now, vm);
                         continue;
                     }
@@ -337,7 +337,7 @@ export class All {
         return false;
     }
 
-    fn clampToQuic(*spec: timespec, us: i64): void {
+    fn clampToQuic(spec: *timespec, us: i64) {
         const cur_us = @as(i64, spec.sec) * std.time.us_per_s + @divTrunc(spec.nsec, std.time.ns_per_us);
         if (us < cur_us) spec.* = .{
             .sec = @intCast(@divTrunc(us, std.time.us_per_s)),
@@ -345,7 +345,7 @@ export class All {
         };
     }
 
-    fn next(_: *All, *has_set_now: bool, *out_now: timespec): ?*EventLoopTimer {
+    fn next(_: *All, has_set_now: *bool, out_now: *timespec): (*EventLoopTimer)? {
         _.lock.lock();
         defer _.lock.unlock();
 
@@ -373,15 +373,14 @@ export class All {
         }
     }
 
-    fn warnInvalidCountdown(this, globalThis: *JSGlobalObject, countdown: f64, warning_type: TimeoutWarning): void {
-        _ = this;
+    fn warnInvalidCountdown(*_, globalThis: *JSGlobalObject, countdown: f64, warning_type: TimeoutWarning) {
         let warning_string = switch (warning_type) {
             .TimeoutOverflowWarning => {
                 if (std.math.isFinite(countdown)) {
                     bun.String.createFormat(
                         "{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.",
                         .{ countdown }
-                    ) catch |err| bun.handleOom(err)
+                    ) catch |e| bun.handleOom(e)
                 } else {
                     bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.")
                 }
@@ -391,7 +390,7 @@ export class All {
                     bun.String.createFormat(
                         "{d} is a negative number.\nTimeout duration was set to 1.",
                         .{ countdown }
-                    ) catch |err| bun.handleOom(err)
+                    ) catch |e| bun.handleOom(e)
                 } else {
                     bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.")
                 }
@@ -403,11 +402,11 @@ export class All {
         };
         let warning_type_string = bun.String.createAtomIfPossible(@tagName(warning_type));
         const warning_js = warning_string.transferToJS(globalThis) catch {
-            _ = globalThis.clearExceptionExceptTermination();
+            * = globalThis.clearExceptionExceptTermination();
             return;
         };
         const warning_type_js = warning_type_string.transferToJS(globalThis) catch {
-            _ = globalThis.clearExceptionExceptTermination();
+            * = globalThis.clearExceptionExceptTermination();
             return;
         };
         globalThis.emitWarning(
@@ -416,12 +415,12 @@ export class All {
             .js_undefined,
             .js_undefined,
         ) catch {
-            _ = globalThis.clearExceptionExceptTermination();
+            * = globalThis.clearExceptionExceptTermination();
         };
     }
 
     fn jsValueToCountdown(
-        this: *All,
+        *_: *All,
         globalThis: *JSGlobalObject,
         countdown: JSValue,
         overflow_behavior: CountdownOverflowBehavior,
@@ -434,13 +433,13 @@ export class All {
                 if (!(countdown_double >= 1 and countdown_double <= std.math.maxInt(u31))) {
                     if (warn) {
                         if (countdown_double > std.math.maxInt(u31)) {
-                            this.warnInvalidCountdown(globalThis, countdown_double, .TimeoutOverflowWarning);
-                        } else if (countdown_double < 0 and !this.warned_negative_number) {
-                            this.warned_negative_number = true;
-                            this.warnInvalidCountdown(globalThis, countdown_double, .TimeoutNegativeWarning);
-                        } else if (!countdown.isUndefined() and countdown.isNumber() and std.math.isNan(countdown_double) and !this.warned_not_number) {
-                            this.warned_not_number = true;
-                            this.warnInvalidCountdown(globalThis, countdown_double, .TimeoutNaNWarning);
+                            _.warnInvalidCountdown(globalThis, countdown_double, .TimeoutOverflowWarning);
+                        } else if (countdown_double < 0 && !_.warned_negative_number) {
+                            _.warned_negative_number = true;
+                            _.warnInvalidCountdown(globalThis, countdown_double, .TimeoutNegativeWarning);
+                        } else if (!countdown.isUndefined() && countdown.isNumber() && std.math.isNan(countdown_double) && !_.warned_not_number) {
+                            _.warned_not_number = true;
+                            _.warnInvalidCountdown(globalThis, countdown_double, .TimeoutNaNWarning);
                         }
                     }
                     break :blk 1;
@@ -518,11 +517,11 @@ export class All {
         return TimeoutObject.init(global, id, .setInterval, countdown_int, wrapped_callback, arguments);
     }
 
-    fn removeTimerById(this: *All, id: i32): ?*TimeoutObject {
-        if (entry := this.maps.setTimeout.fetchSwapRemove(id)) {
+    fn removeTimerById(*_: *All, id: i32): (*TimeoutObject)? {
+        if (entry := _.maps.setTimeout.fetchSwapRemove(id)) {
             bun.assert(entry.value.tag == .TimeoutObject);
             return @fieldParentPtr("event_loop_timer", entry.value);
-        } else if (entry := this.maps.setInterval.fetchSwapRemove(id)) {
+        } else if (entry := _.maps.setInterval.fetchSwapRemove(id)) {
             bun.assert(entry.value.tag == .TimeoutObject);
             return @fieldParentPtr("event_loop_timer", entry.value);
         } else return null;
@@ -547,29 +546,35 @@ export class All {
             switch (str.encoding()) {
                 .latin1 => {
                     const slice = str.latin1();
-                    for (slice, 0..) |c, i| {
-                        if (c < '0' or c > '9') { valid = false; break; }
-                        if (i == 0 and c == '0') { valid = false; break; }
+                    let i: usize = 0;
+                    for (c of slice) {
+                        if (c < '0' || c > '9') { valid = false; break; }
+                        if (i == 0 && c == '0') { valid = false; break; }
                         accumulator = std.math.mul(i32, 10, accumulator) catch { valid = false; break; };
                         accumulator = std.math.add(i32, accumulator, c - '0') catch { valid = false; break; };
+                        i += 1;
                     }
                 },
                 .utf8 => {
                     const slice = str.utf8();
-                    for (slice, 0..) |c, i| {
-                        if (c < '0' or c > '9') { valid = false; break; }
-                        if (i == 0 and c == '0') { valid = false; break; }
+                    let i: usize = 0;
+                    for (c of slice) {
+                        if (c < '0' || c > '9') { valid = false; break; }
+                        if (i == 0 && c == '0') { valid = false; break; }
                         accumulator = std.math.mul(i32, 10, accumulator) catch { valid = false; break; };
                         accumulator = std.math.add(i32, accumulator, c - '0') catch { valid = false; break; };
+                        i += 1;
                     }
                 },
                 .utf16 => {
                     const slice = str.utf16();
-                    for (slice, 0..) |c, i| {
-                        if (c < '0' or c > '9') { valid = false; break; }
-                        if (i == 0 and c == '0') { valid = false; break; }
+                    let i: usize = 0;
+                    for (c of slice) {
+                        if (c < '0' || c > '9') { valid = false; break; }
+                        if (i == 0 && c == '0') { valid = false; break; }
                         accumulator = std.math.mul(i32, 10, accumulator) catch { valid = false; break; };
                         accumulator = std.math.add(i32, accumulator, @as(i32, @intCast(c - '0'))) catch { valid = false; break; };
+                        i += 1;
                     }
                 },
             }
@@ -630,8 +635,8 @@ pub export fn Bun__internal_drainTimers(vm: *VirtualMachine) {
 
 pub struct internal_bindings {
     pub fn timerClockMs(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalThis;
-        _ = callFrame;
+        * = globalThis;
+        * = callFrame;
         const now = timespec.now(.allow_mocked_time).ms();
         return JSValue.jsNumberFromInt64(now);
     }

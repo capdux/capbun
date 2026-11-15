@@ -13,7 +13,7 @@ pub const EventLoopDelayMonitor = struct {
     last_fire_ns: u64 = 0,
     enabled: bool = false,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.js_histogram = jsc.JSValue.zero; self_ptr.event_loop_timer = .{ .next = .epoch, .tag = .EventLoopDelayMonitor }; self_ptr.resolution_ms = 10; self_ptr.last_fire_ns = 0; self_ptr.enabled = false; return self_ptr; }
 
 pub fn init(self: *EventLoopDelayMonitor, js_histogram: jsc.JSValue, event_loop_timer: jsc.API.Timer.EventLoopTimer, resolution_ms: i32, last_fire_ns: u64, enabled: bool) void {
         var __js_histogram_moved = false; _ = &__js_histogram_moved;
@@ -73,7 +73,7 @@ pub fn onFire(self: *EventLoopDelayMonitor, vm: *VirtualMachine, now: *const bun
 };
 
 
-pub extern "c" fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64) callconv(.c) void;
+extern "c" fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64) callconv(.c) void;
 
 pub fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) void {
         _ = vm.timer.event_loop_delay.enable(vm, histogram, resolution_ms);
