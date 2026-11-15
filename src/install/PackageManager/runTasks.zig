@@ -1,1289 +1,17 @@
-/// Called from isolated_install.zig on the main thread.
-pub fn runTasks(
-    manager: *PackageManager,
-    comptime Ctx: type,
-    extract_ctx: Ctx,
-    comptime callbacks: anytype,
-    install_peer: bool,
-    log_level: Options.LogLevel,
-) !void {
-    var has_updated_this_run = false;
-    var has_network_error = false;
-
-    var timestamp_this_tick: ?u32 = null;
-
-    defer {
-        manager.drainDependencyList();
-
-        if (log_level.showProgress()) {
-            manager.startProgressBarIfNone();
-
-            if (@hasField(@TypeOf(callbacks), "progress_bar") and callbacks.progress_bar == true) {
-                const completed_items = manager.total_tasks - manager.pendingTaskCount();
-                if (completed_items != manager.downloads_node.?.unprotected_completed_items or has_updated_this_run) {
-                    manager.downloads_node.?.setCompletedItems(completed_items);
-                    manager.downloads_node.?.setEstimatedTotalItems(manager.total_tasks);
-                }
-            }
-            manager.downloads_node.?.activate();
-            manager.progress.maybeRefresh();
-        }
-    }
-
-    var patch_tasks_batch = manager.patch_task_queue.popBatch();
-    var patch_tasks_iter = patch_tasks_batch.iterator();
-    while (patch_tasks_iter.next()) |ptask| {
-        if (comptime Environment.allow_assert) bun.assert(manager.pendingTaskCount() > 0);
-        manager.decrementPendingTasks();
-        defer ptask.deinit();
-        try ptask.runFromMainThread(manager, log_level);
-        if (ptask.callback == .apply) {
-            if (ptask.callback.apply.logger.errors == 0) {
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
-                    if (ptask.callback.apply.task_id) |task_id| {
-                        _ = task_id; // autofix
-
-                    } else if (Ctx == *PackageInstaller) {
-                        if (ptask.callback.apply.install_context) |*ctx| {
-                            var installer: *PackageInstaller = extract_ctx;
-                            const path = ctx.path;
-                            ctx.path = std.array_list.Managed(u8).init(bun.default_allocator);
-                            installer.node_modules.path = path;
-                            installer.current_tree_id = ctx.tree_id;
-                            const pkg_id = ptask.callback.apply.pkg_id;
-                            const resolution = &manager.lockfile.packages.items(.resolution)[pkg_id];
-
-                            installer.installPackageWithNameAndResolution(
-                                ctx.dependency_id,
-                                pkg_id,
-                                log_level,
-                                ptask.callback.apply.pkgname,
-                                resolution,
-                                false,
-                                false,
-                            );
-                        }
-                    }
-                }
-            } else {
-                // Patch application failed - propagate error to cause install failure
-                return error.InstallFailed;
-            }
-        }
-    }
-
-    if (Ctx == *Store.Installer) {
-        const installer: *Store.Installer = extract_ctx;
-        const batch = installer.task_queue.popBatch();
-        var iter = batch.iterator();
-        while (iter.next()) |task| {
-            switch (task.result) {
-                .none => {
-                    if (comptime Environment.ci_assert) {
-                        bun.assertWithLocation(false, @src());
-                    }
-                    installer.onTaskComplete(task.entry_id, .success);
-                },
-                .err => |err| {
-                    installer.onTaskFail(task.entry_id, err);
-                },
-                .blocked => {
-                    installer.onTaskBlocked(task.entry_id);
-                },
-                .run_scripts => |list| {
-                    const entries = installer.store.entries.slice();
-
-                    const node_id = entries.items(.node_id)[task.entry_id.get()];
-                    const dep_id = installer.store.nodes.items(.dep_id)[node_id.get()];
-                    const dep = installer.lockfile.buffers.dependencies.items[dep_id];
-                    installer.manager.spawnPackageLifecycleScripts(
-                        installer.command_ctx,
-                        list.*,
-                        dep.behavior.optional,
-                        false,
-                        .{
-                            .entry_id = task.entry_id,
-                            .installer = installer,
-                        },
-                    ) catch |err| {
-                        // .monotonic is okay for the same reason as `.done`: we popped this
-                        // task from the `UnboundedQueue`, and the task is no longer running.
-                        entries.items(.step)[task.entry_id.get()].store(.done, .monotonic);
-                        installer.onTaskFail(task.entry_id, .{ .run_scripts = err });
-                    };
-                },
-                .done => {
-                    if (comptime Environment.ci_assert) {
-                        // .monotonic is okay because we should have already synchronized with the
-                        // completed task thread by virtue of popping from the `UnboundedQueue`.
-                        const step = installer.store.entries.items(.step)[task.entry_id.get()].load(.monotonic);
-                        bun.assertWithLocation(step == .done, @src());
-                    }
-                    installer.onTaskComplete(task.entry_id, .success);
-                },
-            }
-        }
-    }
-
-    var network_tasks_batch = manager.async_network_task_queue.popBatch();
-    var network_tasks_iter = network_tasks_batch.iterator();
-    while (network_tasks_iter.next()) |task| {
-        if (comptime Environment.allow_assert) bun.assert(manager.pendingTaskCount() > 0);
-        manager.decrementPendingTasks();
-        // We cannot free the network task at the end of this scope.
-        // It may continue to be referenced in a future task.
-
-        switch (task.callback) {
-            .package_manifest => |*manifest_req| {
-                const name = manifest_req.name;
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, name.slice(), ProgressStrings.download_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-
-                if (!has_network_error and task.response.metadata == null) {
-                    has_network_error = true;
-                    const min = manager.options.min_simultaneous_requests;
-                    const max = AsyncHTTP.max_simultaneous_requests.load(.monotonic);
-                    if (max > min) {
-                        AsyncHTTP.max_simultaneous_requests.store(@max(min, max / 2), .monotonic);
-                    }
-                }
-
-                // Handle retry-able errors.
-                if (task.response.metadata == null or task.response.metadata.?.response.status_code > 499) {
-                    const err = task.response.fail orelse error.HTTPError;
-
-                    if (task.retried < manager.options.max_retry_count) {
-                        task.retried += 1;
-                        manager.enqueueNetworkTask(task);
-
-                        if (manager.options.log_level.isVerbose()) {
-                            manager.log.addWarningFmt(
-                                null,
-                                logger.Loc.Empty,
-                                manager.allocator,
-                                "{s} downloading package manifest <b>{s}<r>. Retry {d}/{d}...",
-                                .{ bun.span(@errorName(err)), name.slice(), task.retried, manager.options.max_retry_count },
-                            ) catch unreachable;
-                        }
-
-                        continue;
-                    }
-                }
-
-                const metadata = task.response.metadata orelse {
-                    // Handle non-retry-able errors.
-                    const err = task.response.fail orelse error.HTTPError;
-
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
-                        callbacks.onPackageManifestError(
-                            extract_ctx,
-                            name.slice(),
-                            err,
-                            task.url_buf,
-                        );
-                    } else {
-                        const fmt = "{s} downloading package manifest <b>{s}<r>";
-                        if (manager.isNetworkTaskRequired(task.task_id)) {
-                            manager.log.addErrorFmt(
-                                null,
-                                logger.Loc.Empty,
-                                manager.allocator,
-                                fmt,
-                                .{ @errorName(err), name.slice() },
-                            ) catch |e| bun.handleOom(e);
-                        } else {
-                            manager.log.addWarningFmt(
-                                null,
-                                logger.Loc.Empty,
-                                manager.allocator,
-                                fmt,
-                                .{ @errorName(err), name.slice() },
-                            ) catch |e| bun.handleOom(e);
-                        }
-
-                        if (manager.subcommand != .remove) {
-                            for (manager.update_requests) |*request| {
-                                if (strings.eql(request.name, name.slice())) {
-                                    request.failed = true;
-                                    manager.options.do.save_lockfile = false;
-                                    manager.options.do.save_yarn_lock = false;
-                                    manager.options.do.install_packages = false;
-                                }
-                            }
-                        }
-                    }
-
-                    continue;
-                };
-                const response = metadata.response;
-
-                if (response.status_code > 399) {
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
-                        const err: PackageManifestError = switch (response.status_code) {
-                            400 => error.PackageManifestHTTP400,
-                            401 => error.PackageManifestHTTP401,
-                            402 => error.PackageManifestHTTP402,
-                            403 => error.PackageManifestHTTP403,
-                            404 => error.PackageManifestHTTP404,
-                            405...499 => error.PackageManifestHTTP4xx,
-                            else => error.PackageManifestHTTP5xx,
-                        };
-
-                        callbacks.onPackageManifestError(
-                            extract_ctx,
-                            name.slice(),
-                            err,
-                            task.url_buf,
-                        );
-
-                        continue;
-                    }
-
-                    if (manager.isNetworkTaskRequired(task.task_id)) {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "<r><red><b>GET<r><red> {s}<d> - {d}<r>",
-                            .{ metadata.url, response.status_code },
-                        ) catch |err| bun.handleOom(err);
-                    } else {
-                        manager.log.addWarningFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>",
-                            .{ metadata.url, response.status_code },
-                        ) catch |err| bun.handleOom(err);
-                    }
-                    if (manager.subcommand != .remove) {
-                        for (manager.update_requests) |*request| {
-                            if (strings.eql(request.name, name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
-
-                    continue;
-                }
-
-                if (log_level.isVerbose()) {
-                    Output.prettyError("    ", .{});
-                    Output.printElapsed(@as(f64, @floatFromInt(task.unsafe_http_client.elapsed)) / std.time.ns_per_ms);
-                    Output.prettyError("\n<d>Downloaded <r><green>{s}<r> versions\n", .{name.slice()});
-                    Output.flush();
-                }
-
-                if (response.status_code == 304) {
-                    // The HTTP request was cached
-                    if (manifest_req.loaded_manifest) |manifest| {
-                        // If we requested extended manifest but we somehow got an abbreviated one, this is a bug
-                        bun.debugAssert(!manifest_req.is_extended_manifest or manifest.pkg.has_extended_manifest);
-
-                        const entry = try manager.manifests.hash_map.getOrPut(manager.allocator, manifest.pkg.name.hash);
-                        entry.value_ptr.* = .{ .manifest = manifest };
-
-                        if (timestamp_this_tick == null) {
-                            timestamp_this_tick = @as(u32, @truncate(@as(u64, @intCast(@max(0, std.time.timestamp()))))) +| 300;
-                        }
-
-                        entry.value_ptr.manifest.pkg.public_max_age = timestamp_this_tick.?;
-
-                        if (manager.options.enable.manifest_cache) {
-                            Npm.PackageManifest.Serializer.saveAsync(
-                                &entry.value_ptr.manifest,
-                                manager.scopeForPackageName(name.slice()),
-                                manager.getTemporaryDirectory().handle,
-                                manager.getCacheDirectory(),
-                            );
-                        }
-
-                        if (@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only) {
-                            continue;
-                        }
-
-                        const dependency_list_entry = manager.task_queue.getEntry(task.task_id).?;
-
-                        const dependency_list = dependency_list_entry.value_ptr.*;
-                        dependency_list_entry.value_ptr.* = .{};
-
-                        try manager.processDependencyList(
-                            dependency_list,
-                            Ctx,
-                            extract_ctx,
-                            callbacks,
-                            install_peer,
-                        );
-
-                        continue;
-                    }
-                }
-
-                manager.task_batch.push(ThreadPool.Batch.from(manager.enqueueParseNPMPackage(task.task_id, name, task)));
-            },
-            .extract => |*extract| {
-                // Streaming extraction never pushes its NetworkTask to
-                // `async_network_task_queue` once committed — the
-                // extract Task published by `TarballStream.finish()`
-                // owns its lifetime — so every `.extract` task that
-                // arrives here is taking the buffered path.
-                bun.debugAssert(!task.streaming_committed);
-
-                if (!has_network_error and task.response.metadata == null) {
-                    has_network_error = true;
-                    const min = manager.options.min_simultaneous_requests;
-                    const max = AsyncHTTP.max_simultaneous_requests.load(.monotonic);
-                    if (max > min) {
-                        AsyncHTTP.max_simultaneous_requests.store(@max(min, max / 2), .monotonic);
-                    }
-                }
-
-                if (task.response.metadata == null or task.response.metadata.?.response.status_code > 499) {
-                    const err = task.response.fail orelse error.TarballFailedToDownload;
-
-                    if (task.retried < manager.options.max_retry_count) {
-                        task.retried += 1;
-                        // Streaming never committed (asserted above), so
-                        // the pre-allocated stream is safe to reuse for
-                        // the retry attempt.
-                        task.resetStreamingForRetry();
-                        manager.enqueueNetworkTask(task);
-
-                        if (manager.options.log_level.isVerbose()) {
-                            manager.log.addWarningFmt(
-                                null,
-                                logger.Loc.Empty,
-                                manager.allocator,
-                                "<r><yellow>warn:<r> {s} downloading tarball <b>{s}@{f}<r>. Retrying {d}/{d}...",
-                                .{
-                                    bun.span(@errorName(err)),
-                                    extract.name.slice(),
-                                    extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto),
-                                    task.retried,
-                                    manager.options.max_retry_count,
-                                },
-                            ) catch unreachable;
-                        }
-
-                        continue;
-                    }
-                }
-
-                // Past this point we will not retry. If streaming state was
-                // allocated but never scheduled, release it now so the
-                // pre-created Task goes back to the pool and the stream
-                // buffers are freed. The buffered `enqueueExtractNPMPackage`
-                // path below allocates its own Task.
-                task.discardUnusedStreamingState(manager);
-
-                const metadata = task.response.metadata orelse {
-                    const err = task.response.fail orelse error.TarballFailedToDownload;
-
-                    // The download will not be retried for this task_id, so
-                    // drop the dedupe state before dispatching the error.
-                    // Otherwise a later `enqueuePackageForDownload` for the
-                    // same package sees `found_existing`, never schedules a
-                    // network task, and waits forever for a callback that
-                    // will not arrive. `Store.Installer.onPackageDownloadError`
-                    // drains `task_queue` itself but does not touch
-                    // `network_dedupe_map`, so this must run on the callback
-                    // path too. Capture `is_required` first —
-                    // `isNetworkTaskRequired` reads the map and returns `true`
-                    // when the entry is gone, which would upgrade optional-dep
-                    // warnings to errors on the void-callback fallback below.
-                    const is_required = manager.isNetworkTaskRequired(task.task_id);
-                    _ = manager.network_dedupe_map.remove(task.task_id);
-
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
-                        if (Ctx == *Store.Installer) {
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                task.task_id,
-                                extract.name.slice(),
-                                &extract.resolution,
-                                err,
-                                task.url_buf,
-                            );
-                        } else {
-                            const package_id = manager.lockfile.buffers.resolutions.items[extract.dependency_id];
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                package_id,
-                                extract.name.slice(),
-                                &extract.resolution,
-                                err,
-                                task.url_buf,
-                            );
-                        }
-                        continue;
-                    }
-
-                    const fmt = "{s} downloading tarball <b>{s}@{f}<r>";
-                    if (is_required) {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            fmt,
-                            .{
-                                @errorName(err),
-                                extract.name.slice(),
-                                extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto),
-                            },
-                        ) catch |e| bun.handleOom(e);
-                    } else {
-                        manager.log.addWarningFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            fmt,
-                            .{
-                                @errorName(err),
-                                extract.name.slice(),
-                                extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto),
-                            },
-                        ) catch |e| bun.handleOom(e);
-                    }
-                    if (manager.subcommand != .remove) {
-                        for (manager.update_requests) |*request| {
-                            if (strings.eql(request.name, extract.name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
-
-                    if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
-                        var list = removed.value;
-                        list.deinit(manager.allocator);
-                    }
-
-                    continue;
-                };
-
-                const response = metadata.response;
-
-                if (response.status_code > 399) {
-                    // Non-retryable HTTP error: drop dedupe state so a later
-                    // enqueue for this task_id schedules a fresh network task
-                    // instead of waiting on this failed one. Runs before the
-                    // callback branch so `Store.Installer` (which `continue`s
-                    // from the callback) is covered too. Capture
-                    // `is_required` first — `isNetworkTaskRequired` reads the
-                    // map and returns `true` when the entry is gone.
-                    const is_required = manager.isNetworkTaskRequired(task.task_id);
-                    _ = manager.network_dedupe_map.remove(task.task_id);
-
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
-                        const err = switch (response.status_code) {
-                            400 => error.TarballHTTP400,
-                            401 => error.TarballHTTP401,
-                            402 => error.TarballHTTP402,
-                            403 => error.TarballHTTP403,
-                            404 => error.TarballHTTP404,
-                            405...499 => error.TarballHTTP4xx,
-                            else => error.TarballHTTP5xx,
-                        };
-
-                        if (Ctx == *Store.Installer) {
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                task.task_id,
-                                extract.name.slice(),
-                                &extract.resolution,
-                                err,
-                                task.url_buf,
-                            );
-                        } else {
-                            const package_id = manager.lockfile.buffers.resolutions.items[extract.dependency_id];
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                package_id,
-                                extract.name.slice(),
-                                &extract.resolution,
-                                err,
-                                task.url_buf,
-                            );
-                        }
-                        continue;
-                    }
-
-                    if (is_required) {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "<r><red><b>GET<r><red> {s}<d> - {d}<r>",
-                            .{
-                                metadata.url,
-                                response.status_code,
-                            },
-                        ) catch |err| bun.handleOom(err);
-                    } else {
-                        manager.log.addWarningFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>",
-                            .{
-                                metadata.url,
-                                response.status_code,
-                            },
-                        ) catch |err| bun.handleOom(err);
-                    }
-                    if (manager.subcommand != .remove) {
-                        for (manager.update_requests) |*request| {
-                            if (strings.eql(request.name, extract.name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
-
-                    if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
-                        var list = removed.value;
-                        list.deinit(manager.allocator);
-                    }
-
-                    continue;
-                }
-
-                if (log_level.isVerbose()) {
-                    Output.prettyError("    ", .{});
-                    Output.printElapsed(@as(f64, @floatCast(@as(f64, @floatFromInt(task.unsafe_http_client.elapsed)) / std.time.ns_per_ms)));
-                    Output.prettyError("<d> Downloaded <r><green>{s}<r> tarball\n", .{extract.name.slice()});
-                    Output.flush();
-                }
-
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, extract.name.slice(), ProgressStrings.extract_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-
-                manager.task_batch.push(ThreadPool.Batch.from(manager.enqueueExtractNPMPackage(extract, task)));
-            },
-            else => unreachable,
-        }
-    }
-
-    var resolve_tasks_batch = manager.resolve_tasks.popBatch();
-    var resolve_tasks_iter = resolve_tasks_batch.iterator();
-    while (resolve_tasks_iter.next()) |task| {
-        if (comptime Environment.allow_assert) bun.assert(manager.pendingTaskCount() > 0);
-        defer manager.preallocated_resolve_tasks.put(task);
-        manager.decrementPendingTasks();
-
-        if (task.log.msgs.items.len > 0) {
-            try task.log.print(Output.errorWriter());
-            if (task.log.errors > 0) {
-                manager.any_failed_to_install = true;
-            }
-            task.log.deinit();
-        }
-
-        switch (task.tag) {
-            .package_manifest => {
-                defer manager.preallocated_network_tasks.put(task.request.package_manifest.network);
-                if (task.status == .fail) {
-                    const name = task.request.package_manifest.name;
-                    const err = task.err orelse error.Failed;
-
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
-                        callbacks.onPackageManifestError(
-                            extract_ctx,
-                            name.slice(),
-                            err,
-                            task.request.package_manifest.network.url_buf,
-                        );
-                    } else {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "{s} parsing package manifest for <b>{s}<r>",
-                            .{
-                                @errorName(err),
-                                name.slice(),
-                            },
-                        ) catch |e| bun.handleOom(e);
-                    }
-
-                    continue;
-                }
-                const manifest = &task.data.package_manifest;
-
-                try manager.manifests.insert(manifest.pkg.name.hash, manifest);
-
-                if (@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only) {
-                    continue;
-                }
-
-                const dependency_list_entry = manager.task_queue.getEntry(task.id).?;
-                const dependency_list = dependency_list_entry.value_ptr.*;
-                dependency_list_entry.value_ptr.* = .{};
-
-                try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
-
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, manifest.name(), ProgressStrings.download_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-            },
-            .extract, .local_tarball => {
-                defer {
-                    switch (task.tag) {
-                        .extract => manager.preallocated_network_tasks.put(task.request.extract.network),
-                        else => {},
-                    }
-                }
-
-                const tarball = switch (task.tag) {
-                    .extract => &task.request.extract.tarball,
-                    .local_tarball => &task.request.local_tarball.tarball,
-                    else => unreachable,
-                };
-                const dependency_id = tarball.dependency_id;
-                var package_id = manager.lockfile.buffers.resolutions.items[dependency_id];
-                const alias = tarball.name.slice();
-                const resolution = &tarball.resolution;
-
-                if (task.status == .fail) {
-                    const err = task.err orelse error.TarballFailedToExtract;
-
-                    // Extract-task failure (integrity check, libarchive error, etc.)
-                    // is symmetric with the HTTP 4xx/5xx branch above: drop the
-                    // dedupe state so a later `enqueuePackageForDownload` for this
-                    // `task_id` schedules a fresh network task instead of waiting
-                    // on this failed one forever. Runs before the callback branch
-                    // so `Store.Installer` (which `continue`s from the callback)
-                    // is covered too. `network_dedupe_map.remove` is a no-op for
-                    // `local_tarball` tasks (they never populate the map).
-                    _ = manager.network_dedupe_map.remove(task.id);
-
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
-                        const fail_url = switch (task.tag) {
-                            .extract => task.request.extract.network.url_buf,
-                            .local_tarball => task.request.local_tarball.tarball.url.slice(),
-                            else => unreachable,
-                        };
-                        if (Ctx == *Store.Installer) {
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                task.id,
-                                alias,
-                                resolution,
-                                err,
-                                fail_url,
-                            );
-                        } else {
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                package_id,
-                                alias,
-                                resolution,
-                                err,
-                                fail_url,
-                            );
-                        }
-                        continue;
-                    }
-
-                    manager.log.addErrorFmt(
-                        null,
-                        logger.Loc.Empty,
-                        manager.allocator,
-                        "{s} extracting tarball from <b>{s}<r>",
-                        .{
-                            @errorName(err),
-                            alias,
-                        },
-                    ) catch |e| bun.handleOom(e);
-
-                    // Void-callback fallback (resolve phase): drain the
-                    // `task_queue` entry too so a later install-phase
-                    // `enqueuePackageForDownload` doesn't wedge on `found_existing`.
-                    if (manager.task_queue.fetchRemove(task.id)) |removed| {
-                        var list = removed.value;
-                        list.deinit(manager.allocator);
-                    }
-
-                    continue;
-                }
-
-                manager.extracted_count += 1;
-                bun.analytics.Features.extracted_packages += 1;
-
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
-                    switch (Ctx) {
-                        *PackageInstaller => {
-                            extract_ctx.fixCachedLockfilePackageSlices();
-                            callbacks.onExtract(
-                                extract_ctx,
-                                task.id,
-                                dependency_id,
-                                &task.data.extract,
-                                log_level,
-                            );
-                        },
-                        *Store.Installer => {
-                            callbacks.onExtract(
-                                extract_ctx,
-                                task.id,
-                            );
-                        },
-                        else => @compileError("unexpected context type"),
-                    }
-                } else if (manager.processExtractedTarballPackage(&package_id, dependency_id, resolution, &task.data.extract, log_level)) |pkg| handle_pkg: {
-                    // In the middle of an install, you could end up needing to downlaod the github tarball for a dependency
-                    // We need to make sure we resolve the dependencies first before calling the onExtract callback
-                    // TODO: move this into a separate function
-                    var any_root = false;
-                    var dependency_list_entry = manager.task_queue.getEntry(task.id) orelse break :handle_pkg;
-                    var dependency_list = dependency_list_entry.value_ptr.*;
-                    dependency_list_entry.value_ptr.* = .{};
-
-                    defer {
-                        dependency_list.deinit(manager.allocator);
-                        if (comptime @TypeOf(callbacks) != void and @TypeOf(callbacks.onResolve) != void) {
-                            if (any_root) {
-                                callbacks.onResolve(extract_ctx);
-                            }
-                        }
-                    }
-
-                    for (dependency_list.items) |dep| {
-                        switch (dep) {
-                            .dependency, .root_dependency => |id| {
-                                var version = &manager.lockfile.buffers.dependencies.items[id].version;
-                                switch (version.tag) {
-                                    .git => {
-                                        version.value.git.package_name = pkg.name;
-                                    },
-                                    .github => {
-                                        version.value.github.package_name = pkg.name;
-                                    },
-                                    .tarball => {
-                                        version.value.tarball.package_name = pkg.name;
-                                    },
-
-                                    // `else` is reachable if this package is from `overrides`. Version in `lockfile.buffer.dependencies`
-                                    // will still have the original.
-                                    else => {},
-                                }
-                                try manager.processDependencyListItem(dep, &any_root, install_peer);
-                            },
-                            else => {
-                                // if it's a node_module folder to install, handle that after we process all the dependencies within the onExtract callback.
-                                dependency_list_entry.value_ptr.append(manager.allocator, dep) catch unreachable;
-                            },
-                        }
-                    }
-                } else if (manager.task_queue.getEntry(Task.Id.forManifest(
-                    manager.lockfile.str(&manager.lockfile.packages.items(.name)[package_id]),
-                ))) |dependency_list_entry| {
-                    // Peer dependencies do not initiate any downloads of their own, thus need to be resolved here instead
-                    const dependency_list = dependency_list_entry.value_ptr.*;
-                    dependency_list_entry.value_ptr.* = .{};
-
-                    try manager.processDependencyList(dependency_list, void, {}, {}, install_peer);
-                }
-
-                manager.setPreinstallState(package_id, manager.lockfile, .done);
-
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, alias, ProgressStrings.extract_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-            },
-            .git_clone => {
-                const clone = &task.request.git_clone;
-                const repo_fd = task.data.git_clone;
-                const name = clone.name.slice();
-                const url = clone.url.slice();
-
-                manager.git_repositories.put(manager.allocator, task.id, repo_fd) catch unreachable;
-
-                if (task.status == .fail) {
-                    const err = task.err orelse error.Failed;
-
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
-                        callbacks.onPackageManifestError(
-                            extract_ctx,
-                            name,
-                            err,
-                            url,
-                        );
-                    } else if (@TypeOf(callbacks.onPackageDownloadError) != void and Ctx == *Store.Installer) {
-                        // The isolated installer queued its entry contexts
-                        // under `checkout_id`, not `clone_id`. A failed clone
-                        // never reaches checkout, so drain every waiting
-                        // checkout for this repo or the install loop blocks
-                        // forever on the entry's pending-task slot.
-                        var drained_any = false;
-                        if (manager.task_queue.fetchRemove(task.id)) |removed| {
-                            var waiters = removed.value;
-                            defer waiters.deinit(manager.allocator);
-                            const pkg_resolutions = manager.lockfile.packages.items(.resolution);
-                            for (waiters.items) |waiter| {
-                                const dep_id = switch (waiter) {
-                                    .dependency => |id| id,
-                                    else => continue,
-                                };
-                                const pkg_id = manager.lockfile.buffers.resolutions.items[dep_id];
-                                if (pkg_id == invalid_package_id) continue;
-                                const res = &pkg_resolutions[pkg_id];
-                                if (res.tag != .git) continue;
-                                const checkout_id = Task.Id.forGitCheckout(
-                                    manager.lockfile.str(&res.value.git.repo),
-                                    manager.lockfile.str(&res.value.git.resolved),
-                                );
-                                drained_any = true;
-                                callbacks.onPackageDownloadError(
-                                    extract_ctx,
-                                    checkout_id,
-                                    name,
-                                    res,
-                                    err,
-                                    url,
-                                );
-                            }
-                        }
-                        if (!drained_any) {
-                            // No clone waiters recorded (or all were skipped
-                            // above) — fall back to the clone task's own
-                            // resolution so the originating entry is still
-                            // released.
-                            const checkout_id = Task.Id.forGitCheckout(
-                                url,
-                                manager.lockfile.str(&clone.res.value.git.resolved),
-                            );
-                            callbacks.onPackageDownloadError(
-                                extract_ctx,
-                                checkout_id,
-                                name,
-                                &clone.res,
-                                err,
-                                url,
-                            );
-                        }
-                    } else if (log_level != .silent) {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "{s} cloning repository for <b>{s}<r>",
-                            .{
-                                @errorName(err),
-                                name,
-                            },
-                        ) catch |e| bun.handleOom(e);
-                    }
-                    continue;
-                }
-
-                if (comptime @TypeOf(callbacks.onExtract) != void and Ctx == *PackageInstaller) {
-                    // Installing!
-                    // this dependency might be something other than a git dependency! only need the name and
-                    // behavior, use the resolution from the task.
-                    const dep_id = clone.dep_id;
-                    const dep = manager.lockfile.buffers.dependencies.items[dep_id];
-                    const dep_name = dep.name.slice(manager.lockfile.buffers.string_bytes.items);
-
-                    const git = clone.res.value.git;
-                    const committish = git.committish.slice(manager.lockfile.buffers.string_bytes.items);
-                    const repo = git.repo.slice(manager.lockfile.buffers.string_bytes.items);
-
-                    const resolved = try Repository.findCommit(
-                        manager.allocator,
-                        manager.env,
-                        manager.log,
-                        task.data.git_clone.stdDir(),
-                        dep_name,
-                        committish,
-                        task.id,
-                    );
-
-                    const checkout_id = Task.Id.forGitCheckout(repo, resolved);
-
-                    if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) continue;
-
-                    manager.task_batch.push(ThreadPool.Batch.from(manager.enqueueGitCheckout(
-                        checkout_id,
-                        repo_fd,
-                        dep_id,
-                        dep_name,
-                        clone.res,
-                        resolved,
-                        null,
-                    )));
-                } else {
-                    // Resolving!
-                    const dependency_list_entry = manager.task_queue.getEntry(task.id).?;
-                    const dependency_list = dependency_list_entry.value_ptr.*;
-                    dependency_list_entry.value_ptr.* = .{};
-
-                    try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
-                }
-
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, name, ProgressStrings.download_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-            },
-            .git_checkout => {
-                const git_checkout = &task.request.git_checkout;
-                const alias = &git_checkout.name;
-                const resolution = &git_checkout.resolution;
-                var package_id: PackageID = invalid_package_id;
-
-                if (task.status == .fail) {
-                    const err = task.err orelse error.Failed;
-
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void and Ctx == *Store.Installer) {
-                        callbacks.onPackageDownloadError(
-                            extract_ctx,
-                            task.id,
-                            alias.slice(),
-                            resolution,
-                            err,
-                            manager.lockfile.str(&resolution.value.git.repo),
-                        );
-                    } else {
-                        manager.log.addErrorFmt(
-                            null,
-                            logger.Loc.Empty,
-                            manager.allocator,
-                            "{s} checking out repository for <b>{s}<r>",
-                            .{
-                                @errorName(err),
-                                alias.slice(),
-                            },
-                        ) catch |e| bun.handleOom(e);
-                    }
-
-                    continue;
-                }
-
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
-                    // We've populated the cache, package already exists in memory. Call the package installer callback
-                    // and don't enqueue dependencies
-                    switch (Ctx) {
-                        *PackageInstaller => {
-
-                            // TODO(dylan-conway) most likely don't need to call this now that the package isn't appended, but
-                            // keeping just in case for now
-                            extract_ctx.fixCachedLockfilePackageSlices();
-
-                            callbacks.onExtract(
-                                extract_ctx,
-                                task.id,
-                                git_checkout.dependency_id,
-                                &task.data.git_checkout,
-                                log_level,
-                            );
-                        },
-                        *Store.Installer => {
-                            callbacks.onExtract(
-                                extract_ctx,
-                                task.id,
-                            );
-                        },
-                        else => @compileError("unexpected context type"),
-                    }
-                } else if (manager.processExtractedTarballPackage(
-                    &package_id,
-                    git_checkout.dependency_id,
-                    resolution,
-                    &task.data.git_checkout,
-                    log_level,
-                )) |pkg| handle_pkg: {
-                    var any_root = false;
-                    var dependency_list_entry = manager.task_queue.getEntry(task.id) orelse break :handle_pkg;
-                    var dependency_list = dependency_list_entry.value_ptr.*;
-                    dependency_list_entry.value_ptr.* = .{};
-
-                    defer {
-                        dependency_list.deinit(manager.allocator);
-                        if (comptime @TypeOf(callbacks) != void and @TypeOf(callbacks.onResolve) != void) {
-                            if (any_root) {
-                                callbacks.onResolve(extract_ctx);
-                            }
-                        }
-                    }
-
-                    for (dependency_list.items) |dep| {
-                        switch (dep) {
-                            .dependency, .root_dependency => |id| {
-                                var repo = &manager.lockfile.buffers.dependencies.items[id].version.value.git;
-                                repo.resolved = pkg.resolution.value.git.resolved;
-                                repo.package_name = pkg.name;
-                                try manager.processDependencyListItem(dep, &any_root, install_peer);
-                            },
-                            else => {
-                                // if it's a node_module folder to install, handle that after we process all the dependencies within the onExtract callback.
-                                dependency_list_entry.value_ptr.append(manager.allocator, dep) catch unreachable;
-                            },
-                        }
-                    }
-
-                    if (@TypeOf(callbacks.onExtract) != void) {
-                        @compileError("ctx should be void");
-                    }
-                }
-
-                if (log_level.showProgress()) {
-                    if (!has_updated_this_run) {
-                        manager.setNodeName(manager.downloads_node.?, alias.slice(), ProgressStrings.download_emoji, true);
-                        has_updated_this_run = true;
-                    }
-                }
-            },
-        }
-    }
-}
-
-pub inline fn pendingTaskCount(manager: *const PackageManager) u32 {
-    return manager.pending_tasks.load(.acquire);
-}
-
-pub inline fn incrementPendingTasks(manager: *PackageManager, count: u32) void {
-    manager.total_tasks += count;
-    // .monotonic is okay because the start of a task doesn't carry any side effects that other
-    // threads depend on (but finishing a task does). Note that this method should usually be called
-    // before the task is actually spawned.
-    _ = manager.pending_tasks.fetchAdd(count, .monotonic);
-}
-
-pub inline fn decrementPendingTasks(manager: *PackageManager) void {
-    _ = manager.pending_tasks.fetchSub(1, .release);
-}
-
-pub fn flushNetworkQueue(this: *PackageManager) void {
-    var network = &this.network_task_fifo;
-
-    while (network.readItem()) |network_task| {
-        network_task.schedule(if (network_task.callback == .extract) &this.network_tarball_batch else &this.network_resolve_batch);
-    }
-}
-
-pub fn flushPatchTaskQueue(this: *PackageManager) void {
-    var patch_task_fifo = &this.patch_task_fifo;
-
-    while (patch_task_fifo.readItem()) |patch_task| {
-        patch_task.schedule(if (patch_task.callback == .apply) &this.patch_apply_batch else &this.patch_calc_hash_batch);
-    }
-}
-
-fn doFlushDependencyQueue(this: *PackageManager) void {
-    var lockfile = this.lockfile;
-    var dependency_queue = &lockfile.scratch.dependency_list_queue;
-
-    while (dependency_queue.readItem()) |dependencies_list| {
-        var i: u32 = dependencies_list.off;
-        const end = dependencies_list.off + dependencies_list.len;
-        while (i < end) : (i += 1) {
-            const dependency = lockfile.buffers.dependencies.items[i];
-            this.enqueueDependencyWithMain(
-                i,
-                &dependency,
-                lockfile.buffers.resolutions.items[i],
-                false,
-            ) catch {};
-        }
-    }
-
-    this.flushNetworkQueue();
-}
-pub fn flushDependencyQueue(this: *PackageManager) void {
-    var last_count = this.total_tasks;
-    while (true) : (last_count = this.total_tasks) {
-        this.flushNetworkQueue();
-        doFlushDependencyQueue(this);
-        this.flushNetworkQueue();
-        this.flushPatchTaskQueue();
-
-        if (this.total_tasks == last_count) break;
-    }
-}
-
-pub fn scheduleTasks(manager: *PackageManager) usize {
-    const count = manager.task_batch.len + manager.network_resolve_batch.len + manager.network_tarball_batch.len + manager.patch_apply_batch.len + manager.patch_calc_hash_batch.len;
-
-    manager.incrementPendingTasks(@intCast(count));
-    manager.thread_pool.schedule(manager.patch_apply_batch);
-    manager.thread_pool.schedule(manager.patch_calc_hash_batch);
-    manager.thread_pool.schedule(manager.task_batch);
-    manager.network_resolve_batch.push(manager.network_tarball_batch);
-    HTTP.http_thread.schedule(manager.network_resolve_batch);
-    manager.task_batch = .{};
-    manager.network_tarball_batch = .{};
-    manager.network_resolve_batch = .{};
-    manager.patch_apply_batch = .{};
-    manager.patch_calc_hash_batch = .{};
-    return count;
-}
-
-pub fn drainDependencyList(this: *PackageManager) void {
-    // Step 2. If there were cached dependencies, go through all of those but don't download the devDependencies for them.
-    this.flushDependencyQueue();
-
-    if (PackageManager.verbose_install) Output.flush();
-
-    // It's only network requests here because we don't store tarballs.
-    _ = this.scheduleTasks();
-}
-
-pub fn getNetworkTask(this: *PackageManager) *NetworkTask {
-    return this.preallocated_network_tasks.get();
-}
-
-pub fn allocGitHubURL(this: *const PackageManager, repository: *const Repository) string {
-    var github_api_url: string = "https://api.github.com";
-    if (this.env.get("GITHUB_API_URL")) |url| {
-        if (url.len > 0) {
-            github_api_url = url;
-        }
-    }
-
-    const owner = this.lockfile.str(&repository.owner);
-    const repo = this.lockfile.str(&repository.repo);
-    const committish = this.lockfile.str(&repository.committish);
-
-    return std.fmt.allocPrint(
-        this.allocator,
-        "{s}/repos/{s}/{s}{s}tarball/{s}",
-        .{
-            strings.withoutTrailingSlash(github_api_url),
-            owner,
-            repo,
-            // repo might be empty if dep is https://github.com/... style
-            if (repo.len > 0) "/" else "",
-            committish,
-        },
-    ) catch unreachable;
-}
-
-pub fn hasCreatedNetworkTask(this: *PackageManager, task_id: Task.Id, is_required: bool) bool {
-    const gpe = bun.handleOom(this.network_dedupe_map.getOrPut(task_id));
-
-    // if there's an existing network task that is optional, we want to make it non-optional if this one would be required
-    gpe.value_ptr.is_required = if (!gpe.found_existing)
-        is_required
-    else
-        gpe.value_ptr.is_required or is_required;
-
-    return gpe.found_existing;
-}
-
-pub fn isNetworkTaskRequired(this: *const PackageManager, task_id: Task.Id) bool {
-    return (this.network_dedupe_map.get(task_id) orelse return true).is_required;
-}
-
-pub fn generateNetworkTaskForTarball(
-    this: *PackageManager,
-    task_id: Task.Id,
-    url: string,
-    is_required: bool,
-    dependency_id: DependencyID,
-    package: Lockfile.Package,
-    patch_name_and_version_hash: ?u64,
-    authorization: NetworkTask.Authorization,
-) NetworkTask.ForTarballError!?*NetworkTask {
-    if (this.hasCreatedNetworkTask(task_id, is_required)) {
-        return null;
-    }
-
-    var network_task = this.getNetworkTask();
-
-    network_task.* = .{
-        .task_id = task_id,
-        .callback = undefined,
-        .allocator = this.allocator,
-        .package_manager = this,
-        .apply_patch_task = if (patch_name_and_version_hash) |h| brk: {
-            const patch_hash = this.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-            const task = PatchTask.newApplyPatchHash(this, package.meta.id, patch_hash, h);
-            task.callback.apply.task_id = task_id;
-            break :brk task;
-        } else null,
-    };
-
-    const scope = this.scopeForPackageName(this.lockfile.str(&package.name));
-
-    try network_task.forTarball(
-        this.allocator,
-        &.{
-            .package_manager = this,
-            .name = strings.StringOrTinyString.initAppendIfNeeded(
-                this.lockfile.str(&package.name),
-                *FileSystem.FilenameStore,
-                FileSystem.FilenameStore.instance,
-            ) catch |err| bun.handleOom(err),
-            .resolution = package.resolution,
-            .cache_dir = this.getCacheDirectory(),
-            .temp_dir = this.getTemporaryDirectory().handle,
-            .dependency_id = dependency_id,
-            .integrity = package.meta.integrity,
-            .url = strings.StringOrTinyString.initAppendIfNeeded(
-                url,
-                *FileSystem.FilenameStore,
-                FileSystem.FilenameStore.instance,
-            ) catch |err| bun.handleOom(err),
-        },
-        scope,
-        authorization,
-    );
-
-    if (ExtractTarball.usesStreamingExtraction()) {
-        // Pre-create the extract Task and streaming state here on the
-        // main thread: `preallocated_resolve_tasks` is not thread-safe,
-        // and the streaming extractor needs a stable `Task` pointer so
-        // it can push the result onto `resolve_tasks` when it finishes.
-        const extract_task = this.createExtractTaskForStreaming(&network_task.callback.extract, network_task);
-        network_task.streaming_extract_task = extract_task;
-        network_task.tarball_stream = TarballStream.init(this.allocator, extract_task, network_task, this);
-    }
-
-    return network_task;
-}
-
-const string = []const u8;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const Output = bun.Output;
 const ThreadPool = bun.ThreadPool;
 const default_allocator = bun.default_allocator;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const Fs = bun.fs;
 const FileSystem = Fs.FileSystem;
-
 const HTTP = bun.http;
 const AsyncHTTP = HTTP.AsyncHTTP;
-
 const DependencyID = bun.install.DependencyID;
 const ExtractTarball = bun.install.ExtractTarball;
 const Features = bun.install.Features;
@@ -1297,11 +25,872 @@ const Store = bun.install.Store;
 const TarballStream = bun.install.TarballStream;
 const Task = bun.install.Task;
 const invalid_package_id = bun.install.invalid_package_id;
-
 const Lockfile = bun.install.Lockfile;
 const Package = Lockfile.Package;
-
 const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
 const PackageInstaller = PackageManager.PackageInstaller;
 const ProgressStrings = PackageManager.ProgressStrings;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+const string = []const u8;
+
+pub fn runTasks(manager: *PackageManager, comptime Ctx: type, extract_ctx: Ctx, comptime callbacks: anytype, install_peer: bool, log_level: Options.LogLevel) !void {
+        var has_updated_this_run = false;
+        _ = &has_updated_this_run;
+        var has_network_error = false;
+        _ = &has_network_error;
+        var timestamp_this_tick: ?u32 = null;
+        _ = &timestamp_this_tick;
+        defer {
+        {
+            _ = manager.drainDependencyList();
+            if (log_level.showProgress()) {
+                _ = manager.startProgressBarIfNone();
+                if ((@hasField(@TypeOf(callbacks), "progress_bar") and (callbacks.progress_bar == true))) {
+                    const completed_items = (manager.total_tasks - manager.pendingTaskCount());
+                    if (((completed_items != manager.downloads_node.?.unprotected_completed_items) or has_updated_this_run)) {
+                        _ = manager.downloads_node.?.setCompletedItems(completed_items);
+                        _ = manager.downloads_node.?.setEstimatedTotalItems(manager.total_tasks);
+                    }
+                }
+                _ = manager.downloads_node.?.activate();
+                _ = manager.progress.maybeRefresh();
+            }
+        }
+        }
+        var patch_tasks_batch = manager.patch_task_queue.popBatch();
+        _ = &patch_tasks_batch;
+        var patch_tasks_iter = patch_tasks_batch.iterator();
+        _ = &patch_tasks_iter;
+        while (patch_tasks_iter.next()) |ptask| {
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert((manager.pendingTaskCount() > 0));
+            }
+            _ = manager.decrementPendingTasks();
+            defer {
+            _ = ptask.deinit();
+            }
+            _ = try ptask.runFromMainThread(manager, log_level);
+            if ((ptask.callback == .apply)) {
+                if ((ptask.callback.apply.logger.errors == 0)) {
+                    if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+                        if (ptask.callback.apply.task_id) |task_id| {
+                            _ = &task_id;
+                            _ = &task_id;
+                        } else {
+                            if ((Ctx == *PackageInstaller)) {
+                                if (ptask.callback.apply.install_context) |*ctx| {
+                                    _ = &ctx;
+                                    var installer = extract_ctx;
+                                    _ = &installer;
+                                    const path = (ctx.*).path;
+                                    (ctx.*).path = std.array_list.Managed(u8).init(bun.default_allocator);
+                                    installer.node_modules.path = path;
+                                    installer.current_tree_id = (ctx.*).tree_id;
+                                    const pkg_id = ptask.callback.apply.pkg_id;
+                                    const resolution = (&manager.lockfile.packages.items(.resolution)[@as(usize, @intCast(pkg_id))]);
+                                    _ = installer.installPackageWithNameAndResolution((ctx.*).dependency_id, pkg_id, log_level, ptask.callback.apply.pkgname, resolution, false, false);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    return error.InstallFailed;
+                }
+            }
+        }
+        if ((Ctx == *Store.Installer)) {
+            const installer = extract_ctx;
+            const batch = installer.task_queue.popBatch();
+            var iter = batch.iterator();
+            _ = &iter;
+            while (iter.next()) |task| {
+                switch (task.result) {
+.none => {
+if (comptime Environment.ci_assert) {
+                    _ = bun.assertWithLocation(false, @src());
+                }
+                _ = installer.onTaskComplete(task.entry_id, .success);
+},
+.err => |e| {
+_ = installer.onTaskFail(task.entry_id, e);
+},
+.blocked => {
+_ = installer.onTaskBlocked(task.entry_id);
+},
+.run_scripts => |list| {
+const entries = installer.store.entries.slice();
+                const node_id = entries.items(.node_id)[@as(usize, @intCast(task.entry_id.get()))];
+                const dep_id = installer.store.nodes.items(.dep_id)[@as(usize, @intCast(node_id.get()))];
+                const dep = installer.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+                _ = (blk_catch_0: { break :blk_catch_0 ((installer.manager.spawnPackageLifecycleScripts(installer.command_ctx, list.*, dep.behavior.optional, false, .{ .entry_id = task.entry_id, .installer = installer })) catch |e| { _ = &e; _ = entries.items(.step)[@as(usize, @intCast(task.entry_id.get()))].store(.done, .monotonic);
+                break :blk_catch_0 installer.onTaskFail(task.entry_id, .{ .run_scripts = e }); }); });
+},
+.done => {
+if (comptime Environment.ci_assert) {
+                    const step = installer.store.entries.items(.step)[@as(usize, @intCast(task.entry_id.get()))].load(.monotonic);
+                    _ = bun.assertWithLocation((step == .done), @src());
+                }
+                _ = installer.onTaskComplete(task.entry_id, .success);
+},
+}
+            }
+        }
+        var network_tasks_batch = manager.async_network_task_queue.popBatch();
+        _ = &network_tasks_batch;
+        var network_tasks_iter = network_tasks_batch.iterator();
+        _ = &network_tasks_iter;
+        while (network_tasks_iter.next()) |task| {
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert((manager.pendingTaskCount() > 0));
+            }
+            _ = manager.decrementPendingTasks();
+            switch (task.callback) {
+.package_manifest => |manifest_req| {
+const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@TypeOf(manifest_req)) == .@"union") @tagName(manifest_req) else manifest_req.name);
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, name.slice(), ProgressStrings.download_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+            if (((!has_network_error) and (task.response.metadata == null))) {
+                has_network_error = true;
+                const min = manager.options.min_simultaneous_requests;
+                const max = AsyncHTTP.max_simultaneous_requests.load(.monotonic);
+                if ((max > min)) {
+                    _ = AsyncHTTP.max_simultaneous_requests.store(@max(min, (max / 2)), .monotonic);
+                }
+            }
+            if (((task.response.metadata == null) or (task.response.metadata.?.response.status_code > 499))) {
+                const e = ((task.response.fail) orelse (error.HTTPError));
+                if ((task.retried < manager.options.max_retry_count)) {
+                    task.retried = (task.retried + 1);
+                    _ = manager.enqueueNetworkTask(task);
+                    if (manager.options.log_level.isVerbose()) {
+                        _ = ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "{s} downloading package manifest <b>{s}<r>. Retry {d}/{d}...", .{ bun.span(@errorName(e)), name.slice(), task.retried, manager.options.max_retry_count })) catch unreachable);
+                    }
+                    continue;
+                }
+            }
+            if ((task.response.metadata == null)) {
+                const e = ((task.response.fail) orelse (error.HTTPError));
+                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                    _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.url_buf);
+                } else {
+                    const fmt: []const u8 = "{s} downloading package manifest <b>{s}<r>";
+                    if (manager.isNetworkTaskRequired(task.task_id)) {
+                        _ = (blk_catch_2: { break :blk_catch_2 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), name.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_2 bun.handleOom(oom_err); }); });
+                    } else {
+                        _ = (blk_catch_3: { break :blk_catch_3 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), name.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_3 bun.handleOom(oom_err); }); });
+                    }
+                    if ((manager.subcommand != .remove)) {
+                        for (cp_mut_slice(&manager.update_requests)) |*request| {
+                            _ = &request;
+                            if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), name.slice())) {
+                                (request.*).failed = true;
+                                manager.options.do.save_lockfile = false;
+                                manager.options.do.save_yarn_lock = false;
+                                manager.options.do.install_packages = false;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            const metadata = task.response.metadata.?;
+            const response = metadata.response;
+            if ((response.status_code > 399)) {
+                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                    const e: PackageManifestError = (switch (response.status_code) {
+400 => error.PackageManifestHTTP400,
+401 => error.PackageManifestHTTP401,
+402 => error.PackageManifestHTTP402,
+403 => error.PackageManifestHTTP403,
+404 => error.PackageManifestHTTP404,
+405...499 => error.PackageManifestHTTP4xx,
+else => error.PackageManifestHTTP5xx,
+});
+                    _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.url_buf);
+                    continue;
+                }
+                if (manager.isNetworkTaskRequired(task.task_id)) {
+                    _ = (blk_catch_4: { break :blk_catch_4 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "<r><red><b>GET<r><red> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_4 bun.handleOom(oom_err); }); });
+                } else {
+                    _ = (blk_catch_5: { break :blk_catch_5 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_5 bun.handleOom(oom_err); }); });
+                }
+                if ((manager.subcommand != .remove)) {
+                    for (cp_mut_slice(&manager.update_requests)) |*request| {
+                        _ = &request;
+                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), name.slice())) {
+                            (request.*).failed = true;
+                            manager.options.do.save_lockfile = false;
+                            manager.options.do.save_yarn_lock = false;
+                            manager.options.do.install_packages = false;
+                        }
+                    }
+                }
+                continue;
+            }
+            if (log_level.isVerbose()) {
+                _ = Output.prettyError("    ", .{});
+                _ = Output.printElapsed((@as(f64, @floatFromInt(task.unsafe_http_client.elapsed)) / std.time.ns_per_ms));
+                _ = Output.prettyError("\n<d>Downloaded <r><green>{s}<r> versions\n", .{ name.slice() });
+                _ = Output.flush();
+            }
+            if ((response.status_code == 304)) {
+                if (manifest_req.loaded_manifest) |manifest| {
+                    _ = &manifest;
+                    _ = bun.debugAssert(((!manifest_req.is_extended_manifest) or manifest.pkg.has_extended_manifest));
+                    const entry = try manager.manifests.hash_map.getOrPut(manager.allocator, (if (@typeInfo(@TypeOf(manifest.pkg)) == .@"enum" or @typeInfo(@TypeOf(manifest.pkg)) == .@"union") @tagName(manifest.pkg) else manifest.pkg.name).hash);
+                    entry.value_ptr.* = .{ .manifest = manifest };
+                    if ((timestamp_this_tick == null)) {
+                        timestamp_this_tick = (@as(u32, @truncate((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))))) +| 300);
+                    }
+                    entry.value_ptr.manifest.pkg.public_max_age = ((timestamp_this_tick) orelse (unreachable));
+                    if (manager.options.enable.manifest_cache) {
+                        _ = Npm.PackageManifest.Serializer.saveAsync((&entry.value_ptr.manifest), manager.scopeForPackageName(name.slice()), manager.getTemporaryDirectory().handle, manager.getCacheDirectory());
+                    }
+                    if ((@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only)) {
+                        continue;
+                    }
+                    const dependency_list_entry = (manager.task_queue.getEntry(task.task_id)).?;
+                    const dependency_list = dependency_list_entry.value_ptr.*;
+                    dependency_list_entry.value_ptr.* = .{};
+                    _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
+                    continue;
+                }
+            }
+            _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueParseNPMPackage(task.task_id, name, task)));
+},
+.extract => |extract| {
+_ = bun.debugAssert((!task.streaming_committed));
+            if (((!has_network_error) and (task.response.metadata == null))) {
+                has_network_error = true;
+                const min = manager.options.min_simultaneous_requests;
+                const max = AsyncHTTP.max_simultaneous_requests.load(.monotonic);
+                if ((max > min)) {
+                    _ = AsyncHTTP.max_simultaneous_requests.store(@max(min, (max / 2)), .monotonic);
+                }
+            }
+            if (((task.response.metadata == null) or (task.response.metadata.?.response.status_code > 499))) {
+                const e = ((task.response.fail) orelse (error.TarballFailedToDownload));
+                if ((task.retried < manager.options.max_retry_count)) {
+                    task.retried = (task.retried + 1);
+                    _ = task.resetStreamingForRetry();
+                    _ = manager.enqueueNetworkTask(task);
+                    if (manager.options.log_level.isVerbose()) {
+                        _ = ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "<r><yellow>warn:<r> {s} downloading tarball <b>{s}@{f}<r>. Retrying {d}/{d}...", .{ bun.span(@errorName(e)), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto), task.retried, manager.options.max_retry_count })) catch unreachable);
+                    }
+                    continue;
+                }
+            }
+            _ = task.discardUnusedStreamingState(manager);
+            if ((task.response.metadata == null)) {
+                const e = ((task.response.fail) orelse (error.TarballFailedToDownload));
+                const is_required = manager.isNetworkTaskRequired(task.task_id);
+                _ = manager.network_dedupe_map.remove(task.task_id);
+                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                    if ((Ctx == *Store.Installer)) {
+                        _ = callbacks.onPackageDownloadError(extract_ctx, task.task_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), (&extract.resolution), e, task.url_buf);
+                    } else {
+                        const package_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(extract.dependency_id))];
+                        _ = callbacks.onPackageDownloadError(extract_ctx, package_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), (&extract.resolution), e, task.url_buf);
+                    }
+                    continue;
+                }
+                const fmt: []const u8 = "{s} downloading tarball <b>{s}@{f}<r>";
+                if (is_required) {
+                    _ = (blk_catch_7: { break :blk_catch_7 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto) })) catch |oom_err| { _ = &oom_err; break :blk_catch_7 bun.handleOom(oom_err); }); });
+                } else {
+                    _ = (blk_catch_8: { break :blk_catch_8 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto) })) catch |oom_err| { _ = &oom_err; break :blk_catch_8 bun.handleOom(oom_err); }); });
+                }
+                if ((manager.subcommand != .remove)) {
+                    for (cp_mut_slice(&manager.update_requests)) |*request| {
+                        _ = &request;
+                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice())) {
+                            (request.*).failed = true;
+                            manager.options.do.save_lockfile = false;
+                            manager.options.do.save_yarn_lock = false;
+                            manager.options.do.install_packages = false;
+                        }
+                    }
+                }
+                if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
+                    _ = &removed;
+                    var list = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
+                    _ = &list;
+                    _ = list.deinit(manager.allocator);
+                }
+                continue;
+            }
+            const metadata = task.response.metadata.?;
+            const response = metadata.response;
+            if ((response.status_code > 399)) {
+                const is_required = manager.isNetworkTaskRequired(task.task_id);
+                _ = manager.network_dedupe_map.remove(task.task_id);
+                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                    const e = (switch (response.status_code) {
+400 => error.TarballHTTP400,
+401 => error.TarballHTTP401,
+402 => error.TarballHTTP402,
+403 => error.TarballHTTP403,
+404 => error.TarballHTTP404,
+405...499 => error.TarballHTTP4xx,
+else => error.TarballHTTP5xx,
+});
+                    if ((Ctx == *Store.Installer)) {
+                        _ = callbacks.onPackageDownloadError(extract_ctx, task.task_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), (&extract.resolution), e, task.url_buf);
+                    } else {
+                        const package_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(extract.dependency_id))];
+                        _ = callbacks.onPackageDownloadError(extract_ctx, package_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), (&extract.resolution), e, task.url_buf);
+                    }
+                    continue;
+                }
+                if (is_required) {
+                    _ = (blk_catch_9: { break :blk_catch_9 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "<r><red><b>GET<r><red> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_9 bun.handleOom(oom_err); }); });
+                } else {
+                    _ = (blk_catch_10: { break :blk_catch_10 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_10 bun.handleOom(oom_err); }); });
+                }
+                if ((manager.subcommand != .remove)) {
+                    for (cp_mut_slice(&manager.update_requests)) |*request| {
+                        _ = &request;
+                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice())) {
+                            (request.*).failed = true;
+                            manager.options.do.save_lockfile = false;
+                            manager.options.do.save_yarn_lock = false;
+                            manager.options.do.install_packages = false;
+                        }
+                    }
+                }
+                if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
+                    _ = &removed;
+                    var list = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
+                    _ = &list;
+                    _ = list.deinit(manager.allocator);
+                }
+                continue;
+            }
+            if (log_level.isVerbose()) {
+                _ = Output.prettyError("    ", .{});
+                _ = Output.printElapsed((@as(f64, @floatFromInt(task.unsafe_http_client.elapsed)) / std.time.ns_per_ms));
+                _ = Output.prettyError("<d> Downloaded <r><green>{s}<r> tarball\n", .{ (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice() });
+                _ = Output.flush();
+            }
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), ProgressStrings.extract_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+            _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueExtractNPMPackage(extract, task)));
+},
+else => {
+_ = unreachable;
+},
+}
+        }
+        var resolve_tasks_batch = manager.resolve_tasks.popBatch();
+        _ = &resolve_tasks_batch;
+        var resolve_tasks_iter = resolve_tasks_batch.iterator();
+        _ = &resolve_tasks_iter;
+        while (resolve_tasks_iter.next()) |task| {
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert((manager.pendingTaskCount() > 0));
+            }
+            defer {
+            _ = manager.preallocated_resolve_tasks.put(task);
+            }
+            _ = manager.decrementPendingTasks();
+            if ((task.log.msgs.items.len > 0)) {
+                _ = try task.log.print(Output.errorWriter());
+                if ((task.log.errors > 0)) {
+                    manager.any_failed_to_install = true;
+                }
+                _ = task.log.deinit();
+            }
+            switch (task.tag) {
+.package_manifest => {
+defer {
+            _ = manager.preallocated_network_tasks.put(task.request.package_manifest.network);
+            }
+            if ((task.status == .fail)) {
+                const name = (if (@typeInfo(@TypeOf(task.request.package_manifest)) == .@"enum" or @typeInfo(@TypeOf(task.request.package_manifest)) == .@"union") @tagName(task.request.package_manifest) else task.request.package_manifest.name);
+                const e = ((task.err) orelse (error.Failed));
+                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                    _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.request.package_manifest.network.url_buf);
+                } else {
+                    _ = (blk_catch_11: { break :blk_catch_11 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} parsing package manifest for <b>{s}<r>", .{ @errorName(e), name.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_11 bun.handleOom(oom_err); }); });
+                }
+                continue;
+            }
+            const manifest = (&task.data.package_manifest);
+            _ = try manager.manifests.insert((if (@typeInfo(@TypeOf(manifest.pkg)) == .@"enum" or @typeInfo(@TypeOf(manifest.pkg)) == .@"union") @tagName(manifest.pkg) else manifest.pkg.name).hash, manifest);
+            if ((@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only)) {
+                continue;
+            }
+            const dependency_list_entry = (manager.task_queue.getEntry(task.id)).?;
+            const dependency_list = dependency_list_entry.value_ptr.*;
+            dependency_list_entry.value_ptr.* = .{};
+            _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, (if (@typeInfo(@TypeOf(manifest)) == .@"enum" or @typeInfo(@TypeOf(manifest)) == .@"union") @tagName(manifest) else manifest.name)(), ProgressStrings.download_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+},
+.extract, .local_tarball => {
+defer {
+            {
+                switch (task.tag) {
+.extract => {
+_ = manager.preallocated_network_tasks.put(task.request.extract.network);
+},
+else => {
+
+},
+}
+            }
+            }
+            const tarball = (switch (task.tag) {
+.extract => (&task.request.extract.tarball),
+.local_tarball => (&task.request.local_tarball.tarball),
+else => unreachable,
+});
+            const dependency_id = tarball.dependency_id;
+            var package_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dependency_id))];
+            _ = &package_id;
+            const alias = (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice();
+            const resolution = (&tarball.resolution);
+            if ((task.status == .fail)) {
+                const e = ((task.err) orelse (error.TarballFailedToExtract));
+                _ = manager.network_dedupe_map.remove(task.id);
+                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                    const fail_url = (switch (task.tag) {
+.extract => task.request.extract.network.url_buf,
+.local_tarball => task.request.local_tarball.tarball.url.slice(),
+else => unreachable,
+});
+                    if ((Ctx == *Store.Installer)) {
+                        _ = callbacks.onPackageDownloadError(extract_ctx, task.id, alias, resolution, e, fail_url);
+                    } else {
+                        _ = callbacks.onPackageDownloadError(extract_ctx, package_id, alias, resolution, e, fail_url);
+                    }
+                    continue;
+                }
+                _ = (blk_catch_12: { break :blk_catch_12 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} extracting tarball from <b>{s}<r>", .{ @errorName(e), alias })) catch |oom_err| { _ = &oom_err; break :blk_catch_12 bun.handleOom(oom_err); }); });
+                if (manager.task_queue.fetchRemove(task.id)) |removed| {
+                    _ = &removed;
+                    var list = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
+                    _ = &list;
+                    _ = list.deinit(manager.allocator);
+                }
+                continue;
+            }
+            manager.extracted_count = (manager.extracted_count + 1);
+            bun.analytics.Features.extracted_packages = (bun.analytics.Features.extracted_packages + 1);
+            if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+                if (Ctx == *PackageInstaller) {
+_ = extract_ctx.fixCachedLockfilePackageSlices();
+                _ = callbacks.onExtract(extract_ctx, task.id, dependency_id, (&task.data.extract), log_level);
+} else if (Ctx == *Store.Installer) {
+_ = callbacks.onExtract(extract_ctx, task.id);
+} else {
+_ = @compileError("unexpected context type");
+}
+            } else {
+                if (manager.processExtractedTarballPackage((&package_id), dependency_id, resolution, (&task.data.extract), log_level)) |pkg| {
+                    _ = &pkg;
+                    var any_root = false;
+                    _ = &any_root;
+                    if (manager.task_queue.getEntry(task.id)) |dependency_list_entry| {
+                        _ = &dependency_list_entry;
+                        var dependency_list = dependency_list_entry.value_ptr.*;
+                        _ = &dependency_list;
+                        dependency_list_entry.value_ptr.* = .{};
+                        defer {
+                        {
+                            _ = dependency_list.deinit(manager.allocator);
+                            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
+                                if (any_root) {
+                                    _ = callbacks.onResolve(extract_ctx);
+                                }
+                            }
+                        }
+                        }
+                        for (dependency_list.items) |dep| {
+                            _ = &dep;
+                            switch (dep) {
+inline .dependency, .root_dependency => |id| {
+var version = (&manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))].version);
+                            _ = &version;
+                            switch (version.tag) {
+.git => {
+(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).git.package_name = (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name);
+},
+.github => {
+(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).github.package_name = (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name);
+},
+.tarball => {
+(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).tarball.package_name = (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name);
+},
+else => {
+
+},
+}
+                            _ = try manager.processDependencyListItem(dep, (&any_root), install_peer);
+},
+else => {
+_ = ((dependency_list_entry.value_ptr.append(manager.allocator, dep)) catch unreachable);
+},
+}
+                        }
+                    }
+                } else {
+                    if (manager.task_queue.getEntry(Task.Id.forManifest(manager.lockfile.str((&manager.lockfile.packages.items(.name)[@as(usize, @intCast(package_id))]))))) |dependency_list_entry| {
+                        _ = &dependency_list_entry;
+                        const dependency_list = dependency_list_entry.value_ptr.*;
+                        dependency_list_entry.value_ptr.* = .{};
+                        _ = try manager.processDependencyList(dependency_list, void, .{}, .{}, install_peer);
+                    }
+                }
+            }
+            _ = manager.setPreinstallState(package_id, manager.lockfile, .done);
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, alias, ProgressStrings.extract_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+},
+.git_clone => {
+const clone = (&task.request.git_clone);
+            const repo_fd = task.data.git_clone;
+            const name = (if (@typeInfo(@TypeOf(clone)) == .@"enum" or @typeInfo(@TypeOf(clone)) == .@"union") @tagName(clone) else clone.name).slice();
+            const url = clone.url.slice();
+            _ = ((manager.git_repositories.put(manager.allocator, task.id, repo_fd)) catch unreachable);
+            if ((task.status == .fail)) {
+                const e = ((task.err) orelse (error.Failed));
+                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                    _ = callbacks.onPackageManifestError(extract_ctx, name, e, url);
+                } else {
+                    if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (Ctx == *Store.Installer))) {
+                        var drained_any = false;
+                        _ = &drained_any;
+                        if (manager.task_queue.fetchRemove(task.id)) |removed| {
+                            _ = &removed;
+                            var waiters = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
+                            _ = &waiters;
+                            defer {
+                            _ = waiters.deinit(manager.allocator);
+                            }
+                            const pkg_resolutions = manager.lockfile.packages.items(.resolution);
+                            for (waiters.items) |waiter| {
+                                _ = &waiter;
+                                const dep_id = (switch (waiter) {
+.dependency => |id| id,
+else => continue,
+});
+                                const pkg_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                                if ((pkg_id == invalid_package_id)) {
+                                    continue;
+                                }
+                                const res = (&pkg_resolutions[@as(usize, @intCast(pkg_id))]);
+                                if ((res.tag != .git)) {
+                                    continue;
+                                }
+                                const checkout_id = Task.Id.forGitCheckout(manager.lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).git.repo)), manager.lockfile.str((&(if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).git.resolved)));
+                                drained_any = true;
+                                _ = callbacks.onPackageDownloadError(extract_ctx, checkout_id, name, res, e, url);
+                            }
+                        }
+                        if ((!drained_any)) {
+                            const checkout_id = Task.Id.forGitCheckout(url, manager.lockfile.str((&(if (@typeInfo(@TypeOf(clone.res)) == .@"enum") @intFromEnum(clone.res) else clone.res.value).git.resolved)));
+                            _ = callbacks.onPackageDownloadError(extract_ctx, checkout_id, name, (&clone.res), e, url);
+                        }
+                    } else {
+                        if ((log_level != .silent)) {
+                            _ = (blk_catch_15: { break :blk_catch_15 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} cloning repository for <b>{s}<r>", .{ @errorName(e), name })) catch |oom_err| { _ = &oom_err; break :blk_catch_15 bun.handleOom(oom_err); }); });
+                        }
+                    }
+                }
+                continue;
+            }
+            if (comptime ((@TypeOf(callbacks.onExtract) != void) and (Ctx == *PackageInstaller))) {
+                const dep_id = clone.dep_id;
+                const dep = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+                const dep_name = cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(manager.lockfile.buffers.string_bytes.items)..];
+                const git = (if (@typeInfo(@TypeOf(clone.res)) == .@"enum") @intFromEnum(clone.res) else clone.res.value).git;
+                const committish = cp_iter_slice(git.committish)[@intCast(manager.lockfile.buffers.string_bytes.items)..];
+                const repo = cp_iter_slice(git.repo)[@intCast(manager.lockfile.buffers.string_bytes.items)..];
+                const resolved = try Repository.findCommit(manager.allocator, manager.env, manager.log, task.data.git_clone.stdDir(), dep_name, committish, task.id);
+                const checkout_id = Task.Id.forGitCheckout(repo, resolved);
+                if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) {
+                    continue;
+                }
+                _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueGitCheckout(checkout_id, repo_fd, dep_id, dep_name, clone.res, resolved, null)));
+            } else {
+                const dependency_list_entry = (manager.task_queue.getEntry(task.id)).?;
+                const dependency_list = dependency_list_entry.value_ptr.*;
+                dependency_list_entry.value_ptr.* = .{};
+                _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
+            }
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, name, ProgressStrings.download_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+},
+.git_checkout => {
+const git_checkout = (&task.request.git_checkout);
+            const alias = (&(if (@typeInfo(@TypeOf(git_checkout)) == .@"enum" or @typeInfo(@TypeOf(git_checkout)) == .@"union") @tagName(git_checkout) else git_checkout.name));
+            const resolution = (&git_checkout.resolution);
+            var package_id: PackageID = invalid_package_id;
+            _ = &package_id;
+            if ((task.status == .fail)) {
+                const e = ((task.err) orelse (error.Failed));
+                if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (Ctx == *Store.Installer))) {
+                    _ = callbacks.onPackageDownloadError(extract_ctx, task.id, alias.slice(), resolution, e, manager.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git.repo)));
+                } else {
+                    _ = (blk_catch_16: { break :blk_catch_16 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} checking out repository for <b>{s}<r>", .{ @errorName(e), alias.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_16 bun.handleOom(oom_err); }); });
+                }
+                continue;
+            }
+            if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+                if (Ctx == *PackageInstaller) {
+_ = extract_ctx.fixCachedLockfilePackageSlices();
+                _ = callbacks.onExtract(extract_ctx, task.id, git_checkout.dependency_id, (&task.data.git_checkout), log_level);
+} else if (Ctx == *Store.Installer) {
+_ = callbacks.onExtract(extract_ctx, task.id);
+} else {
+_ = @compileError("unexpected context type");
+}
+            } else {
+                if (manager.processExtractedTarballPackage((&package_id), git_checkout.dependency_id, resolution, (&task.data.git_checkout), log_level)) |pkg| {
+                    _ = &pkg;
+                    var any_root = false;
+                    _ = &any_root;
+                    if (manager.task_queue.getEntry(task.id)) |dependency_list_entry| {
+                        _ = &dependency_list_entry;
+                        var dependency_list = dependency_list_entry.value_ptr.*;
+                        _ = &dependency_list;
+                        dependency_list_entry.value_ptr.* = .{};
+                        defer {
+                        {
+                            _ = dependency_list.deinit(manager.allocator);
+                            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
+                                if (any_root) {
+                                    _ = callbacks.onResolve(extract_ctx);
+                                }
+                            }
+                        }
+                        }
+                        for (dependency_list.items) |dep| {
+                            _ = &dep;
+                            switch (dep) {
+inline .dependency, .root_dependency => |id| {
+var repo = (&(if (@typeInfo(@TypeOf(manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))].version)) == .@"enum") @intFromEnum(manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))].version) else manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))].version.value).git);
+                            _ = &repo;
+                            repo.resolved = (if (@typeInfo(@TypeOf(pkg.resolution)) == .@"enum") @intFromEnum(pkg.resolution) else pkg.resolution.value).git.resolved;
+                            repo.package_name = (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name);
+                            _ = try manager.processDependencyListItem(dep, (&any_root), install_peer);
+},
+else => {
+_ = ((dependency_list_entry.value_ptr.append(manager.allocator, dep)) catch unreachable);
+},
+}
+                        }
+                        if ((@TypeOf(callbacks.onExtract) != void)) {
+                            _ = @compileError("ctx should be void");
+                        }
+                    }
+                }
+            }
+            if (log_level.showProgress()) {
+                if ((!has_updated_this_run)) {
+                    _ = manager.setNodeName(manager.downloads_node.?, alias.slice(), ProgressStrings.download_emoji, true);
+                    has_updated_this_run = true;
+                }
+            }
+},
+}
+        }
+}
+
+pub inline fn pendingTaskCount(manager: *const PackageManager) u32 {
+        return manager.pending_tasks.load(.acquire);
+}
+
+pub inline fn incrementPendingTasks(manager: *PackageManager, count: u32) void {
+        manager.total_tasks = (manager.total_tasks + count);
+        _ = manager.pending_tasks.fetchAdd(count, .monotonic);
+}
+
+pub inline fn decrementPendingTasks(manager: *PackageManager) void {
+        _ = manager.pending_tasks.fetchSub(1, .release);
+}
+
+pub fn flushNetworkQueue(client: *PackageManager) void {
+        var network = (&client.network_task_fifo);
+        _ = &network;
+        while (network.readItem()) |network_task| {
+            _ = network_task.schedule((if ((network_task.callback == .extract)) (&client.network_tarball_batch) else (&client.network_resolve_batch)));
+        }
+}
+
+pub fn flushPatchTaskQueue(client: *PackageManager) void {
+        var patch_task_fifo = (&client.patch_task_fifo);
+        _ = &patch_task_fifo;
+        while (patch_task_fifo.readItem()) |patch_task| {
+            _ = patch_task.schedule((if ((patch_task.callback == .apply)) (&client.patch_apply_batch) else (&client.patch_calc_hash_batch)));
+        }
+}
+
+pub fn doFlushDependencyQueue(client: *PackageManager) void {
+        var lockfile = client.lockfile;
+        _ = &lockfile;
+        var dependency_queue = (&lockfile.scratch.dependency_list_queue);
+        _ = &dependency_queue;
+        while (dependency_queue.readItem()) |dependencies_list| {
+            var i: u32 = dependencies_list.off;
+            _ = &i;
+            const end = (dependencies_list.off + dependencies_list.len);
+            while ((i < end)) : (i = (i + 1)) {
+                const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
+                _ = (blk_catch_18: { break :blk_catch_18 ((client.enqueueDependencyWithMain(i, (&dependency), lockfile.buffers.resolutions.items[@as(usize, @intCast(i))], false)) catch |__ce_18| { _ = &__ce_18;  }); });
+            }
+        }
+        _ = client.flushNetworkQueue();
+}
+
+pub fn flushDependencyQueue(client: *PackageManager) void {
+        var last_count = client.total_tasks;
+        _ = &last_count;
+        while (true) : (last_count = client.total_tasks) {
+            _ = client.flushNetworkQueue();
+            _ = doFlushDependencyQueue(client);
+            _ = client.flushNetworkQueue();
+            _ = client.flushPatchTaskQueue();
+            if ((client.total_tasks == last_count)) {
+                break;
+            }
+        }
+}
+
+pub fn scheduleTasks(manager: *PackageManager) usize {
+        const count = ((((manager.task_batch.len + manager.network_resolve_batch.len) + manager.network_tarball_batch.len) + manager.patch_apply_batch.len) + manager.patch_calc_hash_batch.len);
+        _ = manager.incrementPendingTasks((if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(i32, @intFromEnum(count)) else cp_cast_int(i32, count)));
+        _ = manager.thread_pool.schedule(manager.patch_apply_batch);
+        _ = manager.thread_pool.schedule(manager.patch_calc_hash_batch);
+        _ = manager.thread_pool.schedule(manager.task_batch);
+        _ = manager.network_resolve_batch.push(manager.network_tarball_batch);
+        _ = HTTP.http_thread.schedule(manager.network_resolve_batch);
+        manager.task_batch = .{};
+        manager.network_tarball_batch = .{};
+        manager.network_resolve_batch = .{};
+        manager.patch_apply_batch = .{};
+        manager.patch_calc_hash_batch = .{};
+        return count;
+}
+
+pub fn drainDependencyList(client: *PackageManager) void {
+        _ = client.flushDependencyQueue();
+        if (PackageManager.verbose_install) {
+            _ = Output.flush();
+        }
+        _ = client.scheduleTasks();
+}
+
+pub fn getNetworkTask(client: *PackageManager) *NetworkTask {
+        return client.preallocated_network_tasks.get();
+}
+
+pub fn allocGitHubURL(client: *const PackageManager, repository: *const Repository) []const u8 {
+        var github_api_url: []const u8 = "https://api.github.com";
+        _ = &github_api_url;
+        if (client.env.get("GITHUB_API_URL")) |url| {
+            _ = &url;
+            if ((url.len > 0)) {
+                github_api_url = url;
+            }
+        }
+        const owner = client.lockfile.str((&repository.owner));
+        const repo = client.lockfile.str((&repository.repo));
+        const committish = client.lockfile.str((&repository.committish));
+        return ((std.fmt.allocPrint(client.allocator, "{s}/repos/{s}/{s}{s}tarball/{s}", .{ strings.withoutTrailingSlash(github_api_url), owner, repo, (if ((repo.len > 0)) "/" else ""), committish })) catch unreachable);
+}
+
+pub fn hasCreatedNetworkTask(client: *PackageManager, task_id: Task.Id, is_required: bool) bool {
+        const gpe = bun.handleOom(client.network_dedupe_map.getOrPut(task_id));
+        gpe.value_ptr.is_required = (if ((!gpe.found_existing)) is_required else (gpe.value_ptr.is_required or is_required));
+        return gpe.found_existing;
+}
+
+pub fn isNetworkTaskRequired(client: *const PackageManager, task_id: Task.Id) bool {
+        return ((client.network_dedupe_map.get(task_id)) orelse { return true; }).is_required;
+}
+
+pub fn generateNetworkTaskForTarball(client: *PackageManager, task_id: Task.Id, url: []const u8, is_required: bool, dependency_id: DependencyID, package: Lockfile.Package, patch_name_and_version_hash: ?u64, authorization: NetworkTask.Authorization) NetworkTask.ForTarballError!?*NetworkTask {
+        if (client.hasCreatedNetworkTask(task_id, is_required)) {
+            return null;
+        }
+        var network_task = client.getNetworkTask();
+        _ = &network_task;
+        var apply_patch_task: ?*PatchTask = null;
+        _ = &apply_patch_task;
+        if (patch_name_and_version_hash) |h| {
+            _ = &h;
+            const patch_hash = ((client.lockfile.patched_dependencies.get(h)).?.patchfileHash()).?;
+            const task = PatchTask.newApplyPatchHash(client, package.@"meta".id, patch_hash, h);
+            task.callback.apply.task_id = task_id;
+            apply_patch_task = task;
+        }
+        network_task.* = .{ .task_id = task_id, .callback = undefined, .allocator = client.allocator, .package_manager = client, .apply_patch_task = apply_patch_task };
+        const scope = client.scopeForPackageName(client.lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))));
+        _ = try network_task.forTarball(client.allocator, (&.{ .package_manager = client, .name = (blk_catch_20: { break :blk_catch_20 ((strings.StringOrTinyString.initAppendIfNeeded(client.lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_20 bun.handleOom(oom_err); }); }), .resolution = package.resolution, .cache_dir = client.getCacheDirectory(), .temp_dir = client.getTemporaryDirectory().handle, .dependency_id = dependency_id, .integrity = package.@"meta".integrity, .url = (blk_catch_21: { break :blk_catch_21 ((strings.StringOrTinyString.initAppendIfNeeded(url, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_21 bun.handleOom(oom_err); }); }) }), scope, authorization);
+        if (ExtractTarball.usesStreamingExtraction()) {
+            const extract_task = client.createExtractTaskForStreaming((&network_task.callback.extract), network_task);
+            network_task.streaming_extract_task = extract_task;
+            network_task.tarball_stream = TarballStream.init(client.allocator, extract_task, network_task, client);
+        }
+        return network_task;
+}

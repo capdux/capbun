@@ -1,218 +1,206 @@
-name: string = "",
-name_hash: PackageNameHash = 0,
-version: Dependency.Version = .{},
-version_buf: []const u8 = "",
-package_id: PackageID = invalid_package_id,
-is_aliased: bool = false,
-failed: bool = false,
-// This must be cloned to handle when the AST store resets
-e_string: ?*JSAst.E.String = null,
-
-pub const Array = std.ArrayListUnmanaged(UpdateRequest);
-
-pub inline fn matches(this: PackageManager.UpdateRequest, dependency: Dependency, string_buf: []const u8) bool {
-    return this.name_hash == if (this.name.len == 0)
-        String.Builder.stringHash(dependency.version.literal.slice(string_buf))
-    else
-        dependency.name_hash;
-}
-
-pub fn getName(this: *const UpdateRequest) string {
-    return if (this.is_aliased)
-        this.name
-    else
-        this.version.literal.slice(this.version_buf);
-}
-
-/// If `this.package_id` is not `invalid_package_id`, it must be less than `lockfile.packages.len`.
-pub fn getNameInLockfile(this: *const UpdateRequest, lockfile: *const Lockfile) ?string {
-    return if (this.package_id == invalid_package_id)
-        null
-    else
-        lockfile.packages.items(.name)[this.package_id].slice(this.version_buf);
-}
-
-/// It is incorrect to call this function before Lockfile.cleanWithLogger() because
-/// resolved_name should be populated if possible.
-///
-/// `this` needs to be a pointer! If `this` is a copy and the name returned from
-/// resolved_name is inlined, you will return a pointer to stack memory.
-pub fn getResolvedName(this: *const UpdateRequest, lockfile: *const Lockfile) string {
-    return if (this.is_aliased)
-        this.name
-    else if (this.getNameInLockfile(lockfile)) |name|
-        name
-    else
-        this.version.literal.slice(this.version_buf);
-}
-
-pub const fromJS = @import("../../install_jsc/update_request_jsc.zig").fromJS;
-
-pub fn parse(
-    allocator: std.mem.Allocator,
-    pm: ?*PackageManager,
-    log: *logger.Log,
-    positionals: []const string,
-    update_requests: *Array,
-    subcommand: Subcommand,
-) []UpdateRequest {
-    return parseWithError(allocator, pm, log, positionals, update_requests, subcommand, true) catch Global.crash();
-}
-
-pub fn parseWithError(
-    allocator: std.mem.Allocator,
-    pm: ?*PackageManager,
-    log: *logger.Log,
-    positionals: []const string,
-    update_requests: *Array,
-    subcommand: Subcommand,
-    fatal: bool,
-) ![]UpdateRequest {
-    // first one is always either:
-    // add
-    // remove
-    outer: for (positionals) |positional| {
-        var input: []u8 = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.trim(u8, positional, " \n\r\t")));
-        {
-            // Replacing "\\\\" (2 bytes) with "/" (1 byte) never grows the string, so a
-            // buffer of `input.len` bytes is always sufficient. Previously this was a
-            // fixed `[2048]u8` stack array which overflowed for longer positionals.
-            const temp = bun.handleOom(bun.default_allocator.alloc(u8, input.len));
-            defer bun.default_allocator.free(temp);
-            const len = std.mem.replace(u8, input, "\\\\", "/", temp);
-            const input2 = temp[0 .. input.len - len];
-            bun.path.platformToPosixInPlace(u8, input2);
-            @memcpy(input[0..input2.len], input2);
-            input.len = input2.len;
-        }
-        switch (subcommand) {
-            .link, .unlink => if (!strings.hasPrefixComptime(input, "link:")) {
-                input = std.fmt.allocPrint(allocator, "{0s}@link:{0s}", .{input}) catch unreachable;
-            },
-            else => {},
-        }
-
-        var value = input;
-        var alias: ?string = null;
-        if (!Dependency.isTarball(input) and strings.isNPMPackageName(input)) {
-            alias = input;
-            value = input[input.len..];
-        } else if (input.len > 1) {
-            if (strings.indexOfChar(input[1..], '@')) |at| {
-                const name = input[0 .. at + 1];
-                if (strings.isNPMPackageName(name)) {
-                    alias = name;
-                    value = input[at + 2 ..];
-                }
-            }
-        }
-
-        const placeholder = String.from("@@@");
-        var version = Dependency.parseWithOptionalTag(
-            allocator,
-            if (alias) |name| String.init(input, name) else placeholder,
-            if (alias) |name| String.Builder.stringHash(name) else null,
-            value,
-            null,
-            &SlicedString.init(input, value),
-            log,
-            pm,
-        ) orelse {
-            if (fatal) {
-                Output.errGeneric("unrecognised dependency format: {s}", .{
-                    positional,
-                });
-            } else {
-                log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{
-                    positional,
-                }) catch |err| bun.handleOom(err);
-            }
-
-            return error.UnrecognizedDependencyFormat;
-        };
-        if (alias != null and version.tag == .git) {
-            if (Dependency.parseWithOptionalTag(
-                allocator,
-                placeholder,
-                null,
-                input,
-                null,
-                &SlicedString.init(input, input),
-                log,
-                pm,
-            )) |ver| {
-                alias = null;
-                version = ver;
-            }
-        }
-        if (switch (version.tag) {
-            .dist_tag => version.value.dist_tag.name.eql(placeholder, input, input),
-            .npm => version.value.npm.name.eql(placeholder, input, input),
-            else => false,
-        }) {
-            if (fatal) {
-                Output.errGeneric("unrecognised dependency format: {s}", .{
-                    positional,
-                });
-            } else {
-                log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{
-                    positional,
-                }) catch |err| bun.handleOom(err);
-            }
-
-            return error.UnrecognizedDependencyFormat;
-        }
-
-        var request = UpdateRequest{
-            .version = version,
-            .version_buf = input,
-        };
-        if (alias) |name| {
-            request.is_aliased = true;
-            request.name = allocator.dupe(u8, name) catch unreachable;
-            request.name_hash = String.Builder.stringHash(name);
-        } else if (version.tag == .github and version.value.github.committish.isEmpty()) {
-            request.name_hash = String.Builder.stringHash(version.literal.slice(input));
-        } else {
-            request.name_hash = String.Builder.stringHash(version.literal.slice(input));
-        }
-
-        for (update_requests.items) |*prev| {
-            if (prev.name_hash == request.name_hash and request.name.len == prev.name.len) continue :outer;
-        }
-        bun.handleOom(update_requests.append(allocator, request));
-    }
-
-    return update_requests.items;
-}
-
-pub const CommandLineArguments = PackageManager.CommandLineArguments;
-pub const Options = PackageManager.Options;
-pub const PackageInstaller = PackageManager.PackageInstaller;
-pub const PackageJSONEditor = PackageManager.PackageJSONEditor;
-pub const Subcommand = PackageManager.Subcommand;
-
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const std = @import("std");
-
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Global = bun.Global;
 const JSAst = bun.ast;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const Semver = bun.Semver;
 const SlicedString = Semver.SlicedString;
-const String = Semver.String;
-
+const SemverString = Semver.String;
 const Dependency = bun.install.Dependency;
 const Lockfile = bun.install.Lockfile;
 const PackageID = bun.install.PackageID;
 const PackageNameHash = bun.install.PackageNameHash;
 const invalid_package_id = bun.install.invalid_package_id;
-
 const PackageManager = bun.install.PackageManager;
-const UpdateRequest = PackageManager.UpdateRequest;
+pub const CommandLineArguments = PackageManager.CommandLineArguments;
+pub const Options = PackageManager.Options;
+pub const PackageInstaller = PackageManager.PackageInstaller;
+pub const PackageJSONEditor = PackageManager.PackageJSONEditor;
+pub const Subcommand = PackageManager.Subcommand;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const update_request_jsc = @import("../../install_jsc/update_request_jsc.zig");
+pub const UpdateRequest = @This();
+
+name: []const u8 = "",
+name_hash: PackageNameHash = 0,
+version: Dependency.Version = .{},
+version_buf: []const u8 = "",
+package_id: PackageID = invalid_package_id,
+is_aliased: bool = false,
+failed: bool = false,
+e_string: ?*JSAst.E.String = null,
+
+pub inline fn matches(client: PackageManager.UpdateRequest, dependency: Dependency, string_buf: []const u8) bool {
+        return (client.name_hash == (if (((if (@typeInfo(@TypeOf(client)) == .@"enum" or @typeInfo(@TypeOf(client)) == .@"union") @tagName(client) else client.name).len == 0)) SemverString.Builder.stringHash(cp_iter_slice(dependency.version.literal)[@intCast(string_buf)..]) else dependency.name_hash));
+}
+
+pub fn getName(client: *const UpdateRequest) []const u8 {
+        return (if (client.is_aliased) client.name else cp_iter_slice(client.version.literal)[@intCast(client.version_buf)..]);
+}
+
+pub fn getNameInLockfile(client: *const UpdateRequest, lockfile: *const Lockfile) ?[]const u8 {
+        return (if ((client.package_id == invalid_package_id)) null else cp_iter_slice(lockfile.packages.items(.name)[@as(usize, @intCast(client.package_id))])[@intCast(client.version_buf)..]);
+}
+
+pub fn getResolvedName(client: *const UpdateRequest, lockfile: *const Lockfile) []const u8 {
+        if (client.is_aliased) {
+            return client.name;
+        }
+        if (client.getNameInLockfile(lockfile)) |name| {
+            _ = &name;
+            return name;
+        }
+        return cp_iter_slice(client.version.literal)[@intCast(client.version_buf)..];
+}
+
+pub fn parse(allocator: std.mem.Allocator, pm: ?*PackageManager, log: *logger.Log, positionals: []const []const u8, update_requests: *Array, subcommand: Subcommand) []UpdateRequest {
+        return (blk_catch_0: { break :blk_catch_0 ((parseWithError(allocator, pm, log, positionals, update_requests, subcommand, true)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 @as([]UpdateRequest, Global.crash()); }); });
+}
+
+pub fn parseWithError(allocator: std.mem.Allocator, pm: ?*PackageManager, log: *logger.Log, positionals: []const []const u8, update_requests: *Array, subcommand: Subcommand, fatal: bool) ![]UpdateRequest {
+        for (cp_iter_slice(positionals)) |positional| {
+            _ = &positional;
+            var input: []u8 = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.trim(u8, positional, " \n\r\t")));
+            _ = &input;
+            {
+                const temp = bun.handleOom(bun.default_allocator.alloc(u8, input.len));
+                defer {
+                _ = bun.default_allocator.free(temp);
+                }
+                const len = std.mem.replace(u8, input, "\\\\", "/", temp);
+                const input2 = temp[0..(input.len - len)];
+                _ = bun.path.platformToPosixInPlace(u8, input2);
+                _ = @memcpy(input[0..input2.len], input2);
+                input.len = input2.len;
+            }
+            switch (subcommand) {
+.link, .unlink => {
+if ((!strings.hasPrefixComptime(input, "link:"))) {
+                input = ((std.fmt.allocPrint(allocator, "{0s}@link:{0s}", .{ input })) catch unreachable);
+            }
+},
+else => {
+
+},
+}
+            var value = input;
+            _ = &value;
+            var alias: ?[]const u8 = null;
+            _ = &alias;
+            if (((!Dependency.isTarball(input)) and strings.isNPMPackageName(input))) {
+                alias = input;
+                value = input[input.len..];
+            } else {
+                if ((input.len > 1)) {
+                    if (strings.indexOfChar(input[1..], 64)) |at| {
+                        _ = &at;
+                        const name = input[0..(at + 1)];
+                        if (strings.isNPMPackageName(name)) {
+                            alias = @as([]const u8, name);
+                            value = input[(at + 2)..];
+                        }
+                    }
+                }
+            }
+            const placeholder = SemverString.@"from"("@@@");
+            var name_arg = placeholder;
+            _ = &name_arg;
+            var hash_arg: ?u64 = null;
+            _ = &hash_arg;
+            if (alias) |name| {
+                _ = &name;
+                name_arg = SemverString.init(input, name);
+                hash_arg = SemverString.Builder.stringHash(name);
+            }
+            const version_opt = Dependency.parseWithOptionalTag(allocator, name_arg, hash_arg, value, null, (&SlicedString.init(input, value)), log, pm);
+            if ((version_opt == null)) {
+                if (fatal) {
+                    _ = Output.errGeneric("unrecognised dependency format: {s}", .{ positional });
+                } else {
+                    _ = (blk_catch_2: { break :blk_catch_2 ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{ positional })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                }
+                return error.UnrecognizedDependencyFormat;
+            }
+            var version = version_opt.?;
+            _ = &version;
+            if (((alias != null) and (version.tag == .git))) {
+                if (Dependency.parseWithOptionalTag(allocator, placeholder, null, input, null, (&SlicedString.init(input, input)), log, pm)) |ver| {
+                    _ = &ver;
+                    alias = null;
+                    version = ver;
+                }
+            }
+            if ((switch (version.tag) {
+.dist_tag => (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag)) == .@"union") @tagName((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag) else (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.name).eql(placeholder, input, input),
+.npm => (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm)) == .@"union") @tagName((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm) else (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.name).eql(placeholder, input, input),
+else => false,
+})) {
+                if (fatal) {
+                    _ = Output.errGeneric("unrecognised dependency format: {s}", .{ positional });
+                } else {
+                    _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{ positional })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                }
+                return error.UnrecognizedDependencyFormat;
+            }
+            var request = UpdateRequest{ .version = version, .version_buf = input };
+            _ = &request;
+            if (alias) |name| {
+                _ = &name;
+                request.is_aliased = true;
+                request.name = ((allocator.dupe(u8, name)) catch unreachable);
+                request.name_hash = SemverString.Builder.stringHash(name);
+            } else {
+                if (((version.tag == .github) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).github.committish.isEmpty())) {
+                    request.name_hash = SemverString.Builder.stringHash(cp_iter_slice(version.literal)[@intCast(input)..]);
+                } else {
+                    request.name_hash = SemverString.Builder.stringHash(cp_iter_slice(version.literal)[@intCast(input)..]);
+                }
+            }
+            var already_exists = false;
+            _ = &already_exists;
+            for (update_requests.items) |*prev| {
+                _ = &prev;
+                if ((((prev.*).name_hash == request.name_hash) and (request.name.len == (if (@typeInfo(@TypeOf((prev.*))) == .@"enum" or @typeInfo(@TypeOf((prev.*))) == .@"union") @tagName((prev.*)) else (prev.*).name).len))) {
+                    already_exists = true;
+                    break;
+                }
+            }
+            if (already_exists) {
+                continue;
+            }
+            _ = bun.handleOom(update_requests.append(allocator, request));
+        }
+        return update_requests.items;
+}
+pub const Array = std.ArrayListUnmanaged(UpdateRequest);
+pub const fromJS = update_request_jsc.fromJS;

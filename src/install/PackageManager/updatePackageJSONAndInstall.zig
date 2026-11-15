@@ -1,739 +1,8 @@
-pub fn updatePackageJSONAndInstallWithManager(
-    manager: *PackageManager,
-    ctx: Command.Context,
-    original_cwd: string,
-) !void {
-    var update_requests = bun.handleOom(UpdateRequest.Array.initCapacity(manager.allocator, 64));
-    defer update_requests.deinit(manager.allocator);
-
-    if (manager.options.positionals.len <= 1) {
-        switch (manager.subcommand) {
-            .add => {
-                Output.errGeneric("no package specified to add", .{});
-                Output.flush();
-                PackageManager.CommandLineArguments.printHelp(.add);
-
-                Global.exit(0);
-            },
-            .remove => {
-                Output.errGeneric("no package specified to remove", .{});
-                Output.flush();
-                PackageManager.CommandLineArguments.printHelp(.remove);
-
-                Global.exit(0);
-            },
-            .update => {},
-            else => {},
-        }
-    }
-
-    return try updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(
-        manager,
-        ctx,
-        original_cwd,
-        manager.options.positionals[1..],
-        &update_requests,
-    );
-}
-
-fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(
-    manager: *PackageManager,
-    ctx: Command.Context,
-    original_cwd: string,
-    positionals: []const string,
-    update_requests: *UpdateRequest.Array,
-) !void {
-    var updates: []UpdateRequest = if (manager.subcommand == .@"patch-commit" or manager.subcommand == .patch)
-        &[_]UpdateRequest{}
-    else
-        UpdateRequest.parse(ctx.allocator, manager, ctx.log, positionals, update_requests, manager.subcommand);
-    try updatePackageJSONAndInstallWithManagerWithUpdates(
-        manager,
-        ctx,
-        &updates,
-        manager.subcommand,
-        original_cwd,
-    );
-}
-
-fn updatePackageJSONAndInstallWithManagerWithUpdates(
-    manager: *PackageManager,
-    ctx: Command.Context,
-    updates: *[]UpdateRequest,
-    subcommand: Subcommand,
-    original_cwd: string,
-) !void {
-    const log_level = manager.options.log_level;
-    if (manager.log.errors > 0) {
-        if (log_level != .silent) {
-            manager.log.print(Output.errorWriter()) catch {};
-        }
-        Global.crash();
-    }
-
-    var current_package_json = switch (manager.workspace_package_json_cache.getWithPath(
-        manager.allocator,
-        manager.log,
-        manager.original_package_json_path,
-        .{
-            .guess_indentation = true,
-        },
-    )) {
-        .parse_err => |err| {
-            manager.log.print(Output.errorWriter()) catch {};
-            Output.errGeneric("failed to parse package.json \"{s}\": {s}", .{
-                manager.original_package_json_path,
-                @errorName(err),
-            });
-            Global.crash();
-        },
-        .read_err => |err| {
-            Output.errGeneric("failed to read package.json \"{s}\": {s}", .{
-                manager.original_package_json_path,
-                @errorName(err),
-            });
-            Global.crash();
-        },
-        .entry => |entry| entry,
-    };
-    const current_package_json_indent = current_package_json.indentation;
-
-    // If there originally was a newline at the end of their package.json, preserve it
-    // so that we don't cause unnecessary diffs in their git history.
-    // https://github.com/oven-sh/bun/issues/1375
-    const preserve_trailing_newline_at_eof_for_package_json = current_package_json.source.contents.len > 0 and
-        current_package_json.source.contents[current_package_json.source.contents.len - 1] == '\n';
-
-    if (subcommand == .remove) {
-        if (current_package_json.root.data != .e_object) {
-            Output.errGeneric("package.json is not an Object {{}}, so there's nothing to {s}!", .{@tagName(subcommand)});
-            Global.crash();
-        } else if (current_package_json.root.data.e_object.properties.len == 0) {
-            Output.errGeneric("package.json is empty {{}}, so there's nothing to {s}!", .{@tagName(subcommand)});
-            Global.crash();
-        } else if (current_package_json.root.asProperty("devDependencies") == null and
-            current_package_json.root.asProperty("dependencies") == null and
-            current_package_json.root.asProperty("optionalDependencies") == null and
-            current_package_json.root.asProperty("peerDependencies") == null)
-        {
-            Output.prettyErrorln("package.json doesn't have dependencies, there's nothing to {s}!", .{@tagName(subcommand)});
-            Global.exit(0);
-        }
-    }
-
-    const dependency_list = if (manager.options.update.development)
-        "devDependencies"
-    else if (manager.options.update.optional)
-        "optionalDependencies"
-    else if (manager.options.update.peer)
-        "peerDependencies"
-    else
-        "dependencies";
-    var any_changes = false;
-
-    var not_in_workspace_root: ?PatchCommitResult = null;
-    switch (subcommand) {
-        .remove => {
-            // if we're removing, they don't have to specify where it is installed in the dependencies list
-            // they can even put it multiple times and we will just remove all of them
-            for (updates.*) |request| {
-                inline for ([_]string{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" }) |list| {
-                    if (current_package_json.root.asProperty(list)) |query| {
-                        if (query.expr.data == .e_object) {
-                            var dependencies = query.expr.data.e_object.properties.slice();
-                            var i: usize = 0;
-                            var new_len = dependencies.len;
-                            while (i < dependencies.len) : (i += 1) {
-                                if (dependencies[i].key.?.data == .e_string) {
-                                    if (dependencies[i].key.?.data.e_string.eql(string, request.name)) {
-                                        if (new_len > 1) {
-                                            dependencies[i] = dependencies[new_len - 1];
-                                            new_len -= 1;
-                                        } else {
-                                            new_len = 0;
-                                        }
-
-                                        any_changes = true;
-                                    }
-                                }
-                            }
-
-                            const changed = new_len != dependencies.len;
-                            if (changed) {
-                                query.expr.data.e_object.properties.len = @as(u32, @truncate(new_len));
-
-                                // If the dependencies list is now empty, remove it from the package.json
-                                // since we're swapRemove, we have to re-sort it
-                                if (query.expr.data.e_object.properties.len == 0) {
-                                    // TODO: Theoretically we could change these two lines to
-                                    // `.orderedRemove(query.i)`, but would that change user-facing
-                                    // behavior?
-                                    _ = current_package_json.root.data.e_object.properties.swapRemove(query.i);
-                                    current_package_json.root.data.e_object.packageJSONSort();
-                                } else {
-                                    var obj = query.expr.data.e_object;
-                                    obj.alphabetizeProperties();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-
-        .link, .add, .update => {
-            // `bun update <package>` is basically the same as `bun add <package>`, except
-            // update will not exceed the current dependency range if it exists
-
-            if (updates.len != 0) {
-                try PackageJSONEditor.edit(
-                    manager,
-                    updates,
-                    &current_package_json.root,
-                    dependency_list,
-                    .{
-                        .exact_versions = manager.options.enable.exact_versions,
-                        .before_install = true,
-                    },
-                );
-            } else if (subcommand == .update) {
-                try PackageJSONEditor.editUpdateNoArgs(
-                    manager,
-                    &current_package_json.root,
-                    .{
-                        .exact_versions = true,
-                        .before_install = true,
-                    },
-                );
-            }
-        },
-        else => {
-            if (manager.options.patch_features == .commit) {
-                var pathbuf: bun.PathBuffer = undefined;
-                if (try manager.doPatchCommit(&pathbuf, log_level)) |stuff| {
-                    // we're inside a workspace package, we need to edit the
-                    // root json, not the `current_package_json`
-                    if (stuff.not_in_workspace_root) {
-                        not_in_workspace_root = stuff;
-                    } else {
-                        try PackageJSONEditor.editPatchedDependencies(
-                            manager,
-                            &current_package_json.root,
-                            stuff.patch_key,
-                            stuff.patchfile_path,
-                        );
-                    }
-                }
-            }
-        },
-    }
-
-    manager.to_update = subcommand == .update;
-
-    {
-        // Incase it's a pointer to self. Avoid RLS.
-        const cloned = updates.*;
-        manager.update_requests = cloned;
-    }
-
-    var buffer_writer = JSPrinter.BufferWriter.init(manager.allocator);
-    try buffer_writer.buffer.list.ensureTotalCapacity(manager.allocator, current_package_json.source.contents.len + 1);
-    buffer_writer.append_newline = preserve_trailing_newline_at_eof_for_package_json;
-    var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
-
-    var written = JSPrinter.printJSON(
-        @TypeOf(&package_json_writer),
-        &package_json_writer,
-        current_package_json.root,
-        &current_package_json.source,
-        .{
-            .indent = current_package_json_indent,
-            .mangled_props = null,
-        },
-    ) catch |err| {
-        Output.prettyErrorln("package.json failed to write due to error {s}", .{@errorName(err)});
-        Global.crash();
-    };
-
-    // There are various tradeoffs with how we commit updates when you run `bun add` or `bun remove`
-    // The one we chose here is to effectively pretend a human did:
-    // 1. "bun add react@latest"
-    // 2. open lockfile, find what react resolved to
-    // 3. open package.json
-    // 4. replace "react" : "latest" with "react" : "^16.2.0"
-    // 5. save package.json
-    // The Smarter™ approach is you resolve ahead of time and write to disk once!
-    // But, turns out that's slower in any case where more than one package has to be resolved (most of the time!)
-    // Concurrent network requests are faster than doing one and then waiting until the next batch
-    var new_package_json_source = try manager.allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero());
-    current_package_json.source.contents = new_package_json_source;
-
-    // may or may not be the package json we are editing
-    const top_level_dir_without_trailing_slash = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir);
-
-    var root_package_json_path_buf: bun.PathBuffer = undefined;
-    const root_package_json_path = root_package_json_path: {
-        @memcpy(root_package_json_path_buf[0..top_level_dir_without_trailing_slash.len], top_level_dir_without_trailing_slash);
-        @memcpy(root_package_json_path_buf[top_level_dir_without_trailing_slash.len..][0.."/package.json".len], "/package.json");
-        const root_package_json_path = root_package_json_path_buf[0 .. top_level_dir_without_trailing_slash.len + "/package.json".len];
-        root_package_json_path_buf[root_package_json_path.len] = 0;
-
-        // The lifetime of this pointer is only valid until the next call to `getWithPath`, which can happen after this scope.
-        // https://github.com/oven-sh/bun/issues/12288
-        const root_package_json = switch (manager.workspace_package_json_cache.getWithPath(
-            manager.allocator,
-            manager.log,
-            root_package_json_path,
-            .{
-                .guess_indentation = true,
-            },
-        )) {
-            .parse_err => |err| {
-                manager.log.print(Output.errorWriter()) catch {};
-                Output.errGeneric("failed to parse package.json \"{s}\": {s}", .{
-                    root_package_json_path,
-                    @errorName(err),
-                });
-                Global.crash();
-            },
-            .read_err => |err| {
-                Output.errGeneric("failed to read package.json \"{s}\": {s}", .{
-                    manager.original_package_json_path,
-                    @errorName(err),
-                });
-                Global.crash();
-            },
-            .entry => |entry| entry,
-        };
-
-        if (not_in_workspace_root) |stuff| {
-            try PackageJSONEditor.editPatchedDependencies(
-                manager,
-                &root_package_json.root,
-                stuff.patch_key,
-                stuff.patchfile_path,
-            );
-            var buffer_writer2 = JSPrinter.BufferWriter.init(manager.allocator);
-            try buffer_writer2.buffer.list.ensureTotalCapacity(manager.allocator, root_package_json.source.contents.len + 1);
-            buffer_writer2.append_newline = preserve_trailing_newline_at_eof_for_package_json;
-            var package_json_writer2 = JSPrinter.BufferPrinter.init(buffer_writer2);
-
-            _ = JSPrinter.printJSON(
-                @TypeOf(&package_json_writer2),
-                &package_json_writer2,
-                root_package_json.root,
-                &root_package_json.source,
-                .{
-                    .indent = root_package_json.indentation,
-                    .mangled_props = null,
-                },
-            ) catch |err| {
-                Output.prettyErrorln("package.json failed to write due to error {s}", .{@errorName(err)});
-                Global.crash();
-            };
-            root_package_json.source.contents = try manager.allocator.dupe(u8, package_json_writer2.ctx.writtenWithoutTrailingZero());
-        }
-
-        break :root_package_json_path root_package_json_path_buf[0..root_package_json_path.len :0];
-    };
-
-    try manager.installWithManager(ctx, root_package_json_path, original_cwd);
-
-    if (subcommand == .update or subcommand == .add or subcommand == .link) {
-        for (updates.*) |request| {
-            if (request.failed) {
-                Global.exit(1);
-                return;
-            }
-        }
-
-        const source = &logger.Source.initPathString("package.json", new_package_json_source);
-
-        // Now, we _re_ parse our in-memory edited package.json
-        // so we can commit the version we changed from the lockfile
-        var new_package_json = JSON.parsePackageJSONUTF8(source, manager.log, manager.allocator) catch |err| {
-            Output.prettyErrorln("package.json failed to parse due to error {s}", .{@errorName(err)});
-            Global.crash();
-        };
-
-        if (updates.len == 0) {
-            try PackageJSONEditor.editUpdateNoArgs(
-                manager,
-                &new_package_json,
-                .{
-                    .exact_versions = manager.options.enable.exact_versions,
-                },
-            );
-        } else {
-            try PackageJSONEditor.edit(
-                manager,
-                updates,
-                &new_package_json,
-                dependency_list,
-                .{
-                    .exact_versions = manager.options.enable.exact_versions,
-                    .add_trusted_dependencies = manager.options.do.trust_dependencies_from_args,
-                },
-            );
-        }
-        var buffer_writer_two = JSPrinter.BufferWriter.init(manager.allocator);
-        try buffer_writer_two.buffer.list.ensureTotalCapacity(manager.allocator, source.contents.len + 1);
-        buffer_writer_two.append_newline =
-            preserve_trailing_newline_at_eof_for_package_json;
-        var package_json_writer_two = JSPrinter.BufferPrinter.init(buffer_writer_two);
-
-        written = JSPrinter.printJSON(
-            @TypeOf(&package_json_writer_two),
-            &package_json_writer_two,
-            new_package_json,
-            source,
-            .{
-                .indent = current_package_json_indent,
-                .mangled_props = null,
-            },
-        ) catch |err| {
-            Output.prettyErrorln("package.json failed to write due to error {s}", .{@errorName(err)});
-            Global.crash();
-        };
-
-        new_package_json_source = try manager.allocator.dupe(u8, package_json_writer_two.ctx.writtenWithoutTrailingZero());
-    }
-
-    if (manager.options.do.write_package_json) {
-        const source, const path = if (manager.options.patch_features == .commit) source_and_path: {
-            const root_package_json_entry = manager.workspace_package_json_cache.getWithPath(
-                manager.allocator,
-                manager.log,
-                root_package_json_path,
-                .{},
-            ).unwrap() catch |err| {
-                Output.err(err, "failed to read/parse package.json at '{s}'", .{root_package_json_path});
-                Global.exit(1);
-            };
-
-            break :source_and_path .{ root_package_json_entry.source.contents, root_package_json_path };
-        } else .{ new_package_json_source, manager.original_package_json_path };
-
-        // Now that we've run the install step
-        // We can save our in-memory package.json to disk
-        const workspace_package_json_file = (try bun.sys.File.openat(
-            .cwd(),
-            path,
-            bun.O.RDWR,
-            0,
-        ).unwrap()).handle.stdFile();
-
-        try workspace_package_json_file.pwriteAll(source, 0);
-        std.posix.ftruncate(workspace_package_json_file.handle, source.len) catch {};
-        workspace_package_json_file.close();
-
-        if (subcommand == .remove) {
-            if (!any_changes) {
-                Global.exit(0);
-                return;
-            }
-
-            var cwd = std.fs.cwd();
-            // This is not exactly correct
-            var node_modules_buf: bun.PathBuffer = undefined;
-            bun.copy(u8, &node_modules_buf, "node_modules" ++ std.fs.path.sep_str);
-            const offset_buf = node_modules_buf["node_modules/".len..];
-            const name_hashes = manager.lockfile.packages.items(.name_hash);
-            for (updates.*) |request| {
-                // If the package no longer exists in the updated lockfile, delete the directory
-                // This is not thorough.
-                // It does not handle nested dependencies
-                // This is a quick & dirty cleanup intended for when deleting top-level dependencies
-                if (std.mem.indexOfScalar(PackageNameHash, name_hashes, String.Builder.stringHash(request.name)) == null) {
-                    bun.copy(u8, offset_buf, request.name);
-                    cwd.deleteTree(node_modules_buf[0 .. "node_modules/".len + request.name.len]) catch {};
-                }
-            }
-
-            // This is where we clean dangling symlinks
-            // This could be slow if there are a lot of symlinks
-            if (bun.openDir(cwd, manager.options.bin_path)) |node_modules_bin_handle| {
-                var node_modules_bin: std.fs.Dir = node_modules_bin_handle;
-                defer node_modules_bin.close();
-                var iter: std.fs.Dir.Iterator = node_modules_bin.iterate();
-                iterator: while (iter.next() catch null) |entry| {
-                    switch (entry.kind) {
-                        std.fs.Dir.Entry.Kind.sym_link => {
-
-                            // any symlinks which we are unable to open are assumed to be dangling
-                            // note that using access won't work here, because access doesn't resolve symlinks
-                            bun.copy(u8, &node_modules_buf, entry.name);
-                            node_modules_buf[entry.name.len] = 0;
-                            const buf: [:0]u8 = node_modules_buf[0..entry.name.len :0];
-
-                            var file = node_modules_bin.openFileZ(buf, .{ .mode = .read_only }) catch {
-                                node_modules_bin.deleteFileZ(buf) catch {};
-                                continue :iterator;
-                            };
-
-                            file.close();
-                        },
-                        else => {},
-                    }
-                }
-            } else |err| {
-                if (err != error.ENOENT) {
-                    Output.err(err, "while reading node_modules/.bin", .{});
-                    Global.crash();
-                }
-            }
-        }
-    }
-}
-
-pub fn updatePackageJSONAndInstallCatchError(
-    ctx: Command.Context,
-    subcommand: Subcommand,
-) !void {
-    updatePackageJSONAndInstall(ctx, subcommand) catch |err| {
-        switch (err) {
-            error.InstallFailed,
-            error.InvalidPackageJSON,
-            => {
-                const log = &bun.cli.Cli.log_;
-                log.print(bun.Output.errorWriter()) catch {};
-                bun.Global.exit(1);
-                return;
-            },
-            else => return err,
-        }
-    };
-}
-
-fn updatePackageJSONAndInstallAndCLI(
-    ctx: Command.Context,
-    subcommand: Subcommand,
-    cli: CommandLineArguments,
-) !void {
-    var manager, const original_cwd = PackageManager.init(ctx, cli, subcommand) catch |err| brk: {
-        if (err == error.MissingPackageJSON) {
-            switch (subcommand) {
-                .update => {
-                    Output.prettyErrorln("<r>No package.json, so nothing to update", .{});
-                    Global.crash();
-                },
-                .remove => {
-                    Output.prettyErrorln("<r>No package.json, so nothing to remove", .{});
-                    Global.crash();
-                },
-                .patch, .@"patch-commit" => {
-                    Output.prettyErrorln("<r>No package.json, so nothing to patch", .{});
-                    Global.crash();
-                },
-                else => {
-                    try attemptToCreatePackageJSON();
-                    break :brk try PackageManager.init(ctx, cli, subcommand);
-                },
-            }
-        }
-
-        return err;
-    };
-    defer ctx.allocator.free(original_cwd);
-
-    if (manager.options.shouldPrintCommandName()) {
-        Output.prettyln("<r><b>bun {s} <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>\n", .{@tagName(subcommand)});
-        Output.flush();
-    }
-
-    // When you run `bun add -g <pkg>` or `bun install -g <pkg>` and the global bin dir is not in $PATH
-    // We should tell the user to add it to $PATH so they don't get confused.
-    if (subcommand.canGloballyInstallPackages()) {
-        if (manager.options.global and manager.options.log_level != .silent) {
-            manager.track_installed_bin = .{ .pending = {} };
-        }
-    }
-
-    try updatePackageJSONAndInstallWithManager(manager, ctx, original_cwd);
-
-    if (manager.options.patch_features == .patch) {
-        try manager.preparePatch();
-    }
-
-    if (manager.any_failed_to_install) {
-        Global.exit(1);
-    }
-
-    // Check if we need to print a warning like:
-    //
-    // > warn: To run "vite", add the global bin folder to $PATH:
-    // >
-    // > fish_add_path "/private/tmp/test"
-    //
-    if (subcommand.canGloballyInstallPackages()) {
-        if (manager.options.global) {
-            if (manager.options.bin_path.len > 0 and manager.track_installed_bin == .basename) {
-                var path_buf: bun.PathBuffer = undefined;
-                const needs_to_print = if (bun.env_var.PATH.get()) |PATH|
-                    // This is not perfect
-                    //
-                    // If you already have a different binary of the same
-                    // name, it will not detect that case.
-                    //
-                    // The problem is there are too many edgecases with filesystem paths.
-                    //
-                    // We want to veer towards false negative than false
-                    // positive. It would be annoying if this message
-                    // appears unnecessarily. It's kind of okay if it doesn't appear
-                    // when it should.
-                    //
-                    // If you set BUN_INSTALL_BIN to "/tmp/woo" on macOS and
-                    // we just checked for "/tmp/woo" in $PATH, it would
-                    // incorrectly print a warning because /tmp/ on macOS is
-                    // aliased to /private/tmp/
-                    //
-                    // Another scenario is case-insensitive filesystems. If you
-                    // have a binary called "esbuild" in /tmp/TeST and you
-                    // install esbuild, it will not detect that case if we naively
-                    // just checked for "esbuild" in $PATH where "$PATH" is /tmp/test
-                    bun.which(
-                        &path_buf,
-                        PATH,
-                        bun.fs.FileSystem.instance.top_level_dir,
-                        manager.track_installed_bin.basename,
-                    ) == null
-                else
-                    true;
-
-                if (needs_to_print) {
-                    const MoreInstructions = struct {
-                        shell: bun.cli.ShellCompletions.Shell = .unknown,
-                        folder: []const u8,
-
-                        // Convert "/Users/Jarred Sumner" => "/Users/Jarred\ Sumner"
-                        const ShellPathFormatter = struct {
-                            folder: []const u8,
-
-                            pub fn format(instructions: @This(), writer: *std.Io.Writer) !void {
-                                var remaining = instructions.folder;
-                                while (bun.strings.indexOfChar(remaining, ' ')) |space| {
-                                    try writer.print(
-                                        "{f}",
-                                        .{bun.fmt.fmtPath(u8, remaining[0..space], .{
-                                            .escape_backslashes = true,
-                                            .path_sep = if (Environment.isWindows) .windows else .posix,
-                                        })},
-                                    );
-                                    try writer.writeAll("\\ ");
-                                    remaining = remaining[@min(space + 1, remaining.len)..];
-                                }
-
-                                try writer.print(
-                                    "{f}",
-                                    .{bun.fmt.fmtPath(u8, remaining, .{
-                                        .escape_backslashes = true,
-                                        .path_sep = if (Environment.isWindows) .windows else .posix,
-                                    })},
-                                );
-                            }
-                        };
-
-                        pub fn format(instructions: @This(), writer: *std.Io.Writer) !void {
-                            const path = ShellPathFormatter{ .folder = instructions.folder };
-                            switch (instructions.shell) {
-                                .unknown => {
-                                    // Unfortunately really difficult to do this in one line on PowerShell.
-                                    try writer.print("{f}", .{path});
-                                },
-                                .bash => {
-                                    try writer.print("export PATH=\"{f}:$PATH\"", .{path});
-                                },
-                                .zsh => {
-                                    try writer.print("export PATH=\"{f}:$PATH\"", .{path});
-                                },
-                                .fish => {
-                                    // Regular quotes will do here.
-                                    try writer.print("fish_add_path {f}", .{bun.fmt.quote(instructions.folder)});
-                                },
-                                .pwsh => {
-                                    try writer.print("$env:PATH += \";{f}\"", .{path});
-                                },
-                            }
-                        }
-                    };
-
-                    Output.prettyError("\n", .{});
-
-                    Output.warn(
-                        \\To run {f}, add the global bin folder to $PATH:
-                        \\
-                        \\<cyan>{f}<r>
-                        \\
-                    ,
-                        .{
-                            bun.fmt.quote(manager.track_installed_bin.basename),
-                            MoreInstructions{ .shell = bun.cli.ShellCompletions.Shell.fromEnv([]const u8, bun.env_var.SHELL.platformGet() orelse ""), .folder = manager.options.bin_path },
-                        },
-                    );
-                    Output.flush();
-                }
-            }
-        }
-    }
-}
-
-pub fn updatePackageJSONAndInstall(
-    ctx: Command.Context,
-    subcommand: Subcommand,
-) !void {
-    var cli = switch (subcommand) {
-        inline else => |cmd| try PackageManager.CommandLineArguments.parse(ctx.allocator, cmd),
-    };
-
-    // The way this works:
-    // 1. Run the bundler on source files
-    // 2. Rewrite positional arguments to act identically to the developer
-    //    typing in the dependency names
-    // 3. Run the install command
-    if (cli.analyze) {
-        const Analyzer = struct {
-            ctx: Command.Context,
-            cli: *PackageManager.CommandLineArguments,
-            subcommand: Subcommand,
-            pub fn onAnalyze(
-                this: *@This(),
-                result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result,
-            ) anyerror!void {
-                // TODO: add separate argument that makes it so positionals[1..] is not done and instead the positionals are passed
-                var positionals = bun.handleOom(bun.default_allocator.alloc(string, result.dependencies.keys().len + 1));
-                positionals[0] = "add";
-                bun.copy(string, positionals[1..], result.dependencies.keys());
-                this.cli.positionals = positionals;
-
-                try updatePackageJSONAndInstallAndCLI(this.ctx, this.subcommand, this.cli.*);
-
-                Global.exit(0);
-            }
-        };
-        var analyzer = Analyzer{
-            .ctx = ctx,
-            .cli = &cli,
-            .subcommand = subcommand,
-        };
-        var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{
-            .ctx = &analyzer,
-            .entry_points = cli.positionals[1..],
-            .onFetch = @ptrCast(&Analyzer.onAnalyze),
-        };
-
-        // This runs the bundler.
-        try bun.cli.BuildCommand.exec(bun.cli.Command.get(), &fetcher);
-        return;
-    }
-
-    return updatePackageJSONAndInstallAndCLI(ctx, subcommand, cli);
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const std = @import("std");
-
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const Global = bun.Global;
 const JSON = bun.json;
@@ -745,13 +14,10 @@ const strings = bun.strings;
 const Command = bun.cli.Command;
 const File = bun.sys.File;
 const PackageNameHash = bun.install.PackageNameHash;
-
 const Semver = bun.Semver;
 const String = Semver.String;
-
 const Fs = bun.fs;
 const FileSystem = Fs.FileSystem;
-
 const PackageManager = bun.install.PackageManager;
 const CommandLineArguments = PackageManager.CommandLineArguments;
 const PackageJSONEditor = PackageManager.PackageJSONEditor;
@@ -759,3 +25,496 @@ const PatchCommitResult = PackageManager.PatchCommitResult;
 const Subcommand = PackageManager.Subcommand;
 const UpdateRequest = PackageManager.UpdateRequest;
 const attemptToCreatePackageJSON = PackageManager.attemptToCreatePackageJSON;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const ShellPathFormatter = struct {
+    folder: []const u8,
+
+pub fn format(self: ShellPathFormatter, writer: *std.Io.Writer) !void {
+            var remaining = self.folder;
+            _ = &remaining;
+            while (bun.strings.indexOfChar(remaining, 32)) |space| {
+                _ = try writer.print("{f}", .{ bun.fmt.fmtPath(u8, remaining[0..space], .{ .escape_backslashes = true, .path_sep = (if (Environment.isWindows) .windows else .posix) }) });
+                _ = try writer.writeAll("\\ ");
+                remaining = remaining[@min((space + 1), remaining.len)..];
+            }
+            _ = try writer.print("{f}", .{ bun.fmt.fmtPath(u8, remaining, .{ .escape_backslashes = true, .path_sep = (if (Environment.isWindows) .windows else .posix) }) });
+    }
+};
+
+pub const MoreInstructions = struct {
+    shell: bun.cli.ShellCompletions.Shell = .unknown,
+    folder: []const u8,
+
+pub fn format(self: MoreInstructions, writer: *std.Io.Writer) !void {
+            const path = ShellPathFormatter{ .folder = self.folder };
+            switch (self.shell) {
+.unknown => {
+_ = try writer.print("{f}", .{ path });
+},
+.bash => {
+_ = try writer.print("export PATH=\"{f}:$PATH\"", .{ path });
+},
+.zsh => {
+_ = try writer.print("export PATH=\"{f}:$PATH\"", .{ path });
+},
+.fish => {
+_ = try writer.print("fish_add_path {f}", .{ bun.fmt.quote(self.folder) });
+},
+.pwsh => {
+_ = try writer.print("$env:PATH += \";{f}\"", .{ path });
+},
+}
+    }
+};
+
+pub const Analyzer = struct {
+    ctx: Command.Context,
+    cli: *PackageManager.CommandLineArguments,
+    subcommand: Subcommand,
+
+pub fn onAnalyze(self: *Analyzer, result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result) !void {
+            var positionals = bun.handleOom(bun.default_allocator.alloc(string, (result.dependencies.keys().len + 1)));
+            _ = &positionals;
+            positionals[cp_cast_int(usize, 0)] = "add";
+            _ = bun.copy(string, positionals[1..], result.dependencies.keys());
+            self.cli.positionals = positionals;
+            _ = try updatePackageJSONAndInstallAndCLI(self.ctx, self.subcommand, self.cli.*);
+            _ = Global.exit(0);
+    }
+};
+
+
+pub fn updatePackageJSONAndInstallWithManager(manager: *PackageManager, ctx: Command.Context, original_cwd: []const u8) !void {
+        var update_requests = bun.handleOom(UpdateRequest.Array.initCapacity(manager.allocator, 64));
+        _ = &update_requests;
+        defer {
+        _ = update_requests.deinit(manager.allocator);
+        }
+        if ((manager.options.positionals.len <= 1)) {
+            switch (manager.subcommand) {
+.add => {
+_ = Output.errGeneric("no package specified to add", .{});
+            _ = Output.flush();
+            _ = PackageManager.CommandLineArguments.printHelp(.add);
+            _ = Global.exit(0);
+},
+.remove => {
+_ = Output.errGeneric("no package specified to remove", .{});
+            _ = Output.flush();
+            _ = PackageManager.CommandLineArguments.printHelp(.remove);
+            _ = Global.exit(0);
+},
+.update => {
+
+},
+else => {
+
+},
+}
+        }
+        return updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(manager, ctx, original_cwd, manager.options.positionals[1..], update_requests);
+}
+
+pub fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(manager: *PackageManager, ctx: Command.Context, original_cwd: []const u8, positionals: []const []const u8, update_requests: *UpdateRequest.Array) !void {
+        var empty_updates: [0]UpdateRequest = &.{};
+        _ = &empty_updates;
+        var updates: []UpdateRequest = (if (((manager.subcommand == .@"patch-commit") or (manager.subcommand == .patch))) empty_updates[0..0] else UpdateRequest.parse(ctx.allocator, manager, ctx.log, positionals, update_requests, manager.subcommand));
+        _ = &updates;
+        _ = try updatePackageJSONAndInstallWithManagerWithUpdates(manager, ctx, (&updates), manager.subcommand, original_cwd);
+}
+
+pub fn updatePackageJSONAndInstallWithManagerWithUpdates(manager: *PackageManager, ctx: Command.Context, updates: []UpdateRequest, subcommand: Subcommand, original_cwd: []const u8) !void {
+        const log_level = manager.options.log_level;
+        if ((manager.log.errors > 0)) {
+            if ((log_level != .silent)) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((manager.log.print(Output.errorWriter())) catch |__ce_0| { _ = &__ce_0;  }); });
+            }
+            _ = Global.crash();
+        }
+        var current_package_json = (switch (manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, manager.original_package_json_path, .{ .guess_indentation = true })) {
+.parse_err => |e| {
+{
+            _ = (blk_catch_1: { break :blk_catch_1 ((manager.log.print(Output.errorWriter())) catch |__ce_1| { _ = &__ce_1;  }); });
+            _ = Output.errGeneric("failed to parse package.json \"{s}\": {s}", .{ manager.original_package_json_path, @errorName(e) });
+            _ = Global.crash();
+        }
+},
+.read_err => |e| {
+{
+            _ = Output.errGeneric("failed to read package.json \"{s}\": {s}", .{ manager.original_package_json_path, @errorName(e) });
+            _ = Global.crash();
+        }
+},
+.entry => |entry| entry,
+});
+        _ = &current_package_json;
+        const current_package_json_indent = current_package_json.indentation;
+        const preserve_trailing_newline_at_eof_for_package_json = ((current_package_json.source.contents.len > 0) and (current_package_json.source.contents[@as(usize, @intCast((current_package_json.source.contents.len - 1)))] == 10));
+        if ((subcommand == .remove)) {
+            if ((current_package_json.root.data != .e_object)) {
+                _ = Output.errGeneric("package.json is not an Object {{}}, so there's nothing to {s}!", .{ @tagName(subcommand) });
+                _ = Global.crash();
+            } else {
+                if ((current_package_json.root.data.e_object.properties.len == 0)) {
+                    _ = Output.errGeneric("package.json is empty {{}}, so there's nothing to {s}!", .{ @tagName(subcommand) });
+                    _ = Global.crash();
+                } else {
+                    if (((((current_package_json.root.asProperty("devDependencies") == null) and (current_package_json.root.asProperty("dependencies") == null)) and (current_package_json.root.asProperty("optionalDependencies") == null)) and (current_package_json.root.asProperty("peerDependencies") == null))) {
+                        _ = Output.prettyErrorln("package.json doesn't have dependencies, there's nothing to {s}!", .{ @tagName(subcommand) });
+                        _ = Global.exit(0);
+                    }
+                }
+            }
+        }
+        const dependency_list = (if (manager.options.update.development) "devDependencies" else (if (manager.options.update.optional) "optionalDependencies" else (if (manager.options.update.peer) "peerDependencies" else "dependencies")));
+        var any_changes = false;
+        _ = &any_changes;
+        var not_in_workspace_root: ?PatchCommitResult = null;
+        _ = &not_in_workspace_root;
+        switch (subcommand) {
+.remove => {
+for (cp_iter_slice(updates.*)) |request| {
+            _ = &request;
+            for (cp_iter_slice(.{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" })) |list| {
+                _ = &list;
+                if (current_package_json.root.asProperty(list)) |query| {
+                    _ = &query;
+                    if ((query.expr.data == .e_object)) {
+                        var dependencies = query.expr.data.e_object.properties.slice();
+                        _ = &dependencies;
+                        var i: usize = 0;
+                        _ = &i;
+                        var new_len = dependencies.len;
+                        _ = &new_len;
+                        while ((i < dependencies.len)) : (i = (i + 1)) {
+                            if ((dependencies[@as(usize, @intCast(i))].key.?.data == .e_string)) {
+                                if (dependencies[@as(usize, @intCast(i))].key.?.data.e_string.eql(string, (if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name))) {
+                                    if ((new_len > 1)) {
+                                        dependencies[cp_cast_int(usize, i)] = dependencies[@as(usize, @intCast((new_len - 1)))];
+                                        new_len = (new_len - 1);
+                                    } else {
+                                        new_len = 0;
+                                    }
+                                    any_changes = true;
+                                }
+                            }
+                        }
+                        const changed = (new_len != dependencies.len);
+                        if (changed) {
+                            query.expr.data.e_object.properties.len = @as(u32, @truncate(new_len));
+                            if ((query.expr.data.e_object.properties.len == 0)) {
+                                _ = current_package_json.root.data.e_object.properties.swapRemove(query.i);
+                                _ = current_package_json.root.data.e_object.packageJSONSort();
+                            } else {
+                                var obj = query.expr.data.e_object;
+                                _ = &obj;
+                                _ = obj.alphabetizeProperties();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+},
+.link, .add, .update => {
+if ((updates.len != 0)) {
+            _ = try PackageJSONEditor.edit(manager, updates, (&current_package_json.root), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .before_install = true });
+        } else {
+            if ((subcommand == .update)) {
+                _ = try PackageJSONEditor.editUpdateNoArgs(manager, (&current_package_json.root), .{ .exact_versions = true, .before_install = true });
+            }
+        }
+},
+else => {
+if ((manager.options.patch_features == .commit)) {
+            var pathbuf: bun.PathBuffer = undefined;
+            _ = &pathbuf;
+            if (try manager.doPatchCommit((&pathbuf), log_level)) |stuff| {
+                _ = &stuff;
+                if (stuff.not_in_workspace_root) {
+                    not_in_workspace_root = stuff;
+                } else {
+                    _ = PackageJSONEditor.editPatchedDependencies(manager, (&current_package_json.root), stuff.patch_key, stuff.patchfile_path);
+                }
+            }
+        }
+},
+}
+        manager.to_update = (subcommand == .update);
+        {
+            const cloned = updates.*;
+            manager.update_requests = cloned;
+        }
+        var buffer_writer = JSPrinter.BufferWriter.init(manager.allocator);
+        _ = &buffer_writer;
+        _ = try buffer_writer.buffer.list.ensureTotalCapacity(manager.allocator, (current_package_json.source.contents.len + 1));
+        buffer_writer.append_newline = preserve_trailing_newline_at_eof_for_package_json;
+        var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
+        _ = &package_json_writer;
+        var written = (blk_catch_2: { break :blk_catch_2 ((JSPrinter.printJSON(@TypeOf(package_json_writer), package_json_writer, current_package_json.root, (&current_package_json.source), .{ .indent = current_package_json_indent, .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+        break :blk_catch_2 Global.crash(); }); });
+        _ = &written;
+        var new_package_json_source = try manager.allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero());
+        _ = &new_package_json_source;
+        current_package_json.source.contents = new_package_json_source;
+        const top_level_dir_without_trailing_slash = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir);
+        var root_package_json_path_buf: bun.PathBuffer = undefined;
+        _ = &root_package_json_path_buf;
+        const root_package_json_path = root_package_json_path: {
+        _ = @memcpy(root_package_json_path_buf[0..top_level_dir_without_trailing_slash.len], top_level_dir_without_trailing_slash);
+        _ = @memcpy(root_package_json_path_buf[top_level_dir_without_trailing_slash.len..][0.."/package.json".len], "/package.json");
+        const root_package_json_path = root_package_json_path_buf[0..(top_level_dir_without_trailing_slash.len + "/package.json".len)];
+        root_package_json_path_buf[cp_cast_int(usize, root_package_json_path.len)] = 0;
+        const root_package_json = (switch (manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, root_package_json_path, .{ .guess_indentation = true })) {
+.parse_err => |e| {
+{
+            _ = (blk_catch_3: { break :blk_catch_3 ((manager.log.print(Output.errorWriter())) catch |__ce_3| { _ = &__ce_3;  }); });
+            _ = Output.errGeneric("failed to parse package.json \"{s}\": {s}", .{ root_package_json_path, @errorName(e) });
+            _ = Global.crash();
+        }
+},
+.read_err => |e| {
+{
+            _ = Output.errGeneric("failed to read package.json \"{s}\": {s}", .{ manager.original_package_json_path, @errorName(e) });
+            _ = Global.crash();
+        }
+},
+.entry => |entry| entry,
+});
+        if (not_in_workspace_root) |stuff| {
+            _ = &stuff;
+            _ = PackageJSONEditor.editPatchedDependencies(manager, (&root_package_json.root), stuff.patch_key, stuff.patchfile_path);
+            var buffer_writer2 = JSPrinter.BufferWriter.init(manager.allocator);
+            _ = &buffer_writer2;
+            _ = try buffer_writer2.buffer.list.ensureTotalCapacity(manager.allocator, (root_package_json.source.contents.len + 1));
+            buffer_writer2.append_newline = preserve_trailing_newline_at_eof_for_package_json;
+            var package_json_writer2 = JSPrinter.BufferPrinter.init(buffer_writer2);
+            _ = &package_json_writer2;
+            _ = (blk_catch_4: { break :blk_catch_4 ((JSPrinter.printJSON(@TypeOf((&package_json_writer2)), (&package_json_writer2), root_package_json.root, (&root_package_json.source), .{ .indent = root_package_json.indentation, .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+            break :blk_catch_4 Global.crash(); }); });
+            root_package_json.source.contents = try manager.allocator.dupe(u8, package_json_writer2.ctx.writtenWithoutTrailingZero());
+        }
+        break :root_package_json_path root_package_json_path_buf[0..root_package_json_path.len :0];
+};
+        _ = try manager.installWithManager(ctx, root_package_json_path, original_cwd);
+        if ((((subcommand == .update) or (subcommand == .add)) or (subcommand == .link))) {
+            for (cp_iter_slice(updates.*)) |request| {
+                _ = &request;
+                if (request.failed) {
+                    _ = Global.exit(1);
+                    return;
+                }
+            }
+            const source = (&logger.Source.initPathString("package.json", new_package_json_source));
+            var new_package_json = (blk_catch_5: { break :blk_catch_5 ((JSON.parsePackageJSONUTF8(source, manager.log, manager.allocator)) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to parse due to error {s}", .{ @errorName(e) });
+            break :blk_catch_5 Global.crash(); }); });
+            _ = &new_package_json;
+            if ((updates.len == 0)) {
+                _ = try PackageJSONEditor.editUpdateNoArgs(manager, (&new_package_json), .{ .exact_versions = manager.options.enable.exact_versions });
+            } else {
+                _ = try PackageJSONEditor.edit(manager, updates, (&new_package_json), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .add_trusted_dependencies = manager.options.do.trust_dependencies_from_args });
+            }
+            var buffer_writer_two = JSPrinter.BufferWriter.init(manager.allocator);
+            _ = &buffer_writer_two;
+            _ = try buffer_writer_two.buffer.list.ensureTotalCapacity(manager.allocator, (source.contents.len + 1));
+            buffer_writer_two.append_newline = preserve_trailing_newline_at_eof_for_package_json;
+            var package_json_writer_two = JSPrinter.BufferPrinter.init(buffer_writer_two);
+            _ = &package_json_writer_two;
+            written = (blk_catch_6: { break :blk_catch_6 ((JSPrinter.printJSON(@TypeOf((&package_json_writer_two)), (&package_json_writer_two), new_package_json, source, .{ .indent = current_package_json_indent, .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+            break :blk_catch_6 Global.crash(); }); });
+            new_package_json_source = try manager.allocator.dupe(u8, package_json_writer_two.ctx.writtenWithoutTrailingZero());
+        }
+        if (manager.options.do.write_package_json) {
+            const source_and_path = (if ((manager.options.patch_features == .commit)) source_and_path: {
+            const root_package_json_entry = (blk_catch_7: { break :blk_catch_7 ((manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, root_package_json_path, .{}).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to read/parse package.json at '{s}'", .{ root_package_json_path });
+            break :blk_catch_7 Global.exit(1); }); });
+            break :source_and_path .{ root_package_json_entry.source.contents, root_package_json_path };
+} else .{ new_package_json_source, manager.original_package_json_path });
+            const source = source_and_path[0];
+            const path = source_and_path[1];
+            const file_res = try bun.sys.File.openat(.cwd(), path, bun.O.RDWR, 0).unwrap();
+            const workspace_package_json_file = file_res.handle.stdFile();
+            _ = try workspace_package_json_file.pwriteAll(source, 0);
+            _ = (blk_catch_8: { break :blk_catch_8 ((std.posix.ftruncate(workspace_package_json_file.handle, source.len)) catch |__ce_8| { _ = &__ce_8;  }); });
+            _ = workspace_package_json_file.close();
+            if ((subcommand == .remove)) {
+                if ((!any_changes)) {
+                    _ = Global.exit(0);
+                    return;
+                }
+                var cwd = std.fs.cwd();
+                _ = &cwd;
+                var node_modules_buf: bun.PathBuffer = undefined;
+                _ = &node_modules_buf;
+                _ = bun.copy(u8, (&node_modules_buf), ("node_modules" ++ std.fs.path.sep_str));
+                const offset_buf = node_modules_buf["node_modules/".len..];
+                const name_hashes = manager.lockfile.packages.items(.name_hash);
+                for (cp_iter_slice(updates.*)) |request| {
+                    _ = &request;
+                    if ((std.mem.indexOfScalar(PackageNameHash, name_hashes, String.Builder.stringHash((if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name))) == null)) {
+                        _ = bun.copy(u8, offset_buf, (if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name));
+                        _ = (blk_catch_9: { break :blk_catch_9 ((cwd.deleteTree(node_modules_buf[0..("node_modules/".len + (if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name).len)])) catch |__ce_9| { _ = &__ce_9;  }); });
+                    }
+                }
+                const open_res = (blk_catch_10: { break :blk_catch_10 ((bun.openDir(cwd, manager.options.bin_path)) catch |e| { _ = &e; if ((e != error.ENOENT)) {
+                    _ = Output.err(e, "while reading node_modules/.bin", .{});
+                    _ = Global.crash();
+                }
+                break :blk_catch_10 null; }); });
+                if (open_res) |node_modules_bin| {
+                    _ = &node_modules_bin;
+                    defer {
+                    _ = node_modules_bin.close();
+                    }
+                    var iter: std.fs.Dir.Iterator = node_modules_bin.iterate();
+                    _ = &iter;
+                    while ((blk_catch_11: { break :blk_catch_11 ((iter.next()) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |entry| {
+                        switch (entry.kind) {
+.sym_link => {
+_ = bun.copy(u8, (&node_modules_buf), (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                        node_modules_buf[cp_cast_int(usize, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len)] = 0;
+                        const buf: [:0]u8 = node_modules_buf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len :0];
+                        var file = (blk_catch_12: { break :blk_catch_12 ((node_modules_bin.openFileZ(buf, .{ .mode = .read_only })) catch |__ce_12| { _ = &__ce_12; _ = (blk_catch_13: { break :blk_catch_13 ((node_modules_bin.deleteFileZ(buf)) catch |__ce_13| { _ = &__ce_13;  }); });
+                        continue; }); });
+                        _ = &file;
+                        _ = file.close();
+},
+else => {
+
+},
+}
+                    }
+                }
+            }
+        }
+}
+
+pub fn updatePackageJSONAndInstallCatchError(ctx: Command.Context, subcommand: Subcommand) !void {
+        _ = (blk_catch_14: { break :blk_catch_14 ((updatePackageJSONAndInstall(ctx, subcommand)) catch |e| { _ = &e; break :blk_catch_14 @as(void, (switch (e) {
+error.InstallFailed, error.InvalidPackageJSON => {
+{
+            const log = (&bun.cli.Cli.log_);
+            _ = (blk_catch_15: { break :blk_catch_15 ((log.print(bun.Output.errorWriter())) catch |__ce_15| { _ = &__ce_15;  }); });
+            _ = bun.Global.exit(1);
+            return;
+        }
+},
+else => {
+return e;
+},
+})); }); });
+}
+
+pub fn updatePackageJSONAndInstallAndCLI(ctx: Command.Context, subcommand: Subcommand, cli: CommandLineArguments) !void {
+        const init_res = (blk_catch_16: { break :blk_catch_16 ((PackageManager.init(ctx, cli, subcommand)) catch |e| { _ = &e; if ((e == error.MissingPackageJSON)) {
+            switch (subcommand) {
+.update => {
+_ = Output.prettyErrorln("<r>No package.json, so nothing to update", .{});
+            _ = Global.crash();
+},
+.remove => {
+_ = Output.prettyErrorln("<r>No package.json, so nothing to remove", .{});
+            _ = Global.crash();
+},
+.patch, .@"patch-commit" => {
+_ = Output.prettyErrorln("<r>No package.json, so nothing to patch", .{});
+            _ = Global.crash();
+},
+else => {
+_ = try attemptToCreatePackageJSON();
+            _ = try PackageManager.init(ctx, cli, subcommand);
+},
+}
+        } else {
+            return e;
+        } }); });
+        var manager = init_res[0];
+        _ = &manager;
+        const original_cwd = init_res[1];
+        defer {
+        _ = ctx.allocator.free(original_cwd);
+        }
+        if (manager.options.shouldPrintCommandName()) {
+            _ = Output.prettyln((("<r><b>bun {s} <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>\n"), .{ @tagName(subcommand) });
+            _ = Output.flush();
+        }
+        if (subcommand.canGloballyInstallPackages()) {
+            if ((manager.options.global and (manager.options.log_level != .silent))) {
+                manager.track_installed_bin = .{ .pending = .{} };
+            }
+        }
+        _ = try updatePackageJSONAndInstallWithManager(manager, ctx, original_cwd);
+        if ((manager.options.patch_features == .patch)) {
+            _ = try manager.preparePatch();
+        }
+        if (manager.any_failed_to_install) {
+            _ = Global.exit(1);
+        }
+        if (subcommand.canGloballyInstallPackages()) {
+            if (manager.options.global) {
+                if (((manager.options.bin_path.len > 0) and (manager.track_installed_bin == .basename))) {
+                    var path_buf: bun.PathBuffer = undefined;
+                    _ = &path_buf;
+                    var needs_to_print = true;
+                    _ = &needs_to_print;
+                    if (bun.env_var.PATH.get()) |PATH| {
+                        _ = &PATH;
+                        needs_to_print = (bun.which((&path_buf), PATH, bun.fs.FileSystem.instance.top_level_dir, manager.track_installed_bin.basename) == null);
+                    }
+                    if (needs_to_print) {
+                        _ = Output.prettyError("\n", .{});
+                        _ = Output.warn("To run {f}, add the global bin folder to $PATH:\n\n<cyan>{f}<r>\n", .{ bun.fmt.quote(manager.track_installed_bin.basename), MoreInstructions{ .shell = bun.cli.ShellCompletions.Shell.fromEnv(string, ((bun.env_var.SHELL.platformGet()) orelse (""))), .folder = manager.options.bin_path } });
+                        _ = Output.flush();
+                    }
+                }
+            }
+        }
+}
+
+pub fn updatePackageJSONAndInstall(ctx: Command.Context, subcommand: Subcommand) !void {
+        var cli = (switch (subcommand) {
+inline else => |cmd| try PackageManager.CommandLineArguments.parse(ctx.allocator, cmd),
+});
+        _ = &cli;
+        if (cli.analyze) {
+            var analyzer = Analyzer{ .ctx = ctx, .cli = cli, .subcommand = subcommand };
+            _ = &analyzer;
+            var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{ .ctx = (&analyzer), .entry_points = cli.positionals[1..], .onFetch = @ptrCast((&Analyzer.onAnalyze)) };
+            _ = &fetcher;
+            _ = try bun.cli.BuildCommand.exec(bun.cli.Command.get());
+            return;
+        }
+        return updatePackageJSONAndInstallAndCLI(ctx, subcommand, cli);
+}

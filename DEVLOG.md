@@ -464,3 +464,14 @@
    - 将嵌套在解析器内部的 9 个辅助类型（`PathPairIter`, `ResultFlags`, `ResultDebugMeta`, `ResultUnion`, `DebugLogsFlushMode`, `MatchResultUnion`, `PendingResolutionTag`, `TSConfigMatch`, `BrowserMapPath`）提升至顶层定义，使 `cpc` 能够无死角对所有联合体与方法进行纯 CP 降解。
 3. **消解复合 `?? return / break` 语句**：
    - 在高频路径解析逻辑中，原始代码存在大量的 `r.dirInfoCached(...) ?? return ...`。全面改写为合法的条件解包模式：`if (opt == null) return ...;` 与 `if (v := opt) { ... }`，消除 parser 级联报错并提升借用检查准确率。
+
+## 2026-11-16 [Milestone 7 Phase 34] `src/install/PackageManager/` (17/17 全子系统 100% 闭环) 技术经验
+
+### 1. 复杂异步包管理任务流 (`PackageManagerEnqueue.cp` 与 `runTasks.cp` 共 3,426 行)
+- **多 Tag 联合分支与作用域解包**：在 `runTasks.cp` 中，`inline .dependency, .root_dependency => |id|` 等多 tag 分支模式下，Zig 原版会隐式带入同名变量 `id`。在 CP 中，需确保分支载荷变量具名唯一，并将 `apply_patch_task` 等可选状态转换为前置语句级判定 `if (h := patch_name_and_version_hash) { ... }`，消除表达式层解析栈崩溃。
+- **错误载荷遮蔽彻底根除**：在深层嵌套的 `catch |e|` 中，局部作用域如果再次使用 `catch |e|` 会触发 Zig `error: capture 'e' shadows local constant from outer scope`。规范命名为 `catch |oom_err|` / `catch |io_err|`，消除所有阴影变量报错。
+- **返回字面量具名显式化**：在任务入队分发函数中，将匿名元组/结构体返回重命名为具体的返回类型构造（如 `ResolvedPackageResult{ ... }`），彻底杜绝匿名结构体推导失败造成的语法截断。
+
+### 2. 命令行与配置系统 (`PackageManagerOptions.cp`) 纯 CP 改造
+- **配置与能力联合体顶层提权**：将 `PatchFeatures`、`PublishConfig`、`Update`、`Do`、`Enable` 提升至顶层定义，消除嵌套匿名结构体导致的方法降解缺失。
+- **消除空指针数组语法**：将 Zig 原生 `&[_]string{}` 替换为纯正 CP 空切片 `[]`；字典多切片同步遍历统一改写为受边界保护的安全单索引循环 `for (i of 0..keys.len)`，杜绝切片错位与指针别名竞争。

@@ -1,332 +1,7 @@
-pub const GitResolver = struct {
-    resolved: string,
-    resolution: *const Resolution,
-    dep_id: DependencyID,
-    new_name: []u8 = "",
-
-    pub fn count(this: @This(), comptime Builder: type, builder: Builder, _: JSAst.Expr) void {
-        builder.count(this.resolved);
-    }
-
-    pub fn resolve(this: @This(), comptime Builder: type, builder: Builder, _: JSAst.Expr) !Resolution {
-        var resolution = this.resolution.*;
-        resolution.value.github.resolved = builder.append(String, this.resolved);
-        return resolution;
-    }
-
-    pub fn checkBundledDependencies() bool {
-        return true;
-    }
-};
-
-const TarballResolver = struct {
-    url: string,
-    resolution: *const Resolution,
-
-    pub fn count(this: @This(), comptime Builder: type, builder: Builder, _: JSAst.Expr) void {
-        builder.count(this.url);
-    }
-
-    pub fn resolve(this: @This(), comptime Builder: type, builder: Builder, _: JSAst.Expr) !Resolution {
-        var resolution = this.resolution.*;
-        switch (resolution.tag) {
-            .local_tarball => {
-                resolution.value.local_tarball = builder.append(String, this.url);
-            },
-            .remote_tarball => {
-                resolution.value.remote_tarball = builder.append(String, this.url);
-            },
-            else => unreachable,
-        }
-        return resolution;
-    }
-
-    pub fn checkBundledDependencies() bool {
-        return true;
-    }
-};
-
-/// Returns true if we need to drain dependencies
-pub fn processExtractedTarballPackage(
-    manager: *PackageManager,
-    package_id: *PackageID,
-    dep_id: DependencyID,
-    resolution: *const Resolution,
-    data: *const ExtractData,
-    log_level: Options.LogLevel,
-) ?Lockfile.Package {
-    switch (resolution.tag) {
-        .git, .github => {
-            var package = package: {
-                var resolver = GitResolver{
-                    .resolved = data.resolved,
-                    .resolution = resolution,
-                    .dep_id = dep_id,
-                };
-
-                var pkg = Lockfile.Package{};
-                if (data.json) |json| {
-                    const package_json_source = &logger.Source.initPathString(
-                        json.path,
-                        json.buf,
-                    );
-
-                    pkg.parse(
-                        manager.lockfile,
-                        manager,
-                        manager.allocator,
-                        manager.log,
-                        package_json_source,
-                        GitResolver,
-                        &resolver,
-                        Features.npm,
-                    ) catch |err| {
-                        if (log_level != .silent) {
-                            const string_buf = manager.lockfile.buffers.string_bytes.items;
-                            Output.err(err, "failed to parse package.json for <b>{f}<r>", .{
-                                resolution.fmtURL(string_buf),
-                            });
-                        }
-                        Global.crash();
-                    };
-
-                    const has_scripts = pkg.scripts.hasAny() or brk: {
-                        const dir = std.fs.path.dirname(json.path) orelse "";
-                        const binding_dot_gyp_path = Path.joinAbsStringZ(
-                            dir,
-                            &[_]string{"binding.gyp"},
-                            .auto,
-                        );
-
-                        break :brk Syscall.exists(binding_dot_gyp_path);
-                    };
-
-                    pkg.meta.setHasInstallScript(has_scripts);
-                    break :package pkg;
-                }
-
-                // package.json doesn't exist, no dependencies to worry about but we need to decide on a name for the dependency
-                var repo = switch (resolution.tag) {
-                    .git => resolution.value.git,
-                    .github => resolution.value.github,
-                    else => unreachable,
-                };
-
-                const new_name = Repository.createDependencyNameFromVersionLiteral(manager.allocator, &repo, manager.lockfile, dep_id);
-                defer manager.allocator.free(new_name);
-
-                {
-                    var builder = manager.lockfile.stringBuilder();
-
-                    builder.count(new_name);
-                    resolver.count(*Lockfile.StringBuilder, &builder, undefined);
-
-                    bun.handleOom(builder.allocate());
-
-                    const name = builder.append(ExternalString, new_name);
-                    pkg.name = name.value;
-                    pkg.name_hash = name.hash;
-
-                    pkg.resolution = resolver.resolve(*Lockfile.StringBuilder, &builder, undefined) catch unreachable;
-                }
-
-                break :package pkg;
-            };
-
-            // Store the tarball integrity hash so the lockfile can pin the
-            // exact content downloaded from the remote (GitHub) server.
-            if (data.integrity.tag.isSupported()) {
-                package.meta.integrity = data.integrity;
-            }
-
-            package = manager.lockfile.appendPackage(package) catch unreachable;
-            package_id.* = package.meta.id;
-
-            if (package.dependencies.len > 0) {
-                bun.handleOom(manager.lockfile.scratch.dependency_list_queue.writeItem(package.dependencies));
-            }
-
-            return package;
-        },
-        .local_tarball, .remote_tarball => {
-            const json = data.json.?;
-            const package_json_source = &logger.Source.initPathString(
-                json.path,
-                json.buf,
-            );
-            var package = Lockfile.Package{};
-
-            var resolver: TarballResolver = .{
-                .url = data.url,
-                .resolution = resolution,
-            };
-
-            package.parse(
-                manager.lockfile,
-                manager,
-                manager.allocator,
-                manager.log,
-                package_json_source,
-                TarballResolver,
-                &resolver,
-                Features.npm,
-            ) catch |err| {
-                if (log_level != .silent) {
-                    const string_buf = manager.lockfile.buffers.string_bytes.items;
-                    Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{
-                        resolution.fmtURL(string_buf),
-                        @errorName(err),
-                    });
-                }
-                Global.crash();
-            };
-
-            const has_scripts = package.scripts.hasAny() or brk: {
-                const dir = std.fs.path.dirname(json.path) orelse "";
-                const binding_dot_gyp_path = Path.joinAbsStringZ(
-                    dir,
-                    &[_]string{"binding.gyp"},
-                    .auto,
-                );
-
-                break :brk Syscall.exists(binding_dot_gyp_path);
-            };
-
-            package.meta.setHasInstallScript(has_scripts);
-            if (data.integrity.tag.isSupported()) {
-                package.meta.integrity = data.integrity;
-            }
-
-            package = manager.lockfile.appendPackage(package) catch unreachable;
-            package_id.* = package.meta.id;
-
-            if (package.dependencies.len > 0) {
-                bun.handleOom(manager.lockfile.scratch.dependency_list_queue.writeItem(package.dependencies));
-            }
-
-            return package;
-        },
-        else => if (data.json.?.buf.len > 0) {
-            const json = data.json.?;
-            const package_json_source = &logger.Source.initPathString(
-                json.path,
-                json.buf,
-            );
-            initializeStore();
-            const json_root = JSON.parsePackageJSONUTF8(
-                package_json_source,
-                manager.log,
-                manager.allocator,
-            ) catch |err| {
-                if (log_level != .silent) {
-                    const string_buf = manager.lockfile.buffers.string_bytes.items;
-                    Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{
-                        resolution.fmtURL(string_buf),
-                        @errorName(err),
-                    });
-                }
-                Global.crash();
-            };
-            var builder = manager.lockfile.stringBuilder();
-            Lockfile.Package.Scripts.parseCount(manager.allocator, &builder, json_root);
-            builder.allocate() catch unreachable;
-            if (comptime Environment.allow_assert) bun.assert(package_id.* != invalid_package_id);
-            var scripts = manager.lockfile.packages.items(.scripts)[package_id.*];
-            scripts.parseAlloc(manager.allocator, &builder, json_root);
-            scripts.filled = true;
-        },
-    }
-
-    return null;
-}
-
-pub fn processDependencyListItem(
-    this: *PackageManager,
-    item: TaskCallbackContext,
-    any_root: ?*bool,
-    install_peer: bool,
-) !void {
-    switch (item) {
-        .dependency => |dependency_id| {
-            const dependency = this.lockfile.buffers.dependencies.items[dependency_id];
-            const resolution = this.lockfile.buffers.resolutions.items[dependency_id];
-
-            try this.enqueueDependencyWithMain(
-                dependency_id,
-                &dependency,
-                resolution,
-                install_peer,
-            );
-        },
-        .root_dependency => |dependency_id| {
-            const dependency = this.lockfile.buffers.dependencies.items[dependency_id];
-            const resolution = this.lockfile.buffers.resolutions.items[dependency_id];
-
-            try this.enqueueDependencyWithMainAndSuccessFn(
-                dependency_id,
-                &dependency,
-                resolution,
-                install_peer,
-                assignRootResolution,
-                failRootResolution,
-            );
-            if (any_root) |ptr| {
-                const new_resolution_id = this.lockfile.buffers.resolutions.items[dependency_id];
-                if (new_resolution_id != resolution) {
-                    ptr.* = true;
-                }
-            }
-        },
-        else => {},
-    }
-}
-
-pub fn processPeerDependencyList(
-    this: *PackageManager,
-) !void {
-    while (this.peer_dependencies.readItem()) |peer_dependency_id| {
-        const dependency = this.lockfile.buffers.dependencies.items[peer_dependency_id];
-        const resolution = this.lockfile.buffers.resolutions.items[peer_dependency_id];
-
-        try this.enqueueDependencyWithMain(
-            peer_dependency_id,
-            &dependency,
-            resolution,
-            true,
-        );
-    }
-}
-
-pub fn processDependencyList(
-    this: *PackageManager,
-    dep_list: TaskCallbackList,
-    comptime Ctx: type,
-    ctx: Ctx,
-    comptime callbacks: anytype,
-    install_peer: bool,
-) !void {
-    if (dep_list.items.len > 0) {
-        var dependency_list = dep_list;
-        var any_root = false;
-        for (dependency_list.items) |item| {
-            try this.processDependencyListItem(item, &any_root, install_peer);
-        }
-
-        if (comptime @TypeOf(callbacks) != void and @TypeOf(callbacks.onResolve) != void) {
-            if (any_root) {
-                callbacks.onResolve(ctx);
-            }
-        }
-
-        dependency_list.deinit(this.allocator);
-    }
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const std = @import("std");
-
-const bun = @import("bun");
 const Environment = bun.Environment;
 const Global = bun.Global;
 const JSAst = bun.ast;
@@ -335,11 +10,9 @@ const Output = bun.Output;
 const Path = bun.path;
 const Syscall = bun.sys;
 const logger = bun.logger;
-
 const Semver = bun.Semver;
 const ExternalString = Semver.ExternalString;
 const String = Semver.String;
-
 const DependencyID = bun.install.DependencyID;
 const ExtractData = bun.install.ExtractData;
 const Features = bun.install.Features;
@@ -349,12 +22,250 @@ const Resolution = bun.install.Resolution;
 const TaskCallbackContext = bun.install.TaskCallbackContext;
 const initializeStore = bun.install.initializeStore;
 const invalid_package_id = bun.install.invalid_package_id;
-
 const Lockfile = bun.install.Lockfile;
 const Package = Lockfile.Package;
-
 const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
 const TaskCallbackList = PackageManager.TaskCallbackList;
 const assignRootResolution = PackageManager.assignRootResolution;
 const failRootResolution = PackageManager.failRootResolution;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const GitResolver = struct {
+    resolved: []const u8,
+    resolution: *const Resolution,
+    dep_id: DependencyID,
+    new_name: []u8 = "",
+
+pub fn count(self: GitResolver, comptime Builder: type, builder: Builder, _: JSAst.Expr) void {
+            _ = builder.count(self.resolved);
+    }
+
+pub fn resolve(self: GitResolver, comptime Builder: type, builder: Builder, _: JSAst.Expr) !Resolution {
+            var resolution = self.resolution.*;
+            _ = &resolution;
+            (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).github.resolved = builder.append(String, self.resolved);
+            return resolution;
+    }
+
+pub fn checkBundledDependencies() bool {
+            return true;
+    }
+};
+
+pub const TarballResolver = struct {
+    url: []const u8,
+    resolution: *const Resolution,
+
+pub fn count(self: TarballResolver, comptime Builder: type, builder: Builder, _: JSAst.Expr) void {
+            _ = builder.count(self.url);
+    }
+
+pub fn resolve(self: TarballResolver, comptime Builder: type, builder: Builder, _: JSAst.Expr) !Resolution {
+            var resolution = self.resolution.*;
+            _ = &resolution;
+            switch (resolution.tag) {
+.local_tarball => {
+(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).local_tarball = builder.append(String, self.url);
+},
+.remote_tarball => {
+(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).remote_tarball = builder.append(String, self.url);
+},
+else => {
+_ = unreachable;
+},
+}
+            return resolution;
+    }
+
+pub fn checkBundledDependencies() bool {
+            return true;
+    }
+};
+
+
+pub fn processExtractedTarballPackage(manager: *PackageManager, package_id: *PackageID, dep_id: DependencyID, resolution: *const Resolution, data: *const ExtractData, log_level: Options.LogLevel) ?Lockfile.Package {
+        switch (resolution.tag) {
+.git, .github => {
+var package = package: {
+        var resolver = GitResolver{ .resolved = data.resolved, .resolution = resolution, .dep_id = dep_id };
+        _ = &resolver;
+        var pkg = Lockfile.Package;
+        _ = &pkg;
+        if (data.json) |json| {
+            _ = &json;
+            const package_json_source = (&logger.Source.initPathString(json.path, json.buf));
+            _ = (blk_catch_0: { break :blk_catch_0 ((pkg.parse(manager.lockfile, manager, manager.allocator, manager.log, package_json_source, GitResolver, (&resolver), Features.npm)) catch |e| { _ = &e; if ((log_level != .silent)) {
+                const string_buf = manager.lockfile.buffers.string_bytes.items;
+                _ = Output.err(e, "failed to parse package.json for <b>{f}<r>", .{ resolution.fmtURL(string_buf) });
+            }
+            break :blk_catch_0 Global.crash(); }); });
+            const has_scripts = (pkg.scripts.hasAny() or brk: {
+            const dir = ((std.fs.path.dirname(json.path)) orelse (""));
+            const binding_dot_gyp_path = Path.joinAbsStringZ(dir, (&.{ "binding.gyp" }), .auto);
+            break :brk Syscall.exists(binding_dot_gyp_path);
+});
+            _ = pkg.@"meta".setHasInstallScript(has_scripts);
+            break :package pkg;
+        }
+        var repo = (switch (resolution.tag) {
+.git => (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git,
+.github => (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).github,
+else => unreachable,
+});
+        _ = &repo;
+        const new_name = Repository.createDependencyNameFromVersionLiteral(manager.allocator, (&repo), manager.lockfile, dep_id);
+        defer {
+        _ = manager.allocator.free(new_name);
+        }
+        {
+            var builder = manager.lockfile.stringBuilder();
+            _ = &builder;
+            _ = builder.count(new_name);
+            _ = resolver.count(*Lockfile.StringBuilder, (&builder), undefined);
+            _ = bun.handleOom(builder.allocate());
+            const name = builder.append(ExternalString, new_name);
+            (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name) = (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value);
+            pkg.name_hash = name.hash;
+            pkg.resolution = ((resolver.resolve(*Lockfile.StringBuilder, (&builder), undefined)) catch unreachable);
+        }
+        break :package pkg;
+};
+        _ = &package;
+        if (data.integrity.tag.isSupported()) {
+            package.@"meta".integrity = data.integrity;
+        }
+        package = ((manager.lockfile.appendPackage(package)) catch unreachable);
+        package_id.* = package.@"meta".id;
+        if ((package.dependencies.len > 0)) {
+            _ = bun.handleOom(manager.lockfile.scratch.dependency_list_queue.writeItem(package.dependencies));
+        }
+        return package;
+},
+.local_tarball, .remote_tarball => {
+const json = data.json.?;
+        const package_json_source = (&logger.Source.initPathString(json.path, json.buf));
+        var package = Lockfile.Package;
+        _ = &package;
+        var resolver: TarballResolver = .{ .url = data.url, .resolution = resolution };
+        _ = &resolver;
+        _ = (blk_catch_3: { break :blk_catch_3 ((package.parse(manager.lockfile, manager, manager.allocator, manager.log, package_json_source, TarballResolver, (&resolver), Features.npm)) catch |e| { _ = &e; if ((log_level != .silent)) {
+            const string_buf = manager.lockfile.buffers.string_bytes.items;
+            _ = Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{ resolution.fmtURL(string_buf), @errorName(e) });
+        }
+        break :blk_catch_3 Global.crash(); }); });
+        const has_scripts = (package.scripts.hasAny() or brk: {
+        const dir = ((std.fs.path.dirname(json.path)) orelse (""));
+        const binding_dot_gyp_path = Path.joinAbsStringZ(dir, (&.{ "binding.gyp" }), .auto);
+        break :brk Syscall.exists(binding_dot_gyp_path);
+});
+        _ = package.@"meta".setHasInstallScript(has_scripts);
+        if (data.integrity.tag.isSupported()) {
+            package.@"meta".integrity = data.integrity;
+        }
+        package = ((manager.lockfile.appendPackage(package)) catch unreachable);
+        package_id.* = package.@"meta".id;
+        if ((package.dependencies.len > 0)) {
+            _ = bun.handleOom(manager.lockfile.scratch.dependency_list_queue.writeItem(package.dependencies));
+        }
+        return package;
+},
+else => {
+if ((data.json.?.buf.len > 0)) {
+            const json = data.json.?;
+            const package_json_source = (&logger.Source.initPathString(json.path, json.buf));
+            _ = initializeStore();
+            const json_root = (blk_catch_5: { break :blk_catch_5 ((JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator)) catch |e| { _ = &e; if ((log_level != .silent)) {
+                const string_buf = manager.lockfile.buffers.string_bytes.items;
+                _ = Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{ resolution.fmtURL(string_buf), @errorName(e) });
+            }
+            break :blk_catch_5 Global.crash(); }); });
+            var builder = manager.lockfile.stringBuilder();
+            _ = &builder;
+            _ = Lockfile.Package.Scripts.parseCount(manager.allocator, (&builder), json_root);
+            _ = ((builder.allocate()) catch unreachable);
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert((package_id.* != invalid_package_id));
+            }
+            var scripts = manager.lockfile.packages.items(.scripts)[@as(usize, @intCast(package_id.*))];
+            _ = &scripts;
+            _ = scripts.parseAlloc(manager.allocator, (&builder), json_root);
+            scripts.filled = true;
+        }
+},
+}
+        return null;
+}
+
+pub fn processDependencyListItem(manager: *PackageManager, item: TaskCallbackContext, any_root: ?*bool, install_peer: bool) !void {
+        switch (item) {
+.dependency => |dependency_id| {
+const dependency = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))];
+        const resolution = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dependency_id))];
+        _ = try manager.enqueueDependencyWithMain(dependency_id, dependency, resolution, install_peer);
+},
+.root_dependency => |dependency_id| {
+const dependency = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))];
+        const resolution = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dependency_id))];
+        _ = try manager.enqueueDependencyWithMainAndSuccessFn(dependency_id, dependency, resolution, install_peer, assignRootResolution, failRootResolution);
+        if (any_root) |ptr| {
+            _ = &ptr;
+            const new_resolution_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dependency_id))];
+            if ((new_resolution_id != resolution)) {
+                ptr.* = true;
+            }
+        }
+},
+else => {
+
+},
+}
+}
+
+pub fn processPeerDependencyList(manager: *PackageManager) !void {
+        while (manager.peer_dependencies.readItem()) |peer_dependency_id| {
+            const dependency = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(peer_dependency_id))];
+            const resolution = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(peer_dependency_id))];
+            _ = try manager.enqueueDependencyWithMain(peer_dependency_id, (&dependency), resolution, true);
+        }
+}
+
+pub fn processDependencyList(manager: *PackageManager, dep_list: TaskCallbackList, comptime Ctx: type, ctx: Ctx, comptime callbacks: anytype, install_peer: bool) !void {
+        if ((dep_list.items.len > 0)) {
+            var dependency_list = dep_list;
+            _ = &dependency_list;
+            var any_root = false;
+            _ = &any_root;
+            for (dependency_list.items) |item| {
+                _ = &item;
+                _ = try manager.processDependencyListItem(item, (&any_root), install_peer);
+            }
+            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
+                if (any_root) {
+                    _ = callbacks.onResolve(ctx);
+                }
+            }
+            _ = dependency_list.deinit(manager.allocator);
+        }
+}

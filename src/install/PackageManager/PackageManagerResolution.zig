@@ -1,236 +1,15 @@
-pub fn formatLaterVersionInCache(
-    this: *PackageManager,
-    package_name: string,
-    name_hash: PackageNameHash,
-    resolution: Resolution,
-) ?Semver.Version.Formatter {
-    switch (resolution.tag) {
-        Resolution.Tag.npm => {
-            if (resolution.value.npm.version.tag.hasPre())
-                // TODO:
-                return null;
-
-            const manifest = this.manifests.byNameHash(
-                this,
-                this.scopeForPackageName(package_name),
-                name_hash,
-                .load_from_memory,
-                this.options.minimum_release_age_ms != null,
-            ) orelse return null;
-
-            if (manifest.findByDistTagWithFilter("latest", this.options.minimum_release_age_ms, this.options.minimum_release_age_excludes).unwrap()) |*latest_version| {
-                if (latest_version.version.order(
-                    resolution.value.npm.version,
-                    manifest.string_buf,
-                    this.lockfile.buffers.string_bytes.items,
-                ) != .gt) return null;
-                return latest_version.version.fmt(manifest.string_buf);
-            }
-
-            return null;
-        },
-        else => return null,
-    }
-}
-
-pub fn scopeForPackageName(this: *const PackageManager, name: string) *const Npm.Registry.Scope {
-    if (name.len == 0 or name[0] != '@') return &this.options.scope;
-    return this.options.registries.getPtr(
-        Npm.Registry.Scope.hash(
-            Npm.Registry.Scope.getName(name),
-        ),
-    ) orelse &this.options.scope;
-}
-
-pub fn getInstalledVersionsFromDiskCache(this: *PackageManager, tags_buf: *std.array_list.Managed(u8), package_name: []const u8, allocator: std.mem.Allocator) !std.array_list.Managed(Semver.Version) {
-    var list = std.array_list.Managed(Semver.Version).init(allocator);
-    var dir = this.getCacheDirectory().openDir(package_name, .{
-        .iterate = true,
-    }) catch |err| switch (err) {
-        error.FileNotFound, error.NotDir, error.AccessDenied, error.DeviceBusy => return list,
-        else => return err,
-    };
-    defer dir.close();
-    var iter = dir.iterate();
-
-    while (try iter.next()) |entry| {
-        if (entry.kind != .directory and entry.kind != .sym_link) continue;
-        const name = entry.name;
-        const sliced = SlicedString.init(name, name);
-        const parsed = Semver.Version.parse(sliced);
-        if (!parsed.valid or parsed.wildcard != .none) continue;
-        // not handling OOM
-        // TODO: wildcard
-        var version = parsed.version.min();
-        const total = version.tag.build.len() + version.tag.pre.len();
-        if (total > 0) {
-            tags_buf.ensureUnusedCapacity(total) catch unreachable;
-            var available = tags_buf.items.ptr[tags_buf.items.len..tags_buf.capacity];
-            const new_version = version.cloneInto(name, &available);
-            tags_buf.items.len += total;
-            version = new_version;
-        }
-
-        list.append(version) catch unreachable;
-    }
-
-    return list;
-}
-
-pub fn resolveFromDiskCache(this: *PackageManager, package_name: []const u8, version: Dependency.Version) ?PackageID {
-    if (version.tag != .npm) {
-        // only npm supported right now
-        // tags are more ambiguous
-        return null;
-    }
-
-    var arena = bun.ArenaAllocator.init(this.allocator);
-    defer arena.deinit();
-    const arena_alloc = arena.allocator();
-    var stack_fallback = std.heap.stackFallback(4096, arena_alloc);
-    const allocator = stack_fallback.get();
-    var tags_buf = std.array_list.Managed(u8).init(allocator);
-    const installed_versions = this.getInstalledVersionsFromDiskCache(&tags_buf, package_name, allocator) catch |err| {
-        Output.debug("error getting installed versions from disk cache: {s}", .{bun.span(@errorName(err))});
-        return null;
-    };
-
-    // TODO: make this fewer passes
-    std.sort.pdq(
-        Semver.Version,
-        installed_versions.items,
-        @as([]const u8, tags_buf.items),
-        Semver.Version.sortGt,
-    );
-    for (installed_versions.items) |installed_version| {
-        if (version.value.npm.version.satisfies(installed_version, this.lockfile.buffers.string_bytes.items, tags_buf.items)) {
-            var buf: bun.PathBuffer = undefined;
-            const npm_package_path = this.pathForCachedNPMPath(&buf, package_name, installed_version) catch |err| {
-                Output.debug("error getting path for cached npm path: {s}", .{bun.span(@errorName(err))});
-                return null;
-            };
-            const dependency = Dependency.Version{
-                .tag = .npm,
-                .value = .{
-                    .npm = .{
-                        .name = String.init(package_name, package_name),
-                        .version = Semver.Query.Group.from(installed_version),
-                    },
-                },
-            };
-            switch (FolderResolution.getOrPut(.{ .cache_folder = npm_package_path }, dependency, ".", this)) {
-                .new_package_id => |id| {
-                    this.enqueueDependencyList(this.lockfile.packages.items(.dependencies)[id]);
-                    return id;
-                },
-                .package_id => |id| {
-                    this.enqueueDependencyList(this.lockfile.packages.items(.dependencies)[id]);
-                    return id;
-                },
-                .err => |err| {
-                    Output.debug("error getting or putting folder resolution: {s}", .{bun.span(@errorName(err))});
-                    return null;
-                },
-            }
-        }
-    }
-
-    return null;
-}
-
-pub fn assignResolution(this: *PackageManager, dependency_id: DependencyID, package_id: PackageID) void {
-    const buffers = &this.lockfile.buffers;
-    if (comptime Environment.allow_assert) {
-        bun.assert(dependency_id < buffers.resolutions.items.len);
-        bun.assert(package_id < this.lockfile.packages.len);
-        // bun.assert(buffers.resolutions.items[dependency_id] == invalid_package_id);
-    }
-    buffers.resolutions.items[dependency_id] = package_id;
-    const string_buf = buffers.string_bytes.items;
-    var dep = &buffers.dependencies.items[dependency_id];
-    if (dep.name.isEmpty() or strings.eql(dep.name.slice(string_buf), dep.version.literal.slice(string_buf))) {
-        dep.name = this.lockfile.packages.items(.name)[package_id];
-        dep.name_hash = this.lockfile.packages.items(.name_hash)[package_id];
-    }
-}
-
-pub fn assignRootResolution(this: *PackageManager, dependency_id: DependencyID, package_id: PackageID) void {
-    const buffers = &this.lockfile.buffers;
-    if (comptime Environment.allow_assert) {
-        bun.assert(dependency_id < buffers.resolutions.items.len);
-        bun.assert(package_id < this.lockfile.packages.len);
-        bun.assert(buffers.resolutions.items[dependency_id] == invalid_package_id);
-    }
-    buffers.resolutions.items[dependency_id] = package_id;
-    const string_buf = buffers.string_bytes.items;
-    var dep = &buffers.dependencies.items[dependency_id];
-    if (dep.name.isEmpty() or strings.eql(dep.name.slice(string_buf), dep.version.literal.slice(string_buf))) {
-        dep.name = this.lockfile.packages.items(.name)[package_id];
-        dep.name_hash = this.lockfile.packages.items(.name_hash)[package_id];
-    }
-}
-
-pub fn verifyResolutions(this: *PackageManager, log_level: PackageManager.Options.LogLevel) void {
-    const lockfile = this.lockfile;
-    const resolutions_lists: []const Lockfile.DependencyIDSlice = lockfile.packages.items(.resolutions);
-    const dependency_lists: []const Lockfile.DependencySlice = lockfile.packages.items(.dependencies);
-    const pkg_resolutions = lockfile.packages.items(.resolution);
-    const dependencies_buffer = lockfile.buffers.dependencies.items;
-    const resolutions_buffer = lockfile.buffers.resolutions.items;
-    const end: PackageID = @truncate(lockfile.packages.len);
-
-    var any_failed = false;
-    const string_buf = lockfile.buffers.string_bytes.items;
-
-    for (resolutions_lists, dependency_lists, 0..) |resolution_list, dependency_list, parent_id| {
-        for (resolution_list.get(resolutions_buffer), dependency_list.get(dependencies_buffer)) |package_id, failed_dep| {
-            if (package_id < end) continue;
-
-            // TODO lockfile rewrite: remove this and make non-optional peer dependencies error if they did not resolve.
-            //      Need to keep this for now because old lockfiles might have a peer dependency without the optional flag set.
-            if (failed_dep.behavior.isPeer()) continue;
-
-            const features = switch (pkg_resolutions[parent_id].tag) {
-                .root, .workspace, .folder => this.options.local_package_features,
-                else => this.options.remote_package_features,
-            };
-            // even if optional dependencies are enabled, it's still allowed to fail
-            if (failed_dep.behavior.optional or !failed_dep.behavior.isEnabled(features)) continue;
-
-            if (log_level != .silent) {
-                if (failed_dep.name.isEmpty() or strings.eqlLong(failed_dep.name.slice(string_buf), failed_dep.version.literal.slice(string_buf), true)) {
-                    Output.errGeneric("<b>{f}<r><d> failed to resolve<r>", .{
-                        failed_dep.version.literal.fmt(string_buf),
-                    });
-                } else {
-                    Output.errGeneric("<b>{s}<r><d>@<b>{f}<r><d> failed to resolve<r>", .{
-                        failed_dep.name.slice(string_buf),
-                        failed_dep.version.literal.fmt(string_buf),
-                    });
-                }
-            }
-            // track this so we can log each failure instead of just the first
-            any_failed = true;
-        }
-    }
-
-    if (any_failed) this.crash();
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const std = @import("std");
-
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const OOM = bun.OOM;
 const Output = bun.Output;
 const strings = bun.strings;
-
 const Semver = bun.Semver;
 const SlicedString = Semver.SlicedString;
 const String = Semver.String;
-
 const Dependency = bun.install.Dependency;
 const DependencyID = bun.install.DependencyID;
 const FolderResolution = bun.install.FolderResolution;
@@ -241,3 +20,233 @@ const PackageManager = bun.install.PackageManager;
 const PackageNameHash = bun.install.PackageNameHash;
 const Resolution = bun.install.Resolution;
 const invalid_package_id = bun.install.invalid_package_id;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+
+pub fn formatLaterVersionInCache(manager: *PackageManager, package_name: []const u8, name_hash: PackageNameHash, resolution: Resolution) ?Semver.Version.Formatter {
+        switch (resolution.tag) {
+.npm => {
+if ((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.tag.hasPre()) {
+            return null;
+        }
+        const manifest_opt = manager.manifests.byNameHash(manager, manager.scopeForPackageName(package_name), name_hash, .load_from_memory, (manager.options.minimum_release_age_ms != null));
+        if ((manifest_opt == null)) {
+            return null;
+        }
+        const manifest = manifest_opt.?;
+        if (manifest.findByDistTagWithFilter("latest", manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) |latest_version| {
+            _ = &latest_version;
+            if ((latest_version.version.order((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, manifest.string_buf, manager.lockfile.buffers.string_bytes.items) != .gt)) {
+                return null;
+            }
+            return latest_version.version.fmt(manifest.string_buf);
+        }
+        return null;
+},
+else => {
+return null;
+},
+}
+}
+
+pub fn scopeForPackageName(client: *const PackageManager, name: []const u8) *const Npm.Registry.Scope {
+        if (((name.len == 0) or (name[0] != 64))) {
+            return (&client.options.scope);
+        }
+        return ((client.options.registries.getPtr(Npm.Registry.Scope.hash(Npm.Registry.Scope.getName(name)))) orelse ((&client.options.scope)));
+}
+
+pub fn getInstalledVersionsFromDiskCache(client: *PackageManager, tags_buf: *std.array_list.Managed(u8), package_name: []const u8, allocator: std.mem.Allocator) !std.array_list.Managed(Semver.Version) {
+        var list = std.array_list.Managed(Semver.Version).init(allocator);
+        _ = &list;
+        var dir = (blk_catch_0: { break :blk_catch_0 ((client.getCacheDirectory().openDir(package_name, .{ .iterate = true })) catch |e| { _ = &e; break :blk_catch_0 (switch (e) {
+error.FileNotFound, error.NotDir, error.AccessDenied, error.DeviceBusy => {
+return list;
+},
+else => {
+return e;
+},
+}); }); });
+        _ = &dir;
+        defer {
+        _ = dir.close();
+        }
+        var iter = dir.iterate();
+        _ = &iter;
+        while (try iter.next()) |entry| {
+            if (((entry.kind != .directory) and (entry.kind != .sym_link))) {
+                continue;
+            }
+            const name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name);
+            const sliced = SlicedString.init(name, name);
+            const parsed = Semver.Version.parse(sliced);
+            if (((!parsed.valid) or (parsed.wildcard != .none))) {
+                continue;
+            }
+            var version = parsed.version.min();
+            _ = &version;
+            const total = (version.tag.build.len() + version.tag.pre.len());
+            if ((total > 0)) {
+                _ = ((tags_buf.ensureUnusedCapacity(total)) catch unreachable);
+                var available = tags_buf.items.ptr[tags_buf.items.len..tags_buf.capacity];
+                _ = &available;
+                const new_version = version.cloneInto(name, (&available));
+                tags_buf.items.len = (tags_buf.items.len + total);
+                version = new_version;
+            }
+            _ = ((list.append(version)) catch unreachable);
+        }
+        return list;
+}
+
+pub fn resolveFromDiskCache(client: *PackageManager, package_name: []const u8, version: Dependency.Version) ?PackageID {
+        if ((version.tag != .npm)) {
+            return null;
+        }
+        var arena_ = bun.ArenaAllocator.init(client.allocator);
+        _ = &arena_;
+        defer {
+        _ = arena_.deinit();
+        }
+        const arena_alloc = arena_.allocator();
+        var stack_fallback = std.heap.stackFallback(4096, arena_alloc);
+        _ = &stack_fallback;
+        const allocator = stack_fallback.get();
+        var tags_buf = std.array_list.Managed(u8).init(allocator);
+        _ = &tags_buf;
+        const installed_versions = (blk_catch_3: { break :blk_catch_3 ((client.getInstalledVersionsFromDiskCache(tags_buf, package_name, allocator)) catch |e| { _ = &e; _ = Output.debug("error getting installed versions from disk cache: {s}", .{ bun.span(@errorName(e)) });
+        return null; }); });
+        _ = std.sort.pdq(Semver.Version, installed_versions.items, @as([]const u8, @ptrCast(@alignCast(tags_buf.items))), Semver.Version.sortGt);
+        for (installed_versions.items) |installed_version| {
+            _ = &installed_version;
+            if ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies(installed_version, client.lockfile.buffers.string_bytes.items, tags_buf.items)) {
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                const npm_package_path = (blk_catch_4: { break :blk_catch_4 ((client.pathForCachedNPMPath((&buf), package_name, installed_version)) catch |e| { _ = &e; _ = Output.debug("error getting path for cached npm path: {s}", .{ bun.span(@errorName(e)) });
+                return null; }); });
+                const dependency = Dependency.Version{ .tag = .npm, .value = .{ .npm = .{ .name = String.init(package_name, package_name), .version = Semver.Query.Group.@"from"(installed_version) } } };
+                switch (FolderResolution.getOrPut(.{ .cache_folder = npm_package_path }, dependency, ".", client)) {
+.new_package_id => |id| {
+_ = client.enqueueDependencyList(client.lockfile.packages.items(.dependencies)[@as(usize, @intCast(id))]);
+                return id;
+},
+.package_id => |id| {
+_ = client.enqueueDependencyList(client.lockfile.packages.items(.dependencies)[@as(usize, @intCast(id))]);
+                return id;
+},
+.err => |e| {
+_ = Output.debug("error getting or putting folder resolution: {s}", .{ bun.span(@errorName(e)) });
+                return null;
+},
+}
+            }
+        }
+        return null;
+}
+
+pub fn assignResolution(client: *PackageManager, dependency_id: DependencyID, package_id: PackageID) void {
+        const buffers = (&client.lockfile.buffers);
+        if (comptime Environment.allow_assert) {
+            _ = bun.assert((dependency_id < buffers.resolutions.items.len));
+            _ = bun.assert((package_id < client.lockfile.packages.len));
+        }
+        buffers.resolutions.items[cp_cast_int(usize, dependency_id)] = package_id;
+        const string_buf = buffers.string_bytes.items;
+        var dep = (&buffers.dependencies.items[@as(usize, @intCast(dependency_id))]);
+        _ = &dep;
+        if (((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).isEmpty() or strings.eql(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(string_buf)..], cp_iter_slice(dep.version.literal)[@intCast(string_buf)..]))) {
+            (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name) = client.lockfile.packages.items(.name)[@as(usize, @intCast(package_id))];
+            dep.name_hash = client.lockfile.packages.items(.name_hash)[@as(usize, @intCast(package_id))];
+        }
+}
+
+pub fn assignRootResolution(client: *PackageManager, dependency_id: DependencyID, package_id: PackageID) void {
+        const buffers = (&client.lockfile.buffers);
+        if (comptime Environment.allow_assert) {
+            _ = bun.assert((dependency_id < buffers.resolutions.items.len));
+            _ = bun.assert((package_id < client.lockfile.packages.len));
+            _ = bun.assert((buffers.resolutions.items[@as(usize, @intCast(dependency_id))] == invalid_package_id));
+        }
+        buffers.resolutions.items[cp_cast_int(usize, dependency_id)] = package_id;
+        const string_buf = buffers.string_bytes.items;
+        var dep = (&buffers.dependencies.items[@as(usize, @intCast(dependency_id))]);
+        _ = &dep;
+        if (((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).isEmpty() or strings.eql(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(string_buf)..], cp_iter_slice(dep.version.literal)[@intCast(string_buf)..]))) {
+            (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name) = client.lockfile.packages.items(.name)[@as(usize, @intCast(package_id))];
+            dep.name_hash = client.lockfile.packages.items(.name_hash)[@as(usize, @intCast(package_id))];
+        }
+}
+
+pub fn verifyResolutions(client: *PackageManager, log_level: PackageManager.Options.LogLevel) void {
+        const lockfile = client.lockfile;
+        const resolutions_lists: []const Lockfile.DependencyIDSlice = lockfile.packages.items(.resolutions);
+        const dependency_lists: []const Lockfile.DependencySlice = lockfile.packages.items(.dependencies);
+        const pkg_resolutions = lockfile.packages.items(.resolution);
+        const dependencies_buffer = lockfile.buffers.dependencies.items;
+        const resolutions_buffer = lockfile.buffers.resolutions.items;
+        const end: PackageID = @truncate(lockfile.packages.len);
+        var any_failed = false;
+        _ = &any_failed;
+        const string_buf = lockfile.buffers.string_bytes.items;
+        var parent_id: usize = 0;
+        _ = &parent_id;
+        while ((parent_id < resolutions_lists.len)) : (parent_id = (parent_id + 1)) {
+            const resolution_list = resolutions_lists[@as(usize, @intCast(parent_id))];
+            const dependency_list = dependency_lists[@as(usize, @intCast(parent_id))];
+            const res_slice = resolution_list.get(resolutions_buffer);
+            const dep_slice = dependency_list.get(dependencies_buffer);
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < (res_slice).?.len)) : (idx = (idx + 1)) {
+                const package_id = res_slice[@as(usize, @intCast(idx))];
+                const failed_dep = dep_slice[@as(usize, @intCast(idx))];
+                if ((package_id < end)) {
+                    continue;
+                }
+                if (failed_dep.behavior.isPeer()) {
+                    continue;
+                }
+                const features = (switch (pkg_resolutions[@as(usize, @intCast(parent_id))].tag) {
+.root, .workspace, .folder => client.options.local_package_features,
+else => client.options.remote_package_features,
+});
+                if ((failed_dep.behavior.optional or (!failed_dep.behavior.isEnabled(features)))) {
+                    continue;
+                }
+                if ((log_level != .silent)) {
+                    if (((if (@typeInfo(@TypeOf(failed_dep)) == .@"enum" or @typeInfo(@TypeOf(failed_dep)) == .@"union") @tagName(failed_dep) else failed_dep.name).isEmpty() or strings.eqlLong(cp_iter_slice((if (@typeInfo(@TypeOf(failed_dep)) == .@"enum" or @typeInfo(@TypeOf(failed_dep)) == .@"union") @tagName(failed_dep) else failed_dep.name))[@intCast(string_buf)..], cp_iter_slice(failed_dep.version.literal)[@intCast(string_buf)..], true))) {
+                        _ = Output.errGeneric("<b>{f}<r><d> failed to resolve<r>", .{ failed_dep.version.literal.fmt(string_buf) });
+                    } else {
+                        _ = Output.errGeneric("<b>{s}<r><d>@<b>{f}<r><d> failed to resolve<r>", .{ cp_iter_slice((if (@typeInfo(@TypeOf(failed_dep)) == .@"enum" or @typeInfo(@TypeOf(failed_dep)) == .@"union") @tagName(failed_dep) else failed_dep.name))[@intCast(string_buf)..], failed_dep.version.literal.fmt(string_buf) });
+                    }
+                }
+                any_failed = true;
+            }
+        }
+        if (any_failed) {
+            _ = client.crash();
+        }
+}

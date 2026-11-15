@@ -1,159 +1,9 @@
-const StartManifestTaskError = bun.OOM || error{InvalidURL};
-fn startManifestTask(manager: *PackageManager, pkg_name: []const u8, dep: *const Dependency, needs_extended_manifest: bool) StartManifestTaskError!void {
-    const task_id = Task.Id.forManifest(pkg_name);
-    if (manager.hasCreatedNetworkTask(task_id, dep.behavior.optional)) {
-        return;
-    }
-    manager.startProgressBarIfNone();
-    var task = manager.getNetworkTask();
-    task.* = .{
-        .package_manager = manager,
-        .callback = undefined,
-        .task_id = task_id,
-        .allocator = manager.allocator,
-    };
-    try task.forManifest(pkg_name, manager.allocator, manager.scopeForPackageName(pkg_name), null, dep.behavior.optional, needs_extended_manifest);
-    manager.enqueueNetworkTask(task);
-}
-
-const Packages = union(enum) {
-    all,
-    ids: []const PackageID,
-};
-
-/// Populate the manifest cache for packages included from `root_pkg_ids`. Only manifests of
-/// direct dependencies of the `root_pkg_ids` are populated. If `root_pkg_ids` has length 0
-/// all packages in the lockfile will have their manifests fetched if necessary.
-pub fn populateManifestCache(manager: *PackageManager, packages: Packages) !void {
-    const log_level = manager.options.log_level;
-    const lockfile = manager.lockfile;
-    const resolutions = lockfile.buffers.resolutions.items;
-    const dependencies = lockfile.buffers.dependencies.items;
-    const string_buf = lockfile.buffers.string_bytes.items;
-    const pkgs = lockfile.packages.slice();
-    const pkg_resolutions = pkgs.items(.resolution);
-    const pkg_names = pkgs.items(.name);
-    const pkg_dependencies = pkgs.items(.dependencies);
-
-    switch (packages) {
-        .all => {
-            var seen_pkg_ids: std.AutoHashMap(PackageID, void) = .init(manager.allocator);
-            defer seen_pkg_ids.deinit();
-
-            for (dependencies, 0..) |*dep, _dep_id| {
-                const dep_id: DependencyID = @intCast(_dep_id);
-
-                const pkg_id = resolutions[dep_id];
-                if (pkg_id == invalid_package_id) {
-                    continue;
-                }
-
-                if ((try seen_pkg_ids.getOrPut(pkg_id)).found_existing) {
-                    continue;
-                }
-
-                const res = pkg_resolutions[pkg_id];
-                if (res.tag != .npm) {
-                    continue;
-                }
-
-                const pkg_name = pkg_names[pkg_id];
-                const needs_extended_manifest = manager.options.minimum_release_age_ms != null;
-
-                _ = manager.manifests.byName(
-                    manager,
-                    manager.scopeForPackageName(pkg_name.slice(string_buf)),
-                    pkg_name.slice(string_buf),
-                    .load_from_memory_fallback_to_disk,
-                    needs_extended_manifest,
-                ) orelse {
-                    try startManifestTask(manager, pkg_name.slice(string_buf), dep, needs_extended_manifest);
-                };
-
-                manager.flushNetworkQueue();
-                _ = manager.scheduleTasks();
-            }
-        },
-        .ids => |ids| {
-            for (ids) |root_pkg_id| {
-                const pkg_deps = pkg_dependencies[root_pkg_id];
-                for (pkg_deps.begin()..pkg_deps.end()) |dep_id| {
-                    if (dep_id >= dependencies.len) continue;
-                    const pkg_id = resolutions[dep_id];
-                    if (pkg_id == invalid_package_id) continue;
-                    const dep = &dependencies[dep_id];
-
-                    const resolution: Resolution = pkg_resolutions[pkg_id];
-                    if (resolution.tag != .npm) continue;
-
-                    const needs_extended_manifest = manager.options.minimum_release_age_ms != null;
-                    const package_name = pkg_names[pkg_id].slice(string_buf);
-                    _ = manager.manifests.byName(
-                        manager,
-                        manager.scopeForPackageName(package_name),
-                        package_name,
-                        .load_from_memory_fallback_to_disk,
-                        needs_extended_manifest,
-                    ) orelse {
-                        try startManifestTask(manager, package_name, dep, needs_extended_manifest);
-
-                        manager.flushNetworkQueue();
-                        _ = manager.scheduleTasks();
-                    };
-                }
-            }
-        },
-    }
-
-    manager.flushNetworkQueue();
-    _ = manager.scheduleTasks();
-
-    if (manager.pendingTaskCount() > 0) {
-        const RunClosure = struct {
-            manager: *PackageManager,
-            err: ?anyerror = null,
-            pub fn isDone(closure: *@This()) bool {
-                closure.manager.runTasks(
-                    *PackageManager,
-                    closure.manager,
-                    .{
-                        .onExtract = {},
-                        .onResolve = {},
-                        .onPackageManifestError = {},
-                        .onPackageDownloadError = {},
-                        .progress_bar = true,
-                        .manifests_only = true,
-                    },
-                    true,
-                    closure.manager.options.log_level,
-                ) catch |err| {
-                    closure.err = err;
-                    return true;
-                };
-
-                return closure.manager.pendingTaskCount() == 0;
-            }
-        };
-
-        var run_closure: RunClosure = .{ .manager = manager };
-        manager.sleepUntil(&run_closure, &RunClosure.isDone);
-
-        if (log_level.showProgress()) {
-            manager.endProgressBar();
-            Output.flush();
-        }
-
-        if (run_closure.err) |err| {
-            return err;
-        }
-    }
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Output = bun.Output;
-
 const Dependency = bun.install.Dependency;
 const DependencyID = bun.install.DependencyID;
 const PackageID = bun.install.PackageID;
@@ -161,3 +11,149 @@ const PackageManager = bun.install.PackageManager;
 const Resolution = bun.install.Resolution;
 const Task = bun.install.Task;
 const invalid_package_id = bun.install.invalid_package_id;
+const StartManifestTaskError = (bun.OOM or error{InvalidURL});
+const Packages = union(enum) {
+    all,
+    ids: []const PackageID,
+};
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const RunClosure = struct {
+    manager: *PackageManager,
+    @"err": ?anyerror = null,
+
+pub fn isDone(closure: *RunClosure) bool {
+            _ = (blk_catch_0: { break :blk_catch_0 ((closure.manager.runTasks(*PackageManager, closure.manager, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{}, .progress_bar = true, .manifests_only = true }, true, closure.manager.options.log_level)) catch |e| { _ = &e; closure.@"err" = e;
+            return true; }); });
+            return (closure.manager.pendingTaskCount() == 0);
+    }
+};
+
+
+pub fn startManifestTask(manager: *PackageManager, pkg_name: []const u8, dep: *const Dependency, needs_extended_manifest: bool) StartManifestTaskError!void {
+        const task_id = Task.Id.forManifest(pkg_name);
+        if (manager.hasCreatedNetworkTask(task_id, dep.behavior.optional)) {
+            return;
+        }
+        _ = manager.startProgressBarIfNone();
+        var task = manager.getNetworkTask();
+        _ = &task;
+        task.* = .{ .package_manager = manager, .callback = undefined, .task_id = task_id, .allocator = manager.allocator };
+        _ = try task.forManifest(pkg_name, manager.allocator, manager.scopeForPackageName(pkg_name), null, dep.behavior.optional, needs_extended_manifest);
+        _ = manager.enqueueNetworkTask(task);
+}
+
+pub fn populateManifestCache(manager: *PackageManager, packages: Packages) !void {
+        const log_level = manager.options.log_level;
+        const lockfile = manager.lockfile;
+        const resolutions = lockfile.buffers.resolutions.items;
+        const dependencies = lockfile.buffers.dependencies.items;
+        const string_buf = lockfile.buffers.string_bytes.items;
+        const pkgs = lockfile.packages.slice();
+        const pkg_resolutions = pkgs.items(.resolution);
+        const pkg_names = pkgs.items(.name);
+        const pkg_dependencies = pkgs.items(.dependencies);
+        switch (packages) {
+.all => {
+var seen_pkg_ids: std.AutoHashMap(PackageID,void) = .init(manager.allocator);
+        _ = &seen_pkg_ids;
+        defer {
+        _ = seen_pkg_ids.deinit();
+        }
+        var _dep_id: usize = 0;
+        _ = &_dep_id;
+        while ((_dep_id < dependencies.len)) : (_dep_id = (_dep_id + 1)) {
+            const dep = (&dependencies[@as(usize, @intCast(_dep_id))]);
+            const dep_id: DependencyID = @as(DependencyID, @intCast(_dep_id));
+            const pkg_id = resolutions[@as(usize, @intCast(dep_id))];
+            if ((pkg_id == invalid_package_id)) {
+                continue;
+            }
+            if (try seen_pkg_ids.getOrPut(pkg_id).found_existing) {
+                continue;
+            }
+            const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            if ((res.tag != .npm)) {
+                continue;
+            }
+            const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+            const needs_extended_manifest = (manager.options.minimum_release_age_ms != null);
+            if ((manager.manifests.byName(manager, manager.scopeForPackageName(cp_iter_slice(pkg_name)[@intCast(string_buf)..]), cp_iter_slice(pkg_name)[@intCast(string_buf)..], .load_from_memory_fallback_to_disk, needs_extended_manifest) == null)) {
+                _ = try startManifestTask(manager, cp_iter_slice(pkg_name)[@intCast(string_buf)..], dep, needs_extended_manifest);
+            }
+            _ = manager.flushNetworkQueue();
+            _ = manager.scheduleTasks();
+        }
+},
+.ids => |ids| {
+for (cp_iter_slice(ids)) |root_pkg_id| {
+            _ = &root_pkg_id;
+            const pkg_deps = pkg_dependencies[@as(usize, @intCast(root_pkg_id))];
+            {
+                var dep_id: i32 = pkg_deps.begin();
+                _ = &dep_id;
+                const __end_1 = pkg_deps.end();
+                while (dep_id < __end_1) : (dep_id += 1) {
+                    if ((dep_id >= dependencies.len)) {
+                        continue;
+                    }
+                    const pkg_id = resolutions[@as(usize, @intCast(dep_id))];
+                    if ((pkg_id == invalid_package_id)) {
+                        continue;
+                    }
+                    const dep = (&dependencies[@as(usize, @intCast(dep_id))]);
+                    const resolution: Resolution = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+                    if ((resolution.tag != .npm)) {
+                        continue;
+                    }
+                    const needs_extended_manifest = (manager.options.minimum_release_age_ms != null);
+                    const package_name = cp_iter_slice(pkg_names[@as(usize, @intCast(pkg_id))])[@intCast(string_buf)..];
+                    if ((manager.manifests.byName(manager, manager.scopeForPackageName(package_name), package_name, .load_from_memory_fallback_to_disk, needs_extended_manifest) == null)) {
+                        _ = try startManifestTask(manager, package_name, dep, needs_extended_manifest);
+                        _ = manager.flushNetworkQueue();
+                        _ = manager.scheduleTasks();
+                    }
+                }
+            }
+        }
+},
+}
+        _ = manager.flushNetworkQueue();
+        _ = manager.scheduleTasks();
+        if ((manager.pendingTaskCount() > 0)) {
+            var run_closure = RunClosure{ .manager = manager };
+            _ = &run_closure;
+            _ = manager.sleepUntil((&run_closure), (&RunClosure.isDone));
+            if (log_level.showProgress()) {
+                _ = manager.endProgressBar();
+                _ = Output.flush();
+            }
+            if (run_closure.@"err") |e| {
+                _ = &e;
+                return e;
+            }
+        }
+}

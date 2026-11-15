@@ -1,1997 +1,18 @@
-pub fn enqueueDependencyWithMain(
-    this: *PackageManager,
-    id: DependencyID,
-    /// This must be a *const to prevent UB
-    dependency: *const Dependency,
-    resolution: PackageID,
-    install_peer: bool,
-) !void {
-    return this.enqueueDependencyWithMainAndSuccessFn(
-        id,
-        dependency,
-        resolution,
-        install_peer,
-        assignResolution,
-        null,
-    );
-}
-
-pub fn enqueueDependencyList(
-    this: *PackageManager,
-    dependencies_list: Lockfile.DependencySlice,
-) void {
-    this.task_queue.ensureUnusedCapacity(this.allocator, dependencies_list.len) catch unreachable;
-    const lockfile = this.lockfile;
-
-    // Step 1. Go through main dependencies
-    var begin = dependencies_list.off;
-    const end = dependencies_list.off +| dependencies_list.len;
-
-    // if dependency is peer and is going to be installed
-    // through "dependencies", skip it
-    if (end - begin > 1 and lockfile.buffers.dependencies.items[0].behavior.isPeer()) {
-        var peer_i: usize = 0;
-        var peer = &lockfile.buffers.dependencies.items[peer_i];
-        while (peer.behavior.isPeer()) {
-            var dep_i: usize = end - 1;
-            var dep = lockfile.buffers.dependencies.items[dep_i];
-            while (!dep.behavior.isPeer()) {
-                if (!dep.behavior.isDev()) {
-                    if (peer.name_hash == dep.name_hash) {
-                        peer.* = lockfile.buffers.dependencies.items[begin];
-                        begin += 1;
-                        break;
-                    }
-                }
-                dep_i -= 1;
-                dep = lockfile.buffers.dependencies.items[dep_i];
-            }
-            peer_i += 1;
-            if (peer_i == end) break;
-            peer = &lockfile.buffers.dependencies.items[peer_i];
-        }
-    }
-
-    var i = begin;
-
-    // we have to be very careful with pointers here
-    while (i < end) : (i += 1) {
-        const dependency = lockfile.buffers.dependencies.items[i];
-        const resolution = lockfile.buffers.resolutions.items[i];
-        this.enqueueDependencyWithMain(
-            i,
-            &dependency,
-            resolution,
-            false,
-        ) catch |err| {
-            const note = .{
-                .fmt = "error occurred while resolving {f}",
-                .args = .{bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), .{
-                    .path_sep = switch (dependency.version.tag) {
-                        .folder => .auto,
-                        else => .any,
-                    },
-                })},
-            };
-
-            if (dependency.behavior.isOptional() or dependency.behavior.isPeer())
-                this.log.addWarningWithNote(null, .{}, this.allocator, @errorName(err), note.fmt, note.args) catch unreachable
-            else
-                this.log.addZigErrorWithNote(this.allocator, err, note.fmt, note.args) catch unreachable;
-
-            continue;
-        };
-    }
-
-    this.drainDependencyList();
-}
-
-pub fn enqueueTarballForDownload(
-    this: *PackageManager,
-    dependency_id: DependencyID,
-    package_id: PackageID,
-    url: string,
-    task_context: TaskCallbackContext,
-    patch_name_and_version_hash: ?u64,
-) EnqueueTarballForDownloadError!void {
-    const task_id = Task.Id.forTarball(url);
-    var task_queue = try this.task_queue.getOrPut(this.allocator, task_id);
-    if (!task_queue.found_existing) {
-        task_queue.value_ptr.* = .{};
-    }
-
-    try task_queue.value_ptr.append(
-        this.allocator,
-        task_context,
-    );
-
-    if (task_queue.found_existing) return;
-
-    if (try this.generateNetworkTaskForTarball(
-        task_id,
-        url,
-        this.lockfile.buffers.dependencies.items[dependency_id].behavior.isRequired(),
-        dependency_id,
-        this.lockfile.packages.get(package_id),
-        patch_name_and_version_hash,
-        .no_authorization,
-    )) |task| {
-        task.schedule(&this.network_tarball_batch);
-        if (this.network_tarball_batch.len > 0) {
-            _ = this.scheduleTasks();
-        }
-    }
-}
-
-pub fn enqueueTarballForReading(
-    this: *PackageManager,
-    dependency_id: DependencyID,
-    package_id: PackageID,
-    alias: string,
-    resolution: *const Resolution,
-    task_context: TaskCallbackContext,
-) void {
-    const path = this.lockfile.str(&resolution.value.local_tarball);
-    const task_id = Task.Id.forTarball(path);
-    var task_queue = this.task_queue.getOrPut(this.allocator, task_id) catch unreachable;
-    if (!task_queue.found_existing) {
-        task_queue.value_ptr.* = .{};
-    }
-
-    task_queue.value_ptr.append(
-        this.allocator,
-        task_context,
-    ) catch unreachable;
-
-    if (task_queue.found_existing) return;
-
-    const integrity = this.lockfile.packages.items(.meta)[package_id].integrity;
-
-    this.task_batch.push(ThreadPool.Batch.from(enqueueLocalTarball(
-        this,
-        task_id,
-        dependency_id,
-        alias,
-        path,
-        resolution.*,
-        integrity,
-    )));
-}
-
-pub fn enqueueGitForCheckout(
-    this: *PackageManager,
-    dependency_id: DependencyID,
-    alias: string,
-    resolution: *const Resolution,
-    task_context: TaskCallbackContext,
-    patch_name_and_version_hash: ?u64,
-) void {
-    const repository = &resolution.value.git;
-    const url = this.lockfile.str(&repository.repo);
-    const clone_id = Task.Id.forGitClone(url);
-    const resolved = this.lockfile.str(&repository.resolved);
-    const checkout_id = Task.Id.forGitCheckout(url, resolved);
-    var checkout_queue = this.task_queue.getOrPut(this.allocator, checkout_id) catch unreachable;
-    if (!checkout_queue.found_existing) {
-        checkout_queue.value_ptr.* = .{};
-    }
-
-    checkout_queue.value_ptr.append(
-        this.allocator,
-        task_context,
-    ) catch unreachable;
-
-    if (checkout_queue.found_existing) return;
-
-    if (this.git_repositories.get(clone_id)) |repo_fd| {
-        this.task_batch.push(ThreadPool.Batch.from(this.enqueueGitCheckout(checkout_id, repo_fd, dependency_id, alias, resolution.*, resolved, patch_name_and_version_hash)));
-    } else {
-        var clone_queue = this.task_queue.getOrPut(this.allocator, clone_id) catch unreachable;
-        if (!clone_queue.found_existing) {
-            clone_queue.value_ptr.* = .{};
-        }
-
-        clone_queue.value_ptr.append(
-            this.allocator,
-            .{ .dependency = dependency_id },
-        ) catch unreachable;
-
-        if (clone_queue.found_existing) return;
-
-        this.task_batch.push(ThreadPool.Batch.from(enqueueGitClone(
-            this,
-            clone_id,
-            alias,
-            repository,
-            dependency_id,
-            &this.lockfile.buffers.dependencies.items[dependency_id],
-            resolution,
-            null,
-        )));
-    }
-}
-
-pub fn enqueueParseNPMPackage(
-    this: *PackageManager,
-    task_id: Task.Id,
-    name: strings.StringOrTinyString,
-    network_task: *NetworkTask,
-) *ThreadPool.Task {
-    var task = this.preallocated_resolve_tasks.get();
-    task.* = Task{
-        .package_manager = this,
-        .log = logger.Log.init(this.allocator),
-        .tag = Task.Tag.package_manifest,
-        .request = .{
-            .package_manifest = .{
-                .network = network_task,
-                .name = name,
-            },
-        },
-        .id = task_id,
-        .data = undefined,
-    };
-    return &task.threadpool_task;
-}
-
-pub fn enqueuePackageForDownload(
-    this: *PackageManager,
-    name: []const u8,
-    dependency_id: DependencyID,
-    package_id: PackageID,
-    version: bun.Semver.Version,
-    url: []const u8,
-    task_context: TaskCallbackContext,
-    patch_name_and_version_hash: ?u64,
-) EnqueuePackageForDownloadError!void {
-    const task_id = Task.Id.forNPMPackage(name, version);
-    var task_queue = try this.task_queue.getOrPut(this.allocator, task_id);
-    if (!task_queue.found_existing) {
-        task_queue.value_ptr.* = .{};
-    }
-
-    try task_queue.value_ptr.append(
-        this.allocator,
-        task_context,
-    );
-
-    if (task_queue.found_existing) return;
-
-    const is_required = this.lockfile.buffers.dependencies.items[dependency_id].behavior.isRequired();
-
-    if (try this.generateNetworkTaskForTarball(
-        task_id,
-        url,
-        is_required,
-        dependency_id,
-        this.lockfile.packages.get(package_id),
-        patch_name_and_version_hash,
-        .allow_authorization,
-    )) |task| {
-        task.schedule(&this.network_tarball_batch);
-        if (this.network_tarball_batch.len > 0) {
-            _ = this.scheduleTasks();
-        }
-    }
-}
-
-const DependencyToEnqueue = union(enum) {
-    pending: DependencyID,
-    resolution: struct { package_id: PackageID, resolution: Resolution },
-    not_found: void,
-    failure: anyerror,
-};
-
-pub fn enqueueDependencyToRoot(
-    this: *PackageManager,
-    name: []const u8,
-    version: *const Dependency.Version,
-    version_buf: []const u8,
-    behavior: Dependency.Behavior,
-) DependencyToEnqueue {
-    const dep_id = @as(DependencyID, @truncate(brk: {
-        const str_buf = this.lockfile.buffers.string_bytes.items;
-        for (this.lockfile.buffers.dependencies.items, 0..) |dep, id| {
-            if (!strings.eqlLong(dep.name.slice(str_buf), name, true)) continue;
-            if (!dep.version.eql(version, str_buf, version_buf)) continue;
-            break :brk id;
-        }
-
-        var builder = this.lockfile.stringBuilder();
-        const dummy = Dependency{
-            .name = String.init(name, name),
-            .name_hash = String.Builder.stringHash(name),
-            .version = version.*,
-            .behavior = behavior,
-        };
-        dummy.countWithDifferentBuffers(name, version_buf, @TypeOf(&builder), &builder);
-
-        builder.allocate() catch |err| return .{ .failure = err };
-
-        const dep = dummy.cloneWithDifferentBuffers(this, name, version_buf, @TypeOf(&builder), &builder) catch unreachable;
-        builder.clamp();
-        const index = this.lockfile.buffers.dependencies.items.len;
-        this.lockfile.buffers.dependencies.append(this.allocator, dep) catch unreachable;
-        this.lockfile.buffers.resolutions.append(this.allocator, invalid_package_id) catch unreachable;
-        if (comptime Environment.allow_assert) bun.assert(this.lockfile.buffers.dependencies.items.len == this.lockfile.buffers.resolutions.items.len);
-        break :brk index;
-    }));
-
-    if (this.lockfile.buffers.resolutions.items[dep_id] == invalid_package_id) {
-        // Copy to the stack: `enqueueDependencyWithMainAndSuccessFn` can call
-        // `Lockfile.Package.fromNPM`, which grows `buffers.dependencies` and
-        // would invalidate a pointer taken directly into it.
-        const dependency = this.lockfile.buffers.dependencies.items[dep_id];
-        this.enqueueDependencyWithMainAndSuccessFn(
-            dep_id,
-            &dependency,
-            invalid_package_id,
-            false,
-            assignRootResolution,
-            failRootResolution,
-        ) catch |err| {
-            return .{ .failure = err };
-        };
-    }
-
-    const resolution_id = switch (this.lockfile.buffers.resolutions.items[dep_id]) {
-        invalid_package_id => brk: {
-            this.drainDependencyList();
-
-            const Closure = struct {
-                // https://github.com/ziglang/zig/issues/19586
-                pub fn issue_19586_workaround() type {
-                    return struct {
-                        err: ?anyerror = null,
-                        manager: *PackageManager,
-                        pub fn isDone(closure: *@This()) bool {
-                            const manager = closure.manager;
-                            if (manager.pendingTaskCount() > 0) {
-                                manager.runTasks(
-                                    void,
-                                    {},
-                                    .{
-                                        .onExtract = {},
-                                        .onResolve = {},
-                                        .onPackageManifestError = {},
-                                        .onPackageDownloadError = {},
-                                    },
-                                    false,
-                                    manager.options.log_level,
-                                ) catch |err| {
-                                    closure.err = err;
-                                    return true;
-                                };
-
-                                if (PackageManager.verbose_install and manager.pendingTaskCount() > 0) {
-                                    if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{closure.manager.pendingTaskCount()});
-                                }
-                            }
-
-                            return manager.pendingTaskCount() == 0;
-                        }
-                    };
-                }
-            }.issue_19586_workaround();
-
-            if (this.options.log_level.showProgress()) {
-                this.startProgressBarIfNone();
-            }
-
-            var closure = Closure{ .manager = this };
-            this.sleepUntil(&closure, &Closure.isDone);
-
-            if (this.options.log_level.showProgress()) {
-                this.endProgressBar();
-                Output.flush();
-            }
-
-            if (closure.err) |err| {
-                return .{ .failure = err };
-            }
-
-            break :brk this.lockfile.buffers.resolutions.items[dep_id];
-        },
-        // we managed to synchronously resolve the dependency
-        else => |pkg_id| pkg_id,
-    };
-
-    if (resolution_id == invalid_package_id) {
-        return .{
-            .not_found = {},
-        };
-    }
-
-    return .{
-        .resolution = .{
-            .resolution = this.lockfile.packages.items(.resolution)[resolution_id],
-            .package_id = resolution_id,
-        },
-    };
-}
-
-pub fn enqueueNetworkTask(this: *PackageManager, task: *NetworkTask) void {
-    if (this.network_task_fifo.writableLength() == 0) {
-        this.flushNetworkQueue();
-    }
-
-    this.network_task_fifo.writeItemAssumeCapacity(task);
-}
-
-pub fn enqueuePatchTask(this: *PackageManager, task: *PatchTask) void {
-    debug("Enqueue patch task: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
-    if (this.patch_task_fifo.writableLength() == 0) {
-        this.flushPatchTaskQueue();
-    }
-
-    this.patch_task_fifo.writeItemAssumeCapacity(task);
-}
-
-/// We need to calculate all the patchfile hashes at the beginning so we don't run into problems with stale hashes
-pub fn enqueuePatchTaskPre(this: *PackageManager, task: *PatchTask) void {
-    debug("Enqueue patch task pre: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
-    task.pre = true;
-    if (this.patch_task_fifo.writableLength() == 0) {
-        this.flushPatchTaskQueue();
-    }
-
-    this.patch_task_fifo.writeItemAssumeCapacity(task);
-    _ = this.pending_pre_calc_hashes.fetchAdd(1, .monotonic);
-}
-
-/// Q: "What do we do with a dependency in a package.json?"
-/// A: "We enqueue it!"
-pub fn enqueueDependencyWithMainAndSuccessFn(
-    this: *PackageManager,
-    id: DependencyID,
-    /// This must be a *const to prevent UB
-    dependency: *const Dependency,
-    resolution: PackageID,
-    install_peer: bool,
-    comptime successFn: SuccessFn,
-    comptime failFn: ?FailFn,
-) !void {
-    if (dependency.behavior.isOptionalPeer()) return;
-
-    var name = dependency.realname();
-    var name_hash = switch (dependency.version.tag) {
-        .dist_tag, .git, .github, .npm, .tarball, .workspace => String.Builder.stringHash(this.lockfile.str(&name)),
-        else => dependency.name_hash,
-    };
-
-    const version = version: {
-        if (dependency.version.tag == .npm) {
-            if (this.known_npm_aliases.get(name_hash)) |aliased| {
-                const group = dependency.version.value.npm.version;
-                const buf = this.lockfile.buffers.string_bytes.items;
-                var curr_list: ?*const Semver.Query.List = &aliased.value.npm.version.head;
-                while (curr_list) |queries| {
-                    var curr: ?*const Semver.Query = &queries.head;
-                    while (curr) |query| {
-                        if (group.satisfies(query.range.left.version, buf, buf) or group.satisfies(query.range.right.version, buf, buf)) {
-                            name = aliased.value.npm.name;
-                            name_hash = String.Builder.stringHash(this.lockfile.str(&name));
-                            break :version aliased;
-                        }
-                        curr = query.next;
-                    }
-                    curr_list = queries.next;
-                }
-
-                // fallthrough. a package that matches the name of an alias but does not match
-                // the version should be enqueued as a normal npm dependency, overrides allowed
-            }
-        }
-
-        // allow overriding all dependencies unless the dependency is coming directly from an alias, "npm:<this dep>" or
-        // if it's a workspaceOnly dependency
-        if (!dependency.behavior.isWorkspace() and (dependency.version.tag != .npm or !dependency.version.value.npm.is_alias)) {
-            if (this.lockfile.overrides.get(name_hash)) |new| {
-                debug("override: {s} -> {s}", .{ this.lockfile.str(&dependency.version.literal), this.lockfile.str(&new.literal) });
-
-                name, name_hash = updateNameAndNameHashFromVersionReplacement(this.lockfile, name, name_hash, new);
-
-                if (new.tag == .catalog) {
-                    if (this.lockfile.catalogs.get(this.lockfile, new.value.catalog, name)) |catalog_dep| {
-                        name, name_hash = updateNameAndNameHashFromVersionReplacement(this.lockfile, name, name_hash, catalog_dep.version);
-                        break :version catalog_dep.version;
-                    }
-                }
-
-                // `name_hash` stays the same
-                break :version new;
-            }
-
-            if (dependency.version.tag == .catalog) {
-                if (this.lockfile.catalogs.get(this.lockfile, dependency.version.value.catalog, name)) |catalog_dep| {
-                    name, name_hash = updateNameAndNameHashFromVersionReplacement(this.lockfile, name, name_hash, catalog_dep.version);
-
-                    break :version catalog_dep.version;
-                }
-            }
-        }
-
-        // explicit copy here due to `dependency.version` becoming undefined
-        // when `getOrPutResolvedPackageWithFindResult` is called and resizes the list.
-        break :version Dependency.Version{
-            .literal = dependency.version.literal,
-            .tag = dependency.version.tag,
-            .value = dependency.version.value,
-        };
-    };
-    var loaded_manifest: ?Npm.PackageManifest = null;
-
-    switch (version.tag) {
-        .dist_tag, .folder, .npm => {
-            retry_from_manifests_ptr: while (true) {
-                var resolve_result_ = getOrPutResolvedPackage(
-                    this,
-                    name_hash,
-                    name,
-                    dependency,
-                    version,
-                    dependency.behavior,
-                    id,
-                    resolution,
-                    install_peer,
-                    successFn,
-                );
-
-                retry_with_new_resolve_result: while (true) {
-                    const resolve_result = resolve_result_ catch |err| {
-                        switch (err) {
-                            error.DistTagNotFound => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (failFn) |fail| {
-                                        fail(
-                                            this,
-                                            dependency,
-                                            id,
-                                            err,
-                                        );
-                                    } else {
-                                        this.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            this.allocator,
-                                            "Package \"{s}\" with tag \"{s}\" not found, but package exists",
-                                            .{
-                                                this.lockfile.str(&name),
-                                                this.lockfile.str(&version.value.dist_tag.tag),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-
-                                return;
-                            },
-                            error.NoMatchingVersion => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (failFn) |fail| {
-                                        fail(
-                                            this,
-                                            dependency,
-                                            id,
-                                            err,
-                                        );
-                                    } else {
-                                        this.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            this.allocator,
-                                            "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>",
-                                            .{
-                                                this.lockfile.str(&version.literal),
-                                                this.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-                                return;
-                            },
-                            error.TooRecentVersion => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (failFn) |fail| {
-                                        fail(
-                                            this,
-                                            dependency,
-                                            id,
-                                            err,
-                                        );
-                                    } else {
-                                        const age_gate_ms = this.options.minimum_release_age_ms orelse 0;
-                                        if (version.tag == .dist_tag) {
-                                            this.log.addErrorFmt(
-                                                null,
-                                                logger.Loc.Empty,
-                                                this.allocator,
-                                                "Package \"{s}\" with tag \"{s}\" not found<r> <d>(all versions blocked by minimum-release-age: {d} seconds)<r>",
-                                                .{
-                                                    this.lockfile.str(&name),
-                                                    this.lockfile.str(&version.value.dist_tag.tag),
-                                                    age_gate_ms / std.time.ms_per_s,
-                                                },
-                                            ) catch unreachable;
-                                        } else {
-                                            this.log.addErrorFmt(
-                                                null,
-                                                logger.Loc.Empty,
-                                                this.allocator,
-                                                "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(blocked by minimum-release-age: {d} seconds)<r>",
-                                                .{
-                                                    this.lockfile.str(&name),
-                                                    this.lockfile.str(&version.literal),
-                                                    age_gate_ms / std.time.ms_per_s,
-                                                },
-                                            ) catch unreachable;
-                                        }
-                                    }
-                                }
-                                return;
-                            },
-                            error.MissingPackageJSON => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (failFn) |fail| {
-                                        fail(
-                                            this,
-                                            dependency,
-                                            id,
-                                            err,
-                                        );
-                                    } else if (version.tag == .folder) {
-                                        this.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            this.allocator,
-                                            "Could not find package.json for \"file:{s}\" dependency \"{s}\"",
-                                            .{
-                                                this.lockfile.str(&version.value.folder),
-                                                this.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    } else {
-                                        this.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            this.allocator,
-                                            "Could not find package.json for dependency \"{s}\"",
-                                            .{
-                                                this.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-                                return;
-                            },
-                            else => {
-                                if (failFn) |fail| {
-                                    fail(
-                                        this,
-                                        dependency,
-                                        id,
-                                        err,
-                                    );
-                                    return;
-                                }
-
-                                return err;
-                            },
-                        }
-                    };
-
-                    if (resolve_result) |result| {
-                        // First time?
-                        if (result.is_first_time) {
-                            if (PackageManager.verbose_install) {
-                                const label: string = this.lockfile.str(&version.literal);
-
-                                Output.prettyErrorln("   -> \"{s}\": \"{s}\" -> {s}@{f}", .{
-                                    this.lockfile.str(&result.package.name),
-                                    label,
-                                    this.lockfile.str(&result.package.name),
-                                    result.package.resolution.fmt(this.lockfile.buffers.string_bytes.items, .auto),
-                                });
-                            }
-                            // Resolve dependencies first
-                            if (result.package.dependencies.len > 0) {
-                                try this.lockfile.scratch.dependency_list_queue.writeItem(result.package.dependencies);
-                            }
-                        }
-
-                        if (result.task != null) {
-                            switch (result.task.?) {
-                                .network_task => |network_task| {
-                                    if (this.getPreinstallState(result.package.meta.id) == .extract) {
-                                        this.setPreinstallState(result.package.meta.id, this.lockfile, .extracting);
-                                        this.enqueueNetworkTask(network_task);
-                                    }
-                                },
-                                .patch_task => |patch_task| {
-                                    if (patch_task.callback == .calc_hash and this.getPreinstallState(result.package.meta.id) == .calc_patch_hash) {
-                                        this.setPreinstallState(result.package.meta.id, this.lockfile, .calcing_patch_hash);
-                                        this.enqueuePatchTask(patch_task);
-                                    } else if (patch_task.callback == .apply and this.getPreinstallState(result.package.meta.id) == .apply_patch) {
-                                        this.setPreinstallState(result.package.meta.id, this.lockfile, .applying_patch);
-                                        this.enqueuePatchTask(patch_task);
-                                    }
-                                },
-                            }
-                        }
-
-                        if (comptime Environment.allow_assert)
-                            debug(
-                                "enqueueDependency({d}, {s}, {s}, {s}) = {d}",
-                                .{
-                                    id,
-                                    @tagName(version.tag),
-                                    this.lockfile.str(&name),
-                                    this.lockfile.str(&version.literal),
-                                    result.package.meta.id,
-                                },
-                            );
-                    } else if (version.tag.isNPM()) {
-                        const name_str = this.lockfile.str(&name);
-                        const task_id = Task.Id.forManifest(name_str);
-
-                        if (comptime Environment.allow_assert) bun.assert(task_id.get() != 0);
-
-                        if (comptime Environment.allow_assert)
-                            debug(
-                                "enqueueDependency({d}, {s}, {s}, {s}) = task {d}",
-                                .{
-                                    id,
-                                    @tagName(version.tag),
-                                    this.lockfile.str(&name),
-                                    this.lockfile.str(&version.literal),
-                                    task_id,
-                                },
-                            );
-
-                        if (!dependency.behavior.isPeer() or install_peer) {
-                            if (!this.hasCreatedNetworkTask(task_id, dependency.behavior.isRequired())) {
-                                const needs_extended_manifest = this.options.minimum_release_age_ms != null;
-                                if (this.options.enable.manifest_cache) {
-                                    var expired = false;
-                                    if (this.manifests.byNameHashAllowExpired(
-                                        this,
-                                        this.scopeForPackageName(name_str),
-                                        name_hash,
-                                        &expired,
-                                        .load_from_memory_fallback_to_disk,
-                                        needs_extended_manifest,
-                                    )) |manifest| {
-                                        loaded_manifest = manifest.*;
-
-                                        // If it's an exact package version already living in the cache
-                                        // We can skip the network request, even if it's beyond the caching period
-                                        if (version.tag == .npm and version.value.npm.version.isExact()) {
-                                            if (loaded_manifest.?.findByVersion(version.value.npm.version.head.head.range.left.version)) |find_result| {
-                                                if (this.options.minimum_release_age_ms) |min_age_ms| {
-                                                    if (!loaded_manifest.?.shouldExcludeFromAgeFilter(this.options.minimum_release_age_excludes) and Npm.PackageManifest.isPackageVersionTooRecent(find_result.package, min_age_ms)) {
-                                                        const package_name = this.lockfile.str(&name);
-                                                        const min_age_seconds = min_age_ms / std.time.ms_per_s;
-                                                        this.log.addErrorFmt(null, logger.Loc.Empty, this.allocator, "Version \"{s}@{f}\" was published within minimum release age of {d} seconds", .{ package_name, find_result.version.fmt(this.lockfile.buffers.string_bytes.items), min_age_seconds }) catch {};
-                                                        return;
-                                                    }
-                                                }
-                                                if (getOrPutResolvedPackageWithFindResult(
-                                                    this,
-                                                    name_hash,
-                                                    name,
-                                                    dependency,
-                                                    version,
-                                                    id,
-                                                    dependency.behavior,
-                                                    &loaded_manifest.?,
-                                                    find_result,
-                                                    install_peer,
-                                                    successFn,
-                                                ) catch null) |new_resolve_result| {
-                                                    resolve_result_ = new_resolve_result;
-                                                    _ = this.network_dedupe_map.remove(task_id);
-                                                    continue :retry_with_new_resolve_result;
-                                                }
-                                            }
-                                        }
-
-                                        // Was it recent enough to just load it without the network call?
-                                        if (this.options.enable.manifest_cache_control and !expired) {
-                                            _ = this.network_dedupe_map.remove(task_id);
-                                            continue :retry_from_manifests_ptr;
-                                        }
-                                    }
-                                }
-
-                                if (PackageManager.verbose_install) {
-                                    Output.prettyErrorln("Enqueue package manifest for download: {s}", .{name_str});
-                                }
-
-                                var network_task = this.getNetworkTask();
-                                network_task.* = .{
-                                    .package_manager = this,
-                                    .callback = undefined,
-                                    .task_id = task_id,
-                                    .allocator = this.allocator,
-                                };
-
-                                try network_task.forManifest(
-                                    name_str,
-                                    this.allocator,
-                                    this.scopeForPackageName(name_str),
-                                    if (loaded_manifest) |*manifest| manifest else null,
-                                    dependency.behavior.isOptional(),
-                                    needs_extended_manifest,
-                                );
-                                this.enqueueNetworkTask(network_task);
-                            }
-                        } else {
-                            try this.peer_dependencies.writeItem(id);
-                            return;
-                        }
-
-                        var manifest_entry_parse = try this.task_queue.getOrPutContext(this.allocator, task_id, .{});
-                        if (!manifest_entry_parse.found_existing) {
-                            manifest_entry_parse.value_ptr.* = TaskCallbackList{};
-                        }
-
-                        const callback_tag = comptime if (successFn == assignRootResolution) "root_dependency" else "dependency";
-                        try manifest_entry_parse.value_ptr.append(this.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
-                    }
-                    return;
-                }
-            }
-            return;
-        },
-        .git => {
-            const dep = &version.value.git;
-            const res = Resolution{
-                .tag = .git,
-                .value = .{
-                    .git = dep.*,
-                },
-            };
-
-            // First: see if we already loaded the git package in-memory
-            if (this.lockfile.getPackageID(name_hash, null, &res)) |pkg_id| {
-                successFn(this, id, pkg_id);
-                return;
-            }
-
-            const alias = this.lockfile.str(&dependency.name);
-            const url = this.lockfile.str(&dep.repo);
-            const clone_id = Task.Id.forGitClone(url);
-            const ctx = @unionInit(
-                TaskCallbackContext,
-                if (successFn == assignRootResolution) "root_dependency" else "dependency",
-                id,
-            );
-
-            if (comptime Environment.allow_assert)
-                debug(
-                    "enqueueDependency({d}, {s}, {s}, {s}) = {s}",
-                    .{
-                        id,
-                        @tagName(version.tag),
-                        this.lockfile.str(&name),
-                        this.lockfile.str(&version.literal),
-                        url,
-                    },
-                );
-
-            if (this.git_repositories.get(clone_id)) |repo_fd| {
-                const resolved = try Repository.findCommit(
-                    this.allocator,
-                    this.env,
-                    this.log,
-                    repo_fd.stdDir(),
-                    alias,
-                    this.lockfile.str(&dep.committish),
-                    clone_id,
-                );
-                const checkout_id = Task.Id.forGitCheckout(url, resolved);
-
-                var entry = this.task_queue.getOrPutContext(this.allocator, checkout_id, .{}) catch unreachable;
-                if (!entry.found_existing) entry.value_ptr.* = .{};
-                if (this.lockfile.buffers.resolutions.items[id] == invalid_package_id) {
-                    try entry.value_ptr.append(this.allocator, ctx);
-                }
-
-                if (dependency.behavior.isPeer()) {
-                    if (!install_peer) {
-                        try this.peer_dependencies.writeItem(id);
-                        return;
-                    }
-                }
-
-                if (this.hasCreatedNetworkTask(checkout_id, dependency.behavior.isRequired())) return;
-
-                this.task_batch.push(ThreadPool.Batch.from(this.enqueueGitCheckout(
-                    checkout_id,
-                    repo_fd,
-                    id,
-                    alias,
-                    res,
-                    resolved,
-                    null,
-                )));
-            } else {
-                var entry = this.task_queue.getOrPutContext(this.allocator, clone_id, .{}) catch unreachable;
-                if (!entry.found_existing) entry.value_ptr.* = .{};
-                try entry.value_ptr.append(this.allocator, ctx);
-
-                if (dependency.behavior.isPeer()) {
-                    if (!install_peer) {
-                        try this.peer_dependencies.writeItem(id);
-                        return;
-                    }
-                }
-
-                if (this.hasCreatedNetworkTask(clone_id, dependency.behavior.isRequired())) return;
-
-                this.task_batch.push(ThreadPool.Batch.from(enqueueGitClone(this, clone_id, alias, dep, id, dependency, &res, null)));
-            }
-        },
-        .github => {
-            const dep = &version.value.github;
-            const res = Resolution{
-                .tag = .github,
-                .value = .{
-                    .github = dep.*,
-                },
-            };
-
-            // First: see if we already loaded the github package in-memory
-            if (this.lockfile.getPackageID(name_hash, null, &res)) |pkg_id| {
-                successFn(this, id, pkg_id);
-                return;
-            }
-
-            const url = this.allocGitHubURL(dep);
-            defer this.allocator.free(url);
-            const task_id = Task.Id.forTarball(url);
-            var entry = this.task_queue.getOrPutContext(this.allocator, task_id, .{}) catch unreachable;
-            if (!entry.found_existing) {
-                entry.value_ptr.* = TaskCallbackList{};
-            }
-
-            if (comptime Environment.allow_assert)
-                debug(
-                    "enqueueDependency({d}, {s}, {s}, {s}) = {s}",
-                    .{
-                        id,
-                        @tagName(version.tag),
-                        this.lockfile.str(&name),
-                        this.lockfile.str(&version.literal),
-                        url,
-                    },
-                );
-
-            const callback_tag = comptime if (successFn == assignRootResolution) "root_dependency" else "dependency";
-            try entry.value_ptr.append(this.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
-
-            if (dependency.behavior.isPeer()) {
-                if (!install_peer) {
-                    try this.peer_dependencies.writeItem(id);
-                    return;
-                }
-            }
-
-            if (try this.generateNetworkTaskForTarball(
-                task_id,
-                url,
-                dependency.behavior.isRequired(),
-                id,
-                .{
-                    .name = dependency.name,
-                    .name_hash = dependency.name_hash,
-                    .resolution = res,
-                },
-                null,
-                .no_authorization,
-            )) |network_task| {
-                this.enqueueNetworkTask(network_task);
-            }
-        },
-        inline .symlink, .workspace => |dependency_tag| {
-            const _result = getOrPutResolvedPackage(
-                this,
-                name_hash,
-                name,
-                dependency,
-                version,
-                dependency.behavior,
-                id,
-                resolution,
-                install_peer,
-                successFn,
-            ) catch |err| brk: {
-                if (err == error.MissingPackageJSON) {
-                    break :brk @as(?ResolvedPackageResult, null);
-                }
-
-                return err;
-            };
-
-            const workspace_not_found_fmt =
-                \\Workspace dependency "{[name]s}" not found
-                \\
-                \\Searched in <b>{[search_path]f}<r>
-                \\
-                \\Workspace documentation: https://bun.com/docs/install/workspaces
-                \\
-            ;
-            const link_not_found_fmt =
-                \\Package "{[name]s}" is not linked
-                \\
-                \\To install a linked package:
-                \\   <cyan>bun link my-pkg-name-from-package-json<r>
-                \\
-                \\Tip: the package name is from package.json, which can differ from the folder name.
-                \\
-            ;
-            if (_result) |result| {
-                // First time?
-                if (result.is_first_time) {
-                    if (PackageManager.verbose_install) {
-                        const label: string = this.lockfile.str(&version.literal);
-
-                        Output.prettyErrorln("   -> \"{s}\": \"{s}\" -> {s}@{f}", .{
-                            this.lockfile.str(&result.package.name),
-                            label,
-                            this.lockfile.str(&result.package.name),
-                            result.package.resolution.fmt(this.lockfile.buffers.string_bytes.items, .auto),
-                        });
-                    }
-                    // We shouldn't see any dependencies
-                    if (result.package.dependencies.len > 0) {
-                        try this.lockfile.scratch.dependency_list_queue.writeItem(result.package.dependencies);
-                    }
-                }
-
-                // should not trigger a network call
-                if (comptime Environment.allow_assert) bun.assert(result.task == null);
-
-                if (comptime Environment.allow_assert)
-                    debug(
-                        "enqueueDependency({d}, {s}, {s}, {s}) = {d}",
-                        .{
-                            id,
-                            @tagName(version.tag),
-                            this.lockfile.str(&name),
-                            this.lockfile.str(&version.literal),
-                            result.package.meta.id,
-                        },
-                    );
-            } else if (dependency.behavior.isRequired()) {
-                if (comptime dependency_tag == .workspace) {
-                    this.log.addErrorFmt(
-                        null,
-                        logger.Loc.Empty,
-                        this.allocator,
-                        workspace_not_found_fmt,
-                        .{
-                            .name = this.lockfile.str(&name),
-                            .search_path = FolderResolution.PackageWorkspaceSearchPathFormatter{ .manager = this, .version = version },
-                        },
-                    ) catch unreachable;
-                } else {
-                    this.log.addErrorFmt(
-                        null,
-                        logger.Loc.Empty,
-                        this.allocator,
-                        link_not_found_fmt,
-                        .{
-                            .name = this.lockfile.str(&name),
-                        },
-                    ) catch unreachable;
-                }
-            } else if (this.options.log_level.isVerbose()) {
-                if (comptime dependency_tag == .workspace) {
-                    this.log.addWarningFmt(
-                        null,
-                        logger.Loc.Empty,
-                        this.allocator,
-                        workspace_not_found_fmt,
-                        .{
-                            .name = this.lockfile.str(&name),
-                            .search_path = FolderResolution.PackageWorkspaceSearchPathFormatter{ .manager = this, .version = version },
-                        },
-                    ) catch unreachable;
-                } else {
-                    this.log.addWarningFmt(
-                        null,
-                        logger.Loc.Empty,
-                        this.allocator,
-                        link_not_found_fmt,
-                        .{
-                            .name = this.lockfile.str(&name),
-                        },
-                    ) catch unreachable;
-                }
-            }
-        },
-        .tarball => {
-            const res: Resolution = switch (version.value.tarball.uri) {
-                .local => |path| .{
-                    .tag = .local_tarball,
-                    .value = .{
-                        .local_tarball = path,
-                    },
-                },
-                .remote => |url| .{
-                    .tag = .remote_tarball,
-                    .value = .{
-                        .remote_tarball = url,
-                    },
-                },
-            };
-
-            // First: see if we already loaded the tarball package in-memory
-            if (this.lockfile.getPackageID(name_hash, null, &res)) |pkg_id| {
-                successFn(this, id, pkg_id);
-                return;
-            }
-
-            const url = switch (version.value.tarball.uri) {
-                .local => |path| this.lockfile.str(&path),
-                .remote => |url| this.lockfile.str(&url),
-            };
-            const task_id = Task.Id.forTarball(url);
-            var entry = this.task_queue.getOrPutContext(this.allocator, task_id, .{}) catch unreachable;
-            if (!entry.found_existing) {
-                entry.value_ptr.* = TaskCallbackList{};
-            }
-
-            if (comptime Environment.allow_assert)
-                debug(
-                    "enqueueDependency({d}, {s}, {s}, {s}) = {s}",
-                    .{
-                        id,
-                        @tagName(version.tag),
-                        this.lockfile.str(&name),
-                        this.lockfile.str(&version.literal),
-                        url,
-                    },
-                );
-
-            const callback_tag = comptime if (successFn == assignRootResolution) "root_dependency" else "dependency";
-            try entry.value_ptr.append(this.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
-
-            if (dependency.behavior.isPeer()) {
-                if (!install_peer) {
-                    try this.peer_dependencies.writeItem(id);
-                    return;
-                }
-            }
-
-            switch (version.value.tarball.uri) {
-                .local => {
-                    if (this.hasCreatedNetworkTask(task_id, dependency.behavior.isRequired())) return;
-
-                    this.task_batch.push(ThreadPool.Batch.from(enqueueLocalTarball(
-                        this,
-                        task_id,
-                        id,
-                        this.lockfile.str(&dependency.name),
-                        url,
-                        res,
-                        .{},
-                    )));
-                },
-                .remote => {
-                    if (try this.generateNetworkTaskForTarball(
-                        task_id,
-                        url,
-                        dependency.behavior.isRequired(),
-                        id,
-                        .{
-                            .name = dependency.name,
-                            .name_hash = dependency.name_hash,
-                            .resolution = res,
-                        },
-                        null,
-                        .no_authorization,
-                    )) |network_task| {
-                        this.enqueueNetworkTask(network_task);
-                    }
-                },
-            }
-        },
-        else => {},
-    }
-}
-
-/// Allocate and initialise an `.extract` Task for an npm tarball.
-/// Shared by the buffered path (`enqueueExtractNPMPackage`) and the
-/// streaming path (`createExtractTaskForStreaming`) so both produce
-/// an identical Task shape; only the return type differs.
-///
-/// Intentionally does *not* move `network_task.apply_patch_task`: the
-/// install phase creates its own PatchTask via `PackageInstaller`, so
-/// applying it here would run the patch twice.
-fn initExtractTask(
-    this: *PackageManager,
-    tarball: *const ExtractTarball,
-    network_task: *NetworkTask,
-) *Task {
-    var task = this.preallocated_resolve_tasks.get();
-    task.* = Task{
-        .package_manager = this,
-        .log = logger.Log.init(this.allocator),
-        .tag = Task.Tag.extract,
-        .request = .{
-            .extract = .{
-                .network = network_task,
-                .tarball = tarball.*,
-            },
-        },
-        .id = network_task.task_id,
-        .data = undefined,
-    };
-    task.request.extract.tarball.skip_verify = !this.options.do.verify_integrity;
-    return task;
-}
-
-pub fn enqueueExtractNPMPackage(
-    this: *PackageManager,
-    tarball: *const ExtractTarball,
-    network_task: *NetworkTask,
-) *ThreadPool.Task {
-    return &initExtractTask(this, tarball, network_task).threadpool_task;
-}
-
-/// Allocate the extract Task up front so the streaming extractor can
-/// publish it to `resolve_tasks` when extraction finishes. Done on the
-/// main thread because `preallocated_resolve_tasks` is not thread-safe.
-/// The NetworkTask's pending-task slot is reused for the extraction so
-/// progress counters stay balanced.
-pub fn createExtractTaskForStreaming(
-    this: *PackageManager,
-    tarball: *const ExtractTarball,
-    network_task: *NetworkTask,
-) *Task {
-    return initExtractTask(this, tarball, network_task);
-}
-
-fn enqueueGitClone(
-    this: *PackageManager,
-    task_id: Task.Id,
-    name: string,
-    repository: *const Repository,
-    dep_id: DependencyID,
-    dependency: *const Dependency,
-    res: *const Resolution,
-    /// if patched then we need to do apply step after network task is done
-    patch_name_and_version_hash: ?u64,
-) *ThreadPool.Task {
-    var task = this.preallocated_resolve_tasks.get();
-    task.* = Task{
-        .package_manager = this,
-        .log = logger.Log.init(this.allocator),
-        .tag = Task.Tag.git_clone,
-        .request = .{
-            .git_clone = .{
-                .name = strings.StringOrTinyString.initAppendIfNeeded(
-                    name,
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .url = strings.StringOrTinyString.initAppendIfNeeded(
-                    this.lockfile.str(&repository.repo),
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .env = Repository.shared_env.get(this.allocator, this.env),
-                .dep_id = dep_id,
-                .res = res.*,
-            },
-        },
-        .id = task_id,
-        .apply_patch_task = if (patch_name_and_version_hash) |h| brk: {
-            const dep = dependency;
-            const pkg_id = switch (this.lockfile.package_index.get(dep.name_hash) orelse @panic("Package not found")) {
-                .id => |p| p,
-                .ids => |ps| ps.items[0], // TODO is this correct
-            };
-            const patch_hash = this.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-            const pt = PatchTask.newApplyPatchHash(this, pkg_id, patch_hash, h);
-            pt.callback.apply.task_id = task_id;
-            break :brk pt;
-        } else null,
-        .data = undefined,
-    };
-    return &task.threadpool_task;
-}
-
-pub fn enqueueGitCheckout(
-    this: *PackageManager,
-    task_id: Task.Id,
-    dir: bun.FD,
-    dependency_id: DependencyID,
-    name: string,
-    resolution: Resolution,
-    resolved: string,
-    /// if patched then we need to do apply step after network task is done
-    patch_name_and_version_hash: ?u64,
-) *ThreadPool.Task {
-    var task = this.preallocated_resolve_tasks.get();
-    task.* = Task{
-        .package_manager = this,
-        .log = logger.Log.init(this.allocator),
-        .tag = Task.Tag.git_checkout,
-        .request = .{
-            .git_checkout = .{
-                .repo_dir = dir,
-                .resolution = resolution,
-                .dependency_id = dependency_id,
-                .name = strings.StringOrTinyString.initAppendIfNeeded(
-                    name,
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .url = strings.StringOrTinyString.initAppendIfNeeded(
-                    this.lockfile.str(&resolution.value.git.repo),
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .resolved = strings.StringOrTinyString.initAppendIfNeeded(
-                    resolved,
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .env = Repository.shared_env.get(this.allocator, this.env),
-            },
-        },
-        .apply_patch_task = if (patch_name_and_version_hash) |h| brk: {
-            const dep = this.lockfile.buffers.dependencies.items[dependency_id];
-            const pkg_id = switch (this.lockfile.package_index.get(dep.name_hash) orelse @panic("Package not found")) {
-                .id => |p| p,
-                .ids => |ps| ps.items[0], // TODO is this correct
-            };
-            const patch_hash = this.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-            const pt = PatchTask.newApplyPatchHash(this, pkg_id, patch_hash, h);
-            pt.callback.apply.task_id = task_id;
-            break :brk pt;
-        } else null,
-        .id = task_id,
-        .data = undefined,
-    };
-    return &task.threadpool_task;
-}
-
-fn enqueueLocalTarball(
-    this: *PackageManager,
-    task_id: Task.Id,
-    dependency_id: DependencyID,
-    name: string,
-    path: string,
-    resolution: Resolution,
-    integrity: Integrity,
-) *ThreadPool.Task {
-    // Resolve the on-disk tarball path here on the main thread. The task
-    // callback runs on a ThreadPool worker and must not read
-    // `lockfile.packages` / `lockfile.buffers.string_bytes`: those buffers
-    // can be reallocated concurrently by the main thread while processing
-    // other dependencies (e.g. `appendPackage` / `StringBuilder.allocate`
-    // in `Package.fromNPM`).
-    var abs_buf: bun.PathBuffer = undefined;
-    const tarball_path, const normalize = tarball_path: {
-        const workspace_pkg_id = this.lockfile.getWorkspacePkgIfWorkspaceDep(dependency_id);
-        if (workspace_pkg_id == invalid_package_id) break :tarball_path .{ path, true };
-
-        const workspace_res = this.lockfile.packages.items(.resolution)[workspace_pkg_id];
-        if (workspace_res.tag != .workspace) break :tarball_path .{ path, true };
-
-        // Construct an absolute path to the tarball.
-        // Normally tarball paths are always relative to the root directory, but if a
-        // workspace depends on a tarball path, it should be relative to the workspace.
-        const workspace_path = workspace_res.value.workspace.slice(this.lockfile.buffers.string_bytes.items);
-        break :tarball_path .{
-            Path.joinAbsStringBuf(
-                FileSystem.instance.top_level_dir,
-                &abs_buf,
-                &[_][]const u8{
-                    workspace_path,
-                    path,
-                },
-                .auto,
-            ),
-            false,
-        };
-    };
-
-    var task = this.preallocated_resolve_tasks.get();
-    task.* = Task{
-        .package_manager = this,
-        .log = logger.Log.init(this.allocator),
-        .tag = Task.Tag.local_tarball,
-        .request = .{
-            .local_tarball = .{
-                .tarball = .{
-                    .package_manager = this,
-                    .name = strings.StringOrTinyString.initAppendIfNeeded(
-                        name,
-                        *FileSystem.FilenameStore,
-                        FileSystem.FilenameStore.instance,
-                    ) catch unreachable,
-                    .resolution = resolution,
-                    .cache_dir = this.getCacheDirectory(),
-                    .temp_dir = this.getTemporaryDirectory().handle,
-                    .dependency_id = dependency_id,
-                    .integrity = integrity,
-                    .url = strings.StringOrTinyString.initAppendIfNeeded(
-                        path,
-                        *FileSystem.FilenameStore,
-                        FileSystem.FilenameStore.instance,
-                    ) catch unreachable,
-                },
-                .tarball_path = strings.StringOrTinyString.initAppendIfNeeded(
-                    tarball_path,
-                    *FileSystem.FilenameStore,
-                    FileSystem.FilenameStore.instance,
-                ) catch unreachable,
-                .normalize = normalize,
-            },
-        },
-        .id = task_id,
-        .data = undefined,
-    };
-    return &task.threadpool_task;
-}
-
-fn updateNameAndNameHashFromVersionReplacement(
-    lockfile: *const Lockfile,
-    original_name: String,
-    original_name_hash: PackageNameHash,
-    new_version: Dependency.Version,
-) struct { String, PackageNameHash } {
-    return switch (new_version.tag) {
-        // only get name hash for npm and dist_tag. git, github, tarball don't have names until after extracting tarball
-        .dist_tag => .{ new_version.value.dist_tag.name, String.Builder.stringHash(lockfile.str(&new_version.value.dist_tag.name)) },
-        .npm => .{ new_version.value.npm.name, String.Builder.stringHash(lockfile.str(&new_version.value.npm.name)) },
-        .git => .{ new_version.value.git.package_name, original_name_hash },
-        .github => .{ new_version.value.github.package_name, original_name_hash },
-        .tarball => .{ new_version.value.tarball.package_name, original_name_hash },
-        else => .{ original_name, original_name_hash },
-    };
-}
-
-pub const ResolvedPackageResult = struct {
-    package: Lockfile.Package,
-
-    /// Is this the first time we've seen this package?
-    is_first_time: bool = false,
-
-    task: ?union(enum) {
-        /// Pending network task to schedule
-        network_task: *NetworkTask,
-
-        /// Apply patch task or calc patch hash task
-        patch_task: *PatchTask,
-    } = null,
-};
-
-fn getOrPutResolvedPackageWithFindResult(
-    this: *PackageManager,
-    name_hash: PackageNameHash,
-    name: String,
-    dependency: *const Dependency,
-    version: Dependency.Version,
-    dependency_id: DependencyID,
-    behavior: Behavior,
-    manifest: *const Npm.PackageManifest,
-    find_result: Npm.PackageManifest.FindResult,
-    install_peer: bool,
-    comptime successFn: SuccessFn,
-) !?ResolvedPackageResult {
-    const should_update = this.to_update and
-        // If updating, only update packages in the current workspace
-        this.lockfile.isRootDependency(this, dependency_id) and
-        // no need to do a look up if update requests are empty (`bun update` with no args)
-        (this.update_requests.len == 0 or
-            this.updating_packages.contains(dependency.name.slice(this.lockfile.buffers.string_bytes.items)));
-
-    // Was this package already allocated? Let's reuse the existing one.
-    if (this.lockfile.getPackageID(
-        name_hash,
-        if (should_update) null else version,
-        &.{
-            .tag = .npm,
-            .value = .{
-                .npm = .{
-                    .version = find_result.version,
-                    .url = find_result.package.tarball_url.value,
-                },
-            },
-        },
-    )) |id| {
-        successFn(this, dependency_id, id);
-        return .{
-            .package = this.lockfile.packages.get(id),
-            .is_first_time = false,
-        };
-    } else if (behavior.isPeer() and !install_peer) {
-        return null;
-    }
-
-    // appendPackage sets the PackageID on the package
-    const package = try this.lockfile.appendPackage(try Lockfile.Package.fromNPM(
-        this,
-        this.allocator,
-        this.lockfile,
-        this.log,
-        manifest,
-        find_result.version,
-        find_result.package,
-        Features.npm,
-    ));
-
-    if (comptime Environment.allow_assert) bun.assert(package.meta.id != invalid_package_id);
-    defer successFn(this, dependency_id, package.meta.id);
-
-    // non-null if the package is in "patchedDependencies"
-    var name_and_version_hash: ?u64 = null;
-    var patchfile_hash: ?u64 = null;
-
-    return switch (this.determinePreinstallState(
-        package,
-        this.lockfile,
-        &name_and_version_hash,
-        &patchfile_hash,
-    )) {
-        // Is this package already in the cache?
-        // We don't need to download the tarball, but we should enqueue dependencies
-        .done => .{ .package = package, .is_first_time = true },
-        // Do we need to download the tarball?
-        .extract => extract: {
-            // Skip tarball download when prefetch_resolved_tarballs is disabled (e.g., --lockfile-only)
-            if (!this.options.do.prefetch_resolved_tarballs) {
-                break :extract .{ .package = package, .is_first_time = true };
-            }
-
-            const task_id = Task.Id.forNPMPackage(this.lockfile.str(&name), package.resolution.value.npm.version);
-            bun.debugAssert(!this.network_dedupe_map.contains(task_id));
-
-            break :extract .{
-                .package = package,
-                .is_first_time = true,
-                .task = .{
-                    .network_task = try this.generateNetworkTaskForTarball(
-                        task_id,
-                        manifest.str(&find_result.package.tarball_url),
-                        behavior.isRequired(),
-                        dependency_id,
-                        package,
-                        name_and_version_hash,
-                        // its npm.
-                        .allow_authorization,
-                    ) orelse unreachable,
-                },
-            };
-        },
-        .calc_patch_hash => .{
-            .package = package,
-            .is_first_time = true,
-            .task = .{
-                .patch_task = PatchTask.newCalcPatchHash(
-                    this,
-                    name_and_version_hash.?,
-                    .{
-                        .pkg_id = package.meta.id,
-                        .dependency_id = dependency_id,
-                        .url = bun.handleOom(this.allocator.dupe(u8, manifest.str(&find_result.package.tarball_url))),
-                    },
-                ),
-            },
-        },
-        .apply_patch => .{
-            .package = package,
-            .is_first_time = true,
-            .task = .{
-                .patch_task = PatchTask.newApplyPatchHash(
-                    this,
-                    package.meta.id,
-                    patchfile_hash.?,
-                    name_and_version_hash.?,
-                ),
-            },
-        },
-        else => unreachable,
-    };
-}
-
-fn getOrPutResolvedPackage(
-    this: *PackageManager,
-    name_hash: PackageNameHash,
-    name: String,
-    dependency: *const Dependency,
-    version: Dependency.Version,
-    behavior: Behavior,
-    dependency_id: DependencyID,
-    resolution: PackageID,
-    install_peer: bool,
-    comptime successFn: SuccessFn,
-) !?ResolvedPackageResult {
-    if (install_peer and behavior.isPeer()) {
-        if (this.lockfile.package_index.get(name_hash)) |index| {
-            const resolutions: []Resolution = this.lockfile.packages.items(.resolution);
-            switch (index) {
-                .id => |existing_id| {
-                    if (existing_id < resolutions.len) {
-                        const existing_resolution = resolutions[existing_id];
-                        if (resolutionSatisfiesDependency(this, existing_resolution, version)) {
-                            successFn(this, dependency_id, existing_id);
-                            return .{
-                                // we must fetch it from the packages array again, incase the package array mutates the value in the `successFn`
-                                .package = this.lockfile.packages.get(existing_id),
-                            };
-                        }
-
-                        const res_tag = resolutions[existing_id].tag;
-                        const ver_tag = version.tag;
-                        if ((res_tag == .npm and ver_tag == .npm) or (res_tag == .git and ver_tag == .git) or (res_tag == .github and ver_tag == .github)) {
-                            const existing_package = this.lockfile.packages.get(existing_id);
-                            this.log.addWarningFmt(
-                                null,
-                                logger.Loc.Empty,
-                                this.allocator,
-                                "incorrect peer dependency \"{f}@{f}\"",
-                                .{
-                                    existing_package.name.fmt(this.lockfile.buffers.string_bytes.items),
-                                    existing_package.resolution.fmt(this.lockfile.buffers.string_bytes.items, .auto),
-                                },
-                            ) catch unreachable;
-                            successFn(this, dependency_id, existing_id);
-                            return .{
-                                // we must fetch it from the packages array again, incase the package array mutates the value in the `successFn`
-                                .package = this.lockfile.packages.get(existing_id),
-                            };
-                        }
-                    }
-                },
-                .ids => |list| {
-                    for (list.items) |existing_id| {
-                        if (existing_id < resolutions.len) {
-                            const existing_resolution = resolutions[existing_id];
-                            if (resolutionSatisfiesDependency(this, existing_resolution, version)) {
-                                successFn(this, dependency_id, existing_id);
-                                return .{
-                                    .package = this.lockfile.packages.get(existing_id),
-                                };
-                            }
-                        }
-                    }
-
-                    if (list.items[0] < resolutions.len) {
-                        const res_tag = resolutions[list.items[0]].tag;
-                        const ver_tag = version.tag;
-                        if ((res_tag == .npm and ver_tag == .npm) or (res_tag == .git and ver_tag == .git) or (res_tag == .github and ver_tag == .github)) {
-                            const existing_package_id = list.items[0];
-                            const existing_package = this.lockfile.packages.get(existing_package_id);
-                            this.log.addWarningFmt(
-                                null,
-                                logger.Loc.Empty,
-                                this.allocator,
-                                "incorrect peer dependency \"{f}@{f}\"",
-                                .{
-                                    existing_package.name.fmt(this.lockfile.buffers.string_bytes.items),
-                                    existing_package.resolution.fmt(this.lockfile.buffers.string_bytes.items, .auto),
-                                },
-                            ) catch unreachable;
-                            successFn(this, dependency_id, list.items[0]);
-                            return .{
-                                // we must fetch it from the packages array again, incase the package array mutates the value in the `successFn`
-                                .package = this.lockfile.packages.get(existing_package_id),
-                            };
-                        }
-                    }
-                },
-            }
-        }
-    }
-
-    if (resolution < this.lockfile.packages.len) {
-        return .{ .package = this.lockfile.packages.get(resolution) };
-    }
-
-    switch (version.tag) {
-        .npm, .dist_tag => {
-            resolve_from_workspace: {
-                if (version.tag == .npm) {
-                    const workspace_path = if (this.lockfile.workspace_paths.count() > 0) this.lockfile.workspace_paths.get(name_hash) else null;
-                    const workspace_version = this.lockfile.workspace_versions.get(name_hash);
-                    const buf = this.lockfile.buffers.string_bytes.items;
-                    if (this.options.link_workspace_packages and
-                        (((workspace_version != null and version.value.npm.version.satisfies(workspace_version.?, buf, buf)) or
-                            // https://github.com/oven-sh/bun/pull/10899#issuecomment-2099609419
-                            // if the workspace doesn't have a version, it can still be used if
-                            // dependency version is wildcard
-                            (workspace_path != null and version.value.npm.version.@"is *"()))))
-                    {
-                        const root_package = this.lockfile.rootPackage() orelse break :resolve_from_workspace;
-                        const root_dependencies = root_package.dependencies.get(this.lockfile.buffers.dependencies.items);
-                        const root_resolutions = root_package.resolutions.get(this.lockfile.buffers.resolutions.items);
-
-                        for (root_dependencies, root_resolutions) |root_dep, workspace_package_id| {
-                            if (workspace_package_id != invalid_package_id and root_dep.version.tag == .workspace and root_dep.name_hash == name_hash) {
-                                // make sure verifyResolutions sees this resolution as a valid package id
-                                successFn(this, dependency_id, workspace_package_id);
-                                return .{
-                                    .package = this.lockfile.packages.get(workspace_package_id),
-                                    .is_first_time = false,
-                                };
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Resolve the version from the loaded NPM manifest
-            const name_str = this.lockfile.str(&name);
-
-            const manifest = this.manifests.byNameHash(
-                this,
-                this.scopeForPackageName(name_str),
-                name_hash,
-                .load_from_memory_fallback_to_disk,
-                this.options.minimum_release_age_ms != null,
-            ) orelse return null; // manifest might still be downloading. This feels unreliable.
-
-            const version_result: Npm.PackageManifest.FindVersionResult = switch (version.tag) {
-                .dist_tag => manifest.findByDistTagWithFilter(this.lockfile.str(&version.value.dist_tag.tag), this.options.minimum_release_age_ms, this.options.minimum_release_age_excludes),
-                .npm => manifest.findBestVersionWithFilter(version.value.npm.version, this.lockfile.buffers.string_bytes.items, this.options.minimum_release_age_ms, this.options.minimum_release_age_excludes),
-                else => unreachable,
-            };
-
-            const find_result: Npm.PackageManifest.FindResult = switch (version_result) {
-                .found => |result| result,
-                .found_with_filter => |filtered| blk: {
-                    const package_name = this.lockfile.str(&name);
-                    if (this.options.log_level.isVerbose()) {
-                        if (filtered.newest_filtered) |newest| {
-                            const min_age_seconds = (this.options.minimum_release_age_ms orelse 0) / std.time.ms_per_s;
-                            switch (version.tag) {
-                                .dist_tag => {
-                                    const tag_str = this.lockfile.str(&version.value.dist_tag.tag);
-                                    Output.prettyErrorln("<d>[minimum-release-age]<r> <b>{s}@{s}<r> selected <green>{f}<r> instead of <yellow>{f}<r> due to {d}-second filter", .{
-                                        package_name,
-                                        tag_str,
-                                        filtered.result.version.fmt(manifest.string_buf),
-                                        newest.fmt(manifest.string_buf),
-                                        min_age_seconds,
-                                    });
-                                },
-                                .npm => {
-                                    const version_str = version.value.npm.version.fmt(manifest.string_buf);
-                                    Output.prettyErrorln("<d>[minimum-release-age]<r> <b>{s}<r>@{f}<r> selected <green>{f}<r> instead of <yellow>{f}<r> due to {d}-second filter", .{
-                                        package_name,
-                                        version_str,
-                                        filtered.result.version.fmt(manifest.string_buf),
-                                        newest.fmt(manifest.string_buf),
-                                        min_age_seconds,
-                                    });
-                                },
-                                else => unreachable,
-                            }
-                        }
-                    }
-
-                    break :blk filtered.result;
-                },
-                .err => |err_type| switch (err_type) {
-                    .too_recent, .all_versions_too_recent => return error.TooRecentVersion,
-                    .not_found => null, // Handle below with existing logic
-                },
-            } orelse {
-                resolve_workspace_from_dist_tag: {
-                    // choose a workspace for a dist_tag only if a version was not found
-                    if (version.tag == .dist_tag) {
-                        const workspace_path = if (this.lockfile.workspace_paths.count() > 0) this.lockfile.workspace_paths.get(name_hash) else null;
-                        if (workspace_path != null) {
-                            const root_package = this.lockfile.rootPackage() orelse break :resolve_workspace_from_dist_tag;
-                            const root_dependencies = root_package.dependencies.get(this.lockfile.buffers.dependencies.items);
-                            const root_resolutions = root_package.resolutions.get(this.lockfile.buffers.resolutions.items);
-
-                            for (root_dependencies, root_resolutions) |root_dep, workspace_package_id| {
-                                if (workspace_package_id != invalid_package_id and root_dep.version.tag == .workspace and root_dep.name_hash == name_hash) {
-                                    // make sure verifyResolutions sees this resolution as a valid package id
-                                    successFn(this, dependency_id, workspace_package_id);
-                                    return .{
-                                        .package = this.lockfile.packages.get(workspace_package_id),
-                                        .is_first_time = false,
-                                    };
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (behavior.isPeer()) {
-                    return null;
-                }
-
-                return switch (version.tag) {
-                    .npm => error.NoMatchingVersion,
-                    .dist_tag => error.DistTagNotFound,
-                    else => unreachable,
-                };
-            };
-
-            return try getOrPutResolvedPackageWithFindResult(
-                this,
-                name_hash,
-                name,
-                dependency,
-                version,
-                dependency_id,
-                behavior,
-                manifest,
-                find_result,
-                install_peer,
-                successFn,
-            );
-        },
-
-        .folder => {
-            const res: FolderResolution = res: {
-                if (this.lockfile.isWorkspaceDependency(dependency_id)) {
-                    // relative to cwd
-                    const folder_path = this.lockfile.str(&version.value.folder);
-                    var buf2: bun.PathBuffer = undefined;
-                    const folder_path_abs = if (std.fs.path.isAbsolute(folder_path)) folder_path else blk: {
-                        break :blk Path.joinAbsStringBuf(
-                            FileSystem.instance.top_level_dir,
-                            &buf2,
-                            &.{folder_path},
-                            .auto,
-                        );
-                        // break :blk Path.joinAbsStringBuf(
-                        //     strings.withoutSuffixComptime(this.original_package_json_path, "package.json"),
-                        //     &buf2,
-                        //     &[_]string{folder_path},
-                        //     .auto,
-                        // );
-                    };
-
-                    // if (strings.eqlLong(strings.withoutTrailingSlash(folder_path_abs), strings.withoutTrailingSlash(FileSystem.instance.top_level_dir), true)) {
-                    //     successFn(this, dependency_id, 0);
-                    //     return .{ .package = this.lockfile.packages.get(0) };
-                    // }
-
-                    break :res FolderResolution.getOrPut(.{ .relative = .folder }, version, folder_path_abs, this);
-                }
-
-                // transitive folder dependencies do not have their dependencies resolved
-                var name_slice = this.lockfile.str(&name);
-                var folder_path = this.lockfile.str(&version.value.folder);
-                var package = Lockfile.Package{};
-
-                {
-                    // only need name and path
-                    var builder = this.lockfile.stringBuilder();
-
-                    builder.count(name_slice);
-                    builder.count(folder_path);
-
-                    bun.handleOom(builder.allocate());
-
-                    name_slice = this.lockfile.str(&name);
-                    folder_path = this.lockfile.str(&version.value.folder);
-
-                    package.name = builder.append(String, name_slice);
-                    package.name_hash = name_hash;
-
-                    package.resolution = Resolution.init(.{
-                        .folder = builder.append(String, folder_path),
-                    });
-
-                    package.scripts.filled = true;
-                    package.meta.setHasInstallScript(false);
-
-                    builder.clamp();
-                }
-
-                // these are always new
-                package = bun.handleOom(this.lockfile.appendPackage(package));
-
-                break :res .{
-                    .new_package_id = package.meta.id,
-                };
-            };
-
-            switch (res) {
-                .err => |err| return err,
-                .package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id) };
-                },
-
-                .new_package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id), .is_first_time = true };
-                },
-            }
-        },
-        .workspace => {
-            // package name hash should be used to find workspace path from map
-            const workspace_path_raw: *const String = this.lockfile.workspace_paths.getPtr(name_hash) orelse &version.value.workspace;
-            const workspace_path = this.lockfile.str(workspace_path_raw);
-            var buf2: bun.PathBuffer = undefined;
-            const workspace_path_u8 = if (std.fs.path.isAbsolute(workspace_path)) workspace_path else blk: {
-                break :blk Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, &buf2, &[_]string{workspace_path}, .auto);
-            };
-
-            const res = FolderResolution.getOrPut(.{ .relative = .workspace }, version, workspace_path_u8, this);
-
-            switch (res) {
-                .err => |err| return err,
-                .package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id) };
-                },
-
-                .new_package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id), .is_first_time = true };
-                },
-            }
-        },
-        .symlink => {
-            const res = FolderResolution.getOrPut(.{ .global = this.globalLinkDirPath() }, version, this.lockfile.str(&version.value.symlink), this);
-
-            switch (res) {
-                .err => |err| return err,
-                .package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id) };
-                },
-
-                .new_package_id => |package_id| {
-                    successFn(this, dependency_id, package_id);
-                    return .{ .package = this.lockfile.packages.get(package_id), .is_first_time = true };
-                },
-            }
-        },
-
-        else => return null,
-    }
-}
-
-fn resolutionSatisfiesDependency(this: *PackageManager, resolution: Resolution, dependency: Dependency.Version) bool {
-    const buf = this.lockfile.buffers.string_bytes.items;
-    if (resolution.tag == .npm and dependency.tag == .npm) {
-        return dependency.value.npm.version.satisfies(resolution.value.npm.version, buf, buf);
-    }
-
-    if (resolution.tag == .git and dependency.tag == .git) {
-        return resolution.value.git.eql(&dependency.value.git, buf, buf);
-    }
-
-    if (resolution.tag == .github and dependency.tag == .github) {
-        return resolution.value.github.eql(&dependency.value.github, buf, buf);
-    }
-
-    return false;
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const std = @import("std");
-
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const Output = bun.Output;
 const Path = bun.path;
 const ThreadPool = bun.ThreadPool;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const Semver = bun.Semver;
 const String = Semver.String;
-
 const Fs = bun.fs;
 const FileSystem = Fs.FileSystem;
-
 const Behavior = bun.install.Behavior;
 const Dependency = bun.install.Dependency;
 const DependencyID = bun.install.DependencyID;
@@ -2008,14 +29,11 @@ const Resolution = bun.install.Resolution;
 const Task = bun.install.Task;
 const TaskCallbackContext = bun.install.TaskCallbackContext;
 const invalid_package_id = bun.install.invalid_package_id;
-
 const Lockfile = bun.install.Lockfile;
 const Package = Lockfile.Package;
-
 const NetworkTask = bun.install.NetworkTask;
 const EnqueuePackageForDownloadError = NetworkTask.ForTarballError;
 const EnqueueTarballForDownloadError = NetworkTask.ForTarballError;
-
 const PackageManager = bun.install.PackageManager;
 const FailFn = PackageManager.FailFn;
 const SuccessFn = PackageManager.SuccessFn;
@@ -2024,3 +42,1172 @@ const assignResolution = PackageManager.assignResolution;
 const assignRootResolution = PackageManager.assignRootResolution;
 const debug = PackageManager.debug;
 const failRootResolution = PackageManager.failRootResolution;
+const DependencyToEnqueue = union(enum) {
+    pending: DependencyID,
+    resolution: struct { package_id: PackageID, resolution: Resolution },
+    not_found: void,
+    failure: anyerror,
+};
+const NameAndNameHash = struct { String, PackageNameHash };
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const ResolvedPackageTask = union(enum) {
+    network_task: *NetworkTask,
+    patch_task: *PatchTask,
+};
+
+pub const ResolvedPackageResult = struct {
+    package: Lockfile.Package,
+    is_first_time: bool = false,
+    task: ?ResolvedPackageTask = null,
+};
+
+
+pub fn enqueueDependencyWithMain(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool) !void {
+        _ = try mgr.enqueueDependencyWithMainAndSuccessFn(id, dependency, resolution, install_peer, assignResolution, null);
+}
+
+pub fn enqueueDependencyList(mgr: *PackageManager, dependencies_list: Lockfile.DependencySlice) void {
+        _ = ((mgr.task_queue.ensureUnusedCapacity(mgr.allocator, dependencies_list.len)) catch unreachable);
+        const lockfile = mgr.lockfile;
+        var begin = dependencies_list.off;
+        _ = &begin;
+        const end = (dependencies_list.off +| dependencies_list.len);
+        if ((((end - begin) > 1) and lockfile.buffers.dependencies.items[0].behavior.isPeer())) {
+            var peer_i: usize = 0;
+            _ = &peer_i;
+            var peer = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(peer_i))]);
+            _ = &peer;
+            while (peer.behavior.isPeer()) {
+                var dep_i: usize = (end - 1);
+                _ = &dep_i;
+                var dep = lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_i))];
+                _ = &dep;
+                while ((!dep.behavior.isPeer())) {
+                    if ((!dep.behavior.isDev())) {
+                        if ((peer.name_hash == dep.name_hash)) {
+                            peer.* = lockfile.buffers.dependencies.items[@as(usize, @intCast(begin))];
+                            begin = (begin + 1);
+                            break;
+                        }
+                    }
+                    dep_i = (dep_i - 1);
+                    dep = lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_i))];
+                }
+                peer_i = (peer_i + 1);
+                if ((peer_i == end)) {
+                    break;
+                }
+                peer = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(peer_i))]);
+            }
+        }
+        var i = begin;
+        _ = &i;
+        while ((i < end)) : (i = (i + 1)) {
+            const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
+            const resolution = lockfile.buffers.resolutions.items[@as(usize, @intCast(i))];
+            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const path_sep: bun.Path.PathSeparators = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any");
+            const note: __CpObj_fmt___const_u8_args_struct____anyopaque__ = .{ .fmt = "error occurred while resolving {f}", .args = .{ bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = path_sep }) } };
+            if ((dependency.behavior.isOptional() or dependency.behavior.isPeer())) {
+                _ = ((mgr.log.addWarningWithNote(null, .{}, mgr.allocator, @errorName(e), note.fmt, note.args)) catch unreachable);
+            } else {
+                _ = ((mgr.log.addZigErrorWithNote(mgr.allocator, e, note.fmt, note.args)) catch unreachable);
+            }
+            continue; }); });
+        }
+        _ = mgr.drainDependencyList();
+}
+
+pub fn enqueueTarballForDownload(mgr: *PackageManager, dependency_id: DependencyID, package_id: PackageID, url: []const u8, task_context: TaskCallbackContext, patch_name_and_version_hash: ?u64) EnqueueTarballForDownloadError!void {
+        const task_id = Task.Id.forTarball(url);
+        var task_queue = try mgr.task_queue.getOrPut(mgr.allocator, task_id);
+        _ = &task_queue;
+        if ((!task_queue.found_existing)) {
+            task_queue.value_ptr.* = .{};
+        }
+        _ = try task_queue.value_ptr.append(mgr.allocator, task_context);
+        if (task_queue.found_existing) {
+            return;
+        }
+        if (try mgr.generateNetworkTaskForTarball(task_id, url, mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))].behavior.isRequired(), dependency_id, mgr.lockfile.packages.get(package_id), patch_name_and_version_hash, .no_authorization)) |task| {
+            _ = &task;
+            _ = task.schedule((&mgr.network_tarball_batch));
+            if ((mgr.network_tarball_batch.len > 0)) {
+                _ = mgr.scheduleTasks();
+            }
+        }
+}
+
+pub fn enqueueTarballForReading(mgr: *PackageManager, dependency_id: DependencyID, package_id: PackageID, alias: []const u8, resolution: *const Resolution, task_context: TaskCallbackContext) void {
+        const path = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).local_tarball));
+        const task_id = Task.Id.forTarball(path);
+        var task_queue = ((mgr.task_queue.getOrPut(mgr.allocator, task_id)) catch unreachable);
+        _ = &task_queue;
+        if ((!task_queue.found_existing)) {
+            task_queue.value_ptr.* = .{};
+        }
+        _ = ((task_queue.value_ptr.append(mgr.allocator, task_context)) catch unreachable);
+        if (task_queue.found_existing) {
+            return;
+        }
+        const integrity = mgr.lockfile.packages.items(.@"meta")[@as(usize, @intCast(package_id))].integrity;
+        _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueLocalTarball(mgr, task_id, dependency_id, alias, path, resolution.*, integrity)));
+}
+
+pub fn enqueueGitForCheckout(mgr: *PackageManager, dependency_id: DependencyID, alias: []const u8, resolution: *const Resolution, task_context: TaskCallbackContext, patch_name_and_version_hash: ?u64) void {
+        const repository = (&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git);
+        const url = mgr.lockfile.str((&repository.repo));
+        const clone_id = Task.Id.forGitClone(url);
+        const resolved = mgr.lockfile.str((&repository.resolved));
+        const checkout_id = Task.Id.forGitCheckout(url, resolved);
+        var checkout_queue = ((mgr.task_queue.getOrPut(mgr.allocator, checkout_id)) catch unreachable);
+        _ = &checkout_queue;
+        if ((!checkout_queue.found_existing)) {
+            checkout_queue.value_ptr.* = .{};
+        }
+        _ = ((checkout_queue.value_ptr.append(mgr.allocator, task_context)) catch unreachable);
+        if (checkout_queue.found_existing) {
+            return;
+        }
+        if (mgr.git_repositories.get(clone_id)) |repo_fd| {
+            _ = &repo_fd;
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(mgr.enqueueGitCheckout(checkout_id, repo_fd, dependency_id, alias, resolution.*, resolved, patch_name_and_version_hash)));
+        } else {
+            var clone_queue = ((mgr.task_queue.getOrPut(mgr.allocator, clone_id)) catch unreachable);
+            _ = &clone_queue;
+            if ((!clone_queue.found_existing)) {
+                clone_queue.value_ptr.* = .{};
+            }
+            _ = ((clone_queue.value_ptr.append(mgr.allocator, .{ .dependency = dependency_id })) catch unreachable);
+            if (clone_queue.found_existing) {
+                return;
+            }
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, repository, dependency_id, (&mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))]), resolution, null)));
+        }
+}
+
+pub fn enqueueParseNPMPackage(mgr: *PackageManager, task_id: Task.Id, name: strings.StringOrTinyString, network_task: *NetworkTask) *ThreadPool.Task {
+        var task = mgr.preallocated_resolve_tasks.get();
+        _ = &task;
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.package_manifest, .request = .{ .package_manifest = .{ .network = network_task, .name = name } }, .id = task_id, .data = undefined };
+        return (blk: {
+        break :blk (&(task).?.threadpool_task);
+
+});
+}
+
+pub fn enqueuePackageForDownload(mgr: *PackageManager, name: []const u8, dependency_id: DependencyID, package_id: PackageID, version: bun.Semver.Version, url: []const u8, task_context: TaskCallbackContext, patch_name_and_version_hash: ?u64) EnqueuePackageForDownloadError!void {
+        const task_id = Task.Id.forNPMPackage(name, version);
+        var task_queue = try mgr.task_queue.getOrPut(mgr.allocator, task_id);
+        _ = &task_queue;
+        if ((!task_queue.found_existing)) {
+            task_queue.value_ptr.* = .{};
+        }
+        _ = try task_queue.value_ptr.append(mgr.allocator, task_context);
+        if (task_queue.found_existing) {
+            return;
+        }
+        const is_required = mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))].behavior.isRequired();
+        if (try mgr.generateNetworkTaskForTarball(task_id, url, is_required, dependency_id, mgr.lockfile.packages.get(package_id), patch_name_and_version_hash, .allow_authorization)) |task| {
+            _ = &task;
+            _ = task.schedule((&mgr.network_tarball_batch));
+            if ((mgr.network_tarball_batch.len > 0)) {
+                _ = mgr.scheduleTasks();
+            }
+        }
+}
+
+pub fn enqueueDependencyToRoot(mgr: *PackageManager, name: []const u8, version: *const Dependency.Version, version_buf: []const u8, behavior: Dependency.Behavior) DependencyToEnqueue {
+        const dep_id = @as(DependencyID, @truncate(brk: {
+        const str_buf = mgr.lockfile.buffers.string_bytes.items;
+        {
+            var id: i32 = 0;
+            _ = &id;
+            const __end_0 = mgr.lockfile.buffers.dependencies.items.len;
+            while (id < __end_0) : (id += 1) {
+                const dep = mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))];
+                if ((!strings.eqlLong(cp_iter_slice((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name))[@intCast(str_buf)..], name, true))) {
+                    continue;
+                }
+                if ((!dep.version.eql(version, str_buf, version_buf))) {
+                    continue;
+                }
+                break :brk id;
+            }
+        }
+        var builder = mgr.lockfile.stringBuilder();
+        _ = &builder;
+        const dummy = Dependency{ .name = String.init(name, name), .name_hash = String.Builder.stringHash(name), .version = version.*, .behavior = behavior };
+        _ = dummy.countWithDifferentBuffers(name, version_buf, @TypeOf((&builder)), (&builder));
+        _ = (blk_catch_10: { break :blk_catch_10 ((builder.allocate()) catch |e| { _ = &e; return .{ .failure = e }; }); });
+        const dep = ((dummy.cloneWithDifferentBuffers(mgr, name, version_buf, @TypeOf((&builder)), (&builder))) catch unreachable);
+        _ = builder.clamp();
+        const index = mgr.lockfile.buffers.dependencies.items.len;
+        _ = ((mgr.lockfile.buffers.dependencies.append(mgr.allocator, dep)) catch unreachable);
+        _ = ((mgr.lockfile.buffers.resolutions.append(mgr.allocator, invalid_package_id)) catch unreachable);
+        if (comptime Environment.allow_assert) {
+            _ = bun.assert((mgr.lockfile.buffers.dependencies.items.len == mgr.lockfile.buffers.resolutions.items.len));
+        }
+        break :brk index;
+}));
+        if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))] == invalid_package_id)) {
+            const dependency = mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+            _ = (blk_catch_14: { break :blk_catch_14 ((mgr.enqueueDependencyWithMainAndSuccessFn(dep_id, (&dependency), invalid_package_id, false, assignRootResolution, failRootResolution)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+        }
+        var resolution_id = mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+        _ = &resolution_id;
+        if ((resolution_id == invalid_package_id)) {
+            _ = mgr.drainDependencyList();
+            const Closure = struct {
+
+pub fn issue_19586_workaround() type {
+            return struct {
+    e: ?anyerror = null,
+    manager: *PackageManager,
+
+pub fn isDone(closure: *@This()) bool {
+            const manager = closure.manager;
+            if ((manager.pendingTaskCount() > 0)) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, .{}, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.err = e;
+                return true; }); });
+                if ((PackageManager.verbose_install and (manager.pendingTaskCount() > 0))) {
+                    if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
+                        _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ closure.manager.pendingTaskCount() });
+                    }
+                }
+            }
+            return (manager.pendingTaskCount() == 0);
+    }
+};
+    }
+}.issue_19586_workaround();
+            if (mgr.options.log_level.showProgress()) {
+                _ = mgr.startProgressBarIfNone();
+            }
+            var closure = Closure{ .manager = mgr };
+            _ = &closure;
+            _ = mgr.sleepUntil((&closure), (&Closure.isDone));
+            if (mgr.options.log_level.showProgress()) {
+                _ = mgr.endProgressBar();
+                _ = Output.flush();
+            }
+            if (closure.err) |e| {
+                _ = &e;
+                return .{ .failure = e };
+            }
+            resolution_id = mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+        }
+        if ((resolution_id == invalid_package_id)) {
+            return .{ .not_found = .{} };
+        }
+        return .{ .resolution = .{ .resolution = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(resolution_id))], .package_id = resolution_id } };
+}
+
+pub fn enqueueNetworkTask(client: *PackageManager, task: *NetworkTask) void {
+        if ((client.network_task_fifo.writableLength() == 0)) {
+            _ = client.flushNetworkQueue();
+        }
+        _ = client.network_task_fifo.writeItemAssumeCapacity(task);
+}
+
+pub fn enqueuePatchTask(client: *PackageManager, task: *PatchTask) void {
+        _ = debug("Enqueue patch task: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
+        if ((client.patch_task_fifo.writableLength() == 0)) {
+            _ = client.flushPatchTaskQueue();
+        }
+        _ = client.patch_task_fifo.writeItemAssumeCapacity(task);
+}
+
+pub fn enqueuePatchTaskPre(client: *PackageManager, task: *PatchTask) void {
+        _ = debug("Enqueue patch task pre: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
+        task.pre = true;
+        if ((client.patch_task_fifo.writableLength() == 0)) {
+            _ = client.flushPatchTaskQueue();
+        }
+        _ = client.patch_task_fifo.writeItemAssumeCapacity(task);
+        _ = client.pending_pre_calc_hashes.fetchAdd(1, .monotonic);
+}
+
+pub fn enqueueDependencyWithMainAndSuccessFn(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool, comptime successFn: anytype, comptime failFn: anytype) !void {
+        if (dependency.behavior.isOptionalPeer()) {
+            return;
+        }
+        var name = dependency.realname();
+        _ = &name;
+        var name_hash = (switch (dependency.version.tag) {
+.dist_tag, .git, .github, .npm, .tarball, .workspace => String.Builder.stringHash(mgr.lockfile.str(name)),
+else => dependency.name_hash,
+});
+        _ = &name_hash;
+        const version = version: {
+        if ((dependency.version.tag == .npm)) {
+            if (mgr.known_npm_aliases.get(name_hash)) |aliased| {
+                _ = &aliased;
+                const group = (if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value).npm.version;
+                const buf = mgr.lockfile.buffers.string_bytes.items;
+                var curr_list: ?*const Semver.Query.List = (&(if (@typeInfo(@TypeOf(aliased)) == .@"enum") @intFromEnum(aliased) else aliased.value).npm.version.head);
+                _ = &curr_list;
+                while (curr_list) |queries| {
+                    var curr: ?*const Semver.Query = (&queries.head);
+                    _ = &curr;
+                    while (curr) |query| {
+                        if ((group.satisfies(query.range.left.version, buf, buf) or group.satisfies(query.range.right.version, buf, buf))) {
+                            name = (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(aliased)) == .@"enum") @intFromEnum(aliased) else aliased.value).npm)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(aliased)) == .@"enum") @intFromEnum(aliased) else aliased.value).npm)) == .@"union") @tagName((if (@typeInfo(@TypeOf(aliased)) == .@"enum") @intFromEnum(aliased) else aliased.value).npm) else (if (@typeInfo(@TypeOf(aliased)) == .@"enum") @intFromEnum(aliased) else aliased.value).npm.name);
+                            name_hash = String.Builder.stringHash(mgr.lockfile.str(name));
+                            break :version aliased;
+                        }
+                        curr = query.next;
+                    }
+                    curr_list = queries.next;
+                }
+            }
+        }
+        if (((!dependency.behavior.isWorkspace()) and ((dependency.version.tag != .npm) or (!(if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value).npm.is_alias)))) {
+            if (mgr.lockfile.overrides.get(name_hash)) |new_override| {
+                _ = &new_override;
+                _ = debug("override: {s} -> {s}", .{ mgr.lockfile.str((&dependency.version.literal)), mgr.lockfile.str((&new_override.literal)) });
+                const name_pair = updateNameAndNameHashFromVersionReplacement(mgr.lockfile, name, name_hash, new_override);
+                name = name_pair[0];
+                name_hash = name_pair[1];
+                if ((new_override.tag == .catalog)) {
+                    if (mgr.lockfile.catalogs.get(mgr.lockfile, (if (@typeInfo(@TypeOf(new_override)) == .@"enum") @intFromEnum(new_override) else new_override.value).catalog, name)) |catalog_dep| {
+                        _ = &catalog_dep;
+                        const name_pair2 = updateNameAndNameHashFromVersionReplacement(mgr.lockfile, name, name_hash, catalog_dep.version);
+                        name = name_pair2[0];
+                        name_hash = name_pair2[1];
+                        break :version catalog_dep.version;
+                    }
+                }
+                break :version new_override;
+            }
+            if ((dependency.version.tag == .catalog)) {
+                if (mgr.lockfile.catalogs.get(mgr.lockfile, (if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value).catalog, name)) |catalog_dep| {
+                    _ = &catalog_dep;
+                    const name_pair3 = updateNameAndNameHashFromVersionReplacement(mgr.lockfile, name, name_hash, catalog_dep.version);
+                    name = name_pair3[0];
+                    name_hash = name_pair3[1];
+                    break :version catalog_dep.version;
+                }
+            }
+        }
+        break :version Dependency.Version{ .literal = dependency.version.literal, .tag = dependency.version.tag, .value = (if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value) };
+};
+        var loaded_manifest: ?Npm.PackageManifest = null;
+        _ = &loaded_manifest;
+        switch (version.tag) {
+.dist_tag, .folder, .npm => {
+{
+            retry_from_manifests_ptr: while (true) {
+                var resolve_result_ = getOrPutResolvedPackage(mgr, name_hash, name, dependency, version, dependency.behavior, id, resolution, install_peer, successFn);
+                _ = &resolve_result_;
+                retry_with_new_resolve_result: while (true) {
+                    const resolve_result = (blk_catch_15: { break :blk_catch_15 ((resolve_result_) catch |e| { _ = &e; break :blk_catch_15 @as(?ResolvedPackageResult, (switch (e) {
+error.DistTagNotFound => {
+{
+                        if (dependency.behavior.isRequired()) {
+                            if (failFn) |fail| {
+                                _ = &fail;
+                                _ = fail(mgr, dependency, id, e);
+                            } else {
+                                _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Package \"{s}\" with tag \"{s}\" not found, but package exists", .{ mgr.lockfile.str(name), mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag)) })) catch unreachable);
+                            }
+                        }
+                        return;
+                    }
+},
+error.NoMatchingVersion => {
+{
+                        if (dependency.behavior.isRequired()) {
+                            if (failFn) |fail| {
+                                _ = &fail;
+                                _ = fail(mgr, dependency, id, e);
+                            } else {
+                                _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>", .{ mgr.lockfile.str((&version.literal)), mgr.lockfile.str(name) })) catch unreachable);
+                            }
+                        }
+                        return;
+                    }
+},
+error.TooRecentVersion => {
+{
+                        if (dependency.behavior.isRequired()) {
+                            if (failFn) |fail| {
+                                _ = &fail;
+                                _ = fail(mgr, dependency, id, e);
+                            } else {
+                                const age_gate_ms = ((mgr.options.minimum_release_age_ms) orelse (0));
+                                if ((version.tag == .dist_tag)) {
+                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Package \"{s}\" with tag \"{s}\" not found<r> <d>(all versions blocked by minimum-release-age: {d} seconds)<r>", .{ mgr.lockfile.str(name), mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag)), (age_gate_ms / std.time.ms_per_s) })) catch unreachable);
+                                } else {
+                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(blocked by minimum-release-age: {d} seconds)<r>", .{ mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), (age_gate_ms / std.time.ms_per_s) })) catch unreachable);
+                                }
+                            }
+                        }
+                        return;
+                    }
+},
+error.MissingPackageJSON => {
+{
+                        if (dependency.behavior.isRequired()) {
+                            if (failFn) |fail| {
+                                _ = &fail;
+                                _ = fail(mgr, dependency, id, e);
+                            } else {
+                                if ((version.tag == .folder)) {
+                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Could not find package.json for \"file:{s}\" dependency \"{s}\"", .{ mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).folder)), mgr.lockfile.str(name) })) catch unreachable);
+                                } else {
+                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Could not find package.json for dependency \"{s}\"", .{ mgr.lockfile.str(name) })) catch unreachable);
+                                }
+                            }
+                        }
+                        return;
+                    }
+},
+else => {
+{
+                        if (failFn) |fail| {
+                            _ = &fail;
+                            _ = fail(mgr, dependency, id, e);
+                            return;
+                        }
+                        return e;
+                    }
+},
+})); }); });
+                    if (resolve_result) |result| {
+                        _ = &result;
+                        if (result.is_first_time) {
+                            if (PackageManager.verbose_install) {
+                                const label: []const u8 = mgr.lockfile.str((&version.literal));
+                                _ = Output.prettyErrorln("   -> \"{s}\": \"{s}\" -> {s}@{f}", .{ mgr.lockfile.str((&(if (@typeInfo(@TypeOf(result.package)) == .@"enum" or @typeInfo(@TypeOf(result.package)) == .@"union") @tagName(result.package) else result.package.name))), label, mgr.lockfile.str((&(if (@typeInfo(@TypeOf(result.package)) == .@"enum" or @typeInfo(@TypeOf(result.package)) == .@"union") @tagName(result.package) else result.package.name))), result.package.resolution.fmt(mgr.lockfile.buffers.string_bytes.items, .auto) });
+                            }
+                            if ((result.package.dependencies.len > 0)) {
+                                _ = try mgr.lockfile.scratch.dependency_list_queue.writeItem(result.package.dependencies);
+                            }
+                        }
+                        if ((result.task != null)) {
+                            switch (result.task.?) {
+.network_task => |network_task| {
+if ((mgr.getPreinstallState(result.package.@"meta".id) == .extract)) {
+                                _ = mgr.setPreinstallState(result.package.@"meta".id, mgr.lockfile, .extracting);
+                                _ = mgr.enqueueNetworkTask(network_task);
+                            }
+},
+.patch_task => |patch_task| {
+if (((patch_task.callback == .calc_hash) and (mgr.getPreinstallState(result.package.@"meta".id) == .calc_patch_hash))) {
+                                _ = mgr.setPreinstallState(result.package.@"meta".id, mgr.lockfile, .calcing_patch_hash);
+                                _ = mgr.enqueuePatchTask(patch_task);
+                            } else {
+                                if (((patch_task.callback == .apply) and (mgr.getPreinstallState(result.package.@"meta".id) == .apply_patch))) {
+                                    _ = mgr.setPreinstallState(result.package.@"meta".id, mgr.lockfile, .applying_patch);
+                                    _ = mgr.enqueuePatchTask(patch_task);
+                                }
+                            }
+},
+}
+                        }
+                        if (comptime Environment.allow_assert) {
+                            _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {d}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), result.package.@"meta".id });
+                        }
+                    } else {
+                        if (version.tag.isNPM()) {
+                            const name_str = mgr.lockfile.str(name);
+                            const task_id = Task.Id.forManifest(name_str);
+                            if (comptime Environment.allow_assert) {
+                                _ = bun.assert((task_id.get() != 0));
+                            }
+                            if (comptime Environment.allow_assert) {
+                                _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = task {d}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), task_id });
+                            }
+                            if (((!dependency.behavior.isPeer()) or install_peer)) {
+                                if ((!mgr.hasCreatedNetworkTask(task_id, dependency.behavior.isRequired()))) {
+                                    const needs_extended_manifest = (mgr.options.minimum_release_age_ms != null);
+                                    if (mgr.options.enable.manifest_cache) {
+                                        var expired = false;
+                                        _ = &expired;
+                                        if (mgr.manifests.byNameHashAllowExpired(mgr, mgr.scopeForPackageName(name_str), name_hash, (&expired), .load_from_memory_fallback_to_disk, needs_extended_manifest)) |manifest| {
+                                            _ = &manifest;
+                                            loaded_manifest = manifest.*;
+                                            if (((version.tag == .npm) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.isExact())) {
+                                                if (loaded_manifest.?.findByVersion((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.head.head.range.left.version)) |find_result| {
+                                                    _ = &find_result;
+                                                    if (mgr.options.minimum_release_age_ms) |min_age_ms| {
+                                                        _ = &min_age_ms;
+                                                        if (((!loaded_manifest.?.shouldExcludeFromAgeFilter(mgr.options.minimum_release_age_excludes)) and Npm.PackageManifest.isPackageVersionTooRecent(find_result.package, min_age_ms))) {
+                                                            const package_name = mgr.lockfile.str(name);
+                                                            const min_age_seconds = (min_age_ms / std.time.ms_per_s);
+                                                            _ = (blk_catch_22: { break :blk_catch_22 ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Version \"{s}@{f}\" was published within minimum release age of {d} seconds", .{ package_name, find_result.version.fmt(mgr.lockfile.buffers.string_bytes.items), min_age_seconds })) catch |__ce_22| { _ = &__ce_22;  }); });
+                                                            return;
+                                                        }
+                                                    }
+                                                    if ((blk_catch_23: { break :blk_catch_23 ((getOrPutResolvedPackageWithFindResult(mgr, name_hash, name, dependency, version, id, dependency.behavior, (&loaded_manifest.?), find_result, install_peer, successFn)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 @as(?ResolvedPackageResult, null); }); })) |new_resolve_result| {
+                                                        _ = &new_resolve_result;
+                                                        resolve_result_ = new_resolve_result;
+                                                        _ = mgr.network_dedupe_map.remove(task_id);
+                                                        continue :retry_with_new_resolve_result;
+                                                    }
+                                                }
+                                            }
+                                            if ((mgr.options.enable.manifest_cache_control and (!expired))) {
+                                                _ = mgr.network_dedupe_map.remove(task_id);
+                                                continue :retry_from_manifests_ptr;
+                                            }
+                                        }
+                                    }
+                                    if (PackageManager.verbose_install) {
+                                        _ = Output.prettyErrorln("Enqueue package manifest for download: {s}", .{ name_str });
+                                    }
+                                    var network_task = mgr.getNetworkTask();
+                                    _ = &network_task;
+                                    network_task.* = .{ .package_manager = mgr, .callback = undefined, .task_id = task_id, .allocator = mgr.allocator };
+                                    _ = try network_task.forManifest(name_str, mgr.allocator, mgr.scopeForPackageName(name_str), (if ((loaded_manifest != null)) loaded_manifest.? else null), dependency.behavior.isOptional(), needs_extended_manifest);
+                                    _ = mgr.enqueueNetworkTask(network_task);
+                                }
+                            } else {
+                                _ = try mgr.peer_dependencies.writeItem(id);
+                                return;
+                            }
+                            var manifest_entry_parse = try mgr.task_queue.getOrPutContext(mgr.allocator, task_id, .{});
+                            _ = &manifest_entry_parse;
+                            if ((!manifest_entry_parse.found_existing)) {
+                                manifest_entry_parse.value_ptr.* = TaskCallbackList{  };
+                            }
+                            const callback_tag = (comptime (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"));
+                            _ = try manifest_entry_parse.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
+                        }
+                    }
+                    return;
+                }
+                return;
+            }
+        }
+},
+.git => {
+const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).git);
+        const res = Resolution{ .tag = .git, .value = .{ .git = dep.* } };
+        if (mgr.lockfile.getPackageID(name_hash, null, (&res))) |pkg_id| {
+            _ = &pkg_id;
+            _ = successFn(mgr, id, pkg_id);
+            return;
+        }
+        const alias = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name)));
+        const url = mgr.lockfile.str((&dep.repo));
+        const clone_id = Task.Id.forGitClone(url);
+        const ctx = @unionInit(TaskCallbackContext, (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"), id);
+        if (comptime Environment.allow_assert) {
+            _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {s}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), url });
+        }
+        if (mgr.git_repositories.get(clone_id)) |repo_fd| {
+            _ = &repo_fd;
+            const resolved = try Repository.findCommit(mgr.allocator, mgr.env, mgr.log, repo_fd.stdDir(), alias, mgr.lockfile.str((&dep.committish)), clone_id);
+            const checkout_id = Task.Id.forGitCheckout(url, resolved);
+            var entry = ((mgr.task_queue.getOrPutContext(mgr.allocator, checkout_id, .{})) catch unreachable);
+            _ = &entry;
+            if ((!entry.found_existing)) {
+                entry.value_ptr.* = .{};
+            }
+            if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))] == invalid_package_id)) {
+                _ = try entry.value_ptr.append(mgr.allocator, ctx);
+            }
+            if (dependency.behavior.isPeer()) {
+                if ((!install_peer)) {
+                    _ = try mgr.peer_dependencies.writeItem(id);
+                    return;
+                }
+            }
+            if (mgr.hasCreatedNetworkTask(checkout_id, dependency.behavior.isRequired())) {
+                return;
+            }
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(mgr.enqueueGitCheckout(checkout_id, repo_fd, id, alias, res, resolved, null)));
+        } else {
+            var entry = ((mgr.task_queue.getOrPutContext(mgr.allocator, clone_id, .{})) catch unreachable);
+            _ = &entry;
+            if ((!entry.found_existing)) {
+                entry.value_ptr.* = .{};
+            }
+            _ = try entry.value_ptr.append(mgr.allocator, ctx);
+            if (dependency.behavior.isPeer()) {
+                if ((!install_peer)) {
+                    _ = try mgr.peer_dependencies.writeItem(id);
+                    return;
+                }
+            }
+            if (mgr.hasCreatedNetworkTask(clone_id, dependency.behavior.isRequired())) {
+                return;
+            }
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, dep, id, dependency, (&res), null)));
+        }
+},
+.github => {
+const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).github);
+        const res = Resolution{ .tag = .github, .value = .{ .github = dep.* } };
+        if (mgr.lockfile.getPackageID(name_hash, null, (&res))) |pkg_id| {
+            _ = &pkg_id;
+            _ = successFn(mgr, id, pkg_id);
+            return;
+        }
+        const url = mgr.allocGitHubURL(dep);
+        defer {
+        _ = mgr.allocator.free(url);
+        }
+        const task_id = Task.Id.forTarball(url);
+        var entry = ((mgr.task_queue.getOrPutContext(mgr.allocator, task_id, .{})) catch unreachable);
+        _ = &entry;
+        if ((!entry.found_existing)) {
+            entry.value_ptr.* = TaskCallbackList{  };
+        }
+        if (comptime Environment.allow_assert) {
+            _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {s}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), url });
+        }
+        const callback_tag = (comptime (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"));
+        _ = try entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
+        if (dependency.behavior.isPeer()) {
+            if ((!install_peer)) {
+                _ = try mgr.peer_dependencies.writeItem(id);
+                return;
+            }
+        }
+        if (try mgr.generateNetworkTaskForTarball(task_id, url, dependency.behavior.isRequired(), id, .{ .name = (if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name), .name_hash = dependency.name_hash, .resolution = res }, null, .no_authorization)) |network_task| {
+            _ = &network_task;
+            _ = mgr.enqueueNetworkTask(network_task);
+        }
+},
+inline .symlink, .workspace => |dependency_tag| {
+const _result = (blk_catch_27: { break :blk_catch_27 ((getOrPutResolvedPackage(mgr, name_hash, name, dependency, version, dependency.behavior, id, resolution, install_peer, successFn)) catch |e| { _ = &e; break :blk_catch_27 @as(?ResolvedPackageResult, brk: {
+        if ((e == error.MissingPackageJSON)) {
+            break :brk @as(?ResolvedPackageResult, null);
+        }
+        return e;
+}); }); });
+        const workspace_not_found_fmt: []const u8 = "Workspace dependency \"{[name]s}\" not found";
+        _ = "";
+        _ = "Searched in <b>{[search_path]f}<r>";
+        _ = "";
+        _ = "Workspace documentation: https://bun.com/docs/install/workspaces";
+        _ = "";
+        const link_not_found_fmt: []const u8 = "Package \"{[name]s}\" is not linked";
+        _ = "";
+        _ = "To install a linked package:";
+        _ = "   <cyan>bun link my-pkg-name-from-package-json<r>";
+        _ = "";
+        _ = "Tip: the package name is from package.json, which can differ from the folder name.";
+        _ = "";
+        if (_result) |result| {
+            _ = &result;
+            if (result.is_first_time) {
+                if (PackageManager.verbose_install) {
+                    const label: []const u8 = mgr.lockfile.str((&version.literal));
+                    _ = Output.prettyErrorln("   -> \"{s}\": \"{s}\" -> {s}@{f}", .{ mgr.lockfile.str((&(if (@typeInfo(@TypeOf(result.package)) == .@"enum" or @typeInfo(@TypeOf(result.package)) == .@"union") @tagName(result.package) else result.package.name))), label, mgr.lockfile.str((&(if (@typeInfo(@TypeOf(result.package)) == .@"enum" or @typeInfo(@TypeOf(result.package)) == .@"union") @tagName(result.package) else result.package.name))), result.package.resolution.fmt(mgr.lockfile.buffers.string_bytes.items, .auto) });
+                }
+                if ((result.package.dependencies.len > 0)) {
+                    _ = try mgr.lockfile.scratch.dependency_list_queue.writeItem(result.package.dependencies);
+                }
+            }
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert((result.task == null));
+            }
+            if (comptime Environment.allow_assert) {
+                _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {d}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), result.package.@"meta".id });
+            }
+        } else {
+            if (dependency.behavior.isRequired()) {
+                if (comptime (dependency_tag == .workspace)) {
+                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, workspace_not_found_fmt, .{ .name = mgr.lockfile.str(name), .search_path = FolderResolution.PackageWorkspaceSearchPathFormatter{ .manager = mgr, .version = version } })) catch unreachable);
+                } else {
+                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, link_not_found_fmt, .{ .name = mgr.lockfile.str(name) })) catch unreachable);
+                }
+            } else {
+                if (mgr.options.log_level.isVerbose()) {
+                    if (comptime (dependency_tag == .workspace)) {
+                        _ = ((mgr.log.addWarningFmt(null, logger.Loc.Empty, mgr.allocator, workspace_not_found_fmt, .{ .name = mgr.lockfile.str(name), .search_path = FolderResolution.PackageWorkspaceSearchPathFormatter{ .manager = mgr, .version = version } })) catch unreachable);
+                    } else {
+                        _ = ((mgr.log.addWarningFmt(null, logger.Loc.Empty, mgr.allocator, link_not_found_fmt, .{ .name = mgr.lockfile.str(name) })) catch unreachable);
+                    }
+                }
+            }
+        }
+},
+.tarball => {
+const res: Resolution = (switch ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).tarball.uri) {
+.local => |path| Resolution{ .tag = .local_tarball, .value = .{ .local_tarball = path } },
+.remote => |url| Resolution{ .tag = .remote_tarball, .value = .{ .remote_tarball = url } },
+});
+        if (mgr.lockfile.getPackageID(name_hash, null, (&res))) |pkg_id| {
+            _ = &pkg_id;
+            _ = successFn(mgr, id, pkg_id);
+            return;
+        }
+        const url = (switch ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).tarball.uri) {
+.local => |path| mgr.lockfile.str((&path)),
+.remote => |url| mgr.lockfile.str((&url)),
+});
+        const task_id = Task.Id.forTarball(url);
+        var entry = ((mgr.task_queue.getOrPutContext(mgr.allocator, task_id, .{})) catch unreachable);
+        _ = &entry;
+        if ((!entry.found_existing)) {
+            entry.value_ptr.* = TaskCallbackList{  };
+        }
+        if (comptime Environment.allow_assert) {
+            _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {s}", .{ id, @tagName(version.tag), mgr.lockfile.str(name), mgr.lockfile.str((&version.literal)), url });
+        }
+        const callback_tag = (comptime (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"));
+        _ = try entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
+        if (dependency.behavior.isPeer()) {
+            if ((!install_peer)) {
+                _ = try mgr.peer_dependencies.writeItem(id);
+                return;
+            }
+        }
+        switch ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).tarball.uri) {
+.local => {
+if (mgr.hasCreatedNetworkTask(task_id, dependency.behavior.isRequired())) {
+            return;
+        }
+        _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueLocalTarball(mgr, task_id, id, mgr.lockfile.str((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name))), url, res, .{})));
+},
+.remote => {
+if (try mgr.generateNetworkTaskForTarball(task_id, url, dependency.behavior.isRequired(), id, .{ .name = (if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name), .name_hash = dependency.name_hash, .resolution = res }, null, .no_authorization)) |network_task| {
+            _ = &network_task;
+            _ = mgr.enqueueNetworkTask(network_task);
+        }
+},
+}
+},
+else => {
+
+},
+}
+}
+
+pub fn initExtractTask(mgr: *PackageManager, tarball: *const ExtractTarball, network_task: *NetworkTask) *Task {
+        var task = mgr.preallocated_resolve_tasks.get();
+        _ = &task;
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.extract, .request = .{ .extract = .{ .network = network_task, .tarball = tarball.* } }, .id = network_task.task_id, .data = undefined };
+        (task).?.request.extract.tarball.skip_verify = (!mgr.options.do.verify_integrity);
+        return task;
+}
+
+pub fn enqueueExtractNPMPackage(mgr: *PackageManager, tarball: *const ExtractTarball, network_task: *NetworkTask) *ThreadPool.Task {
+        return (blk: {
+        break :blk (&initExtractTask(mgr, tarball, network_task).threadpool_task);
+
+});
+}
+
+pub fn createExtractTaskForStreaming(mgr: *PackageManager, tarball: *const ExtractTarball, network_task: *NetworkTask) *Task {
+        return initExtractTask(mgr, tarball, network_task);
+}
+
+pub fn enqueueGitClone(mgr: *PackageManager, task_id: Task.Id, name: []const u8, repository: *const Repository, dep_id: DependencyID, dependency: *const Dependency, res: *const Resolution, patch_name_and_version_hash: ?u64) *ThreadPool.Task {
+        var apply_patch_task: ?*PatchTask = null;
+        _ = &apply_patch_task;
+        if (patch_name_and_version_hash) |h| {
+            _ = &h;
+            const dep = dependency;
+            const pkg_id = (switch (((mgr.lockfile.package_index.get(dep.name_hash)) orelse (@panic("Package not found")))) {
+.id => |p| p,
+.ids => |ps| ps.items[0],
+});
+            const patch_hash = ((mgr.lockfile.patched_dependencies.get(h)).?.patchfileHash()).?;
+            const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
+            pt.callback.apply.task_id = task_id;
+            apply_patch_task = pt;
+        }
+        var task = mgr.preallocated_resolve_tasks.get();
+        _ = &task;
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.git_clone, .request = .{ .git_clone = .{ .name = ((strings.StringOrTinyString.initAppendIfNeeded(name, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .url = ((strings.StringOrTinyString.initAppendIfNeeded(mgr.lockfile.str((&repository.repo)), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .env = Repository.shared_env.get(mgr.allocator, mgr.env), .dep_id = dep_id, .res = res.* } }, .id = task_id, .apply_patch_task = apply_patch_task, .data = undefined };
+        return (blk: {
+        break :blk (&(task).?.threadpool_task);
+
+});
+}
+
+pub fn enqueueGitCheckout(mgr: *PackageManager, task_id: Task.Id, dir: bun.FD, dependency_id: DependencyID, name: []const u8, resolution: Resolution, resolved: []const u8, patch_name_and_version_hash: ?u64) *ThreadPool.Task {
+        var apply_patch_task: ?*PatchTask = null;
+        _ = &apply_patch_task;
+        if (patch_name_and_version_hash) |h| {
+            _ = &h;
+            const dep = mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))];
+            const pkg_id = (switch (((mgr.lockfile.package_index.get(dep.name_hash)) orelse (@panic("Package not found")))) {
+.id => |p| p,
+.ids => |ps| ps.items[0],
+});
+            const patch_hash = ((mgr.lockfile.patched_dependencies.get(h)).?.patchfileHash()).?;
+            const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
+            pt.callback.apply.task_id = task_id;
+            apply_patch_task = pt;
+        }
+        var task = mgr.preallocated_resolve_tasks.get();
+        _ = &task;
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.git_checkout, .request = .{ .git_checkout = .{ .repo_dir = dir, .resolution = resolution, .dependency_id = dependency_id, .name = ((strings.StringOrTinyString.initAppendIfNeeded(name, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .url = ((strings.StringOrTinyString.initAppendIfNeeded(mgr.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git.repo)), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .resolved = ((strings.StringOrTinyString.initAppendIfNeeded(resolved, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .env = Repository.shared_env.get(mgr.allocator, mgr.env) } }, .apply_patch_task = apply_patch_task, .id = task_id, .data = undefined };
+        return (blk: {
+        break :blk (&(task).?.threadpool_task);
+
+});
+}
+
+pub fn enqueueLocalTarball(mgr: *PackageManager, task_id: Task.Id, dependency_id: DependencyID, name: []const u8, path: []const u8, resolution: Resolution, integrity: Integrity) *ThreadPool.Task {
+        var abs_buf: bun.PathBuffer = undefined;
+        _ = &abs_buf;
+        const tarball_path_info = tarball_path: {
+        const workspace_pkg_id = mgr.lockfile.getWorkspacePkgIfWorkspaceDep(dependency_id);
+        if ((workspace_pkg_id == invalid_package_id)) {
+            break :tarball_path .{ path, true };
+        }
+        const workspace_res = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(workspace_pkg_id))];
+        if ((workspace_res.tag != .workspace)) {
+            break :tarball_path .{ path, true };
+        }
+        const workspace_path = cp_iter_slice((if (@typeInfo(@TypeOf(workspace_res)) == .@"enum") @intFromEnum(workspace_res) else workspace_res.value).workspace)[@intCast(mgr.lockfile.buffers.string_bytes.items)..];
+        break :tarball_path .{ Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&abs_buf), (&.{ workspace_path, path }), .auto), false };
+};
+        const tarball_path = tarball_path_info[0];
+        const normalize = tarball_path_info[1];
+        var task = mgr.preallocated_resolve_tasks.get();
+        _ = &task;
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.local_tarball, .request = .{ .local_tarball = .{ .tarball = .{ .package_manager = mgr, .name = ((strings.StringOrTinyString.initAppendIfNeeded(name, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .resolution = resolution, .cache_dir = mgr.getCacheDirectory(), .temp_dir = mgr.getTemporaryDirectory().handle, .dependency_id = dependency_id, .integrity = integrity, .url = ((strings.StringOrTinyString.initAppendIfNeeded(path, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable) }, .tarball_path = ((strings.StringOrTinyString.initAppendIfNeeded(tarball_path, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .normalize = normalize } }, .id = task_id, .data = undefined };
+        return (blk: {
+        break :blk (&(task).?.threadpool_task);
+
+});
+}
+
+pub fn updateNameAndNameHashFromVersionReplacement(lockfile: *const Lockfile, original_name: String, original_name_hash: PackageNameHash, new_version: Dependency.Version) NameAndNameHash {
+        return (switch (new_version.tag) {
+.dist_tag => .{ (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag)) == .@"union") @tagName((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag) else (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag.name), String.Builder.stringHash(lockfile.str((&(if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag)) == .@"union") @tagName((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag) else (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).dist_tag.name)))) },
+.npm => .{ (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm)) == .@"union") @tagName((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm) else (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm.name), String.Builder.stringHash(lockfile.str((&(if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm)) == .@"enum" or @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm)) == .@"union") @tagName((if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm) else (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).npm.name)))) },
+.git => .{ (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).git.package_name, original_name_hash },
+.github => .{ (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).github.package_name, original_name_hash },
+.tarball => .{ (if (@typeInfo(@TypeOf(new_version)) == .@"enum") @intFromEnum(new_version) else new_version.value).tarball.package_name, original_name_hash },
+else => .{ original_name, original_name_hash },
+});
+}
+
+pub fn getOrPutResolvedPackageWithFindResult(mgr: *PackageManager, name_hash: PackageNameHash, name: String, dependency: *const Dependency, version: Dependency.Version, dependency_id: DependencyID, behavior: Behavior, manifest: *const Npm.PackageManifest, find_result: Npm.PackageManifest.FindResult, install_peer: bool, comptime successFn: anytype) !?ResolvedPackageResult {
+        const should_update = ((mgr.to_update and mgr.lockfile.isRootDependency(mgr, dependency_id)) and ((mgr.update_requests.len == 0) or mgr.updating_packages.contains(cp_iter_slice((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name))[@intCast(mgr.lockfile.buffers.string_bytes.items)..])));
+        if (mgr.lockfile.getPackageID(name_hash, (if (should_update) null else version), (&.{ .tag = .npm, .value = .{ .npm = .{ .version = find_result.version, .url = (if (@typeInfo(@TypeOf(find_result.package.tarball_url)) == .@"enum") @intFromEnum(find_result.package.tarball_url) else find_result.package.tarball_url.value) } } }))) |id| {
+            _ = &id;
+            _ = successFn(mgr, dependency_id, id);
+            return .{ .package = mgr.lockfile.packages.get(id), .is_first_time = false };
+        } else {
+            if ((behavior.isPeer() and (!install_peer))) {
+                return null;
+            }
+        }
+        const package = try mgr.lockfile.appendPackage(try Lockfile.Package.fromNPM(mgr, mgr.allocator, mgr.lockfile, mgr.log, manifest, find_result.version, find_result.package, Features.npm));
+        if (comptime Environment.allow_assert) {
+            _ = bun.assert((package.@"meta".id != invalid_package_id));
+        }
+        defer {
+        _ = successFn(mgr, dependency_id, package.@"meta".id);
+        }
+        var name_and_version_hash: ?u64 = null;
+        _ = &name_and_version_hash;
+        var patchfile_hash: ?u64 = null;
+        _ = &patchfile_hash;
+        return (switch (mgr.determinePreinstallState(package, mgr.lockfile, (&name_and_version_hash), (&patchfile_hash))) {
+.done => ResolvedPackageResult{ .package = package, .is_first_time = true },
+.extract => extract: {
+        if ((!mgr.options.do.prefetch_resolved_tarballs)) {
+            break :extract ResolvedPackageResult{ .package = package, .is_first_time = true };
+        }
+        const task_id = Task.Id.forNPMPackage(mgr.lockfile.str((&name)), (if (@typeInfo(@TypeOf(package.resolution)) == .@"enum") @intFromEnum(package.resolution) else package.resolution.value).npm.version);
+        _ = bun.debugAssert((!mgr.network_dedupe_map.contains(task_id)));
+        break :extract ResolvedPackageResult{ .package = package, .is_first_time = true, .task = ResolvedPackageTask{ .network_task = ((try mgr.generateNetworkTaskForTarball(task_id, manifest.str((&find_result.package.tarball_url)), behavior.isRequired(), dependency_id, package, name_and_version_hash, .allow_authorization)) orelse (unreachable)) } };
+},
+.calc_patch_hash => ResolvedPackageResult{ .package = package, .is_first_time = true, .task = ResolvedPackageTask{ .patch_task = PatchTask.newCalcPatchHash(mgr, name_and_version_hash.?, .{ .pkg_id = package.@"meta".id, .dependency_id = dependency_id, .url = bun.handleOom(mgr.allocator.dupe(u8, manifest.str((&find_result.package.tarball_url)))) }) } },
+.apply_patch => ResolvedPackageResult{ .package = package, .is_first_time = true, .task = ResolvedPackageTask{ .patch_task = PatchTask.newApplyPatchHash(mgr, package.@"meta".id, patchfile_hash.?, name_and_version_hash.?) } },
+else => unreachable,
+});
+}
+
+pub fn getOrPutResolvedPackage(mgr: *PackageManager, name_hash: PackageNameHash, name: String, dependency: *const Dependency, version: Dependency.Version, behavior: Behavior, dependency_id: DependencyID, resolution: PackageID, install_peer: bool, comptime successFn: anytype) !?ResolvedPackageResult {
+        if ((install_peer and behavior.isPeer())) {
+            if (mgr.lockfile.package_index.get(name_hash)) |index| {
+                _ = &index;
+                const resolutions: []Resolution = mgr.lockfile.packages.items(.resolution);
+                switch (index) {
+.id => |existing_id| {
+if ((existing_id < resolutions.len)) {
+                    const existing_resolution = resolutions[@as(usize, @intCast(existing_id))];
+                    if (resolutionSatisfiesDependency(mgr, existing_resolution, version)) {
+                        _ = successFn(mgr, dependency_id, existing_id);
+                        return .{ .package = mgr.lockfile.packages.get(existing_id) };
+                    }
+                    const res_tag = resolutions[@as(usize, @intCast(existing_id))].tag;
+                    const ver_tag = version.tag;
+                    if (((((res_tag == .npm) and (ver_tag == .npm)) or ((res_tag == .git) and (ver_tag == .git))) or ((res_tag == .github) and (ver_tag == .github)))) {
+                        const existing_package = mgr.lockfile.packages.get(existing_id);
+                        _ = ((mgr.log.addWarningFmt(null, logger.Loc.Empty, mgr.allocator, "incorrect peer dependency \"{f}@{f}\"", .{ (if (@typeInfo(@TypeOf(existing_package)) == .@"enum" or @typeInfo(@TypeOf(existing_package)) == .@"union") @tagName(existing_package) else existing_package.name).fmt(mgr.lockfile.buffers.string_bytes.items), existing_package.resolution.fmt(mgr.lockfile.buffers.string_bytes.items, .auto) })) catch unreachable);
+                        _ = successFn(mgr, dependency_id, existing_id);
+                        return .{ .package = mgr.lockfile.packages.get(existing_id) };
+                    }
+                }
+},
+.ids => |list| {
+for (list.items) |existing_id| {
+                    _ = &existing_id;
+                    if ((existing_id < resolutions.len)) {
+                        const existing_resolution = resolutions[@as(usize, @intCast(existing_id))];
+                        if (resolutionSatisfiesDependency(mgr, existing_resolution, version)) {
+                            _ = successFn(mgr, dependency_id, existing_id);
+                            return .{ .package = mgr.lockfile.packages.get(existing_id) };
+                        }
+                    }
+                }
+                if ((list.items[0] < resolutions.len)) {
+                    const res_tag = resolutions[@as(usize, @intCast(list.items[0]))].tag;
+                    const ver_tag = version.tag;
+                    if (((((res_tag == .npm) and (ver_tag == .npm)) or ((res_tag == .git) and (ver_tag == .git))) or ((res_tag == .github) and (ver_tag == .github)))) {
+                        const existing_package_id = list.items[0];
+                        const existing_package = mgr.lockfile.packages.get(existing_package_id);
+                        _ = ((mgr.log.addWarningFmt(null, logger.Loc.Empty, mgr.allocator, "incorrect peer dependency \"{f}@{f}\"", .{ (if (@typeInfo(@TypeOf(existing_package)) == .@"enum" or @typeInfo(@TypeOf(existing_package)) == .@"union") @tagName(existing_package) else existing_package.name).fmt(mgr.lockfile.buffers.string_bytes.items), existing_package.resolution.fmt(mgr.lockfile.buffers.string_bytes.items, .auto) })) catch unreachable);
+                        _ = successFn(mgr, dependency_id, list.items[0]);
+                        return .{ .package = mgr.lockfile.packages.get(existing_package_id) };
+                    }
+                }
+},
+}
+            }
+        }
+        if ((resolution < mgr.lockfile.packages.len)) {
+            return .{ .package = mgr.lockfile.packages.get(resolution) };
+        }
+        switch (version.tag) {
+.npm, .dist_tag => {
+if ((version.tag == .npm)) {
+            const workspace_path = (if ((mgr.lockfile.workspace_paths.count() > 0)) mgr.lockfile.workspace_paths.get(name_hash) else null);
+            const workspace_version = mgr.lockfile.workspace_versions.get(name_hash);
+            const buf = mgr.lockfile.buffers.string_bytes.items;
+            if ((mgr.options.link_workspace_packages and (((workspace_version != null) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies(workspace_version.?, buf, buf)) or ((workspace_path != null) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.@"is *"())))) {
+                if (mgr.lockfile.rootPackage()) |root_package| {
+                    _ = &root_package;
+                    const root_dependencies = root_package.dependencies.get(mgr.lockfile.buffers.dependencies.items);
+                    const root_resolutions = root_package.resolutions.get(mgr.lockfile.buffers.resolutions.items);
+                    {
+                        var dep_i: i32 = 0;
+                        _ = &dep_i;
+                        const __end_2 = root_dependencies.len;
+                        while (dep_i < __end_2) : (dep_i += 1) {
+                            const root_dep = root_dependencies[@as(usize, @intCast(dep_i))];
+                            const workspace_package_id = root_resolutions[@as(usize, @intCast(dep_i))];
+                            if ((((workspace_package_id != invalid_package_id) and (root_dep.version.tag == .workspace)) and (root_dep.name_hash == name_hash))) {
+                                _ = successFn(mgr, dependency_id, workspace_package_id);
+                                return .{ .package = mgr.lockfile.packages.get(workspace_package_id), .is_first_time = false };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        const name_str = mgr.lockfile.str((&name));
+        const manifest = ((mgr.manifests.byNameHash(mgr, mgr.scopeForPackageName(name_str), name_hash, .load_from_memory_fallback_to_disk, (mgr.options.minimum_release_age_ms != null))) orelse { return null; });
+        const version_result: Npm.PackageManifest.FindVersionResult = (switch (version.tag) {
+.dist_tag => manifest.findByDistTagWithFilter(mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag)), mgr.options.minimum_release_age_ms, mgr.options.minimum_release_age_excludes),
+.npm => manifest.findBestVersionWithFilter((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version, mgr.lockfile.buffers.string_bytes.items, mgr.options.minimum_release_age_ms, mgr.options.minimum_release_age_excludes),
+else => unreachable,
+});
+        const maybe_find_result: ?Npm.PackageManifest.FindResult = (switch (version_result) {
+.found => |result| result,
+.found_with_filter => |filtered| blk: {
+        const package_name = mgr.lockfile.str((&name));
+        if (mgr.options.log_level.isVerbose()) {
+            if (filtered.newest_filtered) |newest| {
+                _ = &newest;
+                const min_age_seconds = (((mgr.options.minimum_release_age_ms) orelse (0)) / std.time.ms_per_s);
+                switch (version.tag) {
+.dist_tag => {
+const tag_str = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag));
+                _ = Output.prettyErrorln("<d>[minimum-release-age]<r> <b>{s}@{s}<r> selected <green>{f}<r> instead of <yellow>{f}<r> due to {d}-second filter", .{ package_name, tag_str, filtered.result.version.fmt(manifest.string_buf), newest.fmt(manifest.string_buf), min_age_seconds });
+},
+.npm => {
+const version_str = (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.fmt(manifest.string_buf);
+                _ = Output.prettyErrorln("<d>[minimum-release-age]<r> <b>{s}<r>@{f}<r> selected <green>{f}<r> instead of <yellow>{f}<r> due to {d}-second filter", .{ package_name, version_str, filtered.result.version.fmt(manifest.string_buf), newest.fmt(manifest.string_buf), min_age_seconds });
+},
+else => {
+_ = unreachable;
+},
+}
+            }
+        }
+        break :blk filtered.result;
+},
+.err => |err_type| (switch (err_type) {
+.too_recent, .all_versions_too_recent => {
+return error.TooRecentVersion;
+},
+.not_found => null,
+}),
+});
+        if ((maybe_find_result == null)) {
+            if ((version.tag == .dist_tag)) {
+                const workspace_path = (if ((mgr.lockfile.workspace_paths.count() > 0)) mgr.lockfile.workspace_paths.get(name_hash) else null);
+                if ((workspace_path != null)) {
+                    if (mgr.lockfile.rootPackage()) |root_package| {
+                        _ = &root_package;
+                        const root_dependencies = root_package.dependencies.get(mgr.lockfile.buffers.dependencies.items);
+                        const root_resolutions = root_package.resolutions.get(mgr.lockfile.buffers.resolutions.items);
+                        {
+                            var dep_i: i32 = 0;
+                            _ = &dep_i;
+                            const __end_3 = root_dependencies.len;
+                            while (dep_i < __end_3) : (dep_i += 1) {
+                                const root_dep = root_dependencies[@as(usize, @intCast(dep_i))];
+                                const workspace_package_id = root_resolutions[@as(usize, @intCast(dep_i))];
+                                if ((((workspace_package_id != invalid_package_id) and (root_dep.version.tag == .workspace)) and (root_dep.name_hash == name_hash))) {
+                                    _ = successFn(mgr, dependency_id, workspace_package_id);
+                                    return .{ .package = mgr.lockfile.packages.get(workspace_package_id), .is_first_time = false };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (behavior.isPeer()) {
+                return null;
+            }
+            return (switch (version.tag) {
+.npm => error.NoMatchingVersion,
+.dist_tag => error.DistTagNotFound,
+else => unreachable,
+});
+        }
+        const find_result = maybe_find_result.?;
+        return try getOrPutResolvedPackageWithFindResult(mgr, name_hash, name, dependency, version, dependency_id, behavior, manifest, find_result, install_peer, successFn);
+},
+.folder => {
+const res: FolderResolution = res: {
+        if (mgr.lockfile.isWorkspaceDependency(dependency_id)) {
+            const folder_path = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).folder));
+            var buf2: bun.PathBuffer = undefined;
+            _ = &buf2;
+            const folder_path_abs = (if (std.fs.path.isAbsolute(folder_path)) folder_path else blk: {
+            break :blk Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&buf2), (&.{ folder_path }), .auto);
+});
+            break :res FolderResolution.getOrPut(.{ .relative = .folder }, version, folder_path_abs, mgr);
+        }
+        var name_slice = mgr.lockfile.str((&name));
+        _ = &name_slice;
+        var folder_path = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).folder));
+        _ = &folder_path;
+        var package = Lockfile.Package;
+        _ = &package;
+        {
+            var builder = mgr.lockfile.stringBuilder();
+            _ = &builder;
+            _ = builder.count(name_slice);
+            _ = builder.count(folder_path);
+            _ = bun.handleOom(builder.allocate());
+            name_slice = mgr.lockfile.str((&name));
+            folder_path = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).folder));
+            (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name) = builder.append(String, name_slice);
+            package.name_hash = name_hash;
+            package.resolution = Resolution.init(.{ .folder = builder.append(String, folder_path) });
+            package.scripts.filled = true;
+            _ = package.@"meta".setHasInstallScript(false);
+            _ = builder.clamp();
+        }
+        package = bun.handleOom(mgr.lockfile.appendPackage(package));
+        break :res .{ .new_package_id = package.@"meta".id };
+};
+        switch (res) {
+.err => |e| {
+return e;
+},
+.package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id) };
+},
+.new_package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id), .is_first_time = true };
+},
+}
+},
+.workspace => {
+const workspace_path_raw: *const String = ((mgr.lockfile.workspace_paths.getPtr(name_hash)) orelse ((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).workspace)));
+        const workspace_path = mgr.lockfile.str(workspace_path_raw);
+        var buf2: bun.PathBuffer = undefined;
+        _ = &buf2;
+        const workspace_path_u8 = (if (std.fs.path.isAbsolute(workspace_path)) workspace_path else blk: {
+        break :blk Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&buf2), (&.{ workspace_path }), .auto);
+});
+        const res = FolderResolution.getOrPut(.{ .relative = .workspace }, version, workspace_path_u8, mgr);
+        switch (res) {
+.err => |e| {
+return e;
+},
+.package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id) };
+},
+.new_package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id), .is_first_time = true };
+},
+}
+},
+.symlink => {
+const res = FolderResolution.getOrPut(.{ .global = mgr.globalLinkDirPath() }, version, mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).symlink)), mgr);
+        switch (res) {
+.err => |e| {
+return e;
+},
+.package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id) };
+},
+.new_package_id => |package_id| {
+_ = successFn(mgr, dependency_id, package_id);
+        return .{ .package = mgr.lockfile.packages.get(package_id), .is_first_time = true };
+},
+}
+},
+else => {
+return null;
+},
+}
+}
+
+pub fn resolutionSatisfiesDependency(client: *PackageManager, resolution: Resolution, dependency: Dependency.Version) bool {
+        const buf = client.lockfile.buffers.string_bytes.items;
+        if (((resolution.tag == .npm) and (dependency.tag == .npm))) {
+            return (if (@typeInfo(@TypeOf(dependency)) == .@"enum") @intFromEnum(dependency) else dependency.value).npm.version.satisfies((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, buf, buf);
+        }
+        if (((resolution.tag == .git) and (dependency.tag == .git))) {
+            return (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git.eql((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum") @intFromEnum(dependency) else dependency.value).git), buf, buf);
+        }
+        if (((resolution.tag == .github) and (dependency.tag == .github))) {
+            return (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).github.eql((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum") @intFromEnum(dependency) else dependency.value).github), buf, buf);
+        }
+        return false;
+}
+pub const __CpObj_fmt___const_u8_args_struct____anyopaque__ = struct { fmt: []const u8, args: struct { *anyopaque } };
