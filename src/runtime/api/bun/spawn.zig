@@ -1,562 +1,10 @@
-pub const BunSpawn = struct {
-    pub const Action = extern struct {
-        pub const FileActionType = enum(u8) {
-            none = 0,
-            close = 1,
-            dup2 = 2,
-            open = 3,
-        };
-
-        kind: FileActionType = .none,
-        path: ?[*:0]const u8 = null,
-        fds: [2]fd_t,
-        flags: c_int = 0,
-        mode: c_int = 0,
-
-        pub fn init() !Action {
-            return .{};
-        }
-
-        pub fn deinit(self: *Action, allocator: std.mem.Allocator) void {
-            if (self.kind == .open) {
-                if (self.path) |path| {
-                    allocator.free(bun.span(path));
-                }
-            }
-        }
-    };
-
-    pub const Actions = struct {
-        chdir_buf: ?[*:0]u8 = null,
-        actions: std.ArrayListUnmanaged(Action) = .{},
-        detached: bool = false,
-
-        pub fn init() !Actions {
-            return .{};
-        }
-
-        pub fn deinit(self: *Actions) void {
-            if (self.chdir_buf) |buf| {
-                bun.default_allocator.free(bun.span(buf));
-            }
-
-            for (self.actions.items) |*action| {
-                action.deinit(bun.default_allocator);
-            }
-
-            self.actions.deinit(bun.default_allocator);
-        }
-
-        pub fn open(self: *Actions, fd: bun.FD, path: []const u8, flags: u32, mode: i32) !void {
-            const posix_path = try toPosixPath(path);
-
-            return self.openZ(fd, &posix_path, flags, mode);
-        }
-
-        pub fn openZ(self: *Actions, fd: bun.FD, path: [*:0]const u8, flags: u32, mode: i32) !void {
-            try self.actions.append(bun.default_allocator, .{
-                .kind = .open,
-                .path = (try bun.default_allocator.dupeZ(u8, bun.span(path))).ptr,
-                .flags = @intCast(flags),
-                .mode = @intCast(mode),
-                .fds = .{ fd.native(), 0 },
-            });
-        }
-
-        pub fn close(self: *Actions, fd: bun.FD) !void {
-            try self.actions.append(bun.default_allocator, .{
-                .kind = .close,
-                .fds = .{ fd.native(), 0 },
-            });
-        }
-
-        pub fn dup2(self: *Actions, fd: bun.FD, newfd: bun.FD) !void {
-            try self.actions.append(bun.default_allocator, .{
-                .kind = .dup2,
-                .fds = .{ fd.native(), newfd.native() },
-            });
-        }
-
-        pub fn inherit(self: *Actions, fd: bun.FD) !void {
-            try self.dup2(fd, fd);
-        }
-
-        pub fn chdir(self: *Actions, path: []const u8) !void {
-            if (self.chdir_buf) |buf| {
-                bun.default_allocator.free(bun.span(buf));
-            }
-
-            self.chdir_buf = (try bun.default_allocator.dupeZ(u8, path)).ptr;
-        }
-    };
-
-    pub const Attr = struct {
-        detached: bool = false,
-        new_process_group: bool = false,
-        pty_slave_fd: i32 = -1,
-        flags: u16 = 0,
-        reset_signals: bool = false,
-        linux_pdeathsig: i32 = 0,
-
-        pub fn init() !Attr {
-            return Attr{};
-        }
-
-        pub fn deinit(_: *Attr) void {}
-
-        pub fn get(self: Attr) !u16 {
-            return self.flags;
-        }
-
-        pub fn set(self: *Attr, flags: u16) !void {
-            self.flags = flags;
-            // FreeBSD's <spawn.h> has no POSIX_SPAWN_SETSID; bun-spawn.cpp
-            // calls setsid() in the child for `detached`, which process.zig
-            // sets directly on this struct BEFORE calling set(). Preserve
-            // that value when the flag bit isn't available.
-            if (comptime @hasDecl(bun.c, "POSIX_SPAWN_SETSID")) {
-                self.detached = (flags & bun.c.POSIX_SPAWN_SETSID) != 0;
-            }
-        }
-
-        pub fn resetSignals(self: *Attr) !void {
-            self.reset_signals = true;
-        }
-    };
-};
-
-// mostly taken from zig's posix_spawn.zig
-pub const PosixSpawn = struct {
-    pub const WaitPidResult = struct {
-        pid: pid_t,
-        status: u32,
-    };
-
-    pub const PosixSpawnAttr = struct {
-        attr: system.posix_spawnattr_t,
-        detached: bool = false,
-        pty_slave_fd: i32 = -1,
-
-        pub fn init() !PosixSpawnAttr {
-            var attr: system.posix_spawnattr_t = undefined;
-            switch (errno(system.posix_spawnattr_init(&attr))) {
-                .SUCCESS => return PosixSpawnAttr{ .attr = attr },
-                .NOMEM => return error.SystemResources,
-                .INVAL => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn deinit(self: *PosixSpawnAttr) void {
-            _ = system.posix_spawnattr_destroy(&self.attr);
-        }
-
-        pub fn get(self: PosixSpawnAttr) !u16 {
-            var flags: c_short = undefined;
-            switch (errno(system.posix_spawnattr_getflags(&self.attr, &flags))) {
-                .SUCCESS => return @as(u16, @bitCast(flags)),
-                .INVAL => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn set(self: *PosixSpawnAttr, flags: u16) !void {
-            switch (errno(system.posix_spawnattr_setflags(&self.attr, @as(c_short, @bitCast(flags))))) {
-                .SUCCESS => return,
-                .INVAL => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn resetSignals(this: *PosixSpawnAttr) !void {
-            if (posix_spawnattr_reset_signals(&this.attr) != 0) {
-                return error.SystemResources;
-            }
-        }
-
-        extern fn posix_spawnattr_reset_signals(attr: *system.posix_spawnattr_t) c_int;
-    };
-
-    pub const PosixSpawnActions = struct {
-        actions: system.posix_spawn_file_actions_t,
-
-        pub fn init() !PosixSpawnActions {
-            var actions: system.posix_spawn_file_actions_t = undefined;
-            switch (errno(system.posix_spawn_file_actions_init(&actions))) {
-                .SUCCESS => return PosixSpawnActions{ .actions = actions },
-                .NOMEM => return error.SystemResources,
-                .INVAL => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn deinit(self: *PosixSpawnActions) void {
-            _ = system.posix_spawn_file_actions_destroy(&self.actions);
-
-            self.* = undefined;
-        }
-
-        pub fn open(self: *PosixSpawnActions, fd: bun.FD, path: []const u8, flags: u32, mode: mode_t) !void {
-            const posix_path = try toPosixPath(path);
-            return self.openZ(fd, &posix_path, flags, mode);
-        }
-
-        pub fn openZ(self: *PosixSpawnActions, fd: bun.FD, path: [*:0]const u8, flags: u32, mode: mode_t) !void {
-            switch (errno(system.posix_spawn_file_actions_addopen(&self.actions, fd.cast(), path, @as(c_int, @bitCast(flags)), mode))) {
-                .SUCCESS => return,
-                .BADF => return error.InvalidFileDescriptor,
-                .NOMEM => return error.SystemResources,
-                .NAMETOOLONG => return error.NameTooLong,
-                .INVAL => unreachable, // the value of file actions is invalid
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn close(self: *PosixSpawnActions, fd: bun.FD) !void {
-            switch (errno(system.posix_spawn_file_actions_addclose(&self.actions, fd.cast()))) {
-                .SUCCESS => return,
-                .BADF => return error.InvalidFileDescriptor,
-                .NOMEM => return error.SystemResources,
-                .INVAL => unreachable, // the value of file actions is invalid
-                .NAMETOOLONG => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn dup2(self: *PosixSpawnActions, fd: bun.FD, newfd: bun.FD) !void {
-            if (fd == newfd) {
-                return self.inherit(fd);
-            }
-
-            switch (errno(system.posix_spawn_file_actions_adddup2(&self.actions, fd.cast(), newfd.cast()))) {
-                .SUCCESS => return,
-                .BADF => return error.InvalidFileDescriptor,
-                .NOMEM => return error.SystemResources,
-                .INVAL => unreachable, // the value of file actions is invalid
-                .NAMETOOLONG => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn inherit(self: *PosixSpawnActions, fd: bun.FD) !void {
-            switch (errno(system.posix_spawn_file_actions_addinherit_np(&self.actions, fd.cast()))) {
-                .SUCCESS => return,
-                .BADF => return error.InvalidFileDescriptor,
-                .NOMEM => return error.SystemResources,
-                .INVAL => unreachable, // the value of file actions is invalid
-                .NAMETOOLONG => unreachable,
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-
-        pub fn chdir(self: *PosixSpawnActions, path: []const u8) !void {
-            const posix_path = try toPosixPath(path);
-            return self.chdirZ(&posix_path);
-        }
-
-        // deliberately not pub
-        fn chdirZ(self: *PosixSpawnActions, path: [*:0]const u8) !void {
-            switch (errno(system.posix_spawn_file_actions_addchdir_np(&self.actions, path))) {
-                .SUCCESS => return,
-                .NOMEM => return error.SystemResources,
-                .NAMETOOLONG => return error.NameTooLong,
-                .BADF => unreachable,
-                .INVAL => unreachable, // the value of file actions is invalid
-                else => |err| return unexpectedErrno(err),
-            }
-        }
-    };
-
-    // Use BunSpawn types on POSIX (both Linux and macOS) for PTY support via posix_spawn_bun.
-    // Windows uses different spawn mechanisms.
-    pub const Actions = if (Environment.isPosix) BunSpawn.Actions else PosixSpawnActions;
-    pub const Attr = if (Environment.isPosix) BunSpawn.Attr else PosixSpawnAttr;
-
-    /// Used for Linux spawns and macOS PTY spawns via posix_spawn_bun.
-    const BunSpawnRequest = extern struct {
-        chdir_buf: ?[*:0]u8 = null,
-        detached: bool = false,
-        new_process_group: bool = false,
-        actions: ActionsList = .{},
-        pty_slave_fd: i32 = -1,
-        linux_pdeathsig: i32 = 0,
-
-        const ActionsList = extern struct {
-            ptr: ?[*]const BunSpawn.Action = null,
-            len: usize = 0,
-        };
-
-        extern fn posix_spawn_bun(
-            pid: *c_int,
-            path: [*:0]const u8,
-            request: *const BunSpawnRequest,
-            argv: [*:null]?[*:0]const u8,
-            envp: [*:null]?[*:0]const u8,
-        ) isize;
-
-        pub fn spawn(
-            path: [*:0]const u8,
-            req_: BunSpawnRequest,
-            argv: [*:null]?[*:0]const u8,
-            envp: [*:null]?[*:0]const u8,
-        ) Maybe(pid_t) {
-            var req = req_;
-            var pid: c_int = 0;
-
-            const rc = posix_spawn_bun(&pid, path, &req, argv, envp);
-            if (comptime bun.Environment.allow_assert)
-                bun.sys.syslog("posix_spawn_bun({s}) = {d} ({d})", .{
-                    bun.span(argv[0] orelse ""),
-                    rc,
-                    pid,
-                });
-
-            if (rc == 0) {
-                return Maybe(pid_t){ .result = @intCast(pid) };
-            }
-
-            return Maybe(pid_t){
-                .err = .{
-                    .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))),
-                    .syscall = .posix_spawn,
-                    .path = bun.span(argv[0] orelse ""),
-                },
-            };
-        }
-    };
-
-    pub fn spawnZ(
-        path: [*:0]const u8,
-        actions: ?Actions,
-        attr: ?Attr,
-        argv: [*:null]?[*:0]const u8,
-        envp: [*:null]?[*:0]const u8,
-    ) Maybe(pid_t) {
-        const pty_slave_fd = if (attr) |a| a.pty_slave_fd else -1;
-        const detached = if (attr) |a| a.detached else false;
-
-        // Use posix_spawn_bun when:
-        // - Linux: always (uses vfork which is fast and safe)
-        // - macOS: only for PTY spawns (pty_slave_fd >= 0) because PTY setup requires
-        //   setsid() + ioctl(TIOCSCTTY) before exec, which system posix_spawn can't do.
-        //   For non-PTY spawns on macOS, we use system posix_spawn which is safer
-        //   (Apple's posix_spawn uses a kernel fast-path that avoids fork() entirely).
-        const use_bun_spawn = Environment.isLinux or Environment.isFreeBSD or (Environment.isMac and pty_slave_fd >= 0);
-
-        if (use_bun_spawn) {
-            return BunSpawnRequest.spawn(
-                path,
-                .{
-                    .actions = if (actions) |act| .{
-                        .ptr = act.actions.items.ptr,
-                        .len = act.actions.items.len,
-                    } else .{
-                        .ptr = null,
-                        .len = 0,
-                    },
-                    .chdir_buf = if (actions) |a| a.chdir_buf else null,
-                    .detached = detached,
-                    .new_process_group = if (attr) |a| a.new_process_group else false,
-                    .pty_slave_fd = pty_slave_fd,
-                    .linux_pdeathsig = if (attr) |a| a.linux_pdeathsig else 0,
-                },
-                argv,
-                envp,
-            );
-        }
-
-        // macOS without PTY: use system posix_spawn
-        // Need to convert BunSpawn.Actions to PosixSpawnActions for system posix_spawn
-        if (comptime Environment.isMac) {
-            var posix_actions = PosixSpawnActions.init() catch return Maybe(pid_t){
-                .err = .{
-                    .errno = @intFromEnum(std.c.E.NOMEM),
-                    .syscall = .posix_spawn,
-                },
-            };
-            defer posix_actions.deinit();
-
-            var posix_attr = PosixSpawnAttr.init() catch return Maybe(pid_t){
-                .err = .{
-                    .errno = @intFromEnum(std.c.E.NOMEM),
-                    .syscall = .posix_spawn,
-                },
-            };
-            defer posix_attr.deinit();
-
-            // Pass through all flags from the BunSpawn.Attr
-            if (attr) |a| {
-                var flags = a.flags;
-                if (a.new_process_group) {
-                    flags |= bun.c.POSIX_SPAWN_SETPGROUP;
-                    // pgroup defaults to 0 in a freshly-init'd attr, i.e. child's own pid.
-                }
-                if (flags != 0) {
-                    posix_attr.set(flags) catch {};
-                }
-                if (a.reset_signals) {
-                    posix_attr.resetSignals() catch {};
-                }
-            }
-
-            // Convert actions
-            if (actions) |act| {
-                for (act.actions.items) |action| {
-                    switch (action.kind) {
-                        .close => posix_actions.close(bun.FD.fromNative(action.fds[0])) catch |err| {
-                            if (comptime bun.Environment.allow_assert) {
-                                bun.sys.syslog("posix_spawn_file_actions_addclose({d}) failed: {s}", .{ action.fds[0], @errorName(err) });
-                            }
-                        },
-                        .dup2 => posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1])) catch |err| {
-                            if (comptime bun.Environment.allow_assert) {
-                                bun.sys.syslog("posix_spawn_file_actions_adddup2({d}, {d}) failed: {s}", .{ action.fds[0], action.fds[1], @errorName(err) });
-                            }
-                        },
-                        .open => posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, @intCast(action.flags), @intCast(action.mode)) catch |err| {
-                            if (comptime bun.Environment.allow_assert) {
-                                bun.sys.syslog("posix_spawn_file_actions_addopen({d}, {s}, {d}, {d}) failed: {s}", .{ action.fds[0], action.path.?, action.flags, action.mode, @errorName(err) });
-                            }
-                        },
-                        .none => {},
-                    }
-                }
-
-                // Handle chdir
-                if (act.chdir_buf) |chdir_path| {
-                    posix_actions.chdir(bun.span(chdir_path)) catch |err| {
-                        if (comptime bun.Environment.allow_assert) {
-                            bun.sys.syslog("posix_spawn_file_actions_addchdir({s}) failed: {s}", .{ chdir_path, @errorName(err) });
-                        }
-                    };
-                }
-            }
-
-            var pid: pid_t = undefined;
-            const rc = system.posix_spawn(
-                &pid,
-                path,
-                &posix_actions.actions,
-                &posix_attr.attr,
-                argv,
-                envp,
-            );
-            if (comptime bun.Environment.allow_assert)
-                bun.sys.syslog("posix_spawn({s}) = {d} ({d})", .{
-                    path,
-                    rc,
-                    pid,
-                });
-
-            if (rc == 0) {
-                return Maybe(pid_t){ .result = pid };
-            }
-
-            return Maybe(pid_t){
-                .err = .{
-                    .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))),
-                    .syscall = .posix_spawn,
-                    .path = bun.asByteSlice(path),
-                },
-            };
-        }
-
-        // Windows path (uses different mechanism)
-        var pid: pid_t = undefined;
-        const rc = system.posix_spawn(
-            &pid,
-            path,
-            if (actions) |a| &a.actions else null,
-            if (attr) |a| &a.attr else null,
-            argv,
-            envp,
-        );
-        if (comptime bun.Environment.allow_assert)
-            bun.sys.syslog("posix_spawn({s}) = {d} ({d})", .{
-                path,
-                rc,
-                pid,
-            });
-
-        // Unlike most syscalls, posix_spawn returns 0 on success and an errno on failure.
-        // That is why bun.sys.getErrno() is not used here, since that checks for -1.
-        if (rc == 0) {
-            return Maybe(pid_t){ .result = pid };
-        }
-
-        return Maybe(pid_t){
-            .err = .{
-                .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))),
-                .syscall = .posix_spawn,
-                .path = bun.asByteSlice(path),
-            },
-        };
-    }
-
-    /// Use this version of the `waitpid` wrapper if you spawned your child process using `posix_spawn`
-    /// or `posix_spawnp` syscalls.
-    /// See also `std.posix.waitpid` for an alternative if your child process was spawned via `fork` and
-    /// `execve` method.
-    pub fn waitpid(pid: pid_t, flags: u32) Maybe(WaitPidResult) {
-        const PidStatus = c_int;
-        var status: PidStatus = 0;
-        while (true) {
-            const rc = system.waitpid(pid, &status, @as(c_int, @intCast(flags)));
-            switch (errno(rc)) {
-                .SUCCESS => return Maybe(WaitPidResult){
-                    .result = .{
-                        .pid = @as(pid_t, @intCast(rc)),
-                        .status = @as(u32, @bitCast(status)),
-                    },
-                },
-                .INTR => continue,
-
-                else => return bun.sys.Maybe(WaitPidResult).errnoSys(rc, .waitpid).?,
-            }
-        }
-    }
-
-    /// Same as waitpid, but also returns resource usage information.
-    pub fn wait4(pid: pid_t, flags: u32, usage: ?*process.Rusage) Maybe(WaitPidResult) {
-        const PidStatus = c_int;
-        var status: PidStatus = 0;
-        while (true) {
-            const rc = system.wait4(pid, &status, @as(c_int, @intCast(flags)), @ptrCast(usage));
-            switch (errno(rc)) {
-                .SUCCESS => return Maybe(WaitPidResult){
-                    .result = .{
-                        .pid = @as(pid_t, @intCast(rc)),
-                        .status = @as(u32, @bitCast(status)),
-                    },
-                },
-                .INTR => continue,
-
-                else => return bun.sys.Maybe(WaitPidResult).errnoSys(rc, .waitpid).?,
-            }
-        }
-    }
-
-    pub const process = @import("./process.zig");
-    pub const Process = process.Process;
-    pub const SpawnOptions = process.SpawnOptions;
-    pub const Status = process.Status;
-    pub const sync = process.sync;
-    pub const spawnProcess = process.spawnProcess;
-    pub const WindowsSpawnResult = process.WindowsSpawnResult;
-    pub const PosixSpawnResult = process.PosixSpawnResult;
-    pub const SpawnProcessResult = process.SpawnProcessResult;
-    pub const WindowsSpawnOptions = process.WindowsSpawnOptions;
-    pub const Rusage = process.Rusage;
-
-    pub const Stdio = @import("./spawn/stdio.zig").Stdio;
-};
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 const Environment = bun.Environment;
 const Maybe = bun.sys.Maybe;
-
 const errno = std.posix.errno;
 const fd_t = std.posix.fd_t;
 const mode_t = std.posix.mode_t;
@@ -564,3 +12,591 @@ const pid_t = std.posix.pid_t;
 const system = std.posix.system;
 const toPosixPath = std.posix.toPosixPath;
 const unexpectedErrno = std.posix.unexpectedErrno;
+pub const WaitPidMaybe = Maybe(PosixWaitPidResult);
+pub const PidMaybe = Maybe(pid_t);
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const proc = @import("./process.zig");
+pub const stdio_mod = @import("./spawn/stdio.zig");
+pub const BunFileActionType = enum(u8) {
+    none = 0,
+    close = 1,
+    dup2 = 2,
+    open = 3,
+    pub fn get(s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), s); }
+    pub fn has(s: []const u8) bool { return std.meta.stringToEnum(@This(), s) != null; }
+    pub fn fromName(s: []const u8) ?@This() { return get(s); }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+};
+
+pub const BunSpawnAction = extern struct {
+    kind: BunFileActionType = .none,
+    path: ?[*:0]u8 = null,
+    fds: [2]fd_t,
+    flags: c_int = 0,
+    mode: c_int = 0,
+
+pub fn init() !BunSpawnAction {
+            return .{};
+    }
+
+pub fn deinit(self: *BunSpawnAction, allocator: std.mem.Allocator) void {
+            if ((self.kind == .open)) {
+                if (self.path) |path| {
+                    _ = &path;
+                    _ = allocator.free(bun.span(path));
+                }
+            }
+    }
+    pub const FileActionType = BunFileActionType;
+};
+
+pub const BunSpawnActions = struct {
+    chdir_buf: ?[*:0]u8 = null,
+    actions: std.ArrayListUnmanaged(BunSpawnAction) = .{},
+    detached: bool = false,
+
+pub fn init() !BunSpawnActions {
+            return .{};
+    }
+
+pub fn deinit(self: *BunSpawnActions) void {
+            if (self.chdir_buf) |buf| {
+                _ = &buf;
+                _ = bun.default_allocator.free(bun.span(buf));
+            }
+            for (self.actions.items) |*action| {
+                _ = &action;
+                _ = (action.*).deinit(bun.default_allocator);
+            }
+            _ = self.actions.deinit(bun.default_allocator);
+    }
+
+pub fn open(self: *BunSpawnActions, fd: bun.FD, path: []const u8, flags: u32, mode: i32) !void {
+            const posix_path = try toPosixPath(path);
+            return self.openZ(fd, posix_path, flags, mode);
+    }
+
+pub fn openZ(self: *BunSpawnActions, fd: bun.FD, path: [*:0]u8, flags: u32, mode: i32) !void {
+            _ = try self.actions.append(bun.default_allocator, .{ .kind = .open, .path = try bun.default_allocator.dupeZ(u8, bun.span(path)).ptr, .flags = (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)), .mode = (if (comptime @typeInfo(@TypeOf(mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(mode)) else cp_cast_int(i32, mode)), .fds = .{ fd.native(), 0 } });
+    }
+
+pub fn close(self: *BunSpawnActions, fd: bun.FD) !void {
+            _ = try self.actions.append(bun.default_allocator, .{ .kind = .close, .path = null, .flags = 0, .mode = 0, .fds = .{ fd.native(), 0 } });
+    }
+
+pub fn dup2(self: *BunSpawnActions, fd: bun.FD, newfd: bun.FD) !void {
+            _ = try self.actions.append(bun.default_allocator, .{ .kind = .dup2, .path = null, .flags = 0, .mode = 0, .fds = .{ fd.native(), newfd.native() } });
+    }
+
+pub fn inherit(self: *BunSpawnActions, fd: bun.FD) !void {
+            _ = try self.dup2(fd, fd);
+    }
+
+pub fn chdir(self: *BunSpawnActions, path: []const u8) !void {
+            if (self.chdir_buf) |buf| {
+                _ = &buf;
+                _ = bun.default_allocator.free(bun.span(buf));
+            }
+            self.chdir_buf = try bun.default_allocator.dupeZ(u8, path).ptr;
+    }
+};
+
+pub const BunSpawnAttr = struct {
+    detached: bool = false,
+    new_process_group: bool = false,
+    pty_slave_fd: i32 = -1,
+    flags: u16 = 0,
+    reset_signals: bool = false,
+    linux_pdeathsig: i32 = 0,
+
+pub fn init() !BunSpawnAttr {
+            return .{};
+    }
+
+pub fn deinit(self: *BunSpawnAttr) void {
+        _ = self;
+    }
+
+pub fn get(self: BunSpawnAttr) !u16 {
+            return self.flags;
+    }
+
+pub fn set(self: *BunSpawnAttr, flags: u16) !void {
+            self.flags = flags;
+            if (comptime @hasDecl(bun.c, "POSIX_SPAWN_SETSID")) {
+                self.detached = ((flags & bun.c.POSIX_SPAWN_SETSID) != 0);
+            }
+    }
+
+pub fn resetSignals(self: *BunSpawnAttr) !void {
+            self.reset_signals = true;
+    }
+};
+
+pub const BunSpawn = struct {
+    pub const Action = BunSpawnAction;
+    pub const Actions = BunSpawnActions;
+    pub const Attr = BunSpawnAttr;
+};
+
+pub const PosixWaitPidResult = struct {
+    pid: pid_t,
+    status: u32,
+};
+
+pub const PosixAttr = struct {
+    attr: system.posix_spawnattr_t,
+    detached: bool = false,
+    pty_slave_fd: i32 = -1,
+
+pub fn init() !PosixAttr {
+            var attr: system.posix_spawnattr_t = undefined;
+            _ = &attr;
+            switch (errno(system.posix_spawnattr_init((&attr)))) {
+.SUCCESS => {
+return PosixAttr{ .attr = attr };
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn deinit(self: *PosixAttr) void {
+            _ = system.posix_spawnattr_destroy((&self.attr));
+    }
+
+pub fn get(self: PosixAttr) !u16 {
+            var flags: c_short = undefined;
+            _ = &flags;
+            switch (errno(system.posix_spawnattr_getflags((&self.attr), (&flags)))) {
+.SUCCESS => {
+return @as(u16, @bitCast(flags));
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn set(self: *PosixAttr, flags: u16) !void {
+            switch (errno(system.posix_spawnattr_setflags((&self.attr), @as(c_short, @bitCast(flags))))) {
+.SUCCESS => {
+
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn resetSignals(self: *PosixAttr) !void {
+            if ((posix_spawnattr_reset_signals((&self.attr)) != 0)) {
+                return error.SystemResources;
+            }
+    }
+};
+
+pub const PosixActions = struct {
+    actions: system.posix_spawn_file_actions_t,
+
+pub fn init() !PosixActions {
+            var actions: system.posix_spawn_file_actions_t = undefined;
+            _ = &actions;
+            switch (errno(system.posix_spawn_file_actions_init((&actions)))) {
+.SUCCESS => {
+return PosixActions{ .actions = actions };
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn deinit(self: *PosixActions) void {
+            _ = system.posix_spawn_file_actions_destroy((&self.actions));
+            self.* = undefined;
+    }
+
+pub fn open(self: *PosixActions, fd: bun.FD, path: []const u8, flags: u32, mode: mode_t) !void {
+            const posix_path = try toPosixPath(path);
+            return self.openZ(fd, posix_path, flags, mode);
+    }
+
+pub fn openZ(self: *PosixActions, fd: bun.FD, path: [*:0]u8, flags: u32, mode: mode_t) !void {
+            switch (errno(system.posix_spawn_file_actions_addopen((&self.actions), fd.cast(), path, @as(c_int, @bitCast(flags)), mode))) {
+.SUCCESS => {
+
+},
+.BADF => {
+return error.InvalidFileDescriptor;
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.NAMETOOLONG => {
+return error.NameTooLong;
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn close(self: *PosixActions, fd: bun.FD) !void {
+            switch (errno(system.posix_spawn_file_actions_addclose((&self.actions), fd.cast()))) {
+.SUCCESS => {
+
+},
+.BADF => {
+return error.InvalidFileDescriptor;
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.INVAL => {
+_ = unreachable;
+},
+.NAMETOOLONG => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn dup2(self: *PosixActions, fd: bun.FD, newfd: bun.FD) !void {
+            if ((fd == newfd)) {
+                return self.inherit(fd);
+            }
+            switch (errno(system.posix_spawn_file_actions_adddup2((&self.actions), fd.cast(), newfd.cast()))) {
+.SUCCESS => {
+
+},
+.BADF => {
+return error.InvalidFileDescriptor;
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.INVAL => {
+_ = unreachable;
+},
+.NAMETOOLONG => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn inherit(self: *PosixActions, fd: bun.FD) !void {
+            switch (errno(system.posix_spawn_file_actions_addinherit_np((&self.actions), fd.cast()))) {
+.SUCCESS => {
+
+},
+.BADF => {
+return error.InvalidFileDescriptor;
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.INVAL => {
+_ = unreachable;
+},
+.NAMETOOLONG => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+
+pub fn chdir(self: *PosixActions, path: []const u8) !void {
+            const posix_path = try toPosixPath(path);
+            return self.chdirZ(posix_path);
+    }
+
+pub fn chdirZ(self: *PosixActions, path: [*:0]u8) !void {
+            switch (errno(system.posix_spawn_file_actions_addchdir_np((&self.actions), path))) {
+.SUCCESS => {
+
+},
+.NOMEM => {
+return error.SystemResources;
+},
+.NAMETOOLONG => {
+return error.NameTooLong;
+},
+.BADF => {
+_ = unreachable;
+},
+.INVAL => {
+_ = unreachable;
+},
+else => |e| {
+return unexpectedErrno(e);
+},
+}
+    }
+};
+
+pub const BunSpawnActionsList = extern struct {
+    ptr: ?[*]const BunSpawnAction = null,
+    len: usize = 0,
+};
+
+pub const PosixBunSpawnRequest = extern struct {
+    chdir_buf: ?[*:0]u8 = null,
+    detached: bool = false,
+    new_process_group: bool = false,
+    actions: BunSpawnActionsList = .{},
+    pty_slave_fd: i32 = -1,
+    linux_pdeathsig: i32 = 0,
+
+pub extern "c" fn posix_spawn_bun(pid: *c_int, path: [*:0]u8, request: *const PosixBunSpawnRequest, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) callconv(.c) isize;
+
+pub fn spawn(path: [*:0]u8, req_: PosixBunSpawnRequest, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) PidMaybe {
+            var req = req_;
+            _ = &req;
+            var pid: c_int = 0;
+            _ = &pid;
+            const rc = posix_spawn_bun((&pid), path, (&req), argv, envp);
+            if (comptime bun.Environment.allow_assert) {
+                _ = bun.sys.syslog("posix_spawn_bun({s}) = {d} ({d})", .{ bun.span(((argv[0]) orelse (""))), rc, pid });
+            }
+            if ((rc == 0)) {
+                return PidMaybe{ .result = (if (comptime @typeInfo(@TypeOf(pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(pid)) else cp_cast_int(i32, pid)) };
+            }
+            return PidMaybe{ .@"err" = .{ .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))), .syscall = .posix_spawn, .path = bun.span(((argv[0]) orelse (""))) } };
+    }
+    pub const ActionsList = BunSpawnActionsList;
+};
+
+pub const PosixSpawn = struct {
+
+pub fn spawnZ(path: [*:0]u8, actions: ?Actions, attr: ?Attr, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) PidMaybe {
+            var pty_slave_fd: i32 = -1;
+            _ = &pty_slave_fd;
+            var detached = false;
+            _ = &detached;
+            var new_process_group = false;
+            _ = &new_process_group;
+            var linux_pdeathsig: i32 = 0;
+            _ = &linux_pdeathsig;
+            if (attr) |a| {
+                _ = &a;
+                pty_slave_fd = a.pty_slave_fd;
+                detached = a.detached;
+                new_process_group = a.new_process_group;
+                linux_pdeathsig = a.linux_pdeathsig;
+            }
+            var act_ptr: ?[*]const BunSpawnAction = null;
+            _ = &act_ptr;
+            var act_len: usize = 0;
+            _ = &act_len;
+            var chdir_buf: ?[*:0]u8 = null;
+            _ = &chdir_buf;
+            if (actions) |act| {
+                _ = &act;
+                act_ptr = act.actions.items.ptr;
+                act_len = act.actions.items.len;
+                chdir_buf = act.chdir_buf;
+            }
+            const use_bun_spawn = ((Environment.isLinux or Environment.isFreeBSD) or (Environment.isMac and (pty_slave_fd >= 0)));
+            if (use_bun_spawn) {
+                return PosixBunSpawnRequest.spawn(path, .{ .chdir_buf = chdir_buf, .detached = detached, .new_process_group = new_process_group, .actions = .{ .ptr = act_ptr, .len = act_len }, .pty_slave_fd = pty_slave_fd, .linux_pdeathsig = linux_pdeathsig }, argv, envp);
+            }
+            if (comptime Environment.isMac) {
+                var posix_actions = (blk_catch_0: { break :blk_catch_0 ((PosixActions.init()) catch |__ce_0| { _ = &__ce_0; return PidMaybe{ .@"err" = .{ .errno = @intFromEnum(std.c.E.NOMEM), .syscall = .posix_spawn } }; }); });
+                _ = &posix_actions;
+                defer {
+                _ = posix_actions.deinit();
+                }
+                var posix_attr = (blk_catch_1: { break :blk_catch_1 ((PosixAttr.init()) catch |__ce_1| { _ = &__ce_1; return PidMaybe{ .@"err" = .{ .errno = @intFromEnum(std.c.E.NOMEM), .syscall = .posix_spawn } }; }); });
+                _ = &posix_attr;
+                defer {
+                _ = posix_attr.deinit();
+                }
+                if (attr) |a| {
+                    _ = &a;
+                    var flags = a.flags;
+                    _ = &flags;
+                    if (a.new_process_group) {
+                        flags = (flags | bun.c.POSIX_SPAWN_SETPGROUP);
+                    }
+                    if ((flags != 0)) {
+                        _ = (blk_catch_2: { break :blk_catch_2 ((posix_attr.set(flags)) catch |__ce_2| { _ = &__ce_2;  }); });
+                    }
+                    if (a.reset_signals) {
+                        _ = (blk_catch_3: { break :blk_catch_3 ((posix_attr.resetSignals()) catch |__ce_3| { _ = &__ce_3;  }); });
+                    }
+                }
+                if (actions) |act| {
+                    _ = &act;
+                    for (act.actions.items) |action| {
+                        _ = &action;
+                        switch (action.kind) {
+.close => {
+_ = (blk_catch_4: { break :blk_catch_4 ((posix_actions.close(bun.FD.fromNative(action.fds[0]))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
+                            _ = bun.sys.syslog("posix_spawn_file_actions_addclose({d}) failed: {s}", .{ action.fds[0], @errorName(e) });
+                        } }); });
+},
+.dup2 => {
+_ = (blk_catch_5: { break :blk_catch_5 ((posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1]))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
+                            _ = bun.sys.syslog("posix_spawn_file_actions_adddup2({d}, {d}) failed: {s}", .{ action.fds[0], action.fds[1], @errorName(e) });
+                        } }); });
+},
+.open => {
+_ = (blk_catch_6: { break :blk_catch_6 ((posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, (if (comptime @typeInfo(@TypeOf(action.flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(action.flags)) else cp_cast_int(i32, action.flags)), (if (comptime @typeInfo(@TypeOf(action.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(action.mode)) else cp_cast_int(i32, action.mode)))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
+                            _ = bun.sys.syslog("posix_spawn_file_actions_addopen({d}, {s}, {d}, {d}) failed: {s}", .{ action.fds[0], action.path.?, action.flags, action.mode, @errorName(e) });
+                        } }); });
+},
+.none => {
+
+},
+}
+                    }
+                    if (act.chdir_buf) |chdir_path| {
+                        _ = &chdir_path;
+                        _ = (blk_catch_7: { break :blk_catch_7 ((posix_actions.chdir(bun.span(chdir_path))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
+                            _ = bun.sys.syslog("posix_spawn_file_actions_addchdir({s}) failed: {s}", .{ chdir_path, @errorName(e) });
+                        } }); });
+                    }
+                }
+                var pid: pid_t = undefined;
+                _ = &pid;
+                const rc = system.posix_spawn((&pid), path, (&posix_actions.actions), (&posix_attr.attr), argv, envp);
+                if (comptime bun.Environment.allow_assert) {
+                    _ = bun.sys.syslog("posix_spawn({s}) = {d} ({d})", .{ path, rc, pid });
+                }
+                if ((rc == 0)) {
+                    return PidMaybe{ .result = pid };
+                }
+                return PidMaybe{ .@"err" = .{ .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))), .syscall = .posix_spawn, .path = bun.asByteSlice(path) } };
+            }
+            var pid: pid_t = undefined;
+            _ = &pid;
+            var act = actions;
+            _ = &act;
+            var at = attr;
+            _ = &at;
+            const actions_ptr = (if ((act != null)) (&act.?.actions) else null);
+            const attr_ptr = (if ((at != null)) (&at.?.attr) else null);
+            const rc = system.posix_spawn((&pid), path, actions_ptr, attr_ptr, argv, envp);
+            if (comptime bun.Environment.allow_assert) {
+                _ = bun.sys.syslog("posix_spawn({s}) = {d} ({d})", .{ path, rc, pid });
+            }
+            if ((rc == 0)) {
+                return PidMaybe{ .result = pid };
+            }
+            return PidMaybe{ .@"err" = .{ .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))), .syscall = .posix_spawn, .path = bun.asByteSlice(path) } };
+    }
+
+pub fn waitpid(pid: pid_t, flags: u32) WaitPidMaybe {
+            const PidStatus = c_int;
+            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum") @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
+            _ = &status;
+            while (true) {
+                const rc = system.waitpid(pid, (&status), (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else @as(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))));
+                switch (errno(rc)) {
+.SUCCESS => {
+return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum") @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
+},
+.INTR => {
+_ = continue;
+},
+else => {
+return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
+},
+}
+            }
+    }
+
+pub fn wait4(pid: pid_t, flags: u32, usage: ?*proc.Rusage) WaitPidMaybe {
+            const PidStatus = c_int;
+            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum") @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
+            _ = &status;
+            while (true) {
+                const rc = system.wait4(pid, (&status), (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else @as(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))), @ptrCast(usage));
+                switch (errno(rc)) {
+.SUCCESS => {
+return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum") @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
+},
+.INTR => {
+_ = continue;
+},
+else => {
+return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
+},
+}
+            }
+    }
+    pub const WaitPidResult = PosixWaitPidResult;
+    pub const PosixSpawnAttr = PosixAttr;
+    pub const PosixSpawnActions = PosixActions;
+    pub const Actions = (if (Environment.isPosix) BunSpawn.Actions else PosixActions);
+    pub const Attr = (if (Environment.isPosix) BunSpawn.Attr else PosixAttr);
+    pub const BunSpawnRequest = PosixBunSpawnRequest;
+    pub const process = proc;
+    pub const Process = proc.Process;
+    pub const SpawnOptions = proc.SpawnOptions;
+    pub const Status = proc.Status;
+    pub const sync = proc.sync;
+    pub const spawnProcess = proc.spawnProcess;
+    pub const WindowsSpawnResult = proc.WindowsSpawnResult;
+    pub const PosixSpawnResult = proc.PosixSpawnResult;
+    pub const SpawnProcessResult = proc.SpawnProcessResult;
+    pub const WindowsSpawnOptions = proc.WindowsSpawnOptions;
+    pub const Rusage = proc.Rusage;
+    pub const Stdio = stdio_mod.Stdio;
+};
+
+
+extern "c" fn posix_spawnattr_reset_signals(attr: *system.posix_spawnattr_t) callconv(.c) c_int;

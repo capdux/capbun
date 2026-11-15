@@ -1628,3 +1628,56 @@ Options:
   - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
   - 代码膨胀率全量 `<= 1.130x`（均在 `<= 1.20x` 红线内）。
 - 集中完成 Milestone 7 Phase 49 Git 原子提交。
+
+---
+
+## 2026-11-16 08:13:30 - 双路子智能体并发派发任务留痕
+
+### 1. 任务派发记录
+- **Worker 1 (`66a30a4f-4c6a-46ac-8633-1e7e733241e4`, Role: CP Migrator - Runtime Bun API)**：
+  - 任务目标：`src/runtime/api/bun/` 核心模块纯 CP 化（`x509.cp`, `SecureContext.cp`, `SSLContextCache.cp`, `spawn.cp`, `subprocess.cp`）
+  - 门禁要求：4 项硬门禁全绿，0 Zig 语法残留。
+- **Worker 2 (`a1698133-8eaf-4c29-9e7b-2c9fd4982032`, Role: CP Migrator - Test Runner)**：
+  - 任务目标：`src/test_runner/` 核心模块纯 CP 化（`snapshot.cp`, `Execution.cp`）
+  - 门禁要求：4 项硬门禁全绿，0 Zig 语法残留。
+- **状态**：双路子智能体已并发启动，主智能体进入事件驱动休眠等待唤醒通知。
+
+---
+
+## 2026-11-16 08:42:30 - Worker 2 结单验收与新批次并发派发记录
+
+### 1. 结单与独立严密验收
+- **Worker 2 (`a1698133-8eaf-4c29-9e7b-2c9fd4982032`) 完成汇报**：
+  - `src/test_runner/snapshot.cp` (1.11x, PASS)
+  - `src/test_runner/Execution.cp` (1.099x, PASS)
+- **主智能体独立严密验收通过**：4 项硬门禁全绿（备份完好、0 违例、编译与 ast-check 0 报错）。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+
+### 2. 主智能体攻坚进展
+- 主智能体就地快速完成了 `src/test_runner/expect/` 中前 50 个匹配器模块的转换与编译（包括全部 37 个 `toBe*.cp` 系列 matchers 100% PASS）。
+
+### 3. 新批次并发派发
+- **Worker 2 新实例 (`26daacfd-c74c-4773-9201-f595cf09c525`, Role: CP Migrator - Expect Matchers)**：
+  - 任务目标：攻坚修复 `src/test_runner/expect/` 剩余 25 个断言匹配器（`toContain*`, `toHaveBeenCalled*`, `toHave*`, `toThrow*` 等）。
+  - 门禁要求：4 项硬门禁全绿，0 Zig 语法残留。
+- **状态**：双路并发运行中，主智能体进入事件响应休眠，等待完成唤醒。
+
+---
+
+## 2026-11-16 08:45:00 - `src/runtime/api/bun/` (5 个核心模块 100% 全量闭环) 结单验收与入库
+
+### 1. 结单汇报接收与独立严密验收
+- **Worker 1 (`66a30a4f-4c6a-46ac-8633-1e7e733241e4`) 汇报结单**，完成 `src/runtime/api/bun/` 5 个模块迁移；
+- 主智能体调用 `python3 scripts/cpc_brief.py` 执行独立严密验收：
+  1. `src/runtime/api/bun/x509.cp` (108 行, 0.574x, PASS)
+  2. `src/runtime/api/bun/SecureContext.cp` (139 行, 0.986x, PASS)
+  3. `src/runtime/api/bun/SSLContextCache.cp` (186 行, 1.000x, PASS)
+  4. `src/runtime/api/bun/spawn.cp` (547 行, 1.058x, PASS)
+  5. `src/runtime/api/bun/subprocess.cp` (777 行, 0.916x, PASS)
+- **4 项硬门禁指标 100% 全绿**：
+  - 全部 5 个 `<stem>_.zig` 原始备份完好无损；
+  - `cpc --lib` + `vendor/zig/zig ast-check` 双重 0 报错；
+  - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`；
+  - 代码膨胀率全量 `<= 1.058x`（均在 `<= 1.20x` 红线内）。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+- 集中完成 Milestone 7 Phase 50 Git 原子提交。

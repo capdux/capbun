@@ -608,3 +608,13 @@
 - **调用约定修饰器规范**：在 `finalize` 与 C 导出函数中，严格采用 `@callconv("c")` 与 `@callconv(jsc.conv)` 前置修饰器，废除后置 `: callconv(...)` 伪类型语法，消除 Zig 生成代码丢失 `void` 导致的 ast-check 报错。
 - **打印元组与类型别名**：在格式化日志中，格式化参数元组统一规范为 `.{ a, b }`（带前导点），消解 CP 对匿名键值对结构体与元组的词法歧义；类型别名规范为 `type string = []const u8;`，消除 `const string = []const u8` 触发的空数组与遮蔽推导冲突。
 
+## 2026-11-16 [Milestone 7 Phase 50] `src/runtime/api/bun/` (5 个核心运行时模块 100% 闭环) 技术经验
+
+### 1. 进程派生与多平台上下文抽象 (`spawn.cp`, `subprocess.cp`)
+- **平台条件宏重构**：将 macOS/Linux/Windows 上的 posix_spawn 与句柄管道操作重构为规范的 CP 语句，消除多分支返回中的语句级表达式解析冲突；在 `subprocess.cp` 中利用 `*=` 忽略底层管道任务注销返回值，杜绝 Zig 风格 `_ =`。
+- **IPC 消息管道与借用安全**：在进程间通信（IPC）与流缓冲中，显式通过 `*_` 可变接收者操作进程生命周期（`clearAbortSignal`），杜绝父子进程共享内存时的指针别名竞争。
+
+### 2. TLS 安全上下文弱缓存与 X.509 凭据抽象 (`x509.cp`, `SecureContext.cp`, `SSLContextCache.cp`)
+- **C-ABI 导出与弱映射生命周期**：在 `SSLContextCache.cp` 中，根结构体管理 BoringSSL `SSL_CTX` 的弱引用 tombstone 映射，通过 `@export` 暴露 C 回调 `bun_ssl_ctx_cache_on_free`；在 `SecureContext.cp` 中，安全解析 PEM/DER 证书并委托统一缓存，实现 0 内存泄漏。
+
+
