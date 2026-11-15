@@ -1,159 +1,132 @@
-pub fn toHaveReturnedWith(this: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
-    jsc.markBinding(@src());
-
-    const thisValue = callframe.this();
-    defer this.postMatch(globalThis);
-
-    const value: JSValue = try this.getValue(globalThis, thisValue, "toHaveReturnedWith", "<green>expected<r>");
-
-    const expected = callframe.argumentsAsArray(1)[0];
-    this.incrementExpectCallCounter();
-
-    const returns = try bun.cpp.JSMockFunction__getReturns(globalThis, value);
-    if (!returns.jsType().isArray()) {
-        var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
-        defer formatter.deinit();
-        return globalThis.throw("Expected value must be a mock function: {f}", .{value.toFmt(&formatter)});
-    }
-
-    const calls_count = @as(u32, @intCast(try returns.getLength(globalThis)));
-    var pass = false;
-
-    var successful_returns = std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator);
-    defer successful_returns.deinit();
-
-    var has_errors = false;
-
-    // Check for a pass and collect info for error messages
-    for (0..calls_count) |i| {
-        const result = returns.getDirectIndex(globalThis, @truncate(i));
-
-        if (result.isObject()) {
-            const result_type = try result.get(globalThis, "type") orelse .js_undefined;
-            if (result_type.isString()) {
-                const type_str = try result_type.toBunString(globalThis);
-                defer type_str.deref();
-
-                if (type_str.eqlComptime("return")) {
-                    const result_value = try result.get(globalThis, "value") orelse .js_undefined;
-                    try successful_returns.append(result_value);
-
-                    // Check for pass condition only if not already passed
-                    if (!pass) {
-                        if (try result_value.jestDeepEquals(expected, globalThis)) {
-                            pass = true;
-                        }
-                    }
-                } else if (type_str.eqlComptime("throw")) {
-                    has_errors = true;
-                }
-            }
-        }
-    }
-
-    if (pass != this.flags.not) {
-        return .js_undefined;
-    }
-
-    // Handle failure
-    var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
-    defer formatter.deinit();
-
-    const signature = comptime getSignature("toHaveReturnedWith", "<green>expected<r>", false);
-
-    if (this.flags.not) {
-        const not_signature = comptime getSignature("toHaveReturnedWith", "<green>expected<r>", true);
-        return this.throw(globalThis, not_signature, "\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n", .{expected.toFmt(&formatter)});
-    }
-
-    // No match was found.
-    const successful_returns_count = successful_returns.items.len;
-
-    // Case: Only one successful return, no errors
-    if (calls_count == 1 and successful_returns_count == 1) {
-        const received = successful_returns.items[0];
-        if (expected.isString() and received.isString()) {
-            const diff_format = DiffFormatter{
-                .expected = expected,
-                .received = received,
-                .globalThis = globalThis,
-                .not = false,
-            };
-            return this.throw(globalThis, signature, "\n\n{f}\n", .{diff_format});
-        }
-
-        return this.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{
-            expected.toFmt(&formatter),
-            received.toFmt(&formatter),
-        });
-    }
-
-    if (has_errors) {
-        // Case: Some calls errored
-        const list_formatter = mock.AllCallsFormatter{
-            .globalThis = globalThis,
-            .returns = returns,
-            .formatter = &formatter,
-        };
-        const fmt =
-            \\Some calls errored:
-            \\
-            \\    Expected: {f}
-            \\    Received:
-            \\{f}
-            \\
-            \\    Number of returns: {d}
-            \\    Number of calls:   {d}
-        ;
-
-        switch (Output.enable_ansi_colors_stderr) {
-            inline else => |colors| {
-                return this.throw(globalThis, signature, Output.prettyFmt("\n\n" ++ fmt ++ "\n", colors), .{
-                    expected.toFmt(&formatter),
-                    list_formatter,
-                    successful_returns_count,
-                    calls_count,
-                });
-            },
-        }
-    } else {
-        // Case: No errors, but no match (and multiple returns)
-        const list_formatter = mock.SuccessfulReturnsFormatter{
-            .globalThis = globalThis,
-            .successful_returns = &successful_returns,
-            .formatter = &formatter,
-        };
-        const fmt =
-            \\    <green>Expected<r>: {f}
-            \\    <red>Received<r>:
-            \\{f}
-            \\
-            \\    Number of returns: {d}
-        ;
-
-        switch (Output.enable_ansi_colors_stderr) {
-            inline else => |colors| {
-                return this.throw(globalThis, signature, Output.prettyFmt("\n\n" ++ fmt ++ "\n", colors), .{
-                    expected.toFmt(&formatter),
-                    list_formatter,
-                    successful_returns_count,
-                });
-            },
-        }
-    }
-}
-
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
+
 const DiffFormatter = @import("../diff_format.zig").DiffFormatter;
-
-const bun = @import("bun");
 const Output = bun.Output;
-
 const jsc = bun.jsc;
 const CallFrame = bun.jsc.CallFrame;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const mock = bun.jsc.Expect.mock;
-
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+
+pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
+        _ = jsc.markBinding(@src());
+        const thisValue = callframe.this();
+        defer {
+        _ = client.postMatch(globalThis);
+        }
+        const value: JSValue = try client.getValue(globalThis, thisValue, "toHaveReturnedWith", "<green>expected<r>");
+        const expected = callframe.argumentsAsArray(1)[0];
+        _ = client.incrementExpectCallCounter();
+        const returns = try bun.cpp.JSMockFunction__getReturns(globalThis, value);
+        if ((!returns.jsType().isArray())) {
+            var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
+            _ = &formatter;
+            defer {
+            _ = formatter.deinit();
+            }
+            return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt((&formatter)) });
+        }
+        const calls_count: u32 = @truncate(try returns.getLength(globalThis));
+        var pass = false;
+        _ = &pass;
+        var successful_returns = std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator);
+        _ = &successful_returns;
+        defer {
+        _ = successful_returns.deinit();
+        }
+        var has_errors = false;
+        _ = &has_errors;
+        var i: u32 = 0;
+        _ = &i;
+        while ((i < calls_count)) : (i = (i + 1)) {
+            const result = returns.getDirectIndex(globalThis, i);
+            if (result.isObject()) {
+                const result_type = ((try result.get(globalThis, "type")) orelse (.js_undefined));
+                if (result_type.isString()) {
+                    const type_str = try result_type.toBunString(globalThis);
+                    defer {
+                    _ = type_str.deref();
+                    }
+                    if (type_str.eqlComptime("return")) {
+                        const result_value = ((try result.get(globalThis, "value")) orelse (.js_undefined));
+                        _ = try successful_returns.append(result_value);
+                        if ((!pass)) {
+                            if (try result_value.jestDeepEquals(expected, globalThis)) {
+                                pass = true;
+                            }
+                        }
+                    } else {
+                        if (type_str.eqlComptime("throw")) {
+                            has_errors = true;
+                        }
+                    }
+                }
+            }
+        }
+        if ((pass != client.flags.not)) {
+            return error.js_undefined;
+        }
+        var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
+        _ = &formatter;
+        defer {
+        _ = formatter.deinit();
+        }
+        const signature = (comptime getSignature("toHaveReturnedWith", "<green>expected<r>", false));
+        if (client.flags.not) {
+            const not_signature = (comptime getSignature("toHaveReturnedWith", "<green>expected<r>", true));
+            return client.throw(globalThis, not_signature, ("\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n"), .{ expected.toFmt((&formatter)) });
+        }
+        const successful_returns_count = successful_returns.items.len;
+        if (((calls_count == 1) and (successful_returns_count == 1))) {
+            const received = successful_returns.items[0];
+            if ((expected.isString() and received.isString())) {
+                const diff_format = DiffFormatter{ .expected = expected, .received = received, .globalThis = globalThis, .not = false };
+                return client.throw(globalThis, signature, "\n\n{f}\n", .{ diff_format });
+            }
+            return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ expected.toFmt((&formatter)), received.toFmt((&formatter)) });
+        }
+        if (has_errors) {
+            const list_formatter = mock.AllCallsFormatter{ .globalThis = globalThis, .returns = returns, .formatter = (&formatter) };
+            const fmt = ((((("Some calls errored:\n\n" ++ "    Expected: {f}\n") ++ "    Received:\n") ++ "{f}\n\n") ++ "    Number of returns: {d}\n") ++ "    Number of calls:   {d}");
+            switch (Output.enable_ansi_colors_stderr) {
+inline else => |colors| {
+return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter)), list_formatter, successful_returns_count, calls_count });
+},
+}
+        } else {
+            const list_formatter = mock.SuccessfulReturnsFormatter{ .globalThis = globalThis, .successful_returns = successful_returns, .formatter = (&formatter) };
+            const fmt = ((("    <green>Expected<r>: {f}\n" ++ "    <red>Received<r>:\n") ++ "{f}\n\n") ++ "    Number of returns: {d}");
+            switch (Output.enable_ansi_colors_stderr) {
+inline else => |colors| {
+return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter)), list_formatter, successful_returns_count });
+},
+}
+        }
+}

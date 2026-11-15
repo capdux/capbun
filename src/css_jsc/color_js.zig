@@ -17,6 +17,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -189,7 +204,7 @@ const r = try colorIntFromJS(globalThis, try args[0].getIndex(globalThis, 0), "[
                 break :brk .{ .result = css.CssColor{ .rgba = .{ .alpha = (if (comptime @typeInfo(@TypeOf(a)) == .@"enum") cp_cast_int(u8, @intFromEnum(a)) else cp_cast_int(u8, a)), .red = (if (comptime @typeInfo(@TypeOf(r)) == .@"enum") cp_cast_int(u8, @intFromEnum(r)) else cp_cast_int(u8, r)), .green = (if (comptime @typeInfo(@TypeOf(g)) == .@"enum") cp_cast_int(u8, @intFromEnum(g)) else cp_cast_int(u8, g)), .blue = (if (comptime @typeInfo(@TypeOf(b)) == .@"enum") cp_cast_int(u8, @intFromEnum(b)) else cp_cast_int(u8, b)) } } };
 },
 else => {
-return globalThis.throw("Expected array length 3 or 4", .{  });
+return globalThis.throw("Expected array length 3 or 4", &.{});
 },
 }
             } else {
@@ -231,14 +246,11 @@ if ((log.msgs.items.len == 0)) {
         return globalThis.throw("color() failed to parse {s}", .{ @tagName(e.basic().kind) });
 },
 .result => |*result| {
-const format: OutputColorFormat = (if ((unresolved_format == .ansi)) (switch (bun.Output.Source.colorDepth()) {
-.none => {
-return jsc.JSValue.jsEmptyString(globalThis);
-},
-.@"16" => .ansi_16,
-.@"16m" => .ansi_16m,
-.@"256" => .ansi_256,
-}) else unresolved_format);
+if (((unresolved_format == .ansi) and (bun.Output.Source.colorDepth() == .none))) {
+            return jsc.JSValue.jsEmptyString(globalThis);
+        }
+        const depth = bun.Output.Source.colorDepth();
+        const format: OutputColorFormat = (if ((unresolved_format == .ansi)) (if ((depth == .@"16m")) OutputColorFormat.ansi_16m else (if ((@intFromEnum(depth) == 1)) OutputColorFormat.ansi_16 else OutputColorFormat.ansi_256)) else unresolved_format);
         _ = formatted: {
         var str = (blk_catch_2: { break :blk_catch_2 ((color: {
         break :color (switch (format) {

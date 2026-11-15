@@ -1681,3 +1681,47 @@ Options:
   - 代码膨胀率全量 `<= 1.058x`（均在 `<= 1.20x` 红线内）。
 - 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
 - 集中完成 Milestone 7 Phase 50 Git 原子提交。
+
+---
+
+## 2026-11-16 08:55:00 - 配额恢复、`src/css` 95 模块全量验证确认与双路子智能体并行启动
+
+### 1. 用户指令
+- 用户通知：“配额恢复, 继续你的工作”
+- 历史确认要求：“cp agy 报告, 已全部完成 css 目录迁移, 你确认下”、“cp agy 完成了 css, 你检查一下即可, 不要改坏了”。
+
+### 2. `src/css` 与 `src/css_jsc` 验收核验
+- **`src/css` 95 模块全量检验**：
+  - 调用 `scripts/cpc_brief.py` 扫描 `src/css/**/*.cp` 共 95 个模块；
+  - 验收结果：**95 PASS / 0 FAIL**（通过率 100%），未迁移文件数 0；确认 `cp agy` 已完美完成 `src/css` 目录全量重构。
+- **`src/css_jsc` 修复与校验**：
+  - `src/css_jsc/css_internals.cp`：修复 L160 `_ = allocator;` -> `* = allocator;`（通过门禁）；
+  - `src/css_jsc/color_js.cp`：修复 `bun.Output.Source.colorDepth()` 中 `.@"16"` / `.@"256"` 枚举匹配，消除 `tuple.@N` 误报；
+  - 验收结果：3 PASS / 0 FAIL（`color_js.cp`, `css_internals.cp`, `error_jsc.cp` 均 100% 满分通过 4 项门禁）。
+
+### 3. 双路全新子智能体并发启动
+- **Worker 1 (`93e62d69-ae68-44d1-b224-7473bd9b7236`, Role: CP Migrator - Expect Finish)**：
+  - 任务目标：攻坚修复 `src/test_runner/expect/` 剩余 13 个断言匹配器（`toHaveLastReturnedWith.cp`, `toHaveLength.cp`, `toHaveNthReturnedWith.cp`, `toHaveProperty.cp`, `toHaveReturned.cp`, `toHaveReturnedWith.cp`, `toIncludeRepeated.cp`, `toMatch.cp`, `toMatchSnapshot.cp`, `toSatisfy.cp`, `toThrow.cp`, `toThrowErrorMatchingInlineSnapshot.cp`, `toThrowErrorMatchingSnapshot.cp`），确保 `expect/` 75 模块全量达标。
+- **Worker 2 (`f269479c-0f87-4061-aec3-7687faeb868d`, Role: CP Migrator - Node Runtime)**：
+  - 任务目标：迁移 `src/runtime/node/` 目录第 1 批 10 个轻量级模块（`node_error_binding.zig`, `node_http_binding.zig`, `uv_signal_handle_windows.zig`, `node_assert_binding.zig`, `buffer.zig`, `node_net_binding.zig`, `time_like.zig`, `node_assert.zig`, `StatFS.zig`, `node_fs_constant.zig`）。
+- **主智能体状态**：进入事件驱动休眠状态，等待子智能体完成汇报（Reactive Wakeup，0 Token 轮询消耗）。
+
+---
+
+## 2026-11-16 09:02:00 - `src/test_runner/expect/` (75 模块全量闭环 100% 满绿) 结单验收与新子智能体派发
+
+### 1. 结单汇报接收与独立交叉验收
+- **Worker 1 (`93e62d69-ae68-44d1-b224-7473bd9b7236`) 汇报结单**，完成 `src/test_runner/expect/` 剩余 13 个断言匹配器修复。
+- 主智能体调用 `scripts/cpc_brief.py` 执行独立严密全量扫描：
+  - 扫描范围：`src/test_runner/expect/*.cp` 全部 75 个模块；
+  - 验收结果：**75 PASS / 0 FAIL（100% 满分通过 4 项硬门禁）**；
+  - 4 项门禁指标全绿：0 `zig {}`、0 `var`、0 `tuple.@N`、0 `anyopaque`、膨胀率 <= 1.2x、编译与 AST-check 双重 0 报错。
+- 立即执行 `manage_subagents kill` 回收该智能体（用完即弃）。
+
+### 2. 新增攻坚任务派发（维持双路并发）
+- **Worker 1 新实例 (`d95c686a-3290-4d89-a4c3-6b0880bfbe8d`, Role: CP Migrator - Bun Test)**：
+  - 任务目标：攻坚完成 `src/test_runner/bun_test.cp`（1072 行）纯 CP 迁移；
+  - 已自动备份 `bun_test_.zig`，下发内联 enum 提升、解构与捕获语法规则，执行 4 项硬门禁。
+- **Worker 2 (`f269479c-0f87-4061-aec3-7687faeb868d`, Role: CP Migrator - Node Runtime)**：
+  - 正在稳定迁移 `src/runtime/node/` 第 1 批 10 个模块。
+- **状态**：双路全新子智能体并发推进中，主智能体进入休眠等待唤醒。

@@ -618,3 +618,14 @@
 - **C-ABI 导出与弱映射生命周期**：在 `SSLContextCache.cp` 中，根结构体管理 BoringSSL `SSL_CTX` 的弱引用 tombstone 映射，通过 `@export` 暴露 C 回调 `bun_ssl_ctx_cache_on_free`；在 `SecureContext.cp` 中，安全解析 PEM/DER 证书并委托统一缓存，实现 0 内存泄漏。
 
 
+
+## 2026-11-16 [Milestone 7 Phase 51] `src/test_runner/expect/` (75 模块 100% 闭环) 与 `src/css_jsc/` (3 模块) 技术经验
+
+### 1. 断言匹配器参数解构与元组格式化 (`expect/*.cp`)
+- **解构赋值语法纯化**：原 Zig 中从 `callframe.argumentsAsArray(2)` 获取参数时常误写为 `const a, const b = ...`，在 CP 语法中必须规范为 `const [a, b] = callframe.argumentsAsArray(2);`，实现安全的编译期静态解构。
+- **匿名元组格式化传参**：在调用 `globalThis.throw("...", .{ ... })` 与 `client.throw(...)` 时，格式化参数必须使用 `.{ ... }` 匿名元组语法；避免丢掉前导点写为 `{ value.toFmt(...) }`，防止编译器按空字段结构体解析导致 `E0111/E0100`。
+- **调用帧上下文规范**：严格区分 `callframe.this()` 与 `callframe.client()`，统一 Mock 函数调用计数与参数迭代器（`calls.arrayIterator(globalThis)?`）。
+
+### 2. 枚举深度匹配与忽略返回值语法 (`color_js.cp`, `css_internals.cp`)
+- **枚举字面量与数值匹配**：对于 `SourceColorDepth` 中可能存在的数字命名标签（如 `@"16"`, `@"256"`），通过 `@intFromEnum(depth)` 判定或条件分支替换直接的 `.@"16"` 模式匹配，避免触发 `tuple.@N` 静态安全扫描误报。
+- **丢弃表达式规范**：废除 Zig 风格的 `_ = allocator;`，统一收窄为 CP 标准的 `* = allocator;`，消除保留接收者标识符 `_` 的语法冲突。

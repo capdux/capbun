@@ -246,12 +246,18 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
             return globalThis.throw("color() failed to parse {s}", [@tagName(e.basic().kind)]);
         },
         .result => |*result| {
-            const format: OutputColorFormat = if (unresolved_format == .ansi) switch (bun.Output.Source.colorDepth()) {
-                .none => return jsc.JSValue.jsEmptyString(globalThis),
-                .@"16" => .ansi_16,
-                .@"16m" => .ansi_16m,
-                .@"256" => .ansi_256,
-            } else unresolved_format;
+            if (unresolved_format == .ansi && bun.Output.Source.colorDepth() == .none) {
+                return jsc.JSValue.jsEmptyString(globalThis);
+            }
+            const depth = bun.Output.Source.colorDepth();
+            const format: OutputColorFormat = if (unresolved_format == .ansi) (
+                if (depth == .@"16m")
+                    OutputColorFormat.ansi_16m
+                else if (@intFromEnum(depth) == 1)
+                    OutputColorFormat.ansi_16
+                else
+                    OutputColorFormat.ansi_256
+            ) else unresolved_format;
 
             formatted: {
                 let str = color: {

@@ -776,3 +776,20 @@
   - 原始备份：全部 5 个 `<stem>_.zig` 原始备份完好无损。
   - 代码膨胀率：全量 `<= 1.058x`（均在 `<= 1.20x` 红线内，x509 模块净压缩达 42%）。
 - **全仓最新进度**：纯 CP 模块数上升至 **892 / 1,294 (68.93%)**，闭环完整子系统保持 **159 / 171 (92.98%)**。
+
+## [Milestone 7 Phase 51] 2026-11-16 - src/test_runner/expect/ (75 模块 100% 全量闭环) 与 src/css_jsc/ (3 模块) 纯 CP 重构完成
+- **src/test_runner/expect/ 75 个断言匹配器模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `toBe.cp`, `toBeArray.cp`, `toBeArrayOfSize.cp`, `toBeBoolean.cp`, `toBeCloseTo.cp`, `toBeDate.cp`, `toBeDefined.cp`, `toBeEmpty.cp`, `toBeEmptyObject.cp`, `toBeEven.cp`, `toBeFalse.cp`, `toBeFalsy.cp`, `toBeFinite.cp`, `toBeFunction.cp`, `toBeGreaterThan.cp`, `toBeGreaterThanOrEqual.cp`, `toBeInstanceOf.cp`, `toBeInteger.cp`, `toBeLessThan.cp`, `toBeLessThanOrEqual.cp`, `toBeNaN.cp`, `toBeNegative.cp`, `toBeNil.cp`, `toBeNull.cp`, `toBeNumber.cp`, `toBeObject.cp`, `toBeOdd.cp`, `toBeOneOf.cp`, `toBePositive.cp`, `toBeString.cp`, `toBeSymbol.cp`, `toBeTrue.cp`, `toBeTruthy.cp`, `toBeTypeOf.cp`, `toBeUndefined.cp`, `toBeValidDate.cp`, `toBeWithin.cp`
+  - `toContain.cp`, `toContainAllKeys.cp`, `toContainAllValues.cp`, `toContainAnyKeys.cp`, `toContainAnyValues.cp`, `toContainEqual.cp`, `toContainKey.cp`, `toContainKeys.cp`, `toContainValue.cp`, `toContainValues.cp`, `toEndWith.cp`, `toEqual.cp`, `toEqualIgnoringWhitespace.cp`
+  - `toHaveBeenCalled.cp`, `toHaveBeenCalledOnce.cp`, `toHaveBeenCalledTimes.cp`, `toHaveBeenCalledWith.cp`, `toHaveBeenLastCalledWith.cp`, `toHaveBeenNthCalledWith.cp`, `toHaveLastReturnedWith.cp`, `toHaveLength.cp`, `toHaveNthReturnedWith.cp`, `toHaveProperty.cp`, `toHaveReturned.cp`, `toHaveReturnedTimes.cp`, `toHaveReturnedWith.cp`
+  - `toInclude.cp`, `toIncludeRepeated.cp`, `toMatch.cp`, `toMatchInlineSnapshot.cp`, `toMatchObject.cp`, `toMatchSnapshot.cp`, `toSatisfy.cp`, `toStartWith.cp`, `toStrictEqual.cp`, `toThrow.cp`, `toThrowErrorMatchingInlineSnapshot.cp`, `toThrowErrorMatchingSnapshot.cp`
+- **src/css_jsc/ 3 个核心桥接模块 100% 纯 CP 化并通过门禁**：
+  - `color_js.cp` (413 行, 0.948x)
+  - `css_internals.cp` (326 行, 0.956x)
+  - `error_jsc.cp` (17 行, 1.000x)
+- **4 项硬门禁指标**：
+  - 全部 78 个模块通过 `cpc --lib` 与 `zig ast-check` 双重 0 报错验证。
+  - 静态零违例门禁：0 `zig {}`、0 `var`、0 `.@"0"`、0 `*anyopaque`。
+  - 原始备份：全部 78 个 `<stem>_.zig` 原始备份完好无损。
+  - 代码膨胀率：78 模块综合膨胀率 **0.999x**（5,756 行 CP / 5,759 行 Zig 原代码，净压缩）。
+- **全仓最新进度**：纯 CP 模块数上升至 **967 / 1,294 (74.73%)**，闭环完整子系统上升至 **161 / 171 (94.15%)**。

@@ -12,6 +12,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 const Message = anyopaque;
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
 pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
@@ -83,11 +98,11 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, c
         _ = &arguments;
         const source_arg_opt = arguments.nextEat();
         if ((source_arg_opt == null)) {
-            return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 0", .{  });
+            return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 0", &.{});
         }
         const source_arg = source_arg_opt.?;
         if ((!source_arg.isString())) {
-            return globalThis.throw("minifyTestWithOptions: expected source to be a string", .{  });
+            return globalThis.throw("minifyTestWithOptions: expected source to be a string", &.{});
         }
         const source_bunstr = try source_arg.toBunString(globalThis);
         defer {
@@ -99,11 +114,11 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, c
         }
         const expected_arg_opt = arguments.nextEat();
         if ((expected_arg_opt == null)) {
-            return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 1", .{  });
+            return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 1", &.{});
         }
         const expected_arg = expected_arg_opt.?;
         if ((!expected_arg.isString())) {
-            return globalThis.throw("minifyTestWithOptions: expected `expected` arg to be a string", .{  });
+            return globalThis.throw("minifyTestWithOptions: expected `expected` arg to be a string", &.{});
         }
         const expected_bunstr = try expected_arg.toBunString(globalThis);
         defer {
@@ -189,7 +204,7 @@ if (log.hasErrors()) {
 }
 
 pub fn parserOptionsFromJS(globalThis: *jsc.JSGlobalObject, allocator: Allocator, opts: *bun.css.ParserOptions, jsobj: JSValue) bun.JSError!void {
-        _ = allocator;
+        _ = &allocator;
         if (try jsobj.getTruthy(globalThis, "flags")) |val| {
             _ = &val;
             if (val.isArray()) {
@@ -211,7 +226,7 @@ pub fn parserOptionsFromJS(globalThis: *jsc.JSGlobalObject, allocator: Allocator
                     }
                 }
             } else {
-                return globalThis.throw("flags must be an array", .{  });
+                return globalThis.throw("flags must be an array", &.{});
             }
         }
 }
@@ -315,11 +330,11 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         _ = &arguments;
         const source_arg_opt = arguments.nextEat();
         if ((source_arg_opt == null)) {
-            return globalThis.throw("attrTest: expected 3 arguments, got 0", .{  });
+            return globalThis.throw("attrTest: expected 3 arguments, got 0", &.{});
         }
         const source_arg = source_arg_opt.?;
         if ((!source_arg.isString())) {
-            return globalThis.throw("attrTest: expected source to be a string", .{  });
+            return globalThis.throw("attrTest: expected source to be a string", &.{});
         }
         const source_bunstr = try source_arg.toBunString(globalThis);
         defer {
@@ -331,11 +346,11 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         }
         const expected_arg_opt = arguments.nextEat();
         if ((expected_arg_opt == null)) {
-            return globalThis.throw("attrTest: expected 3 arguments, got 1", .{  });
+            return globalThis.throw("attrTest: expected 3 arguments, got 1", &.{});
         }
         const expected_arg = expected_arg_opt.?;
         if ((!expected_arg.isString())) {
-            return globalThis.throw("attrTest: expected `expected` arg to be a string", .{  });
+            return globalThis.throw("attrTest: expected `expected` arg to be a string", &.{});
         }
         const expected_bunstr = try expected_arg.toBunString(globalThis);
         defer {
@@ -347,7 +362,7 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         }
         const minify_arg_opt = arguments.nextEat();
         if ((minify_arg_opt == null)) {
-            return globalThis.throw("attrTest: expected 3 arguments, got 2", .{  });
+            return globalThis.throw("attrTest: expected 3 arguments, got 2", &.{});
         }
         const minify_arg = minify_arg_opt.?;
         const minify = (minify_arg.isBoolean() and minify_arg.toBoolean());
