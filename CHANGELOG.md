@@ -1096,3 +1096,14 @@
   - `BundleThread.cp` (194 行, 0.995x)
 - **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.080x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,109 / 1,295 模块 (85.64%)**，`src/bundler/` 待迁移模块降至 20 个！
+
+## 2026-11-19 [Milestone 7 Phase 64 Group B] `src/install/` 首批 5 核心包管理模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 5 个包管理器核心基础模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `versioned_url.cp` (44 行, 1.000x)
+  - `ConfigVersion.cp` (45 行, 1.000x)
+  - `ExternalSlice.cp` (71 行, 0.973x)
+  - `padding_checker.cp` (108 行, 1.000x)
+  - `PackageManifestMap.cp` (129 行, 1.040x)
+- **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.040x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,119 / 1,295 模块 (86.41%)**，`src/install/` 待迁移模块降至 25 个！

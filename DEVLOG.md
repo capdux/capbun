@@ -820,3 +820,13 @@
 ### 2. 延迟批处理任务与线程调度 (`DeferredBatchTask.cp`, `BundleThread.cp`)
 - **任务状态排他修改**：在任务调度方法 `schedule` 与 `init` 中，将接收者严格限定为独占可变 `*_`，消除了高并发打包调度时的任务并发重入竞争。
 - **图依赖持有者生命周期**：在 `Graph.cp` 中规范模块节点引用关系，根除模块图析构阶段的浅拷贝双重释放隐患。
+
+## 2026-11-19 [Milestone 7 Phase 64 Group B] 包管理器版本配置与清单缓存 CP 纯化经验
+
+### 1. 结构体填充校验与泛型切片封装 (`padding_checker.cp`, `ExternalSlice.cp`)
+- **编译期反射与循环遍历**：在 `padding_checker.cp` 中，反射遍历类型字段时避免多循环变量冲突，改用标准 `while (j < info.fields.len) : (j += 1)` 步进，确保元编程在 CP 转译下保持精准对齐。
+- **外部切片所有权抽象**：在 `ExternalSlice.cp` 中，将跨线程或外部进程共享的内存切片封装为只读借用与所有权转移两种模式，杜绝析构悬垂。
+
+### 2. 包清单内存映射与过期淘汰 (`PackageManifestMap.cp`)
+- **根结构体组织与辅助结构体提升**：贯彻 `@root struct PackageManifestMap` 铁律，将内部辅助的缓存项和淘汰标记提升至文件顶层，并使用 `*_` 独占可变方法控制淘汰逻辑。
+- **海象运算符防线**：使用 `if (manifest := loaded)` 与 `if (expiry := is_expired)` 消除管道捕获语法，确保在 AST 生成时零语法损失。
