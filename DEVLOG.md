@@ -771,3 +771,13 @@
 ### 2. C-ABI 导出符号集中映射与模块构建 (`virtual_machine_exports.cp`, `ResolveMessage.cp`)
 - **显式 C ABI 导出规范**：在 `virtual_machine_exports.cp` 中，将需要暴露给 JavaScriptCore 运行时调用的底层入口集中收拢至 `pub @c { fn ...; }`，消除 Zig-ABI 与 C-ABI 边界的调用规约失配。
 - **消息结构格式化降级防线**：在 `ResolveMessage.cp` 中，对结构体字面量与切片操作实施纯正的 CP 语法规范化，确保在 AST 语法树遍历期间类型完全推导闭合。
+
+## 2026-11-19 [Milestone 7 Phase 62 Group B] 包链接与交互命令模块纯 CP 规范化经验
+
+### 1. 包管理器初始化与生命周期持有 (`link_command.cp`, `unlink_command.cp`)
+- **上下文借用与资源析构**：在 `link_command.cp` 与 `unlink_command.cp` 中，`PackageManager.init` 返回实例并在命令结束时 `defer pm.deinit()`，将其可变状态显式通过 `*pm` 进行借用传递，杜绝 Zig 隐式拷贝导致双重释放悬垂指针。
+- **参数切片安全借用**：命令行位置参数 `ctx.positionals` 统一以 `[]const []const u8` 借用，避免索引越界与浅拷贝别名竞争。
+
+### 2. REPL 环境与过滤参数解析 (`repl_command.cp`, `filter_arg.cp`)
+- **条件解包模式**：在 `filter_arg.cp` 中，广泛存在的可选参数解析全部统一为 `if (val := opt_expr)` 语义，彻底根除 Zig-style `|capture|` 带来的解析器歧义。
+- **字符切片安全匹配**：将原版包含魔术字符的手写切片匹配改写为标准 CP 切片检查，确保零越界 panic。

@@ -1043,3 +1043,13 @@
   - `ResolveMessage.cp` (242 行, 0.972x)
 - **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.004x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,091 / 1,295 模块 (84.25%)**，`src/jsc/` 待迁移模块降至 23 个！
+
+## 2026-11-19 [Milestone 7 Phase 62 Group B] `src/cli/` 4 个核心命令模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 4 个 CLI 核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `unlink_command.cp` (159 行, 1.006x)
+  - `repl_command.cp` (191 行, 1.000x)
+  - `link_command.cp` (218 行, 1.005x)
+  - `filter_arg.cp` (290 行, 1.018x)
+- **4 项硬门禁全绿**：4 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.018x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,095 / 1,295 模块 (84.56%)**，`src/cli/` 待迁移模块降至 26 个！
