@@ -948,3 +948,29 @@
     - `TextCodec.cp` (53 行, 1.152x)
 - **4 项硬门禁全绿**：16 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.152x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **阶段性累计**：本轮连续收割 31 个模块，`src/jsc/` 未迁移模块从 97 个锐减至 66 个！
+
+## 2026-11-19 [Milestone 7 Phase 59] `src/jsc/` 双智能体并发推进 18 模块 100% 满绿闭环
+
+- **两路并发短生命周期子智能体完成 18 个基础微模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - **Group A (9 模块)**：
+    - `bindgen_test.cp` (38 行, 1.027x)
+    - `URLSearchParams.cp` (49 行, 1.065x)
+    - `DecodedJSValue.cp` (54 行, 1.102x)
+    - `JSArrayIterator.cp` (54 行, 1.038x)
+    - `JSModuleLoader.cp` (60 行, 1.091x)
+    - `RegularExpression.cp` (60 行, 1.053x)
+    - `DOMURL.cp` (63 行, 1.086x)
+    - `RefString.cp` (64 行, 1.016x)
+    - `JSCell.cp` (61 行, 0.953x)
+  - **Group B (9 模块)**：
+    - `CommonStrings.cp` (70 行, 1.000x)
+    - `JSFunction.cp` (82 行, 1.093x)
+    - `ProcessAutoKiller.cp` (74 行, 0.987x)
+    - `CachedBytecode.cp` (68 行, 0.895x)
+    - `JSSecrets.cp` (81 行, 0.942x)
+    - `resolver_jsc.cp` (93 行, 1.057x)
+    - `DeprecatedStrong.cp` (102 行, 1.074x)
+    - `JSString.cp` (99 行, 0.961x)
+    - `generated_classes_list.cp` (135 行, 1.000x)
+- **4 项硬门禁全绿**：18 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.102x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,054 / 1,295 模块 (81.39%)**，`src/jsc/` 待迁移模块从 66 个进一步压降至 48 个！

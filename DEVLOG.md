@@ -711,3 +711,14 @@
 
 ### 2. 泛型 Comptme 函数内部的结构体字面量语法规范 (`Errorable.cp`)
 - 在泛型构建函数 `Errorable(comptime Type: type)` 中，返回的 `extern struct` 内部方法若构造自身实例 `@This(){ ... }`，匿名联合载荷必须使用 `.{ .field = val }` 显式带点属性赋值，避免因 Zig 语法歧义引发的 parser 断裂。
+
+## 2026-11-19 [Milestone 7 Phase 59] 双智能体并行攻坚 JSC 微模块经验与 C-ABI 契约规范
+
+### 1. 不透明类型与 C-ABI 导出契约规范 (`JSCell.cp`, `JSFunction.cp`, `JSString.cp`)
+- **不透明结构体规范**：使用 `@opaque pub struct Name { ... }` 替代旧版 `pub const Name = opaque { ... };`，确保 `cpc` 编译器将其识别为顶层类定义并实施完整的类型 lowering。
+- **C-ABI 导出与 callconv**：对于外部导出的 C 函数，使用 `@callconv("c")` 替代旧版 `callconv(.c)`，并在原型中严格杜绝 `this` 关键字作为形参命名，使用 `globalThis: *bun.jsc.JSGlobalObject` 等语义化名称。
+- **安全指针转换**：指针类型转换统一使用 `bun.cast(*T, _)`，避免直接在 CP 源码中书写深层嵌套的 `@ptrCast(@alignCast(...))`。
+
+### 2. 私有标识符净化与可选类型表达式 (`DeprecatedStrong.cp`, `CommonStrings.cp`)
+- **私有哈希标识符规范化**：原 Zig 代码中使用的带有 `#` 前缀的私有字段（如 `#raw`, `#safety`, `#backing`），在 CP 中统一净化为标准字段 `raw`, `safety`, `backing`，消除解析器歧义。
+- **只读接收者语法统一**：在无参数实例方法中（如 `pub inline fn @"::"(): JSValue`），接收者省略形参，在方法体内通过 `_.field` 访问当前实例，完美通过 E0121 与 E0116 门禁。
