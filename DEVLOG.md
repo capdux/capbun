@@ -696,3 +696,9 @@
 
 ### 3. 可变性排他收窄与只读方法内变异消除 (`SystemError.cp`)
 - **E0130 根因与修复**：在只读方法体内调用自身的变异方法（如在未标注 `*_` 的 `toErrorInstance` 中调用 `_.deref()`），触发编译器 Borrow Checker 的 `E0130: cannot perform mutable operation in a read-only method` 拦截。通过将方法接收者显式声明为独占可变 `pub fn toErrorInstance(*_, ...)`，严格遵循 CP 单写多读排他安全契约，从根源消除指针别名竞争风险。
+
+## 2026-11-19 [Milestone 7 Phase 57] 批量小文件流水线优化与微型模块极速攻坚经验
+
+### 1. 微模块批量预处理与 0 Token 瞬态收割
+- 对 4~25 行的微型模块，直接采用 `zig2cp_prep.py` 批量生成，8 个模块直接 0 修改通过 4 项门禁。
+- 针对 `@opaque pub struct`，将 C-ABI 导出函数提升到顶部 `@c { ... }` 块并规避 `this` 关键字命名冲突（重命名为 `exc`/`gs` 等），实现快速收割。

@@ -904,3 +904,23 @@
   - 原始备份：全部 11 个 `<stem>_.zig` 原始备份完好无损。
   - 代码膨胀率：全部严格控制在 <= 1.066x 内（远低于 1.20x 硬门禁）。
 - **总重构行数**：本次交付 **7,745 行** 100% 纯正 CP 代码。
+
+## 2026-11-19 [Milestone 7 Phase 57] `src/jsc/` 高频微模块 15 连斩 100% 满绿闭环
+
+- **批量极速收割 15 个高价值微型基础模块（纯 CP 化）**：
+  - `JSInternalPromise.cp` (4 行, 1.000x)
+  - `JSPromiseRejectionOperation.cp` (4 行, 1.000x)
+  - `ScriptExecutionStatus.cp` (5 行, 1.000x)
+  - `SourceType.cp` (6 行, 1.000x)
+  - `ZigErrorType.cp` (7 行, 1.000x)
+  - `sizes.cp` (8 行, 1.000x)
+  - `SourceProvider.cp` (8 行, 1.000x)
+  - `CustomGetterSetter.cp` (11 行, 1.000x)
+  - `GetterSetter.cp` (8 行, 0.727x)
+  - `static_export.cp` (14 行, 0.933x)
+  - `JSRuntimeType.cp` (16 行, 1.000x)
+  - `CommonAbortReason.cp` (19 行, 1.118x)
+  - `Exception.cp` (23 行, 1.150x)
+  - `comptime_string_map_jsc.cp` (20 行, 1.000x)
+  - `Counters.cp` (21 行, 0.913x)
+- **4 项硬门禁指标**：全部通过 `cpc --lib` 与 `zig ast-check` 0 报错，无 `zig {}`/`var`，膨胀率 <= 1.15x。
