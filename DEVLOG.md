@@ -781,3 +781,12 @@
 ### 2. REPL 环境与过滤参数解析 (`repl_command.cp`, `filter_arg.cp`)
 - **条件解包模式**：在 `filter_arg.cp` 中，广泛存在的可选参数解析全部统一为 `if (val := opt_expr)` 语义，彻底根除 Zig-style `|capture|` 带来的解析器歧义。
 - **字符切片安全匹配**：将原版包含魔术字符的手写切片匹配改写为标准 CP 切片检查，确保零越界 panic。
+
+## 2026-11-19 [Milestone 7 Phase 62 Group B] 打包器链接上下文与 Chunk 处理 CP 纯化经验
+
+### 1. HTML 与 CSS Chunk 后处理流程规范 (`postProcessHTMLChunk.cp`, `postProcessCSSChunk.cp`)
+- **只读借用切片与结果输出**：在 HTML/CSS Chunk 渲染与后处理中，将输入切片统一声明为 `const chunk: Chunk`，对动态缓冲区通过 `*_` 可变借用写入，根除浅拷贝引发的并发渲染竞争。
+- **静态路由遍历借用安全**：在 `StaticRouteVisitor.cp` 中，路由树遍历算法规范使用迭代器与条件解包，消除递归解引用悬垂隐患。
+
+### 2. 跨模块 CSS 依赖收集与 JS 编译结果生成 (`findImportedCSSFilesInJSOrder.cp`, `generateCompileResultForJSChunk.cp`)
+- **数组顺序遍历与引用保持**：在拓扑排序和文件依赖收集函数中，统一使用 `for (file of files)`，避免手动管理裸指针索引引发越界异常。
