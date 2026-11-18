@@ -810,3 +810,13 @@
 ### 2. 栈帧与生成器参数解析 (`ZigStackFrame.cp`, `bindgen.cp`)
 - **栈帧切片只读借用安全**：在 `ZigStackFrame.cp` 中，针对帧位置与调用代码的解析函数全部标注只读参数 `_` 与 `v: SourceLocation`，杜绝调用栈遍历引发的栈内存泄露。
 - **模板与类型元编程 Lowering**：在 `bindgen.cp` 中，将复杂的内联类型检查重构为静态方法，使 `cpc` 能生成清晰标准的 Zig 绑定代码。
+
+## 2026-11-19 [Milestone 7 Phase 63 Group B] 打包器线程池与索引哈希表 CP 纯化经验
+
+### 1. 字符串与源码索引哈希映射借用安全 (`IndexStringMap.cp`, `PathToSourceIndexMap.cp`)
+- **哈希表分配器解耦**：将 `AutoArrayHashMapUnmanaged` 与 `StringHashMapUnmanaged` 的释放与插入操作统一显式绑定外部传入的 `allocator: std.mem.Allocator`，杜绝内部悬垂分配器引用。
+- **只读查找方法无锁安全**：所有查询方法（如 `get`, `getPath`）统一标注只读接收者 `_`，支持并发安全多读。
+
+### 2. 延迟批处理任务与线程调度 (`DeferredBatchTask.cp`, `BundleThread.cp`)
+- **任务状态排他修改**：在任务调度方法 `schedule` 与 `init` 中，将接收者严格限定为独占可变 `*_`，消除了高并发打包调度时的任务并发重入竞争。
+- **图依赖持有者生命周期**：在 `Graph.cp` 中规范模块节点引用关系，根除模块图析构阶段的浅拷贝双重释放隐患。

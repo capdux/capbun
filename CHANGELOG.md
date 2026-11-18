@@ -1085,3 +1085,14 @@
   - `bun_string_jsc.cp` (267 行, 1.008x)
 - **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.024x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,109 / 1,295 模块 (85.64%)**，`src/jsc/` 待迁移模块降至 18 个！
+
+## 2026-11-19 [Milestone 7 Phase 63 Group B] `src/bundler/` 首批 5 核心基础模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 5 个打包器核心基础模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `IndexStringMap.cp` (27 行, 1.080x)
+  - `PathToSourceIndexMap.cp` (44 行, 0.957x)
+  - `DeferredBatchTask.cp` (52 行, 1.000x)
+  - `Graph.cp` (141 行, 1.007x)
+  - `BundleThread.cp` (194 行, 0.995x)
+- **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.080x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,109 / 1,295 模块 (85.64%)**，`src/bundler/` 待迁移模块降至 20 个！

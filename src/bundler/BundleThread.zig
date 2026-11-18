@@ -1,184 +1,76 @@
-/// Used to keep the bundle thread from spinning on Windows
-pub fn timerCallback(_: *bun.windows.libuv.Timer) callconv(.c) void {}
-
-/// Originally, bake.DevServer required a separate bundling thread, but that was
-/// later removed. The bundling thread's scheduling logic is generalized over
-/// the completion structure.
-///
-/// CompletionStruct's interface:
-///
-/// - `configureBundler` is used to configure `Bundler`.
-/// - `completeOnBundleThread` is used to tell the task that it is done.
-pub fn BundleThread(CompletionStruct: type) type {
-    return struct {
-        const Self = @This();
-
-        waker: bun.Async.Waker,
-        ready_event: std.Thread.ResetEvent,
-        queue: bun.UnboundedQueue(CompletionStruct, .next),
-        generation: bun.Generation = 0,
-
-        /// To initialize, put this somewhere in memory, and then call `spawn()`
-        pub const uninitialized: Self = .{
-            .waker = undefined,
-            .queue = .{},
-            .generation = 0,
-            .ready_event = .{},
-        };
-
-        pub fn spawn(instance: *Self) !std.Thread {
-            const thread = try std.Thread.spawn(.{}, threadMain, .{instance});
-            instance.ready_event.wait();
-            return thread;
-        }
-
-        /// Lazily-initialized singleton. This is used for `Bun.build` since the
-        /// bundle thread may not be needed.
-        pub const singleton = struct {
-            var once = std.once(loadOnceImpl);
-            var instance: ?*Self = null;
-
-            // Blocks the calling thread until the bun build thread is created.
-            // std.once also blocks other callers of this function until the first caller is done.
-            fn loadOnceImpl() void {
-                const bundle_thread = bun.handleOom(bun.default_allocator.create(Self));
-                bundle_thread.* = uninitialized;
-                instance = bundle_thread;
-
-                // 2. Spawn the bun build thread.
-                const os_thread = bundle_thread.spawn() catch
-                    Output.panic("Failed to spawn bun build thread", .{});
-                os_thread.detach();
-            }
-
-            pub fn get() *Self {
-                once.call();
-                return instance.?;
-            }
-
-            pub fn enqueue(completion: *CompletionStruct) void {
-                get().enqueue(completion);
-            }
-        };
-
-        pub fn enqueue(instance: *Self, completion: *CompletionStruct) void {
-            instance.queue.push(completion);
-            instance.waker.wake();
-        }
-
-        fn threadMain(instance: *Self) void {
-            Output.Source.configureNamedThread("Bundler");
-
-            instance.waker = bun.Async.Waker.init() catch @panic("Failed to create waker");
-
-            // Unblock the calling thread so it can continue.
-            instance.ready_event.set();
-
-            var timer: bun.windows.libuv.Timer = undefined;
-            if (bun.Environment.isWindows) {
-                timer.init(instance.waker.loop.uv_loop);
-                timer.start(std.math.maxInt(u64), std.math.maxInt(u64), &timerCallback);
-            }
-
-            var has_bundled = false;
-            while (true) {
-                while (instance.queue.pop()) |completion| {
-                    generateInNewThread(completion, instance.generation) catch |err| {
-                        completion.result = .{ .err = err };
-                        completion.completeOnBundleThread();
-                    };
-                    has_bundled = true;
-                }
-                instance.generation +|= 1;
-
-                if (has_bundled) {
-                    bun.mimalloc.mi_collect(false);
-                    has_bundled = false;
-                }
-
-                _ = instance.waker.wait();
-            }
-        }
-
-        /// This is called from `Bun.build` in JavaScript.
-        fn generateInNewThread(completion: *CompletionStruct, generation: bun.Generation) !void {
-            var heap = ThreadLocalArena.init();
-            defer heap.deinit();
-
-            const allocator = heap.allocator();
-            var ast_memory_allocator = try allocator.create(js_ast.ASTMemoryAllocator);
-            ast_memory_allocator.* = .{ .allocator = allocator };
-            ast_memory_allocator.reset();
-            ast_memory_allocator.push();
-
-            const transpiler = try allocator.create(bun.Transpiler);
-
-            try completion.configureBundler(transpiler, allocator);
-
-            transpiler.resolver.generation = generation;
-
-            const this = try BundleV2.init(
-                transpiler,
-                null, // TODO: Kit
-                allocator,
-                jsc.AnyEventLoop.init(allocator),
-                false,
-                jsc.WorkPool.get(),
-                heap,
-            );
-
-            this.plugins = completion.plugins;
-            this.completion = switch (CompletionStruct) {
-                BundleV2.JSBundleCompletionTask => completion,
-                else => @compileError("Unknown completion struct: " ++ CompletionStruct),
-            };
-            // Set the file_map pointer for in-memory file support
-            this.file_map = if (completion.config.files.map.count() > 0)
-                &completion.config.files
-            else
-                null;
-            completion.transpiler = this;
-
-            defer {
-                ast_memory_allocator.pop();
-                this.deinitWithoutFreeingArena();
-            }
-
-            errdefer {
-                // Wait for wait groups to finish. There still may be ongoing work.
-                this.linker.source_maps.line_offset_wait_group.wait();
-                this.linker.source_maps.quoted_contents_wait_group.wait();
-
-                var out_log = Logger.Log.init(bun.default_allocator);
-                bun.handleOom(this.transpiler.log.appendToWithRecycled(&out_log, true));
-                completion.log = out_log;
-            }
-
-            completion.result = .{ .value = try this.runFromJSInNewThread(transpiler.options.entry_points) };
-
-            var out_log = Logger.Log.init(bun.default_allocator);
-            bun.handleOom(this.transpiler.log.appendToWithRecycled(&out_log, true));
-            completion.log = out_log;
-            completion.completeOnBundleThread();
-        }
-    };
-}
-
-pub const Ref = bun.ast.Ref;
-
-pub const Index = bun.ast.Index;
-
-pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
-pub const ThreadPool = bun.bundle_v2.ThreadPool;
-pub const ParseTask = bun.bundle_v2.ParseTask;
-
-const Logger = @import("../logger/logger.zig");
-const Timer = @import("../perf/system_timer.zig");
-const linker = @import("./linker.zig");
-const options = @import("./options.zig");
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const Logger = @import("../logger/logger.zig");
+pub const Timer = @import("../perf/system_timer.zig");
+pub const linker = @import("./linker.zig");
+pub const options = @import("./options.zig");
+pub const bun = @import("bun");
 const Async = bun.Async;
 const Environment = bun.Environment;
 const Output = bun.Output;
@@ -187,9 +79,136 @@ const bake = bun.bake;
 const default_allocator = bun.default_allocator;
 const js_ast = bun.ast;
 const jsc = bun.jsc;
-
 const allocators = bun.allocators;
 const ThreadLocalArena = bun.allocators.MimallocArena;
-
 const bundler = bun.bundle_v2;
 const BundleV2 = bundler.BundleV2;
+pub const Ref = bun.ast.Ref;
+pub const Index = bun.ast.Index;
+pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
+pub const ThreadPool = bun.bundle_v2.ThreadPool;
+pub const ParseTask = bun.bundle_v2.ParseTask;
+
+pub fn timerCallback(_: *bun.windows.libuv.Timer) callconv(.c) void {
+}
+
+pub fn BundleThread(CompletionStruct: type) type {
+        return struct {
+    waker: bun.Async.Waker,
+    ready_event: std.Thread.ResetEvent,
+    queue: bun.UnboundedQueue(CompletionStruct,.next),
+    generation: bun.Generation = 0,
+
+pub fn spawn(instance: *Self) !std.Thread {
+            const thread = try std.Thread.spawn(.{}, threadMain, .{ .instance = instance });
+            _ = instance.ready_event.wait();
+            return thread;
+    }
+
+pub fn enqueue(instance: *Self, completion: *CompletionStruct) void {
+            _ = instance.queue.push(completion);
+            _ = instance.waker.wake();
+    }
+
+pub fn threadMain(instance: *Self) void {
+            _ = Output.Source.configureNamedThread("Bundler");
+            instance.waker = (blk_catch_0: { break :blk_catch_0 ((bun.Async.Waker.init()) catch |__ce_0| { _ = &__ce_0; @panic("Failed to create waker"); }); });
+            _ = instance.ready_event.set();
+            var timer: bun.windows.libuv.Timer = undefined;
+            _ = &timer;
+            if (bun.Environment.isWindows) {
+                _ = timer.init(instance.waker.loop.uv_loop);
+                _ = timer.start(std.math.maxInt(u64), std.math.maxInt(u64), (&timerCallback));
+            }
+            var has_bundled = false;
+            _ = &has_bundled;
+            while (true) {
+                while (instance.queue.pop()) |completion| {
+                    _ = (blk_catch_1: { break :blk_catch_1 ((generateInNewThread(completion, instance.generation)) catch |e| { _ = &e; completion.result = .{ .err = e };
+                    break :blk_catch_1 completion.completeOnBundleThread(); }); });
+                    has_bundled = true;
+                }
+                if (has_bundled) {
+                    _ = bun.mimalloc.mi_collect(false);
+                    has_bundled = false;
+                }
+                _ = instance.waker.wait();
+            }
+    }
+
+pub fn generateInNewThread(completion: *CompletionStruct, generation: bun.Generation) !void {
+            var heap = ThreadLocalArena.init();
+            _ = &heap;
+            defer {
+            _ = heap.deinit();
+            }
+            const allocator = heap.allocator();
+            var ast_memory_allocator = try allocator.create(js_ast.ASTMemoryAllocator);
+            _ = &ast_memory_allocator;
+            ast_memory_allocator.* = .{ .allocator = allocator };
+            _ = ast_memory_allocator.reset();
+            _ = ast_memory_allocator.push();
+            const transpiler = try allocator.create(bun.Transpiler);
+            _ = try completion.configureBundler(transpiler, allocator);
+            transpiler.resolver.generation = generation;
+            const bundle = try BundleV2.init(transpiler, null, allocator, jsc.AnyEventLoop.init(allocator), false, jsc.WorkPool.get(), heap);
+            bundle.plugins = completion.plugins;
+            bundle.completion = (switch (CompletionStruct) {
+BundleV2.JSBundleCompletionTask => completion,
+else => @compileError(("Unknown completion struct: " ++ CompletionStruct)),
+});
+            bundle.file_map = (if ((completion.config.files.map.count() > 0)) (&completion.config.files) else null);
+            completion.transpiler = bundle;
+            defer {
+            {
+                _ = ast_memory_allocator.pop();
+                _ = bundle.deinitWithoutFreeingArena();
+            }
+            }
+            errdefer {
+            {
+                _ = bundle.linker.source_maps.line_offset_wait_group.wait();
+                _ = bundle.linker.source_maps.quoted_contents_wait_group.wait();
+                var out_log = Logger.Log.init(bun.default_allocator);
+                _ = &out_log;
+                _ = bun.handleOom(bundle.transpiler.log.appendToWithRecycled((&out_log), true));
+                completion.log = out_log;
+            }
+            }
+            completion.result = .{ .value = try bundle.runFromJSInNewThread(transpiler.options.entry_points) };
+            var out_log = Logger.Log.init(bun.default_allocator);
+            _ = &out_log;
+            _ = bun.handleOom(bundle.transpiler.log.appendToWithRecycled((&out_log), true));
+            completion.log = out_log;
+            _ = completion.completeOnBundleThread();
+    }
+    const Self = @This();
+    pub const uninitialized: Self = .{ .waker = undefined, .queue = .{}, .generation = 0, .ready_event = .{} };
+    pub const singleton = struct {
+                var once = std.once(loadOnceImpl);
+                var instance: ?*Self = null;
+    
+                // Blocks the calling thread until the bun build thread is created.
+                // std.once also blocks other callers of this function until the first caller is done.
+                fn loadOnceImpl() void {
+                    const bundle_thread = bun.handleOom(bun.default_allocator.create(Self));
+                    bundle_thread.* = uninitialized;
+                    instance = bundle_thread;
+    
+                    // 2. Spawn the bun build thread.
+                    const os_thread = bundle_thread.spawn() catch
+                        Output.panic("Failed to spawn bun build thread", {});
+                    os_thread.detach();
+                }
+    
+                pub fn get() *Self {
+                    once.call();
+                    return instance.?;
+                }
+    
+                pub fn enqueue(completion: *CompletionStruct) void {
+                    get().enqueue(completion);
+                }
+            };
+};
+}
