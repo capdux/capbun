@@ -2104,3 +2104,40 @@ Options:
 ### 2. 流水线接力新派发
 - **Worker 1 (`b345fc9a`, Phase 61 Group A)**：攻坚 `src/jsc/` 5 模块（`JSObject.cp`, `HTTPServerAgent.cp`, `ZigException.cp`, `NodeModuleModule.cp`, `BuildMessage.cp`）；
 - **Worker 2 (`6b2a57cc`, Phase 61 Group B)**：按用户要求专门攻坚小文件目录 `src/cli/` 10 个轻量子命令模块（`discord_command.cp` ~ `exec_command.cp`）。
+
+---
+
+## 2026-11-19 08:09:35 - 收到上游广播结单通知并立即重启常驻守护进程
+
+### 1. 广播通知接收与审计
+- 监听到 `cp_agy` 广播结单：`task-capsurf-20261119-zlib-link-failure`
+  - 来源：`capsurf_agy`
+  - 目标：`['bun_agy', 'capsurf_agy']`
+  - 内容：`zlib` 链接构建问题由 `cp_agy` 修复完成。
+  - 影响评估：Bun 采用自身内部 vendored `zlib-ng`，不依赖系统全局 zlib 链接，无受阻文件。
+- **重启常驻守护任务**：唤醒后第一时间重启 `watch_task.py` 为后台常驻任务（Task ID: `task-776`）。
+
+---
+
+## 2026-11-19 08:12:00 - Phase 61: 10 个轻量 CLI 基础子命令模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成全量 10 个 CLI 子命令模块硬门禁独立验收：
+  1. `src/cli/discord_command.cp` (9 行, 0.900x, **PASS**)
+  2. `src/cli/add_command.cp` (11 行, 1.000x, **PASS**)
+  3. `src/cli/patch_commit_command.cp` (11 行, 1.000x, **PASS**)
+  4. `src/cli/remove_command.cp` (11 行, 1.000x, **PASS**)
+  5. `src/cli/pm_why_command.cp` (12 行, 1.000x, **PASS**)
+  6. `src/cli/which_npm_client.cp` (12 行, 1.000x, **PASS**)
+  7. `src/cli/patch_command.cp` (17 行, 1.000x, **PASS**)
+  8. `src/cli/update_command.cp` (18 行, 1.000x, **PASS**)
+  9. `src/cli/ci_info.cp` (27 行, 1.000x, **PASS**)
+  10. `src/cli/exec_command.cp` (46 行, 1.000x, **PASS**)
+- **4 项硬门禁指标全绿**：10 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.000x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,074 / 1,295 模块 (82.93%)**！
+
+### 2. 流水线零等待接力新派发
+- **Worker 2 (`6b2a57cc`)** 完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 2 (`3ea35658`, Role: `CP Migrator - CLI Batch 2`)**：
+  - 攻坚目标（7 模块，62~105 行）：`colon_list_type.cp`, `fuzzilli_command.cp`, `shell_completions.cp`, `list-of-yarn-commands.cp`, `scan_command.cp`, `install_command.cp`, `add_completions.cp`；
+- 与正在攻坚 `src/jsc/` 的 **Worker 1 (`b345fc9a`)** 保持双路满载并发。

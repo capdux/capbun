@@ -732,3 +732,12 @@
 ### 2. 借用解包与条件语句静默消除 (`Weak.cp`, `Strong.cp`)
 - **海象运算符借用解包**：对于带有可空字段的引用获取，避免使用隐蔽的 `?? return`，统一使用 CP 规范的 `if (ref := _.ref)` 进行只读解包，防止 AST 树下挂载分支被误判截断。
 - **标识符消歧**：结构体内部字段避免使用与关键字或内置操作冲突的裸标识符，重构消除局部重名遮蔽。
+
+## 2026-11-19 [Milestone 7 Phase 61] CLI 轻量子命令模块 CP 规范化实战经验
+
+### 1. 结构体静态命令入口与错误传播 (`discord_command.cp`, `add_command.cp`)
+- **静态方法声明规范**：CLI 命令类全部使用 `pub struct CommandName { pub static fn exec(...) !void { ... } }` 组织，严禁在实例外部隐式引用未初始化的 `this`。
+- **错误传播后缀**：在执行安装或更新子命令时，原版 `try PackageManager...` 规范改写为后缀式错误传播 `PackageManager.updatePackageJSONAndInstallCatchError(...)?`。
+
+### 2. 字符串类型别名与环境加载 (`exec_command.cp`, `ci_info.cp`)
+- **消除 `const string` 重复定义冲突**：CP 原生内置 `string` 关键字，在迁移包含 `const string = []const u8;` 的文件时，统一使用标准 CP 原生切片 `[]const u8` 或全局别名，避免 parser 将标识符当成关键字声明而断裂。

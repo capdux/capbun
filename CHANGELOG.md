@@ -992,3 +992,19 @@
     - `URL.cp` (161 行, 0.970x)
 - **4 项硬门禁全绿**：10 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.156x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,064 / 1,295 模块 (82.16%)**，`src/jsc/` 待迁移模块从 48 个大幅压降至 38 个！
+
+## 2026-11-19 [Milestone 7 Phase 61] `src/cli/` 首批 10 个轻量子命令模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 10 个轻量 CLI 子命令模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `discord_command.cp` (9 行, 0.900x)
+  - `add_command.cp` (11 行, 1.000x)
+  - `patch_commit_command.cp` (11 行, 1.000x)
+  - `remove_command.cp` (11 行, 1.000x)
+  - `pm_why_command.cp` (12 行, 1.000x)
+  - `which_npm_client.cp` (12 行, 1.000x)
+  - `patch_command.cp` (17 行, 1.000x)
+  - `update_command.cp` (18 行, 1.000x)
+  - `ci_info.cp` (27 行, 1.000x)
+  - `exec_command.cp` (46 行, 1.000x)
+- **4 项硬门禁全绿**：10 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.000x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,074 / 1,295 模块 (82.93%)**，`src/cli/` 待迁移模块从 47 个大幅压降至 37 个！
