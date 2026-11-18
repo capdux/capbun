@@ -741,3 +741,13 @@
 
 ### 2. 字符串类型别名与环境加载 (`exec_command.cp`, `ci_info.cp`)
 - **消除 `const string` 重复定义冲突**：CP 原生内置 `string` 关键字，在迁移包含 `const string = []const u8;` 的文件时，统一使用标准 CP 原生切片 `[]const u8` 或全局别名，避免 parser 将标识符当成关键字声明而断裂。
+
+## 2026-11-19 [Milestone 7 Phase 61 Group A] JSC 对象与异常抽象 CP 纯化实战经验
+
+### 1. 不透明对象体系结构与 C 符号收拢 (`JSObject.cp`, `ZigException.cp`)
+- **根不透明类型规范**：采用 `@opaque pub struct JSObject { ... }` 组织核心 JS 对象句柄，通过文件顶层的 `@c { fn ...; }` 块对接底层 JSC C-API，彻底杜绝裸 extern 导致的返回类型丢失。
+- **异常栈与作用域解构**：在 `ZigException.cp` 中规范错误捕获与转换方法，去除对 `*anyopaque` 的依赖，统一使用强类型句柄 `*jsc.JSGlobalObject` 与安全类型转换 `bun.cast`。
+
+### 2. 消息流解析与循环解构 (`BuildMessage.cp`, `NodeModuleModule.cp`)
+- **标准切片循环重构**：将原版 `for (notes, 0..) |note, i|` 彻底消除，改写为纯正的 CP 迭代语法 `for (note, i of notes, 0..)`。
+- **条件解包防线**：在 `NodeModuleModule.cp` 中，将 Zig 风格的 `if (opt) |val|` 语句全量规范为 `if (val := opt)`，消除作用域提升造成的变量未定义解析中断。

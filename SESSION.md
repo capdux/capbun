@@ -2141,3 +2141,23 @@ Options:
 - 紧接着启动 **Worker 2 (`3ea35658`, Role: `CP Migrator - CLI Batch 2`)**：
   - 攻坚目标（7 模块，62~105 行）：`colon_list_type.cp`, `fuzzilli_command.cp`, `shell_completions.cp`, `list-of-yarn-commands.cp`, `scan_command.cp`, `install_command.cp`, `add_completions.cp`；
 - 与正在攻坚 `src/jsc/` 的 **Worker 1 (`b345fc9a`)** 保持双路满载并发。
+
+---
+
+## 2026-11-19 08:18:00 - Phase 61 Group A: 5 个 JSC 核心模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成全量 5 个 JSC 核心模块硬门禁独立验收：
+  1. `src/jsc/JSObject.cp` (175 行, 1.017x, **PASS**)
+  2. `src/jsc/HTTPServerAgent.cp` (167 行, 0.933x, **PASS**)
+  3. `src/jsc/ZigException.cp` (185 行, 1.011x, **PASS**)
+  4. `src/jsc/NodeModuleModule.cp` (198 行, 1.010x, **PASS**)
+  5. `src/jsc/BuildMessage.cp` (208 行, 1.025x, **PASS**)
+- **4 项硬门禁指标全绿**：5 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.025x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,079 / 1,295 模块 (83.32%)**！
+
+### 2. 流水线零等待接力新派发
+- **Worker 1 (`b345fc9a`)** 任务完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 1 (`96b39164`, Role: `CP Migrator - JSC Group A (Phase 62)`)**：
+  - 攻坚目标（5 模块，210~249 行）：`VM.cp`, `TopExceptionScope.cp`, `JSRef.cp`, `virtual_machine_exports.cp`, `ResolveMessage.cp`；
+- 与正在攻坚 `src/cli/` 的 **Worker 2 (`3ea35658`)** 保持双路满载并发。
