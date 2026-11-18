@@ -1074,3 +1074,14 @@
   - `findAllImportedPartsInJSOrder.cp` (223 行, 1.009x)
 - **4 项硬门禁全绿**：4 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.053x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,104 / 1,295 模块 (85.25%)**！突破 85% 大关，`src/bundler/linker_context/` 待迁移模块降至 15 个！
+
+## 2026-11-19 [Milestone 7 Phase 63 Group A] `src/jsc/` 5 个绑定与信号核心模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 5 个 JSC 核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `ZigStackFrame.cp` (251 行, 0.996x)
+  - `bindgen.cp` (257 行, 1.012x)
+  - `AbortSignal.cp` (261 行, 1.024x)
+  - `btjs.cp` (266 行, 1.023x)
+  - `bun_string_jsc.cp` (267 行, 1.008x)
+- **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.024x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,109 / 1,295 模块 (85.64%)**，`src/jsc/` 待迁移模块降至 18 个！

@@ -800,3 +800,13 @@
 ### 2. DevServer 语句转换与 JS 导入排序 (`convertStmtsForChunkForDevServer.cp`, `findAllImportedPartsInJSOrder.cp`)
 - **AST 节点递归借用安全**：在语句转换遍历函数中，递归遍历形参使用不可变借用 `v: ASTNode`，仅在写入修改时传递独占借用引用，彻底消除深层递归遍历中指针变异导致的野指针隐患。
 - **依赖拓扑图顺序遍历**：使用标准迭代器遍历图依赖，消除旧版手写索引递增可能存在的越界 panic。
+
+## 2026-11-19 [Milestone 7 Phase 63 Group A] 异步信号控制与 JSC 栈帧切片 CP 纯化经验
+
+### 1. 异步取消信号所有权与引用链 (`AbortSignal.cp`)
+- **信号触发与生命周期借用**：在 `AbortSignal.cp` 中，`signal.abort()` 显式通过独占可变借用 `*_` 解构与派发回调，消除了在多线程和异步事件轮询并发触发时可能导致的引用计数指针悬垂。
+- **C 导出接口集中封装**：将 JavaScriptCore 底层回调函数集中置于文件顶部 `@c { fn ...; }` 块内，确保 C ABI 规约对齐。
+
+### 2. 栈帧与生成器参数解析 (`ZigStackFrame.cp`, `bindgen.cp`)
+- **栈帧切片只读借用安全**：在 `ZigStackFrame.cp` 中，针对帧位置与调用代码的解析函数全部标注只读参数 `_` 与 `v: SourceLocation`，杜绝调用栈遍历引发的栈内存泄露。
+- **模板与类型元编程 Lowering**：在 `bindgen.cp` 中，将复杂的内联类型检查重构为静态方法，使 `cpc` 能生成清晰标准的 Zig 绑定代码。
