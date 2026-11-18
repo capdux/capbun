@@ -830,3 +830,13 @@
 ### 2. 包清单内存映射与过期淘汰 (`PackageManifestMap.cp`)
 - **根结构体组织与辅助结构体提升**：贯彻 `@root struct PackageManifestMap` 铁律，将内部辅助的缓存项和淘汰标记提升至文件顶层，并使用 `*_` 独占可变方法控制淘汰逻辑。
 - **海象运算符防线**：使用 `if (manifest := loaded)` 与 `if (expiry := is_expired)` 消除管道捕获语法，确保在 AST 生成时零语法损失。
+
+## 2026-11-19 [Milestone 7 Phase 64 Group B] AST 内存分配与指令边界 CP 纯化经验
+
+### 1. AST 内存池生命周期借用 (`ASTMemoryAllocator.cp`)
+- **作用域借用安全**：在 AST 内存分配器中，内存池的分配与释放遵循单写多读排他安全，将分配方法的接收者明确为 `*_`，防止多线程并行解析过程中的内存重叠与悬垂指针。
+- **辅助结构体模块顶层提升**：将内部嵌套的 `Scope` 与切片适配器提升至模块顶层，避免 cpc 跳过类型 lowering。
+
+### 2. 指令边界与符号解析 (`UseDirective.cp`, `ServerComponentBoundary.cp`, `symbols.cp`)
+- **指令匹配纯切片安全**：在 `"use client"` 与 `"use server"` 边界解析中，利用不可变字符串切片安全比较，消除深层 AST 遍历时的越界风险。
+- **符号作用域状态迁移**：符号表遍历与查询全部通过只读借用参数解构，杜绝指针别名污染。
