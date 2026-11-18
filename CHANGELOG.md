@@ -837,6 +837,18 @@
 - **全仓最新进度**：纯 CP 模块数上升至 **983 / 1,294 (75.97%)**，闭环完整子系统上升至 **162 / 171 (94.74%)**。
 
 
+## [Milestone 7 Phase 55] 2026-11-18 - src/runtime/api (BunObject, html_rewriter) 与 src/string (unicode) 核心模块重构固化
+- **src/runtime/api/ 2 核心大型模块 100% 纯 CP 化并通过全部 4 项硬门禁**：
+  - `BunObject.cp` (2,216 行, 1.018x, PASS)：消除所有 `var` 与非标接收者，借用检查与独占可变完整通过。
+  - `html_rewriter.cp` (2,031 行, 0.998x, PASS)：HTML 流式重写器纯 CP 化，闭环通过。
+- **src/string/immutable/ 核心编码模块 100% 纯 CP 化**：
+  - `unicode.cp` (2,058 行, 1.008x, PASS)：WTF-8 编码与 Unicode 多字节解包逻辑纯 CP 化。
+- **4 项硬门禁指标**：
+  - 双重 0 报错（`cpc --lib` 与 `zig ast-check` 全部通过）。
+  - 静态零违例：0 `zig {}`、0 `var`、0 `.@"0"`/`.@"1"`、0 `*anyopaque`。
+  - 原始备份：全部 `<stem>_.zig` 完好无损。
+  - 代码膨胀率：严格控制在 0.998x ~ 1.018x，远优于 1.20x 上限门禁。
+
 ## [Milestone 7 Phase 54] 2026-11-18 - src/http_types 全子系统 100% 满绿闭环、src/runtime/node/ 核心 9 模块与 src/runtime/api/ 3 模块重构完成
 - **src/http_types/ 全子系统 (全部 9 个模块) 100% 纯 CP 化并通过全部 4 项硬门禁**：
   - `mime_type_list_enum.cp` (4,664 行, 1.000x, PASS)

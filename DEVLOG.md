@@ -655,6 +655,17 @@
 - **关键字与保留字转义防护**：针对 JSC 对象的 `@"this"` 方法调用添加显式转义；重命名局部变量 `any` 避免触发向 Zig `anytype` 的错误转换；将文件末尾 `test` 块规整为顶层标准测试函数。
 
 
+## 2026-11-18 [Milestone 7 Phase 55] `BunObject.cp`, `html_rewriter.cp`, `unicode.cp` 大型核心模块重构经验
+
+### 1. WTF-8 变长解码与表达式直接下沉 (`unicode.cp`)
+- **局部变量 lowering 遗漏消除**：在 `decodeWTF8RuneTMultibyte` 中，多字节解码直接将按位拼接表达式返回 `return @as(T, (@as(T, p[0] & 0x1F) << 6) | @as(T, s1 & 0x3F));`，避免了多层语句块中临时局部变量未被 cpc 收集声明导致的 ast-check 报错。
+
+### 2. 流式重写器与结构体方法接收者规范 (`html_rewriter.cp`)
+- **借用排他性与状态变异**：针对 HTML 语法分析器的状态机，严格区分只读检测方法（省略接收者，体内通过 `_` 读取）与状态迁移方法（显式 `*_` 接收者），消除潜在的数据竞态。
+
+### 3. 全局对象绑定与常量表提升 (`BunObject.cp`)
+- **嵌套二级结构体提升**：在 2,200+ 行的大型绑定中，将嵌入在字段或内部命名空间的辅助结构体提升至模块顶层声明，确保 cpc 完成 100% 的语法 lowering，彻底杜绝 Zig 残留宏。
+
 ## 2026-11-18 [Milestone 7 Phase 54] `src/http_types/` 全量闭环与 `src/runtime/node/`, `src/runtime/api/` 核心架构经验
 
 ### 1. 错误联合体异常匹配与 `cp_has_ok_val` 符号未决消除 (`path_watcher.cp`, `types.cp`)
