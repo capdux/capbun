@@ -895,3 +895,14 @@
 - **根模型与外部原型收拢**：使用 `@root struct Debugger` 组织调试器主体，外部 C++ 接口统一在文件顶层 `@c { fn ...; }` 原型集中声明，彻底消除内联 `extern "c" fn`。
 - **不透明生命周期句柄**：定义 `@opaque pub struct TestReporterHandle` 与 `LifecycleHandle`，规范只读接收者省略机制，消除 `E0123`。
 - **原子互斥与类型转换收窄**：全局互斥变量使用 `let futex_atomic`，定时器回调采用 `unsafe { let ptr: *uv.Timer = @ptrCast(handle); ... }` 彻底消除 `*anyopaque`。
+
+
+## 2026-11-19 [Milestone 7 Phase 67 Group B] 包管理优化器与完整性校验 CP 纯化经验
+
+### 1. 安装后优化器与 PNPM 匹配器 (`postinstall_optimizer.cp`, `PnpmMatcher.cp`)
+- **生命周期所有权转移收窄**：在 `postinstall_optimizer.cp` 中，规范包脚本执行上下文的所有权转移 `own ctx: Context`，消除执行完毕后的重复释放隐患。
+- **规则匹配状态机**：在 `PnpmMatcher.cp` 中，将内嵌匹配规则提升至顶层结构体，利用只读借用解构匹配规则切片，彻底消除跨分支指针悬垂。
+
+### 2. 包安装入口与哈希完整性校验 (`install.cp`, `integrity.cp`)
+- **哈希算法分发类型安全**：在 `integrity.cp` 中，规范 `Algorithm` 枚举与 `Hash` 联合体的只读方法派发，利用 `_` 接收者消除隐式浅拷贝。
+- **安装全局状态借用隔离**：在 `install.cp` 中，废除原版裸 `var` 变量，统一改写为只读常量与线程局部/独占可变绑定，确保高并发安装期间的多线程单写多读安全。

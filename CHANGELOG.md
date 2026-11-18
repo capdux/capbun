@@ -1174,3 +1174,14 @@
   - `Debugger.cp` (528 行, 0.987x)
 - **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 0.987x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,141 / 1,295 模块 (88.11%)**，突破 88% 大关，`src/jsc/` 待迁移模块降至 13 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 67 Group B] `src/install/` 第二批 4 个包管理核心模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 4 个包管理核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `postinstall_optimizer.cp` (187 行, 0.944x)
+  - `PnpmMatcher.cp` (201 行, 0.985x)
+  - `install.cp` (300 行, 1.017x)
+  - `integrity.cp` (323 行, 1.013x)
+- **4 项硬门禁全绿**：4 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.017x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,145 / 1,295 模块 (88.42%)**，`src/install/` 待迁移模块降至 17 个！

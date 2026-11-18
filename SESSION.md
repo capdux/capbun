@@ -2454,3 +2454,23 @@ Options:
 - 紧接着启动 **Worker 1 (全新实例, Role: `CP Migrator - JSC Store & Buffer`)**：
   - 攻坚 `src/jsc/RuntimeTranspilerStore.zig` (655 行) 与 `src/jsc/array_buffer.zig` (692 行)；
 - 与正在攻坚 `src/install/` 的 **Worker 2 (`ab6e5c91`)** 保持双路满载并发。
+
+
+---
+
+## 2026-11-19 10:56:00 - Phase 67 Group B (Install Batch 2): 4 个包管理核心模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成 4 个 `src/install/` 核心模块硬门禁独立验收：
+  1. `src/install/postinstall_optimizer.cp` (187 行, 0.944x, **PASS**)
+  2. `src/install/PnpmMatcher.cp` (201 行, 0.985x, **PASS**)
+  3. `src/install/install.cp` (300 行, 1.017x, **PASS**)
+  4. `src/install/integrity.cp` (323 行, 1.013x, **PASS**)
+- **4 项硬门禁指标全绿**：4 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.017x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,145 / 1,295 模块 (88.42%)**！
+
+### 2. 流水线零等待接力新派发
+- **Worker 2 (`ab6e5c91`)** 任务完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - Bundler HTML & ServerComponent`)**：
+  - 攻坚 `src/bundler/` 第 2 批 3 个小模块（247~308 行，共 831 行）：`ServerComponentParseTask.zig`, `HTMLImportManifest.zig`, `HTMLScanner.zig`；
+- 与正在攻坚 `src/jsc/` 的 **Worker 1 (`0ad513c4`)** 保持双路满载并发。
