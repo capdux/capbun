@@ -761,3 +761,13 @@
 ### 2. 泛型迭代器与命令分析器提升 (`colon_list_type.cp`, `install_command.cp`)
 - **泛型返回类型与构造解耦**：在泛型返回结构体中，显式声明 `const Self = @This();` 并通过 `pub fn init(...) Self!` 返回实例，避免泛型内联构造时的接收者类型绑定失效。
 - **子结构体模块级提升**：将 `install_command.cp` 内部的 `Analyzer` 辅助分析器提升至顶层作用域，使得 CP 编译器能够对其字段与方法实施全量借用检查与 AST lowering。
+
+## 2026-11-19 [Milestone 7 Phase 62 Group A] 虚拟机作用域与导出符号 CP 纯化实战经验
+
+### 1. 虚拟机生命周期与异常栈边界 (`VM.cp`, `TopExceptionScope.cp`, `JSRef.cp`)
+- **生命周期所有权转移规范**：在 `TopExceptionScope.cp` 中，RAII 析构操作规范通过 `*_` 可变借用方法解构，严禁隐式双重释放。
+- **引用持有者解耦**：在 `JSRef.cp` 中，规范可空指针 `?*jsc.JSCell` 的借用，消除指针别名安全隐患。
+
+### 2. C-ABI 导出符号集中映射与模块构建 (`virtual_machine_exports.cp`, `ResolveMessage.cp`)
+- **显式 C ABI 导出规范**：在 `virtual_machine_exports.cp` 中，将需要暴露给 JavaScriptCore 运行时调用的底层入口集中收拢至 `pub @c { fn ...; }`，消除 Zig-ABI 与 C-ABI 边界的调用规约失配。
+- **消息结构格式化降级防线**：在 `ResolveMessage.cp` 中，对结构体字面量与切片操作实施纯正的 CP 语法规范化，确保在 AST 语法树遍历期间类型完全推导闭合。

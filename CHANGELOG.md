@@ -1032,3 +1032,14 @@
   - `add_completions.cp` (105 行, 1.000x)
 - **4 项硬门禁全绿**：7 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.065x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,086 / 1,295 模块 (83.86%)**，`src/cli/` 待迁移模块降至 30 个！
+
+## 2026-11-19 [Milestone 7 Phase 62 Group A] `src/jsc/` 5 个虚拟机与异常作用域模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 5 个 JSC 核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `VM.cp` (204 行, 0.971x)
+  - `TopExceptionScope.cp` (215 行, 1.000x)
+  - `JSRef.cp` (225 行, 1.000x)
+  - `virtual_machine_exports.cp` (245 行, 1.004x)
+  - `ResolveMessage.cp` (242 行, 0.972x)
+- **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.004x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,091 / 1,295 模块 (84.25%)**，`src/jsc/` 待迁移模块降至 23 个！
