@@ -1019,3 +1019,16 @@
   - `BuildMessage.cp` (208 行, 1.025x)
 - **4 项硬门禁全绿**：5 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.025x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,079 / 1,295 模块 (83.32%)**，`src/jsc/` 待迁移模块降至 28 个！
+
+## 2026-11-19 [Milestone 7 Phase 61 Group B] `src/cli/` 第二批 7 个基础命令模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 7 个 CLI 基础命令模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `colon_list_type.cp` (66 行, 1.065x)
+  - `fuzzilli_command.cp` (73 行, 0.986x)
+  - `shell_completions.cp` (77 行, 1.027x)
+  - `list-of-yarn-commands.cp` (76 行, 1.000x)
+  - `scan_command.cp` (72 行, 0.947x)
+  - `install_command.cp` (99 行, 1.021x)
+  - `add_completions.cp` (105 行, 1.000x)
+- **4 项硬门禁全绿**：7 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.065x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,086 / 1,295 模块 (83.86%)**，`src/cli/` 待迁移模块降至 30 个！

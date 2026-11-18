@@ -751,3 +751,13 @@
 ### 2. 消息流解析与循环解构 (`BuildMessage.cp`, `NodeModuleModule.cp`)
 - **标准切片循环重构**：将原版 `for (notes, 0..) |note, i|` 彻底消除，改写为纯正的 CP 迭代语法 `for (note, i of notes, 0..)`。
 - **条件解包防线**：在 `NodeModuleModule.cp` 中，将 Zig 风格的 `if (opt) |val|` 语句全量规范为 `if (val := opt)`，消除作用域提升造成的变量未定义解析中断。
+
+## 2026-11-19 [Milestone 7 Phase 61 Group B] CLI 自动补全与命令调度纯 CP 化经验
+
+### 1. 静态查找表与大型压缩字节常量嵌入 (`list-of-yarn-commands.cp`, `add_completions.cp`)
+- **多级匿名元组规范化**：在 `ComptimeStringMap` 等静态结构映射中，嵌套元组必须规范化为 `.{ .{ "cmd1" }, .{ "cmd2" } }`，防止语法分析器将多级嵌套元组作为语句块解析。
+- **预压缩二进制资源嵌入**：对于包含 65KB 预压缩 zlib 字节数组的大型文件，显式采用编译期定长数组 `const compressed_data: [65409]u8 = [...]`，切片借用时显式指定类型 `([]const u8)?`，完美避免数组退化为多元素裸指针引发借用检查报错。
+
+### 2. 泛型迭代器与命令分析器提升 (`colon_list_type.cp`, `install_command.cp`)
+- **泛型返回类型与构造解耦**：在泛型返回结构体中，显式声明 `const Self = @This();` 并通过 `pub fn init(...) Self!` 返回实例，避免泛型内联构造时的接收者类型绑定失效。
+- **子结构体模块级提升**：将 `install_command.cp` 内部的 `Analyzer` 辅助分析器提升至顶层作用域，使得 CP 编译器能够对其字段与方法实施全量借用检查与 AST lowering。
