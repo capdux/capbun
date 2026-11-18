@@ -924,3 +924,27 @@
   - `comptime_string_map_jsc.cp` (20 行, 1.000x)
   - `Counters.cp` (21 行, 0.913x)
 - **4 项硬门禁指标**：全部通过 `cpc --lib` 与 `zig ast-check` 0 报错，无 `zig {}`/`var`，膨胀率 <= 1.15x。
+
+## 2026-11-19 [Milestone 7 Phase 58] `src/jsc/` 双智能体并发极速推进 16 连斩 100% 满绿闭环
+
+- **两路并发短生命周期子智能体批量攻坚 16 个高价值核心微模块（全部通过 4 项硬门禁）**：
+  - **Group A (8 模块)**：
+    - `JSArray.cp` (25 行, 1.000x)
+    - `config.cp` (25 行, 0.962x)
+    - `EventType.cp` (30 行, 0.938x)
+    - `ZigStackFramePosition.cp` (32 行, 1.000x)
+    - `codegen.cp` (33 行, 1.000x)
+    - `resolve_path_jsc.cp` (32 行, 0.970x)
+    - `DeferredError.cp` (34 行, 1.000x)
+    - `JSUint8Array.cp` (35 行, 1.000x)
+  - **Group B (8 模块)**：
+    - `JSMap.cp` (39 行, 1.000x)
+    - `MarkedArgumentBuffer.cp` (42 行, 1.077x)
+    - `fmt_jsc.cp` (39 行, 1.000x)
+    - `ZigStackFrameCode.cp` (40 行, 1.000x)
+    - `Errorable.cp` (43 行, 1.000x)
+    - `ResolvedSource.cp` (44 行, 1.000x)
+    - `JSBigInt.cp` (45 行, 1.023x)
+    - `TextCodec.cp` (53 行, 1.152x)
+- **4 项硬门禁全绿**：16 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.152x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **阶段性累计**：本轮连续收割 31 个模块，`src/jsc/` 未迁移模块从 97 个锐减至 66 个！
