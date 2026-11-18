@@ -851,3 +851,13 @@
 ### 2. AST 符号绑定与字符频率统计 (`CharFreq.cp`, `Ast.cp`, `Binding.cp`, `NewStore.cp`)
 - **根结构体嵌套提升与类型 LOWERING**：全面贯彻 `@root struct` 组织规则，将 `Tag`, `CommonJSNamedExport`, `CharAndCount` 等二级数据模型提升至文件作用域，确保 CP 编译器对所有成员类型执行完备的借用检查。
 - **元组访问与解构纯化**：在 `NewStore.cp` 中使用标准数组索引 `largest[0]` / `largest[1]` 消除所有 `.@"0"` 违例，切片声明严格采用常量数组切片借用。
+
+## 2026-11-19 [Milestone 7 Phase 65 Group A] WebCore Headers 与 FFI 桥接 CP 纯化经验
+
+### 1. WebCore FetchHeaders 不透明类型与生命周期引用 (`FetchHeaders.cp`)
+- **不透明类型规范与 C 绑定集中提升**：采用 `@opaque pub struct FetchHeaders` 结构，将数十个底层 C++ WebCore 绑定函数收拢至顶部 `@c { fn ...; }`，消除深层声明导致的类型遮蔽与符号可见性断裂。
+- **PicoHeaders 嵌套消除**：将辅助解析类型提升至顶层，接收者严格区分只读 `_` 与独占可变 `*_`，消除了浅拷贝并发安全问题。
+
+### 2. FFI 外部函数接口与动态类型推断 (`FFI.cp`)
+- **无类型指针净化**：全面消除 `*anyopaque` / `?*anyopaque`，将上下文句柄改写为强类型的 `pub type JSCell = (*void)?;`，并利用显式类型转换收窄截断与浮点转换。
+- **可变性收窄与分支消除**：废除全局与局部未初始化 `var`，统一采用只读声明 `const` 与可变绑定 `let`，彻底杜绝指针别名污染。
