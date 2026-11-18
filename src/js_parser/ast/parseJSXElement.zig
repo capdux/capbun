@@ -1,319 +1,283 @@
-pub fn ParseJSXElement(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const is_typescript_enabled = P.is_typescript_enabled;
-        const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
-
-        pub fn parseJSXElement(noalias p: *P, loc: logger.Loc) anyerror!Expr {
-            if (only_scan_imports_and_do_not_visit) {
-                p.needs_jsx_import = true;
-            }
-
-            const tag = try JSXTag.parse(P, p);
-
-            // The tag may have TypeScript type arguments: "<Foo<T>/>"
-            if (is_typescript_enabled) {
-                // Pass a flag to the type argument skipper because we need to call
-                _ = try p.skipTypeScriptTypeArguments(true);
-            }
-
-            var previous_string_with_backslash_loc = logger.Loc{};
-            var properties = G.Property.List{};
-            var key_prop_i: i32 = -1;
-            var flags = Flags.JSXElement.Bitset{};
-            var start_tag: ?ExprNodeIndex = null;
-
-            // Fragments don't have props
-            // Fragments of the form "React.Fragment" are not parsed as fragments.
-            if (@as(JSXTag.TagType, tag.data) == .tag) {
-                start_tag = tag.data.tag;
-
-                var spread_loc: logger.Loc = logger.Loc.Empty;
-                var props = ListManaged(G.Property).init(p.allocator);
-                var first_spread_prop_i: i32 = -1;
-                var i: i32 = 0;
-                parse_attributes: while (true) {
-                    switch (p.lexer.token) {
-                        .t_identifier => {
-                            defer i += 1;
-                            // Parse the prop name
-                            const key_range = p.lexer.range();
-                            const prop_name_literal = p.lexer.identifier;
-                            const special_prop = E.JSXElement.SpecialProp.Map.get(prop_name_literal) orelse E.JSXElement.SpecialProp.any;
-                            try p.lexer.nextInsideJSXElement();
-
-                            if (special_prop == .key) {
-                                // <ListItem key>
-                                if (p.lexer.token != .t_equals) {
-                                    // Unlike Babel, we're going to just warn here and move on.
-                                    try p.log.addWarning(p.source, key_range.loc, "\"key\" prop ignored. Must be a string, number or symbol.");
-                                    continue;
-                                }
-
-                                key_prop_i = i;
-                            }
-
-                            const prop_name = p.newExpr(E.String{ .data = prop_name_literal }, key_range.loc);
-
-                            // Parse the value
-                            var value: Expr = undefined;
-                            if (p.lexer.token != .t_equals) {
-
-                                // Implicitly true value
-                                // <button selected>
-                                value = p.newExpr(E.Boolean{ .value = true }, logger.Loc{ .start = key_range.loc.start + key_range.len });
-                            } else {
-                                value = try p.parseJSXPropValueIdentifier(&previous_string_with_backslash_loc);
-                            }
-
-                            try props.append(G.Property{ .key = prop_name, .value = value });
-                        },
-                        .t_open_brace => {
-                            defer i += 1;
-                            // Use Next() not ExpectInsideJSXElement() so we can parse "..."
-                            try p.lexer.next();
-
-                            switch (p.lexer.token) {
-                                .t_dot_dot_dot => {
-                                    try p.lexer.next();
-
-                                    if (first_spread_prop_i == -1) first_spread_prop_i = i;
-                                    spread_loc = p.lexer.loc();
-                                    try props.append(G.Property{ .value = try p.parseExpr(.comma), .kind = .spread });
-                                },
-                                // This implements
-                                //  <div {foo} />
-                                //  ->
-                                //  <div foo={foo} />
-                                T.t_identifier => {
-                                    // we need to figure out what the key they mean is
-                                    // to do that, we must determine the key name
-                                    const expr = try p.parseExpr(Level.lowest);
-
-                                    const key = brk: {
-                                        switch (expr.data) {
-                                            .e_import_identifier => |ident| {
-                                                break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
-                                            },
-                                            .e_commonjs_export_identifier => |ident| {
-                                                break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
-                                            },
-                                            .e_identifier => |ident| {
-                                                break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
-                                            },
-                                            .e_dot => |dot| {
-                                                break :brk p.newExpr(E.String{ .data = dot.name }, dot.name_loc);
-                                            },
-                                            .e_index => |index| {
-                                                if (index.index.data == .e_string) {
-                                                    break :brk index.index;
-                                                }
-                                            },
-                                            else => {},
-                                        }
-
-                                        // If we get here, it's invalid
-                                        try p.log.addError(p.source, expr.loc, "Invalid JSX prop shorthand, must be identifier, dot or string");
-                                        return error.SyntaxError;
-                                    };
-
-                                    try props.append(G.Property{ .value = expr, .key = key, .kind = .normal });
-                                },
-                                // This implements
-                                //  <div {"foo"} />
-                                //  <div {'foo'} />
-                                //  ->
-                                //  <div foo="foo" />
-                                // note: template literals are not supported, operations on strings are not supported either
-                                T.t_string_literal => {
-                                    const key = p.newExpr(try p.lexer.toEString(), p.lexer.loc());
-                                    try p.lexer.next();
-                                    try props.append(G.Property{ .value = key, .key = key, .kind = .normal });
-                                },
-
-                                else => try p.lexer.unexpected(),
-                            }
-
-                            try p.lexer.nextInsideJSXElement();
-                        },
-                        else => {
-                            break :parse_attributes;
-                        },
-                    }
-                }
-
-                const is_key_after_spread = key_prop_i > -1 and first_spread_prop_i > -1 and key_prop_i > first_spread_prop_i;
-                flags.setPresent(.is_key_after_spread, is_key_after_spread);
-                properties = G.Property.List.moveFromList(&props);
-                if (is_key_after_spread and p.options.jsx.runtime == .automatic and !p.has_classic_runtime_warned) {
-                    try p.log.addWarning(p.source, spread_loc, "\"key\" prop after a {...spread} is deprecated in JSX. Falling back to classic runtime.");
-                    p.has_classic_runtime_warned = true;
-                }
-            }
-
-            // People sometimes try to use the output of "JSON.stringify()" as a JSX
-            // attribute when automatically-generating JSX code. Doing so is incorrect
-            // because JSX strings work like XML instead of like JS (since JSX is XML-in-
-            // JS). Specifically, using a backslash before a quote does not cause it to
-            // be escaped:
-            //
-            //   JSX ends the "content" attribute here and sets "content" to 'some so-called \\'
-            //                                          v
-            //         <Button content="some so-called \"button text\"" />
-            //                                                      ^
-            //       There is no "=" after the JSX attribute "text", so we expect a ">"
-            //
-            // This code special-cases this error to provide a less obscure error message.
-            if (p.lexer.token == .t_syntax_error and strings.eqlComptime(p.lexer.raw(), "\\") and previous_string_with_backslash_loc.start > 0) {
-                const r = p.lexer.range();
-                // Not dealing with this right now.
-                try p.log.addRangeError(p.source, r, "Invalid JSX escape - use XML entity codes quotes or pass a JavaScript string instead");
-                return error.SyntaxError;
-            }
-
-            // A slash here is a self-closing element
-            if (p.lexer.token == .t_slash) {
-                const close_tag_loc = p.lexer.loc();
-                // Use NextInsideJSXElement() not Next() so we can parse ">>" as ">"
-
-                try p.lexer.nextInsideJSXElement();
-
-                if (p.lexer.token != .t_greater_than) {
-                    try p.lexer.expected(.t_greater_than);
-                }
-
-                return p.newExpr(E.JSXElement{
-                    .tag = start_tag,
-                    .properties = properties,
-                    .key_prop_index = key_prop_i,
-                    .flags = flags,
-                    .close_tag_loc = close_tag_loc,
-                }, loc);
-            }
-
-            // Use ExpectJSXElementChild() so we parse child strings
-            try p.lexer.expectJSXElementChild(.t_greater_than);
-            var children = ListManaged(Expr).init(p.allocator);
-            // var last_element_i: usize = 0;
-
-            while (true) {
-                switch (p.lexer.token) {
-                    .t_string_literal => {
-                        try children.append(p.newExpr(try p.lexer.toEString(), loc));
-                        try p.lexer.nextJSXElementChild();
-                    },
-                    .t_open_brace => {
-                        // Use Next() instead of NextJSXElementChild() here since the next token is an expression
-                        try p.lexer.next();
-
-                        const is_spread = p.lexer.token == .t_dot_dot_dot;
-                        if (is_spread) {
-                            try p.lexer.next();
-                        }
-
-                        // The expression is optional, and may be absent
-                        if (p.lexer.token != .t_close_brace) {
-                            var item = try p.parseExpr(.lowest);
-                            if (is_spread) {
-                                item = p.newExpr(E.Spread{ .value = item }, loc);
-                            }
-                            try children.append(item);
-                        }
-
-                        // Use ExpectJSXElementChild() so we parse child strings
-                        try p.lexer.expectJSXElementChild(.t_close_brace);
-                    },
-                    .t_less_than => {
-                        const less_than_loc = p.lexer.loc();
-                        try p.lexer.nextInsideJSXElement();
-
-                        if (p.lexer.token != .t_slash) {
-                            // This is a child element
-
-                            children.append(try p.parseJSXElement(less_than_loc)) catch unreachable;
-
-                            // The call to parseJSXElement() above doesn't consume the last
-                            // TGreaterThan because the caller knows what Next() function to call.
-                            // Use NextJSXElementChild() here since the next token is an element
-                            // child.
-                            try p.lexer.nextJSXElementChild();
-                            continue;
-                        }
-
-                        // This is the closing element
-                        try p.lexer.nextInsideJSXElement();
-                        const end_tag = try JSXTag.parse(P, p);
-
-                        if (!strings.eql(end_tag.name, tag.name)) {
-                            try p.log.addRangeErrorFmtWithNote(
-                                p.source,
-                                end_tag.range,
-                                p.allocator,
-                                "Expected closing JSX tag to match opening tag \"\\<{s}\\>\"",
-                                .{tag.name},
-                                "Opening tag here:",
-                                .{},
-                                tag.range,
-                            );
-                            return error.SyntaxError;
-                        }
-
-                        if (p.lexer.token != .t_greater_than) {
-                            try p.lexer.expected(.t_greater_than);
-                        }
-
-                        return p.newExpr(E.JSXElement{
-                            .tag = end_tag.data.asExpr(),
-                            .children = ExprNodeList.moveFromList(&children),
-                            .properties = properties,
-                            .key_prop_index = key_prop_i,
-                            .flags = flags,
-                            .close_tag_loc = end_tag.range.loc,
-                        }, loc);
-                    },
-                    else => {
-                        try p.lexer.unexpected();
-                        return error.SyntaxError;
-                    },
-                }
-            }
-        }
-    };
-}
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const E = js_ast.E;
 const Expr = js_ast.Expr;
 const ExprNodeIndex = js_ast.ExprNodeIndex;
 const ExprNodeList = js_ast.ExprNodeList;
 const Flags = js_ast.Flags;
-
 const G = js_ast.G;
 const Property = G.Property;
-
 const Op = js_ast.Op;
 const Level = js_ast.Op.Level;
-
 const js_lexer = bun.js_lexer;
 const T = js_lexer.T;
-
 const js_parser = bun.js_parser;
 const JSXTag = js_parser.JSXTag;
 const JSXTransformType = js_parser.JSXTransformType;
 const TypeScript = js_parser.TypeScript;
 const options = js_parser.options;
-
-const std = @import("std");
 const List = std.ArrayListUnmanaged;
 const Map = std.AutoHashMapUnmanaged;
 const ListManaged = std.array_list.Managed;
+
+pub fn ParseJSXElement(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn parseJSXElement(p: *P, loc: logger.Loc) anyerror!Expr {
+            if (only_scan_imports_and_do_not_visit) {
+                p.needs_jsx_import = true;
+            }
+            const tag = try JSXTag.parse(P, p);
+            if (is_typescript_enabled) {
+                _ = try p.skipTypeScriptTypeArguments(true);
+            }
+            var previous_string_with_backslash_loc = logger.Loc{  };
+            _ = &previous_string_with_backslash_loc;
+            var properties = G.Property.List{  };
+            _ = &properties;
+            var key_prop_i: i32 = -1;
+            _ = &key_prop_i;
+            var flags = Flags.JSXElement.Bitset{  };
+            _ = &flags;
+            var start_tag: ?ExprNodeIndex = null;
+            _ = &start_tag;
+            if (((if (comptime @typeInfo(JSXTag.TagType) == .@"enum") @as(JSXTag.TagType, @enumFromInt(tag.data)) else @as(JSXTag.TagType, tag.data)) == .tag)) {
+                start_tag = tag.data.tag;
+                var spread_loc: logger.Loc = logger.Loc.Empty;
+                _ = &spread_loc;
+                var props = ListManaged(G.Property).init(p.allocator);
+                _ = &props;
+                var first_spread_prop_i: i32 = -1;
+                _ = &first_spread_prop_i;
+                var i: i32 = 0;
+                _ = &i;
+                parse_attributes: while (true) {
+                    switch (p.lexer.token) {
+.t_identifier => {
+defer {
+                    i = (i + 1);
+                    }
+                    const key_range = p.lexer.range();
+                    const prop_name_literal = p.lexer.identifier;
+                    const special_prop = ((E.JSXElement.SpecialProp.Map.get(prop_name_literal)) orelse (E.JSXElement.SpecialProp.any));
+                    _ = try p.lexer.nextInsideJSXElement();
+                    if ((special_prop == .key)) {
+                        if ((p.lexer.token != .t_equals)) {
+                            _ = try p.log.addWarning(p.source, key_range.loc, "\"key\" prop ignored. Must be a string, number or symbol.");
+                            continue;
+                        }
+                        key_prop_i = i;
+                    }
+                    const prop_name = p.newExpr(E.String{ .data = prop_name_literal }, key_range.loc);
+                    var value: Expr = undefined;
+                    _ = &value;
+                    if ((p.lexer.token != .t_equals)) {
+                        value = p.newExpr(E.Boolean{ .value = true }, logger.Loc{ .start = (key_range.loc.start + key_range.len) });
+                    } else {
+                        value = try p.parseJSXPropValueIdentifier((&previous_string_with_backslash_loc));
+                    }
+                    _ = try props.append(G.Property{ .key = prop_name, .value = value });
+},
+.t_open_brace => {
+defer {
+                    i = (i + 1);
+                    }
+                    _ = try p.lexer.next();
+                    switch (p.lexer.token) {
+.t_dot_dot_dot => {
+_ = try p.lexer.next();
+                    if ((first_spread_prop_i == -1)) {
+                        first_spread_prop_i = i;
+                    }
+                    spread_loc = p.lexer.loc();
+                    _ = try props.append(G.Property{ .value = try p.parseExpr(.comma), .kind = .spread });
+},
+T.t_identifier => {
+const expr = try p.parseExpr(Level.lowest);
+                    const key = brk: {
+                    switch (expr.data) {
+.e_import_identifier => |ident| {
+break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
+},
+.e_commonjs_export_identifier => |ident| {
+break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
+},
+.e_identifier => |ident| {
+break :brk p.newExpr(E.String{ .data = p.loadNameFromRef(ident.ref) }, expr.loc);
+},
+.e_dot => |dot| {
+break :brk p.newExpr(E.String{ .data = (if (@typeInfo(@TypeOf(dot)) == .@"enum" or @typeInfo(@TypeOf(dot)) == .@"union") @tagName(dot) else dot.name) }, dot.name_loc);
+},
+.e_index => |index| {
+if ((index.index.data == .e_string)) {
+                        break :brk index.index;
+                    }
+},
+else => {
+
+},
+}
+                    _ = try p.log.addError(p.source, expr.loc, "Invalid JSX prop shorthand, must be identifier, dot or string");
+                    return error.SyntaxError;
+};
+                    _ = try props.append(G.Property{ .value = expr, .key = key, .kind = .normal });
+},
+T.t_string_literal => {
+const key = p.newExpr(try p.lexer.toEString(), p.lexer.loc());
+                    _ = try p.lexer.next();
+                    _ = try props.append(G.Property{ .value = key, .key = key, .kind = .normal });
+},
+else => {
+_ = try p.lexer.unexpected();
+},
+}
+                    _ = try p.lexer.nextInsideJSXElement();
+},
+else => {
+break :parse_attributes;
+},
+}
+                }
+                const is_key_after_spread = (((key_prop_i > -1) and (first_spread_prop_i > -1)) and (key_prop_i > first_spread_prop_i));
+                _ = flags.setPresent(.is_key_after_spread, is_key_after_spread);
+                properties = G.Property.List.moveFromList((&props));
+                if (((is_key_after_spread and (p.options.jsx.runtime == .automatic)) and (!p.has_classic_runtime_warned))) {
+                    _ = try p.log.addWarning(p.source, spread_loc, "\"key\" prop after a {...spread} is deprecated in JSX. Falling back to classic runtime.");
+                    p.has_classic_runtime_warned = true;
+                }
+            }
+            if ((((p.lexer.token == .t_syntax_error) and strings.eqlComptime(p.lexer.raw(), "\\")) and (previous_string_with_backslash_loc.start > 0))) {
+                const r = p.lexer.range();
+                _ = try p.log.addRangeError(p.source, r, "Invalid JSX escape - use XML entity codes quotes or pass a JavaScript string instead");
+                return error.SyntaxError;
+            }
+            if ((p.lexer.token == .t_slash)) {
+                const close_tag_loc = p.lexer.loc();
+                _ = try p.lexer.nextInsideJSXElement();
+                if ((p.lexer.token != .t_greater_than)) {
+                    _ = try p.lexer.expected(.t_greater_than);
+                }
+                return p.newExpr(E.JSXElement{ .tag = start_tag, .properties = properties, .key_prop_index = key_prop_i, .flags = flags, .close_tag_loc = close_tag_loc }, loc);
+            }
+            _ = try p.lexer.expectJSXElementChild(.t_greater_than);
+            var children = ListManaged(Expr).init(p.allocator);
+            _ = &children;
+            while (true) {
+                switch (p.lexer.token) {
+.t_string_literal => {
+_ = try children.append(p.newExpr(try p.lexer.toEString(), loc));
+                _ = try p.lexer.nextJSXElementChild();
+},
+.t_open_brace => {
+_ = try p.lexer.next();
+                const is_spread = (p.lexer.token == .t_dot_dot_dot);
+                if (is_spread) {
+                    _ = try p.lexer.next();
+                }
+                if ((p.lexer.token != .t_close_brace)) {
+                    var item = try p.parseExpr(.lowest);
+                    _ = &item;
+                    if (is_spread) {
+                        item = p.newExpr(E.Spread{ .value = item }, loc);
+                    }
+                    _ = try children.append(item);
+                }
+                _ = try p.lexer.expectJSXElementChild(.t_close_brace);
+},
+.t_less_than => {
+const less_than_loc = p.lexer.loc();
+                _ = try p.lexer.nextInsideJSXElement();
+                if ((p.lexer.token != .t_slash)) {
+                    _ = ((children.append(try p.parseJSXElement(less_than_loc))) catch unreachable);
+                    _ = try p.lexer.nextJSXElementChild();
+                    continue;
+                }
+                _ = try p.lexer.nextInsideJSXElement();
+                const end_tag = try JSXTag.parse(P, p);
+                if ((!strings.eql((if (@typeInfo(@TypeOf(end_tag)) == .@"enum" or @typeInfo(@TypeOf(end_tag)) == .@"union") @tagName(end_tag) else end_tag.name), (if (@typeInfo(@TypeOf(tag)) == .@"enum" or @typeInfo(@TypeOf(tag)) == .@"union") @tagName(tag) else tag.name)))) {
+                    _ = try p.log.addRangeErrorFmtWithNote(p.source, end_tag.range, p.allocator, "Expected closing JSX tag to match opening tag \"\\<{s}\\>\"", .{ (if (@typeInfo(@TypeOf(tag)) == .@"enum" or @typeInfo(@TypeOf(tag)) == .@"union") @tagName(tag) else tag.name) }, "Opening tag here:", .{}, tag.range);
+                    return error.SyntaxError;
+                }
+                if ((p.lexer.token != .t_greater_than)) {
+                    _ = try p.lexer.expected(.t_greater_than);
+                }
+                return p.newExpr(E.JSXElement{ .tag = end_tag.data.asExpr(), .children = ExprNodeList.moveFromList((&children)), .properties = properties, .key_prop_index = key_prop_i, .flags = flags, .close_tag_loc = end_tag.range.loc }, loc);
+},
+else => {
+_ = try p.lexer.unexpected();
+                return error.SyntaxError;
+},
+}
+            }
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const is_typescript_enabled = P.is_typescript_enabled;
+    const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+};
+}

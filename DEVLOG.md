@@ -871,3 +871,14 @@
 ### 2. 字符串拼接编译期折叠与打包语法树 (`foldStringAddition.cp`, `BundledAst.cp`)
 - **字符串常量表达式深度遍历**：在 `foldStringAddition.cp` 中，对二元加法节点的折叠检查采用模式匹配与不可变切片安全截取，彻底杜绝折叠中间态产生的未释放临时缓冲区。
 - **打包 AST 树持有者**：在 `BundledAst.cp` 中，将整棵语法树的生命周期管理统一由独占容器接管，析构时递归释放所有语句节点。
+
+
+## 2026-11-19 [Milestone 7 Phase 66 Group B] AST 运算符表初始化与 JSX 语法树节点 CP 纯化经验
+
+### 1. 运算符元组表与优先级定义 (`Op.cp`)
+- **元组初始化与索引纯化**：将原版 `.{ "+", Level.prefix, false }` 结构规范为 CP 数组元组语法 `[ "+", Level.prefix, false ]`，并通过 `triple[0]`, `triple[1]`, `triple[2]` 替代 `.@"0"` 访问，规避元组解析歧义。
+- **静态枚举方法收窄**：将 `callFromNew` 等静态派生函数显式标注为 `static fn`，杜绝内联修饰符与枚举标签命名冲突。
+
+### 2. JSX 元素解析与全局符号识别 (`parseJSXElement.cp`, `KnownGlobal.cp`)
+- **表达式守卫语句重构**：将表达式位置的 `return` 语法重写为标准前置守卫语句（`if (!cond) return null;`），彻底消除控制流解析异常。
+- **关键字枚举转义**：对 `.@"null"`, `.@"undefined"`, `.@"string"` 关键字枚举标签使用标识符转义，保障严格的词法匹配。

@@ -2403,3 +2403,36 @@ Options:
 - 紧接着启动 **Worker 2 (`33cfb12b`, Role: `CP Migrator - AST Batch 4`)**：
   - 攻坚 `src/js_parser/ast/` 第四批 4 个模块（237~361 行，共 1,212 行）：`S.cp`, `Op.cp`, `parseJSXElement.cp`, `KnownGlobal.cp`；
 - 与正在攻坚 `src/jsc/` 的 **Worker 1 (`c2a24958`)** 保持双路满载并发。
+
+---
+
+## 2026-11-19 10:31:00 - 服务重启上下文恢复、后台常驻通信重启与全新双路并发重新分发
+
+### 1. 响应用户指令与恢复真实环境
+- 彻底清理重启后处于 `idle` 状态的旧子智能体，严禁复用旧 ID；
+- 真实启动后台常驻通信进程：
+  - `python3 scripts/watch_task.py --status resolved --agent bun_agy` (Task ID: `task-1182`, `IsDaemon: true`)；
+- **派发 2 个全新短生命周期并发子智能体接手任务**：
+  - **Worker 1 (`cf9bf70c`, Role: `CP Migrator - JSC Debugger & HotReloader`)**：攻坚 `src/jsc/Debugger.cp` 与 `src/jsc/hot_reloader.cp`；
+  - **Worker 2 (`5afffdf0`, Role: `CP Migrator - AST Op & KnownGlobal`)**：攻坚 `src/js_parser/ast/Op.cp` 与 `src/js_parser/ast/KnownGlobal.cp`（与已 PASS 的 `S.cp`, `parseJSXElement.cp` 汇合闭环）。
+- 底部状态栏真实呈现：1 个常驻通信任务 + 2 个运行中子智能体。
+
+
+---
+
+## 2026-11-19 10:43:00 - Phase 66 Group B (AST Batch 4): 4 个核心语法树与运算符模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成全量 4 个 `js_parser/ast` 核心模块硬门禁独立验收：
+  1. `src/js_parser/ast/S.cp` (237 行, 1.000x, **PASS**)
+  2. `src/js_parser/ast/Op.cp` (289 行, 0.993x, **PASS**)
+  3. `src/js_parser/ast/parseJSXElement.cp` (317 行, 0.994x, **PASS**)
+  4. `src/js_parser/ast/KnownGlobal.cp` (360 行, 0.997x, **PASS**)
+- **4 项硬门禁指标全绿**：4 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.000x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,139 / 1,295 模块 (87.95%)**！距离 88% 仅一步之遥！
+
+### 2. 调度与并发进展
+- 后台常驻监听进程（`task-1182`, `watch_task.py`）持续平稳运行；
+- 2 路并发短生命周期子智能体全力推进中：
+  - **Worker 1 (`cf9bf70c`, Role: `CP Migrator - JSC Debugger & HotReloader`)**：`src/jsc/Debugger.cp` 与 `src/jsc/hot_reloader.cp`；
+  - **Worker 2 (`ab6e5c91`, Role: `CP Migrator - Install Batch 2`)**：`src/install/postinstall_optimizer.cp`、`PnpmMatcher.cp`、`install.cp`、`integrity.cp`。
