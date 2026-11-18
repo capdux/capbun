@@ -882,3 +882,16 @@
 ### 2. JSX 元素解析与全局符号识别 (`parseJSXElement.cp`, `KnownGlobal.cp`)
 - **表达式守卫语句重构**：将表达式位置的 `return` 语法重写为标准前置守卫语句（`if (!cond) return null;`），彻底消除控制流解析异常。
 - **关键字枚举转义**：对 `.@"null"`, `.@"undefined"`, `.@"string"` 关键字枚举标签使用标识符转义，保障严格的词法匹配。
+
+
+## 2026-11-19 [Milestone 7 Phase 67 Group A] JSC 调试器与热重载工具链 CP 纯化经验
+
+### 1. 热重载器类型别名与任务顶层提升 (`hot_reloader.cp`)
+- **线程局部状态严格修饰**：在泛型结构体中，将原版 `pub let clear_screen` 规范化为 `@tls pub let clear_screen: bool = false;`，消除未类型化声明导致的 CP lowering 阻断。
+- **任务模型顶层提升**：将 `MainFile` 与通用 `NewTask` 结构体解耦提升至模块顶层，避免内部常量初始化时 CP 语法被降级器原样输出跳过。
+- **安全切片借用**：规范 `changed_files: [][:0]u8?` 与 `type string = []const u8;` 类型声明，消除切片长度推断错误。
+
+### 2. 调试器根结构体与 C 原型收拢 (`Debugger.cp`)
+- **根模型与外部原型收拢**：使用 `@root struct Debugger` 组织调试器主体，外部 C++ 接口统一在文件顶层 `@c { fn ...; }` 原型集中声明，彻底消除内联 `extern "c" fn`。
+- **不透明生命周期句柄**：定义 `@opaque pub struct TestReporterHandle` 与 `LifecycleHandle`，规范只读接收者省略机制，消除 `E0123`。
+- **原子互斥与类型转换收窄**：全局互斥变量使用 `let futex_atomic`，定时器回调采用 `unsafe { let ptr: *uv.Timer = @ptrCast(handle); ... }` 彻底消除 `*anyopaque`。
