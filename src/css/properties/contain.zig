@@ -7,8 +7,10 @@ const ContainerName = css.css_rules.container.ContainerName;
 const ContainerIdent = ContainerName;
 pub const ContainerType = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const ContainerNameList = union(enum) {
-    none: void,
-    names: SmallList(ContainerIdent,1),
+    /// The `none` keyword.
+    none,
+    /// A list of container names.
+    names: SmallList(ContainerIdent, 1),
 };
 pub const Container = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const css = @import("../css_parser.zig");

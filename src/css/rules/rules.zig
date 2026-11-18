@@ -15,6 +15,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
 fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
@@ -85,6 +100,7 @@ pub const StyleContext = struct {
 
 
 pub fn CssRule(comptime Rule: type) type {
+        _ = &Rule;
         return union(enum) {
         /// A `@media` rule.
         media: media.MediaRule(Rule),
@@ -170,6 +186,7 @@ pub fn CssRule(comptime Rule: type) type {
 }
 
 pub fn CssRuleList(comptime AtRule: type) type {
+        _ = &AtRule;
         return struct {
     v: ArrayList(CssRule(AtRule)) = .{},
 
@@ -461,21 +478,23 @@ pub fn deepClone(self: *@This(), allocator: std.mem.Allocator) @This() {
 }
 
 pub fn StyleRuleKey(comptime R: type) type {
+        _ = &R;
         return struct {
     list: *const ArrayList(CssRule(R)),
     index: usize,
     hash: u64,
 
 pub fn HashMap(comptime V: type) type {
+            _ = &V;
             return std.ArrayHashMapUnmanaged(StyleRuleKey(R), V, struct {
 
 pub fn hash(self: @This(), key: This) u32 {
-        _ = &self;
+        _ = self;
             return @truncate(key.hash);
     }
 
-pub fn eql(self: @This(), a: This, b: This) bool {
-        _ = &self;
+pub fn eql(self: @This(), a: This, b: This, _: usize) bool {
+        _ = self;
             return a.eql((&b));
     }
 }, false);
@@ -486,8 +505,7 @@ pub fn new(list: *const ArrayList(CssRule(R)), index: usize) This {
             return This{ .list = list, .index = index, .hash = rule.hashKey() };
     }
 
-pub fn eql(self: @This(), key_self: *const @This(), other: *const This) bool {
-        _ = &self;
+pub fn eql(key_self: *const @This(), other: *const This) bool {
             if ((!((key_self.index < key_self.list.items.len) and (key_self.list.items[@as(usize, @intCast(key_self.index))] == .style)))) {
                 return false;
             }

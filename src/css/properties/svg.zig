@@ -6,29 +6,40 @@ const LengthPercentage = css.css_values.length.LengthPercentage;
 const CssColor = css.css_values.color.CssColor;
 const Url = css.css_values.url.Url;
 const SVGPaint = union(enum) {
+    /// A URL reference to a paint server element, e.g. `linearGradient`, `radialGradient`, and `pattern`.
     Url: struct {
         /// The url of the paint server.
         url: Url,
         /// A fallback to be used in case the paint server cannot be resolved.
         fallback: ?SVGPaintFallback,
     },
+    /// A solid color paint.
     Color: CssColor,
-    ContextFill: void,
-    ContextStroke: void,
-    None: void,
+    /// Use the paint value of fill from a context element.
+    ContextFill,
+    /// Use the paint value of stroke from a context element.
+    ContextStroke,
+    /// No paint.
+    None,
 };
 const SVGPaintFallback = union(enum) {
-    None: void,
+    /// No fallback.
+    None,
+    /// A solid color.
     Color: CssColor,
 };
 pub const StrokeLinecap = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const StrokeLinejoin = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 const StrokeDasharray = union(enum) {
-    None: void,
+    /// No dashing is used.
+    None,
+    /// Specifies a dashing pattern to use.
     Values: ArrayList(LengthPercentage),
 };
 const Marker = union(enum) {
-    None: void,
+    /// No marker.
+    None,
+    /// A url reference to a `<marker>` element.
     Url: Url,
 };
 pub const ColorInterpolation = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));

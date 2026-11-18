@@ -72,8 +72,7 @@ pub fn writePrefix(d: *Printer, prefix: css.VendorPrefix) PrintErr!css.VendorPre
             return vp;
     }
 
-pub fn writePrefixed(self: @This(), d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8) PrintErr!void {
-        _ = &self;
+pub fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8) PrintErr!void {
             _ = try writePrefix(d, prefix);
             _ = try d.writeStr(val);
     }
@@ -84,6 +83,7 @@ pub fn serializeSelectorList(list: []const parser.Selector, dest: *Printer, cont
             var first = true;
             _ = &first;
             for (list) |*selector| {
+                _ = &selector;
                 if ((!first)) {
                     _ = try dest.delim(44, false);
                 }
@@ -98,6 +98,7 @@ pub fn serializeSelector(selector: *const parser.Selector, dest: *css.Printer, c
             if (comptime bun.Environment.isDebug) {
                 _ = debug("Selector components:\n", .{});
                 for (selector.components.items) |*comp| {
+                    _ = &comp;
                     _ = debug(" {f}\n", .{ comp });
                 }
                 _ = debug("Compound selector iter\n", .{});
@@ -156,6 +157,7 @@ else => .{ true, first_index },
                             break :brk compound[@min(1, compound.len)..];
 } else compound);
                             for (slice) |*simple| {
+                                _ = &simple;
                                 _ = try serializeComponent(simple, dest, context);
                             }
                             if (swap_nesting) {
@@ -190,6 +192,7 @@ else => .{ true, first_index },
                     }
                     if ((i < compound.len)) {
                         for (iter[i..]) |*simple| {
+                            _ = &simple;
                             if ((simple.* == .explicit_universal_type)) {
                                 if (can_elide_namespace) {
                                     continue;
@@ -716,6 +719,7 @@ pub fn toCss_SelectorList(selectors: []const parser.Selector, dest: *css.Printer
             _ = try tocss_servo.toCss_Selector((&selectors[0]), dest);
             if ((selectors.len > 1)) {
                 for (selectors[1..]) |*selector| {
+                    _ = &selector;
                     _ = try dest.writeStr(", ");
                     _ = try tocss_servo.toCss_Selector(selector, dest);
                 }
@@ -748,6 +752,7 @@ else => .{ true, 0 },
                     } else {
                         if ((compound[@as(usize, @intCast(first_non_namespace))] == .explicit_universal_type)) {
                             for (compound) |*simple| {
+                                _ = &simple;
                                 _ = try tocss_servo.toCss_Component(simple, dest);
                             }
                             perform_step_2 = false;
@@ -757,6 +762,7 @@ else => .{ true, 0 },
                 }
                 if (perform_step_2) {
                     for (compound) |*simple| {
+                        _ = &simple;
                         if ((simple.* == .explicit_universal_type)) {
                             if (can_elide_namespace) {
                                 continue;
@@ -1023,6 +1029,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 const Message = anyopaque;

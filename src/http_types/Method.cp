@@ -39,16 +39,16 @@ export enum Method: u8 {
     UNLOCK = 34,
     UNSUBSCRIBE = 35,
 
-    pub fn hasBody(this): bool {
-        return with_body.contains(this);
+    pub fn hasBody(): bool {
+        return with_body.contains(_);
     }
 
-    pub fn hasRequestBody(this): bool {
-        return with_request_body.contains(this);
+    pub fn hasRequestBody(): bool {
+        return with_request_body.contains(_);
     }
 
-    pub fn isIdempotent(this): bool {
-        return idempotent.contains(this);
+    pub fn isIdempotent(): bool {
+        return idempotent.contains(_);
     }
 
     pub static fn find(str: string): Method? {
@@ -63,14 +63,14 @@ export enum Method: u8 {
     pub const Set = std.enums.EnumSet(Method);
 
     const with_body: Set = brk: {
-        var values = Set.initFull();
+        let values = Set.initFull();
         values.remove(.HEAD);
         values.remove(.TRACE);
         break :brk values;
     };
 
     const with_request_body: Set = brk: {
-        var values = Set.initFull();
+        let values = Set.initFull();
         values.remove(.GET);
         values.remove(.HEAD);
         values.remove(.OPTIONS);
@@ -79,7 +79,7 @@ export enum Method: u8 {
     };
 
     const idempotent: Set = brk: {
-        var values = Set.initEmpty();
+        let values = Set.initEmpty();
         values.insert(.GET);
         values.insert(.HEAD);
         values.insert(.PUT);

@@ -6,14 +6,14 @@ export enum Encoding {
     zstd,
     chunked,
 
-    pub fn canUseLibDeflate(this): bool {
+    pub fn canUseLibDeflate(): bool {
         return switch (this) {
             .gzip, .deflate => true,
             else => false,
         };
     }
 
-    pub fn isCompressed(this): bool {
+    pub fn isCompressed(): bool {
         return switch (this) {
             .brotli, .gzip, .deflate, .zstd => true,
             else => false,

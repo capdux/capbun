@@ -62,22 +62,22 @@ export enum Category {
     chemical,
     multipart,
 
-    pub fn isCode(this): bool {
-        return match (this) {
+    pub fn isCode(): bool {
+        return match (_) {
             .wasm, .json, .css, .html, .javascript => true,
             else => false,
         };
     }
 
-    pub fn isTextLike(this): bool {
-        return match (this) {
+    pub fn isTextLike(): bool {
+        return match (_) {
             .javascript, .html, .text, .css, .json => true,
             else => false,
         };
     }
 
-    pub fn autosetFilename(this): bool {
-        return match (this) {
+    pub fn autosetFilename(): bool {
+        return match (_) {
             .wasm, .font, .image, .audio, .video, .javascript, .html, .text, .css, .json => false,
             else => true,
         };
@@ -189,13 +189,13 @@ export @root struct MimeType {
     value: string,
     category: Category,
 
-    pub fn canOpenInEditor(this): bool {
-        if (this.category == .text || this.category.isCode()) {
+    pub fn canOpenInEditor(): bool {
+        if (_.category == .text || _.category.isCode()) {
             return true;
         }
 
-        if (this.category == .image) {
-            return strings.eqlComptime(this.value, "image/svg+xml");
+        if (_.category == .image) {
+            return strings.eqlComptime(_.value, "image/svg+xml");
         }
 
         return false;
@@ -229,14 +229,14 @@ export @value struct Compact {
         };
     }
 
-    pub fn toMimeType(this): MimeType {
+    pub fn toMimeType(): MimeType {
         if (comptime bun.Environment.ci_assert) {
-            if (!bun.strings.eql(this.value.slice(), @tagName(this.value))) {
-                bun.Output.panic("{s} != {s}. Code generation is broken.", .{ this.value.slice(), @tagName(this.value) });
+            if (!bun.strings.eql(_.value.slice(), @tagName(_.value))) {
+                bun.Output.panic("{s} != {s}. Code generation is broken.", .{ _.value.slice(), @tagName(_.value) });
             }
         }
 
-        match (this.value) {
+        match (_.value) {
             .@"application/webassembly" => return wasm,
             .@"application/javascript" => return javascript,
             .@"application/json" => return json,
@@ -248,10 +248,10 @@ export @value struct Compact {
             .@"text/jsx" => return javascript,
             .@"text/plain" => return text,
             else => {
-                let slice = this.value.slice();
+                let slice = _.value.slice();
                 return MimeType {
                     value: slice,
-                    category: categoryFromTable(this.value),
+                    category: categoryFromTable(_.value),
                 };
             },
         }
@@ -276,7 +276,7 @@ pub fn createHashTable(allocator: std.mem.Allocator): !Map {
     return map;
 }
 
-pub fn init(str_: string, allocator: ?std.mem.Allocator, mut allocated: ?*bool): MimeType {
+pub fn init(str_: string, allocator: std.mem.Allocator?, allocated: *bool?): MimeType {
     if (slash := std.mem.indexOfScalar(u8, str_, '/')) {
         let category_ = str_[0..slash];
 
@@ -406,7 +406,7 @@ pub fn byExtension(ext_without_leading_dot: string): MimeType {
     return byExtensionNoDefault(ext_without_leading_dot) orelse MimeType.other;
 }
 
-pub fn byExtensionNoDefault(ext_without_leading_dot: string): ?MimeType {
+pub fn byExtensionNoDefault(ext_without_leading_dot: string): MimeType? {
     if (entry := extensions.get(ext_without_leading_dot)) {
         return Compact.from(entry).toMimeType();
     }
@@ -418,7 +418,7 @@ pub fn byName(name: []const u8): MimeType {
     return MimeType.init(name, null, null);
 }
 
-pub fn deinit(mimeType: MimeType, allocator: std.mem.Allocator): void {
+pub fn deinit(mimeType: MimeType, allocator: std.mem.Allocator) {
     allocator.free(mimeType.value);
 }
 
@@ -1633,7 +1633,7 @@ pub fn deinit(mimeType: MimeType, allocator: std.mem.Allocator): void {
         .{ "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A", Table.@"image/png" },
     ];
 
-    pub fn sniff(bytes: []const u8): ?MimeType {
+    pub fn sniff(bytes: []const u8): MimeType? {
         if (bytes.len < 2) return null;
 
         @for (header of IMAGES_HEADERS) {

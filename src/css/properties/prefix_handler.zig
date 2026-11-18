@@ -91,7 +91,7 @@ pub fn handleProperty(self: *FallbackHandler, property: *const Property, dest: *
             return false;
     }
 
-pub fn finalize(self: *FallbackHandler) void {
+pub fn finalize(self: *FallbackHandler, _: *css.DeclarationList, _: *css.PropertyHandlerContext) void {
             inline for (std.@"meta".fields(FallbackHandler)) |field| {
                 @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = null;
             }

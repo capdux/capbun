@@ -317,7 +317,7 @@ pub enum Qualifier {
 }
 
 /// A [media type](https://drafts.csswg.org/mediaqueries/#media-types) within a media query.
-pub union(enum) MediaType {
+pub enum MediaType {
     /// Matches all devices.
     all,
     /// Matches printers, and devices intended to reproduce a printed
@@ -712,35 +712,35 @@ pub enum MediaFeatureId {
 
     pub const valueType = css.DeriveValueType(@This(), ValueTypeMap).valueType;
 
-    pub const ValueTypeMap = {
-        width: MediaFeatureType.length,
-        height: MediaFeatureType.length,
+    pub const ValueTypeMap = .{
+        .width = MediaFeatureType.length,
+        .height = MediaFeatureType.length,
         .@"aspect-ratio" = MediaFeatureType.ratio,
-        orientation: MediaFeatureType.ident,
+        .orientation = MediaFeatureType.ident,
         .@"overflow-block" = MediaFeatureType.ident,
         .@"overflow-inline" = MediaFeatureType.ident,
         .@"horizontal-viewport-segments" = MediaFeatureType.integer,
         .@"vertical-viewport-segments" = MediaFeatureType.integer,
         .@"display-mode" = MediaFeatureType.ident,
-        resolution: MediaFeatureType.resolution,
-        scan: MediaFeatureType.ident,
-        grid: MediaFeatureType.boolean,
-        update: MediaFeatureType.ident,
+        .resolution = MediaFeatureType.resolution,
+        .scan = MediaFeatureType.ident,
+        .grid = MediaFeatureType.boolean,
+        .update = MediaFeatureType.ident,
         .@"environment-blending" = MediaFeatureType.ident,
-        color: MediaFeatureType.integer,
+        .color = MediaFeatureType.integer,
         .@"color-index" = MediaFeatureType.integer,
-        monochrome: MediaFeatureType.integer,
+        .monochrome = MediaFeatureType.integer,
         .@"color-gamut" = MediaFeatureType.ident,
         .@"dynamic-range" = MediaFeatureType.ident,
         .@"inverted-colors" = MediaFeatureType.ident,
-        pointer: MediaFeatureType.ident,
-        hover: MediaFeatureType.ident,
+        .pointer = MediaFeatureType.ident,
+        .hover = MediaFeatureType.ident,
         .@"any-pointer" = MediaFeatureType.ident,
         .@"any-hover" = MediaFeatureType.ident,
         .@"nav-controls" = MediaFeatureType.ident,
         .@"video-color-gamut" = MediaFeatureType.ident,
         .@"video-dynamic-range" = MediaFeatureType.ident,
-        scripting: MediaFeatureType.ident,
+        .scripting = MediaFeatureType.ident,
         .@"prefers-reduced-motion" = MediaFeatureType.ident,
         .@"prefers-reduced-transparency" = MediaFeatureType.ident,
         .@"prefers-contrast" = MediaFeatureType.ident,
@@ -1450,11 +1450,11 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             return switch (_.*) {
                 .standard => |v| v.toCssWithPrefix(prefix, dest),
                 .custom => |d| {
-                    dest.writeStr(prefix)?;
+                    try dest.writeStr(prefix);
                     return DashedIdentFns.toCss(&d, dest);
                 },
                 .unknown => |v| {
-                    dest.writeStr(prefix)?;
+                    try dest.writeStr(prefix);
                     return IdentFns.toCss(&v, dest);
                 },
             };

@@ -16,21 +16,46 @@ const Time = css.css_values.time.Time;
 const EasingFunction = css.css_values.easing.EasingFunction;
 pub const AnimationList = SmallList(Animation, 1);
 pub const AnimationNameList = SmallList(AnimationName, 1);
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const css = @import("../css_parser.zig");
+pub const bun = @import("bun");
 pub const AnimationName = union(enum) {
-    none: void,
+    none,
     ident: CustomIdent,
     string: CSSString,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
+pub fn hash(self: AnimationName, hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), self, hasher);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: AnimationName, dest: *Printer) PrintErr!void {
             var css_module_animation_enabled = false;
             _ = &css_module_animation_enabled;
             if (dest.css_module) |cm| {
@@ -65,62 +90,29 @@ if (css_module_animation_enabled) {
 },
 }
     }
-    const This = @This();
+    
+    pub const This = @This();
 };
+
 pub const AnimationIterationCount = union(enum) {
     number: CSSNumber,
-    infinite: void,
+    infinite,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn default(self: @This()) AnimationIterationCount {
-        _ = &self;
+pub fn default() AnimationIterationCount {
             return .{ .number = 1.0 };
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
+    
     pub const parse = css.DeriveParse(@This()).parse;
+    
     pub const toCss = css.DeriveToCss(@This()).toCss;
 };
-pub const AnimationTimeline = union(enum) {
-    auto: void,
-    none: void,
-    dashed_ident: DashedIdent,
-    scroll: ScrollTimeline,
-    view: ViewTimeline,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
-
-pub fn default(self: @This()) AnimationTimeline {
-        _ = &self;
-            return .auto;
-    }
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-};
-pub const AnimationAttachmentRange = union(enum) {
-    normal: void,
-    length_percentage: LengthPercentage,
-    timeline_range: struct {
-        /// The name of the timeline range.
-        name: TimelineRangeName,
-        /// The offset from the start of the named timeline range.
-        offset: LengthPercentage,
-    },
-};
-fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
-fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
-fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
-fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
-fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
-
-pub const css = @import("../css_parser.zig");
-pub const bun = @import("bun");
 pub const AnimationDirection = enum {
     normal,
     reverse,
@@ -222,6 +214,28 @@ pub const AnimationComposition = enum {
     pub const deepClone = css_impl.deepClone;
 };
 
+pub const AnimationTimeline = union(enum) {
+    auto,
+    none,
+    dashed_ident: DashedIdent,
+    scroll: ScrollTimeline,
+    view: ViewTimeline,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn default() AnimationTimeline {
+            return .auto;
+    }
+    
+    pub const parse = css.DeriveParse(@This()).parse;
+    
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
 pub const Scroller = enum {
     root,
     nearest,
@@ -273,6 +287,17 @@ pub fn default() ScrollAxis {
     pub const toCss = css_impl.toCss;
     
     pub const deepClone = css_impl.deepClone;
+};
+
+pub const AnimationAttachmentRange = union(enum) {
+    normal,
+    length_percentage: LengthPercentage,
+    timeline_range: struct {
+        name: TimelineRangeName,
+        offset: LengthPercentage,
+    },
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
 };
 
 pub const TimelineRangeName = enum {
@@ -341,7 +366,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                     }
                 }
                 if ((iteration_count == null)) {
-                    if (input.tryParse(AnimationIterationCount.parse, .{})) |value| {
+                    if (input.tryParse(AnimationIterationCount{ .parse = {} }, .{})) |value| {
                         _ = &value;
                         iteration_count = value;
                         continue;
@@ -369,14 +394,14 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                     }
                 }
                 if ((name == null)) {
-                    if (input.tryParse(AnimationName.parse, .{})) |value| {
+                    if (input.tryParse(AnimationName{ .parse = {} }, .{})) |value| {
                         _ = &value;
                         name = value;
                         continue;
                     }
                 }
                 if ((timeline == null)) {
-                    if (input.tryParse(AnimationTimeline.parse, .{})) |value| {
+                    if (input.tryParse(AnimationTimeline{ .parse = {} }, .{})) |value| {
                         _ = &value;
                         timeline = value;
                         continue;
@@ -384,7 +409,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                 }
                 break;
             }
-            return .{ .result = Animation{ .name = ((name) orelse (AnimationName.none)), .duration = ((duration) orelse (Time{ .seconds = 0.0 })), .timing_function = ((timing_function) orelse (EasingFunction.ease)), .iteration_count = ((iteration_count) orelse (AnimationIterationCount.number(1))), .direction = ((direction) orelse (AnimationDirection.normal)), .play_state = ((play_state) orelse (AnimationPlayState.running)), .delay = ((delay) orelse (Time{ .seconds = 0.0 })), .fill_mode = ((fill_mode) orelse (AnimationFillMode.none)), .timeline = ((timeline) orelse (AnimationTimeline.auto)) } };
+            return .{ .result = Animation{ .name = ((name) orelse (AnimationName{ .none = {} })), .duration = ((duration) orelse (Time{ .seconds = 0.0 })), .timing_function = ((timing_function) orelse (EasingFunction.ease)), .iteration_count = ((iteration_count) orelse (AnimationIterationCount{ .number = 1 })), .direction = ((direction) orelse (AnimationDirection.normal)), .play_state = ((play_state) orelse (AnimationPlayState.running)), .delay = ((delay) orelse (Time{ .seconds = 0.0 })), .fill_mode = ((fill_mode) orelse (AnimationFillMode.none)), .timeline = ((timeline) orelse (AnimationTimeline{ .auto = {} })) } };
     }
 
 pub fn toCss(self: Animation, dest: *Printer) PrintErr!void {
@@ -425,7 +450,7 @@ const name_str = (if ((self.name == .ident)) name.v else name);
 },
 }
             _ = try self.name.toCss(dest);
-            if (((!self.name.eql((&AnimationName.none))) and (!self.timeline.eql((&AnimationTimeline.default()))))) {
+            if (((!self.name.eql((&AnimationName{ .none = {} }))) and (!self.timeline.eql((&AnimationTimeline.default()))))) {
                 _ = try dest.writeChar(32);
                 _ = try self.timeline.toCss(dest);
             }

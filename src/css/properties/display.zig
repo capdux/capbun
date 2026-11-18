@@ -16,86 +16,99 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), self, hasher);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 };
 pub const DisplayInside = union(enum) {
-    flow: void,
-    flow_root: void,
-    table: void,
+    flow,
+    flow_root,
+    table,
     flex: css.VendorPrefix,
     box: css.VendorPrefix,
-    grid: void,
-    ruby: void,
+    grid,
+    ruby,
 
-pub fn parse(self: @This(), input: *css.Parser) css.Result(@This()) {
-        _ = &self;
-            const displayInsideMap = bun.ComptimeStringMap(DisplayInside, .{ .{ "flow", DisplayInside.flow }, .{ "flow-root", DisplayInside.flow_root }, .{ "table", DisplayInside.table }, .{ "flex", DisplayInside{ .flex = css.VendorPrefix{ .none = true } } }, .{ "-webkit-flex", DisplayInside{ .flex = css.VendorPrefix{ .webkit = true } } }, .{ "-ms-flexbox", DisplayInside{ .flex = css.VendorPrefix{ .ms = true } } }, .{ "-webkit-box", DisplayInside{ .box = css.VendorPrefix{ .webkit = true } } }, .{ "-moz-box", DisplayInside{ .box = css.VendorPrefix{ .moz = true } } }, .{ "grid", DisplayInside.grid }, .{ "ruby", DisplayInside.ruby } });
-            const location = input.currentSourceLocation();
-            const ident = (switch (input.expectIdent()) {
-.result => |v| v,
-.err => |e| {
-return .{ .err = e };
-},
-});
-            if (displayInsideMap.getASCIIICaseInsensitive(ident)) |value| {
-                _ = &value;
-                return .{ .result = value };
-            }
-            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+    pub fn parse(input: *css.Parser) css.Result(@This()) {
+        const displayInsideMap = bun.ComptimeStringMap(DisplayInside, .{
+            .{ "flow", DisplayInside.flow },
+            .{ "flow-root", DisplayInside.flow_root },
+            .{ "table", DisplayInside.table },
+            .{ "flex", DisplayInside{ .flex = css.VendorPrefix{ .none = true } } },
+            .{ "-webkit-flex", DisplayInside{ .flex = css.VendorPrefix{ .webkit = true } } },
+            .{ "-ms-flexbox", DisplayInside{ .flex = css.VendorPrefix{ .ms = true } } },
+            .{ "-webkit-box", DisplayInside{ .box = css.VendorPrefix{ .webkit = true } } },
+            .{ "-moz-box", DisplayInside{ .box = css.VendorPrefix{ .moz = true } } },
+            .{ "grid", DisplayInside.grid },
+            .{ "ruby", DisplayInside.ruby },
+        });
+
+        const location = input.currentSourceLocation();
+        const ident = switch (input.expectIdent()) {
+            .result => |v| v,
+            .err => |e| return .{ .err = e },
+        };
+
+        if (displayInsideMap.getASCIIICaseInsensitive(ident)) |value| {
+            return .{ .result = value };
+        }
+
+        return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
-            switch (self.*) {
-.flow => {
-_ = try dest.writeStr("flow");
-},
-.flow_root => {
-_ = try dest.writeStr("flow-root");
-},
-.table => {
-_ = try dest.writeStr("table");
-},
-.flex => |prefix| {
-_ = try prefix.toCss(dest);
-            if ((prefix == css.VendorPrefix{ .ms = true })) {
-                _ = try dest.writeStr("flexbox");
-            } else {
-                _ = try dest.writeStr("flex");
-            }
-},
-.box => |prefix| {
-_ = try prefix.toCss(dest);
-            _ = try dest.writeStr("box");
-},
-.grid => {
-_ = try dest.writeStr("grid");
-},
-.ruby => {
-_ = try dest.writeStr("ruby");
-},
-}
+    pub fn toCss(this: *const DisplayInside, dest: *css.Printer) css.PrintErr!void {
+        switch (this.*) {
+            .flow => try dest.writeStr("flow"),
+            .flow_root => try dest.writeStr("flow-root"),
+            .table => try dest.writeStr("table"),
+            .flex => |prefix| {
+                try prefix.toCss(dest);
+                if (prefix == css.VendorPrefix{ .ms = true }) {
+                    try dest.writeStr("flexbox");
+                } else {
+                    try dest.writeStr("flex");
+                }
+            },
+            .box => |prefix| {
+                try prefix.toCss(dest);
+                try dest.writeStr("box");
+            },
+            .grid => try dest.writeStr("grid"),
+            .ruby => try dest.writeStr("ruby"),
+        }
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
 };
+const bun = @import("bun");
 const Allocator = std.mem.Allocator;
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const css = @import("../css_parser.zig");
-pub const bun = @import("bun");
 pub const Visibility = enum {
     visible,
     hidden,

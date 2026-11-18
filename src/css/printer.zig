@@ -157,8 +157,7 @@ pub fn lookupIdentOrRef(self: *Printer, ident: css.css_values.ident.IdentOrRef) 
             return self.lookupSymbol((ident.asRef()).?);
     }
 
-pub inline fn getWrittenAmt(self: Printer, writer: *std.Io.Writer) usize {
-        _ = &self;
+pub inline fn getWrittenAmt(writer: *std.Io.Writer) usize {
             if ((writer.vtable == std.Io.Writer.Allocating.init(undefined).writer.vtable)) {
                 const alloc_writer: *std.Io.Writer.Allocating = @fieldParentPtr("writer", writer);
                 return alloc_writer.written().len;
@@ -293,9 +292,9 @@ pub fn writeStr(self: *Printer, s: []const u8) PrintErr!void {
     }
 
 pub fn writeFmt(self: *Printer, comptime fmt: []const u8, args: anytype) PrintErr!void {
-            const start: usize = self.getWrittenAmt(self.dest);
+            const start: usize = Printer.getWrittenAmt(self.dest);
             _ = (blk_catch_3: { break :blk_catch_3 ((self.dest.print(fmt, args)) catch |__ce_3| { _ = &__ce_3; return self.addFmtError(); }); });
-            const written = (self.getWrittenAmt(self.dest) - start);
+            const written = (Printer.getWrittenAmt(self.dest) - start);
             self.col = (self.col + @as(u32, @intCast(written)));
     }
 

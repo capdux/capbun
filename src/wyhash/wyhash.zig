@@ -3,12 +3,26 @@ const std = @import("std");
 const string = []const u8;
 
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
-const primes: [5]u64 = .{ -6884282663029611473, -1800455987208640293, -8161530843051276573, 6384245875588680899, 2129725606500045391 };
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -40,12 +54,10 @@ pub fn init(seed: u64) WyhashStateless {
     }
 
 pub fn round(self: *WyhashStateless, b: []const u8) void {
-        _ = &self;
             self.seed = (mix0(read_bytes8(b[0..]), read_bytes8(b[8..]), self.seed) ^ mix1(read_bytes8(b[16..]), read_bytes8(b[24..]), self.seed));
     }
 
 pub fn update(self: *WyhashStateless, b: []const u8) void {
-        _ = &self;
             var off: usize = 0;
             _ = &off;
             while ((off < b.len)) {
@@ -56,7 +68,6 @@ pub fn update(self: *WyhashStateless, b: []const u8) void {
     }
 
 pub fn final(self: *WyhashStateless, b: []const u8) u64 {
-        _ = &self;
             var s = self.seed;
             _ = &s;
             var rem_len = b.len;
@@ -122,7 +133,6 @@ pub fn init(seed: u64) Wyhash11 {
     }
 
 pub fn update(self: *Wyhash11, b: []const u8) void {
-        _ = &self;
             var off: usize = 0;
             _ = &off;
             if (((self.buf_len != 0) and ((self.buf_len + b.len) >= 32))) {
@@ -153,7 +163,6 @@ pub fn update(self: *Wyhash11, b: []const u8) void {
     }
 
 pub fn final(self: *Wyhash11) u64 {
-        _ = &self;
             var rem_key = self.buf[0..self.buf_len];
             _ = &rem_key;
             return self.state.final(rem_key);
@@ -164,6 +173,7 @@ pub fn hash(seed: u64, input: []const u8) u64 {
     }
 };
 
+const primes: [5]u64 = .{ -6884282663029611473, -1800455987208640293, -8161530843051276573, 6384245875588680899, 2129725606500045391 };
 
 pub fn read_bytes1(data: []const u8) u64 {
         return (if (comptime @typeInfo(@TypeOf(data[0])) == .@"enum") cp_cast_int(u64, @intFromEnum(data[0])) else cp_cast_int(u64, data[0]));

@@ -261,50 +261,50 @@ pub const BackgroundSize = union(enum) {
     /// The `contain` keyword. Scales the background image so that it fits within the element.
     contain,
 
-    pub fn parse(input: *css.Parser): css.Result(@This()) {
-        if (width := input.tryParse(LengthPercentageOrAuto.parse, {}).asValue()) {
-            const height = input.tryParse(LengthPercentageOrAuto.parse, {}).unwrapOr(.auto);
-            return { result: { explicit: { width: width, height: height } } };
+    pub fn parse(input: *css.Parser) css.Result(@This()) {
+        if (input.tryParse(LengthPercentageOrAuto.parse, .{}).asValue()) |width| {
+            const height = input.tryParse(LengthPercentageOrAuto.parse, .{}).unwrapOr(.auto);
+            return .{ .result = .{ .explicit = .{ .width = width, .height = height } } };
         }
 
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
             .result => |v| v,
-            .err => |e| return { err: e },
+            .err => |e| return .{ .err = e },
         };
 
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "cover")) {
-            return { result: .cover };
+            return .{ .result = .cover };
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "contain")) {
-            return { result: .contain };
+            return .{ .result = .contain };
         } else {
-            return { err: location.newBasicUnexpectedTokenError({ ident: ident }) };
+            return .{ .err = location.newBasicUnexpectedTokenError(.{ .ident = ident }) };
         }
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.*) {
+    pub fn toCss(this: *const BackgroundSize, dest: *Printer) PrintErr!void {
+        return switch (this.*) {
             .cover => dest.writeStr("cover"),
             .contain => dest.writeStr("contain"),
             .explicit => |explicit| {
-                explicit.width.toCss(dest)?;
+                try explicit.width.toCss(dest);
                 if (explicit.height != .auto) {
-                    dest.writeStr(" ")?;
-                    explicit.height.toCss(dest)?;
+                    try dest.writeStr(" ");
+                    try explicit.height.toCss(dest);
                 }
                 return;
             },
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn default(): @This() {
-        return BackgroundSize{ .explicit = {
-            width: .auto,
-            height: .auto,
+    pub fn default() @This() {
+        return BackgroundSize{ .explicit = .{
+            .width = .auto,
+            .height = .auto,
         } };
     }
 
@@ -583,17 +583,19 @@ pub struct AspectRatio {
     }
 }
 
+const ClipsAndPrefix = struct { css.SmallList(BackgroundClip, 1), VendorPrefix };
+
 pub struct BackgroundHandler {
     color: CssColor? = null,
-    images: css.SmallList?(Image, 1) = null,
+    images: css.SmallList(Image, 1)? = null,
     has_prefix: bool = false,
-    x_positions: css.SmallList?(HorizontalPosition, 1) = null,
-    y_positions: css.SmallList?(VerticalPosition, 1) = null,
-    repeats: css.SmallList?(BackgroundRepeat, 1) = null,
-    sizes: css.SmallList?(BackgroundSize, 1) = null,
-    attachments: css.SmallList?(BackgroundAttachment, 1) = null,
-    origins: css.SmallList?(BackgroundOrigin, 1) = null,
-    clips: struct? { css.SmallList(BackgroundClip, 1), VendorPrefix } = null,
+    x_positions: css.SmallList(HorizontalPosition, 1)? = null,
+    y_positions: css.SmallList(VerticalPosition, 1)? = null,
+    repeats: css.SmallList(BackgroundRepeat, 1)? = null,
+    sizes: css.SmallList(BackgroundSize, 1)? = null,
+    attachments: css.SmallList(BackgroundAttachment, 1)? = null,
+    origins: css.SmallList(BackgroundOrigin, 1)? = null,
+    clips: ClipsAndPrefix? = null,
     decls: ArrayList(Property) = undefined,
     flushed_properties: BackgroundProperty = undefined,
     has_any: bool = false,
@@ -816,7 +818,7 @@ pub struct BackgroundHandler {
         let maybe_sizes: css.SmallList(BackgroundSize, 1)? = bun.take(&_.sizes);
         let maybe_attachments: css.SmallList(BackgroundAttachment, 1)? = bun.take(&_.attachments);
         let maybe_origins: css.SmallList(BackgroundOrigin, 1)? = bun.take(&_.origins);
-        let maybe_clips: (struct { css.SmallList(BackgroundClip, 1), css.VendorPrefix })? = bun.take(&_.clips);
+        let maybe_clips: ClipsAndPrefix? = bun.take(&_.clips);
         defer {
             if (*c := maybe_color) c.deinit(allocator);
             if (*i := maybe_images) i.deinit(allocator);

@@ -69,33 +69,33 @@ export struct WyhashStateless {
         };
     }
 
-    fn round(*this, b: string) {
-        seed = mix0(
+    fn round(*_, b: string) {
+        _.seed = mix0(
             read_bytes8(b[0..]),
             read_bytes8(b[8..]),
-            seed,
+            _.seed,
         ) ^ mix1(
             read_bytes8(b[16..]),
             read_bytes8(b[24..]),
-            seed,
+            _.seed,
         );
     }
 
-    fn update(*this, b: string) {
+    fn update(*_, b: string) {
         let off: usize = 0;
         while (off < b.len) {
-            round(b[off..off + 32]);
+            _.round(b[off..off + 32]);
             off += 32;
         }
-        msg_len += b.len;
+        _.msg_len += b.len;
     }
 
-    fn final(*this, b: string): u64 {
-        let s = seed;
+    fn final(*_, b: string): u64 {
+        let s = _.seed;
         let rem_len = b.len;
         let rem_key = b[0..rem_len];
 
-        seed = switch (rem_len) {
+        _.seed = switch (rem_len) {
             0 => s,
             1 => mix0(read_bytes1(rem_key), primes[4], s),
             2 => mix0(read_bytes2(rem_key), primes[4], s),
@@ -131,8 +131,8 @@ export struct WyhashStateless {
             else => s,
         };
 
-        msg_len += b.len;
-        return mum(seed ^ (msg_len as u64), primes[4]);
+        _.msg_len += b.len;
+        return mum(_.seed ^ (@as(u64, _.msg_len)), primes[4]);
     }
 
     static fn hash(seed: u64, input: string): u64 {
@@ -158,36 +158,36 @@ export struct Wyhash11 {
         };
     }
 
-    fn update(*this, b: string) {
+    fn update(*_, b: string) {
         let off: usize = 0;
 
-        if (buf_len != 0 && buf_len + b.len >= 32) {
-            off += 32 - buf_len;
+        if (_.buf_len != 0 && _.buf_len + b.len >= 32) {
+            off += 32 - _.buf_len;
             let i: usize = 0;
             while (i < off) {
-                buf[buf_len + i] = b[i];
+                _.buf[_.buf_len + i] = b[i];
                 i += 1;
             }
-            state.update(buf[0..32]);
-            buf_len = 0;
+            _.state.update(_.buf[0..32]);
+            _.buf_len = 0;
         }
 
         let remain_len = b.len - off;
         let aligned_len = remain_len - (remain_len % 32);
-        state.update(b[off..off + aligned_len]);
+        _.state.update(b[off..off + aligned_len]);
 
         let rem_slice = b[off + aligned_len..b.len];
         let j: usize = 0;
         while (j < rem_slice.len) {
-            buf[buf_len + j] = rem_slice[j];
+            _.buf[_.buf_len + j] = rem_slice[j];
             j += 1;
         }
-        buf_len += rem_slice.len;
+        _.buf_len += rem_slice.len;
     }
 
-    fn final(*this): u64 {
-        let rem_key = buf[0..buf_len];
-        return state.final(rem_key);
+    fn final(*_): u64 {
+        let rem_key = _.buf[0.._.buf_len];
+        return _.state.final(rem_key);
     }
 
     static fn hash(seed: u64, input: string): u64 {

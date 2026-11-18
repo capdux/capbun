@@ -15,14 +15,7 @@ pub const FetchCacheMode = enum(u3) {
     pub fn fromName(s: []const u8) ?@This() { return get(s); }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
     
-    pub const Map = bun.ComptimeStringMap(FetchCacheMode, .{
-            .{ "default", .default },
-            .{ "no-store", .@"no-store" },
-            .{ "reload", .reload },
-            .{ "no-cache", .@"no-cache" },
-            .{ "force-cache", .@"force-cache" },
-            .{ "only-if-cached", .@"only-if-cached" },
-        });
+    pub const Map = bun.ComptimeStringMap(FetchCacheMode, .{ .{ "default", .default }, .{ "no-store", .@"no-store" }, .{ "reload", .reload }, .{ "no-cache", .@"no-cache" }, .{ "force-cache", .@"force-cache" }, .{ "only-if-cached", .@"only-if-cached" } });
     
     pub const toJS = @import("../http_jsc/fetch_enums_jsc.zig").fetchCacheModeToJS;
 };

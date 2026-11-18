@@ -21,12 +21,12 @@ pub const SELECTOR_WHITESPACE: []const u8 = " \t\n\r\x0C";
 pub const attrs = struct {
 
 pub fn NamespaceUrl(comptime Impl: type) type {
+            _ = &Impl;
             return struct {
     prefix: Impl.SelectorImpl.NamespacePrefix,
     url: Impl.SelectorImpl.NamespaceUrl,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -41,6 +41,7 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
 
 pub fn AttrSelectorWithOptionalNamespace(comptime Impl: type) type {
+            _ = &Impl;
             return struct {
     namespace: ?NamespaceConstraint(NamespaceUrl(Impl)),
     local_name: Impl.SelectorImpl.LocalName,
@@ -86,8 +87,7 @@ _ = try dest.writeStr(" s");
             return dest.writeChar(93);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -102,23 +102,24 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
 
 pub fn NamespaceConstraint(comptime NamespaceUrl_: type) type {
+            _ = &NamespaceUrl_;
             return union(enum) {
-    any: void,
-    specific: NamespaceUrl_,
+            any,
+            /// Empty string for no namespace
+            specific: NamespaceUrl_,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
+            pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+                return css.implementEql(@This(), lhs, rhs);
+            }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
-    }
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+                return css.implementHash(@This(), this, hasher);
+            }
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-};
+            pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+                return css.implementDeepClone(@This(), this, allocator);
+            }
+        };
     }
 
 pub fn ParsedAttrSelectorWithValue(comptime AttrValue: type) type {
@@ -127,38 +128,35 @@ pub fn ParsedAttrSelectorWithValue(comptime AttrValue: type) type {
     case_sensitivity: ParsedCaseSensitivity,
     expected_value: AttrValue,
 
-pub fn __generateEql(self: @This()) void {
-        _ = &self;
+pub fn __generateEql() void {
     }
 
-pub fn __generateDeepClone(self: @This()) void {
-        _ = &self;
+pub fn __generateDeepClone() void {
     }
 
-pub fn __generateHash(self: @This()) void {
-        _ = &self;
+pub fn __generateHash() void {
     }
 };
     }
 
 pub fn ParsedAttrSelectorOperation(comptime AttrValue: type) type {
+            _ = &AttrValue;
             return union(enum) {
-    exists: void,
-    with_value: ParsedAttrSelectorWithValue(AttrValue),
+            exists,
+            with_value: ParsedAttrSelectorWithValue(AttrValue),
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
+            pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+                return css.implementDeepClone(@This(), this, allocator);
+            }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
+            pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+                return css.implementEql(@This(), lhs, rhs);
+            }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
-    }
-};
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+                return css.implementHash(@This(), this, hasher);
+            }
+        };
     }
     pub const AttrSelectorOperator = enum {
             equal,
@@ -214,14 +212,12 @@ pub fn toU32(self: @This()) u32 {
             return (((if (comptime @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) == .@"enum") cp_cast_int(u32, @intFromEnum(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) else cp_cast_int(u32, cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.id_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.id_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.id_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(20)) == .@"enum") cp_cast_int(u32, @intFromEnum(20)) else cp_cast_int(u32, 20))))) | (if (comptime @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10))))) == .@"enum") cp_cast_int(u32, @intFromEnum(cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10))))) else cp_cast_int(u32, cp_shl((if (comptime @typeInfo(@TypeOf(@min(self.class_like_selectors, MAX_10BIT))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(self.class_like_selectors, MAX_10BIT))) else cp_cast_int(u32, @min(self.class_like_selectors, MAX_10BIT))), (if (comptime @typeInfo(@TypeOf(10)) == .@"enum") cp_cast_int(u32, @intFromEnum(10)) else cp_cast_int(u32, 10)))))) | @min(self.element_selectors, MAX_10BIT));
     }
 
-pub fn fromU32(self: @This(), value: u32) Specificity {
-        _ = &self;
+pub fn fromU32(value: u32) Specificity {
             _ = bun.assert((((value <= cp_shl(MAX_10BIT, 20)) | cp_shl(MAX_10BIT, 10)) | MAX_10BIT));
             return Specificity{ .id_selectors = cp_shr(value, 20), .class_like_selectors = (cp_shr(value, 10) & MAX_10BIT), .element_selectors = (value & MAX_10BIT) };
     }
 
-pub fn add(self: @This(), lhs: *Specificity, rhs: Specificity) void {
-        _ = &self;
+pub fn add(lhs: *Specificity, rhs: Specificity) void {
             lhs.id_selectors = (lhs.id_selectors + rhs.id_selectors);
             lhs.element_selectors = (lhs.element_selectors + rhs.element_selectors);
             lhs.class_like_selectors = (lhs.class_like_selectors + rhs.class_like_selectors);
@@ -251,6 +247,8 @@ pub const Direction = enum {
     }
 };
 pub const PseudoClass = union(enum) {
+    /// https://drafts.csswg.org/selectors-4/#linguistic-pseudos
+    /// The [:lang()](https://drafts.csswg.org/selectors-4/#the-lang-pseudo) pseudo class.
     lang: struct {
         /// A list of language codes.
         languages: ArrayList([]const u8),
@@ -259,6 +257,7 @@ pub const PseudoClass = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The [:dir()](https://drafts.csswg.org/selectors-4/#the-dir-pseudo) pseudo class.
     dir: struct {
         /// A direction.
         direction: Direction,
@@ -267,52 +266,118 @@ pub const PseudoClass = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
-    hover: void,
-    active: void,
-    focus: void,
-    focus_visible: void,
-    focus_within: void,
-    current: void,
-    past: void,
-    future: void,
-    playing: void,
-    paused: void,
-    seeking: void,
-    buffering: void,
-    stalled: void,
-    muted: void,
-    volume_locked: void,
+
+    // https://drafts.csswg.org/selectors-4/#useraction-pseudos
+    /// The [:hover](https://drafts.csswg.org/selectors-4/#the-hover-pseudo) pseudo class.
+    hover,
+    /// The [:active](https://drafts.csswg.org/selectors-4/#the-active-pseudo) pseudo class.
+    active,
+    /// The [:focus](https://drafts.csswg.org/selectors-4/#the-focus-pseudo) pseudo class.
+    focus,
+    /// The [:focus-visible](https://drafts.csswg.org/selectors-4/#the-focus-visible-pseudo) pseudo class.
+    focus_visible,
+    /// The [:focus-within](https://drafts.csswg.org/selectors-4/#the-focus-within-pseudo) pseudo class.
+    focus_within,
+
+    /// https://drafts.csswg.org/selectors-4/#time-pseudos
+    /// The [:current](https://drafts.csswg.org/selectors-4/#the-current-pseudo) pseudo class.
+    current,
+    /// The [:past](https://drafts.csswg.org/selectors-4/#the-past-pseudo) pseudo class.
+    past,
+    /// The [:future](https://drafts.csswg.org/selectors-4/#the-future-pseudo) pseudo class.
+    future,
+
+    /// https://drafts.csswg.org/selectors-4/#resource-pseudos
+    /// The [:playing](https://drafts.csswg.org/selectors-4/#selectordef-playing) pseudo class.
+    playing,
+    /// The [:paused](https://drafts.csswg.org/selectors-4/#selectordef-paused) pseudo class.
+    paused,
+    /// The [:seeking](https://drafts.csswg.org/selectors-4/#selectordef-seeking) pseudo class.
+    seeking,
+    /// The [:buffering](https://drafts.csswg.org/selectors-4/#selectordef-buffering) pseudo class.
+    buffering,
+    /// The [:stalled](https://drafts.csswg.org/selectors-4/#selectordef-stalled) pseudo class.
+    stalled,
+    /// The [:muted](https://drafts.csswg.org/selectors-4/#selectordef-muted) pseudo class.
+    muted,
+    /// The [:volume-locked](https://drafts.csswg.org/selectors-4/#selectordef-volume-locked) pseudo class.
+    volume_locked,
+
+    /// The [:fullscreen](https://fullscreen.spec.whatwg.org/#:fullscreen-pseudo-class) pseudo class.
     fullscreen: css.VendorPrefix,
-    open: void,
-    closed: void,
-    modal: void,
-    picture_in_picture: void,
-    popover_open: void,
-    defined: void,
+
+    /// https://drafts.csswg.org/selectors/#display-state-pseudos
+    /// The [:open](https://drafts.csswg.org/selectors/#selectordef-open) pseudo class.
+    open,
+    /// The [:closed](https://drafts.csswg.org/selectors/#selectordef-closed) pseudo class.
+    closed,
+    /// The [:modal](https://drafts.csswg.org/selectors/#modal-state) pseudo class.
+    modal,
+    /// The [:picture-in-picture](https://drafts.csswg.org/selectors/#pip-state) pseudo class.
+    picture_in_picture,
+
+    /// https://html.spec.whatwg.org/multipage/semantics-other.html#selector-popover-open
+    /// The [:popover-open](https://html.spec.whatwg.org/multipage/semantics-other.html#selector-popover-open) pseudo class.
+    popover_open,
+
+    /// The [:defined](https://drafts.csswg.org/selectors-4/#the-defined-pseudo) pseudo class.
+    defined,
+
+    /// https://drafts.csswg.org/selectors-4/#location
+    /// The [:any-link](https://drafts.csswg.org/selectors-4/#the-any-link-pseudo) pseudo class.
     any_link: css.VendorPrefix,
-    link: void,
-    local_link: void,
-    target: void,
-    target_within: void,
-    visited: void,
-    enabled: void,
-    disabled: void,
+    /// The [:link](https://drafts.csswg.org/selectors-4/#link-pseudo) pseudo class.
+    link,
+    /// The [:local-link](https://drafts.csswg.org/selectors-4/#the-local-link-pseudo) pseudo class.
+    local_link,
+    /// The [:target](https://drafts.csswg.org/selectors-4/#the-target-pseudo) pseudo class.
+    target,
+    /// The [:target-within](https://drafts.csswg.org/selectors-4/#the-target-within-pseudo) pseudo class.
+    target_within,
+    /// The [:visited](https://drafts.csswg.org/selectors-4/#visited-pseudo) pseudo class.
+    visited,
+
+    /// https://drafts.csswg.org/selectors-4/#input-pseudos
+    /// The [:enabled](https://drafts.csswg.org/selectors-4/#enabled-pseudo) pseudo class.
+    enabled,
+    /// The [:disabled](https://drafts.csswg.org/selectors-4/#disabled-pseudo) pseudo class.
+    disabled,
+    /// The [:read-only](https://drafts.csswg.org/selectors-4/#read-only-pseudo) pseudo class.
     read_only: css.VendorPrefix,
+    /// The [:read-write](https://drafts.csswg.org/selectors-4/#read-write-pseudo) pseudo class.
     read_write: css.VendorPrefix,
+    /// The [:placeholder-shown](https://drafts.csswg.org/selectors-4/#placeholder) pseudo class.
     placeholder_shown: css.VendorPrefix,
-    default: void,
-    checked: void,
-    indeterminate: void,
-    blank: void,
-    valid: void,
-    invalid: void,
-    in_range: void,
-    out_of_range: void,
-    required: void,
-    optional: void,
-    user_valid: void,
-    user_invalid: void,
+    /// The [:default](https://drafts.csswg.org/selectors-4/#the-default-pseudo) pseudo class.
+    default,
+    /// The [:checked](https://drafts.csswg.org/selectors-4/#checked) pseudo class.
+    checked,
+    /// The [:indeterminate](https://drafts.csswg.org/selectors-4/#indeterminate) pseudo class.
+    indeterminate,
+    /// The [:blank](https://drafts.csswg.org/selectors-4/#blank) pseudo class.
+    blank,
+    /// The [:valid](https://drafts.csswg.org/selectors-4/#valid-pseudo) pseudo class.
+    valid,
+    /// The [:invalid](https://drafts.csswg.org/selectors-4/#invalid-pseudo) pseudo class.
+    invalid,
+    /// The [:in-range](https://drafts.csswg.org/selectors-4/#in-range-pseudo) pseudo class.
+    in_range,
+    /// The [:out-of-range](https://drafts.csswg.org/selectors-4/#out-of-range-pseudo) pseudo class.
+    out_of_range,
+    /// The [:required](https://drafts.csswg.org/selectors-4/#required-pseudo) pseudo class.
+    required,
+    /// The [:optional](https://drafts.csswg.org/selectors-4/#optional-pseudo) pseudo class.
+    optional,
+    /// The [:user-valid](https://drafts.csswg.org/selectors-4/#user-valid-pseudo) pseudo class.
+    user_valid,
+    /// The [:used-invalid](https://drafts.csswg.org/selectors-4/#user-invalid-pseudo) pseudo class.
+    user_invalid,
+
+    /// The [:autofill](https://html.spec.whatwg.org/multipage/semantics-other.html#selector-autofill) pseudo class.
     autofill: css.VendorPrefix,
+
+    // CSS modules
+    /// The CSS modules :local() pseudo class.
     local: struct {
         /// A local selector.
         selector: *Selector,
@@ -321,6 +386,7 @@ pub const PseudoClass = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The CSS modules :global() pseudo class.
     global: struct {
         /// A global selector.
         selector: *Selector,
@@ -329,7 +395,11 @@ pub const PseudoClass = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+
+    /// A [webkit scrollbar](https://webkit.org/blog/363/styling-scrollbars/) pseudo class.
+    // https://webkit.org/blog/363/styling-scrollbars/
     webkit_scrollbar: WebKitScrollbarPseudoClass,
+    /// An unknown pseudo class.
     custom: struct {
         /// The pseudo class name.
         name: []const u8,
@@ -338,6 +408,7 @@ pub const PseudoClass = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// An unknown functional pseudo class.
     custom_function: struct {
         /// The pseudo class name.
         name: []const u8,
@@ -349,97 +420,74 @@ pub const PseudoClass = union(enum) {
         pub fn __generateHash() void {}
     },
 
-pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
-            var s = std.Io.Writer.Allocating.init(dest.allocator);
-            _ = &s;
-            const writer = (&s.writer);
-            const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
-            var printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
-            _ = &printer;
-            _ = try serialize.serializePseudoClass(self, (&printer), null);
-            return dest.writeStr(s.written());
-    }
-
-pub fn eql(self: @This(), lhs: *const PseudoClass, rhs: *const PseudoClass) bool {
-        _ = &self;
-            return css.implementEql(PseudoClass, lhs, rhs);
-    }
-
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-
-pub fn getPrefix(self: *const @This()) css.VendorPrefix {
-            return (switch (self.*) {
-inline .fullscreen, .any_link, .read_only, .read_write, .placeholder_shown, .autofill => |p| p,
-else => css.VendorPrefix{  },
-});
-    }
-
-pub fn getNecessaryPrefixes(self: *@This(), targets: css.targets.Targets) css.VendorPrefix {
-            const F = css.prefixes.Feature;
-            var p: *css.VendorPrefix = undefined;
-            _ = &p;
-            var feature: F = undefined;
-            _ = &feature;
-            switch (self.*) {
-.fullscreen => |*v| {
-p = v;
-            feature = F.pseudo_class_fullscreen;
-},
-.any_link => |*v| {
-p = v;
-            feature = F.pseudo_class_any_link;
-},
-.read_only => |*v| {
-p = v;
-            feature = F.pseudo_class_read_only;
-},
-.read_write => |*v| {
-p = v;
-            feature = F.pseudo_class_read_write;
-},
-.placeholder_shown => |*v| {
-p = v;
-            feature = F.pseudo_class_placeholder_shown;
-},
-.autofill => |*v| {
-p = v;
-            feature = F.pseudo_class_autofill;
-},
-else => {
-return css.VendorPrefix{  };
-},
-}
-            p.* = targets.prefixes(p.*, feature);
-            return p.*;
-    }
-
-pub fn isUserActionState(self: *const @This()) bool {
-            return (switch (self.*) {
-.active, .hover, .focus, .focus_within, .focus_visible => true,
-else => false,
-});
-    }
-
-pub fn isValidBeforeWebkitScrollbar(self: *const @This()) bool {
-            return (!(switch (self.*) {
-.webkit_scrollbar => true,
-else => false,
-}));
-    }
-
-pub fn isValidAfterWebkitScrollbar(self: *const @This()) bool {
-            return (switch (self.*) {
-.webkit_scrollbar, .enabled, .disabled, .hover, .active => true,
-else => false,
-});
-    }
     pub const isEquivalent = pseudoClassIsEquivalent;
+
+    pub fn toCss(this: *const PseudoClass, dest: *Printer) PrintErr!void {
+        var s = std.Io.Writer.Allocating.init(dest.allocator);
+        // PERF(alloc): I don't like making these little allocations
+        const writer = &s.writer;
+        const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
+        var printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
+        try serialize.serializePseudoClass(this, &printer, null);
+        return dest.writeStr(s.written());
+    }
+
+    pub fn eql(lhs: *const PseudoClass, rhs: *const PseudoClass) bool {
+        return css.implementEql(PseudoClass, lhs, rhs);
+    }
+
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+        return css.implementHash(@This(), this, hasher);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
+
+    pub fn getPrefix(this: *const PseudoClass) css.VendorPrefix {
+        return switch (this.*) {
+            inline .fullscreen, .any_link, .read_only, .read_write, .placeholder_shown, .autofill => |p| p,
+            else => css.VendorPrefix{},
+        };
+    }
+
+    pub fn getNecessaryPrefixes(this: *PseudoClass, targets: css.targets.Targets) css.VendorPrefix {
+        const F = css.prefixes.Feature;
+        var p: *css.VendorPrefix = undefined;
+        var feature: F = undefined;
+        switch (this.*) {
+            .fullscreen => |*v| { p = v; feature = F.pseudo_class_fullscreen; },
+            .any_link => |*v| { p = v; feature = F.pseudo_class_any_link; },
+            .read_only => |*v| { p = v; feature = F.pseudo_class_read_only; },
+            .read_write => |*v| { p = v; feature = F.pseudo_class_read_write; },
+            .placeholder_shown => |*v| { p = v; feature = F.pseudo_class_placeholder_shown; },
+            .autofill => |*v| { p = v; feature = F.pseudo_class_autofill; },
+            else => return css.VendorPrefix{},
+        }
+        p.* = targets.prefixes(p.*, feature);
+        return p.*;
+    }
+
+    pub fn isUserActionState(this: *const PseudoClass) bool {
+        return switch (this.*) {
+            .active, .hover, .focus, .focus_within, .focus_visible => true,
+            else => false,
+        };
+    }
+
+    pub fn isValidBeforeWebkitScrollbar(this: *const PseudoClass) bool {
+        return !switch (this.*) {
+            .webkit_scrollbar => true,
+            else => false,
+        };
+    }
+
+    pub fn isValidAfterWebkitScrollbar(this: *const PseudoClass) bool {
+        return switch (this.*) {
+            .webkit_scrollbar, .enabled, .disabled, .hover, .active => true,
+            else => false,
+        };
+    }
 };
 pub const WebKitScrollbarPseudoClass = enum {
     /// :horizontal
@@ -490,8 +538,8 @@ pub const SelectorParser = struct {
     options: *const css.ParserOptions,
     allocator: Allocator,
 
-pub fn newLocalIdentifier(self: *@This(), input: *css.Parser, tag: css.CssRef.Tag, raw: []const u8, loc: usize) Impl.SelectorImpl.LocalIdentifier {
-        _ = &self;
+pub fn newLocalIdentifier(self: *@This(), _: *SelectorParser, input: *css.Parser, tag: css.CssRef.Tag, raw: []const u8, loc: usize) Impl.SelectorImpl.LocalIdentifier {
+        _ = self;
             if (input.flags.css_modules) {
                 return Impl.SelectorImpl.LocalIdentifier.fromRef(input.addSymbolForName(raw, tag, bun.logger.Loc{ .start = @intCast(loc) }), (if (comptime bun.Environment.isDebug) .{ raw, input.allocator() } else ({
 })));
@@ -500,7 +548,7 @@ pub fn newLocalIdentifier(self: *@This(), input: *css.Parser, tag: css.CssRef.Ta
     }
 
 pub fn namespaceForPrefix(self: *@This(), prefix: css.css_values.ident.Ident) ?[]const u8 {
-        _ = &self;
+        _ = self;
             return prefix.v;
     }
 
@@ -569,12 +617,12 @@ return .{ .err = e };
     }
 
 pub fn parseIsAndWhere(self: *@This()) bool {
-        _ = &self;
+        _ = self;
             return true;
     }
 
-pub fn parseAnyPrefix(self: *const @This(), name: []const u8) ?css.VendorPrefix {
-        _ = &self;
+pub fn parseAnyPrefix(self: @This(), _: *const SelectorParser, name: []const u8) ?css.VendorPrefix {
+        _ = self;
             const Map = (comptime bun.ComptimeStringMap(css.VendorPrefix, .{ .{ "-webkit-any", css.VendorPrefix{ .webkit = true } }, .{ "-moz-any", css.VendorPrefix{ .moz = true } } }));
             return Map.getAnyCase(name);
     }
@@ -599,8 +647,8 @@ pub fn parseNonTsPseudoClass(self: *@This(), loc: css.SourceLocation, name: []co
             return .{ .result = pseudo_class };
     }
 
-pub fn parseHost(self: *@This()) bool {
-        _ = &self;
+pub fn parseHost(self: *@This(), _: *SelectorParser) bool {
+        _ = self;
             return true;
     }
 
@@ -674,22 +722,22 @@ pub fn deepCombinatorEnabled(self: *@This()) bool {
     }
 
 pub fn defaultNamespace(self: *@This()) ?selector_impl.Selectors.SelectorImpl.NamespaceUrl {
-        _ = &self;
+        _ = self;
             return null;
     }
 
 pub fn parsePart(self: *@This()) bool {
-        _ = &self;
+        _ = self;
             return true;
     }
 
 pub fn parseSlotted(self: *@This()) bool {
-        _ = &self;
+        _ = self;
             return true;
     }
 
 pub fn isAndWhereErrorRecovery(self: *@This()) ParseErrorRecovery {
-        _ = &self;
+        _ = self;
             return .ignore_invalid_selector;
     }
 
@@ -711,18 +759,15 @@ pub const NthSelectorData = struct {
     a: i32,
     b: i32,
 
-pub fn only(self: @This(), of_type: bool) NthSelectorData {
-        _ = &self;
+pub fn only(of_type: bool) NthSelectorData {
             return NthSelectorData{ .ty = (if (of_type) NthType.only_of_type else NthType.only_child), .is_function = false, .a = 0, .b = 1 };
     }
 
-pub fn first(self: @This(), of_type: bool) NthSelectorData {
-        _ = &self;
+pub fn first(of_type: bool) NthSelectorData {
             return NthSelectorData{ .ty = (if (of_type) NthType.of_type else NthType.child), .is_function = false, .a = 0, .b = 1 };
     }
 
-pub fn last(self: @This(), of_type: bool) NthSelectorData {
-        _ = &self;
+pub fn last(of_type: bool) NthSelectorData {
             return NthSelectorData{ .ty = (if (of_type) NthType.last_of_type else NthType.last_child), .is_function = false, .a = 0, .b = 1 };
     }
 
@@ -743,8 +788,7 @@ pub fn isFunction(self: *const @This()) bool {
             return ((self.a != 0) or (self.b != 1));
     }
 
-pub fn numberSign(self: @This(), num: i32) []const u8 {
-        _ = &self;
+pub fn numberSign(num: i32) []const u8 {
             if ((num >= 0)) {
                 return "+";
             }
@@ -787,8 +831,7 @@ pub fn writeAffine(self: *const @This(), dest: *Printer) PrintErr!void {
             }
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -946,7 +989,7 @@ pub const Combinator = enum {
     }
 };
 pub const SelectorParseErrorKind = union(enum) {
-    invalid_state: void,
+    invalid_state,
     class_needs_ident: css.Token,
     pseudo_element_expected_ident: css.Token,
     unsupported_pseudo_class_or_element: []const u8,
@@ -955,62 +998,77 @@ pub const SelectorParseErrorKind = union(enum) {
     unexpected_selector_after_pseudo_element: css.Token,
     invalid_qual_name_in_attr: css.Token,
     expected_bar_in_attr: css.Token,
-    empty_selector: void,
-    dangling_combinator: void,
-    invalid_pseudo_class_before_webkit_scrollbar: void,
-    invalid_pseudo_class_after_webkit_scrollbar: void,
-    invalid_pseudo_class_after_pseudo_element: void,
-    missing_nesting_selector: void,
-    missing_nesting_prefix: void,
+    empty_selector,
+    dangling_combinator,
+    invalid_pseudo_class_before_webkit_scrollbar,
+    invalid_pseudo_class_after_webkit_scrollbar,
+    invalid_pseudo_class_after_pseudo_element,
+    missing_nesting_selector,
+    missing_nesting_prefix,
     expected_namespace: []const u8,
     bad_value_in_attr: css.Token,
     explicit_namespace_unexpected_token: css.Token,
     unexpected_ident: []const u8,
     ambiguous_css_module_class: []const u8,
 
-pub fn intoDefaultParserError(self: @This()) css.ParserError {
-            return css.ParserError{ .selector_error = self.intoSelectorError() };
+    pub fn intoDefaultParserError(this: SelectorParseErrorKind) css.ParserError {
+        return css.ParserError{
+            .selector_error = this.intoSelectorError(),
+        };
     }
 
-pub fn intoSelectorError(self: @This()) css.SelectorError {
-            return (switch (self) {
-.invalid_state => .invalid_state,
-.class_needs_ident => |token| .{ .class_needs_ident = token },
-.pseudo_element_expected_ident => |token| .{ .pseudo_element_expected_ident = token },
-.unsupported_pseudo_class_or_element => |name| .{ .unsupported_pseudo_class_or_element = name },
-.no_qualified_name_in_attribute_selector => |token| .{ .no_qualified_name_in_attribute_selector = token },
-.unexpected_token_in_attribute_selector => |token| .{ .unexpected_token_in_attribute_selector = token },
-.invalid_qual_name_in_attr => |token| .{ .invalid_qual_name_in_attr = token },
-.expected_bar_in_attr => |token| .{ .expected_bar_in_attr = token },
-.empty_selector => .empty_selector,
-.dangling_combinator => .dangling_combinator,
-.invalid_pseudo_class_before_webkit_scrollbar => .invalid_pseudo_class_before_webkit_scrollbar,
-.invalid_pseudo_class_after_webkit_scrollbar => .invalid_pseudo_class_after_webkit_scrollbar,
-.invalid_pseudo_class_after_pseudo_element => .invalid_pseudo_class_after_pseudo_element,
-.missing_nesting_selector => .missing_nesting_selector,
-.missing_nesting_prefix => .missing_nesting_prefix,
-.expected_namespace => |name| .{ .expected_namespace = name },
-.bad_value_in_attr => |token| .{ .bad_value_in_attr = token },
-.explicit_namespace_unexpected_token => |token| .{ .explicit_namespace_unexpected_token = token },
-.unexpected_ident => |ident| .{ .unexpected_ident = ident },
-.unexpected_selector_after_pseudo_element => |tok| .{ .unexpected_selector_after_pseudo_element = tok },
-.ambiguous_css_module_class => |name| .{ .ambiguous_css_module_class = name },
-});
+    pub fn intoSelectorError(this: SelectorParseErrorKind) css.SelectorError {
+        return switch (this) {
+            .invalid_state => .invalid_state,
+            .class_needs_ident => |token| .{ .class_needs_ident = token },
+            .pseudo_element_expected_ident => |token| .{ .pseudo_element_expected_ident = token },
+            .unsupported_pseudo_class_or_element => |name| .{ .unsupported_pseudo_class_or_element = name },
+            .no_qualified_name_in_attribute_selector => |token| .{ .no_qualified_name_in_attribute_selector = token },
+            .unexpected_token_in_attribute_selector => |token| .{ .unexpected_token_in_attribute_selector = token },
+            .invalid_qual_name_in_attr => |token| .{ .invalid_qual_name_in_attr = token },
+            .expected_bar_in_attr => |token| .{ .expected_bar_in_attr = token },
+            .empty_selector => .empty_selector,
+            .dangling_combinator => .dangling_combinator,
+            .invalid_pseudo_class_before_webkit_scrollbar => .invalid_pseudo_class_before_webkit_scrollbar,
+            .invalid_pseudo_class_after_webkit_scrollbar => .invalid_pseudo_class_after_webkit_scrollbar,
+            .invalid_pseudo_class_after_pseudo_element => .invalid_pseudo_class_after_pseudo_element,
+            .missing_nesting_selector => .missing_nesting_selector,
+            .missing_nesting_prefix => .missing_nesting_prefix,
+            .expected_namespace => |name| .{ .expected_namespace = name },
+            .bad_value_in_attr => |token| .{ .bad_value_in_attr = token },
+            .explicit_namespace_unexpected_token => |token| .{ .explicit_namespace_unexpected_token = token },
+            .unexpected_ident => |ident| .{ .unexpected_ident = ident },
+            .unexpected_selector_after_pseudo_element => |tok| .{ .unexpected_selector_after_pseudo_element = tok },
+            .ambiguous_css_module_class => |name| .{ .ambiguous_css_module_class = name },
+        };
     }
 };
 pub const PseudoElement = union(enum) {
-    after: void,
-    before: void,
-    first_line: void,
-    first_letter: void,
+    /// The [::after](https://drafts.csswg.org/css-pseudo-4/#selectordef-after) pseudo element.
+    after,
+    /// The [::before](https://drafts.csswg.org/css-pseudo-4/#selectordef-before) pseudo element.
+    before,
+    /// The [::first-line](https://drafts.csswg.org/css-pseudo-4/#first-line-pseudo) pseudo element.
+    first_line,
+    /// The [::first-letter](https://drafts.csswg.org/css-pseudo-4/#first-letter-pseudo) pseudo element.
+    first_letter,
+    /// The [::selection](https://drafts.csswg.org/css-pseudo-4/#selectordef-selection) pseudo element.
     selection: css.VendorPrefix,
+    /// The [::placeholder](https://drafts.csswg.org/css-pseudo-4/#placeholder-pseudo) pseudo element.
     placeholder: css.VendorPrefix,
-    marker: void,
+    /// The [::marker](https://drafts.csswg.org/css-pseudo-4/#marker-pseudo) pseudo element.
+    marker,
+    /// The [::backdrop](https://fullscreen.spec.whatwg.org/#::backdrop-pseudo-element) pseudo element.
     backdrop: css.VendorPrefix,
+    /// The [::file-selector-button](https://drafts.csswg.org/css-pseudo-4/#file-selector-button-pseudo) pseudo element.
     file_selector_button: css.VendorPrefix,
+    /// A [webkit scrollbar](https://webkit.org/blog/363/styling-scrollbars/) pseudo element.
     webkit_scrollbar: WebKitScrollbarPseudoElement,
-    cue: void,
-    cue_region: void,
+    /// The [::cue](https://w3c.github.io/webvtt/#the-cue-pseudo-element) pseudo element.
+    cue,
+    /// The [::cue-region](https://w3c.github.io/webvtt/#the-cue-region-pseudo-element) pseudo element.
+    cue_region,
+    /// The [::cue()](https://w3c.github.io/webvtt/#cue-selector) functional pseudo element.
     cue_function: struct {
         /// The selector argument.
         selector: *Selector,
@@ -1019,6 +1077,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The [::cue-region()](https://w3c.github.io/webvtt/#cue-region-selector) functional pseudo element.
     cue_region_function: struct {
         /// The selector argument.
         selector: *Selector,
@@ -1027,7 +1086,9 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
-    view_transition: void,
+    /// The [::view-transition](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition) pseudo element.
+    view_transition,
+    /// The [::view-transition-group()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-group-pt-name-selector) functional pseudo element.
     view_transition_group: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
@@ -1036,6 +1097,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The [::view-transition-image-pair()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-image-pair-pt-name-selector) functional pseudo element.
     view_transition_image_pair: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
@@ -1044,6 +1106,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The [::view-transition-old()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-old-pt-name-selector) functional pseudo element.
     view_transition_old: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
@@ -1052,6 +1115,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// The [::view-transition-new()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-new-pt-name-selector) functional pseudo element.
     view_transition_new: struct {
         /// A part name selector.
         part_name: ViewTransitionPartName,
@@ -1060,6 +1124,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// An unknown pseudo element.
     custom: struct {
         /// The name of the pseudo element.
         name: []const u8,
@@ -1068,6 +1133,7 @@ pub const PseudoElement = union(enum) {
         pub fn __generateDeepClone() void {}
         pub fn __generateHash() void {}
     },
+    /// An unknown functional pseudo element.
     custom_function: struct {
         /// The name of the pseudo element.
         name: []const u8,
@@ -1079,101 +1145,87 @@ pub const PseudoElement = union(enum) {
         pub fn __generateHash() void {}
     },
 
-pub fn eql(self: *const @This(), other: *const PseudoElement) bool {
-            return css.implementEql(PseudoElement, self, other);
-    }
-
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-
-pub fn getNecessaryPrefixes(self: *@This(), targets: css.targets.Targets) css.VendorPrefix {
-            const F = css.prefixes.Feature;
-            var p: *css.VendorPrefix = undefined;
-            _ = &p;
-            var feature: F = undefined;
-            _ = &feature;
-            switch (self.*) {
-.selection => |*v| {
-p = v;
-            feature = F.pseudo_element_selection;
-},
-.placeholder => |*v| {
-p = v;
-            feature = F.pseudo_element_placeholder;
-},
-.backdrop => |*v| {
-p = v;
-            feature = F.pseudo_element_backdrop;
-},
-.file_selector_button => |*v| {
-p = v;
-            feature = F.pseudo_element_file_selector_button;
-},
-else => {
-return css.VendorPrefix{  };
-},
-}
-            p.* = targets.prefixes(p.*, feature);
-            return p.*;
-    }
-
-pub fn getPrefix(self: *const @This()) css.VendorPrefix {
-            return (switch (self.*) {
-.selection, .placeholder, .backdrop, .file_selector_button => |p| p,
-else => css.VendorPrefix{  },
-});
-    }
-
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-            _ = try writer.print("{s}", .{ @tagName(self.*) });
-    }
-
-pub fn validAfterSlotted(self: *const @This()) bool {
-            return (switch (self.*) {
-.before, .after, .marker, .placeholder, .file_selector_button => true,
-else => false,
-});
-    }
-
-pub fn isUnknown(self: *const @This()) bool {
-            return (switch (self.*) {
-.custom, .custom_function => true,
-else => false,
-});
-    }
-
-pub fn acceptsStatePseudoClasses(self: *const @This()) bool {
-        _ = &self;
-            return true;
-    }
-
-pub fn isWebkitScrollbar(self: *const @This()) bool {
-            return (self.* == .webkit_scrollbar);
-    }
-
-pub fn isViewTransition(self: *const @This()) bool {
-            return (switch (self.*) {
-.view_transition_group, .view_transition_image_pair, .view_transition_new, .view_transition_old => true,
-else => false,
-});
-    }
-
-pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
-            var s = std.Io.Writer.Allocating.init(dest.allocator);
-            _ = &s;
-            const writer = (&s.writer);
-            const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
-            var printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
-            _ = &printer;
-            _ = try serialize.serializePseudoElement(self, (&printer), null);
-            return dest.writeStr(s.written());
-    }
     pub const isEquivalent = pseudoElementIsEquivalent;
+
+    pub fn eql(this: *const PseudoElement, other: *const PseudoElement) bool {
+        return css.implementEql(PseudoElement, this, other);
+    }
+
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+        return css.implementHash(@This(), this, hasher);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
+
+    pub fn getNecessaryPrefixes(this: *PseudoElement, targets: css.targets.Targets) css.VendorPrefix {
+        const F = css.prefixes.Feature;
+        var p: *css.VendorPrefix = undefined;
+        var feature: F = undefined;
+        switch (this.*) {
+            .selection => |*v| { p = v; feature = F.pseudo_element_selection; },
+            .placeholder => |*v| { p = v; feature = F.pseudo_element_placeholder; },
+            .backdrop => |*v| { p = v; feature = F.pseudo_element_backdrop; },
+            .file_selector_button => |*v| { p = v; feature = F.pseudo_element_file_selector_button; },
+            else => return css.VendorPrefix{},
+        }
+
+        p.* = targets.prefixes(p.*, feature);
+
+        return p.*;
+    }
+
+    pub fn getPrefix(this: *const PseudoElement) css.VendorPrefix {
+        return switch (this.*) {
+            .selection, .placeholder, .backdrop, .file_selector_button => |p| p,
+            else => css.VendorPrefix{},
+        };
+    }
+
+    pub fn format(this: *const PseudoElement, writer: *std.Io.Writer) !void {
+        try writer.print("{s}", .{@tagName(this.*)});
+    }
+
+    pub fn validAfterSlotted(this: *const PseudoElement) bool {
+        return switch (this.*) {
+            .before, .after, .marker, .placeholder, .file_selector_button => true,
+            else => false,
+        };
+    }
+
+    pub fn isUnknown(this: *const PseudoElement) bool {
+        return switch (this.*) {
+            .custom, .custom_function => true,
+            else => false,
+        };
+    }
+
+    pub fn acceptsStatePseudoClasses(_: *const PseudoElement) bool {
+        // Be lienient.
+        return true;
+    }
+
+    pub fn isWebkitScrollbar(this: *const PseudoElement) bool {
+        return this.* == .webkit_scrollbar;
+    }
+
+    pub fn isViewTransition(this: *const PseudoElement) bool {
+        return switch (this.*) {
+            .view_transition_group, .view_transition_image_pair, .view_transition_new, .view_transition_old => true,
+            else => false,
+        };
+    }
+
+    pub fn toCss(this: *const PseudoElement, dest: *Printer) PrintErr!void {
+        var s = std.Io.Writer.Allocating.init(dest.allocator);
+        // PERF(alloc): I don't like making small allocations here for the string.
+        const writer = &s.writer;
+        const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
+        var printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
+        try serialize.serializePseudoElement(this, &printer, null);
+        return dest.writeStr(s.written());
+    }
 };
 pub const NthType = enum {
     child,
@@ -1203,55 +1255,53 @@ pub const AttributeFlags = enum {
     pub const toCaseSensitivity = attributeFlagsToCaseSensitivity;
 };
 pub const ViewTransitionPartName = union(enum) {
-    all: void,
+    /// *
+    all,
+    /// <custom-ident>
     name: css.css_values.ident.CustomIdent,
+    /// .<custom-ident>
     class: css.css_values.ident.CustomIdent,
 
-pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
-            return (switch (self.*) {
-.all => try dest.writeStr("*"),
-.name => |name| try css.CustomIdentFns.toCss((&name), dest),
-.class => |name| {
-{
-                _ = try dest.writeChar(46);
-                _ = try css.CustomIdentFns.toCss((&name), dest);
-            }
-},
-});
+    pub fn toCss(this: *const @This(), dest: *css.Printer) css.PrintErr!void {
+        return switch (this.*) {
+            .all => try dest.writeStr("*"),
+            .name => |name| try css.CustomIdentFns.toCss(&name, dest),
+            .class => |name| {
+                try dest.writeChar('.');
+                try css.CustomIdentFns.toCss(&name, dest);
+            },
+        };
     }
 
-pub fn parse(self: @This(), input: *css.Parser) Result(ViewTransitionPartName) {
-        _ = &self;
-            if (input.tryParse(css.Parser.expectDelim, .{ 42 }).isOk()) {
-                return .{ .result = .all };
-            }
-            if (input.tryParse(css.Parser.expectDelim, .{ 46 }).isOk()) {
-                return .{ .result = .{ .class = (switch (css.css_values.ident.CustomIdent.parse(input)) {
-.result => |v| v,
-.err => |e| {
-return .{ .err = e };
-},
-}) } };
-            }
-            return .{ .result = .{ .name = (switch (css.css_values.ident.CustomIdent.parse(input)) {
-.result => |v| v,
-.err => |e| {
-return .{ .err = e };
-},
-}) } };
+    pub fn parse(input: *css.Parser) Result(ViewTransitionPartName) {
+        if (input.tryParse(css.Parser.expectDelim, .{'*'}).isOk()) {
+            return .{ .result = .all };
+        }
+
+        // Try to parse a class selector (.<custom-ident>)
+        if (input.tryParse(css.Parser.expectDelim, .{'.'}).isOk()) {
+            return .{ .result = .{ .class = switch (css.css_values.ident.CustomIdent.parse(input)) {
+                .result => |v| v,
+                .err => |e| return .{ .err = e },
+            } } };
+        }
+
+        return .{ .result = .{ .name = switch (css.css_values.ident.CustomIdent.parse(input)) {
+            .result => |v| v,
+            .err => |e| return .{ .err = e },
+        } } };
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+        return css.implementHash(@This(), this, hasher);
     }
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+    pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
     }
 };
 const selector_builder = @import("./builder.zig");
@@ -1264,6 +1314,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
@@ -1752,8 +1817,8 @@ pub fn specifitiesAllEqual(self: *const @This()) bool {
             return true;
     }
 
-pub fn toCss(self: *const @This()) PrintErr!void {
-        _ = &self;
+pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
+        _ = self;
             _ = @compileError("Do not call this! Use `serializer.serializeSelectorList()` or `tocss_servo.toCss_SelectorList()` instead.");
     }
 
@@ -1881,8 +1946,7 @@ return .{ .err = e };
             }
     }
 
-pub fn fromSelector(self: @This(), allocator: Allocator, selector: GenericSelector(Impl)) This {
-        _ = &self;
+pub fn fromSelector(allocator: Allocator, selector: GenericSelector(Impl)) This {
             var result = This{  };
             _ = &result;
             _ = result.v.append(allocator, selector);
@@ -1893,8 +1957,7 @@ pub fn deepClone(self: *const @This(), allocator: Allocator) This {
             return .{ .v = self.v.deepClone(allocator) };
     }
 
-pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
-        _ = &self;
+pub fn eql(lhs: *const This, rhs: *const This) bool {
             return lhs.v.eql((&rhs.v));
     }
 
@@ -1944,15 +2007,14 @@ pub fn debug(self: *const @This()) DebugFmt {
             return DebugFmt{ .this = self };
     }
 
-pub fn parse(self: @This(), parser: *SelectorParser, input: *css.Parser) Result(This) {
-        _ = &self;
+pub fn parse(parser: *SelectorParser, input: *css.Parser) Result(This) {
             var state = SelectorParsingState{  };
             _ = &state;
             return parse_selector(Impl, parser, input, (&state), .none);
     }
 
-pub fn toCss(self: *const @This()) PrintErr!void {
-        _ = &self;
+pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
+        _ = self;
             _ = @compileError("Do not call this! Use `serializer.serializeSelector()` or `tocss_servo.toCss_Selector()` instead.");
     }
 
@@ -2006,8 +2068,7 @@ pub fn len(self: *const @This()) usize {
             return self.components.items.len;
     }
 
-pub fn fromComponent(self: @This(), allocator: Allocator, component: GenericComponent(Impl)) This {
-        _ = &self;
+pub fn fromComponent(allocator: Allocator, component: GenericComponent(Impl)) This {
             var builder = SelectorBuilder(Impl).init(allocator);
             _ = &builder;
             if (component.asCombinator()) |combinator| {
@@ -2024,8 +2085,7 @@ pub fn specificity(self: *const @This()) u32 {
             return self.specificity_and_flags.specificity;
     }
 
-pub fn parseWithOptions(self: @This(), input: *css.Parser, options: *const css.ParserOptions) Result(This) {
-        _ = &self;
+pub fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions) Result(This) {
             var selector_parser = SelectorParser{ .is_nesting_allowed = true, .options = options };
             _ = &selector_parser;
             return parse((&selector_parser), input);
@@ -2079,11 +2139,12 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
 pub fn GenericComponent(comptime Impl: type) type {
         _ = ValidSelectorImpl(Impl);
         return union(enum) {
-    combinator: Combinator,
-    explicit_any_namespace: void,
-    explicit_no_namespace: void,
-    default_namespace: Impl.SelectorImpl.NamespaceUrl,
-    namespace: struct {
+        combinator: Combinator,
+
+        explicit_any_namespace,
+        explicit_no_namespace,
+        default_namespace: Impl.SelectorImpl.NamespaceUrl,
+        namespace: struct {
             prefix: Impl.SelectorImpl.NamespacePrefix,
             url: Impl.SelectorImpl.NamespaceUrl,
 
@@ -2091,11 +2152,14 @@ pub fn GenericComponent(comptime Impl: type) type {
             pub fn __generateDeepClone() void {}
             pub fn __generateHash() void {}
         },
-    explicit_universal_type: void,
-    local_name: LocalName(Impl),
-    id: Impl.SelectorImpl.LocalIdentifier,
-    class: Impl.SelectorImpl.LocalIdentifier,
-    attribute_in_no_namespace_exists: struct {
+
+        explicit_universal_type,
+        local_name: LocalName(Impl),
+
+        id: Impl.SelectorImpl.LocalIdentifier,
+        class: Impl.SelectorImpl.LocalIdentifier,
+
+        attribute_in_no_namespace_exists: struct {
             local_name: Impl.SelectorImpl.LocalName,
             local_name_lower: Impl.SelectorImpl.LocalName,
 
@@ -2103,7 +2167,8 @@ pub fn GenericComponent(comptime Impl: type) type {
             pub fn __generateDeepClone() void {}
             pub fn __generateHash() void {}
         },
-    attribute_in_no_namespace: struct {
+        /// Used only when local_name is already lowercase.
+        attribute_in_no_namespace: struct {
             local_name: Impl.SelectorImpl.LocalName,
             operator: attrs.AttrSelectorOperator,
             value: Impl.SelectorImpl.AttrValue,
@@ -2114,20 +2179,56 @@ pub fn GenericComponent(comptime Impl: type) type {
             pub fn __generateDeepClone() void {}
             pub fn __generateHash() void {}
         },
-    attribute_other: *attrs.AttrSelectorWithOptionalNamespace(Impl),
-    negation: []GenericSelector(Impl),
-    root: void,
-    empty: void,
-    scope: void,
-    nth: NthSelectorData,
-    nth_of: NthOfSelectorData(Impl),
-    non_ts_pseudo_class: Impl.SelectorImpl.NonTSPseudoClass,
-    slotted: GenericSelector(Impl),
-    part: []Impl.SelectorImpl.Identifier,
-    host: ?GenericSelector(Impl),
-    where: []GenericSelector(Impl),
-    is: []GenericSelector(Impl),
-    any: struct {
+        /// Use a Box in the less common cases with more data to keep size_of::<Component>() small.
+        attribute_other: *attrs.AttrSelectorWithOptionalNamespace(Impl),
+
+        /// Pseudo-classes
+        negation: []GenericSelector(Impl),
+        root,
+        empty,
+        scope,
+        nth: NthSelectorData,
+        nth_of: NthOfSelectorData(Impl),
+        non_ts_pseudo_class: Impl.SelectorImpl.NonTSPseudoClass,
+        /// The ::slotted() pseudo-element:
+        ///
+        /// https://drafts.csswg.org/css-scoping/#slotted-pseudo
+        ///
+        /// The selector here is a compound selector, that is, no combinators.
+        ///
+        /// NOTE(emilio): This should support a list of selectors, but as of this
+        /// writing no other browser does, && that allows them to put ::slotted()
+        /// in the rule hash, so we do that too.
+        ///
+        /// See https://github.com/w3c/csswg-drafts/issues/2158
+        slotted: GenericSelector(Impl),
+        /// The `::part` pseudo-element.
+        ///   https://drafts.csswg.org/css-shadow-parts/#part
+        part: []Impl.SelectorImpl.Identifier,
+        /// The `:host` pseudo-class:
+        ///
+        /// https://drafts.csswg.org/css-scoping/#host-selector
+        ///
+        /// NOTE(emilio): This should support a list of selectors, but as of this
+        /// writing no other browser does, && that allows them to put :host()
+        /// in the rule hash, so we do that too.
+        ///
+        /// See https://github.com/w3c/csswg-drafts/issues/2158
+        host: ?GenericSelector(Impl),
+        /// The `:where` pseudo-class.
+        ///
+        /// https://drafts.csswg.org/selectors/#zero-matches
+        ///
+        /// The inner argument is conceptually a SelectorList, but we move the
+        /// selectors to the heap to keep Component small.
+        where: []GenericSelector(Impl),
+        /// The `:is` pseudo-class.
+        ///
+        /// https://drafts.csswg.org/selectors/#matches-pseudo
+        ///
+        /// Same comment as above re. the argument.
+        is: []GenericSelector(Impl),
+        any: struct {
             vendor_prefix: Impl.SelectorImpl.VendorPrefix,
             selectors: []GenericSelector(Impl),
 
@@ -2135,99 +2236,99 @@ pub fn GenericComponent(comptime Impl: type) type {
             pub fn __generateDeepClone() void {}
             pub fn __generateHash() void {}
         },
-    has: []GenericSelector(Impl),
-    pseudo_element: Impl.SelectorImpl.PseudoElement,
-    nesting: void,
+        /// The `:has` pseudo-class.
+        ///
+        /// https://www.w3.org/TR/selectors/#relational
+        has: []GenericSelector(Impl),
+        /// An implementation-dependent pseudo-element selector.
+        pseudo_element: Impl.SelectorImpl.PseudoElement,
+        /// A nesting selector:
+        ///
+        /// https://drafts.csswg.org/css-nesting-1/#nest-selector
+        ///
+        /// NOTE: This is a lightningcss addition.
+        nesting,
 
-pub fn isLocallyScoped(self: *const @This()) bool {
-            return (switch (self.*) {
-.id, .class => true,
-else => false,
-});
-    }
+        const This = @This();
 
-pub fn asClass(self: *const @This()) ?Impl.SelectorImpl.LocalIdentifier {
-            return (switch (self.*) {
-inline .class => |v| v,
-else => null,
-});
-    }
+        /// If css mdules is enabled these will be locally scoped
+        pub fn isLocallyScoped(this: *const @This()) bool {
+            return switch (this.*) {
+                .id, .class => true,
+                else => false,
+            };
+        }
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
+        pub fn asClass(this: *const @This()) ?Impl.SelectorImpl.LocalIdentifier {
+            return switch (this.*) {
+                inline .class => |v| v,
+                else => null,
+            };
+        }
 
-pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
-        _ = &self;
+        pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+            return css.implementDeepClone(@This(), this, allocator);
+        }
+
+        pub fn eql(lhs: *const This, rhs: *const This) bool {
             return css.implementEql(This, lhs, rhs);
-    }
+        }
 
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-            switch (self.*) {
-.local_name => {
-return try writer.print("local_name={s}", .{ (if (@typeInfo(@TypeOf(self.local_name)) == .@"enum" or @typeInfo(@TypeOf(self.local_name)) == .@"union") @tagName(self.local_name) else self.local_name.name).v });
-},
-.combinator => {
-return try writer.print("combinator='{f}'", .{ self.combinator });
-},
-.pseudo_element => {
-return try writer.print("pseudo_element={f}", .{ self.pseudo_element });
-},
-.class => {
-return try writer.print("class={f}", .{ self.class });
-},
-else => {
-
-},
-}
-            return writer.print("{s}", .{ @tagName(self.*) });
-    }
-
-pub fn asCombinator(self: *const @This()) ?Combinator {
-            if ((self.* == .combinator)) {
-                return self.combinator;
+        pub fn format(this: *const This, writer: *std.Io.Writer) !void {
+            switch (this.*) {
+                .local_name => return try writer.print("local_name={s}", .{this.local_name.name.v}),
+                .combinator => return try writer.print("combinator='{f}'", .{this.combinator}),
+                .pseudo_element => return try writer.print("pseudo_element={f}", .{this.pseudo_element}),
+                .class => return try writer.print("class={f}", .{this.class}),
+                else => {},
             }
+            return writer.print("{s}", .{@tagName(this.*)});
+        }
+
+        pub fn asCombinator(this: *const This) ?Combinator {
+            if (this.* == .combinator) return this.combinator;
             return null;
-    }
+        }
 
-pub fn convertHelper_is(self: @This(), s: []GenericSelector(Impl)) This {
-        _ = &self;
+        pub fn convertHelper_is(s: []GenericSelector(Impl)) This {
             return .{ .is = s };
-    }
+        }
 
-pub fn convertHelper_where(self: @This(), s: []GenericSelector(Impl)) This {
-        _ = &self;
+        pub fn convertHelper_where(s: []GenericSelector(Impl)) This {
             return .{ .where = s };
-    }
+        }
 
-pub fn convertHelper_any(self: @This(), s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix) This {
-        _ = &self;
-            return .{ .any = .{ .vendor_prefix = prefix, .selectors = s } };
-    }
+        pub fn convertHelper_any(s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix) This {
+            return .{
+                .any = .{
+                    .vendor_prefix = prefix,
+                    .selectors = s,
+                },
+            };
+        }
 
-pub fn isCombinator(self: *const @This()) bool {
-            return (self.* == .combinator);
-    }
+        /// Returns true if this is a combinator.
+        pub fn isCombinator(this: *const This) bool {
+            return this.* == .combinator;
+        }
 
-pub fn toCss(self: *const @This()) PrintErr!void {
-        _ = &self;
-            _ = @compileError("Do not call this! Use `serializer.serializeComponent()` or `tocss_servo.toCss_Component()` instead.");
-    }
+        pub fn toCss(_: *const This, _: *Printer) PrintErr!void {
+            @compileError("Do not call this! Use `serializer.serializeComponent()` or `tocss_servo.toCss_Component()` instead.");
+        }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
-    }
-    const This = @This();
-};
+        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
+            return css.implementHash(@This(), this, hasher);
+        }
+    };
 }
 
 pub fn NthOfSelectorData(comptime Impl: type) type {
+        _ = &Impl;
         return struct {
     data: NthSelectorData,
     selectors: []GenericSelector(Impl),
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -2507,7 +2608,7 @@ return .{ .err = e };
             return .{ .result = result.items };
     }
 };
-                const names = (switch (input.parseNestedBlock([]Impl.SelectorImpl.Identifier, (&Closure{ .parser = parser }), Closure.parsefn)) {
+                const names = (switch (input.parseNestedBlock(&.{}, Impl.SelectorImpl.Identifier, (&Closure{ .parser = parser }), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },
@@ -3072,21 +3173,23 @@ return .{ .err = e };
 }
 
 pub fn OptionalQName(comptime Impl: type) type {
+        _ = &Impl;
         return union(enum) {
-    some: struct { QNamePrefix(Impl), ?[]const u8 },
-    none: css.Token,
-};
+        some: struct { QNamePrefix(Impl), ?[]const u8 },
+        none: css.Token,
+    };
 }
 
 pub fn QNamePrefix(comptime Impl: type) type {
+        _ = &Impl;
         return union(enum) {
-    implicit_no_namespace: void,
-    implicit_any_namespace: void,
-    implicit_default_namespace: Impl.SelectorImpl.NamespaceUrl,
-    explicit_no_namespace: void,
-    explicit_any_namespace: void,
-    explicit_namespace: struct { Impl.SelectorImpl.NamespacePrefix, Impl.SelectorImpl.NamespaceUrl },
-};
+        implicit_no_namespace, // `foo` in attr selectors
+        implicit_any_namespace, // `foo` in type selectors, without a default ns
+        implicit_default_namespace: Impl.SelectorImpl.NamespaceUrl, // `foo` in type selectors, with a default ns
+        explicit_no_namespace, // `|foo`
+        explicit_any_namespace, // `*|foo`
+        explicit_namespace: struct { Impl.SelectorImpl.NamespacePrefix, Impl.SelectorImpl.NamespaceUrl }, // `prefix|foo`
+    };
 }
 
 pub fn parse_qualified_name(comptime Impl: type, parser: *SelectorParser, input: *css.Parser, in_attr_selector: bool) Result(OptionalQName(Impl)) {
@@ -3208,6 +3311,7 @@ else => {
 }
 
 pub fn LocalName(comptime Impl: type) type {
+        _ = &Impl;
         return struct {
     name: Impl.SelectorImpl.LocalName,
     lower_name: Impl.SelectorImpl.LocalName,
@@ -3216,16 +3320,13 @@ pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
             return css.IdentFns.toCss((&self.name), dest);
     }
 
-pub fn __generateEql(self: @This()) void {
-        _ = &self;
+pub fn __generateEql() void {
     }
 
-pub fn __generateDeepClone(self: @This()) void {
-        _ = &self;
+pub fn __generateDeepClone() void {
     }
 
-pub fn __generateHash(self: @This()) void {
-        _ = &self;
+pub fn __generateHash() void {
     }
 };
 }

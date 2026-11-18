@@ -30,6 +30,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
@@ -37,28 +52,28 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const css = @import("./css_parser.zig");
 pub const bun = @import("bun");
 
-pub inline fn implementDeepClone(comptime T: type, this: *const T, allocator: Allocator) T {
+pub inline fn implementDeepClone(comptime T: type, self: *const T, allocator: Allocator) T {
         const tyinfo = @typeInfo(T);
         if (comptime bun.@"meta".isSimpleCopyType(T)) {
-            return this.*;
+            return self.*;
         }
         if ((comptime bun.@"meta".looksLikeListContainerType(T))) |result| {
             _ = &result;
             return (switch (result) {
-.array_list => deepClone(result.child, allocator, this),
+.array_list => deepClone(result.child, allocator, self),
 .baby_list => @panic("Not implemented."),
-.small_list => this.deepClone(allocator),
+.small_list => self.deepClone(allocator),
 });
         }
         if (comptime (T == bun.string)) {
-            return this.*;
+            return self.*;
         }
         if (comptime (T == bun.logger.Loc)) {
-            return this.*;
+            return self.*;
         }
         if (comptime (@typeInfo(T) == .pointer)) {
             const TT = std.@"meta".Child(T);
-            return implementEql(TT, this.*);
+            return implementEql(TT, self.*);
         }
         return (switch (tyinfo) {
 .@"struct" => {
@@ -67,9 +82,9 @@ pub inline fn implementDeepClone(comptime T: type, this: *const T, allocator: Al
             _ = &strct;
             inline for (tyinfo.@"struct".fields) |field| {
                 if (comptime (canTransitivelyImplementDeepClone(field.@"type") and @hasDecl(field.@"type", "__generateDeepClone"))) {
-                    @field(strct, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = implementDeepClone(field.@"type", (&field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), allocator)));
+                    @field(strct, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = implementDeepClone(field.@"type", (&field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), allocator)));
                 } else {
-                    @field(strct, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = deepClone(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), allocator);
+                    @field(strct, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = deepClone(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), allocator);
                 }
             }
             return strct;
@@ -82,11 +97,11 @@ pub inline fn implementDeepClone(comptime T: type, this: *const T, allocator: Al
             inline for (0..efields.len) |idx| {
                 const enum_field = efields[@as(usize, @intCast(idx))];
                 const union_field = ufields[@as(usize, @intCast(idx))];
-                if ((@intFromEnum(this.*) == (if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value))) {
+                if ((@intFromEnum(self.*) == (if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value))) {
                     if (comptime (canTransitivelyImplementDeepClone(union_field.@"type") and @hasDecl(union_field.@"type", "__generateDeepClone"))) {
-                        return @unionInit(T, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name), implementDeepClone(union_field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), allocator));
+                        return @unionInit(T, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name), implementDeepClone(union_field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), allocator));
                     }
-                    return @unionInit(T, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name), deepClone(union_field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), allocator));
+                    return @unionInit(T, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name), deepClone(union_field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), allocator));
                 }
             }
             _ = unreachable;
@@ -96,30 +111,30 @@ else => @compileError(("Unhandled type " ++ @typeName(T))),
 });
 }
 
-pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
+pub fn implementEql(comptime T: type, self: *const T, other: *const T) bool {
         const tyinfo = @typeInfo(T);
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            return (this.* == other.*);
+            return (self.* == other.*);
         }
         if (comptime (T == bun.string)) {
-            return bun.strings.eql(this.*, other.*);
+            return bun.strings.eql(self.*, other.*);
         }
         if (comptime (@typeInfo(T) == .pointer)) {
             const TT = std.@"meta".Child(T);
-            return implementEql(TT, this.*, other.*);
+            return implementEql(TT, self.*, other.*);
         }
         if (comptime (@typeInfo(T) == .optional)) {
             const TT = std.@"meta".Child(T);
-            if (((this.* != null) and (other.* != null))) {
-                return implementEql(TT, (&this.*.?), (&other.*.?));
+            if (((self.* != null) and (other.* != null))) {
+                return implementEql(TT, (&self.*.?), (&other.*.?));
             }
             return false;
         }
         if (comptime (T == VendorPrefix)) {
-            return VendorPrefix.eql(this.*, other.*);
+            return VendorPrefix.eql(self.*, other.*);
         }
         if (comptime (T == bun.logger.Loc)) {
-            return (this.start == other.start);
+            return (self.start == other.start);
         }
         return (switch (tyinfo) {
 .optional => @compileError("Handled above, this means Zack wrote a bug."),
@@ -128,18 +143,18 @@ pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
 {
             const Child = std.@"meta".Child(T);
             if (comptime bun.@"meta".isSimpleEqlType(Child)) {
-                return std.mem.eql(Child, (&this.*), (&other.*));
+                return std.mem.eql(Child, (&self.*), (&other.*));
             }
-            if ((this.len != other.len)) {
+            if ((self.len != other.len)) {
                 return false;
             }
             if (comptime (canTransitivelyImplementEql(Child) and @hasDecl(Child, "__generateEql"))) {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_0 = this.len;
+                    const __end_0 = self.len;
                     while (i < __end_0) : (i += 1) {
-                        if ((!implementEql(Child, (&this[@as(usize, @intCast(i))]), (&other[@as(usize, @intCast(i))])))) {
+                        if ((!implementEql(Child, (&self[@as(usize, @intCast(i))]), (&other[@as(usize, @intCast(i))])))) {
                             return false;
                         }
                     }
@@ -148,9 +163,9 @@ pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_1 = this.len;
+                    const __end_1 = self.len;
                     while (i < __end_1) : (i += 1) {
-                        if ((!eql(Child, (&this[@as(usize, @intCast(i))]), (&other[@as(usize, @intCast(i))])))) {
+                        if ((!eql(Child, (&self[@as(usize, @intCast(i))]), (&other[@as(usize, @intCast(i))])))) {
                             return false;
                         }
                     }
@@ -162,7 +177,7 @@ pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
 .@"struct" => {
 {
             inline for (tyinfo.@"struct".fields) |field| {
-                if ((!eql(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), (&@field(other, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)))))) {
+                if ((!eql(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), (&@field(other, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)))))) {
                     return false;
                 }
             }
@@ -174,7 +189,7 @@ pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
             if ((tyinfo.@"union".tag_type == null)) {
                 _ = @compileError("Unions must have a tag type");
             }
-            if ((@intFromEnum(this.*) != @intFromEnum(other.*))) {
+            if ((@intFromEnum(self.*) != @intFromEnum(other.*))) {
                 return false;
             }
             const enum_fields = bun.@"meta".EnumFields(T);
@@ -182,12 +197,12 @@ pub fn implementEql(comptime T: type, this: *const T, other: *const T) bool {
             inline for (0..enum_fields.len) |idx| {
                 const enum_field = enum_fields[@as(usize, @intCast(idx))];
                 const union_field = ufields[@as(usize, @intCast(idx))];
-                if (((if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value) == @intFromEnum(this.*))) {
+                if (((if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value) == @intFromEnum(self.*))) {
                     if ((union_field.@"type" != void)) {
                         if (comptime (canTransitivelyImplementEql(union_field.@"type") and @hasDecl(union_field.@"type", "__generateEql"))) {
-                            return implementEql(union_field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), (&@field(other, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))));
+                            return implementEql(union_field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), (&@field(other, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))));
                         }
-                        return eql(union_field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), (&@field(other, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))));
+                        return eql(union_field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))), (&@field(other, (if (@typeInfo(@TypeOf(enum_field)) == .@"enum" or @typeInfo(@TypeOf(enum_field)) == .@"union") @tagName(enum_field) else enum_field.name))));
                     } else {
                         return true;
                     }
@@ -200,20 +215,20 @@ else => @compileError(("Unsupported type: " ++ @typeName(T))),
 });
 }
 
-pub fn implementHash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) void {
+pub fn implementHash(comptime T: type, self: *const T, hasher: *std.hash.Wyhash) void {
         const tyinfo = @typeInfo(T);
         if (comptime (T == void)) {
             return;
         }
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            return hasher.update(std.mem.asBytes(this));
+            return hasher.update(std.mem.asBytes(self));
         }
         if ((comptime bun.@"meta".looksLikeListContainerType(T))) |result| {
             _ = &result;
             const list = (switch (result) {
-.array_list => this.items[0..],
-.baby_list => this.sliceConst(),
-.small_list => this.slice(),
+.array_list => self.items[0..],
+.baby_list => self.sliceConst(),
+.small_list => self.slice(),
 });
             _ = bun.writeAnyToHasher(hasher, list.len);
             for (cp_iter_slice(list)) |item| {
@@ -223,7 +238,7 @@ pub fn implementHash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash)
             return;
         }
         if (comptime (T == bun.string)) {
-            return hasher.update(this.*);
+            return hasher.update(self.*);
         }
         if (comptime (@typeInfo(T) == .pointer)) {
             _ = @compileError(("Invalid type for implementHash(): " ++ @typeName(T)));
@@ -233,18 +248,18 @@ pub fn implementHash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash)
         }
         return (switch (tyinfo) {
 .optional => {
-if ((this.* == null)) {
+if ((self.* == null)) {
             _ = bun.writeAnyToHasher(hasher, "null");
         } else {
             _ = bun.writeAnyToHasher(hasher, "some");
-            _ = hash(tyinfo.optional.child, (&this.*.?), hasher);
+            _ = hash(tyinfo.optional.child, (&self.*.?), hasher);
         }
 },
-.pointer => hash(tyinfo.pointer.child, (&this.*), hasher),
+.pointer => hash(tyinfo.pointer.child, (&self.*), hasher),
 .array => {
 {
-            _ = bun.writeAnyToHasher(hasher, this.len);
-            for (cp_iter_slice(this.*[0..])) |item| {
+            _ = bun.writeAnyToHasher(hasher, self.len);
+            for (cp_iter_slice(self.*[0..])) |item| {
                 _ = &item;
                 _ = hash(tyinfo.array.child, (&item), hasher);
             }
@@ -254,10 +269,10 @@ if ((this.* == null)) {
 {
             inline for (tyinfo.@"struct".fields) |field| {
                 if (comptime hasHash(field.@"type")) {
-                    _ = hash(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
+                    _ = hash(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
                 } else {
                     if ((@hasDecl(field.@"type", "__generateHash") and (@typeInfo(field.@"type") == .@"struct"))) {
-                        _ = implementHash(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
+                        _ = implementHash(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
                     } else {
                         _ = @compileError(((("Can't hash these fields: " ++ @typeName(field.@"type")) ++ ". On ") ++ @typeName(T)));
                     }
@@ -266,25 +281,25 @@ if ((this.* == null)) {
             return;
         }
 },
-.@"enum" => bun.writeAnyToHasher(hasher, @intFromEnum(this.*)),
+.@"enum" => bun.writeAnyToHasher(hasher, @intFromEnum(self.*)),
 .@"union" => {
 {
             if ((tyinfo.@"union".tag_type == null)) {
                 _ = @compileError("Unions must have a tag type");
             }
-            _ = bun.writeAnyToHasher(hasher, @intFromEnum(this.*));
+            _ = bun.writeAnyToHasher(hasher, @intFromEnum(self.*));
             const enum_fields = bun.@"meta".EnumFields(T);
             const ufields = std.@"meta".fields(T);
             inline for (0..enum_fields.len) |idx| {
                 const enum_field = enum_fields[@as(usize, @intCast(idx))];
                 const union_field = ufields[@as(usize, @intCast(idx))];
-                if (((if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value) == @intFromEnum(this.*))) {
+                if (((if (@typeInfo(@TypeOf(enum_field)) == .@"enum") @intFromEnum(enum_field) else enum_field.value) == @intFromEnum(self.*))) {
                     const field = union_field;
                     if (comptime hasHash(field.@"type")) {
-                        _ = hash(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
+                        _ = hash(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
                     } else {
                         if ((@hasDecl(field.@"type", "__generateHash") and (@typeInfo(field.@"type") == .@"struct"))) {
-                            _ = implementHash(field.@"type", (&@field(this, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
+                            _ = implementHash(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), hasher);
                         } else {
                             _ = @compileError(((("Can't hash these fields: " ++ @typeName(field.@"type")) ++ ". On ") ++ @typeName(T)));
                         }
@@ -432,14 +447,14 @@ return true;
         return (if (T == f32) true else @hasDecl(T, "toCss"));
 }
 
-pub inline fn toCss(comptime T: type, this: *const T, dest: *Printer) PrintErr!void {
+pub inline fn toCss(comptime T: type, self: *const T, dest: *Printer) PrintErr!void {
         if ((@typeInfo(T) == .pointer)) {
             const TT = std.@"meta".Child(T);
-            return toCss(TT, this.*, dest);
+            return toCss(TT, self.*, dest);
         }
         if ((@typeInfo(T) == .optional)) {
             const TT = std.@"meta".Child(T);
-            if (this.*) |*val| {
+            if (self.*) |*val| {
                 _ = &val;
                 return toCss(TT, (val.*), dest);
             }
@@ -449,7 +464,7 @@ pub inline fn toCss(comptime T: type, this: *const T, dest: *Printer) PrintErr!v
             _ = &result;
             switch (result.list) {
 .array_list => {
-return css.to_css.fromList(result.child, this.items, dest);
+return css.to_css.fromList(result.child, self.items, dest);
 },
 .baby_list => {
 _ = @compileError("TODO");
@@ -459,7 +474,7 @@ _ = @compileError("TODO");
 },
 }
         }
-        return (if (T == f32) CSSNumberFns.toCss(this, dest) else if (T == CSSInteger) CSSIntegerFns.toCss(this, dest) else if (T == CustomIdent) CustomIdentFns.toCss(this, dest) else if (T == DashedIdent) DashedIdentFns.toCss(this, dest) else if (T == Ident) IdentFns.toCss(this, dest) else T.toCss(this, dest));
+        return (if (T == f32) CSSNumberFns.toCss(self, dest) else if (T == CSSInteger) CSSIntegerFns.toCss(self, dest) else if (T == CustomIdent) CustomIdentFns.toCss(self, dest) else if (T == DashedIdent) DashedIdentFns.toCss(self, dest) else if (T == Ident) IdentFns.toCss(self, dest) else T.toCss(self, dest));
 }
 
 pub fn eqlList(comptime T: type, lhs: *const ArrayList(T), rhs: *const ArrayList(T)) bool {
@@ -555,25 +570,25 @@ else => false,
 });
 }
 
-pub inline fn deepClone(comptime T: type, this: *const T, allocator: Allocator) T {
+pub inline fn deepClone(comptime T: type, self: *const T, allocator: Allocator) T {
         const tyinfo = (comptime @typeInfo(T));
         if (comptime (tyinfo == .pointer)) {
             if (comptime (tyinfo.pointer.size == .one)) {
                 const TT = std.@"meta".Child(T);
-                return bun.create(allocator, TT, deepClone(TT, this.*, allocator));
+                return bun.create(allocator, TT, deepClone(TT, self.*, allocator));
             }
             if (comptime (tyinfo.pointer.size == .slice)) {
-                var slc = bun.handleOom(allocator.alloc(tyinfo.pointer.child, this.len));
+                var slc = bun.handleOom(allocator.alloc(tyinfo.pointer.child, self.len));
                 _ = &slc;
                 if (comptime (bun.@"meta".isSimpleCopyType(tyinfo.pointer.child) or (tyinfo.pointer.child == bun.string))) {
-                    _ = @memcpy(slc, this.*);
+                    _ = @memcpy(slc, self.*);
                 } else {
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_7 = this.len;
+                        const __end_7 = self.len;
                         while (i < __end_7) : (i += 1) {
-                            slc[cp_cast_int(usize, i)] = deepClone(tyinfo.pointer.child, (&this[@as(usize, @intCast(i))]), allocator);
+                            slc[cp_cast_int(usize, i)] = deepClone(tyinfo.pointer.child, (&self[@as(usize, @intCast(i))]), allocator);
                         }
                     }
                 }
@@ -583,29 +598,29 @@ pub inline fn deepClone(comptime T: type, this: *const T, allocator: Allocator) 
         }
         if (comptime (tyinfo == .optional)) {
             const TT = std.@"meta".Child(T);
-            if ((this.* != null)) {
-                return deepClone(TT, (&this.*.?), allocator);
+            if ((self.* != null)) {
+                return deepClone(TT, (&self.*.?), allocator);
             }
             return (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(null)) else @as(T, null));
         }
         if (comptime bun.@"meta".isSimpleCopyType(T)) {
-            return this.*;
+            return self.*;
         }
         if ((comptime bun.@"meta".looksLikeListContainerType(T))) |result| {
             _ = &result;
             return (switch (result.list) {
-.array_list => css.deepClone(result.child, allocator, this),
-.baby_list => this.deepCloneInfallible(allocator),
-.small_list => this.deepClone(allocator),
+.array_list => css.deepClone(result.child, allocator, self),
+.baby_list => self.deepCloneInfallible(allocator),
+.small_list => self.deepClone(allocator),
 });
         }
         if (comptime (T == bun.string)) {
-            return this.*;
+            return self.*;
         }
         if ((!@hasDecl(T, "deepClone"))) {
             _ = @compileError((@typeName(T) ++ " does not have a deepClone() function"));
         }
-        return this.deepClone(allocator);
+        return self.deepClone(allocator);
 }
 
 pub inline fn tryFromAngle(comptime T: type, angle: Angle) ?T {
@@ -678,15 +693,15 @@ pub inline fn partialCmpF32(lhs: *const f32, rhs: *const f32) ?std.math.Order {
         return .eq;
 }
 
-pub fn hashArrayList(comptime V: type, this: *const ArrayList(V), hasher: *std.hash.Wyhash) void {
-        for (this.items) |item| {
+pub fn hashArrayList(comptime V: type, self: *const ArrayList(V), hasher: *std.hash.Wyhash) void {
+        for (self.items) |item| {
             _ = &item;
             _ = hash(V, (&item), hasher);
         }
 }
 
-pub fn hashBabyList(comptime V: type, this: *const bun.BabyList(V), hasher: *std.hash.Wyhash) void {
-        for (cp_iter_slice(this.sliceConst())) |item| {
+pub fn hashBabyList(comptime V: type, self: *const bun.BabyList(V), hasher: *std.hash.Wyhash) void {
+        for (cp_iter_slice(self.sliceConst())) |item| {
             _ = &item;
             _ = hash(V, (&item), hasher);
         }
@@ -725,7 +740,7 @@ return true;
         return (@hasDecl(T, "hash"));
 }
 
-pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) void {
+pub fn hash(comptime T: type, self: *const T, hasher: *std.hash.Wyhash) void {
         if (comptime (T == void)) {
             return;
         }
@@ -733,10 +748,10 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) void {
         if (comptime ((tyinfo == .pointer) and (T != bun.string))) {
             const TT = std.@"meta".Child(T);
             if ((tyinfo.pointer.size == .one)) {
-                return hash(TT, this.*, hasher);
+                return hash(TT, self.*, hasher);
             } else {
                 if ((tyinfo.pointer.size == .slice)) {
-                    for (cp_iter_slice(this.*)) |item| {
+                    for (cp_iter_slice(self.*)) |item| {
                         _ = &item;
                         _ = hash(TT, (&item), hasher);
                     }
@@ -748,8 +763,8 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) void {
         }
         if (comptime (@typeInfo(T) == .optional)) {
             const TT = std.@"meta".Child(T);
-            if ((this.* != null)) {
-                return hash(TT, (&this.*.?), hasher);
+            if ((self.* != null)) {
+                return hash(TT, (&self.*.?), hasher);
             }
             return;
         }
@@ -757,20 +772,20 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) void {
             _ = &result;
             switch (result.list) {
 .array_list => {
-return hashArrayList(result.child, this, hasher);
+return hashArrayList(result.child, self, hasher);
 },
 .baby_list => {
-return hashBabyList(result.child, this, hasher);
+return hashBabyList(result.child, self, hasher);
 },
 .small_list => {
-return this.hash(hasher);
+return self.hash(hasher);
 },
 }
         }
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            const bytes = std.mem.asBytes(this);
+            const bytes = std.mem.asBytes(self);
             _ = hasher.update(bytes);
             return;
         }
-        return (if (T == []const u8) hasher.update(this.*) else T.hash(this, hasher));
+        return (if (T == []const u8) hasher.update(self.*) else T.hash(self, hasher));
 }

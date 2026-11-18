@@ -9,8 +9,10 @@ const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 const Angle = css.css_values.angle.Angle;
 const Url = css.css_values.url.Url;
 pub const FilterList = union(enum) {
-    none: void,
-    filters: SmallList(Filter,1),
+    /// The `none` keyword.
+    none,
+    /// A list of filter functions.
+    filters: SmallList(Filter, 1),
 };
 pub const Filter = union(enum) {
     blur: Length,

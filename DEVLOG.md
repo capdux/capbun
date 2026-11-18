@@ -653,3 +653,22 @@
 ### 2. 核心断言系统转义与控制流净化 (`expect.cp`)
 - **饱和运算与计数器溢出防护**：原 Zig 的 `+|=` 饱和加法重构为标准的 `std.math.add(u32, count, 1) catch std.math.maxInt(u32)`，彻底消除非标操作符。
 - **关键字与保留字转义防护**：针对 JSC 对象的 `@"this"` 方法调用添加显式转义；重命名局部变量 `any` 避免触发向 Zig `anytype` 的错误转换；将文件末尾 `test` 块规整为顶层标准测试函数。
+
+
+## 2026-11-18 [Milestone 7 Phase 54] `src/http_types/` 全量闭环与 `src/runtime/node/`, `src/runtime/api/` 核心架构经验
+
+### 1. 错误联合体异常匹配与 `cp_has_ok_val` 符号未决消除 (`path_watcher.cp`, `types.cp`)
+- **错误捕获后对标量 switch 的 lowering 根因**：在 `catch |e| switch (e) { ... }` 中，若将纯错误值 `e`（如 `error.FailedToCreate...` 或 `error.NotFileUrl`）传入 `switch` 表达式，CP 编译器的模式分析器会误将其当作枚举或可空/结果联合类型处理，生成包含 `cp_has_ok_val`、`cp_is_null_val`、`cp_unwrap_err_val` 的内联降级块，而当前运行时未定义这些标识符导致 ast-check 报错。
+- **规范方案**：针对标量错误值的条件分流，改用语句级 `if (e == error.A) ... else if (e == error.B) ...`；对于已确认为单分支不可达的断言场景（如 `bufPrint`），直接使用 `catch unreachable`，消除所有辅助宏的生成。
+
+### 2. 枚举类型实例方法与接收者规范 (`mime_type_list_enum.cp`, `Method.cp`, `MimeType.cp`)
+- **只读实例方法接收者规范**：在 `enum` 内部声明的方法（如 `slice()`, `len()`, `ptr()`），省略方法定义时的接收者实参，方法体内直接使用 `_` 访问当前实例，或在定义时声明 `this: EnumType` 显式标注类型。对包含模式匹配的只读方法，使用 `match (_)` 或 `switch (_)` 替代旧版的 `this`。
+- **变量标识符纯化**：将枚举集初始化的 `var values = Set.initFull();` 彻底改写为 `let values = Set.initFull();`，杜绝 `var` 变量。
+
+### 3. Markdown AST 与多返回值解构架构 (`MarkdownObject.cp`)
+- **调用帧多返回值安全获取**：原 Zig 代码中的 `const a, const b = callframe.argumentsAsArray(2);` 在 CP 语法中应声明数组后索引取值：`const args = callframe.argumentsAsArray(2); const a = args[0]; const b = args[1];`，避免多变量联合声明引发的解析异常。
+- **C-ABI 导出与声明收拢**：将零散分布的 C 外部函数（如 `BunMarkdownTagStrings__getTagString`, `BunMarkdownMeta__createLink` 等）统一收拢至文件顶部 `@c { ... }` 块内，显式标注 `global: *jsc.JSGlobalObject`，禁止裸写 `*jsc`。
+
+### 4. 哨兵数组字面量与按位排程掩码 (`cron.cp`)
+- **哨兵类型数组字面量规范**：针对 `let argv = [_:null]?[*:0]const u8{ ... }`，改用显式长度的数组声明 `const argv: [3]?[*:0]const u8 = [crontab_path.ptr, "-l", null];`，元素显式取 `.ptr` 确保与 `[*:0]const u8` 保持类型完全一致。
+- **内联匿名枚举提升**：函数签名中的内联枚举 `comptime mode: enum { reload, teardown }` 会被 CP 编译器视为复杂嵌套类型跳过 lowering；将其提升到模块顶层声明为 `pub const CronClearMode = enum { reload, teardown };` 后，方法签名保持简洁安全。

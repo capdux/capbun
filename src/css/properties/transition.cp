@@ -103,11 +103,16 @@ pub struct Transition {
     }
 }
 
+const TransitionProperties = struct { SmallList(PropertyId, 1), VendorPrefix };
+const TransitionDurations = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionDelays = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionTimingFunctions = struct { SmallList(EasingFunction, 1), VendorPrefix };
+
 pub struct TransitionHandler {
-    properties: struct? { SmallList(PropertyId, 1), VendorPrefix } = null,
-    durations: struct? { SmallList(Time, 1), VendorPrefix } = null,
-    delays: struct? { SmallList(Time, 1), VendorPrefix } = null,
-    timing_functions: struct? { SmallList(EasingFunction, 1), VendorPrefix } = null,
+    properties: TransitionProperties? = null,
+    durations: TransitionDurations? = null,
+    delays: TransitionDelays? = null,
+    timing_functions: TransitionTimingFunctions? = null,
     has_any: bool = false,
 
     fn handleProperty(*_, prop: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext): bool {
@@ -158,13 +163,17 @@ pub struct TransitionHandler {
                 _.property(dest, context, Feature.transition_delay, "delays", &delays, vp);
                 _.property(dest, context, Feature.transition_timing_function, "timing_functions", &timing_functions, vp);
             },
-            .unparsed => |*x| if (isTransitionProperty(&x.property_id)) {
-                _.flush(dest, context);
-                dest.append(
-                    context.allocator,
-                    { unparsed: x.getPrefixed(context.allocator, context.targets, Feature.transition) },
-                ) catch |e| bun.handleOom(e);
-            } else return false,
+            .unparsed => |*x| {
+                if (isTransitionProperty(&x.property_id)) {
+                    _.flush(dest, context);
+                    dest.append(
+                        context.allocator,
+                        { unparsed: x.getPrefixed(context.allocator, context.targets, Feature.transition) },
+                    ) catch |e| bun.handleOom(e);
+                } else {
+                    return false;
+                }
+            },
             else => return false,
         }
 
@@ -209,10 +218,10 @@ pub struct TransitionHandler {
         if (!_.has_any) return;
         _.has_any = false;
 
-        let _properties: struct? { SmallList(PropertyId, 1), VendorPrefix } = bun.take(&_.properties);
-        let _durations: struct? { SmallList(Time, 1), VendorPrefix } = bun.take(&_.durations);
-        let _delays: struct? { SmallList(Time, 1), VendorPrefix } = bun.take(&_.delays);
-        let _timing_functions: struct? { SmallList(EasingFunction, 1), VendorPrefix } = bun.take(&_.timing_functions);
+        let _properties: TransitionProperties? = bun.take(&_.properties);
+        let _durations: TransitionDurations? = bun.take(&_.durations);
+        let _delays: TransitionDelays? = bun.take(&_.delays);
+        let _timing_functions: TransitionTimingFunctions? = bun.take(&_.timing_functions);
 
         let rtl_properties: SmallList(PropertyId, 1)? = null;
         if (*p := _properties) {
@@ -368,7 +377,7 @@ pub struct TransitionHandler {
     }
 }
 
-fn expandProperties(properties: *css.SmallList(PropertyId, 1), context: *css.PropertyHandlerContext): css.SmallList(PropertyId, 1)? {
+fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.PropertyHandlerContext): SmallList(PropertyId, 1)? {
     const replace = struct {
         inline fn replace(allocator: Allocator, propertiez: auto, props: []const PropertyId, i: u32) {
             propertiez.mut(i).* = props[0].deepClone(allocator);
@@ -441,69 +450,69 @@ const LogicalPropertyId = union(enum) {
 
 fn getLogicalProperties(property_id: *const PropertyId): LogicalPropertyId {
     return switch (property_id.*) {
-        .@"block-size" => { block: .{ .logical_size, &[.height] } },
-        .@"inline-size" => { @"inline": .{ .logical_size, &[.width], &[.height] } },
-        .@"min-block-size" => { block: .{ .logical_size, &[.@"min-height"] } },
-        .@"max-block-size" => { block: .{ .logical_size, &[.@"max-height"] } },
-        .@"min-inline-size" => { @"inline": .{ .logical_size, &[.@"min-width"], &[.@"min-height"] } },
-        .@"max-inline-size" => { @"inline": .{ .logical_size, &[.@"max-width"], &[.@"max-height"] } },
+        .@"block-size" => LogicalPropertyId{ block: .{ .logical_size, &[.height] } },
+        .@"inline-size" => LogicalPropertyId{ @"inline": .{ .logical_size, &[.width], &[.height] } },
+        .@"min-block-size" => LogicalPropertyId{ block: .{ .logical_size, &[.@"min-height"] } },
+        .@"max-block-size" => LogicalPropertyId{ block: .{ .logical_size, &[.@"max-height"] } },
+        .@"min-inline-size" => LogicalPropertyId{ @"inline": .{ .logical_size, &[.@"min-width"], &[.@"min-height"] } },
+        .@"max-inline-size" => LogicalPropertyId{ @"inline": .{ .logical_size, &[.@"max-width"], &[.@"max-height"] } },
 
-        .@"inset-block-start" => { block: .{ .logical_inset, &[.top] } },
-        .@"inset-block-end" => { block: .{ .logical_inset, &[.bottom] } },
-        .@"inset-inline-start" => { @"inline": .{ .logical_inset, &[.left], &[.right] } },
-        .@"inset-inline-end" => { @"inline": .{ .logical_inset, &[.right], &[.left] } },
-        .@"inset-block" => { block: .{ .logical_inset, &[ .top, .bottom ] } },
-        .@"inset-inline" => { block: .{ .logical_inset, &[ .left, .right ] } },
-        .inset => { block: .{ .logical_inset, &[ .top, .bottom, .left, .right ] } },
+        .@"inset-block-start" => LogicalPropertyId{ block: .{ .logical_inset, &[.top] } },
+        .@"inset-block-end" => LogicalPropertyId{ block: .{ .logical_inset, &[.bottom] } },
+        .@"inset-inline-start" => LogicalPropertyId{ @"inline": .{ .logical_inset, &[.left], &[.right] } },
+        .@"inset-inline-end" => LogicalPropertyId{ @"inline": .{ .logical_inset, &[.right], &[.left] } },
+        .@"inset-block" => LogicalPropertyId{ block: .{ .logical_inset, &[ .top, .bottom ] } },
+        .@"inset-inline" => LogicalPropertyId{ block: .{ .logical_inset, &[ .left, .right ] } },
+        .inset => LogicalPropertyId{ block: .{ .logical_inset, &[ .top, .bottom, .left, .right ] } },
 
-        .@"margin-block-start" => { block: .{ .logical_margin, &[.@"margin-top"] } },
-        .@"margin-block-end" => { block: .{ .logical_margin, &[.@"margin-bottom"] } },
-        .@"margin-inline-start" => { @"inline": .{ .logical_margin, &[.@"margin-left"], &[.@"margin-right"] } },
-        .@"margin-inline-end" => { @"inline": .{ .logical_margin, &[.@"margin-right"], &[.@"margin-left"] } },
-        .@"margin-block" => { block: .{ .logical_margin, &[ .@"margin-top", .@"margin-bottom" ] } },
-        .@"margin-inline" => { block: .{ .logical_margin, &[ .@"margin-left", .@"margin-right" ] } },
+        .@"margin-block-start" => LogicalPropertyId{ block: .{ .logical_margin, &[.@"margin-top"] } },
+        .@"margin-block-end" => LogicalPropertyId{ block: .{ .logical_margin, &[.@"margin-bottom"] } },
+        .@"margin-inline-start" => LogicalPropertyId{ @"inline": .{ .logical_margin, &[.@"margin-left"], &[.@"margin-right"] } },
+        .@"margin-inline-end" => LogicalPropertyId{ @"inline": .{ .logical_margin, &[.@"margin-right"], &[.@"margin-left"] } },
+        .@"margin-block" => LogicalPropertyId{ block: .{ .logical_margin, &[ .@"margin-top", .@"margin-bottom" ] } },
+        .@"margin-inline" => LogicalPropertyId{ block: .{ .logical_margin, &[ .@"margin-left", .@"margin-right" ] } },
 
-        .@"padding-block-start" => { block: .{ .logical_padding, &[.@"padding-top"] } },
-        .@"padding-block-end" => { block: .{ .logical_padding, &[.@"padding-bottom"] } },
-        .@"padding-inline-start" => { @"inline": .{ .logical_padding, &[.@"padding-left"], &[.@"padding-right"] } },
-        .@"padding-inline-end" => { @"inline": .{ .logical_padding, &[.@"padding-right"], &[.@"padding-left"] } },
-        .@"padding-block" => { block: .{ .logical_padding, &[ .@"padding-top", .@"padding-bottom" ] } },
-        .@"padding-inline" => { block: .{ .logical_padding, &[ .@"padding-left", .@"padding-right" ] } },
+        .@"padding-block-start" => LogicalPropertyId{ block: .{ .logical_padding, &[.@"padding-top"] } },
+        .@"padding-block-end" => LogicalPropertyId{ block: .{ .logical_padding, &[.@"padding-bottom"] } },
+        .@"padding-inline-start" => LogicalPropertyId{ @"inline": .{ .logical_padding, &[.@"padding-left"], &[.@"padding-right"] } },
+        .@"padding-inline-end" => LogicalPropertyId{ @"inline": .{ .logical_padding, &[.@"padding-right"], &[.@"padding-left"] } },
+        .@"padding-block" => LogicalPropertyId{ block: .{ .logical_padding, &[ .@"padding-top", .@"padding-bottom" ] } },
+        .@"padding-inline" => LogicalPropertyId{ block: .{ .logical_padding, &[ .@"padding-left", .@"padding-right" ] } },
 
-        .@"border-block-start" => { block: .{ .logical_borders, &[.@"border-top"] } },
-        .@"border-block-start-width" => { block: .{ .logical_borders, &[.@"border-top-width"] } },
-        .@"border-block-start-color" => { block: .{ .logical_borders, &[.@"border-top-color"] } },
-        .@"border-block-start-style" => { block: .{ .logical_borders, &[.@"border-top-style"] } },
+        .@"border-block-start" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-top"] } },
+        .@"border-block-start-width" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-top-width"] } },
+        .@"border-block-start-color" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-top-color"] } },
+        .@"border-block-start-style" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-top-style"] } },
 
-        .@"border-block-end" => { block: .{ .logical_borders, &[.@"border-bottom"] } },
-        .@"border-block-end-width" => { block: .{ .logical_borders, &[.@"border-bottom-width"] } },
-        .@"border-block-end-color" => { block: .{ .logical_borders, &[.@"border-bottom-color"] } },
-        .@"border-block-end-style" => { block: .{ .logical_borders, &[.@"border-bottom-style"] } },
+        .@"border-block-end" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-bottom"] } },
+        .@"border-block-end-width" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-bottom-width"] } },
+        .@"border-block-end-color" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-bottom-color"] } },
+        .@"border-block-end-style" => LogicalPropertyId{ block: .{ .logical_borders, &[.@"border-bottom-style"] } },
 
-        .@"border-inline-start" => { @"inline": .{ .logical_borders, &[.@"border-left"], &[.@"border-right"] } },
-        .@"border-inline-start-width" => { @"inline": .{ .logical_borders, &[.@"border-left-width"], &[.@"border-right-width"] } },
-        .@"border-inline-start-color" => { @"inline": .{ .logical_borders, &[.@"border-left-color"], &[.@"border-right-color"] } },
-        .@"border-inline-start-style" => { @"inline": .{ .logical_borders, &[.@"border-left-style"], &[.@"border-right-style"] } },
+        .@"border-inline-start" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-left"], &[.@"border-right"] } },
+        .@"border-inline-start-width" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-left-width"], &[.@"border-right-width"] } },
+        .@"border-inline-start-color" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-left-color"], &[.@"border-right-color"] } },
+        .@"border-inline-start-style" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-left-style"], &[.@"border-right-style"] } },
 
-        .@"border-inline-end" => { @"inline": .{ .logical_borders, &[.@"border-right"], &[.@"border-left"] } },
-        .@"border-inline-end-width" => { @"inline": .{ .logical_borders, &[.@"border-right-width"], &[.@"border-left-width"] } },
-        .@"border-inline-end-color" => { @"inline": .{ .logical_borders, &[.@"border-right-color"], &[.@"border-left-color"] } },
-        .@"border-inline-end-style" => { @"inline": .{ .logical_borders, &[.@"border-right-style"], &[.@"border-left-style"] } },
+        .@"border-inline-end" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-right"], &[.@"border-left"] } },
+        .@"border-inline-end-width" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-right-width"], &[.@"border-left-width"] } },
+        .@"border-inline-end-color" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-right-color"], &[.@"border-left-color"] } },
+        .@"border-inline-end-style" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[.@"border-right-style"], &[.@"border-left-style"] } },
 
-        .@"border-block" => { block: .{ .logical_borders, &[ .@"border-top", .@"border-bottom" ] } },
-        .@"border-block-color" => { block: .{ .logical_borders, &[ .@"border-top-color", .@"border-bottom-color" ] } },
-        .@"border-block-width" => { block: .{ .logical_borders, &[ .@"border-top-width", .@"border-bottom-width" ] } },
-        .@"border-block-style" => { block: .{ .logical_borders, &[ .@"border-top-style", .@"border-bottom-style" ] } },
+        .@"border-block" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-top", .@"border-bottom" ] } },
+        .@"border-block-color" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-top-color", .@"border-bottom-color" ] } },
+        .@"border-block-width" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-top-width", .@"border-bottom-width" ] } },
+        .@"border-block-style" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-top-style", .@"border-bottom-style" ] } },
 
-        .@"border-inline" => { block: .{ .logical_borders, &[ .@"border-left", .@"border-right" ] } },
-        .@"border-inline-color" => { block: .{ .logical_borders, &[ .@"border-left-color", .@"border-right-color" ] } },
-        .@"border-inline-width" => { block: .{ .logical_borders, &[ .@"border-left-width", .@"border-right-width" ] } },
-        .@"border-inline-style" => { block: .{ .logical_borders, &[ .@"border-left-style", .@"border-right-style" ] } },
+        .@"border-inline" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-left", .@"border-right" ] } },
+        .@"border-inline-color" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-left-color", .@"border-right-color" ] } },
+        .@"border-inline-width" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-left-width", .@"border-right-width" ] } },
+        .@"border-inline-style" => LogicalPropertyId{ block: .{ .logical_borders, &[ .@"border-left-style", .@"border-right-style" ] } },
 
-        .@"border-start-start-radius" => { @"inline": .{ .logical_borders, &[PropertyId{ @"border-top-left-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-top-right-radius": VendorPrefix.NONE }] } },
-        .@"border-start-end-radius" => { @"inline": .{ .logical_borders, &[PropertyId{ @"border-top-right-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-top-left-radius": VendorPrefix.NONE }] } },
-        .@"border-end-start-radius" => { @"inline": .{ .logical_borders, &[PropertyId{ @"border-bottom-left-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-bottom-right-radius": VendorPrefix.NONE }] } },
-        .@"border-end-end-radius" => { @"inline": .{ .logical_borders, &[PropertyId{ @"border-bottom-right-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-bottom-left-radius": VendorPrefix.NONE }] } },
+        .@"border-start-start-radius" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[PropertyId{ @"border-top-left-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-top-right-radius": VendorPrefix.NONE }] } },
+        .@"border-start-end-radius" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[PropertyId{ @"border-top-right-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-top-left-radius": VendorPrefix.NONE }] } },
+        .@"border-end-start-radius" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[PropertyId{ @"border-bottom-left-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-bottom-right-radius": VendorPrefix.NONE }] } },
+        .@"border-end-end-radius" => LogicalPropertyId{ @"inline": .{ .logical_borders, &[PropertyId{ @"border-bottom-right-radius": VendorPrefix.NONE }], &[PropertyId{ @"border-bottom-left-radius": VendorPrefix.NONE }] } },
 
         else => .none,
     };

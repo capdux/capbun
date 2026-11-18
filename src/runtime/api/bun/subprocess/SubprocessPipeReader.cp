@@ -37,20 +37,20 @@ pub union(enum) State {
     }
 
     pub static fn create(event_loop: *jsc.EventLoop, process: *Subprocess, result: StdioResult, limit: (*MaxBuf)?): *PipeReader {
-        let this = bun.new(PipeReader, {
+        let instance = bun.new(PipeReader, {
             ref_count: .init(),
             process: process,
             reader: IOReader.init(PipeReader),
             event_loop: event_loop,
             stdio_result: result,
         });
-        MaxBuf.addToPipereader(limit, &this.reader.maxbuf);
+        MaxBuf.addToPipereader(limit, &instance.reader.maxbuf);
         if (Environment.isWindows) {
-            this.reader.source = .{ .pipe = this.stdio_result.buffer };
+            instance.reader.source = .{ .pipe = instance.stdio_result.buffer };
         }
 
-        this.reader.setParent(this);
-        return this;
+        instance.reader.setParent(instance);
+        return instance;
     }
 
     pub fn readAll(*_) {

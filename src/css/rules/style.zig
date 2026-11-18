@@ -59,6 +59,7 @@ pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
                 var first_rule = true;
                 _ = &first_rule;
                 inline for (css.VendorPrefix.FIELDS) |field| {
+                    _ = &field;
                     if (@field(self.vendor_prefix, field)) {
                         if (first_rule) {
                             first_rule = false;
@@ -90,6 +91,7 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
                 _ = &i;
                 const DECLS: struct { []const u8, []const u8 } = .{ "declarations", "important_declarations" };
                 inline for (DECLS) |decl_field_name| {
+                    _ = &decl_field_name;
                     const important = (comptime std.mem.eql(u8, decl_field_name, "important_declarations"));
                     const decls: *const ArrayList(css.Property) = (&@field(self.declarations, decl_field_name));
                     for (decls.items) |*decl| {

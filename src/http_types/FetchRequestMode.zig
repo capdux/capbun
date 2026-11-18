@@ -13,12 +13,7 @@ pub const FetchRequestMode = enum(u2) {
     pub fn fromName(s: []const u8) ?@This() { return get(s); }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
     
-    pub const Map = bun.ComptimeStringMap(FetchRequestMode, .{
-            .{ "same-origin", .@"same-origin" },
-            .{ "no-cors", .@"no-cors" },
-            .{ "cors", .cors },
-            .{ "navigate", .navigate },
-        });
+    pub const Map = bun.ComptimeStringMap(FetchRequestMode, .{ .{ "same-origin", .@"same-origin" }, .{ "no-cors", .@"no-cors" }, .{ "cors", .cors }, .{ "navigate", .navigate } });
     
     pub const toJS = @import("../http_jsc/fetch_enums_jsc.zig").fetchRequestModeToJS;
 };

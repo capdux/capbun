@@ -22,36 +22,38 @@ pub const BorderBlock = GenericBorder(LineStyle, 8);
 pub const BorderInline = GenericBorder(LineStyle, 9);
 pub const Border = GenericBorder(LineStyle, 10);
 pub const BorderSideWidth = union(enum) {
-    thin: void,
-    medium: void,
-    thick: void,
+    /// A UA defined `thin` value.
+    thin,
+    /// A UA defined `medium` value.
+    medium,
+    /// A UA defined `thick` value.
+    thick,
+    /// An explicit width.
     length: Length,
 
-pub fn isCompatible(self: *const @This(), browsers: bun.css.targets.Browsers) bool {
-            return (switch (self.*) {
-.length => |len| len.isCompatible(browsers),
-else => true,
-});
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-
-pub fn default(self: @This()) BorderSideWidth {
-        _ = &self;
-            return .medium;
-    }
-
-pub fn deinit(self: *@This()) void {
-        _ = &self;
-    }
-
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
-    }
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
+
+    pub fn isCompatible(this: *const @This(), browsers: bun.css.targets.Browsers) bool {
+        return switch (this.*) {
+            .length => |len| len.isCompatible(browsers),
+            else => true,
+        };
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
+
+    pub fn default() BorderSideWidth {
+        return .medium;
+    }
+
+    pub fn deinit(_: *@This(), _: std.mem.Allocator) void {}
+
+    pub fn eql(this: *const @This(), other: *const @This()) bool {
+        return css.implementEql(@This(), this, other);
+    }
 };
 const BorderProperty = packed struct(u32) {
     @"top-color": bool = false,
@@ -150,6 +152,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
@@ -172,8 +189,8 @@ pub const LineStyle = enum {
     pub fn fromName(s: []const u8) ?@This() { return get(s); }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn isCompatible(self: *const LineStyle) bool {
-        _ = &self;
+pub fn isCompatible(self: *const LineStyle, _: bun.css.targets.Browsers) bool {
+        _ = self;
             return true;
     }
 
@@ -747,33 +764,29 @@ var up = unparsed.deepClone(context.allocator);
         logical_supported: bool,
         logical_shorthand_supported: bool,
     
-    pub inline fn logicalProp(self: @This(), f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
-            _ = &self;
+    pub inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
                 _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, val.deepClone(f.ctx.allocator)), @unionInit(css.Property, rtl, val.deepClone(f.ctx.allocator)));
         }
     
-    pub inline fn push(self: @This(), f: *FlushContext, comptime p: []const u8, val: anytype) void {
-            _ = &self;
+    pub inline fn push(f: *FlushContext, comptime p: []const u8, val: anytype) void {
                 _ = bun.bits.insert(BorderProperty, (&f.self.flushed_properties), @field(BorderProperty, p));
                 _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, val.deepClone(f.ctx.allocator))));
         }
     
-    pub inline fn fallbacks(self: @This(), f: *FlushContext, comptime p: []const u8, _val: anytype) void {
-            _ = &self;
+    pub inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: anytype) void {
                 var val = _val;
                 _ = &val;
                 if ((!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p)))) {
                     const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
-                    _ = &fbs;
                     for (css.generic.slice(@TypeOf(fbs), &fbs)) |fallback| {
+                        _ = &fallback;
                         _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, fallback)));
                     }
                 }
                 _ = push(f, p, val);
         }
     
-    pub inline fn prop(self: @This(), f: *FlushContext, comptime prop_name: []const u8, val: anytype) void {
-            _ = &self;
+    pub inline fn prop(f: *FlushContext, comptime prop_name: []const u8, val: anytype) void {
                 _ = @setEvalBranchQuota(10000);
                 if (comptime std.mem.eql(u8, prop_name, "border-inline-start")) {
                     if (f.logical_supported) {
@@ -940,13 +953,11 @@ var up = unparsed.deepClone(context.allocator);
                 }
         }
     
-    pub inline fn is_eq(self: @This(), s: *@This(), comptime key: []const u8) bool {
-            _ = &self;
+    pub inline fn is_eq(s: *@This(), comptime key: []const u8) bool {
                 return ((css.generic.eql(@TypeOf(@field(s.block_start, key)), (&@field(s.block_start, key)), (&@field(s.block_end, key))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key)))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.block_start, key))));
         }
     
-    pub inline fn prop_diff(self: @This(), s: *@This(), border: anytype, fallback: anytype, border_fallback: anytype) void {
-            _ = &self;
+    pub inline fn prop_diff(s: *@This(), border: anytype, fallback: anytype, border_fallback: anytype) void {
                 if ((((!is_logical) and s.is_eq("color")) and s.is_eq("style"))) {
                     _ = prop(s.f, "border", border.toBorder(s.f.ctx.allocator));
                     _ = shorthand(s, BorderWidth, "border-width", "width");
@@ -968,8 +979,7 @@ var up = unparsed.deepClone(context.allocator);
                 }
         }
     
-    pub inline fn side_diff(self: @This(), s: *@This(), border: anytype, other: anytype, comptime prop_name: []const u8, width: anytype, style: anytype, comptime color: []const u8) void {
-            _ = &self;
+    pub inline fn side_diff(s: *@This(), border: anytype, other: anytype, comptime prop_name: []const u8, width: anytype, style: anytype, comptime color: []const u8) void {
                 const eq_width = css.generic.eql(@TypeOf(border.width), (&border.width), (&other.width));
                 const eq_style = css.generic.eql(@TypeOf(border.style), (&border.style), (&other.style));
                 const eq_color = css.generic.eql(@TypeOf(border.color), (&border.color), (&other.color));
@@ -988,8 +998,7 @@ var up = unparsed.deepClone(context.allocator);
                 }
         }
     
-    pub inline fn side(self: @This(), s: *@This(), val: anytype, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) void {
-            _ = &self;
+    pub inline fn side(s: *@This(), val: anytype, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) void {
                 if (val.isValid()) {
                     _ = s.f.prop(short, val.toBorder(s.f.ctx.allocator));
                 } else {
@@ -1008,8 +1017,7 @@ var up = unparsed.deepClone(context.allocator);
                 }
         }
     
-    pub inline fn inlineProp(self: @This(), s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) void {
-            _ = &self;
+    pub inline fn inlineProp(s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) void {
                 if (((@field(s.inline_start, key) != null) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key))))) {
                     _ = s.f.prop(left, (bun.take((&@field(s.inline_start, key)))).?);
                     _ = s.f.prop(right, (bun.take((&@field(s.inline_end, key)))).?);
@@ -1191,8 +1199,7 @@ pub fn GenericBorder(comptime S: type, comptime P: u8) type {
     style: S,
     color: CssColor,
 
-pub fn parse(self: @This(), input: *css.Parser) css.Result(@This()) {
-        _ = &self;
+pub fn parse(input: *css.Parser) css.Result(@This()) {
             var color: ?CssColor = null;
             _ = &color;
             var style: ?S = null;
@@ -1289,8 +1296,7 @@ pub fn eql(self: @This(), other: *const This) bool {
             return css.implementEql(@This(), self, other);
     }
 
-pub inline fn default(self: @This()) This {
-        _ = &self;
+pub inline fn default() This {
             return This{ .width = .medium, .style = S.default(), .color = CssColor.current_color };
     }
     pub const _p_val = PVal;
@@ -1306,14 +1312,18 @@ pub fn getFallbacks(self: *@This(), allocator: std.mem.Allocator, targets: css.T
             var fallbacks = ColorFallbackKind{  };
             _ = &fallbacks;
             inline for (fields) |field| {
+                _ = &field;
                 _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getNecessaryFallbacks(targets));
             }
-            var res = css.SmallList(T, 2){  };
+            var res = css.SmallList(T, 2);
             _ = &res;
+            {
+            }
             if (fallbacks.rgb) {
                 var out: T = undefined;
                 _ = &out;
                 inline for (fields) |field| {
+                    _ = &field;
                     @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .rgb = true });
                 }
                 _ = res.append(allocator, out);
@@ -1322,12 +1332,14 @@ pub fn getFallbacks(self: *@This(), allocator: std.mem.Allocator, targets: css.T
                 var out: T = undefined;
                 _ = &out;
                 inline for (fields) |field| {
+                    _ = &field;
                     @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .p3 = true });
                 }
                 _ = res.append(allocator, out);
             }
             if (fallbacks.lab) {
                 inline for (fields) |field| {
+                    _ = &field;
                     @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .lab = true });
                 }
             }

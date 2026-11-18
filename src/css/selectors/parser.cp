@@ -53,7 +53,7 @@ pub const attrs = struct {
                 return css.implementDeepClone(@This(), this, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
                 return css.implementHash(@This(), this, hasher);
             }
         };
@@ -108,7 +108,7 @@ pub const attrs = struct {
                 return css.implementDeepClone(@This(), this, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
                 return css.implementHash(@This(), this, hasher);
             }
         };
@@ -125,7 +125,7 @@ pub const attrs = struct {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
                 return css.implementHash(@This(), this, hasher);
             }
 
@@ -161,7 +161,7 @@ pub const attrs = struct {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
+            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
                 return css.implementHash(@This(), this, hasher);
             }
         };

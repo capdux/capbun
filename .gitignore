@@ -202,3 +202,4 @@ TASK_QUEUE.jsonl
 *.zig.map
 temp/
 
+__pycache__/

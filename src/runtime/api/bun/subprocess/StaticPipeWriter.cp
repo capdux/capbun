@@ -44,8 +44,8 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
                 this.writer.write();
         }
 
-        pub fn create(event_loop: anytype, subprocess: *ProcessType, result: StdioResult, source: Source) *This {
-            const this = bun.new(This, {
+        pub static fn create(event_loop: anytype, subprocess: *ProcessType, result: StdioResult, source: Source): *This {
+            let instance = bun.new(This, {
                 ref_count: .init(),
                 event_loop: jsc.EventLoopHandle.init(event_loop),
                 process: subprocess,
@@ -53,10 +53,10 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
                 source: source,
             });
             if (Environment.isWindows) {
-                this.writer.setPipe(this.stdio_result.buffer);
+                instance.writer.setPipe(instance.stdio_result.buffer);
             }
-            this.writer.setParent(this);
-            return this;
+            instance.writer.setParent(instance);
+            return instance;
         }
 
         pub fn start(this: *This) bun.sys.Maybe(void) {

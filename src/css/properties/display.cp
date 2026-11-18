@@ -228,7 +228,7 @@ pub const DisplayInside = union(enum) {
     grid,
     ruby,
 
-    pub fn parse(input: *css.Parser): css.Result(@This()) {
+    pub fn parse(input: *css.Parser) css.Result(@This()) {
         const displayInsideMap = bun.ComptimeStringMap(DisplayInside, .{
             .{ "flow", DisplayInside.flow },
             .{ "flow-root", DisplayInside.flow_root },
@@ -245,42 +245,43 @@ pub const DisplayInside = union(enum) {
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
             .result => |v| v,
-            .err => |e| return { err: e },
+            .err => |e| return .{ .err = e },
         };
 
-        if (value := displayInsideMap.getASCIIICaseInsensitive(ident)) {
-            return { result: value };
+        if (displayInsideMap.getASCIIICaseInsensitive(ident)) |value| {
+            return .{ .result = value };
         }
 
-        return { err: location.newUnexpectedTokenError({ ident: ident }) };
+        return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-    pub fn toCss(dest: *css.Printer): css.PrintErr!void {
-        switch (_.*) {
+    pub fn toCss(this: *const DisplayInside, dest: *css.Printer) css.PrintErr!void {
+        switch (this.*) {
             .flow => try dest.writeStr("flow"),
             .flow_root => try dest.writeStr("flow-root"),
             .table => try dest.writeStr("table"),
             .flex => |prefix| {
-                prefix.toCss(dest)?;
+                try prefix.toCss(dest);
                 if (prefix == css.VendorPrefix{ .ms = true }) {
-                    dest.writeStr("flexbox")?;
+                    try dest.writeStr("flexbox");
                 } else {
-                    dest.writeStr("flex")?;
+                    try dest.writeStr("flex");
                 }
             },
             .box => |prefix| {
-                prefix.toCss(dest)?;
-                dest.writeStr("box")?;
+                try prefix.toCss(dest);
+                try dest.writeStr("box");
             },
             .grid => try dest.writeStr("grid"),
             .ruby => try dest.writeStr("ruby"),
         }
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 };
 
-import bun from "bun";
+const bun = @import("bun");
+const std = @import("std");
 const Allocator = std.mem.Allocator;

@@ -29,8 +29,8 @@ fn parse(tag_str: string): ParsedETag {
 }
 
 fn weakMatch(tag1: string, is_weak1: bool, tag2: string, is_weak2: bool): bool {
-    _ = is_weak1;
-    _ = is_weak2;
+    * = is_weak1;
+    * = is_weak2;
     return std.mem.eql(u8, tag1, tag2);
 }
 

@@ -391,8 +391,7 @@ pub const CssModuleReference = union(enum) {
         return switch (this.*) {
             .local => |v| bun.strings.eql(v.name, other.local.name),
             .global => |v| bun.strings.eql(v.name, other.global.name),
-            // .dependency => |v| bun.strings.eql(v.name, other.dependency.name) and bun.strings.eql(v.specifier, other.dependency.specifier),
-            .dependency => |v| bun.strings.eql(v.name, other.dependency.name) && bun.strings.eql(v.specifier, other.dependency.specifier),
+            .dependency => |v| bun.strings.eql(v.name, other.dependency.name) and bun.strings.eql(v.specifier, other.dependency.specifier),
         };
     }
 };

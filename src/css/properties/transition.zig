@@ -12,8 +12,12 @@ const Time = css.css_values.time.Time;
 const EasingFunction = css.css_values.easing.EasingFunction;
 const VendorPrefix = css.VendorPrefix;
 const Feature = css.prefixes.Feature;
+const TransitionProperties = struct { SmallList(PropertyId, 1), VendorPrefix };
+const TransitionDurations = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionDelays = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionTimingFunctions = struct { SmallList(EasingFunction, 1), VendorPrefix };
 const LogicalPropertyId = union(enum) {
-    none: void,
+    none,
     block: struct { css.compat.Feature, []const PropertyId },
     @"inline": struct { css.compat.Feature, []const PropertyId, []const PropertyId },
 };
@@ -23,6 +27,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
@@ -105,10 +124,10 @@ pub fn toCss(self: Transition, dest: *Printer) PrintErr!void {
 };
 
 pub const TransitionHandler = struct {
-    properties: ?struct { SmallList(PropertyId, 1), VendorPrefix } = null,
-    durations: ?struct { SmallList(Time, 1), VendorPrefix } = null,
-    delays: ?struct { SmallList(Time, 1), VendorPrefix } = null,
-    timing_functions: ?struct { SmallList(EasingFunction, 1), VendorPrefix } = null,
+    properties: ?TransitionProperties = null,
+    durations: ?TransitionDurations = null,
+    delays: ?TransitionDelays = null,
+    timing_functions: ?TransitionTimingFunctions = null,
     has_any: bool = false,
 
 pub fn handleProperty(self: *TransitionHandler, prop: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
@@ -167,11 +186,12 @@ const val: *const SmallList(Transition,1) = (&x.*[0]);
             _ = self.property(dest, context, Feature.transition_timing_function, "timing_functions", timing_functions, vp);
 },
 .unparsed => |*x| {
-_ = (if (isTransitionProperty((&x.property_id))) blk: {
-            _ = self.flush(dest, context);
-            break :blk (blk_catch_0: { break :blk_catch_0 ((dest.append(context.allocator, .{ .unparsed = x.getPrefixed(context.allocator, context.targets, Feature.transition) })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-
-} else return false);
+if (isTransitionProperty((&x.property_id))) {
+                _ = self.flush(dest, context);
+                _ = (blk_catch_0: { break :blk_catch_0 ((dest.append(context.allocator, .{ .unparsed = x.getPrefixed(context.allocator, context.targets, Feature.transition) })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+            } else {
+                return false;
+            }
 },
 else => {
 return false;
@@ -221,13 +241,13 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 return;
             }
             self.has_any = false;
-            var _properties: ?struct { SmallList(PropertyId, 1), VendorPrefix } = bun.take((&self.properties));
+            var _properties: ?TransitionProperties = bun.take((&self.properties));
             _ = &_properties;
-            var _durations: ?struct { SmallList(Time, 1), VendorPrefix } = bun.take((&self.durations));
+            var _durations: ?TransitionDurations = bun.take((&self.durations));
             _ = &_durations;
-            var _delays: ?struct { SmallList(Time, 1), VendorPrefix } = bun.take((&self.delays));
+            var _delays: ?TransitionDelays = bun.take((&self.delays));
             _ = &_delays;
-            var _timing_functions: ?struct { SmallList(EasingFunction, 1), VendorPrefix } = bun.take((&self.timing_functions));
+            var _timing_functions: ?TransitionTimingFunctions = bun.take((&self.timing_functions));
             _ = &_timing_functions;
             var rtl_properties: ?SmallList(PropertyId,1) = null;
             _ = &rtl_properties;
@@ -246,10 +266,10 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 const timing_prefixes: *VendorPrefix = (&_timing_functions.?[1]);
                 const intersection = property_prefixes.bitwiseAnd(duration_prefixes.*).bitwiseAnd(delay_prefixes.*).bitwiseAnd(timing_prefixes.*);
                 if ((!intersection.isEmpty())) {
-                    const transitions = self.getTransitions(context, properties, durations, delays, timing_functions);
+                    const transitions = TransitionHandler.getTransitions(context, properties, durations, delays, timing_functions);
                     if (rtl_properties) |*rtl_properties2| {
                         _ = &rtl_properties2;
-                        const rtl_transitions = self.getTransitions(context, (rtl_properties2.*), durations, delays, timing_functions);
+                        const rtl_transitions = TransitionHandler.getTransitions(context, (rtl_properties2.*), durations, delays, timing_functions);
                         _ = context.addLogicalRule(context.allocator, Property{ .transition = .{ transitions, intersection } }, Property{ .transition = .{ rtl_transitions, intersection } });
                     } else {
                         _ = (blk_catch_1: { break :blk_catch_1 ((dest.append(context.allocator, Property{ .transition = .{ transitions.deepClone(context.allocator), intersection } })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
@@ -301,8 +321,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
             _ = self.reset();
     }
 
-pub inline fn getTransitions(self: TransitionHandler, context: *const css.PropertyHandlerContext, properties: *SmallList(PropertyId,1), durations: *SmallList(Time,1), delays: *SmallList(Time,1), timing_functions: *SmallList(EasingFunction,1)) SmallList(Transition,1) {
-        _ = &self;
+pub inline fn getTransitions(context: *const css.PropertyHandlerContext, properties: *SmallList(PropertyId,1), durations: *SmallList(Time,1), delays: *SmallList(Time,1), timing_functions: *SmallList(EasingFunction,1)) SmallList(Transition,1) {
             const cycleBump = struct {
 
 pub inline fn cycleBump(idx: *u32, len: u32) void {
@@ -355,7 +374,7 @@ pub fn reset(self: *TransitionHandler) void {
 };
 
 
-pub fn expandProperties(properties: *css.SmallList(PropertyId,1), context: *css.PropertyHandlerContext) ?css.SmallList(PropertyId,1) {
+pub fn expandProperties(properties: *SmallList(PropertyId,1), context: *css.PropertyHandlerContext) ?SmallList(PropertyId,1) {
         const replace = struct {
 
 pub inline fn replace(allocator: Allocator, propertiez: anytype, props: []const PropertyId, i: u32) void {
@@ -420,59 +439,59 @@ pub inline fn replace(allocator: Allocator, propertiez: anytype, props: []const 
 
 pub fn getLogicalProperties(property_id: *const PropertyId) LogicalPropertyId {
         return (switch (property_id.*) {
-.@"block-size" => .{ .block = .{ .logical_size, (&.{ .height }) } },
-.@"inline-size" => .{ .@"inline" = .{ .logical_size, (&.{ .width }), (&.{ .height }) } },
-.@"min-block-size" => .{ .block = .{ .logical_size, (&.{ .@"min-height" }) } },
-.@"max-block-size" => .{ .block = .{ .logical_size, (&.{ .@"max-height" }) } },
-.@"min-inline-size" => .{ .@"inline" = .{ .logical_size, (&.{ .@"min-width" }), (&.{ .@"min-height" }) } },
-.@"max-inline-size" => .{ .@"inline" = .{ .logical_size, (&.{ .@"max-width" }), (&.{ .@"max-height" }) } },
-.@"inset-block-start" => .{ .block = .{ .logical_inset, (&.{ .top }) } },
-.@"inset-block-end" => .{ .block = .{ .logical_inset, (&.{ .bottom }) } },
-.@"inset-inline-start" => .{ .@"inline" = .{ .logical_inset, (&.{ .left }), (&.{ .right }) } },
-.@"inset-inline-end" => .{ .@"inline" = .{ .logical_inset, (&.{ .right }), (&.{ .left }) } },
-.@"inset-block" => .{ .block = .{ .logical_inset, (&.{ .top, .bottom }) } },
-.@"inset-inline" => .{ .block = .{ .logical_inset, (&.{ .left, .right }) } },
-.inset => .{ .block = .{ .logical_inset, (&.{ .top, .bottom, .left, .right }) } },
-.@"margin-block-start" => .{ .block = .{ .logical_margin, (&.{ .@"margin-top" }) } },
-.@"margin-block-end" => .{ .block = .{ .logical_margin, (&.{ .@"margin-bottom" }) } },
-.@"margin-inline-start" => .{ .@"inline" = .{ .logical_margin, (&.{ .@"margin-left" }), (&.{ .@"margin-right" }) } },
-.@"margin-inline-end" => .{ .@"inline" = .{ .logical_margin, (&.{ .@"margin-right" }), (&.{ .@"margin-left" }) } },
-.@"margin-block" => .{ .block = .{ .logical_margin, (&.{ .@"margin-top", .@"margin-bottom" }) } },
-.@"margin-inline" => .{ .block = .{ .logical_margin, (&.{ .@"margin-left", .@"margin-right" }) } },
-.@"padding-block-start" => .{ .block = .{ .logical_padding, (&.{ .@"padding-top" }) } },
-.@"padding-block-end" => .{ .block = .{ .logical_padding, (&.{ .@"padding-bottom" }) } },
-.@"padding-inline-start" => .{ .@"inline" = .{ .logical_padding, (&.{ .@"padding-left" }), (&.{ .@"padding-right" }) } },
-.@"padding-inline-end" => .{ .@"inline" = .{ .logical_padding, (&.{ .@"padding-right" }), (&.{ .@"padding-left" }) } },
-.@"padding-block" => .{ .block = .{ .logical_padding, (&.{ .@"padding-top", .@"padding-bottom" }) } },
-.@"padding-inline" => .{ .block = .{ .logical_padding, (&.{ .@"padding-left", .@"padding-right" }) } },
-.@"border-block-start" => .{ .block = .{ .logical_borders, (&.{ .@"border-top" }) } },
-.@"border-block-start-width" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-width" }) } },
-.@"border-block-start-color" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-color" }) } },
-.@"border-block-start-style" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-style" }) } },
-.@"border-block-end" => .{ .block = .{ .logical_borders, (&.{ .@"border-bottom" }) } },
-.@"border-block-end-width" => .{ .block = .{ .logical_borders, (&.{ .@"border-bottom-width" }) } },
-.@"border-block-end-color" => .{ .block = .{ .logical_borders, (&.{ .@"border-bottom-color" }) } },
-.@"border-block-end-style" => .{ .block = .{ .logical_borders, (&.{ .@"border-bottom-style" }) } },
-.@"border-inline-start" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left" }), (&.{ .@"border-right" }) } },
-.@"border-inline-start-width" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-width" }), (&.{ .@"border-right-width" }) } },
-.@"border-inline-start-color" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-color" }), (&.{ .@"border-right-color" }) } },
-.@"border-inline-start-style" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-style" }), (&.{ .@"border-right-style" }) } },
-.@"border-inline-end" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right" }), (&.{ .@"border-left" }) } },
-.@"border-inline-end-width" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-width" }), (&.{ .@"border-left-width" }) } },
-.@"border-inline-end-color" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-color" }), (&.{ .@"border-left-color" }) } },
-.@"border-inline-end-style" => .{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-style" }), (&.{ .@"border-left-style" }) } },
-.@"border-block" => .{ .block = .{ .logical_borders, (&.{ .@"border-top", .@"border-bottom" }) } },
-.@"border-block-color" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-color", .@"border-bottom-color" }) } },
-.@"border-block-width" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-width", .@"border-bottom-width" }) } },
-.@"border-block-style" => .{ .block = .{ .logical_borders, (&.{ .@"border-top-style", .@"border-bottom-style" }) } },
-.@"border-inline" => .{ .block = .{ .logical_borders, (&.{ .@"border-left", .@"border-right" }) } },
-.@"border-inline-color" => .{ .block = .{ .logical_borders, (&.{ .@"border-left-color", .@"border-right-color" }) } },
-.@"border-inline-width" => .{ .block = .{ .logical_borders, (&.{ .@"border-left-width", .@"border-right-width" }) } },
-.@"border-inline-style" => .{ .block = .{ .logical_borders, (&.{ .@"border-left-style", .@"border-right-style" }) } },
-.@"border-start-start-radius" => .{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-top-left-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-top-right-radius" = VendorPrefix.NONE } }) } },
-.@"border-start-end-radius" => .{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-top-right-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-top-left-radius" = VendorPrefix.NONE } }) } },
-.@"border-end-start-radius" => .{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-bottom-left-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-bottom-right-radius" = VendorPrefix.NONE } }) } },
-.@"border-end-end-radius" => .{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-bottom-right-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-bottom-left-radius" = VendorPrefix.NONE } }) } },
+.@"block-size" => LogicalPropertyId{ .block = .{ .logical_size, (&.{ .height }) } },
+.@"inline-size" => LogicalPropertyId{ .@"inline" = .{ .logical_size, (&.{ .width }), (&.{ .height }) } },
+.@"min-block-size" => LogicalPropertyId{ .block = .{ .logical_size, (&.{ .@"min-height" }) } },
+.@"max-block-size" => LogicalPropertyId{ .block = .{ .logical_size, (&.{ .@"max-height" }) } },
+.@"min-inline-size" => LogicalPropertyId{ .@"inline" = .{ .logical_size, (&.{ .@"min-width" }), (&.{ .@"min-height" }) } },
+.@"max-inline-size" => LogicalPropertyId{ .@"inline" = .{ .logical_size, (&.{ .@"max-width" }), (&.{ .@"max-height" }) } },
+.@"inset-block-start" => LogicalPropertyId{ .block = .{ .logical_inset, (&.{ .top }) } },
+.@"inset-block-end" => LogicalPropertyId{ .block = .{ .logical_inset, (&.{ .bottom }) } },
+.@"inset-inline-start" => LogicalPropertyId{ .@"inline" = .{ .logical_inset, (&.{ .left }), (&.{ .right }) } },
+.@"inset-inline-end" => LogicalPropertyId{ .@"inline" = .{ .logical_inset, (&.{ .right }), (&.{ .left }) } },
+.@"inset-block" => LogicalPropertyId{ .block = .{ .logical_inset, (&.{ .top, .bottom }) } },
+.@"inset-inline" => LogicalPropertyId{ .block = .{ .logical_inset, (&.{ .left, .right }) } },
+.inset => LogicalPropertyId{ .block = .{ .logical_inset, (&.{ .top, .bottom, .left, .right }) } },
+.@"margin-block-start" => LogicalPropertyId{ .block = .{ .logical_margin, (&.{ .@"margin-top" }) } },
+.@"margin-block-end" => LogicalPropertyId{ .block = .{ .logical_margin, (&.{ .@"margin-bottom" }) } },
+.@"margin-inline-start" => LogicalPropertyId{ .@"inline" = .{ .logical_margin, (&.{ .@"margin-left" }), (&.{ .@"margin-right" }) } },
+.@"margin-inline-end" => LogicalPropertyId{ .@"inline" = .{ .logical_margin, (&.{ .@"margin-right" }), (&.{ .@"margin-left" }) } },
+.@"margin-block" => LogicalPropertyId{ .block = .{ .logical_margin, (&.{ .@"margin-top", .@"margin-bottom" }) } },
+.@"margin-inline" => LogicalPropertyId{ .block = .{ .logical_margin, (&.{ .@"margin-left", .@"margin-right" }) } },
+.@"padding-block-start" => LogicalPropertyId{ .block = .{ .logical_padding, (&.{ .@"padding-top" }) } },
+.@"padding-block-end" => LogicalPropertyId{ .block = .{ .logical_padding, (&.{ .@"padding-bottom" }) } },
+.@"padding-inline-start" => LogicalPropertyId{ .@"inline" = .{ .logical_padding, (&.{ .@"padding-left" }), (&.{ .@"padding-right" }) } },
+.@"padding-inline-end" => LogicalPropertyId{ .@"inline" = .{ .logical_padding, (&.{ .@"padding-right" }), (&.{ .@"padding-left" }) } },
+.@"padding-block" => LogicalPropertyId{ .block = .{ .logical_padding, (&.{ .@"padding-top", .@"padding-bottom" }) } },
+.@"padding-inline" => LogicalPropertyId{ .block = .{ .logical_padding, (&.{ .@"padding-left", .@"padding-right" }) } },
+.@"border-block-start" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top" }) } },
+.@"border-block-start-width" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-width" }) } },
+.@"border-block-start-color" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-color" }) } },
+.@"border-block-start-style" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-style" }) } },
+.@"border-block-end" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-bottom" }) } },
+.@"border-block-end-width" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-bottom-width" }) } },
+.@"border-block-end-color" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-bottom-color" }) } },
+.@"border-block-end-style" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-bottom-style" }) } },
+.@"border-inline-start" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left" }), (&.{ .@"border-right" }) } },
+.@"border-inline-start-width" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-width" }), (&.{ .@"border-right-width" }) } },
+.@"border-inline-start-color" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-color" }), (&.{ .@"border-right-color" }) } },
+.@"border-inline-start-style" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-left-style" }), (&.{ .@"border-right-style" }) } },
+.@"border-inline-end" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right" }), (&.{ .@"border-left" }) } },
+.@"border-inline-end-width" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-width" }), (&.{ .@"border-left-width" }) } },
+.@"border-inline-end-color" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-color" }), (&.{ .@"border-left-color" }) } },
+.@"border-inline-end-style" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ .@"border-right-style" }), (&.{ .@"border-left-style" }) } },
+.@"border-block" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top", .@"border-bottom" }) } },
+.@"border-block-color" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-color", .@"border-bottom-color" }) } },
+.@"border-block-width" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-width", .@"border-bottom-width" }) } },
+.@"border-block-style" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-top-style", .@"border-bottom-style" }) } },
+.@"border-inline" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-left", .@"border-right" }) } },
+.@"border-inline-color" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-left-color", .@"border-right-color" }) } },
+.@"border-inline-width" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-left-width", .@"border-right-width" }) } },
+.@"border-inline-style" => LogicalPropertyId{ .block = .{ .logical_borders, (&.{ .@"border-left-style", .@"border-right-style" }) } },
+.@"border-start-start-radius" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-top-left-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-top-right-radius" = VendorPrefix.NONE } }) } },
+.@"border-start-end-radius" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-top-right-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-top-left-radius" = VendorPrefix.NONE } }) } },
+.@"border-end-start-radius" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-bottom-left-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-bottom-right-radius" = VendorPrefix.NONE } }) } },
+.@"border-end-end-radius" => LogicalPropertyId{ .@"inline" = .{ .logical_borders, (&.{ PropertyId{ .@"border-bottom-right-radius" = VendorPrefix.NONE } }), (&.{ PropertyId{ .@"border-bottom-left-radius" = VendorPrefix.NONE } }) } },
 else => .none,
 });
 }

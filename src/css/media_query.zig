@@ -34,6 +34,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
@@ -106,6 +121,47 @@ pub fn hash(self: Qualifier, hasher: anytype) void {
     }
 };
 
+pub const MediaType = union(enum) {
+    all,
+    print,
+    screen,
+    custom: []const u8,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+
+pub fn parse(input: *css.Parser) Result(MediaType) {
+            const ident = (switch (input.expectIdent()) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            return .{ .result = MediaType.fromStr(ident) };
+    }
+
+pub fn fromStr(ident: []const u8) MediaType {
+            const Enumerations = enum { all, print, screen };
+            const Map = (comptime bun.ComptimeEnumMap(Enumerations));
+            if (Map.getASCIIICaseInsensitive(ident)) |x| {
+                _ = &x;
+                return (switch (x) {
+.all => .all,
+.print => .print,
+.screen => .screen,
+});
+            }
+            return .{ .custom = ident };
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn hash(self: MediaType, hasher: anytype) void {
+            return css.implementHash(@This(), (&self), hasher);
+    }
+};
+
 pub const MediaCondition = union(enum) {
     feature: MediaFeature,
     not: *MediaCondition,
@@ -129,8 +185,7 @@ _ = try operationToCss(MediaCondition, operation.operator, (&operation.condition
             return;
     }
 
-pub fn parseFeature(self: MediaCondition, input: *css.Parser) Result(MediaCondition) {
-        _ = &self;
+pub fn parseFeature(input: *css.Parser) Result(MediaCondition) {
             const feature = (switch (MediaFeature.parse(input)) {
 .err => |e| {
 return .{ .err = e };
@@ -140,18 +195,15 @@ return .{ .err = e };
             return .{ .result = MediaCondition{ .feature = feature } };
     }
 
-pub fn createNegation(self: MediaCondition, condition: *MediaCondition) MediaCondition {
-        _ = &self;
+pub fn createNegation(condition: *MediaCondition) MediaCondition {
             return MediaCondition{ .not = condition };
     }
 
-pub fn createOperation(self: MediaCondition, operator: Operator, conditions: ArrayList(MediaCondition)) MediaCondition {
-        _ = &self;
+pub fn createOperation(operator: Operator, conditions: ArrayList(MediaCondition)) MediaCondition {
             return MediaCondition{ .operation = .{ .operator = operator, .conditions = conditions } };
     }
 
-pub fn parseStyleQuery(self: MediaCondition, input: *css.Parser) Result(MediaCondition) {
-        _ = &self;
+pub fn parseStyleQuery(input: *css.Parser) Result(MediaCondition) {
             return .{ .err = input.newErrorForNextToken() };
     }
 
@@ -163,8 +215,7 @@ pub fn needsParens(self: MediaCondition, parent_operator: ?Operator, targets: *c
 });
     }
 
-pub fn parseWithFlags(self: MediaCondition, input: *css.Parser, flags: QueryConditionFlags) Result(MediaCondition) {
-        _ = &self;
+pub fn parseWithFlags(input: *css.Parser, flags: QueryConditionFlags) Result(MediaCondition) {
             return parseQueryCondition(MediaCondition, input, flags);
     }
 
@@ -176,8 +227,7 @@ pub fn deepClone(self: MediaCondition, allocator: std.mem.Allocator) MediaCondit
 });
     }
 
-pub fn eql(self: MediaCondition, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -328,8 +378,7 @@ pub const MediaFeatureValue = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn eql(self: MediaFeatureValue, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -625,7 +674,7 @@ pub fn deepClone(self: MediaList, allocator: std.mem.Allocator) MediaList {
             return MediaList{ .media_queries = css.deepClone(MediaQuery, allocator, (&self.media_queries)) };
     }
 
-pub fn cloneWithImportRecords(self: MediaList, allocator: std.mem.Allocator) @This() {
+pub fn cloneWithImportRecords(self: MediaList, allocator: std.mem.Allocator, _: *bun.BabyList(bun.ImportRecord)) @This() {
             return self.deepClone(allocator);
     }
 
@@ -718,7 +767,7 @@ return .{ .err = e };
 },
 else => unreachable,
 }) else null));
-            const media_type = ((explicit_media_type) orelse (MediaType.all));
+            const media_type = ((explicit_media_type) orelse (MediaType{ .all = {} }));
             return .{ .result = MediaQuery{ .qualifier = qualifier, .media_type = media_type, .condition = condition } };
     }
 
@@ -761,52 +810,11 @@ pub fn neverMatches(self: MediaQuery) bool {
     const This = @This();
 };
 
-pub const MediaType = union(enum) {
-    all: void,
-    print: void,
-    screen: void,
-    custom: []const u8,
-
-pub fn parse(input: *css.Parser) Result(MediaType) {
-            const ident = (switch (input.expectIdent()) {
-.result => |v| v,
-.err => |e| {
-return .{ .err = e };
-},
-});
-            return .{ .result = MediaType.fromStr(ident) };
-    }
-
-pub fn fromStr(ident: []const u8) MediaType {
-            const Enumerations = enum { all, print, screen };
-            const Map = (comptime bun.ComptimeEnumMap(Enumerations));
-            if (Map.getASCIIICaseInsensitive(ident)) |x| {
-                _ = &x;
-                return (switch (x) {
-.all => .all,
-.print => .print,
-.screen => .screen,
-});
-            }
-            return .{ .custom = ident };
-    }
-
-pub fn eql(self: *const MediaType, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
-
-pub fn hash(self: *const MediaType, hasher: anytype) void {
-            return css.implementHash(@This(), (&self), hasher);
-    }
-};
-
 pub const MediaConditionOperation = struct {
     operator: Operator,
     conditions: ArrayList(MediaCondition),
 
-pub fn eql(self: MediaConditionOperation, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 };
@@ -1380,8 +1388,7 @@ pub fn MediaFeatureName(comptime FeatureId: type) type {
     custom: DashedIdent,
     unknown: Ident,
 
-pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
-        _ = &self;
+pub fn eql(lhs: *const This, rhs: *const This) bool {
             if ((@intFromEnum(lhs.*) != @intFromEnum(rhs.*))) {
                 return false;
             }
@@ -1425,8 +1432,7 @@ pub fn toCssWithPrefix(self: @This(), prefix: []const u8, dest: *Printer) PrintE
 });
     }
 
-pub fn parse(self: @This(), input: *css.Parser) Result(struct{This,?MediaFeatureComparison}) {
-        _ = &self;
+pub fn parse(input: *css.Parser) Result(struct{This,?MediaFeatureComparison}) {
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
 return .{ .err = e };

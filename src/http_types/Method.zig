@@ -70,144 +70,67 @@ pub fn which(str: []const u8) ?Method {
     
     pub const Set = std.enums.EnumSet(Method);
     
-    const with_body: Set = brk: {
+    pub const with_body: Set = brk: {
             var values = Set.initFull();
-            values.remove(.HEAD);
-            values.remove(.TRACE);
+            _ = &values;
+            _ = values.remove(.HEAD);
+            _ = values.remove(.TRACE);
             break :brk values;
-        };
+    };
     
-    const with_request_body: Set = brk: {
+    pub const with_request_body: Set = brk: {
             var values = Set.initFull();
-            values.remove(.GET);
-            values.remove(.HEAD);
-            values.remove(.OPTIONS);
-            values.remove(.TRACE);
+            _ = &values;
+            _ = values.remove(.GET);
+            _ = values.remove(.HEAD);
+            _ = values.remove(.OPTIONS);
+            _ = values.remove(.TRACE);
             break :brk values;
-        };
+    };
     
-    const idempotent: Set = brk: {
+    pub const idempotent: Set = brk: {
             var values = Set.initEmpty();
-            values.insert(.GET);
-            values.insert(.HEAD);
-            values.insert(.PUT);
-            values.insert(.DELETE);
-            values.insert(.OPTIONS);
-            values.insert(.TRACE);
-            values.insert(.QUERY);
+            _ = &values;
+            _ = values.insert(.GET);
+            _ = values.insert(.HEAD);
+            _ = values.insert(.PUT);
+            _ = values.insert(.DELETE);
+            _ = values.insert(.OPTIONS);
+            _ = values.insert(.TRACE);
+            _ = values.insert(.QUERY);
             break :brk values;
-        };
+    };
     
-    const Map = bun.ComptimeStringMap(Method, .{
-            .{ "ACL", Method.ACL },
-            .{ "BIND", Method.BIND },
-            .{ "CHECKOUT", Method.CHECKOUT },
-            .{ "CONNECT", Method.CONNECT },
-            .{ "COPY", Method.COPY },
-            .{ "DELETE", Method.DELETE },
-            .{ "GET", Method.GET },
-            .{ "HEAD", Method.HEAD },
-            .{ "LINK", Method.LINK },
-            .{ "LOCK", Method.LOCK },
-            .{ "M-SEARCH", Method.@"M-SEARCH" },
-            .{ "MERGE", Method.MERGE },
-            .{ "MKACTIVITY", Method.MKACTIVITY },
-            .{ "MKADDRESSBOOK", Method.MKADDRESSBOOK },
-            .{ "MKCALENDAR", Method.MKCALENDAR },
-            .{ "MKCOL", Method.MKCOL },
-            .{ "MOVE", Method.MOVE },
-            .{ "NOTIFY", Method.NOTIFY },
-            .{ "OPTIONS", Method.OPTIONS },
-            .{ "PATCH", Method.PATCH },
-            .{ "POST", Method.POST },
-            .{ "PROPFIND", Method.PROPFIND },
-            .{ "PROPPATCH", Method.PROPPATCH },
-            .{ "PURGE", Method.PURGE },
-            .{ "PUT", Method.PUT },
-            .{ "QUERY", Method.QUERY },
-            .{ "REBIND", Method.REBIND },
-            .{ "REPORT", Method.REPORT },
-            .{ "SEARCH", Method.SEARCH },
-            .{ "SOURCE", Method.SOURCE },
-            .{ "SUBSCRIBE", Method.SUBSCRIBE },
-            .{ "TRACE", Method.TRACE },
-            .{ "UNBIND", Method.UNBIND },
-            .{ "UNLINK", Method.UNLINK },
-            .{ "UNLOCK", Method.UNLOCK },
-            .{ "UNSUBSCRIBE", Method.UNSUBSCRIBE },
-    
-            .{ "acl", Method.ACL },
-            .{ "bind", Method.BIND },
-            .{ "checkout", Method.CHECKOUT },
-            .{ "connect", Method.CONNECT },
-            .{ "copy", Method.COPY },
-            .{ "delete", Method.DELETE },
-            .{ "get", Method.GET },
-            .{ "head", Method.HEAD },
-            .{ "link", Method.LINK },
-            .{ "lock", Method.LOCK },
-            .{ "m-search", Method.@"M-SEARCH" },
-            .{ "merge", Method.MERGE },
-            .{ "mkactivity", Method.MKACTIVITY },
-            .{ "mkaddressbook", Method.MKADDRESSBOOK },
-            .{ "mkcalendar", Method.MKCALENDAR },
-            .{ "mkcol", Method.MKCOL },
-            .{ "move", Method.MOVE },
-            .{ "notify", Method.NOTIFY },
-            .{ "options", Method.OPTIONS },
-            .{ "patch", Method.PATCH },
-            .{ "post", Method.POST },
-            .{ "propfind", Method.PROPFIND },
-            .{ "proppatch", Method.PROPPATCH },
-            .{ "purge", Method.PURGE },
-            .{ "put", Method.PUT },
-            .{ "query", Method.QUERY },
-            .{ "rebind", Method.REBIND },
-            .{ "report", Method.REPORT },
-            .{ "search", Method.SEARCH },
-            .{ "source", Method.SOURCE },
-            .{ "subscribe", Method.SUBSCRIBE },
-            .{ "trace", Method.TRACE },
-            .{ "unbind", Method.UNBIND },
-            .{ "unlink", Method.UNLINK },
-            .{ "unlock", Method.UNLOCK },
-            .{ "unsubscribe", Method.UNSUBSCRIBE },
-        });
+    pub const Map = bun.ComptimeStringMap(Method, .{ .{ "ACL", Method.ACL }, .{ "BIND", Method.BIND }, .{ "CHECKOUT", Method.CHECKOUT }, .{ "CONNECT", Method.CONNECT }, .{ "COPY", Method.COPY }, .{ "DELETE", Method.DELETE }, .{ "GET", Method.GET }, .{ "HEAD", Method.HEAD }, .{ "LINK", Method.LINK }, .{ "LOCK", Method.LOCK }, .{ "M-SEARCH", Method.@"M-SEARCH" }, .{ "MERGE", Method.MERGE }, .{ "MKACTIVITY", Method.MKACTIVITY }, .{ "MKADDRESSBOOK", Method.MKADDRESSBOOK }, .{ "MKCALENDAR", Method.MKCALENDAR }, .{ "MKCOL", Method.MKCOL }, .{ "MOVE", Method.MOVE }, .{ "NOTIFY", Method.NOTIFY }, .{ "OPTIONS", Method.OPTIONS }, .{ "PATCH", Method.PATCH }, .{ "POST", Method.POST }, .{ "PROPFIND", Method.PROPFIND }, .{ "PROPPATCH", Method.PROPPATCH }, .{ "PURGE", Method.PURGE }, .{ "PUT", Method.PUT }, .{ "QUERY", Method.QUERY }, .{ "REBIND", Method.REBIND }, .{ "REPORT", Method.REPORT }, .{ "SEARCH", Method.SEARCH }, .{ "SOURCE", Method.SOURCE }, .{ "SUBSCRIBE", Method.SUBSCRIBE }, .{ "TRACE", Method.TRACE }, .{ "UNBIND", Method.UNBIND }, .{ "UNLINK", Method.UNLINK }, .{ "UNLOCK", Method.UNLOCK }, .{ "UNSUBSCRIBE", Method.UNSUBSCRIBE }, .{ "acl", Method.ACL }, .{ "bind", Method.BIND }, .{ "checkout", Method.CHECKOUT }, .{ "connect", Method.CONNECT }, .{ "copy", Method.COPY }, .{ "delete", Method.DELETE }, .{ "get", Method.GET }, .{ "head", Method.HEAD }, .{ "link", Method.LINK }, .{ "lock", Method.LOCK }, .{ "m-search", Method.@"M-SEARCH" }, .{ "merge", Method.MERGE }, .{ "mkactivity", Method.MKACTIVITY }, .{ "mkaddressbook", Method.MKADDRESSBOOK }, .{ "mkcalendar", Method.MKCALENDAR }, .{ "mkcol", Method.MKCOL }, .{ "move", Method.MOVE }, .{ "notify", Method.NOTIFY }, .{ "options", Method.OPTIONS }, .{ "patch", Method.PATCH }, .{ "post", Method.POST }, .{ "propfind", Method.PROPFIND }, .{ "proppatch", Method.PROPPATCH }, .{ "purge", Method.PURGE }, .{ "put", Method.PUT }, .{ "query", Method.QUERY }, .{ "rebind", Method.REBIND }, .{ "report", Method.REPORT }, .{ "search", Method.SEARCH }, .{ "source", Method.SOURCE }, .{ "subscribe", Method.SUBSCRIBE }, .{ "trace", Method.TRACE }, .{ "unbind", Method.UNBIND }, .{ "unlink", Method.UNLINK }, .{ "unlock", Method.UNLOCK }, .{ "unsubscribe", Method.UNSUBSCRIBE } });
     
     pub const toJS = @import("../http_jsc/method_jsc.zig").toJS;
     
     pub const Optional = union(enum) {
-            any: void,
-            method: Set,
+        any: void,
+        method: Set,
     
-            pub fn contains(this: Optional, other: Optional) bool {
-                if (this == .any) {
-                    return true;
-                }
-                if (other == .any) {
-                    return true;
-                }
+    pub fn contains(self: @This(), other: Optional) bool {
+                return (self.method.intersectWith(other.method).count() > 0);
+        }
     
-                return this.method.intersectWith(other.method).count() > 0;
-            }
+    pub fn insert(self: *@This(), method: Method) void {
+                switch (self.*) {
+    .any => {
     
-            pub fn insert(this: *Optional, method: Method) void {
-                switch (this.*) {
-                    .any => {},
-                    .method => |*set| {
-                        set.insert(method);
-                        if (set.eql(Set.initFull())) {
-                            this.* = .any;
-                        }
-                    },
+    },
+    .method => |*set| {
+    _ = set.insert(method);
+                if (set.eql(Set.initFull())) {
                 }
-            }
-        };
+    },
+    }
+        }
+    };
 };
 
 
 pub fn Bun__HTTPMethod__from(str: [*]const u8, len: usize) i16 {
-        var method: ?Method = Method{ .find = str[0..len] };
+        var method: ?Method = Method.find(str[0..len]);
         _ = &method;
         if ((method == null)) {
             return -1;

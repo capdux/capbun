@@ -33,8 +33,8 @@ pub fn parse(tag_str: []const u8) ParsedETag {
 }
 
 pub fn weakMatch(tag1: []const u8, is_weak1: bool, tag2: []const u8, is_weak2: bool) bool {
-        _ = is_weak1;
-        _ = is_weak2;
+        _ = &is_weak1;
+        _ = &is_weak2;
         return std.mem.eql(u8, tag1, tag2);
 }
 

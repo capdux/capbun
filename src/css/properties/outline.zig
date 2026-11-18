@@ -9,13 +9,11 @@ pub const OutlineStyle = union(enum) {
     auto: void,
     line_style: LineStyle,
 
-pub fn default(self: @This()) @This() {
-        _ = &self;
+pub fn default() @This() {
             return .{ .line_style = .none };
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 

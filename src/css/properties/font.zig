@@ -11,74 +11,79 @@ const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const Percentage = css.css_values.percentage.Percentage;
 const Angle = css.css_values.angle.Angle;
 pub const FontWeight = union(enum) {
+    /// An absolute font weight.
     absolute: AbsoluteFontWeight,
-    bolder: void,
-    lighter: void,
+    /// The `bolder` keyword.
+    bolder,
+    /// The `lighter` keyword.
+    lighter,
 
-pub inline fn default(self: @This()) FontWeight {
-        _ = &self;
-            return .{ .absolute = AbsoluteFontWeight.default() };
-    }
-
-pub fn isCompatible(self: @This(), this_fw: *const FontWeight, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
-            return (switch (this_fw.*) {
-.absolute => |*a| a.isCompatible(browsers),
-.bolder, .lighter => true,
-});
-    }
-
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
+    // TODO: implement this
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
+
+    pub inline fn default() FontWeight {
+        return .{ .absolute = AbsoluteFontWeight.default() };
+    }
+
+    pub fn isCompatible(this_fw: *const FontWeight, browsers: bun.css.targets.Browsers) bool {
+        return switch (this_fw.*) {
+            .absolute => |*a| a.isCompatible(browsers),
+            .bolder, .lighter => true,
+        };
+    }
+
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
 };
 pub const AbsoluteFontWeight = union(enum) {
+    /// An explicit weight.
     weight: CSSNumber,
-    normal: void,
-    bold: void,
+    /// Same as `400`.
+    normal,
+    /// Same as `700`.
+    bold,
 
-pub fn toCss(self: @This(), this_afw: *const AbsoluteFontWeight, dest: *css.Printer) css.PrintErr!void {
-        _ = &self;
-            return (switch (this_afw.*) {
-.weight => |*weight| CSSNumberFns.toCss(weight, dest),
-.normal => try dest.writeStr((if (dest.minify) "400" else "normal")),
-.bold => try dest.writeStr((if (dest.minify) "700" else "bold")),
-});
-    }
-
-pub fn isCompatible(self: @This(), this_afw: *const AbsoluteFontWeight, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
-            return (switch (this_afw.*) {
-.weight => |*val| (if ((!(((val.* >= 100.0) and (val.* <= 900.0)) and (@mod(val.*, 100.0) == 0.0)))) css.Feature.font_weight_number.isCompatible(browsers) else true),
-else => true,
-});
-    }
-
-pub inline fn default(self: @This()) AbsoluteFontWeight {
-        _ = &self;
-            return .normal;
-    }
-
-pub fn eql(self: @This(), lhs: *const AbsoluteFontWeight, rhs: *const AbsoluteFontWeight) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
     pub const parse = css.DeriveParse(@This()).parse;
+
+    pub fn toCss(this_afw: *const AbsoluteFontWeight, dest: *css.Printer) css.PrintErr!void {
+        return switch (this_afw.*) {
+            .weight => |*weight| CSSNumberFns.toCss(weight, dest),
+            .normal => try dest.writeStr(if (dest.minify) "400" else "normal"),
+            .bold => try dest.writeStr(if (dest.minify) "700" else "bold"),
+        };
+    }
+
+    pub fn isCompatible(this_afw: *const AbsoluteFontWeight, browsers: bun.css.targets.Browsers) bool {
+        return switch (this_afw.*) {
+            // Older browsers only supported 100, 200, 300, ...900 rather than arbitrary values.
+            .weight => |*val| if (!((val.* >= 100.0 and val.* <= 900.0) and @mod(val.*, 100.0) == 0.0))
+                css.Feature.font_weight_number.isCompatible(browsers)
+            else
+                true,
+            else => true,
+        };
+    }
+
+    pub inline fn default() AbsoluteFontWeight {
+        return .normal;
+    }
+
+    pub fn eql(lhs: *const AbsoluteFontWeight, rhs: *const AbsoluteFontWeight) bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
 };
 pub const FontSize = union(enum) {
     length: LengthPercentage,
     absolute: AbsoluteFontSize,
     relative: RelativeFontSize,
 
-pub fn isCompatible(self: @This(), this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
+pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
             return (switch (this_lh.*) {
 .length => |*l| (switch (l.*) {
 .dimension => |*d| (switch (d.*) {
@@ -92,8 +97,7 @@ else => l.isCompatible(browsers),
 });
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -125,16 +129,14 @@ pub fn intoPercentage(self: @This()) Percentage {
 });
     }
 
-pub fn isCompatible(self: @This(), this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
+pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
             return (switch (this_lh.*) {
 .percentage => css.Feature.font_stretch_percentage.isCompatible(browsers),
 .keyword => true,
 });
     }
 
-pub fn eql(self: @This(), lhs: *const FontStretch, rhs: *const FontStretch) bool {
-        _ = &self;
+pub fn eql(lhs: *const FontStretch, rhs: *const FontStretch) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -142,8 +144,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
             return css.implementDeepClone(@This(), self, allocator);
     }
 
-pub inline fn default(self: @This()) FontStretch {
-        _ = &self;
+pub inline fn default() FontStretch {
             return .{ .keyword = FontStretchKeyword.default() };
     }
     pub const parse = css.DeriveParse(@This()).parse;
@@ -152,16 +153,14 @@ pub const FontFamily = union(enum) {
     generic: GenericFontFamily,
     family_name: []const u8,
 
-pub fn isCompatible(self: @This(), this_ff: *const FontFamily, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
+pub fn isCompatible(this_ff: *const FontFamily, browsers: bun.css.targets.Browsers) bool {
             return (switch (this_ff.*) {
 .generic => |g| g.isCompatible(browsers),
 .family_name => true,
 });
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -177,67 +176,71 @@ pub fn hash(self: *const @This(), hasher: anytype) void {
     pub const toCss = toCssFontFamily;
 };
 pub const FontStyle = union(enum) {
-    normal: void,
-    italic: void,
+    /// Normal font style.
+    normal,
+    /// Italic font style.
+    italic,
+    /// Oblique font style, with a custom angle.
     oblique: Angle,
 
-pub fn default(self: @This()) FontStyle {
-        _ = &self;
-            return .normal;
+    pub fn default() FontStyle {
+        return .normal;
     }
 
-pub fn isCompatible(self: @This(), this_fs: *const FontStyle, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
-            return (switch (this_fs.*) {
-.oblique => |*angle| (if ((!angle.eql((&FontStyle.defaultObliqueAngle())))) css.Feature.font_style_oblique_angle.isCompatible(browsers) else true),
-.normal, .italic => true,
-});
-    }
-
-pub fn defaultObliqueAngle(self: @This()) Angle {
-        _ = &self;
-            return Angle{ .deg = 14.0 };
-    }
-
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
     pub const parse = parseFontStyle;
     pub const toCss = toCssFontStyle;
+
+    pub fn isCompatible(this_fs: *const FontStyle, browsers: bun.css.targets.Browsers) bool {
+        return switch (this_fs.*) {
+            .oblique => |*angle| if (!angle.eql(&FontStyle.defaultObliqueAngle()))
+                css.Feature.font_style_oblique_angle.isCompatible(browsers)
+            else
+                true,
+            .normal, .italic => true,
+        };
+    }
+
+    pub fn defaultObliqueAngle() Angle {
+        return Angle{ .deg = 14.0 };
+    }
+
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
 };
 pub const LineHeight = union(enum) {
-    normal: void,
+    /// The UA sets the line height based on the font.
+    normal,
+    /// A multiple of the element's font size.
     number: CSSNumber,
+    /// An explicit height.
     length: LengthPercentage,
 
-pub fn isCompatible(self: @This(), this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
-        _ = &self;
-            return (switch (this_lh.*) {
-.length => |*l| l.isCompatible(browsers),
-.normal, .number => true,
-});
-    }
-
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-
-pub fn default(self: @This()) LineHeight {
-        _ = &self;
-            return .normal;
-    }
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
+
+    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
+        return switch (this_lh.*) {
+            .length => |*l| l.isCompatible(browsers),
+            .normal, .number => true,
+        };
+    }
+
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
+
+    pub fn default() LineHeight {
+        return .normal;
+    }
 };
 pub const VerticalAlign = union(enum) {
     keyword: VerticalAlignKeyword,
@@ -252,6 +255,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
@@ -652,8 +670,7 @@ pub const FontProperty = packed struct(u8) {
     @"font-variant-caps": bool = false,
     __unused: u1 = 0,
 
-pub fn tryFromPropertyId(self: FontProperty, property_id: css.PropertyIdTag) ?FontProperty {
-        _ = &self;
+pub fn tryFromPropertyId(property_id: css.PropertyIdTag) ?FontProperty {
             inline for (std.@"meta".fields(FontProperty)) |field| {
                 if (comptime std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "__unused")) {
                     continue;

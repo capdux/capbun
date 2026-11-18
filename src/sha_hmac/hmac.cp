@@ -1,12 +1,13 @@
-const bun = @import("bun");
+import bun from "bun";
 const boring = bun.BoringSSL.c;
 pub const Algorithm = bun.jsc.API.Bun.Crypto.EVP.Algorithm;
-pub type OutputBuffer = *[u8; boring.EVP_MAX_MD_SIZE];
+type string = []const u8;
+pub type OutputBuffer = *[boring.EVP_MAX_MD_SIZE]u8;
 
-pub fn generate(key: string, data: string, algorithm: Algorithm, out: OutputBuffer): ?string {
+pub fn generate(key: string, data: string, algorithm: Algorithm, out: OutputBuffer): string? {
     let outlen: c_uint = boring.EVP_MAX_MD_SIZE;
     if (boring.HMAC(
-        algorithm.md() orelse bun.Output.panic("Expected BoringSSL algorithm for HMAC", .{}),
+        algorithm.md() ?? bun.Output.panic("Expected BoringSSL algorithm for HMAC", .{}),
         key.ptr,
         key.len,
         data.ptr,

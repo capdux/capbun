@@ -213,7 +213,7 @@ pub struct Animation {
 }
 
 /// A value for the [animation-name](https://drafts.csswg.org/css-animations/#animation-name) property.
-pub const AnimationName = union(enum) {
+pub enum AnimationName {
     /// The `none` keyword.
     none,
     /// An identifier of a `@keyframes` rule.
@@ -224,8 +224,8 @@ pub const AnimationName = union(enum) {
     // ~toCssImpl
     const This = @This();
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), _, hasher);
     }
 
     pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -272,10 +272,10 @@ pub const AnimationName = union(enum) {
             },
         }
     }
-};
+}
 
 /// A value for the [animation-iteration-count](https://drafts.csswg.org/css-animations/#animation-iteration-count) property.
-pub const AnimationIterationCount = union(enum) {
+pub enum AnimationIterationCount {
     /// The animation will repeat the specified number of times.
     number: CSSNumber,
     /// The animation will repeat forever.
@@ -291,7 +291,7 @@ pub const AnimationIterationCount = union(enum) {
     pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 /// A value for the [animation-direction](https://drafts.csswg.org/css-animations/#animation-direction) property.
 pub enum AnimationDirection {
@@ -376,7 +376,7 @@ pub enum AnimationComposition {
 }
 
 /// A value for the [animation-timeline](https://drafts.csswg.org/css-animations-2/#animation-timeline) property.
-pub const AnimationTimeline = union(enum) {
+pub enum AnimationTimeline {
     /// The animation's timeline is a DocumentTimeline, more specifically the default document timeline.
     auto,
     /// The animation is not associated with a timeline.
@@ -398,7 +398,7 @@ pub const AnimationTimeline = union(enum) {
     pub fn default(): AnimationTimeline {
         return .auto;
     }
-};
+}
 
 /// The [scroll()](https://drafts.csswg.org/scroll-animations-1/#scroll-notation) function.
 pub struct ScrollTimeline {
@@ -480,19 +480,19 @@ pub struct AnimationRangeEnd {
 
 /// A value for the [animation-range-start](https://drafts.csswg.org/scroll-animations/#animation-range-start)
 /// or [animation-range-end](https://drafts.csswg.org/scroll-animations/#animation-range-end) property.
-pub const AnimationAttachmentRange = union(enum) {
+pub enum AnimationAttachmentRange {
     /// The start of the animation's attachment range is the start of its associated timeline.
     normal,
     /// The animation attachment range starts at the specified point on the timeline measuring from the start of the timeline.
     length_percentage: LengthPercentage,
     /// The animation attachment range starts at the specified point on the timeline measuring from the start of the specified named timeline range.
-    timeline_range: struct {
+    timeline_range: {
         /// The name of the timeline range.
         name: TimelineRangeName,
         /// The offset from the start of the named timeline range.
         offset: LengthPercentage,
     },
-};
+}
 
 /// A [view progress timeline range](https://drafts.csswg.org/scroll-animations/#view-timelines-ranges)
 pub enum TimelineRangeName {

@@ -12,11 +12,7 @@ pub const FetchRedirect = enum(u2) {
     pub fn fromName(s: []const u8) ?@This() { return get(s); }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
     
-    pub const Map = bun.ComptimeStringMap(FetchRedirect, .{
-            .{ "follow", .follow },
-            .{ "manual", .manual },
-            .{ "error", .@"error" },
-        });
+    pub const Map = bun.ComptimeStringMap(FetchRedirect, .{ .{ "follow", .follow }, .{ "manual", .manual }, .{ "error", .@"error" } });
     
     pub const toJS = @import("../http_jsc/fetch_enums_jsc.zig").fetchRedirectToJS;
 };

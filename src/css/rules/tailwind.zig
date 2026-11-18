@@ -49,7 +49,7 @@ pub fn toCss(self: TailwindAtRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(59);
     }
 
-pub fn deepClone(self: TailwindAtRule) @This() {
+pub fn deepClone(self: TailwindAtRule, _: std.mem.Allocator) @This() {
             return self.*;
     }
 };

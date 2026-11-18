@@ -12,6 +12,7 @@ const Length = css.css_values.length.LengthValue;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 const Angle = css.css_values.angle.Angle;
 pub const Transform = union(enum) {
+    /// A 2D translation.
     translate: struct {
         x: LengthPercentage,
         y: LengthPercentage,
@@ -24,9 +25,13 @@ pub const Transform = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
+    /// A translation in the X direction.
     translate_x: LengthPercentage,
+    /// A translation in the Y direction.
     translate_y: LengthPercentage,
+    /// A translation in the Z direction.
     translate_z: Length,
+    /// A 3D translation.
     translate_3d: struct {
         x: LengthPercentage,
         y: LengthPercentage,
@@ -40,6 +45,7 @@ pub const Transform = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
+    /// A 2D scale.
     scale: struct {
         x: NumberOrPercentage,
         y: NumberOrPercentage,
@@ -52,9 +58,13 @@ pub const Transform = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
+    /// A scale in the X direction.
     scale_x: NumberOrPercentage,
+    /// A scale in the Y direction.
     scale_y: NumberOrPercentage,
+    /// A scale in the Z direction.
     scale_z: NumberOrPercentage,
+    /// A 3D scale.
     scale_3d: struct {
         x: NumberOrPercentage,
         y: NumberOrPercentage,
@@ -68,10 +78,15 @@ pub const Transform = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
+    /// A 2D rotation.
     rotate: Angle,
+    /// A rotation around the X axis.
     rotate_x: Angle,
+    /// A rotation around the Y axis.
     rotate_y: Angle,
+    /// A rotation around the Z axis.
     rotate_z: Angle,
+    /// A 3D rotation.
     rotate_3d: struct {
         x: f32,
         y: f32,
@@ -86,6 +101,7 @@ pub const Transform = union(enum) {
             return css.implementDeepClone(@This(), this, allocator);
         }
     },
+    /// A 2D skew.
     skew: struct {
         x: Angle,
         y: Angle,
@@ -98,38 +114,51 @@ pub const Transform = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
+    /// A skew along the X axis.
     skew_x: Angle,
+    /// A skew along the Y axis.
     skew_y: Angle,
+    /// A perspective transform.
     perspective: Length,
+    /// A 2D matrix transform.
     matrix: Matrix(f32),
+    /// A 3D matrix transform.
     matrix_3d: Matrix3d(f32),
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+    pub const parse = parseTransform;
+
+    pub const toCss = toCssTransform;
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
     }
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
+    pub fn eql(this: *const @This(), other: *const @This()) bool {
+        return css.implementEql(@This(), this, other);
     }
-    pub const parse = parseTransform;
-    pub const toCss = toCssTransform;
 };
 pub const Perspective = union(enum) {
-    none: void,
+    /// No perspective transform is applied.
+    none,
+    /// Distance to the center of projection.
     length: Length,
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
+
+    pub fn eql(this: *const @This(), other: *const @This()) bool {
+        return css.implementEql(@This(), this, other);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
 };
 pub const Translate = union(enum) {
-    none: void,
+    /// The "none" keyword.
+    none,
+
+    /// The x, y, and z translations.
     xyz: struct {
         /// The x translation.
         x: LengthPercentage,
@@ -145,19 +174,23 @@ pub const Translate = union(enum) {
         }
     },
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
     pub const parse = parseTranslate;
     pub const toCss = toCssTranslate;
     pub const toTransform = toTransformTranslate;
+
+    pub fn eql(this: *const @This(), other: *const @This()) bool {
+        return css.implementEql(@This(), this, other);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
 };
 pub const Scale = union(enum) {
-    none: void,
+    /// The "none" keyword.
+    none,
+
+    /// Scale on the x, y, and z axis.
     xyz: struct {
         /// Scale on the x axis.
         x: NumberOrPercentage,
@@ -173,16 +206,17 @@ pub const Scale = union(enum) {
         }
     },
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
-    }
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
     pub const parse = parseScale;
     pub const toCss = toCssScale;
     pub const toTransform = toTransformScale;
+
+    pub fn eql(this: *const @This(), other: *const @This()) bool {
+        return css.implementEql(@This(), this, other);
+    }
+
+    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
+    }
 };
 const TransformAndPrefix = struct { TransformList, VendorPrefix };
 const ArrayList = std.ArrayListUnmanaged;
@@ -192,6 +226,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const css = @import("../css_parser.zig");
@@ -1368,8 +1417,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
             return css.implementDeepClone(@This(), self, allocator);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 };
@@ -1394,8 +1442,7 @@ pub fn Matrix3d(comptime T: type) type {
     m43: T,
     m44: T,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 };

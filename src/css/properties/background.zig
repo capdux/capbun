@@ -16,6 +16,7 @@ const HorizontalPosition = css.css_values.position.HorizontalPosition;
 const VerticalPosition = css.css_values.position.VerticalPosition;
 const Position = css.css_values.position.Position;
 pub const BackgroundSize = union(enum) {
+    /// An explicit background size.
     explicit: struct {
         /// The width of the background.
         width: css.css_values.length.LengthPercentageOrAuto,
@@ -30,65 +31,63 @@ pub const BackgroundSize = union(enum) {
             return css.implementDeepClone(@This(), this, allocator);
         }
     },
-    cover: void,
-    contain: void,
+    /// The `cover` keyword. Scales the background image to cover both the width and height of the element.
+    cover,
+    /// The `contain` keyword. Scales the background image so that it fits within the element.
+    contain,
 
-pub fn parse(self: @This(), input: *css.Parser) css.Result(@This()) {
-        _ = &self;
-            if (input.tryParse(LengthPercentageOrAuto.parse, .{}).asValue()) |width| {
-                _ = &width;
-                const height = input.tryParse(LengthPercentageOrAuto.parse, .{}).unwrapOr(.auto);
-                return .{ .result = .{ .explicit = .{ .width = width, .height = height } } };
-            }
-            const location = input.currentSourceLocation();
-            const ident = (switch (input.expectIdent()) {
-.result => |v| v,
-.err => |e| {
-return .{ .err = e };
-},
-});
-            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "cover")) {
-                return .{ .result = .cover };
-            } else {
-                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "contain")) {
-                    return .{ .result = .contain };
-                } else {
-                    return .{ .err = location.newBasicUnexpectedTokenError(.{ .ident = ident }) };
-                }
-            }
+    pub fn parse(input: *css.Parser) css.Result(@This()) {
+        if (input.tryParse(LengthPercentageOrAuto.parse, .{}).asValue()) |width| {
+            const height = input.tryParse(LengthPercentageOrAuto.parse, .{}).unwrapOr(.auto);
+            return .{ .result = .{ .explicit = .{ .width = width, .height = height } } };
+        }
+
+        const location = input.currentSourceLocation();
+        const ident = switch (input.expectIdent()) {
+            .result => |v| v,
+            .err => |e| return .{ .err = e },
+        };
+
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "cover")) {
+            return .{ .result = .cover };
+        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "contain")) {
+            return .{ .result = .contain };
+        } else {
+            return .{ .err = location.newBasicUnexpectedTokenError(.{ .ident = ident }) };
+        }
     }
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
-.cover => dest.writeStr("cover"),
-.contain => dest.writeStr("contain"),
-.explicit => |explicit| {
-{
-                _ = try explicit.width.toCss(dest);
-                if ((explicit.height != .auto)) {
-                    _ = try dest.writeStr(" ");
-                    _ = try explicit.height.toCss(dest);
+    pub fn toCss(this: *const BackgroundSize, dest: *Printer) PrintErr!void {
+        return switch (this.*) {
+            .cover => dest.writeStr("cover"),
+            .contain => dest.writeStr("contain"),
+            .explicit => |explicit| {
+                try explicit.width.toCss(dest);
+                if (explicit.height != .auto) {
+                    try dest.writeStr(" ");
+                    try explicit.height.toCss(dest);
                 }
                 return;
-            }
-},
-});
+            },
+        };
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = &self;
-            return css.implementEql(@This(), lhs, rhs);
+    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
 
-pub fn default(self: @This()) @This() {
-        _ = &self;
-            return BackgroundSize{ .explicit = .{ .width = .auto, .height = .auto } };
+    pub fn default() @This() {
+        return BackgroundSize{ .explicit = .{
+            .width = .auto,
+            .height = .auto,
+        } };
     }
 
-pub inline fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+    pub inline fn deepClone(this: *const @This(), allocator: Allocator) @This() {
+        return css.implementDeepClone(@This(), this, allocator);
     }
 };
+const ClipsAndPrefix = struct { css.SmallList(BackgroundClip, 1), VendorPrefix };
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -96,6 +95,21 @@ fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
 fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
@@ -232,8 +246,8 @@ pub const Background = struct {
     origin: BackgroundOrigin,
     clip: BackgroundClip,
 
-pub fn deinit(self: *Background) void {
-        _ = &self;
+pub fn deinit(self: *Background, _: Allocator) void {
+        _ = self;
     }
 
 pub fn parse(input: *css.Parser) css.Result(@This()) {
@@ -586,7 +600,7 @@ pub const BackgroundHandler = struct {
     sizes: ?css.SmallList(BackgroundSize,1) = null,
     attachments: ?css.SmallList(BackgroundAttachment,1) = null,
     origins: ?css.SmallList(BackgroundOrigin,1) = null,
-    clips: ?struct { css.SmallList(BackgroundClip, 1), VendorPrefix } = null,
+    clips: ?ClipsAndPrefix = null,
     decls: ArrayList(Property) = undefined,
     flushed_properties: BackgroundProperty = undefined,
     has_any: bool = false,
@@ -828,7 +842,7 @@ pub fn push(handler: *BackgroundHandler, alloc: Allocator, d: *css.DeclarationLi
             _ = &maybe_attachments;
             var maybe_origins: ?css.SmallList(BackgroundOrigin,1) = bun.take((&self.origins));
             _ = &maybe_origins;
-            var maybe_clips: ?struct { css.SmallList(BackgroundClip, 1), css.VendorPrefix } = bun.take((&self.clips));
+            var maybe_clips: ?ClipsAndPrefix = bun.take((&self.clips));
             _ = &maybe_clips;
             defer {
             {

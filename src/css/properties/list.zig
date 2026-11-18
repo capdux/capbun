@@ -6,8 +6,11 @@ const CustomIdent = css.css_values.ident.CustomIdent;
 const CSSString = css.css_values.string.CSSString;
 const Image = css.css_values.image.Image;
 pub const ListStyleType = union(enum) {
-    none: void,
+    /// No marker.
+    none,
+    /// An explicit marker string.
     string: CSSString,
+    /// A named counter style.
     counter_style: CounterStyle,
 };
 pub const CounterStyle = union(enum) {
