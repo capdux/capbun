@@ -840,3 +840,14 @@
 ### 2. 指令边界与符号解析 (`UseDirective.cp`, `ServerComponentBoundary.cp`, `symbols.cp`)
 - **指令匹配纯切片安全**：在 `"use client"` 与 `"use server"` 边界解析中，利用不可变字符串切片安全比较，消除深层 AST 遍历时的越界风险。
 - **符号作用域状态迁移**：符号表遍历与查询全部通过只读借用参数解构，杜绝指针别名污染。
+
+## 2026-11-19 [Milestone 7 Phase 64 & 65] JSC 运行时导出与 AST 作用域绑定 CP 纯化经验
+
+### 1. JSC 全局命名空间与 Promise 生命周期持有 (`jsc.cp`, `CallFrame.cp`, `JSPromise.cp`, `SavedSourceMap.cp`)
+- **命名空间与 C-ABI 统一收拢**：在 `jsc.cp` 中，将所有底层运行时初始化与符号导出收拢至 `@c { fn ...; }`，消除与保留字 `class` 等命名的冲突。
+- **SourceMap 静态表可变消除**：在 `SavedSourceMap.cp` 中，将原版全局 3 处裸 `var` 统一改写为纯正的 CP 静态只读/可变持有者，使用海象解包与独占可变接收者 `*_` 控制映射表生命周期。
+- **调用帧多返回值切片化**：在 `CallFrame.cp` 中，对原生调用参数的解构使用不可变切片安全借用，避免指针悬垂。
+
+### 2. AST 符号绑定与字符频率统计 (`CharFreq.cp`, `Ast.cp`, `Binding.cp`, `NewStore.cp`)
+- **根结构体嵌套提升与类型 LOWERING**：全面贯彻 `@root struct` 组织规则，将 `Tag`, `CommonJSNamedExport`, `CharAndCount` 等二级数据模型提升至文件作用域，确保 CP 编译器对所有成员类型执行完备的借用检查。
+- **元组访问与解构纯化**：在 `NewStore.cp` 中使用标准数组索引 `largest[0]` / `largest[1]` 消除所有 `.@"0"` 违例，切片声明严格采用常量数组切片借用。
