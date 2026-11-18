@@ -974,3 +974,21 @@
     - `generated_classes_list.cp` (135 行, 1.000x)
 - **4 项硬门禁全绿**：18 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.102x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,054 / 1,295 模块 (81.39%)**，`src/jsc/` 待迁移模块从 66 个进一步压降至 48 个！
+
+## 2026-11-19 [Milestone 7 Phase 60] `src/jsc/` 双智能体推进 10 个中小型模块 100% 满绿闭环
+
+- **两路并发短生命周期子智能体完成 10 个核心基础与 Web 模块迁移（全部通过 4 项硬门禁）**：
+  - **Group A (5 模块)**：
+    - `AnyPromise.cp` (103 行, 0.945x)
+    - `BunHeapProfiler.cp` (110 行, 1.000x)
+    - `Weak.cp` (123 行, 1.070x)
+    - `DOMFormData.cp` (127 行, 0.977x)
+    - `BunCPUProfiler.cp` (134 行, 1.000x)
+  - **Group B (5 模块)**：
+    - `javascript_core_c_api.cp` (170 行, 1.156x)
+    - `ZigStackTrace.cp` (151 行, 1.007x)
+    - `JSPropertyIterator.cp` (147 行, 0.961x)
+    - `Strong.cp` (145 行, 0.948x)
+    - `URL.cp` (161 行, 0.970x)
+- **4 项硬门禁全绿**：10 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.156x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,064 / 1,295 模块 (82.16%)**，`src/jsc/` 待迁移模块从 48 个大幅压降至 38 个！

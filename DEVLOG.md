@@ -722,3 +722,13 @@
 ### 2. 私有标识符净化与可选类型表达式 (`DeprecatedStrong.cp`, `CommonStrings.cp`)
 - **私有哈希标识符规范化**：原 Zig 代码中使用的带有 `#` 前缀的私有字段（如 `#raw`, `#safety`, `#backing`），在 CP 中统一净化为标准字段 `raw`, `safety`, `backing`，消除解析器歧义。
 - **只读接收者语法统一**：在无参数实例方法中（如 `pub inline fn @"::"(): JSValue`），接收者省略形参，在方法体内通过 `_.field` 访问当前实例，完美通过 E0121 与 E0116 门禁。
+
+## 2026-11-19 [Milestone 7 Phase 60] JSC 核心与 Web API 进阶重构与 C 回调类型规范
+
+### 1. C-API 回调与函数指针统一规范 (`javascript_core_c_api.cp`)
+- **顶层 `@c` 符号声明**：将所有外部 C 符号集中声明在 `pub @c { fn ...; }` 块中，统一参数与返回值规范。
+- **可空函数指针类型**：将旧版复杂的函数指针声明规范为 `(@c fn (...): RetType)?`，例如 `pub type JSTypedArrayBytesDeallocator = (@c fn (*void, *void): void)?;`，彻底根除 CP 编译器语法断裂与 AST 类型缺失。
+
+### 2. 借用解包与条件语句静默消除 (`Weak.cp`, `Strong.cp`)
+- **海象运算符借用解包**：对于带有可空字段的引用获取，避免使用隐蔽的 `?? return`，统一使用 CP 规范的 `if (ref := _.ref)` 进行只读解包，防止 AST 树下挂载分支被误判截断。
+- **标识符消歧**：结构体内部字段避免使用与关键字或内置操作冲突的裸标识符，重构消除局部重名遮蔽。
