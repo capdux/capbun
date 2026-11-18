@@ -790,3 +790,13 @@
 
 ### 2. 跨模块 CSS 依赖收集与 JS 编译结果生成 (`findImportedCSSFilesInJSOrder.cp`, `generateCompileResultForJSChunk.cp`)
 - **数组顺序遍历与引用保持**：在拓扑排序和文件依赖收集函数中，统一使用 `for (file of files)`，避免手动管理裸指针索引引发越界异常。
+
+## 2026-11-19 [Milestone 7 Phase 63 Group B] 打包器文件列表构建与语句转换 CP 纯化经验
+
+### 1. 输出文件列表构建器状态借用 (`OutputFileListBuilder.cp`)
+- **构建器独占可变接收者**：对于维护内部动态数组的构建器类型，方法全部标注独占可变接收者 `*_`，通过 `bun.cast` 与借用检查消除切片多次引用的别名竞争。
+- **文件输出路径解包**：对可能为空的输出路径使用标准海象运算符解包 `if (p := path)`，杜绝解包丢失。
+
+### 2. DevServer 语句转换与 JS 导入排序 (`convertStmtsForChunkForDevServer.cp`, `findAllImportedPartsInJSOrder.cp`)
+- **AST 节点递归借用安全**：在语句转换遍历函数中，递归遍历形参使用不可变借用 `v: ASTNode`，仅在写入修改时传递独占借用引用，彻底消除深层递归遍历中指针变异导致的野指针隐患。
+- **依赖拓扑图顺序遍历**：使用标准迭代器遍历图依赖，消除旧版手写索引递增可能存在的越界 panic。
