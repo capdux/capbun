@@ -683,3 +683,16 @@
 ### 4. 哨兵数组字面量与按位排程掩码 (`cron.cp`)
 - **哨兵类型数组字面量规范**：针对 `let argv = [_:null]?[*:0]const u8{ ... }`，改用显式长度的数组声明 `const argv: [3]?[*:0]const u8 = [crontab_path.ptr, "-l", null];`，元素显式取 `.ptr` 确保与 `[*:0]const u8` 保持类型完全一致。
 - **内联匿名枚举提升**：函数签名中的内联枚举 `comptime mode: enum { reload, teardown }` 会被 CP 编译器视为复杂嵌套类型跳过 lowering；将其提升到模块顶层声明为 `pub const CronClearMode = enum { reload, teardown };` 后，方法签名保持简洁安全。
+
+## 2026-11-19 [Milestone 7 Phase 56] 根结构体与嵌套辅助类型提升架构实战经验总结
+
+### 1. 根结构体嵌套辅助类型的模块顶层提升架构 (`JSBundler.cp`)
+- **嵌套二级结构体跳过 lowering 根因**：原 Zig 代码将整个文件封装在 `pub const JSBundler = struct { ... };` 内部，其中嵌套的 `FileMap`, `Config`, `CompileOptions`, `Plugin`, `Resolve`, `Load` 等辅助结构体，在直接使用 `pub const Sub = struct { ... }` 时，会被 CP 编译器视为 raw Zig 复合字面量而跳过 CP 表达式与类型的 lowering，导致字段类型 `T?` 或方法 `static fn` 原样透传引发 ast-check 报错。
+- **最佳范式**：全面贯彻「根结构体与辅助结构体组织铁律」：将所有辅助结构体提升至模块顶层声明（命名如 `BundlerFileMap`, `BundlerConfig`, `BundlerCompileOptions` 等），在文件末尾通过 `pub struct JSBundler { pub const FileMap = BundlerFileMap; ... }` 进行对外契约桥接，使 `cpc` 能对每个结构体实施完整的借用检查与语法转译。
+
+### 2. 匿名结构体与联合体方法降级防线 (`JSBundler.cp`, `StringBuilder.cp`)
+- **匿名载荷内部方法的提升**：在 `union(enum)` 中，若某个分支载荷为匿名结构体 `success: struct { path: []const u8, fn deinit(*_) { ... } }`，方法体内的变异借用契约无法绑定到具名类型。必须将匿名载荷提升为独立命名结构体 `pub struct ResolveSuccess { ... }`，确保 `*_` 准确解构并生成正确的 Zig C-ABI 代码。
+- **类型切换中的别名引流 (`StringBuilder.cp`)**：在 `switch` 表达式返回类型的场景下，直接在分支中写 `[]const u8` 会被解析器当作数组字面量打断语法。通过在文件作用域声明 `type Latin1Slice = []const u8;` 并由分支返回该具名类型别名，彻底根除了类型推导断裂。
+
+### 3. 可变性排他收窄与只读方法内变异消除 (`SystemError.cp`)
+- **E0130 根因与修复**：在只读方法体内调用自身的变异方法（如在未标注 `*_` 的 `toErrorInstance` 中调用 `_.deref()`），触发编译器 Borrow Checker 的 `E0130: cannot perform mutable operation in a read-only method` 拦截。通过将方法接收者显式声明为独占可变 `pub fn toErrorInstance(*_, ...)`，严格遵循 CP 单写多读排他安全契约，从根源消除指针别名竞争风险。
