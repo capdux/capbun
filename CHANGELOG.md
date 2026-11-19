@@ -1404,3 +1404,11 @@
   2. src/bundler/LinkerContext.cp (2806行, 1.009x)
   3. src/install/PackageInstall.cp (1515行, 1.000x)
 - 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-19 12:08:13 UTC - src/install/ 四大存量核心模块 migration, pnpm, yarn, hosted_git_info 迁移通过入库
+- 完成模块：
+  1. src/install/migration.cp (1218行, 1.071x)
+  2. src/install/pnpm.cp (1670行, 1.054x)
+  3. src/install/yarn.cp (1795行, 1.044x)
+  4. src/install/hosted_git_info.cp (1422行, 0.861x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
