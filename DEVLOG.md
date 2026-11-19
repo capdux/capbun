@@ -1150,3 +1150,7 @@
 
 ### 2026-11-19 08:05:19 UTC - ParseTask 模块攻坚细节
 - 成功攻克此前报 BLOCKED 的核心复杂模块 ParseTask.zig，消除作用域与类型 lowering 问题，已安全合入。
+## 2026-11-19: `src/install/` 迁移经验总结 (`install-migrator-v3`)
+- `@c pub struct`（替代 `pub const X = extern struct`）需将内部嵌套 `struct`/`enum`（如 `StorePathFormatter`, `Formatter`, `Phase`）提升至模块顶层，避免跳过 CP lowering。
+- `std.Io.Writer.Error!void` 为 `cpc` 可识别的格式化写入错误联合返回类型。
+- 字符串/路径切片在 `FileSystem.DirnameStore.instance.append` 中需使用顶层 `type string = []const u8;` 别名而非内联 `[]const u8`。

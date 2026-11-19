@@ -1395,3 +1395,5 @@
 ### 2026-11-19 08:05:19 UTC - src/bundler/ParseTask.cp 攻坚完成合入主仓
 - 完成模块：ParseTask.cp (1481行，膨胀率 0.990x)。
 - 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，静态 0 违例完全达标。
+### [2026-11-19] `src/install/` 新增 3 个纯 CP 模块通过 4 项硬门禁
+- `src/install/repository.cp` (1.044x)、`src/install/lifecycle_script_runner.cp` (1.017x)、`src/install/TarballStream.cp` (1.017x) 及对应 `_.zig` 备份与 `.zig` 产物。

@@ -2906,3 +2906,13 @@ Options:
 - 紧接着启动 **Worker 1 (全新实例, Role: `CP Migrator - Install Scripts & Tarball`)**：
   - 攻坚 `src/install/` 核心脚本执行与解包模块：`lifecycle_script_runner.zig` (605 行) 与 `extract_tarball.zig` (613 行)；
 - 与正在攻坚 `src/bundler/transpiler.zig` 的 **Worker 2 (`802dfc10`)** 保持双路满载并发。
+- 2026-11-19: Started migration of src/install/ files to .cp.
+  - bin.cp blocked by compiler bug: for loop and &&/|| operators not lowered. Submitted task: task-20261119-bin-zig-for-loop.
+  - extract_tarball.cp blocked by compiler bug: E0111, E0100, E0206. Submitted task: task-20261119-install-cpc.
+
+### [2026-11-19 19:05] `src/install/` 阶段性迁移进展 (`install-migrator-v3`)
+- 完成并全绿通过 4 项硬门禁（`cpc --lib` + `zig ast-check` + 静态零违例 + 膨胀率 <= 1.20x）：
+  - `src/install/repository.cp` (ratio 1.044x)
+  - `src/install/lifecycle_script_runner.cp` (ratio 1.017x)
+  - `src/install/TarballStream.cp` (ratio 1.017x)
+- `bin.cp`、`extract_tarball.cp` 已投递编译器缺陷任务后标记 `BLOCKED` 跳过。
