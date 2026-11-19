@@ -985,3 +985,14 @@
 ### 2. 宿主函数包装器与匿名结构体 Lowering 提升 (`host_fn.cp`)
 - **包装结构体工厂顶层提升**：对于 `wrap1`..`wrap5` 与 `wrap4v`，将内联匿名结构体拆分提升为顶层泛型结构体函数 `WrapNStruct(func)`，消除函数返回时内联匿名结构体的语法解析边界歧义。
 - **匿名方法体内空值合并与类型构造**：在匿名方法体内将可能被误判为结构体字面量的 `?? { return ...; }` 统一改写为 `orelse { return ...; }`；利用编译期泛型类型构造器 `fn Optional(comptime T: type): type` 表达类型断言匹配，消解与三元操作符 `? :` 的解析冲突。
+
+
+## 2026-11-19 [Milestone 7 Phase 72 Group B] Bundler LinkerContext 惰性导出代码生成与分块依赖解析 CP 纯化经验
+
+### 1. 访问者嵌套结构体提升与 Labeled Block 规范 (`generateCodeForLazyExport.cp`)
+- **嵌套结构体提升**：将 `Visitor` 提升至顶层结构体，方法接收者严格遵守只读省略与可变 `*_`，消除了嵌套定义阻断 CP lowering 的缺陷。
+- **Labeled Block 表达式纯化**：规范化 `break :out;` 表达式求值，防止降级器将跳转语句误判为赋值左值导致词法断裂。
+
+### 2. 跨分块依赖分析与产物落地磁盘安全 (`computeCrossChunkDependencies.cp`, `writeOutputFilesToDisk.cp`)
+- **多线程工作池静态遍历**：将 `CrossChunkDependencies` 提升为顶层结构体并声明 `pub static fn walk`，利用带步进的 `while` 循环替代带捕获的多集合遍历，保障多线程池调用下的生命周期安全。
+- **嵌套可选切片类型别名**：声明 `type MaybeByteSlice = ([]const u8)?;`，消除嵌套切片形参中的符号混淆；取消管道捕获，规范为可空判空前置守卫，根除悬垂切片。

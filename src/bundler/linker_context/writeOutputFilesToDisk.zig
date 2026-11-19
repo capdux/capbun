@@ -1,468 +1,70 @@
-pub fn writeOutputFilesToDisk(
-    c: *LinkerContext,
-    root_path: string,
-    chunks: []Chunk,
-    output_files: *OutputFileListBuilder,
-    standalone_chunk_contents: ?[]const ?[]const u8,
-) !void {
-    const trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
-    defer trace.end();
-    var root_dir = std.fs.cwd().makeOpenPath(root_path, .{}) catch |err| {
-        if (err == error.NotDir) {
-            c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {f} is a file. Please choose a different outdir or delete {f}", .{
-                bun.fmt.quote(root_path),
-                bun.fmt.quote(root_path),
-            }) catch unreachable;
-        } else {
-            c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {s} {f}", .{
-                @errorName(err),
-                bun.fmt.quote(root_path),
-            }) catch unreachable;
-        }
-
-        return err;
-    };
-    defer root_dir.close();
-    // Optimization: when writing to disk, we can re-use the memory
-    var max_heap_allocator: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator.deinit();
-
-    const code_allocator = max_heap_allocator.init(bun.default_allocator);
-
-    var max_heap_allocator_source_map: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator_source_map.deinit();
-
-    const source_map_allocator = max_heap_allocator_source_map.init(bun.default_allocator);
-
-    var max_heap_allocator_inline_source_map: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator_inline_source_map.deinit();
-
-    const code_with_inline_source_map_allocator = max_heap_allocator_inline_source_map.init(bun.default_allocator);
-
-    var pathbuf: bun.PathBuffer = undefined;
-    const bv2: *bundler.BundleV2 = @fieldParentPtr("linker", c);
-
-    for (chunks, 0..) |*chunk, chunk_index_in_chunks_list| {
-        // In standalone mode, only write HTML chunks to disk.
-        // Insert placeholder output files for non-HTML chunks to keep indices aligned.
-        if (standalone_chunk_contents != null and chunk.content != .html) {
-            _ = output_files.insertForChunk(options.OutputFile.init(.{
-                .data = .{ .saved = 0 },
-                .hash = null,
-                .loader = chunk.content.loader(),
-                .input_path = "",
-                .display_size = 0,
-                .output_kind = .chunk,
-                .input_loader = .js,
-                .output_path = "",
-                .is_executable = false,
-                .source_map_index = null,
-                .bytecode_index = null,
-                .module_info_index = null,
-                .side = .client,
-                .entry_point_index = null,
-                .referenced_css_chunks = &.{},
-            }));
-            continue;
-        }
-
-        const trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
-        defer trace2.end();
-        defer max_heap_allocator.reset();
-
-        const rel_path = chunk.final_rel_path;
-        if (std.fs.path.dirnamePosix(rel_path)) |rel_parent| {
-            if (rel_parent.len > 0) {
-                root_dir.makePath(rel_parent) catch |err| {
-                    c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving chunk {f}", .{
-                        @errorName(err),
-                        bun.fmt.quote(rel_parent),
-                        bun.fmt.quote(chunk.final_rel_path),
-                    }) catch unreachable;
-                    return err;
-                };
-            }
-        }
-        var display_size: usize = 0;
-        const public_path = if (chunk.flags.is_browser_chunk_from_server_build)
-            bv2.transpilerForTarget(.browser).options.public_path
-        else
-            c.resolver.opts.public_path;
-
-        var code_result = if (standalone_chunk_contents) |scc|
-            chunk.intermediate_output.codeStandalone(
-                code_allocator,
-                c.parse_graph,
-                &c.graph,
-                public_path,
-                chunk,
-                chunks,
-                &display_size,
-                false,
-                false,
-                scc,
-            ) catch |err| bun.Output.panic("Failed to create output chunk: {s}", .{@errorName(err)})
-        else
-            chunk.intermediate_output.code(
-                code_allocator,
-                c.parse_graph,
-                &c.graph,
-                public_path,
-                chunk,
-                chunks,
-                &display_size,
-                c.resolver.opts.compile and !chunk.flags.is_browser_chunk_from_server_build,
-                chunk.content.sourcemap(c.options.source_maps) != .none,
-            ) catch |err| bun.Output.panic("Failed to create output chunk: {s}", .{@errorName(err)});
-
-        var source_map_output_file: ?options.OutputFile = null;
-
-        const input_path = try bun.default_allocator.dupe(
-            u8,
-            if (chunk.entry_point.is_entry_point)
-                c.parse_graph.input_files.items(.source)[chunk.entry_point.source_index].path.text
-            else
-                chunk.final_rel_path,
-        );
-
-        switch (chunk.content.sourcemap(c.options.source_maps)) {
-            .external, .linked => |tag| {
-                const output_source_map = chunk.output_source_map.finalize(source_map_allocator, code_result.shifts) catch @panic("Failed to allocate memory for external source map");
-                const source_map_final_rel_path = strings.concat(default_allocator, &.{
-                    chunk.final_rel_path,
-                    ".map",
-                }) catch @panic("Failed to allocate memory for external source map path");
-
-                if (tag == .linked) {
-                    const a, const b = if (public_path.len > 0)
-                        cheapPrefixNormalizer(public_path, source_map_final_rel_path)
-                    else
-                        .{ "", std.fs.path.basename(source_map_final_rel_path) };
-
-                    const source_map_start = "//# sourceMappingURL=";
-                    const total_len = code_result.buffer.len + source_map_start.len + a.len + b.len + "\n".len;
-                    var buf = std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len) catch @panic("Failed to allocate memory for output file with inline source map");
-                    buf.appendSliceAssumeCapacity(code_result.buffer);
-                    buf.appendSliceAssumeCapacity(source_map_start);
-                    buf.appendSliceAssumeCapacity(a);
-                    buf.appendSliceAssumeCapacity(b);
-                    buf.appendAssumeCapacity('\n');
-                    code_result.buffer = buf.items;
-                }
-
-                switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer(
-                    &pathbuf,
-                    .{
-                        .data = jsc.Node.StringOrBuffer{
-                            .buffer = bun.api.node.Buffer{
-                                .buffer = .{
-                                    .ptr = @constCast(output_source_map.ptr),
-                                    // TODO: handle > 4 GB files
-                                    .len = @as(u32, @truncate(output_source_map.len)),
-                                    .byte_len = @as(u32, @truncate(output_source_map.len)),
-                                },
-                            },
-                        },
-                        .encoding = .buffer,
-                        .dirfd = .fromStdDir(root_dir),
-                        .file = .{
-                            .path = .{
-                                .string = bun.PathString.init(source_map_final_rel_path),
-                            },
-                        },
-                    },
-                )) {
-                    .err => |err| {
-                        try c.log.addSysError(bun.default_allocator, err, "writing sourcemap for chunk {f}", .{
-                            bun.fmt.quote(chunk.final_rel_path),
-                        });
-                        return error.WriteFailed;
-                    },
-                    .result => {},
-                }
-
-                source_map_output_file = options.OutputFile.init(.{
-                    .output_path = source_map_final_rel_path,
-                    .input_path = try strings.concat(bun.default_allocator, &.{ input_path, ".map" }),
-                    .loader = .json,
-                    .input_loader = .file,
-                    .output_kind = .sourcemap,
-                    .size = @as(u32, @truncate(output_source_map.len)),
-                    .data = .{
-                        .saved = 0,
-                    },
-                    .side = .client,
-                    .entry_point_index = null,
-                    .is_executable = false,
-                });
-            },
-            .@"inline" => {
-                const output_source_map = chunk.output_source_map.finalize(source_map_allocator, code_result.shifts) catch @panic("Failed to allocate memory for external source map");
-                const encode_len = base64.encodeLen(output_source_map);
-
-                const source_map_start = "//# sourceMappingURL=data:application/json;base64,";
-                const total_len = code_result.buffer.len + source_map_start.len + encode_len + 1;
-                var buf = std.array_list.Managed(u8).initCapacity(code_with_inline_source_map_allocator, total_len) catch @panic("Failed to allocate memory for output file with inline source map");
-
-                buf.appendSliceAssumeCapacity(code_result.buffer);
-                buf.appendSliceAssumeCapacity(source_map_start);
-
-                buf.items.len += encode_len;
-                _ = base64.encode(buf.items[buf.items.len - encode_len ..], output_source_map);
-
-                buf.appendAssumeCapacity('\n');
-                code_result.buffer = buf.items;
-            },
-            .none => {},
-        }
-        const bytecode_output_file: ?options.OutputFile = brk: {
-            if (c.options.generate_bytecode_cache) {
-                const loader: Loader = if (chunk.entry_point.is_entry_point)
-                    c.parse_graph.input_files.items(.loader)[
-                        chunk.entry_point.source_index
-                    ]
-                else
-                    .js;
-
-                if (loader.isJavaScriptLike()) {
-                    jsc.VirtualMachine.is_bundler_thread_for_bytecode_cache = true;
-                    jsc.initialize(false);
-                    var fdpath: bun.PathBuffer = undefined;
-                    var source_provider_url = try bun.String.createFormat("{s}" ++ bun.bytecode_extension, .{chunk.final_rel_path});
-                    source_provider_url.ref();
-
-                    defer source_provider_url.deref();
-
-                    if (jsc.CachedBytecode.generate(c.options.output_format, code_result.buffer, &source_provider_url)) |result| {
-                        const source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
-                        defer source_provider_url_str.deinit();
-                        const bytecode, const cached_bytecode = result;
-                        debug("Bytecode cache generated {s}: {f}", .{ source_provider_url_str.slice(), bun.fmt.size(bytecode.len, .{ .space_between_number_and_unit = true }) });
-                        @memcpy(fdpath[0..chunk.final_rel_path.len], chunk.final_rel_path);
-                        fdpath[chunk.final_rel_path.len..][0..bun.bytecode_extension.len].* = bun.bytecode_extension.*;
-                        defer cached_bytecode.deref();
-                        switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer(
-                            &pathbuf,
-                            .{
-                                .data = .{
-                                    .buffer = .{
-                                        .buffer = .{
-                                            .ptr = @constCast(bytecode.ptr),
-                                            .len = @as(u32, @truncate(bytecode.len)),
-                                            .byte_len = @as(u32, @truncate(bytecode.len)),
-                                        },
-                                    },
-                                },
-                                .encoding = .buffer,
-                                .mode = if (chunk.flags.is_executable) 0o755 else 0o644,
-
-                                .dirfd = .fromStdDir(root_dir),
-                                .file = .{
-                                    .path = .{
-                                        .string = bun.PathString.init(fdpath[0 .. chunk.final_rel_path.len + bun.bytecode_extension.len]),
-                                    },
-                                },
-                            },
-                        )) {
-                            .result => {},
-                            .err => |err| {
-                                c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{f} writing bytecode for chunk {f}", .{
-                                    err,
-                                    bun.fmt.quote(chunk.final_rel_path),
-                                }) catch unreachable;
-                                return error.WriteFailed;
-                            },
-                        }
-
-                        break :brk options.OutputFile.init(.{
-                            .output_path = bun.default_allocator.dupe(u8, source_provider_url_str.slice()) catch unreachable,
-                            .input_path = std.fmt.allocPrint(bun.default_allocator, "{s}" ++ bun.bytecode_extension, .{chunk.final_rel_path}) catch unreachable,
-                            .input_loader = .file,
-                            .hash = if (chunk.template.placeholder.hash != null) bun.hash(bytecode) else null,
-                            .output_kind = .bytecode,
-                            .loader = .file,
-                            .size = @as(u32, @truncate(bytecode.len)),
-                            .display_size = @as(u32, @truncate(bytecode.len)),
-                            .data = .{
-                                .saved = 0,
-                            },
-                            .side = null,
-                            .entry_point_index = null,
-                            .is_executable = false,
-                        });
-                    }
-                }
-            }
-
-            break :brk null;
-        };
-
-        switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer(
-            &pathbuf,
-            .{
-                .data = .{
-                    .buffer = .{
-                        .buffer = .{
-                            .ptr = @constCast(code_result.buffer.ptr),
-                            // TODO: handle > 4 GB files
-                            .len = @as(u32, @truncate(code_result.buffer.len)),
-                            .byte_len = @as(u32, @truncate(code_result.buffer.len)),
-                        },
-                    },
-                },
-                .encoding = .buffer,
-                .mode = if (chunk.flags.is_executable) 0o755 else 0o644,
-
-                .dirfd = .fromStdDir(root_dir),
-                .file = .{
-                    .path = jsc.Node.PathLike{
-                        .string = bun.PathString.init(rel_path),
-                    },
-                },
-            },
-        )) {
-            .err => |err| {
-                try c.log.addSysError(bun.default_allocator, err, "writing chunk {f}", .{
-                    bun.fmt.quote(chunk.final_rel_path),
-                });
-                return error.WriteFailed;
-            },
-            .result => {},
-        }
-
-        const source_map_index: ?u32 = if (source_map_output_file != null)
-            try output_files.insertForSourcemapOrBytecode(source_map_output_file.?)
-        else
-            null;
-
-        const bytecode_index: ?u32 = if (bytecode_output_file != null)
-            try output_files.insertForSourcemapOrBytecode(bytecode_output_file.?)
-        else
-            null;
-
-        const output_kind = if (chunk.content == .css)
-            .asset
-        else if (chunk.entry_point.is_entry_point)
-            c.graph.files.items(.entry_point_kind)[chunk.entry_point.source_index].outputKind()
-        else
-            .chunk;
-
-        const chunk_index = output_files.insertForChunk(options.OutputFile.init(.{
-            .output_path = bun.default_allocator.dupe(u8, chunk.final_rel_path) catch unreachable,
-            .input_path = input_path,
-            .input_loader = if (chunk.entry_point.is_entry_point)
-                c.parse_graph.input_files.items(.loader)[chunk.entry_point.source_index]
-            else
-                .js,
-            .hash = chunk.template.placeholder.hash,
-            .output_kind = output_kind,
-            .loader = chunk.content.loader(),
-            .source_map_index = source_map_index,
-            .bytecode_index = bytecode_index,
-            .size = @as(u32, @truncate(code_result.buffer.len)),
-            .display_size = @as(u32, @truncate(display_size)),
-            .is_executable = chunk.flags.is_executable,
-            .data = .{
-                .saved = 0,
-            },
-            .side = if (chunk.content == .css)
-                .client
-            else switch (c.graph.ast.items(.target)[chunk.entry_point.source_index]) {
-                .browser => .client,
-                else => .server,
-            },
-            .entry_point_index = if (output_kind == .@"entry-point")
-                chunk.entry_point.source_index - @as(u32, (if (c.framework) |fw| if (fw.server_components != null) 3 else 1 else 1))
-            else
-                null,
-            .referenced_css_chunks = switch (chunk.content) {
-                .javascript => |js| @ptrCast(try bun.default_allocator.dupe(u32, js.css_chunks)),
-                .css => &.{},
-                .html => &.{},
-            },
-        }));
-
-        // We want the chunk index to remain the same in `output_files` so the indices in `OutputFile.referenced_css_chunks` work.
-        // In standalone mode, non-HTML chunks are skipped so this invariant doesn't apply.
-        if (standalone_chunk_contents == null)
-            bun.assertf(chunk_index == chunk_index_in_chunks_list, "chunk_index ({d}) != chunk_index_in_chunks_list ({d})", .{ chunk_index, chunk_index_in_chunks_list });
-    }
-
-    // In standalone mode, additional output files (assets) are inlined into the HTML.
-    if (standalone_chunk_contents != null) return;
-
-    {
-        const additional_output_files = output_files.getMutableAdditionalOutputFiles();
-        output_files.total_insertions += @intCast(additional_output_files.len);
-        for (c.parse_graph.additional_output_files.items, additional_output_files) |*src, *dest| {
-            const bytes = src.value.buffer.bytes;
-            src.value.buffer.bytes.len = 0;
-
-            defer {
-                src.value.buffer.allocator.free(bytes);
-            }
-
-            if (std.fs.path.dirname(src.dest_path)) |rel_parent| {
-                if (rel_parent.len > 0) {
-                    root_dir.makePath(rel_parent) catch |err| {
-                        c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving file {f}", .{
-                            @errorName(err),
-                            bun.fmt.quote(rel_parent),
-                            bun.fmt.quote(src.dest_path),
-                        }) catch unreachable;
-                        return err;
-                    };
-                }
-            }
-
-            switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer(
-                &pathbuf,
-                .{
-                    .data = .{
-                        .buffer = .{
-                            .buffer = .{
-                                .ptr = @constCast(bytes.ptr),
-                                .len = @as(u32, @truncate(bytes.len)),
-                                .byte_len = @as(u32, @truncate(bytes.len)),
-                            },
-                        },
-                    },
-                    .encoding = .buffer,
-                    .dirfd = .fromStdDir(root_dir),
-                    .file = .{
-                        .path = jsc.Node.PathLike{
-                            .string = bun.PathString.init(src.dest_path),
-                        },
-                    },
-                },
-            )) {
-                .err => |err| {
-                    c.log.addSysError(bun.default_allocator, err, "writing file {f}", .{
-                        bun.fmt.quote(src.src_path.text),
-                    }) catch unreachable;
-                    return error.WriteFailed;
-                },
-                .result => {},
-            }
-
-            dest.* = src.*;
-            dest.value = .{
-                .saved = .{},
-            };
-            dest.size = @as(u32, @truncate(bytes.len));
-        }
-    }
-}
-
-pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
-pub const ThreadPool = bun.bundle_v2.ThreadPool;
-pub const ParseTask = bun.bundle_v2.ParseTask;
-
-const string = []const u8;
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_fmt(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == bool) { return if (v) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime @typeInfo(__T) == .@"enum") { return @tagName(v); } else if (comptime @typeInfo(__T) == .optional) { if (v) |unwrapped| { return cp_fmt(unwrapped); } else { return "null"; } } else { return std.fmt.allocPrint(std.heap.page_allocator, "{any}", .{v}) catch unreachable; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+const string = []const u8;
+const MaybeByteSlice = ?[]const u8;
 const Loader = bun.Loader;
 const Output = bun.Output;
 const base64 = bun.base64;
@@ -470,14 +72,250 @@ const default_allocator = bun.default_allocator;
 const jsc = bun.jsc;
 const options = bun.options;
 const strings = bun.strings;
-
 const bundler = bun.bundle_v2;
 const Chunk = bundler.Chunk;
 const cheapPrefixNormalizer = bundler.cheapPrefixNormalizer;
-
 const LinkerContext = bun.bundle_v2.LinkerContext;
 const OutputFileListBuilder = bun.bundle_v2.LinkerContext.OutputFileListBuilder;
 const debug = LinkerContext.debug;
-
 const Logger = bun.logger;
 const Loc = Logger.Loc;
+pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
+pub const ThreadPool = bun.bundle_v2.ThreadPool;
+pub const ParseTask = bun.bundle_v2.ParseTask;
+
+pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: []Chunk, output_files: *OutputFileListBuilder, standalone_chunk_contents: ?[]const MaybeByteSlice) !void {
+        const trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
+        defer {
+        _ = trace.end();
+        }
+        var root_dir = (blk_catch_0: { break :blk_catch_0 ((std.fs.cwd().makeOpenPath(root_path, .{})) catch |e| { _ = &e; if ((e == error.NotDir)) {
+            _ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {f} is a file. Please choose a different outdir or delete {f}", .{ bun.fmt.quote(root_path), bun.fmt.quote(root_path) })) catch unreachable);
+        } else {
+            _ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {s} {f}", .{ @errorName(e), bun.fmt.quote(root_path) })) catch unreachable);
+        }
+        return e; }); });
+        _ = &root_dir;
+        defer {
+        _ = root_dir.close();
+        }
+        var max_heap_allocator: bun.MaxHeapAllocator = undefined;
+        _ = &max_heap_allocator;
+        defer {
+        _ = max_heap_allocator.deinit();
+        }
+        const code_allocator = max_heap_allocator.init(bun.default_allocator);
+        var max_heap_allocator_source_map: bun.MaxHeapAllocator = undefined;
+        _ = &max_heap_allocator_source_map;
+        defer {
+        _ = max_heap_allocator_source_map.deinit();
+        }
+        const source_map_allocator = max_heap_allocator_source_map.init(bun.default_allocator);
+        var max_heap_allocator_inline_source_map: bun.MaxHeapAllocator = undefined;
+        _ = &max_heap_allocator_inline_source_map;
+        defer {
+        _ = max_heap_allocator_inline_source_map.deinit();
+        }
+        const code_with_inline_source_map_allocator = max_heap_allocator_inline_source_map.init(bun.default_allocator);
+        var pathbuf: bun.PathBuffer = undefined;
+        _ = &pathbuf;
+        const bv2: *bundler.BundleV2 = @fieldParentPtr("linker", c);
+        var chunk_index_in_chunks_list: usize = 0;
+        _ = &chunk_index_in_chunks_list;
+        while ((chunk_index_in_chunks_list < chunks.len)) : (chunk_index_in_chunks_list = (chunk_index_in_chunks_list + 1)) {
+            var chunk = (&chunks[@as(usize, @intCast(chunk_index_in_chunks_list))]);
+            _ = &chunk;
+            if (((standalone_chunk_contents != null) and (chunk.content != .html))) {
+                _ = output_files.insertForChunk(options.OutputFile.init(.{ .data = .{ .saved = 0 }, .hash = null, .loader = chunk.content.loader(), .input_path = "", .display_size = 0, .output_kind = .chunk, .input_loader = .js, .output_path = "", .is_executable = false, .source_map_index = null, .bytecode_index = null, .module_info_index = null, .side = .client, .entry_point_index = null, .referenced_css_chunks = &.{} }));
+                continue;
+            }
+            const trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
+            defer {
+            _ = trace2.end();
+            }
+            defer {
+            _ = max_heap_allocator.reset();
+            }
+            const rel_path = chunk.final_rel_path;
+            if (std.fs.path.dirnamePosix(rel_path)) |rel_parent| {
+                _ = &rel_parent;
+                if ((rel_parent.len > 0)) {
+                    _ = (blk_catch_3: { break :blk_catch_3 ((root_dir.makePath(rel_parent)) catch |e| { _ = &e; _ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving chunk {f}", .{ @errorName(e), bun.fmt.quote(rel_parent), bun.fmt.quote(chunk.final_rel_path) })) catch unreachable);
+                    return e; }); });
+                }
+            }
+            var display_size: usize = 0;
+            _ = &display_size;
+            const public_path = (if (chunk.flags.is_browser_chunk_from_server_build) bv2.transpilerForTarget(.browser).options.public_path else c.resolver.opts.public_path);
+            var code_result: Chunk.IntermediateOutput.Result = undefined;
+            _ = &code_result;
+            if (standalone_chunk_contents) |scc| {
+                _ = &scc;
+                code_result = (blk_catch_5: { break :blk_catch_5 ((chunk.intermediate_output.codeStandalone(code_allocator, c.parse_graph, (&c.graph), public_path, chunk, chunks, (&display_size), false, false, scc)) catch |e| { _ = &e; break :blk_catch_5 bun.Output.panic("Failed to create output chunk: {s}", .{ @errorName(e) }); }); });
+            } else {
+                code_result = (blk_catch_6: { break :blk_catch_6 ((chunk.intermediate_output.code(code_allocator, c.parse_graph, (&c.graph), public_path, chunk, chunks, (&display_size), (c.resolver.opts.compile and (!chunk.flags.is_browser_chunk_from_server_build)), (chunk.content.sourcemap(c.options.source_maps) != .none))) catch |e| { _ = &e; break :blk_catch_6 bun.Output.panic("Failed to create output chunk: {s}", .{ @errorName(e) }); }); });
+            }
+            var source_map_output_file: ?options.OutputFile = null;
+            _ = &source_map_output_file;
+            const input_path = try bun.default_allocator.dupe(u8, (if (chunk.entry_point.is_entry_point) c.parse_graph.input_files.items(.source)[@as(usize, @intCast(chunk.entry_point.source_index))].path.text else chunk.final_rel_path));
+            const sm_mode = chunk.content.sourcemap(c.options.source_maps);
+            switch (sm_mode) {
+.external, .linked => {
+const output_source_map = (blk_catch_7: { break :blk_catch_7 ((chunk.output_source_map.finalize(source_map_allocator, code_result.shifts)) catch |__ce_7| { _ = &__ce_7; @panic("Failed to allocate memory for external source map"); }); });
+            const source_map_final_rel_path = (blk_catch_8: { break :blk_catch_8 ((strings.concat(default_allocator, (&.{ chunk.final_rel_path, ".map" }))) catch |__ce_8| { _ = &__ce_8; @panic("Failed to allocate memory for external source map path"); }); });
+            if ((sm_mode == .linked)) {
+                const pair = (if ((public_path.len > 0)) cheapPrefixNormalizer(public_path, source_map_final_rel_path) else .{ cp_string_from(""), std.fs.path.basename(source_map_final_rel_path) });
+                const a = pair[0];
+                const b = pair[1];
+                const source_map_start: []const u8 = "//# sourceMappingURL=";
+                const total_len = ((((code_result.buffer.len + source_map_start.len) + a.len) + b.len) + "\n".len);
+                var buf = (blk_catch_9: { break :blk_catch_9 ((std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len)) catch |__ce_9| { _ = &__ce_9; @panic("Failed to allocate memory for output file with inline source map"); }); });
+                _ = &buf;
+                _ = buf.appendSliceAssumeCapacity(code_result.buffer);
+                _ = buf.appendSliceAssumeCapacity(source_map_start);
+                _ = buf.appendSliceAssumeCapacity(a);
+                _ = buf.appendSliceAssumeCapacity(b);
+                _ = buf.appendAssumeCapacity(10);
+                code_result.buffer = buf.items;
+            }
+            switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&pathbuf), .{ .data = jsc.Node.StringOrBuffer{ .buffer = bun.api.node.Buffer{ .buffer = .{ .ptr = @constCast(output_source_map.ptr), .len = @as(u32, @truncate(output_source_map.len)), .byte_len = @as(u32, @truncate(output_source_map.len)) } } }, .encoding = .buffer, .dirfd = .fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(source_map_final_rel_path) } } })) {
+.err => |e| {
+_ = try c.log.addSysError(bun.default_allocator, e, "writing sourcemap for chunk {f}", .{ bun.fmt.quote(chunk.final_rel_path) });
+            return error.WriteFailed;
+},
+.result => {
+
+},
+}
+            source_map_output_file = options.OutputFile.init(.{ .output_path = source_map_final_rel_path, .input_path = try strings.concat(bun.default_allocator, (&.{ input_path, ".map" })), .loader = .json, .input_loader = .file, .output_kind = .sourcemap, .size = @as(u32, @truncate(output_source_map.len)), .data = .{ .saved = 0 }, .side = .client, .entry_point_index = null, .is_executable = false });
+},
+.@"inline" => {
+const output_source_map = (blk_catch_10: { break :blk_catch_10 ((chunk.output_source_map.finalize(source_map_allocator, code_result.shifts)) catch |__ce_10| { _ = &__ce_10; @panic("Failed to allocate memory for external source map"); }); });
+            const encode_len = base64.encodeLen(output_source_map);
+            const source_map_start: []const u8 = "//# sourceMappingURL=data:application/json;base64,";
+            const total_len = (((code_result.buffer.len + source_map_start.len) + encode_len) + 1);
+            var buf = (blk_catch_11: { break :blk_catch_11 ((std.array_list.Managed(u8).initCapacity(code_with_inline_source_map_allocator, total_len)) catch |__ce_11| { _ = &__ce_11; @panic("Failed to allocate memory for output file with inline source map"); }); });
+            _ = &buf;
+            _ = buf.appendSliceAssumeCapacity(code_result.buffer);
+            _ = buf.appendSliceAssumeCapacity(source_map_start);
+            buf.items.len = (buf.items.len + encode_len);
+            _ = base64.encode(buf.items[(buf.items.len - encode_len)..], output_source_map);
+            _ = buf.appendAssumeCapacity(10);
+            code_result.buffer = buf.items;
+},
+.none => {
+
+},
+}
+            var bytecode_output_file: ?options.OutputFile = null;
+            _ = &bytecode_output_file;
+            if (c.options.generate_bytecode_cache) {
+                const loader: Loader = (if (chunk.entry_point.is_entry_point) c.parse_graph.input_files.items(.loader)[@as(usize, @intCast(chunk.entry_point.source_index))] else .js);
+                if (loader.isJavaScriptLike()) {
+                    jsc.VirtualMachine.is_bundler_thread_for_bytecode_cache = true;
+                    _ = jsc.initialize(false);
+                    var fdpath: bun.PathBuffer = undefined;
+                    _ = &fdpath;
+                    var source_provider_url = try bun.String.createFormat(("{s}" ++ bun.bytecode_extension), .{ chunk.final_rel_path });
+                    _ = &source_provider_url;
+                    _ = source_provider_url.ref();
+                    defer {
+                    _ = source_provider_url.deref();
+                    }
+                    if (jsc.CachedBytecode.generate(c.options.output_format, code_result.buffer, (&source_provider_url))) |result| {
+                        _ = &result;
+                        const source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
+                        defer {
+                        _ = source_provider_url_str.deinit();
+                        }
+                        const bytecode = result[0];
+                        const cached_bytecode = result[1];
+                        _ = debug("Bytecode cache generated {s}: {f}", .{ source_provider_url_str.slice(), bun.fmt.size(bytecode.len, .{ .space_between_number_and_unit = true }) });
+                        _ = @memcpy(fdpath[0..chunk.final_rel_path.len], chunk.final_rel_path);
+                        (fdpath[chunk.final_rel_path.len..][0..bun.bytecode_extension.len]).* = bun.bytecode_extension.*;
+                        defer {
+                        _ = cached_bytecode.deref();
+                        }
+                        switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&pathbuf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = @constCast(bytecode.ptr), .len = @as(u32, @truncate(bytecode.len)), .byte_len = @as(u32, @truncate(bytecode.len)) } } }, .encoding = .buffer, .mode = (if (chunk.flags.is_executable) 493 else 420), .dirfd = .fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(fdpath[0..(chunk.final_rel_path.len + bun.bytecode_extension.len)]) } } })) {
+.result => {
+
+},
+.err => |e| {
+_ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{f} writing bytecode for chunk {f}", .{ e, bun.fmt.quote(chunk.final_rel_path) })) catch unreachable);
+                        return error.WriteFailed;
+},
+}
+                        bytecode_output_file = options.OutputFile.init(.{ .output_path = ((bun.default_allocator.dupe(u8, source_provider_url_str.slice())) catch unreachable), .input_path = ((std.fmt.allocPrint(bun.default_allocator, ("{s}" ++ bun.bytecode_extension), .{ chunk.final_rel_path })) catch unreachable), .input_loader = .file, .hash = (if ((chunk.template.placeholder.hash != null)) bun.hash(bytecode) else null), .output_kind = .bytecode, .loader = .file, .size = @as(u32, @truncate(bytecode.len)), .display_size = @as(u32, @truncate(bytecode.len)), .data = .{ .saved = 0 }, .side = null, .entry_point_index = null, .is_executable = false });
+                    }
+                }
+            }
+            switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&pathbuf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = @constCast(code_result.buffer.ptr), .len = @as(u32, @truncate(code_result.buffer.len)), .byte_len = @as(u32, @truncate(code_result.buffer.len)) } } }, .encoding = .buffer, .mode = (if (chunk.flags.is_executable) 493 else 420), .dirfd = .fromStdDir(root_dir), .file = .{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(rel_path) } } })) {
+.err => |e| {
+_ = try c.log.addSysError(bun.default_allocator, e, "writing chunk {f}", .{ bun.fmt.quote(chunk.final_rel_path) });
+            return error.WriteFailed;
+},
+.result => {
+
+},
+}
+            const source_map_index: ?u32 = (if ((source_map_output_file != null)) try output_files.insertForSourcemapOrBytecode(source_map_output_file.?) else null);
+            const bytecode_index: ?u32 = (if ((bytecode_output_file != null)) try output_files.insertForSourcemapOrBytecode(bytecode_output_file.?) else null);
+            const output_kind = (if ((chunk.content == .css)) .asset else (if (chunk.entry_point.is_entry_point) c.graph.files.items(.entry_point_kind)[@as(usize, @intCast(chunk.entry_point.source_index))].outputKind() else .chunk));
+            const chunk_index = output_files.insertForChunk(options.OutputFile.init(.{ .output_path = ((bun.default_allocator.dupe(u8, chunk.final_rel_path)) catch unreachable), .input_path = input_path, .input_loader = (if (chunk.entry_point.is_entry_point) c.parse_graph.input_files.items(.loader)[@as(usize, @intCast(chunk.entry_point.source_index))] else .js), .hash = chunk.template.placeholder.hash, .output_kind = output_kind, .loader = chunk.content.loader(), .source_map_index = source_map_index, .bytecode_index = bytecode_index, .size = @as(u32, @truncate(code_result.buffer.len)), .display_size = @as(u32, @truncate(display_size)), .is_executable = chunk.flags.is_executable, .data = .{ .saved = 0 }, .side = (if ((chunk.content == .css)) .client else (switch (c.graph.ast.items(.target)[@as(usize, @intCast(chunk.entry_point.source_index))]) {
+.browser => .client,
+else => .server,
+})), .entry_point_index = (if ((output_kind == .@"entry-point")) (chunk.entry_point.source_index - (if (comptime @typeInfo(@TypeOf((if (((c.framework != null) and (c.framework.?.server_components != null))) 3 else 1))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (((c.framework != null) and (c.framework.?.server_components != null))) 3 else 1))) else cp_cast_int(u32, (if (((c.framework != null) and (c.framework.?.server_components != null))) 3 else 1)))) else null), .referenced_css_chunks = (switch (chunk.content) {
+.javascript => |js| (blk: {
+            break :blk @ptrCast(try bun.default_allocator.dupe(u32, js.css_chunks));
+
+}),
+.css => &.{},
+.html => &.{},
+}) }));
+            if ((standalone_chunk_contents == null)) {
+                _ = bun.assertf((chunk_index == chunk_index_in_chunks_list), "chunk_index ({d}) != chunk_index_in_chunks_list ({d})", .{ chunk_index, chunk_index_in_chunks_list });
+            }
+        }
+        if ((standalone_chunk_contents != null)) {
+            return;
+        }
+        {
+            const additional_output_files = output_files.getMutableAdditionalOutputFiles();
+            output_files.total_insertions = (output_files.total_insertions + (if (comptime @typeInfo(@TypeOf(additional_output_files.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(additional_output_files.len)) else cp_cast_int(i32, additional_output_files.len)));
+            var add_idx: usize = 0;
+            _ = &add_idx;
+            const add_src = c.parse_graph.additional_output_files.items;
+            while ((add_idx < additional_output_files.len)) : (add_idx = (add_idx + 1)) {
+                var src = (&add_src[@as(usize, @intCast(add_idx))]);
+                _ = &src;
+                var dest = (&additional_output_files[@as(usize, @intCast(add_idx))]);
+                _ = &dest;
+                const bytes = (if (@typeInfo(@TypeOf(src)) == .@"enum") @intFromEnum(src) else src.value).buffer.bytes;
+                (if (@typeInfo(@TypeOf(src)) == .@"enum") @intFromEnum(src) else src.value).buffer.bytes.len = 0;
+                defer {
+                {
+                    _ = (if (@typeInfo(@TypeOf(src)) == .@"enum") @intFromEnum(src) else src.value).buffer.allocator.free(bytes);
+                }
+                }
+                if (std.fs.path.dirname(src.dest_path)) |rel_parent| {
+                    _ = &rel_parent;
+                    if ((rel_parent.len > 0)) {
+                        _ = (blk_catch_16: { break :blk_catch_16 ((root_dir.makePath(rel_parent)) catch |e| { _ = &e; _ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving file {f}", .{ @errorName(e), bun.fmt.quote(rel_parent), bun.fmt.quote(src.dest_path) })) catch unreachable);
+                        return e; }); });
+                    }
+                }
+                switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&pathbuf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = @constCast(bytes.ptr), .len = @as(u32, @truncate(bytes.len)), .byte_len = @as(u32, @truncate(bytes.len)) } } }, .encoding = .buffer, .dirfd = .fromStdDir(root_dir), .file = .{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(src.dest_path) } } })) {
+.err => |e| {
+_ = ((c.log.addSysError(bun.default_allocator, e, "writing file {f}", .{ bun.fmt.quote(src.src_path.text) })) catch unreachable);
+                return error.WriteFailed;
+},
+.result => {
+
+},
+}
+                dest.* = src.*;
+                (if (@typeInfo(@TypeOf(dest)) == .@"enum") @intFromEnum(dest) else dest.value) = .{ .saved = .{} };
+                dest.size = @as(u32, @truncate(bytes.len));
+            }
+        }
+}
