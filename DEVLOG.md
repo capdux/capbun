@@ -1068,3 +1068,14 @@
 - **根治 Zig 隐式内存安全隐患**：原版在顶层持有 `var symbols = &this.graph.symbols; defer this.graph.symbols = symbols.*;` 长跨度别名，并在数千行逻辑中与修改 `client` 的方法并发交叉。CP 借用检查器精准捕获该并发冲突，重构为在各分支按需直接调用 `client.graph.symbols.follow` 与 `get`，消除指针别名污染，根除内存悬垂。
 - **关键字与属性精准转义**：将 `import` 与 `ref` 严格转义/重构为 `imp`、`wrap_ref`、`bound_ref` 与 `name.@"ref"`，保障严格的词法匹配。
 - **辅助类型顶层分离**：将内嵌的 `PropertyInFile` 与 `Visitor` 提升至顶层结构体，多参数循环重构为 `while (i < len) : (i += 1)`。
+
+
+## 2026-11-19 [Milestone 7 Phase 77 Group B] Bundler 全局链接缓冲池与宏常量定义 CP 纯化经验
+
+### 1. 结构体静态变量与导出符号支持 (`linker.cp`)
+- **全局静态缓冲列表声明**：在结构体内使用 `static let relative_paths_list: *ImportPathsList = undefined;`，被降级器合规转换为 `pub var relative_paths_list`，原生兼容 `Linker.relative_paths_list.append(...)` 跨模块调用。
+- **单写多读与空切片安全**：对可选未初始化切片使用顶层常量切片进行借用初始化，根除 `&.{}` 违规。
+
+### 2. 宏定义表与独占可变方法排他安全 (`defines.cp`)
+- **可变方法接收者纯化**：将 `insert`、`insertGlobal`、`insertFromIterator` 声明为 `*_` 独占可变方法，查询类方法省略接收者只读借用，消除方法调用时形参错位歧义。
+- **裸指针切片安全收窄**：对 `([*]const u8)?` 裸指针的切片提取包裹于 `unsafe { _.original_name_ptr.?[0.._.original_name_len] }` 块内，表达式位置海象解包规范为语句级前置提取。
