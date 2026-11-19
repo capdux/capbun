@@ -1,0 +1,435 @@
+pub fn ParseImportExport(
+    comptime parser_feature__typescript: bool,
+    comptime parser_feature__jsx: JSXTransformType,
+    comptime parser_feature__scan_only: bool,
+): type {
+    return struct {
+        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+        const is_typescript_enabled = P.is_typescript_enabled;
+        const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+
+        /// Note: The caller has already parsed the "import" keyword
+        static fn parseImportExpr(p: *P, loc: logger.Loc, level: Level): anyerror!Expr {
+            // Parse an "import.meta" expression
+            if (p.lexer.token == .t_dot) {
+                p.esm_import_keyword = js_lexer.rangeOfIdentifier(p.source, loc);
+                p.lexer.next()?;
+                if (p.lexer.isContextualKeyword("meta")) {
+                    p.lexer.next()?;
+                    p.has_import_meta = true;
+                    return p.newExpr(E.ImportMeta{}, loc);
+                } else {
+                    p.lexer.expectedString("\"meta\"")?;
+                }
+            }
+
+            if (level.gt(.call)) {
+                const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                p.log.addRangeError(p.source, r, "Cannot use an \"import\" expression here without parentheses") catch unreachable;
+            }
+
+            // allow "in" inside call arguments;
+            const old_allow_in = p.allow_in;
+            p.allow_in = true;
+
+            p.lexer.preserve_all_comments_before = true;
+            p.lexer.expect(.t_open_paren)?;
+
+            // const comments = try p.lexer.comments_to_preserve_before.toOwnedSlice();
+            p.lexer.comments_to_preserve_before.clearRetainingCapacity();
+
+            p.lexer.preserve_all_comments_before = false;
+
+            const value = p.parseExpr(.comma)?;
+
+            let import_options = Expr.empty;
+            if (p.lexer.token == .t_comma) {
+                // "import('./foo.json', )"
+                p.lexer.next()?;
+
+                if (p.lexer.token != .t_close_paren) {
+                    // "import('./foo.json', { assert: { type: 'json' } })"
+                    import_options = p.parseExpr(.comma)?;
+
+                    if (p.lexer.token == .t_comma) {
+                        // "import('./foo.json', { assert: { type: 'json' } }, )"
+                        p.lexer.next()?;
+                    }
+                }
+            }
+
+            p.lexer.expect(.t_close_paren)?;
+
+            p.allow_in = old_allow_in;
+
+            if (comptime only_scan_imports_and_do_not_visit) {
+                if (value.data == .e_string && value.data.e_string.isUTF8() && value.data.e_string.isPresent()) {
+                    const import_record_index = p.addImportRecord(.dynamic, value.loc, value.data.e_string.slice(p.allocator));
+
+                    return p.newExpr(E.Import{
+                        expr: value,
+                        // .leading_interior_comments = comments,
+                        import_record_index: import_record_index,
+                        options: import_options,
+                    }, loc);
+                }
+            }
+
+            // _ = comments; // TODO: leading_interior comments
+
+            return p.newExpr(E.Import{
+                expr: value,
+                // .leading_interior_comments = comments,
+                import_record_index: std.math.maxInt(u32),
+                options: import_options,
+            }, loc);
+        }
+
+        static fn parseImportClause(
+            p: *P,
+        ): !ImportClause {
+            let items = ListManaged(js_ast.ClauseItem).init(p.allocator);
+            p.lexer.expect(.t_open_brace)?;
+            let is_single_line = !p.lexer.has_newline_before;
+            // this variable should not exist if we're not in a typescript file
+            let had_type_only_imports: bool = false;
+
+            while (p.lexer.token != .t_close_brace) {
+                // The alias may be a keyword;
+                const isIdentifier = p.lexer.token == .t_identifier;
+                const alias_loc = p.lexer.loc();
+                const alias = p.parseClauseAlias("import")?;
+                let name = LocRef{ loc: alias_loc, ref: try p.storeNameInRef(alias) };
+                let original_name = alias;
+                p.lexer.next()?;
+
+                const probably_type_only_import = if (comptime is_typescript_enabled)
+                    strings.eqlComptime(alias, "type") &&
+                        p.lexer.token != .t_comma &&
+                        p.lexer.token != .t_close_brace
+                else
+                    false;
+
+                // "import { type xx } from 'mod'"
+                // "import { type xx as yy } from 'mod'"
+                // "import { type 'xx' as yy } from 'mod'"
+                // "import { type as } from 'mod'"
+                // "import { type as as } from 'mod'"
+                // "import { type as as as } from 'mod'"
+                if (probably_type_only_import) {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        p.lexer.next()?;
+                        if (p.lexer.isContextualKeyword("as")) {
+                            original_name = p.lexer.identifier;
+                            name = LocRef{ loc: p.lexer.loc(), ref: try p.storeNameInRef(original_name) };
+                            p.lexer.next()?;
+
+                            if (p.lexer.token == .t_identifier) {
+
+                                // "import { type as as as } from 'mod'"
+                                // "import { type as as foo } from 'mod'"
+                                had_type_only_imports = true;
+                                p.lexer.next()?;
+                            } else {
+                                // "import { type as as } from 'mod'"
+
+                                try items.append({
+                                    alias: alias,
+                                    alias_loc: alias_loc,
+                                    name: name,
+                                    original_name: original_name,
+                                });
+                            }
+                        } else if (p.lexer.token == .t_identifier) {
+                            had_type_only_imports = true;
+
+                            // "import { type as xxx } from 'mod'"
+                            original_name = p.lexer.identifier;
+                            name = LocRef{ loc: p.lexer.loc(), ref: try p.storeNameInRef(original_name) };
+                            p.lexer.expect(.t_identifier)?;
+
+                            if (isEvalOrArguments(original_name)) {
+                                const r = p.source.rangeOfString(name.loc);
+                                p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use {s} as an identifier here", .{original_name})?;
+                            }
+
+                            try items.append({
+                                alias: alias,
+                                alias_loc: alias_loc,
+                                name: name,
+                                original_name: original_name,
+                            });
+                        }
+                    } else {
+                        const is_identifier = p.lexer.token == .t_identifier;
+
+                        // "import { type xx } from 'mod'"
+                        // "import { type xx as yy } from 'mod'"
+                        // "import { type if as yy } from 'mod'"
+                        // "import { type 'xx' as yy } from 'mod'"
+                        * = try p.parseClauseAlias("import");
+                        p.lexer.next()?;
+
+                        if (p.lexer.isContextualKeyword("as")) {
+                            p.lexer.next()?;
+
+                            p.lexer.expect(.t_identifier)?;
+                        } else if (!is_identifier) {
+                            // An import where the name is a keyword must have an alias
+                            p.lexer.expectedString("\"as\"")?;
+                        }
+                        had_type_only_imports = true;
+                    }
+                } else {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        p.lexer.next()?;
+                        original_name = p.lexer.identifier;
+                        name = LocRef{ loc: alias_loc, ref: try p.storeNameInRef(original_name) };
+                        p.lexer.expect(.t_identifier)?;
+                    } else if (!isIdentifier) {
+                        // An import where the name is a keyword must have an alias
+                        p.lexer.expectedString("\"as\"")?;
+                    }
+
+                    // Reject forbidden names
+                    if (isEvalOrArguments(original_name)) {
+                        const r = js_lexer.rangeOfIdentifier(p.source, name.loc);
+                        p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use \"{s}\" as an identifier here", .{original_name})?;
+                    }
+
+                    try items.append(js_ast.ClauseItem{
+                        alias: alias,
+                        alias_loc: alias_loc,
+                        name: name,
+                        original_name: original_name,
+                    });
+                }
+
+                if (p.lexer.token != .t_comma) {
+                    break;
+                }
+
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+
+                p.lexer.next()?;
+
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+
+            p.lexer.expect(.t_close_brace)?;
+            return ImportClause{
+                items: items.items,
+                is_single_line: is_single_line,
+                had_type_only_imports: if (comptime is_typescript_enabled)
+                    had_type_only_imports
+                else
+                    false,
+            };
+        }
+
+        static fn parseExportClause(p: *P): !ExportClauseResult {
+            let items = ListManaged(js_ast.ClauseItem).initCapacity(p.allocator, 1) catch unreachable;
+            p.lexer.expect(.t_open_brace)?;
+            let is_single_line = !p.lexer.has_newline_before;
+            let first_non_identifier_loc = logger.Loc{ start: 0 };
+            let had_type_only_exports = false;
+
+            while (p.lexer.token != .t_close_brace) {
+                let alias = p.parseClauseAlias("export")?;
+                let alias_loc = p.lexer.loc();
+
+                const name = LocRef{
+                    loc: alias_loc,
+                    ref: p.storeNameInRef(alias) catch unreachable,
+                };
+                const original_name = alias;
+
+                // The name can actually be a keyword if we're really an "export from"
+                // statement. However, we won't know until later. Allow keywords as
+                // identifiers for now and throw an error later if there's no "from".
+                //
+                //   // This is fine
+                //   export { default } from 'path'
+                //
+                //   // This is a syntax error
+                //   export { default }
+                //
+                if (p.lexer.token != .t_identifier && first_non_identifier_loc.start == 0) {
+                    first_non_identifier_loc = p.lexer.loc();
+                }
+                p.lexer.next()?;
+
+                if (comptime is_typescript_enabled) {
+                    if (strings.eqlComptime(alias, "type") && p.lexer.token != .t_comma && p.lexer.token != .t_close_brace) {
+                        if (p.lexer.isContextualKeyword("as")) {
+                            p.lexer.next()?;
+
+                            if (p.lexer.isContextualKeyword("as")) {
+                                alias = p.parseClauseAlias("export")?;
+                                alias_loc = p.lexer.loc();
+                                p.lexer.next()?;
+
+                                if (p.lexer.token != .t_comma && p.lexer.token != .t_close_brace) {
+                                    // "export { type as as as }"
+                                    // "export { type as as foo }"
+                                    // "export { type as as 'foo' }"
+                                    * = p.parseClauseAlias("export") catch "";
+                                    had_type_only_exports = true;
+                                    p.lexer.next()?;
+                                } else {
+                                    // "export { type as as }"
+                                    items.append(js_ast.ClauseItem{
+                                        alias: alias,
+                                        alias_loc: alias_loc,
+                                        name: name,
+                                        original_name: original_name,
+                                    }) catch unreachable;
+                                }
+                            } else if (p.lexer.token != .t_comma && p.lexer.token != .t_close_brace) {
+                                // "export { type as xxx }"
+                                // "export { type as 'xxx' }"
+                                alias = p.parseClauseAlias("export")?;
+                                alias_loc = p.lexer.loc();
+                                p.lexer.next()?;
+
+                                items.append(js_ast.ClauseItem{
+                                    alias: alias,
+                                    alias_loc: alias_loc,
+                                    name: name,
+                                    original_name: original_name,
+                                }) catch unreachable;
+                            } else {
+                                had_type_only_exports = true;
+                            }
+                        } else {
+                            // The name can actually be a keyword if we're really an "export from"
+                            // statement. However, we won't know until later. Allow keywords as
+                            // identifiers for now and throw an error later if there's no "from".
+                            //
+                            //   // This is fine
+                            //   export { default } from 'path'
+                            //
+                            //   // This is a syntax error
+                            //   export { default }
+                            //
+                            if (p.lexer.token != .t_identifier && first_non_identifier_loc.start == 0) {
+                                first_non_identifier_loc = p.lexer.loc();
+                            }
+
+                            // "export { type xx }"
+                            // "export { type xx as yy }"
+                            // "export { type xx as if }"
+                            // "export { type default } from 'path'"
+                            // "export { type default as if } from 'path'"
+                            // "export { type xx as 'yy' }"
+                            // "export { type 'xx' } from 'mod'"
+                            * = p.parseClauseAlias("export") catch "";
+                            p.lexer.next()?;
+
+                            if (p.lexer.isContextualKeyword("as")) {
+                                p.lexer.next()?;
+                                * = p.parseClauseAlias("export") catch "";
+                                p.lexer.next()?;
+                            }
+
+                            had_type_only_exports = true;
+                        }
+                    } else {
+                        if (p.lexer.isContextualKeyword("as")) {
+                            p.lexer.next()?;
+                            alias = p.parseClauseAlias("export")?;
+                            alias_loc = p.lexer.loc();
+
+                            p.lexer.next()?;
+                        }
+
+                        items.append(js_ast.ClauseItem{
+                            alias: alias,
+                            alias_loc: alias_loc,
+                            name: name,
+                            original_name: original_name,
+                        }) catch unreachable;
+                    }
+                } else {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        p.lexer.next()?;
+                        alias = p.parseClauseAlias("export")?;
+                        alias_loc = p.lexer.loc();
+
+                        p.lexer.next()?;
+                    }
+
+                    items.append(js_ast.ClauseItem{
+                        alias: alias,
+                        alias_loc: alias_loc,
+                        name: name,
+                        original_name: original_name,
+                    }) catch unreachable;
+                }
+
+                // we're done if there's no comma
+                if (p.lexer.token != .t_comma) {
+                    break;
+                }
+
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+                p.lexer.next()?;
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+            p.lexer.expect(.t_close_brace)?;
+
+            // Throw an error here if we found a keyword earlier and this isn't an
+            // "export from" statement after all
+            if (first_non_identifier_loc.start != 0 && !p.lexer.isContextualKeyword("from")) {
+                const r = js_lexer.rangeOfIdentifier(p.source, first_non_identifier_loc);
+                p.lexer.addRangeError(r, "Expected identifier but found \"{s}\"", .{p.source.textForRange(r)}, true)?;
+                return error.SyntaxError;
+            }
+
+            return ExportClauseResult{
+                clauses: items.items,
+                is_single_line: is_single_line,
+                had_type_only_exports: had_type_only_exports,
+            };
+        }
+    };
+}
+
+const ListManaged = std.array_list.Managed;
+
+import bun from "bun";
+const assert = bun.assert;
+const js_lexer = bun.js_lexer;
+const logger = bun.logger;
+const strings = bun.strings;
+
+const js_ast = bun.ast;
+const E = js_ast.E;
+const Expr = js_ast.Expr;
+const LocRef = js_ast.LocRef;
+
+const Op = js_ast.Op;
+const Level = js_ast.Op.Level;
+
+const js_parser = bun.js_parser;
+const ExportClauseResult = js_parser.ExportClauseResult;
+const ImportClause = js_parser.ImportClause;
+const JSXTransformType = js_parser.JSXTransformType;
+const isEvalOrArguments = js_parser.isEvalOrArguments;
+const options = js_parser.options;

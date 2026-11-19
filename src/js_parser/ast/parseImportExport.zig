@@ -1,437 +1,313 @@
-pub fn ParseImportExport(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const is_typescript_enabled = P.is_typescript_enabled;
-        const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
-
-        /// Note: The caller has already parsed the "import" keyword
-        pub fn parseImportExpr(noalias p: *P, loc: logger.Loc, level: Level) anyerror!Expr {
-            // Parse an "import.meta" expression
-            if (p.lexer.token == .t_dot) {
-                p.esm_import_keyword = js_lexer.rangeOfIdentifier(p.source, loc);
-                try p.lexer.next();
-                if (p.lexer.isContextualKeyword("meta")) {
-                    try p.lexer.next();
-                    p.has_import_meta = true;
-                    return p.newExpr(E.ImportMeta{}, loc);
-                } else {
-                    try p.lexer.expectedString("\"meta\"");
-                }
-            }
-
-            if (level.gt(.call)) {
-                const r = js_lexer.rangeOfIdentifier(p.source, loc);
-                p.log.addRangeError(p.source, r, "Cannot use an \"import\" expression here without parentheses") catch unreachable;
-            }
-
-            // allow "in" inside call arguments;
-            const old_allow_in = p.allow_in;
-            p.allow_in = true;
-
-            p.lexer.preserve_all_comments_before = true;
-            try p.lexer.expect(.t_open_paren);
-
-            // const comments = try p.lexer.comments_to_preserve_before.toOwnedSlice();
-            p.lexer.comments_to_preserve_before.clearRetainingCapacity();
-
-            p.lexer.preserve_all_comments_before = false;
-
-            const value = try p.parseExpr(.comma);
-
-            var import_options = Expr.empty;
-            if (p.lexer.token == .t_comma) {
-                // "import('./foo.json', )"
-                try p.lexer.next();
-
-                if (p.lexer.token != .t_close_paren) {
-                    // "import('./foo.json', { assert: { type: 'json' } })"
-                    import_options = try p.parseExpr(.comma);
-
-                    if (p.lexer.token == .t_comma) {
-                        // "import('./foo.json', { assert: { type: 'json' } }, )"
-                        try p.lexer.next();
-                    }
-                }
-            }
-
-            try p.lexer.expect(.t_close_paren);
-
-            p.allow_in = old_allow_in;
-
-            if (comptime only_scan_imports_and_do_not_visit) {
-                if (value.data == .e_string and value.data.e_string.isUTF8() and value.data.e_string.isPresent()) {
-                    const import_record_index = p.addImportRecord(.dynamic, value.loc, value.data.e_string.slice(p.allocator));
-
-                    return p.newExpr(E.Import{
-                        .expr = value,
-                        // .leading_interior_comments = comments,
-                        .import_record_index = import_record_index,
-                        .options = import_options,
-                    }, loc);
-                }
-            }
-
-            // _ = comments; // TODO: leading_interior comments
-
-            return p.newExpr(E.Import{
-                .expr = value,
-                // .leading_interior_comments = comments,
-                .import_record_index = std.math.maxInt(u32),
-                .options = import_options,
-            }, loc);
-        }
-
-        pub fn parseImportClause(
-            p: *P,
-        ) !ImportClause {
-            var items = ListManaged(js_ast.ClauseItem).init(p.allocator);
-            try p.lexer.expect(.t_open_brace);
-            var is_single_line = !p.lexer.has_newline_before;
-            // this variable should not exist if we're not in a typescript file
-            var had_type_only_imports = if (comptime is_typescript_enabled)
-                false;
-
-            while (p.lexer.token != .t_close_brace) {
-                // The alias may be a keyword;
-                const isIdentifier = p.lexer.token == .t_identifier;
-                const alias_loc = p.lexer.loc();
-                const alias = try p.parseClauseAlias("import");
-                var name = LocRef{ .loc = alias_loc, .ref = try p.storeNameInRef(alias) };
-                var original_name = alias;
-                try p.lexer.next();
-
-                const probably_type_only_import = if (comptime is_typescript_enabled)
-                    strings.eqlComptime(alias, "type") and
-                        p.lexer.token != .t_comma and
-                        p.lexer.token != .t_close_brace
-                else
-                    false;
-
-                // "import { type xx } from 'mod'"
-                // "import { type xx as yy } from 'mod'"
-                // "import { type 'xx' as yy } from 'mod'"
-                // "import { type as } from 'mod'"
-                // "import { type as as } from 'mod'"
-                // "import { type as as as } from 'mod'"
-                if (probably_type_only_import) {
-                    if (p.lexer.isContextualKeyword("as")) {
-                        try p.lexer.next();
-                        if (p.lexer.isContextualKeyword("as")) {
-                            original_name = p.lexer.identifier;
-                            name = LocRef{ .loc = p.lexer.loc(), .ref = try p.storeNameInRef(original_name) };
-                            try p.lexer.next();
-
-                            if (p.lexer.token == .t_identifier) {
-
-                                // "import { type as as as } from 'mod'"
-                                // "import { type as as foo } from 'mod'"
-                                had_type_only_imports = true;
-                                try p.lexer.next();
-                            } else {
-                                // "import { type as as } from 'mod'"
-
-                                try items.append(.{
-                                    .alias = alias,
-                                    .alias_loc = alias_loc,
-                                    .name = name,
-                                    .original_name = original_name,
-                                });
-                            }
-                        } else if (p.lexer.token == .t_identifier) {
-                            had_type_only_imports = true;
-
-                            // "import { type as xxx } from 'mod'"
-                            original_name = p.lexer.identifier;
-                            name = LocRef{ .loc = p.lexer.loc(), .ref = try p.storeNameInRef(original_name) };
-                            try p.lexer.expect(.t_identifier);
-
-                            if (isEvalOrArguments(original_name)) {
-                                const r = p.source.rangeOfString(name.loc);
-                                try p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use {s} as an identifier here", .{original_name});
-                            }
-
-                            try items.append(.{
-                                .alias = alias,
-                                .alias_loc = alias_loc,
-                                .name = name,
-                                .original_name = original_name,
-                            });
-                        }
-                    } else {
-                        const is_identifier = p.lexer.token == .t_identifier;
-
-                        // "import { type xx } from 'mod'"
-                        // "import { type xx as yy } from 'mod'"
-                        // "import { type if as yy } from 'mod'"
-                        // "import { type 'xx' as yy } from 'mod'"
-                        _ = try p.parseClauseAlias("import");
-                        try p.lexer.next();
-
-                        if (p.lexer.isContextualKeyword("as")) {
-                            try p.lexer.next();
-
-                            try p.lexer.expect(.t_identifier);
-                        } else if (!is_identifier) {
-                            // An import where the name is a keyword must have an alias
-                            try p.lexer.expectedString("\"as\"");
-                        }
-                        had_type_only_imports = true;
-                    }
-                } else {
-                    if (p.lexer.isContextualKeyword("as")) {
-                        try p.lexer.next();
-                        original_name = p.lexer.identifier;
-                        name = LocRef{ .loc = alias_loc, .ref = try p.storeNameInRef(original_name) };
-                        try p.lexer.expect(.t_identifier);
-                    } else if (!isIdentifier) {
-                        // An import where the name is a keyword must have an alias
-                        try p.lexer.expectedString("\"as\"");
-                    }
-
-                    // Reject forbidden names
-                    if (isEvalOrArguments(original_name)) {
-                        const r = js_lexer.rangeOfIdentifier(p.source, name.loc);
-                        try p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use \"{s}\" as an identifier here", .{original_name});
-                    }
-
-                    try items.append(js_ast.ClauseItem{
-                        .alias = alias,
-                        .alias_loc = alias_loc,
-                        .name = name,
-                        .original_name = original_name,
-                    });
-                }
-
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-
-                try p.lexer.next();
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-            }
-
-            if (p.lexer.has_newline_before) {
-                is_single_line = false;
-            }
-
-            try p.lexer.expect(.t_close_brace);
-            return ImportClause{
-                .items = items.items,
-                .is_single_line = is_single_line,
-                .had_type_only_imports = if (comptime is_typescript_enabled)
-                    had_type_only_imports
-                else
-                    false,
-            };
-        }
-
-        pub fn parseExportClause(p: *P) !ExportClauseResult {
-            var items = ListManaged(js_ast.ClauseItem).initCapacity(p.allocator, 1) catch unreachable;
-            try p.lexer.expect(.t_open_brace);
-            var is_single_line = !p.lexer.has_newline_before;
-            var first_non_identifier_loc = logger.Loc{ .start = 0 };
-            var had_type_only_exports = false;
-
-            while (p.lexer.token != .t_close_brace) {
-                var alias = try p.parseClauseAlias("export");
-                var alias_loc = p.lexer.loc();
-
-                const name = LocRef{
-                    .loc = alias_loc,
-                    .ref = p.storeNameInRef(alias) catch unreachable,
-                };
-                const original_name = alias;
-
-                // The name can actually be a keyword if we're really an "export from"
-                // statement. However, we won't know until later. Allow keywords as
-                // identifiers for now and throw an error later if there's no "from".
-                //
-                //   // This is fine
-                //   export { default } from 'path'
-                //
-                //   // This is a syntax error
-                //   export { default }
-                //
-                if (p.lexer.token != .t_identifier and first_non_identifier_loc.start == 0) {
-                    first_non_identifier_loc = p.lexer.loc();
-                }
-                try p.lexer.next();
-
-                if (comptime is_typescript_enabled) {
-                    if (strings.eqlComptime(alias, "type") and p.lexer.token != .t_comma and p.lexer.token != .t_close_brace) {
-                        if (p.lexer.isContextualKeyword("as")) {
-                            try p.lexer.next();
-
-                            if (p.lexer.isContextualKeyword("as")) {
-                                alias = try p.parseClauseAlias("export");
-                                alias_loc = p.lexer.loc();
-                                try p.lexer.next();
-
-                                if (p.lexer.token != .t_comma and p.lexer.token != .t_close_brace) {
-                                    // "export { type as as as }"
-                                    // "export { type as as foo }"
-                                    // "export { type as as 'foo' }"
-                                    _ = p.parseClauseAlias("export") catch "";
-                                    had_type_only_exports = true;
-                                    try p.lexer.next();
-                                } else {
-                                    // "export { type as as }"
-                                    items.append(js_ast.ClauseItem{
-                                        .alias = alias,
-                                        .alias_loc = alias_loc,
-                                        .name = name,
-                                        .original_name = original_name,
-                                    }) catch unreachable;
-                                }
-                            } else if (p.lexer.token != .t_comma and p.lexer.token != .t_close_brace) {
-                                // "export { type as xxx }"
-                                // "export { type as 'xxx' }"
-                                alias = try p.parseClauseAlias("export");
-                                alias_loc = p.lexer.loc();
-                                try p.lexer.next();
-
-                                items.append(js_ast.ClauseItem{
-                                    .alias = alias,
-                                    .alias_loc = alias_loc,
-                                    .name = name,
-                                    .original_name = original_name,
-                                }) catch unreachable;
-                            } else {
-                                had_type_only_exports = true;
-                            }
-                        } else {
-                            // The name can actually be a keyword if we're really an "export from"
-                            // statement. However, we won't know until later. Allow keywords as
-                            // identifiers for now and throw an error later if there's no "from".
-                            //
-                            //   // This is fine
-                            //   export { default } from 'path'
-                            //
-                            //   // This is a syntax error
-                            //   export { default }
-                            //
-                            if (p.lexer.token != .t_identifier and first_non_identifier_loc.start == 0) {
-                                first_non_identifier_loc = p.lexer.loc();
-                            }
-
-                            // "export { type xx }"
-                            // "export { type xx as yy }"
-                            // "export { type xx as if }"
-                            // "export { type default } from 'path'"
-                            // "export { type default as if } from 'path'"
-                            // "export { type xx as 'yy' }"
-                            // "export { type 'xx' } from 'mod'"
-                            _ = p.parseClauseAlias("export") catch "";
-                            try p.lexer.next();
-
-                            if (p.lexer.isContextualKeyword("as")) {
-                                try p.lexer.next();
-                                _ = p.parseClauseAlias("export") catch "";
-                                try p.lexer.next();
-                            }
-
-                            had_type_only_exports = true;
-                        }
-                    } else {
-                        if (p.lexer.isContextualKeyword("as")) {
-                            try p.lexer.next();
-                            alias = try p.parseClauseAlias("export");
-                            alias_loc = p.lexer.loc();
-
-                            try p.lexer.next();
-                        }
-
-                        items.append(js_ast.ClauseItem{
-                            .alias = alias,
-                            .alias_loc = alias_loc,
-                            .name = name,
-                            .original_name = original_name,
-                        }) catch unreachable;
-                    }
-                } else {
-                    if (p.lexer.isContextualKeyword("as")) {
-                        try p.lexer.next();
-                        alias = try p.parseClauseAlias("export");
-                        alias_loc = p.lexer.loc();
-
-                        try p.lexer.next();
-                    }
-
-                    items.append(js_ast.ClauseItem{
-                        .alias = alias,
-                        .alias_loc = alias_loc,
-                        .name = name,
-                        .original_name = original_name,
-                    }) catch unreachable;
-                }
-
-                // we're done if there's no comma
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-                try p.lexer.next();
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-            }
-
-            if (p.lexer.has_newline_before) {
-                is_single_line = false;
-            }
-            try p.lexer.expect(.t_close_brace);
-
-            // Throw an error here if we found a keyword earlier and this isn't an
-            // "export from" statement after all
-            if (first_non_identifier_loc.start != 0 and !p.lexer.isContextualKeyword("from")) {
-                const r = js_lexer.rangeOfIdentifier(p.source, first_non_identifier_loc);
-                try p.lexer.addRangeError(r, "Expected identifier but found \"{s}\"", .{p.source.textForRange(r)}, true);
-                return error.SyntaxError;
-            }
-
-            return ExportClauseResult{
-                .clauses = items.items,
-                .is_single_line = is_single_line,
-                .had_type_only_exports = had_type_only_exports,
-            };
-        }
-    };
-}
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const ListManaged = std.array_list.Managed;
+const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+const ListManaged = std.array_list.Managed;
 const assert = bun.assert;
 const js_lexer = bun.js_lexer;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const E = js_ast.E;
 const Expr = js_ast.Expr;
 const LocRef = js_ast.LocRef;
-
 const Op = js_ast.Op;
 const Level = js_ast.Op.Level;
-
 const js_parser = bun.js_parser;
 const ExportClauseResult = js_parser.ExportClauseResult;
 const ImportClause = js_parser.ImportClause;
 const JSXTransformType = js_parser.JSXTransformType;
 const isEvalOrArguments = js_parser.isEvalOrArguments;
 const options = js_parser.options;
+
+pub fn ParseImportExport(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn parseImportExpr(p: *P, loc: logger.Loc, level: Level) anyerror!Expr {
+            if ((p.lexer.token == .t_dot)) {
+                p.esm_import_keyword = js_lexer.rangeOfIdentifier(p.source, loc);
+                _ = try p.lexer.next();
+                if (p.lexer.isContextualKeyword("meta")) {
+                    _ = try p.lexer.next();
+                    p.has_import_meta = true;
+                    return p.newExpr(E.ImportMeta, loc);
+                } else {
+                    _ = try p.lexer.expectedString("\"meta\"");
+                }
+            }
+            if (level.gt(.call)) {
+                const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                _ = ((p.log.addRangeError(p.source, r, "Cannot use an \"import\" expression here without parentheses")) catch unreachable);
+            }
+            const old_allow_in = p.allow_in;
+            p.allow_in = true;
+            p.lexer.preserve_all_comments_before = true;
+            _ = try p.lexer.expect(.t_open_paren);
+            _ = p.lexer.comments_to_preserve_before.clearRetainingCapacity();
+            p.lexer.preserve_all_comments_before = false;
+            const value = try p.parseExpr(.comma);
+            var import_options = Expr.empty;
+            _ = &import_options;
+            if ((p.lexer.token == .t_comma)) {
+                _ = try p.lexer.next();
+                if ((p.lexer.token != .t_close_paren)) {
+                    import_options = try p.parseExpr(.comma);
+                    if ((p.lexer.token == .t_comma)) {
+                        _ = try p.lexer.next();
+                    }
+                }
+            }
+            _ = try p.lexer.expect(.t_close_paren);
+            p.allow_in = old_allow_in;
+            if (comptime only_scan_imports_and_do_not_visit) {
+                if ((((value.data == .e_string) and value.data.e_string.isUTF8()) and value.data.e_string.isPresent())) {
+                    const import_record_index = p.addImportRecord(.dynamic, value.loc, value.data.e_string.slice(p.allocator));
+                    return p.newExpr(E.Import{ .expr = value, .import_record_index = import_record_index, .options = import_options }, loc);
+                }
+            }
+            return p.newExpr(E.Import{ .expr = value, .import_record_index = std.math.maxInt(u32), .options = import_options }, loc);
+    }
+
+pub fn parseImportClause(p: *P) !ImportClause {
+            var items = ListManaged(js_ast.ClauseItem).init(p.allocator);
+            _ = &items;
+            _ = try p.lexer.expect(.t_open_brace);
+            var is_single_line = (!p.lexer.has_newline_before);
+            _ = &is_single_line;
+            var had_type_only_imports: bool = false;
+            _ = &had_type_only_imports;
+            while ((p.lexer.token != .t_close_brace)) {
+                const isIdentifier = (p.lexer.token == .t_identifier);
+                const alias_loc = p.lexer.loc();
+                const alias = try p.parseClauseAlias("import");
+                var name = LocRef{ .loc = alias_loc, .ref = try p.storeNameInRef(alias) };
+                _ = &name;
+                var original_name = alias;
+                _ = &original_name;
+                _ = try p.lexer.next();
+                const probably_type_only_import = (if (comptime is_typescript_enabled) ((strings.eqlComptime(alias, "type") and (p.lexer.token != .t_comma)) and (p.lexer.token != .t_close_brace)) else false);
+                if (probably_type_only_import) {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        _ = try p.lexer.next();
+                        if (p.lexer.isContextualKeyword("as")) {
+                            original_name = p.lexer.identifier;
+                            name = LocRef{ .loc = p.lexer.loc(), .ref = try p.storeNameInRef(original_name) };
+                            _ = try p.lexer.next();
+                            if ((p.lexer.token == .t_identifier)) {
+                                had_type_only_imports = true;
+                                _ = try p.lexer.next();
+                            } else {
+                                _ = try items.append(.{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name });
+                            }
+                        } else {
+                            if ((p.lexer.token == .t_identifier)) {
+                                had_type_only_imports = true;
+                                original_name = p.lexer.identifier;
+                                name = LocRef{ .loc = p.lexer.loc(), .ref = try p.storeNameInRef(original_name) };
+                                _ = try p.lexer.expect(.t_identifier);
+                                if (isEvalOrArguments(original_name)) {
+                                    const r = p.source.rangeOfString(name.loc);
+                                    _ = try p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use {s} as an identifier here", .{ original_name });
+                                }
+                                _ = try items.append(.{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name });
+                            }
+                        }
+                    } else {
+                        const is_identifier = (p.lexer.token == .t_identifier);
+                        _ = try p.parseClauseAlias("import");
+                        _ = try p.lexer.next();
+                        if (p.lexer.isContextualKeyword("as")) {
+                            _ = try p.lexer.next();
+                            _ = try p.lexer.expect(.t_identifier);
+                        } else {
+                            if ((!is_identifier)) {
+                                _ = try p.lexer.expectedString("\"as\"");
+                            }
+                        }
+                        had_type_only_imports = true;
+                    }
+                } else {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        _ = try p.lexer.next();
+                        original_name = p.lexer.identifier;
+                        name = LocRef{ .loc = alias_loc, .ref = try p.storeNameInRef(original_name) };
+                        _ = try p.lexer.expect(.t_identifier);
+                    } else {
+                        if ((!isIdentifier)) {
+                            _ = try p.lexer.expectedString("\"as\"");
+                        }
+                    }
+                    if (isEvalOrArguments(original_name)) {
+                        const r = js_lexer.rangeOfIdentifier(p.source, name.loc);
+                        _ = try p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use \"{s}\" as an identifier here", .{ original_name });
+                    }
+                    _ = try items.append(js_ast.ClauseItem{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name });
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+                _ = try p.lexer.next();
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+            _ = try p.lexer.expect(.t_close_brace);
+            return ImportClause{ .items = items.items, .is_single_line = is_single_line, .had_type_only_imports = (if (comptime is_typescript_enabled) had_type_only_imports else false) };
+    }
+
+pub fn parseExportClause(p: *P) !ExportClauseResult {
+            var items = ((ListManaged(js_ast.ClauseItem).initCapacity(p.allocator, 1)) catch unreachable);
+            _ = &items;
+            _ = try p.lexer.expect(.t_open_brace);
+            var is_single_line = (!p.lexer.has_newline_before);
+            _ = &is_single_line;
+            var first_non_identifier_loc = logger.Loc{ .start = 0 };
+            _ = &first_non_identifier_loc;
+            var had_type_only_exports = false;
+            _ = &had_type_only_exports;
+            while ((p.lexer.token != .t_close_brace)) {
+                var alias = try p.parseClauseAlias("export");
+                _ = &alias;
+                var alias_loc = p.lexer.loc();
+                _ = &alias_loc;
+                const name = LocRef{ .loc = alias_loc, .ref = ((p.storeNameInRef(alias)) catch unreachable) };
+                const original_name = alias;
+                if (((p.lexer.token != .t_identifier) and (first_non_identifier_loc.start == 0))) {
+                    first_non_identifier_loc = p.lexer.loc();
+                }
+                _ = try p.lexer.next();
+                if (comptime is_typescript_enabled) {
+                    if (((strings.eqlComptime(alias, "type") and (p.lexer.token != .t_comma)) and (p.lexer.token != .t_close_brace))) {
+                        if (p.lexer.isContextualKeyword("as")) {
+                            _ = try p.lexer.next();
+                            if (p.lexer.isContextualKeyword("as")) {
+                                alias = try p.parseClauseAlias("export");
+                                alias_loc = p.lexer.loc();
+                                _ = try p.lexer.next();
+                                if (((p.lexer.token != .t_comma) and (p.lexer.token != .t_close_brace))) {
+                                    _ = (blk_catch_3: { break :blk_catch_3 ((p.parseClauseAlias("export")) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 ""; }); });
+                                    had_type_only_exports = true;
+                                    _ = try p.lexer.next();
+                                } else {
+                                    _ = ((items.append(js_ast.ClauseItem{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name })) catch unreachable);
+                                }
+                            } else {
+                                if (((p.lexer.token != .t_comma) and (p.lexer.token != .t_close_brace))) {
+                                    alias = try p.parseClauseAlias("export");
+                                    alias_loc = p.lexer.loc();
+                                    _ = try p.lexer.next();
+                                    _ = ((items.append(js_ast.ClauseItem{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name })) catch unreachable);
+                                } else {
+                                    had_type_only_exports = true;
+                                }
+                            }
+                        } else {
+                            if (((p.lexer.token != .t_identifier) and (first_non_identifier_loc.start == 0))) {
+                                first_non_identifier_loc = p.lexer.loc();
+                            }
+                            _ = (blk_catch_6: { break :blk_catch_6 ((p.parseClauseAlias("export")) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 ""; }); });
+                            _ = try p.lexer.next();
+                            if (p.lexer.isContextualKeyword("as")) {
+                                _ = try p.lexer.next();
+                                _ = (blk_catch_7: { break :blk_catch_7 ((p.parseClauseAlias("export")) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 ""; }); });
+                                _ = try p.lexer.next();
+                            }
+                            had_type_only_exports = true;
+                        }
+                    } else {
+                        if (p.lexer.isContextualKeyword("as")) {
+                            _ = try p.lexer.next();
+                            alias = try p.parseClauseAlias("export");
+                            alias_loc = p.lexer.loc();
+                            _ = try p.lexer.next();
+                        }
+                        _ = ((items.append(js_ast.ClauseItem{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name })) catch unreachable);
+                    }
+                } else {
+                    if (p.lexer.isContextualKeyword("as")) {
+                        _ = try p.lexer.next();
+                        alias = try p.parseClauseAlias("export");
+                        alias_loc = p.lexer.loc();
+                        _ = try p.lexer.next();
+                    }
+                    _ = ((items.append(js_ast.ClauseItem{ .alias = alias, .alias_loc = alias_loc, .name = name, .original_name = original_name })) catch unreachable);
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+                _ = try p.lexer.next();
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+            _ = try p.lexer.expect(.t_close_brace);
+            if (((first_non_identifier_loc.start != 0) and (!p.lexer.isContextualKeyword("from")))) {
+                const r = js_lexer.rangeOfIdentifier(p.source, first_non_identifier_loc);
+                _ = try p.lexer.addRangeError(r, "Expected identifier but found \"{s}\"", .{ p.source.textForRange(r) }, true);
+                return error.SyntaxError;
+            }
+            return ExportClauseResult{ .clauses = items.items, .is_single_line = is_single_line, .had_type_only_exports = had_type_only_exports };
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const is_typescript_enabled = P.is_typescript_enabled;
+    const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+};
+}

@@ -1,502 +1,80 @@
-/// REPL Transform module - transforms code for interactive REPL evaluation
-///
-/// This module provides transformations for REPL mode:
-/// - Wraps the last expression in { value: expr } for result capture
-/// - Wraps code with await in async IIFE with variable hoisting
-/// - Hoists declarations for variable persistence across REPL lines
-pub fn ReplTransforms(comptime P: type) type {
-    return struct {
-        const Self = @This();
-
-        /// Apply REPL-mode transforms to the AST.
-        /// This transforms code for interactive evaluation:
-        /// - Wraps the last expression in { value: expr } for result capture
-        /// - Wraps code with await in async IIFE with variable hoisting
-        pub fn apply(p: *P, parts: *ListManaged(js_ast.Part), allocator: Allocator) !void {
-            // Skip transform if there's a top-level return (indicates module pattern)
-            if (p.has_top_level_return) {
-                return;
-            }
-
-            // Collect all statements
-            var total_stmts_count: usize = 0;
-            for (parts.items) |part| {
-                total_stmts_count += part.stmts.len;
-            }
-
-            if (total_stmts_count == 0) {
-                return;
-            }
-
-            // Collect all statements into a single array
-            var all_stmts = bun.handleOom(allocator.alloc(Stmt, total_stmts_count));
-            var stmt_idx: usize = 0;
-            for (parts.items) |part| {
-                for (part.stmts) |stmt| {
-                    all_stmts[stmt_idx] = stmt;
-                    stmt_idx += 1;
-                }
-            }
-
-            // Check if there's top-level await or imports (imports become dynamic awaited imports)
-            var has_top_level_await = p.top_level_await_keyword.len > 0;
-            if (!has_top_level_await) {
-                for (all_stmts) |stmt| {
-                    if (stmt.data == .s_import) {
-                        has_top_level_await = true;
-                        break;
-                    }
-                }
-            }
-
-            // Apply transform with is_async based on presence of top-level await
-            try transformWithHoisting(p, parts, all_stmts, allocator, has_top_level_await);
-        }
-
-        /// Transform code with hoisting and IIFE wrapper
-        /// @param is_async: true for async IIFE (when top-level await present), false for sync IIFE
-        fn transformWithHoisting(
-            p: *P,
-            parts: *ListManaged(js_ast.Part),
-            all_stmts: []Stmt,
-            allocator: Allocator,
-            is_async: bool,
-        ) !void {
-            if (all_stmts.len == 0) return;
-
-            // Lists for hoisted declarations and inner statements
-            var hoisted_stmts = ListManaged(Stmt).init(allocator);
-            var inner_stmts = ListManaged(Stmt).init(allocator);
-            try hoisted_stmts.ensureTotalCapacity(all_stmts.len);
-            try inner_stmts.ensureTotalCapacity(all_stmts.len);
-
-            // Process each statement - hoist all declarations for REPL persistence
-            for (all_stmts) |stmt| {
-                switch (stmt.data) {
-                    .s_local => |local| {
-                        // Hoist all declarations as var so they become context properties
-                        // In sloppy mode, var at top level becomes a property of the global/context object
-                        // This is essential for REPL variable persistence across vm.runInContext calls
-                        const kind: S.Local.Kind = .k_var;
-
-                        // Extract individual identifiers from binding patterns for hoisting
-                        var hoisted_decl_list = ListManaged(G.Decl).init(allocator);
-                        for (local.decls.slice()) |decl| {
-                            try extractIdentifiersFromBinding(p, decl.binding, &hoisted_decl_list);
-                        }
-
-                        if (hoisted_decl_list.items.len > 0) {
-                            try hoisted_stmts.append(p.s(S.Local{
-                                .kind = kind,
-                                .decls = Decl.List.fromOwnedSlice(hoisted_decl_list.items),
-                            }, stmt.loc));
-                        }
-
-                        // Create assignment expressions for the inner statements
-                        for (local.decls.slice()) |decl| {
-                            if (decl.value) |value| {
-                                // Create assignment expression: binding = value
-                                const assign_expr = createBindingAssignment(p, decl.binding, value, allocator);
-                                try inner_stmts.append(p.s(S.SExpr{ .value = assign_expr }, stmt.loc));
-                            }
-                        }
-                    },
-                    .s_function => |func| {
-                        // For function declarations:
-                        // Hoist as: var funcName;
-                        // Inner: this.funcName = funcName; function funcName() {}
-                        if (func.func.name) |name_loc| {
-                            try hoisted_stmts.append(p.s(S.Local{
-                                .kind = .k_var,
-                                .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                                    G.Decl{
-                                        .binding = p.b(B.Identifier{ .ref = name_loc.ref.? }, name_loc.loc),
-                                        .value = null,
-                                    },
-                                }))),
-                            }, stmt.loc));
-
-                            // Add this.funcName = funcName assignment
-                            const this_expr = p.newExpr(E.This{}, stmt.loc);
-                            const this_dot = p.newExpr(E.Dot{
-                                .target = this_expr,
-                                .name = p.symbols.items[name_loc.ref.?.innerIndex()].original_name,
-                                .name_loc = name_loc.loc,
-                            }, stmt.loc);
-                            const func_id = p.newExpr(E.Identifier{ .ref = name_loc.ref.? }, name_loc.loc);
-                            const assign = p.newExpr(E.Binary{
-                                .op = .bin_assign,
-                                .left = this_dot,
-                                .right = func_id,
-                            }, stmt.loc);
-                            try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
-                        }
-                        // Add the function declaration itself
-                        try inner_stmts.append(stmt);
-                    },
-                    .s_class => |class| {
-                        // For class declarations:
-                        // Hoist as: var ClassName; (use var so it persists to vm context)
-                        // Inner: ClassName = class ClassName {}
-                        if (class.class.class_name) |name_loc| {
-                            try hoisted_stmts.append(p.s(S.Local{
-                                .kind = .k_var,
-                                .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                                    G.Decl{
-                                        .binding = p.b(B.Identifier{ .ref = name_loc.ref.? }, name_loc.loc),
-                                        .value = null,
-                                    },
-                                }))),
-                            }, stmt.loc));
-
-                            // Convert class declaration to assignment: ClassName = class ClassName {}
-                            const class_expr = p.newExpr(class.class, stmt.loc);
-                            const class_id = p.newExpr(E.Identifier{ .ref = name_loc.ref.? }, name_loc.loc);
-                            const assign = p.newExpr(E.Binary{
-                                .op = .bin_assign,
-                                .left = class_id,
-                                .right = class_expr,
-                            }, stmt.loc);
-                            try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
-                        } else {
-                            try inner_stmts.append(stmt);
-                        }
-                    },
-                    .s_import => |import_data| {
-                        // Convert static imports to dynamic imports for REPL evaluation:
-                        //   import X from 'mod'      -> var X = (await import('mod')).default
-                        //   import { a, b } from 'mod' -> var {a, b} = await import('mod')
-                        //   import * as X from 'mod'   -> var X = await import('mod')
-                        //   import 'mod'              -> await import('mod')
-                        const path_str = p.import_records.items[import_data.import_record_index].path.text;
-                        const import_expr = p.newExpr(E.Import{
-                            .expr = p.newExpr(E.String{ .data = path_str }, stmt.loc),
-                            .import_record_index = std.math.maxInt(u32),
-                        }, stmt.loc);
-                        const await_expr = p.newExpr(E.Await{ .value = import_expr }, stmt.loc);
-
-                        if (import_data.star_name_loc) |_| {
-                            // import * as X from 'mod' -> var X = await import('mod')
-                            try hoisted_stmts.append(p.s(S.Local{
-                                .kind = .k_var,
-                                .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                                    G.Decl{
-                                        .binding = p.b(B.Identifier{ .ref = import_data.namespace_ref }, stmt.loc),
-                                        .value = null,
-                                    },
-                                }))),
-                            }, stmt.loc));
-                            const assign = p.newExpr(E.Binary{
-                                .op = .bin_assign,
-                                .left = p.newExpr(E.Identifier{ .ref = import_data.namespace_ref }, stmt.loc),
-                                .right = await_expr,
-                            }, stmt.loc);
-                            try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
-                        } else if (import_data.default_name) |default_name| {
-                            // import X from 'mod' -> var X = (await import('mod')).default
-                            // import X, { a } from 'mod' -> var __ns = await import('mod'); var X = __ns.default; var a = __ns.a;
-                            try hoisted_stmts.append(p.s(S.Local{
-                                .kind = .k_var,
-                                .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                                    G.Decl{
-                                        .binding = p.b(B.Identifier{ .ref = default_name.ref.? }, default_name.loc),
-                                        .value = null,
-                                    },
-                                }))),
-                            }, stmt.loc));
-
-                            if (import_data.items.len > 0) {
-                                // Share a single await import() between default and named imports.
-                                // namespace_ref is synthesized by processImportStatement for all non-star imports.
-                                try convertNamedImports(p, import_data, await_expr, &hoisted_stmts, &inner_stmts, allocator, stmt.loc);
-                                const ns_ref_expr = p.newExpr(E.Identifier{ .ref = import_data.namespace_ref }, stmt.loc);
-                                const dot_default = p.newExpr(E.Dot{
-                                    .target = ns_ref_expr,
-                                    .name = "default",
-                                    .name_loc = stmt.loc,
-                                }, stmt.loc);
-                                const assign = p.newExpr(E.Binary{
-                                    .op = .bin_assign,
-                                    .left = p.newExpr(E.Identifier{ .ref = default_name.ref.? }, default_name.loc),
-                                    .right = dot_default,
-                                }, stmt.loc);
-                                try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
-                            } else {
-                                const dot_default = p.newExpr(E.Dot{
-                                    .target = await_expr,
-                                    .name = "default",
-                                    .name_loc = stmt.loc,
-                                }, stmt.loc);
-                                const assign = p.newExpr(E.Binary{
-                                    .op = .bin_assign,
-                                    .left = p.newExpr(E.Identifier{ .ref = default_name.ref.? }, default_name.loc),
-                                    .right = dot_default,
-                                }, stmt.loc);
-                                try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
-                            }
-                        } else if (import_data.items.len > 0) {
-                            // import { a, b } from 'mod' -> destructure from await import('mod')
-                            try convertNamedImports(p, import_data, await_expr, &hoisted_stmts, &inner_stmts, allocator, stmt.loc);
-                        } else {
-                            // import 'mod' (side-effect only) -> await import('mod')
-                            try inner_stmts.append(p.s(S.SExpr{ .value = await_expr }, stmt.loc));
-                        }
-                    },
-                    .s_directive => |directive| {
-                        // In REPL mode, treat directives (string literals) as expressions
-                        const str_expr = p.newExpr(E.String{ .data = directive.value }, stmt.loc);
-                        try inner_stmts.append(p.s(S.SExpr{ .value = str_expr }, stmt.loc));
-                    },
-                    else => {
-                        try inner_stmts.append(stmt);
-                    },
-                }
-            }
-
-            // Wrap the last expression in return { value: expr }
-            wrapLastExpressionWithReturn(p, &inner_stmts, allocator);
-
-            // Create the IIFE: (() => { ...inner_stmts... })() or (async () => { ... })()
-            const arrow = p.newExpr(E.Arrow{
-                .args = &.{},
-                .body = .{ .loc = logger.Loc.Empty, .stmts = inner_stmts.items },
-                .is_async = is_async,
-            }, logger.Loc.Empty);
-
-            const iife = p.newExpr(E.Call{
-                .target = arrow,
-                .args = ExprNodeList{},
-            }, logger.Loc.Empty);
-
-            // Final output: hoisted declarations + IIFE call
-            const final_stmts_count = hoisted_stmts.items.len + 1;
-            var final_stmts = bun.handleOom(allocator.alloc(Stmt, final_stmts_count));
-            for (hoisted_stmts.items, 0..) |stmt, j| {
-                final_stmts[j] = stmt;
-            }
-            final_stmts[hoisted_stmts.items.len] = p.s(S.SExpr{ .value = iife }, logger.Loc.Empty);
-
-            // Update parts
-            if (parts.items.len > 0) {
-                parts.items[0].stmts = final_stmts;
-                parts.items.len = 1;
-            }
-        }
-
-        /// Convert named imports to individual var assignments from the dynamic import
-        /// import { a, b as c } from 'mod' ->
-        ///   var a; var c;  (hoisted)
-        ///   var __mod = await import('mod'); a = __mod.a; c = __mod.b;  (inner)
-        fn convertNamedImports(
-            p: *P,
-            import_data: *const S.Import,
-            await_expr: Expr,
-            hoisted_stmts: *ListManaged(Stmt),
-            inner_stmts: *ListManaged(Stmt),
-            allocator: Allocator,
-            loc: logger.Loc,
-        ) !void {
-
-            // Store the module in the namespace ref: var __ns = await import('mod')
-            try hoisted_stmts.append(p.s(S.Local{
-                .kind = .k_var,
-                .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                    G.Decl{
-                        .binding = p.b(B.Identifier{ .ref = import_data.namespace_ref }, loc),
-                        .value = null,
-                    },
-                }))),
-            }, loc));
-            const ns_assign = p.newExpr(E.Binary{
-                .op = .bin_assign,
-                .left = p.newExpr(E.Identifier{ .ref = import_data.namespace_ref }, loc),
-                .right = await_expr,
-            }, loc);
-            try inner_stmts.append(p.s(S.SExpr{ .value = ns_assign }, loc));
-
-            // For each named import: var name; name = __ns.originalName;
-            for (import_data.items) |item| {
-                try hoisted_stmts.append(p.s(S.Local{
-                    .kind = .k_var,
-                    .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, &.{
-                        G.Decl{
-                            .binding = p.b(B.Identifier{ .ref = item.name.ref.? }, item.name.loc),
-                            .value = null,
-                        },
-                    }))),
-                }, loc));
-                const ns_ref_expr = p.newExpr(E.Identifier{ .ref = import_data.namespace_ref }, loc);
-                const prop_access = p.newExpr(E.Dot{
-                    .target = ns_ref_expr,
-                    .name = item.alias,
-                    .name_loc = item.name.loc,
-                }, loc);
-                const item_assign = p.newExpr(E.Binary{
-                    .op = .bin_assign,
-                    .left = p.newExpr(E.Identifier{ .ref = item.name.ref.? }, item.name.loc),
-                    .right = prop_access,
-                }, loc);
-                try inner_stmts.append(p.s(S.SExpr{ .value = item_assign }, loc));
-            }
-        }
-
-        /// Wrap the last expression in return { value: expr }
-        fn wrapLastExpressionWithReturn(p: *P, inner_stmts: *ListManaged(Stmt), allocator: Allocator) void {
-            if (inner_stmts.items.len > 0) {
-                var last_idx: usize = inner_stmts.items.len;
-                while (last_idx > 0) {
-                    last_idx -= 1;
-                    const last_stmt = inner_stmts.items[last_idx];
-                    switch (last_stmt.data) {
-                        .s_empty, .s_comment => continue,
-                        .s_expr => |expr_data| {
-                            // Wrap in return { value: expr }
-                            const wrapped = wrapExprInValueObject(p, expr_data.value, allocator);
-                            inner_stmts.items[last_idx] = p.s(S.Return{ .value = wrapped }, last_stmt.loc);
-                            break;
-                        },
-                        else => break,
-                    }
-                }
-            }
-        }
-
-        /// Extract individual identifiers from a binding pattern for hoisting
-        fn extractIdentifiersFromBinding(p: *P, binding: Binding, decls: *ListManaged(G.Decl)) !void {
-            switch (binding.data) {
-                .b_identifier => |ident| {
-                    try decls.append(G.Decl{
-                        .binding = p.b(B.Identifier{ .ref = ident.ref }, binding.loc),
-                        .value = null,
-                    });
-                },
-                .b_array => |arr| {
-                    for (arr.items) |item| {
-                        try extractIdentifiersFromBinding(p, item.binding, decls);
-                    }
-                },
-                .b_object => |obj| {
-                    for (obj.properties) |prop| {
-                        try extractIdentifiersFromBinding(p, prop.value, decls);
-                    }
-                },
-                .b_missing => {},
-            }
-        }
-
-        /// Create { __proto__: null, value: expr } wrapper object
-        /// Uses null prototype to create a clean data object
-        fn wrapExprInValueObject(p: *P, expr: Expr, allocator: Allocator) Expr {
-            var properties = bun.handleOom(allocator.alloc(G.Property, 2));
-            // __proto__: null - creates null-prototype object
-            properties[0] = G.Property{
-                .key = p.newExpr(E.String{ .data = "__proto__" }, expr.loc),
-                .value = p.newExpr(E.Null{}, expr.loc),
-            };
-            // value: expr - the actual result value
-            properties[1] = G.Property{
-                .key = p.newExpr(E.String{ .data = "value" }, expr.loc),
-                .value = expr,
-            };
-            return p.newExpr(E.Object{
-                .properties = G.Property.List.fromOwnedSlice(properties),
-            }, expr.loc);
-        }
-
-        /// Create assignment expression from binding pattern
-        fn createBindingAssignment(p: *P, binding: Binding, value: Expr, allocator: Allocator) Expr {
-            switch (binding.data) {
-                .b_identifier => |ident| {
-                    return p.newExpr(E.Binary{
-                        .op = .bin_assign,
-                        .left = p.newExpr(E.Identifier{ .ref = ident.ref }, binding.loc),
-                        .right = value,
-                    }, binding.loc);
-                },
-                .b_array => {
-                    // For array destructuring, create: [a, b] = value
-                    return p.newExpr(E.Binary{
-                        .op = .bin_assign,
-                        .left = convertBindingToExpr(p, binding, allocator),
-                        .right = value,
-                    }, binding.loc);
-                },
-                .b_object => {
-                    // For object destructuring, create: {a, b} = value
-                    return p.newExpr(E.Binary{
-                        .op = .bin_assign,
-                        .left = convertBindingToExpr(p, binding, allocator),
-                        .right = value,
-                    }, binding.loc);
-                },
-                .b_missing => {
-                    // Return Missing expression to match convertBindingToExpr
-                    return p.newExpr(E.Missing{}, binding.loc);
-                },
-            }
-        }
-
-        /// Convert a binding pattern to an expression (for assignment targets)
-        /// Handles spread/rest patterns in arrays and objects to match Binding.toExpr behavior
-        fn convertBindingToExpr(p: *P, binding: Binding, allocator: Allocator) Expr {
-            switch (binding.data) {
-                .b_identifier => |ident| {
-                    return p.newExpr(E.Identifier{ .ref = ident.ref }, binding.loc);
-                },
-                .b_array => |arr| {
-                    var items = bun.handleOom(allocator.alloc(Expr, arr.items.len));
-                    for (arr.items, 0..) |item, i| {
-                        const expr = convertBindingToExpr(p, item.binding, allocator);
-                        // Check for spread pattern: if has_spread and this is the last element
-                        if (arr.has_spread and i == arr.items.len - 1) {
-                            items[i] = p.newExpr(E.Spread{ .value = expr }, expr.loc);
-                        } else if (item.default_value) |default_val| {
-                            items[i] = p.newExpr(E.Binary{
-                                .op = .bin_assign,
-                                .left = expr,
-                                .right = default_val,
-                            }, item.binding.loc);
-                        } else {
-                            items[i] = expr;
-                        }
-                    }
-                    return p.newExpr(E.Array{
-                        .items = ExprNodeList.fromOwnedSlice(items),
-                        .is_single_line = arr.is_single_line,
-                    }, binding.loc);
-                },
-                .b_object => |obj| {
-                    var properties = bun.handleOom(allocator.alloc(G.Property, obj.properties.len));
-                    for (obj.properties, 0..) |prop, i| {
-                        properties[i] = G.Property{
-                            .flags = prop.flags,
-                            .key = prop.key,
-                            // Set kind to .spread if the property has spread flag
-                            .kind = if (prop.flags.contains(.is_spread)) .spread else .normal,
-                            .value = convertBindingToExpr(p, prop.value, allocator),
-                            .initializer = prop.default_value,
-                        };
-                    }
-                    return p.newExpr(E.Object{
-                        .properties = G.Property.List.fromOwnedSlice(properties),
-                        .is_single_line = obj.is_single_line,
-                    }, binding.loc);
-                },
-                .b_missing => {
-                    return p.newExpr(E.Missing{}, binding.loc);
-                },
-            }
-        }
-    };
-}
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
 const Allocator = std.mem.Allocator;
 const ListManaged = std.array_list.Managed;
-
-const bun = @import("bun");
 const logger = bun.logger;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const Binding = js_ast.Binding;
@@ -505,6 +83,293 @@ const Expr = js_ast.Expr;
 const ExprNodeList = js_ast.ExprNodeList;
 const S = js_ast.S;
 const Stmt = js_ast.Stmt;
-
 const G = js_ast.G;
 const Decl = G.Decl;
+
+pub fn ReplTransforms(comptime P: type) type {
+        return struct {
+
+pub fn apply(p: *P, parts: *ListManaged(js_ast.Part), allocator: Allocator) !void {
+            if (p.has_top_level_return) {
+                return;
+            }
+            var total_stmts_count: usize = 0;
+            _ = &total_stmts_count;
+            for (parts.items) |part| {
+                _ = &part;
+                total_stmts_count = (total_stmts_count + part.stmts.len);
+            }
+            if ((total_stmts_count == 0)) {
+                return;
+            }
+            var all_stmts = bun.handleOom(allocator.alloc(Stmt, total_stmts_count));
+            _ = &all_stmts;
+            var stmt_idx: usize = 0;
+            _ = &stmt_idx;
+            for (parts.items) |part| {
+                _ = &part;
+                for (cp_iter_slice(part.stmts)) |stmt| {
+                    _ = &stmt;
+                    all_stmts[cp_cast_int(usize, stmt_idx)] = stmt;
+                    stmt_idx = (stmt_idx + 1);
+                }
+            }
+            var has_top_level_await = (p.top_level_await_keyword.len > 0);
+            _ = &has_top_level_await;
+            if ((!has_top_level_await)) {
+                for (cp_iter_slice(all_stmts)) |stmt| {
+                    _ = &stmt;
+                    if ((stmt.data == .s_import)) {
+                        has_top_level_await = true;
+                        break;
+                    }
+                }
+            }
+            _ = try transformWithHoisting(p, parts, all_stmts, allocator, has_top_level_await);
+    }
+
+pub fn transformWithHoisting(p: *P, parts: *ListManaged(js_ast.Part), all_stmts: []Stmt, allocator: Allocator, is_async: bool) !void {
+            if ((all_stmts.len == 0)) {
+                return;
+            }
+            var hoisted_stmts = ListManaged(Stmt).init(allocator);
+            _ = &hoisted_stmts;
+            var inner_stmts = ListManaged(Stmt).init(allocator);
+            _ = &inner_stmts;
+            _ = try hoisted_stmts.ensureTotalCapacity(all_stmts.len);
+            _ = try inner_stmts.ensureTotalCapacity(all_stmts.len);
+            for (cp_iter_slice(all_stmts)) |stmt| {
+                _ = &stmt;
+                switch (stmt.data) {
+.s_local => |local| {
+const kind: S.Local.Kind = .k_var;
+                var hoisted_decl_list = ListManaged(G.Decl).init(allocator);
+                _ = &hoisted_decl_list;
+                for (cp_iter_slice(local.decls.slice())) |decl| {
+                    _ = &decl;
+                    _ = try extractIdentifiersFromBinding(p, decl.binding, (&hoisted_decl_list));
+                }
+                if ((hoisted_decl_list.items.len > 0)) {
+                    _ = try hoisted_stmts.append(p.s(S.Local{ .kind = kind, .decls = Decl.List.fromOwnedSlice(hoisted_decl_list.items) }, stmt.loc));
+                }
+                for (cp_iter_slice(local.decls.slice())) |decl| {
+                    _ = &decl;
+                    if ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value)) |value| {
+                        _ = &value;
+                        const assign_expr = createBindingAssignment(p, decl.binding, value, allocator);
+                        _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign_expr }, stmt.loc));
+                    }
+                }
+},
+.s_function => |func| {
+if ((if (@typeInfo(@TypeOf(func.func)) == .@"enum" or @typeInfo(@TypeOf(func.func)) == .@"union") @tagName(func.func) else func.func.name)) |name_loc| {
+                    _ = &name_loc;
+                    _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = name_loc.ref.? }, name_loc.loc), .value = null } })))) }, stmt.loc));
+                    const this_expr = p.newExpr(E.This, stmt.loc);
+                    const this_dot = p.newExpr(E.Dot{ .target = this_expr, .name = p.symbols.items[@as(usize, @intCast(name_loc.ref.?.innerIndex()))].original_name, .name_loc = name_loc.loc }, stmt.loc);
+                    const func_id = p.newExpr(E.Identifier{ .@"ref" = name_loc.ref.? }, name_loc.loc);
+                    const assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = this_dot, .right = func_id }, stmt.loc);
+                    _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
+                }
+                _ = try inner_stmts.append(stmt);
+},
+.s_class => |cls| {
+if (cls.class.class_name) |name_loc| {
+                    _ = &name_loc;
+                    _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = name_loc.ref.? }, name_loc.loc), .value = null } })))) }, stmt.loc));
+                    const class_expr = p.newExpr(cls.class, stmt.loc);
+                    const class_id = p.newExpr(E.Identifier{ .@"ref" = name_loc.ref.? }, name_loc.loc);
+                    const assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = class_id, .right = class_expr }, stmt.loc);
+                    _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
+                } else {
+                    _ = try inner_stmts.append(stmt);
+                }
+},
+.s_import => |import_data| {
+const path_str = p.import_records.items[@as(usize, @intCast(import_data.import_record_index))].path.text;
+                const import_expr = p.newExpr(E.Import{ .expr = p.newExpr(E.String{ .data = path_str }, stmt.loc), .import_record_index = std.math.maxInt(u32) }, stmt.loc);
+                const await_expr = p.newExpr(E.Await{ .value = import_expr }, stmt.loc);
+                if (import_data.star_name_loc) |_| {
+                    _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = import_data.namespace_ref }, stmt.loc), .value = null } })))) }, stmt.loc));
+                    const assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = import_data.namespace_ref }, stmt.loc), .right = await_expr }, stmt.loc);
+                    _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
+                } else {
+                    if (import_data.default_name) |default_name| {
+                        _ = &default_name;
+                        _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = default_name.ref.? }, default_name.loc), .value = null } })))) }, stmt.loc));
+                        if ((import_data.items.len > 0)) {
+                            _ = try convertNamedImports(p, import_data, await_expr, (&hoisted_stmts), (&inner_stmts), allocator, stmt.loc);
+                            const ns_ref_expr = p.newExpr(E.Identifier{ .@"ref" = import_data.namespace_ref }, stmt.loc);
+                            const dot_default = p.newExpr(E.Dot{ .target = ns_ref_expr, .name = "default", .name_loc = stmt.loc }, stmt.loc);
+                            const assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = default_name.ref.? }, default_name.loc), .right = dot_default }, stmt.loc);
+                            _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
+                        } else {
+                            const dot_default = p.newExpr(E.Dot{ .target = await_expr, .name = "default", .name_loc = stmt.loc }, stmt.loc);
+                            const assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = default_name.ref.? }, default_name.loc), .right = dot_default }, stmt.loc);
+                            _ = try inner_stmts.append(p.s(S.SExpr{ .value = assign }, stmt.loc));
+                        }
+                    } else {
+                        if ((import_data.items.len > 0)) {
+                            _ = try convertNamedImports(p, import_data, await_expr, (&hoisted_stmts), (&inner_stmts), allocator, stmt.loc);
+                        } else {
+                            _ = try inner_stmts.append(p.s(S.SExpr{ .value = await_expr }, stmt.loc));
+                        }
+                    }
+                }
+},
+.s_directive => |directive| {
+const str_expr = p.newExpr(E.String{ .data = (if (@typeInfo(@TypeOf(directive)) == .@"enum") @intFromEnum(directive) else directive.value) }, stmt.loc);
+                _ = try inner_stmts.append(p.s(S.SExpr{ .value = str_expr }, stmt.loc));
+},
+else => {
+_ = try inner_stmts.append(stmt);
+},
+}
+            }
+            _ = wrapLastExpressionWithReturn(p, (&inner_stmts), allocator);
+            const arrow = p.newExpr(E.Arrow{ .args = &.{}, .body = .{ .loc = logger.Loc.Empty, .stmts = inner_stmts.items }, .is_async = is_async }, logger.Loc.Empty);
+            const iife = p.newExpr(E.Call{ .target = arrow, .args = ExprNodeList{  } }, logger.Loc.Empty);
+            const final_stmts_count = (hoisted_stmts.items.len + 1);
+            var final_stmts = bun.handleOom(allocator.alloc(Stmt, final_stmts_count));
+            _ = &final_stmts;
+            for (hoisted_stmts.items, 0..) |stmt, j| {
+                _ = &stmt;
+                _ = &j;
+                final_stmts[cp_cast_int(usize, j)] = stmt;
+            }
+            final_stmts[cp_cast_int(usize, hoisted_stmts.items.len)] = p.s(S.SExpr{ .value = iife }, logger.Loc.Empty);
+            if ((parts.items.len > 0)) {
+                parts.items[0].stmts = final_stmts;
+                parts.items.len = 1;
+            }
+    }
+
+pub fn convertNamedImports(p: *P, import_data: *const S.Import, await_expr: Expr, hoisted_stmts: *ListManaged(Stmt), inner_stmts: *ListManaged(Stmt), allocator: Allocator, loc: logger.Loc) !void {
+            _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = import_data.namespace_ref }, loc), .value = null } })))) }, loc));
+            const ns_assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = import_data.namespace_ref }, loc), .right = await_expr }, loc);
+            _ = try inner_stmts.append(p.s(S.SExpr{ .value = ns_assign }, loc));
+            for (import_data.items) |item| {
+                _ = &item;
+                _ = try hoisted_stmts.append(p.s(S.Local{ .kind = .k_var, .decls = Decl.List.fromOwnedSlice(bun.handleOom(allocator.dupe(G.Decl, (&.{ G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref.? }, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).loc), .value = null } })))) }, loc));
+                const ns_ref_expr = p.newExpr(E.Identifier{ .@"ref" = import_data.namespace_ref }, loc);
+                const prop_access = p.newExpr(E.Dot{ .target = ns_ref_expr, .name = item.alias, .name_loc = (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).loc }, loc);
+                const item_assign = p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref.? }, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).loc), .right = prop_access }, loc);
+                _ = try inner_stmts.append(p.s(S.SExpr{ .value = item_assign }, loc));
+            }
+    }
+
+pub fn wrapLastExpressionWithReturn(p: *P, inner_stmts: *ListManaged(Stmt), allocator: Allocator) void {
+            if ((inner_stmts.items.len > 0)) {
+                var last_idx: usize = inner_stmts.items.len;
+                _ = &last_idx;
+                while ((last_idx > 0)) {
+                    last_idx = (last_idx - 1);
+                    const last_stmt = inner_stmts.items[@as(usize, @intCast(last_idx))];
+                    switch (last_stmt.data) {
+.s_empty, .s_comment => {
+_ = continue;
+},
+.s_expr => |expr_data| {
+const wrapped = wrapExprInValueObject(p, (if (@typeInfo(@TypeOf(expr_data)) == .@"enum") @intFromEnum(expr_data) else expr_data.value), allocator);
+                    inner_stmts.items[cp_cast_int(usize, last_idx)] = p.s(S.Return{ .value = wrapped }, last_stmt.loc);
+                    break;
+},
+else => {
+break;
+},
+}
+                }
+            }
+    }
+
+pub fn extractIdentifiersFromBinding(p: *P, binding: Binding, decls: *ListManaged(G.Decl)) !void {
+            switch (binding.data) {
+.b_identifier => |ident| {
+_ = try decls.append(G.Decl{ .binding = p.b(B.Identifier{ .@"ref" = ident.ref }, binding.loc), .value = null });
+},
+.b_array => |arr| {
+for (arr.items) |item| {
+                _ = &item;
+                _ = try extractIdentifiersFromBinding(p, item.binding, decls);
+            }
+},
+.b_object => |obj| {
+for (cp_iter_slice(obj.properties)) |prop| {
+                _ = &prop;
+                _ = try extractIdentifiersFromBinding(p, (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value), decls);
+            }
+},
+.b_missing => {
+
+},
+}
+    }
+
+pub fn wrapExprInValueObject(p: *P, expr: Expr, allocator: Allocator) Expr {
+            var properties = bun.handleOom(allocator.alloc(G.Property, 2));
+            _ = &properties;
+            properties[cp_cast_int(usize, 0)] = G.Property{ .key = p.newExpr(E.String{ .data = "__proto__" }, expr.loc), .value = p.newExpr(E.Null, expr.loc) };
+            properties[cp_cast_int(usize, 1)] = G.Property{ .key = p.newExpr(E.String{ .data = "value" }, expr.loc), .value = expr };
+            return p.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(properties) }, expr.loc);
+    }
+
+pub fn createBindingAssignment(p: *P, binding: Binding, value: Expr, allocator: Allocator) Expr {
+            switch (binding.data) {
+.b_identifier => |ident| {
+return p.newExpr(E.Binary{ .op = .bin_assign, .left = p.newExpr(E.Identifier{ .@"ref" = ident.ref }, binding.loc), .right = value }, binding.loc);
+},
+.b_array => {
+return p.newExpr(E.Binary{ .op = .bin_assign, .left = convertBindingToExpr(p, binding, allocator), .right = value }, binding.loc);
+},
+.b_object => {
+return p.newExpr(E.Binary{ .op = .bin_assign, .left = convertBindingToExpr(p, binding, allocator), .right = value }, binding.loc);
+},
+.b_missing => {
+return p.newExpr(E.Missing, binding.loc);
+},
+}
+    }
+
+pub fn convertBindingToExpr(p: *P, binding: Binding, allocator: Allocator) Expr {
+            switch (binding.data) {
+.b_identifier => |ident| {
+return p.newExpr(E.Identifier{ .@"ref" = ident.ref }, binding.loc);
+},
+.b_array => |arr| {
+var items = bun.handleOom(allocator.alloc(Expr, arr.items.len));
+            _ = &items;
+            for (arr.items, 0..) |item, i| {
+                _ = &item;
+                _ = &i;
+                const expr = convertBindingToExpr(p, item.binding, allocator);
+                if ((arr.has_spread and (i == (arr.items.len - 1)))) {
+                    items[cp_cast_int(usize, i)] = p.newExpr(E.Spread{ .value = expr }, expr.loc);
+                } else {
+                    if (item.default_value) |default_val| {
+                        _ = &default_val;
+                        items[cp_cast_int(usize, i)] = p.newExpr(E.Binary{ .op = .bin_assign, .left = expr, .right = default_val }, item.binding.loc);
+                    } else {
+                        items[cp_cast_int(usize, i)] = expr;
+                    }
+                }
+            }
+            return p.newExpr(E.Array{ .items = ExprNodeList.fromOwnedSlice(items), .is_single_line = arr.is_single_line }, binding.loc);
+},
+.b_object => |obj| {
+var properties = bun.handleOom(allocator.alloc(G.Property, obj.properties.len));
+            _ = &properties;
+            for (obj.properties, 0..) |prop, i| {
+                _ = &prop;
+                _ = &i;
+                properties[cp_cast_int(usize, i)] = G.Property{ .flags = prop.flags, .key = prop.key, .kind = (if (prop.flags.contains(.is_spread)) .spread else .normal), .value = convertBindingToExpr(p, (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value), allocator), .initializer = prop.default_value };
+            }
+            return p.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(properties), .is_single_line = obj.is_single_line }, binding.loc);
+},
+.b_missing => {
+return p.newExpr(E.Missing, binding.loc);
+},
+}
+    }
+    const Self = @This();
+};
+}

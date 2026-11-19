@@ -1462,3 +1462,11 @@
 - 完成模块：src/js_parser/ast/E.cp (1507行, 膨胀率 1.025x)
 - 涵盖节点：Array, Unary, Binary, JSXElement, String, Object, Template, RegExp, Import 等全部表达式 AST 节点定义。
 - 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，4 项硬门禁完全达成，无残留 *.zig.map。
+
+### 2026-11-19 19:38:15 UTC - JS Parser AST 核心解析与转换模块 4 连胜入库
+- 完成模块：
+  1. parseImportExport.cp (435行, 0.995x)
+  2. parseFn.cp (509行, 1.002x)
+  3. repl_transforms.cp (509行, 0.998x)
+  4. parseTypescript.cp (579行, 1.055x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。

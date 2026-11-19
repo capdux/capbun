@@ -1,479 +1,71 @@
-pub fn ParseFn(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const is_typescript_enabled = P.is_typescript_enabled;
-
-        /// This assumes the "function" token has already been parsed
-        pub fn parseFnStmt(noalias p: *P, loc: logger.Loc, noalias opts: *ParseStatementOptions, asyncRange: ?logger.Range) !Stmt {
-            const is_generator = p.lexer.token == T.t_asterisk;
-            const is_async = asyncRange != null;
-
-            if (is_generator) {
-                // p.markSyntaxFeature(compat.Generator, p.lexer.Range())
-                try p.lexer.next();
-            } else if (is_async) {
-                // p.markLoweredSyntaxFeature(compat.AsyncAwait, asyncRange, compat.Generator)
-            }
-
-            switch (opts.lexical_decl) {
-                .forbid => {
-                    try p.forbidLexicalDecl(loc);
-                },
-
-                // Allow certain function statements in certain single-statement contexts
-                .allow_fn_inside_if, .allow_fn_inside_label => {
-                    if (opts.is_typescript_declare or is_generator or is_async) {
-                        try p.forbidLexicalDecl(loc);
-                    }
-                },
-                else => {},
-            }
-
-            var name: ?js_ast.LocRef = null;
-            var nameText: string = "";
-
-            // The name is optional for "export default function() {}" pseudo-statements
-            if (!opts.is_name_optional or p.lexer.token == T.t_identifier) {
-                const nameLoc = p.lexer.loc();
-                nameText = p.lexer.identifier;
-                try p.lexer.expect(T.t_identifier);
-                // Difference
-                const ref = try p.newSymbol(Symbol.Kind.other, nameText);
-                name = js_ast.LocRef{
-                    .loc = nameLoc,
-                    .ref = ref,
-                };
-            }
-
-            // Even anonymous functions can have TypeScript type parameters
-            if (is_typescript_enabled) {
-                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-            }
-
-            // Introduce a fake block scope for function declarations inside if statements
-            var ifStmtScopeIndex: usize = 0;
-            const hasIfScope = opts.lexical_decl == .allow_fn_inside_if;
-            if (hasIfScope) {
-                ifStmtScopeIndex = try p.pushScopeForParsePass(js_ast.Scope.Kind.block, loc);
-            }
-
-            const scopeIndex: usize = try p.pushScopeForParsePass(js_ast.Scope.Kind.function_args, p.lexer.loc());
-
-            var func = try p.parseFn(name, FnOrArrowDataParse{
-                .needs_async_loc = loc,
-                .async_range = asyncRange orelse logger.Range.None,
-                .has_async_range = asyncRange != null,
-                .allow_await = if (is_async) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident,
-                .allow_yield = if (is_generator) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident,
-                .is_typescript_declare = opts.is_typescript_declare,
-
-                // Only allow omitting the body if we're parsing TypeScript
-                .allow_missing_body_for_type_script = is_typescript_enabled,
-            });
-            p.fn_or_arrow_data_parse.has_argument_decorators = false;
-
-            if (comptime is_typescript_enabled) {
-                // Don't output anything if it's just a forward declaration of a function
-                if ((opts.is_typescript_declare or func.flags.contains(.is_forward_declaration))) {
-                    p.popAndDiscardScope(scopeIndex);
-
-                    // Balance the fake block scope introduced above
-                    if (hasIfScope) {
-                        p.popScope();
-                    }
-
-                    if (opts.is_typescript_declare and opts.is_namespace_scope and opts.is_export) {
-                        p.has_non_local_export_declare_inside_namespace = true;
-                    }
-
-                    return p.s(S.TypeScript{}, loc);
-                }
-            }
-
-            p.popScope();
-
-            // Only declare the function after we know if it had a body or not. Otherwise
-            // TypeScript code such as this will double-declare the symbol:
-            //
-            //     function foo(): void;
-            //     function foo(): void {}
-            //
-            if (name != null) {
-                const kind = if (is_generator or is_async)
-                    Symbol.Kind.generator_or_async_function
-                else
-                    Symbol.Kind.hoisted_function;
-
-                name.?.ref = try p.declareSymbol(kind, name.?.loc, nameText);
-                func.name = name;
-            }
-
-            func.flags.setPresent(.has_if_scope, hasIfScope);
-            func.flags.setPresent(.is_export, opts.is_export);
-
-            // Balance the fake block scope introduced above
-            if (hasIfScope) {
-                p.popScope();
-            }
-
-            return p.s(
-                S.Function{
-                    .func = func,
-                },
-                loc,
-            );
-        }
-
-        pub fn parseFn(p: *P, name: ?js_ast.LocRef, opts: FnOrArrowDataParse) anyerror!G.Fn {
-            // if data.allowAwait and data.allowYield {
-            //     p.markSyntaxFeature(compat.AsyncGenerator, data.asyncRange)
-            // }
-
-            var func = G.Fn{
-                .name = name,
-
-                .flags = Flags.Function.init(.{
-                    .has_rest_arg = false,
-                    .is_async = opts.allow_await == .allow_expr,
-                    .is_generator = opts.allow_yield == .allow_expr,
-                }),
-
-                .arguments_ref = null,
-                .open_parens_loc = p.lexer.loc(),
-            };
-            try p.lexer.expect(T.t_open_paren);
-
-            // Await and yield are not allowed in function arguments
-            var old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
-
-            p.fn_or_arrow_data_parse.allow_await = if (opts.allow_await == .allow_expr)
-                AwaitOrYield.forbid_all
-            else
-                AwaitOrYield.allow_ident;
-
-            p.fn_or_arrow_data_parse.allow_yield = if (opts.allow_yield == .allow_expr)
-                AwaitOrYield.forbid_all
-            else
-                AwaitOrYield.allow_ident;
-
-            // Don't suggest inserting "async" before anything if "await" is found
-            p.fn_or_arrow_data_parse.needs_async_loc = logger.Loc.Empty;
-
-            // If "super()" is allowed in the body, it's allowed in the arguments
-            p.fn_or_arrow_data_parse.allow_super_call = opts.allow_super_call;
-            p.fn_or_arrow_data_parse.allow_super_property = opts.allow_super_property;
-
-            var rest_arg: bool = false;
-            var arg_has_decorators: bool = false;
-            var args = List(G.Arg){};
-            while (p.lexer.token != T.t_close_paren) {
-                // Skip over "this" type annotations
-                if (is_typescript_enabled and p.lexer.token == T.t_this) {
-                    try p.lexer.next();
-                    if (p.lexer.token == T.t_colon) {
-                        try p.lexer.next();
-                        try p.skipTypeScriptType(.lowest);
-                    }
-                    if (p.lexer.token != T.t_comma) {
-                        break;
-                    }
-
-                    try p.lexer.next();
-                    continue;
-                }
-
-                var ts_decorators: []ExprNodeIndex = &([_]ExprNodeIndex{});
-                if (opts.allow_ts_decorators) {
-                    ts_decorators = try p.parseTypeScriptDecorators();
-                    if (ts_decorators.len > 0) {
-                        arg_has_decorators = true;
-                    }
-                }
-
-                if (!func.flags.contains(.has_rest_arg) and p.lexer.token == T.t_dot_dot_dot) {
-                    // p.markSyntaxFeature
-                    try p.lexer.next();
-                    rest_arg = true;
-                    func.flags.insert(.has_rest_arg);
-                }
-
-                var is_typescript_ctor_field = false;
-                const is_identifier = p.lexer.token == T.t_identifier;
-                var text = p.lexer.identifier;
-                var arg = try p.parseBinding(.{});
-                var ts_metadata = TypeScript.Metadata.default;
-
-                if (comptime is_typescript_enabled) {
-                    if (is_identifier and opts.is_constructor) {
-                        // Skip over TypeScript accessibility modifiers, which turn this argument
-                        // into a class field when used inside a class constructor. This is known
-                        // as a "parameter property" in TypeScript.
-                        while (true) {
-                            switch (p.lexer.token) {
-                                .t_identifier, .t_open_brace, .t_open_bracket => {
-                                    if (!js_lexer.TypeScriptAccessibilityModifier.has(text)) {
-                                        break;
-                                    }
-
-                                    is_typescript_ctor_field = true;
-
-                                    // TypeScript requires an identifier binding
-                                    if (p.lexer.token != .t_identifier) {
-                                        try p.lexer.expect(.t_identifier);
-                                    }
-                                    text = p.lexer.identifier;
-
-                                    // Re-parse the binding (the current binding is the TypeScript keyword)
-                                    arg = try p.parseBinding(.{});
-                                },
-                                else => {
-                                    break;
-                                },
-                            }
-                        }
-                    }
-
-                    // "function foo(a?) {}"
-                    if (p.lexer.token == .t_question) {
-                        try p.lexer.next();
-                    }
-
-                    // "function foo(a: any) {}"
-                    if (p.lexer.token == .t_colon) {
-                        try p.lexer.next();
-                        if (!rest_arg) {
-                            if (p.options.features.emit_decorator_metadata and
-                                opts.allow_ts_decorators and
-                                (opts.has_argument_decorators or opts.has_decorators or arg_has_decorators))
-                            {
-                                ts_metadata = try p.skipTypeScriptTypeWithMetadata(.lowest);
-                            } else {
-                                try p.skipTypeScriptType(.lowest);
-                            }
-                        } else {
-                            // rest parameter is always object, leave metadata as m_none
-                            try p.skipTypeScriptType(.lowest);
-                        }
-                    }
-                }
-
-                var parseStmtOpts = ParseStatementOptions{};
-                p.declareBinding(.hoisted, &arg, &parseStmtOpts) catch unreachable;
-
-                var default_value: ?ExprNodeIndex = null;
-                if (!func.flags.contains(.has_rest_arg) and p.lexer.token == .t_equals) {
-                    // p.markSyntaxFeature
-                    try p.lexer.next();
-                    default_value = try p.parseExpr(.comma);
-                }
-
-                args.append(p.allocator, G.Arg{
-                    .ts_decorators = ExprNodeList.fromOwnedSlice(ts_decorators),
-                    .binding = arg,
-                    .default = default_value,
-
-                    // We need to track this because it affects code generation
-                    .is_typescript_ctor_field = is_typescript_ctor_field,
-                    .ts_metadata = ts_metadata,
-                }) catch unreachable;
-
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                if (func.flags.contains(.has_rest_arg)) {
-                    // JavaScript does not allow a comma after a rest argument
-                    if (opts.is_typescript_declare) {
-                        // TypeScript does allow a comma after a rest argument in a "declare" context
-                        try p.lexer.next();
-                    } else {
-                        try p.lexer.expect(.t_close_paren);
-                    }
-
-                    break;
-                }
-
-                try p.lexer.next();
-                rest_arg = false;
-            }
-            if (args.items.len > 0) {
-                func.args = args.items;
-            }
-
-            // Reserve the special name "arguments" in this scope. This ensures that it
-            // shadows any variable called "arguments" in any parent scopes. But only do
-            // this if it wasn't already declared above because arguments are allowed to
-            // be called "arguments", in which case the real "arguments" is inaccessible.
-            if (!p.current_scope.members.contains("arguments")) {
-                func.arguments_ref = p.declareSymbolMaybeGenerated(.arguments, func.open_parens_loc, arguments_str, false) catch unreachable;
-                p.symbols.items[func.arguments_ref.?.innerIndex()].must_not_be_renamed = true;
-            }
-
-            try p.lexer.expect(.t_close_paren);
-            p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), &old_fn_or_arrow_data);
-
-            p.fn_or_arrow_data_parse.has_argument_decorators = arg_has_decorators;
-
-            // "function foo(): any {}"
-            if (is_typescript_enabled) {
-                if (p.lexer.token == .t_colon) {
-                    try p.lexer.next();
-
-                    if (p.options.features.emit_decorator_metadata and opts.allow_ts_decorators and (opts.has_argument_decorators or opts.has_decorators)) {
-                        func.return_ts_metadata = try p.skipTypescriptReturnTypeWithMetadata();
-                    } else {
-                        try p.skipTypescriptReturnType();
-                    }
-                } else if (p.options.features.emit_decorator_metadata and opts.allow_ts_decorators and (opts.has_argument_decorators or opts.has_decorators)) {
-                    if (func.flags.contains(.is_async)) {
-                        func.return_ts_metadata = .m_promise;
-                    } else {
-                        func.return_ts_metadata = .m_undefined;
-                    }
-                }
-            }
-
-            // "function foo(): any;"
-            if (opts.allow_missing_body_for_type_script and p.lexer.token != .t_open_brace) {
-                try p.lexer.expectOrInsertSemicolon();
-                func.flags.insert(.is_forward_declaration);
-                return func;
-            }
-            var tempOpts = opts;
-            func.body = try p.parseFnBody(&tempOpts);
-
-            return func;
-        }
-
-        pub fn parseFnExpr(p: *P, loc: logger.Loc, is_async: bool, async_range: logger.Range) !Expr {
-            try p.lexer.next();
-            const is_generator = p.lexer.token == T.t_asterisk;
-            if (is_generator) {
-                // p.markSyntaxFeature()
-                try p.lexer.next();
-            } else if (is_async) {
-                // p.markLoweredSyntaxFeature(compat.AsyncAwait, asyncRange, compat.Generator)
-            }
-
-            var name: ?js_ast.LocRef = null;
-
-            _ = p.pushScopeForParsePass(.function_args, loc) catch unreachable;
-
-            // The name is optional
-            if (p.lexer.token == .t_identifier) {
-                const text = p.lexer.identifier;
-
-                // Don't declare the name "arguments" since it's shadowed and inaccessible
-                name = js_ast.LocRef{
-                    .loc = p.lexer.loc(),
-                    .ref = if (text.len > 0 and !strings.eqlComptime(text, "arguments"))
-                        try p.declareSymbol(.hoisted_function, p.lexer.loc(), text)
-                    else
-                        try p.newSymbol(.hoisted_function, text),
-                };
-
-                try p.lexer.next();
-            }
-
-            // Even anonymous functions can have TypeScript type parameters
-            if (comptime is_typescript_enabled) {
-                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-            }
-
-            const func = try p.parseFn(name, FnOrArrowDataParse{
-                .needs_async_loc = loc,
-                .async_range = async_range,
-                .allow_await = if (is_async) .allow_expr else .allow_ident,
-                .allow_yield = if (is_generator) .allow_expr else .allow_ident,
-            });
-            p.fn_or_arrow_data_parse.has_argument_decorators = false;
-
-            p.validateFunctionName(func, .expr);
-            p.popScope();
-
-            return p.newExpr(js_ast.E.Function{
-                .func = func,
-            }, loc);
-        }
-
-        pub fn parseFnBody(p: *P, data: *FnOrArrowDataParse) !G.FnBody {
-            const oldFnOrArrowData = p.fn_or_arrow_data_parse;
-            const oldAllowIn = p.allow_in;
-            p.fn_or_arrow_data_parse = data.*;
-            p.allow_in = true;
-
-            const loc = p.lexer.loc();
-            var pushedScopeForFunctionBody = false;
-            if (p.lexer.token == .t_open_brace) {
-                _ = try p.pushScopeForParsePass(Scope.Kind.function_body, p.lexer.loc());
-                pushedScopeForFunctionBody = true;
-            }
-
-            try p.lexer.expect(.t_open_brace);
-            var opts = ParseStatementOptions{};
-            const stmts = try p.parseStmtsUpTo(.t_close_brace, &opts);
-            try p.lexer.next();
-
-            if (pushedScopeForFunctionBody) p.popScope();
-
-            p.allow_in = oldAllowIn;
-            p.fn_or_arrow_data_parse = oldFnOrArrowData;
-            return G.FnBody{ .loc = loc, .stmts = stmts };
-        }
-
-        pub fn parseArrowBody(p: *P, args: []js_ast.G.Arg, data: *FnOrArrowDataParse) !E.Arrow {
-            const arrow_loc = p.lexer.loc();
-
-            // Newlines are not allowed before "=>"
-            if (p.lexer.has_newline_before) {
-                try p.log.addRangeError(p.source, p.lexer.range(), "Unexpected newline before \"=>\"");
-                return error.SyntaxError;
-            }
-
-            try p.lexer.expect(T.t_equals_greater_than);
-
-            for (args) |*arg| {
-                var opts = ParseStatementOptions{};
-                try p.declareBinding(Symbol.Kind.hoisted, &arg.binding, &opts);
-            }
-
-            // The ability to use "this" and "super()" is inherited by arrow functions
-            data.allow_super_call = p.fn_or_arrow_data_parse.allow_super_call;
-            data.allow_super_property = p.fn_or_arrow_data_parse.allow_super_property;
-            data.is_this_disallowed = p.fn_or_arrow_data_parse.is_this_disallowed;
-
-            if (p.lexer.token == .t_open_brace) {
-                const body = try p.parseFnBody(data);
-                p.after_arrow_body_loc = p.lexer.loc();
-                return E.Arrow{ .args = args, .body = body };
-            }
-
-            _ = try p.pushScopeForParsePass(Scope.Kind.function_body, arrow_loc);
-            defer p.popScope();
-
-            var old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
-
-            p.fn_or_arrow_data_parse = data.*;
-            const expr = try p.parseExpr(Level.comma);
-            p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), &old_fn_or_arrow_data);
-
-            var stmts = try p.allocator.alloc(Stmt, 1);
-            stmts[0] = p.s(S.Return{ .value = expr }, expr.loc);
-            return E.Arrow{ .args = args, .prefer_expr = true, .body = G.FnBody{ .loc = arrow_loc, .stmts = stmts } };
-        }
-    };
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const string = []const u8;
-
-const bun = @import("bun");
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const E = js_ast.E;
 const Expr = js_ast.Expr;
@@ -485,16 +77,12 @@ const S = js_ast.S;
 const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
 const Symbol = js_ast.Symbol;
-
 const G = js_ast.G;
 const Arg = G.Arg;
-
 const Op = js_ast.Op;
 const Level = js_ast.Op.Level;
-
 const js_lexer = bun.js_lexer;
 const T = js_lexer.T;
-
 const js_parser = bun.js_parser;
 const AwaitOrYield = js_parser.AwaitOrYield;
 const FnOrArrowDataParse = js_parser.FnOrArrowDataParse;
@@ -503,6 +91,329 @@ const ParseStatementOptions = js_parser.ParseStatementOptions;
 const TypeScript = js_parser.TypeScript;
 const arguments_str = js_parser.arguments_str;
 const options = js_parser.options;
-
-const std = @import("std");
 const List = std.ArrayListUnmanaged;
+
+pub fn ParseFn(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn parseFnStmt(p: *P, loc: logger.Loc, opts: *ParseStatementOptions, asyncRange: ?logger.Range) anyerror!Stmt {
+            const is_generator = (p.lexer.token == T.t_asterisk);
+            const is_async = (asyncRange != null);
+            if (is_generator) {
+                _ = try p.lexer.next();
+            } else {
+                if (is_async) {
+                }
+            }
+            switch (opts.lexical_decl) {
+.forbid => {
+_ = try p.forbidLexicalDecl(loc);
+},
+.allow_fn_inside_if, .allow_fn_inside_label => {
+if (((opts.is_typescript_declare or is_generator) or is_async)) {
+                _ = try p.forbidLexicalDecl(loc);
+            }
+},
+else => {
+
+},
+}
+            var name: ?js_ast.LocRef = null;
+            _ = &name;
+            var nameText: []const u8 = "";
+            _ = &nameText;
+            if (((!opts.is_name_optional) or (p.lexer.token == T.t_identifier))) {
+                const nameLoc = p.lexer.loc();
+                nameText = p.lexer.identifier;
+                _ = try p.lexer.expect(T.t_identifier);
+                const sym_ref = try p.newSymbol(Symbol.Kind.other, nameText);
+                name = js_ast.LocRef{ .loc = nameLoc, .@"ref" = sym_ref };
+            }
+            if (is_typescript_enabled) {
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+            }
+            var ifStmtScopeIndex: usize = 0;
+            _ = &ifStmtScopeIndex;
+            const hasIfScope = (opts.lexical_decl == .allow_fn_inside_if);
+            if (hasIfScope) {
+                ifStmtScopeIndex = try p.pushScopeForParsePass(js_ast.Scope.Kind.block, loc);
+            }
+            const scopeIndex: usize = try p.pushScopeForParsePass(js_ast.Scope.Kind.function_args, p.lexer.loc());
+            var func = p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = ((asyncRange) orelse (logger.Range.None)), .has_async_range = (asyncRange != null), .allow_await = (if (is_async) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .allow_yield = (if (is_generator) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .is_typescript_declare = opts.is_typescript_declare, .allow_missing_body_for_type_script = is_typescript_enabled });
+            _ = &func;
+            p.fn_or_arrow_data_parse.has_argument_decorators = false;
+            if (comptime is_typescript_enabled) {
+                if ((opts.is_typescript_declare or func.flags.contains(.is_forward_declaration))) {
+                    _ = p.popAndDiscardScope(scopeIndex);
+                    if (hasIfScope) {
+                        _ = p.popScope();
+                    }
+                    if (((opts.is_typescript_declare and opts.is_namespace_scope) and opts.is_export)) {
+                        p.has_non_local_export_declare_inside_namespace = true;
+                    }
+                    return p.s(S.TypeScript, loc);
+                }
+            }
+            _ = p.popScope();
+            if (name) |name_val| {
+                _ = &name_val;
+                const kind = (if ((is_generator or is_async)) Symbol.Kind.generator_or_async_function else Symbol.Kind.hoisted_function);
+                name = js_ast.LocRef{ .loc = name_val.loc, .@"ref" = try p.declareSymbol(kind, name_val.loc, nameText) };
+                (if (@typeInfo(@TypeOf(func)) == .@"enum" or @typeInfo(@TypeOf(func)) == .@"union") @tagName(func) else func.name) = name;
+            }
+            _ = func.flags.setPresent(.has_if_scope, hasIfScope);
+            _ = func.flags.setPresent(.is_export, opts.is_export);
+            if (hasIfScope) {
+                _ = p.popScope();
+            }
+            return p.s(S.Function{ .func = func }, loc);
+    }
+
+pub fn parseFn(p: *P, name: ?js_ast.LocRef, opts: FnOrArrowDataParse) anyerror!G.Fn {
+            var func = G.Fn{ .name = name, .flags = Flags.Function.init(.{ .has_rest_arg = false, .is_async = (opts.allow_await == .allow_expr), .is_generator = (opts.allow_yield == .allow_expr) }), .arguments_ref = null, .open_parens_loc = p.lexer.loc() };
+            _ = &func;
+            _ = try p.lexer.expect(T.t_open_paren);
+            var old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
+            _ = &old_fn_or_arrow_data;
+            p.fn_or_arrow_data_parse.allow_await = (if ((opts.allow_await == .allow_expr)) AwaitOrYield.forbid_all else AwaitOrYield.allow_ident);
+            p.fn_or_arrow_data_parse.allow_yield = (if ((opts.allow_yield == .allow_expr)) AwaitOrYield.forbid_all else AwaitOrYield.allow_ident);
+            p.fn_or_arrow_data_parse.needs_async_loc = logger.Loc.Empty;
+            p.fn_or_arrow_data_parse.allow_super_call = opts.allow_super_call;
+            p.fn_or_arrow_data_parse.allow_super_property = opts.allow_super_property;
+            var rest_arg: bool = false;
+            _ = &rest_arg;
+            var arg_has_decorators: bool = false;
+            _ = &arg_has_decorators;
+            var args = List(G.Arg);
+            _ = &args;
+            {
+            }
+            while ((p.lexer.token != T.t_close_paren)) {
+                if ((is_typescript_enabled and (p.lexer.token == T.t_this))) {
+                    _ = try p.lexer.next();
+                    if ((p.lexer.token == T.t_colon)) {
+                        _ = try p.lexer.next();
+                        _ = try p.skipTypeScriptType(.lowest);
+                    }
+                    if ((p.lexer.token != T.t_comma)) {
+                        break;
+                    }
+                    _ = try p.lexer.next();
+                    continue;
+                }
+                var ts_decorators: []ExprNodeIndex = &.{};
+                _ = &ts_decorators;
+                if (opts.allow_ts_decorators) {
+                    ts_decorators = try p.parseTypeScriptDecorators();
+                    if ((ts_decorators.len > 0)) {
+                        arg_has_decorators = true;
+                    }
+                }
+                if (((!func.flags.contains(.has_rest_arg)) and (p.lexer.token == T.t_dot_dot_dot))) {
+                    _ = try p.lexer.next();
+                    rest_arg = true;
+                    _ = func.flags.insert(.has_rest_arg);
+                }
+                var is_typescript_ctor_field = false;
+                _ = &is_typescript_ctor_field;
+                const is_identifier = (p.lexer.token == T.t_identifier);
+                var text = p.lexer.identifier;
+                _ = &text;
+                var arg = try p.parseBinding(.{});
+                _ = &arg;
+                var ts_metadata = TypeScript.Metadata.default;
+                _ = &ts_metadata;
+                if (comptime is_typescript_enabled) {
+                    if ((is_identifier and opts.is_constructor)) {
+                        while (true) {
+                            switch (p.lexer.token) {
+.t_identifier, .t_open_brace, .t_open_bracket => {
+if ((!js_lexer.TypeScriptAccessibilityModifier.has(text))) {
+                                break;
+                            }
+                            is_typescript_ctor_field = true;
+                            if ((p.lexer.token != .t_identifier)) {
+                                _ = try p.lexer.expect(.t_identifier);
+                            }
+                            text = p.lexer.identifier;
+                            arg = try p.parseBinding(.{});
+},
+else => {
+break;
+},
+}
+                        }
+                    }
+                    if ((p.lexer.token == .t_question)) {
+                        _ = try p.lexer.next();
+                    }
+                    if ((p.lexer.token == .t_colon)) {
+                        _ = try p.lexer.next();
+                        if ((!rest_arg)) {
+                            if (((p.options.features.emit_decorator_metadata and opts.allow_ts_decorators) and ((opts.has_argument_decorators or opts.has_decorators) or arg_has_decorators))) {
+                                ts_metadata = try p.skipTypeScriptTypeWithMetadata(.lowest);
+                            } else {
+                                _ = try p.skipTypeScriptType(.lowest);
+                            }
+                        } else {
+                            _ = try p.skipTypeScriptType(.lowest);
+                        }
+                    }
+                }
+                var parseStmtOpts = ParseStatementOptions{  };
+                _ = &parseStmtOpts;
+                _ = ((p.declareBinding(.hoisted, (&arg), (&parseStmtOpts))) catch unreachable);
+                var default_value: ?ExprNodeIndex = null;
+                _ = &default_value;
+                if (((!func.flags.contains(.has_rest_arg)) and (p.lexer.token == .t_equals))) {
+                    _ = try p.lexer.next();
+                    default_value = try p.parseExpr(.comma);
+                }
+                _ = ((args.append(p.allocator, G.Arg{ .ts_decorators = ExprNodeList.fromOwnedSlice(ts_decorators), .binding = arg, .default = default_value, .is_typescript_ctor_field = is_typescript_ctor_field, .ts_metadata = ts_metadata })) catch unreachable);
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                if (func.flags.contains(.has_rest_arg)) {
+                    if (opts.is_typescript_declare) {
+                        _ = try p.lexer.next();
+                    } else {
+                        _ = try p.lexer.expect(.t_close_paren);
+                    }
+                    break;
+                }
+                _ = try p.lexer.next();
+                rest_arg = false;
+            }
+            if ((args.items.len > 0)) {
+                func.args = args.items;
+            }
+            if ((!p.current_scope.members.contains("arguments"))) {
+                func.arguments_ref = ((p.declareSymbolMaybeGenerated(.arguments, func.open_parens_loc, arguments_str, false)) catch unreachable);
+                if (func.arguments_ref) |arg_ref| {
+                    _ = &arg_ref;
+                    p.symbols.items[@as(usize, @intCast(arg_ref.innerIndex()))].must_not_be_renamed = true;
+                }
+            }
+            _ = try p.lexer.expect(.t_close_paren);
+            p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), (&old_fn_or_arrow_data));
+            p.fn_or_arrow_data_parse.has_argument_decorators = arg_has_decorators;
+            if (is_typescript_enabled) {
+                if ((p.lexer.token == .t_colon)) {
+                    _ = try p.lexer.next();
+                    if (((p.options.features.emit_decorator_metadata and opts.allow_ts_decorators) and (opts.has_argument_decorators or opts.has_decorators))) {
+                        func.return_ts_metadata = try p.skipTypescriptReturnTypeWithMetadata();
+                    } else {
+                        _ = try p.skipTypescriptReturnType();
+                    }
+                } else {
+                    if (((p.options.features.emit_decorator_metadata and opts.allow_ts_decorators) and (opts.has_argument_decorators or opts.has_decorators))) {
+                        if (func.flags.contains(.is_async)) {
+                            func.return_ts_metadata = .m_promise;
+                        } else {
+                            func.return_ts_metadata = .m_undefined;
+                        }
+                    }
+                }
+            }
+            if ((opts.allow_missing_body_for_type_script and (p.lexer.token != .t_open_brace))) {
+                _ = try p.lexer.expectOrInsertSemicolon();
+                _ = func.flags.insert(.is_forward_declaration);
+                return func;
+            }
+            var tempOpts = opts;
+            _ = &tempOpts;
+            func.body = try p.parseFnBody((&tempOpts));
+            return func;
+    }
+
+pub fn parseFnExpr(p: *P, loc: logger.Loc, is_async: bool, async_range: logger.Range) !Expr {
+            _ = try p.lexer.next();
+            const is_generator = (p.lexer.token == T.t_asterisk);
+            if (is_generator) {
+                _ = try p.lexer.next();
+            } else {
+                if (is_async) {
+                }
+            }
+            var name: ?js_ast.LocRef = null;
+            _ = &name;
+            _ = ((p.pushScopeForParsePass(.function_args, loc)) catch unreachable);
+            if ((p.lexer.token == .t_identifier)) {
+                const text = p.lexer.identifier;
+                name = js_ast.LocRef{ .loc = p.lexer.loc(), .@"ref" = (if (((text.len > 0) and (!strings.eqlComptime(text, "arguments")))) try p.declareSymbol(.hoisted_function, p.lexer.loc(), text) else try p.newSymbol(.hoisted_function, text)) };
+                _ = try p.lexer.next();
+            }
+            if (comptime is_typescript_enabled) {
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+            }
+            const func = p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = async_range, .allow_await = (if (is_async) .allow_expr else .allow_ident), .allow_yield = (if (is_generator) .allow_expr else .allow_ident) });
+            p.fn_or_arrow_data_parse.has_argument_decorators = false;
+            _ = p.validateFunctionName(func, .expr);
+            _ = p.popScope();
+            return p.newExpr(js_ast.E.Function{ .func = func }, loc);
+    }
+
+pub fn parseFnBody(p: *P, data: *FnOrArrowDataParse) !G.FnBody {
+            const oldFnOrArrowData = p.fn_or_arrow_data_parse;
+            const oldAllowIn = p.allow_in;
+            p.fn_or_arrow_data_parse = data.*;
+            p.allow_in = true;
+            const loc = p.lexer.loc();
+            var pushedScopeForFunctionBody = false;
+            _ = &pushedScopeForFunctionBody;
+            if ((p.lexer.token == .t_open_brace)) {
+                _ = try p.pushScopeForParsePass(Scope.Kind.function_body, p.lexer.loc());
+                pushedScopeForFunctionBody = true;
+            }
+            _ = try p.lexer.expect(.t_open_brace);
+            var opts = ParseStatementOptions{  };
+            _ = &opts;
+            const stmts = try p.parseStmtsUpTo(.t_close_brace, (&opts));
+            _ = try p.lexer.next();
+            if (pushedScopeForFunctionBody) {
+                _ = p.popScope();
+            }
+            p.allow_in = oldAllowIn;
+            p.fn_or_arrow_data_parse = oldFnOrArrowData;
+            return G.FnBody{ .loc = loc, .stmts = stmts };
+    }
+
+pub fn parseArrowBody(p: *P, args: []js_ast.G.Arg, data: *FnOrArrowDataParse) !E.Arrow {
+            const arrow_loc = p.lexer.loc();
+            if (p.lexer.has_newline_before) {
+                _ = try p.log.addRangeError(p.source, p.lexer.range(), "Unexpected newline before \"=>\"");
+                return error.SyntaxError;
+            }
+            _ = try p.lexer.expect(T.t_equals_greater_than);
+            for (cp_mut_slice(&args)) |*arg| {
+                _ = &arg;
+                var opts = ParseStatementOptions{  };
+                _ = &opts;
+                _ = try p.declareBinding(Symbol.Kind.hoisted, (&(arg.*).binding), (&opts));
+            }
+            data.allow_super_call = p.fn_or_arrow_data_parse.allow_super_call;
+            data.allow_super_property = p.fn_or_arrow_data_parse.allow_super_property;
+            data.is_this_disallowed = p.fn_or_arrow_data_parse.is_this_disallowed;
+            if ((p.lexer.token == .t_open_brace)) {
+                const body = try p.parseFnBody(data);
+                p.after_arrow_body_loc = p.lexer.loc();
+                return E.Arrow{ .args = args, .body = body };
+            }
+            _ = try p.pushScopeForParsePass(Scope.Kind.function_body, arrow_loc);
+            defer {
+            _ = p.popScope();
+            }
+            var old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
+            _ = &old_fn_or_arrow_data;
+            p.fn_or_arrow_data_parse = data.*;
+            const expr = try p.parseExpr(Level.comma);
+            p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), (&old_fn_or_arrow_data));
+            var stmts = try p.allocator.alloc(Stmt, 1);
+            _ = &stmts;
+            stmts[cp_cast_int(usize, 0)] = p.s(S.Return{ .value = expr }, expr.loc);
+            return E.Arrow{ .args = args, .prefer_expr = true, .body = G.FnBody{ .loc = arrow_loc, .stmts = stmts } };
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const is_typescript_enabled = P.is_typescript_enabled;
+};
+}
