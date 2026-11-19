@@ -1123,3 +1123,14 @@
 ### 2. 全局宏定义表切片与枚举关键字转义 (`defines-table.cp`)
 - **静态切片字面量标准对齐**：数百项字符串元组切片统一采用 `&[ ... ]` 表达，元组格式化使用纯 CP `[ ... ]` 语法。
 - **保留标识符精准转义**：对 `PureGlobalIdentifierValue` 内部的 `undefined` 枚举标签转义为 `@\"undefined\"`，消除语法解析冲突。
+
+
+## 2026-11-19 [Milestone 7 Phase 80 Group A] 包安装多变量解构与网络任务状态机 CP 纯化经验
+
+### 1. 结构体与联合体内联类型提升 (`PackageManagerTask.cp`, `NetworkTask.cp`)
+- **嵌套二级结构体提升**：将 `union Request` 与 `union Callback` 内的原生匿名二级结构体提取为独立命名的顶层类型（如 `PackageManifestRequest` 等），消解 CP 语法中 union 字段内直接嵌套 `struct` 的语法冲突。
+- **关键字与标识符转义规避**：对 `Task.err` 字段进行转义处理（`@"err"`），将 `arena` 命名规范为 `arena_allocator`，消除保留关键字冲突；形参避免与枚举方法 `name()` 同名。
+
+### 2. 提升式安装依赖图多值解构 (`hoisted_install.cp`)
+- **多返回值解构纯化**：将 Zig 的 `const a, var b = trees: { ... }` 改写为 CP 原生解构 `const [completed_trees, tree_ids_to_trees_the_id_depends_on] = trees: { ... }`。
+- **控制流扁平化**：平滑重构 `while (...) { ... } else { ... }` 为顺序单出口控制流，确保控制流语义严密。

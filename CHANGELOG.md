@@ -1368,3 +1368,13 @@
   - `defines-table.cp` (930 行, 0.999x)
 - **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.009x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,187 / 1,295 模块 (91.66%)**，`src/bundler/` 待迁移模块降至 5 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 80 Group A] `src/install/` 第三批 3 个核心包安装与网络调度模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 3 个包管理核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `hoisted_install.cp` (378 行, 0.995x)
+  - `PackageManagerTask.cp` (389 行, 1.010x)
+  - `NetworkTask.cp` (510 行, 1.010x)
+- **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.010x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,190 / 1,295 模块 (91.89%)**，突破 1,190 模块！`src/install/` 待迁移模块降至 18 个！

@@ -1,362 +1,78 @@
-pub fn installHoistedPackages(
-    this: *PackageManager,
-    ctx: Command.Context,
-    workspace_filters: []const WorkspaceFilter,
-    install_root_dependencies: bool,
-    log_level: PackageManager.Options.LogLevel,
-    packages_to_install: ?[]const PackageID,
-) !PackageInstall.Summary {
-    bun.analytics.Features.hoisted_bun_install += 1;
-
-    const original_trees = this.lockfile.buffers.trees;
-    const original_tree_dep_ids = this.lockfile.buffers.hoisted_dependencies;
-
-    try this.lockfile.filter(this.log, this, install_root_dependencies, workspace_filters, packages_to_install);
-
-    defer {
-        this.lockfile.buffers.trees = original_trees;
-        this.lockfile.buffers.hoisted_dependencies = original_tree_dep_ids;
-    }
-
-    var root_node: *Progress.Node = undefined;
-    var download_node: Progress.Node = undefined;
-    var install_node: Progress.Node = undefined;
-    var scripts_node: Progress.Node = undefined;
-    const options = &this.options;
-    var progress = &this.progress;
-
-    if (log_level.showProgress()) {
-        progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
-        root_node = progress.start("", 0);
-        download_node = root_node.start(ProgressStrings.download(), 0);
-
-        install_node = root_node.start(ProgressStrings.install(), this.lockfile.buffers.hoisted_dependencies.items.len);
-        scripts_node = root_node.start(ProgressStrings.script(), 0);
-        this.downloads_node = &download_node;
-        this.scripts_node = &scripts_node;
-    }
-
-    defer {
-        if (log_level.showProgress()) {
-            progress.root.end();
-            progress.* = .{};
-        }
-    }
-
-    // If there was already a valid lockfile and so we did not resolve, i.e. there was zero network activity
-    // the packages could still not be in the cache dir
-    // this would be a common scenario in a CI environment
-    // or if you just cloned a repo
-    // we want to check lazily though
-    // no need to download packages you've already installed!!
-    var new_node_modules = false;
-    const cwd = bun.FD.cwd();
-    const node_modules_folder = brk: {
-        // Attempt to open the existing node_modules folder
-        switch (bun.sys.openatOSPath(cwd, bun.OSPathLiteral("node_modules"), bun.O.DIRECTORY | bun.O.RDONLY, 0o755)) {
-            .result => |fd| break :brk std.fs.Dir{ .fd = fd.cast() },
-            .err => {},
-        }
-
-        new_node_modules = true;
-
-        // Attempt to create a new node_modules folder
-        if (bun.sys.mkdir("node_modules", 0o755).asErr()) |err| {
-            if (err.errno != @intFromEnum(bun.sys.E.EXIST)) {
-                Output.err(err, "could not create the <b>\"node_modules\"<r> directory", .{});
-                Global.crash();
-            }
-        }
-        break :brk bun.openDir(cwd.stdDir(), "node_modules") catch |err| {
-            Output.err(err, "could not open the <b>\"node_modules\"<r> directory", .{});
-            Global.crash();
-        };
-    };
-
-    var skip_delete = new_node_modules;
-    var skip_verify_installed_version_number = new_node_modules;
-
-    if (options.enable.force_install) {
-        skip_verify_installed_version_number = true;
-        skip_delete = false;
-    }
-
-    var summary = PackageInstall.Summary{};
-
-    {
-        var iterator = Lockfile.Tree.Iterator(.node_modules).init(this.lockfile);
-        if (comptime Environment.isPosix) {
-            Bin.Linker.ensureUmask();
-        }
-        var installer: PackageInstaller = brk: {
-            const completed_trees, const tree_ids_to_trees_the_id_depends_on = trees: {
-                const trees = this.lockfile.buffers.trees.items;
-                const completed_trees = try Bitset.initEmpty(this.allocator, trees.len);
-                var tree_ids_to_trees_the_id_depends_on = try Bitset.List.initEmpty(this.allocator, trees.len, trees.len);
-
-                {
-                    // For each tree id, traverse through it's parents and mark all visited tree
-                    // ids as dependents for the current tree parent
-                    var deps = try Bitset.initEmpty(this.allocator, trees.len);
-                    defer deps.deinit(this.allocator);
-                    for (trees) |_curr| {
-                        var curr = _curr;
-                        tree_ids_to_trees_the_id_depends_on.set(curr.id, curr.id);
-
-                        while (curr.parent != Lockfile.Tree.invalid_id) {
-                            deps.set(curr.id);
-                            tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps);
-                            curr = trees[curr.parent];
-                        }
-
-                        deps.setAll(false);
-                    }
-                }
-
-                if (comptime Environment.allow_assert) {
-                    if (trees.len > 0) {
-                        // last tree should only depend on one other
-                        bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(trees.len - 1).count() == 1, @src());
-                        // and it should be itself
-                        bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(trees.len - 1).isSet(trees.len - 1), @src());
-
-                        // root tree should always depend on all trees
-                        bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(0).count() == trees.len, @src());
-                    }
-
-                    // a tree should always depend on itself
-                    for (0..trees.len) |j| {
-                        bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(j).isSet(j), @src());
-                    }
-                }
-
-                break :trees .{
-                    completed_trees,
-                    tree_ids_to_trees_the_id_depends_on,
-                };
-            };
-
-            // These slices potentially get resized during iteration
-            // so we want to make sure they're not accessible to the rest of this function
-            // to make mistakes harder
-            var parts = this.lockfile.packages.slice();
-
-            break :brk PackageInstaller{
-                .manager = this,
-                .options = &this.options,
-                .metas = parts.items(.meta),
-                .bins = parts.items(.bin),
-                .root_node_modules_folder = node_modules_folder,
-                .names = parts.items(.name),
-                .pkg_name_hashes = parts.items(.name_hash),
-                .resolutions = parts.items(.resolution),
-                .pkg_dependencies = parts.items(.dependencies),
-                .lockfile = this.lockfile,
-                .node = &install_node,
-                .node_modules = .{
-                    .path = std.array_list.Managed(u8).fromOwnedSlice(
-                        this.allocator,
-                        try this.allocator.dupe(
-                            u8,
-                            strings.withoutTrailingSlash(FileSystem.instance.top_level_dir),
-                        ),
-                    ),
-                    .tree_id = 0,
-                },
-                .progress = progress,
-                .skip_verify_installed_version_number = skip_verify_installed_version_number,
-                .skip_delete = skip_delete,
-                .summary = &summary,
-                .force_install = options.enable.force_install,
-                .successfully_installed = try Bitset.initEmpty(
-                    this.allocator,
-                    this.lockfile.packages.len,
-                ),
-                .command_ctx = ctx,
-                .tree_ids_to_trees_the_id_depends_on = tree_ids_to_trees_the_id_depends_on,
-                .completed_trees = completed_trees,
-                .trees = trees: {
-                    const trees = bun.handleOom(this.allocator.alloc(TreeContext, this.lockfile.buffers.trees.items.len));
-                    for (0..this.lockfile.buffers.trees.items.len) |i| {
-                        trees[i] = .{
-                            .binaries = Bin.PriorityQueue.init(this.allocator, .{
-                                .dependencies = &this.lockfile.buffers.dependencies,
-                                .string_buf = &this.lockfile.buffers.string_bytes,
-                            }),
-                        };
-                    }
-                    break :trees trees;
-                },
-                .trusted_dependencies_from_update_requests = this.findTrustedDependenciesFromUpdateRequests(),
-                .seen_bin_links = bun.StringHashMap(void).init(this.allocator),
-            };
-        };
-
-        try installer.node_modules.path.append(std.fs.path.sep);
-
-        defer installer.deinit();
-
-        while (iterator.next(&installer.completed_trees)) |node_modules| {
-            installer.node_modules.path.items.len = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1;
-            try installer.node_modules.path.appendSlice(node_modules.relative_path);
-            installer.node_modules.tree_id = node_modules.tree_id;
-            var remaining = node_modules.dependencies;
-            installer.current_tree_id = node_modules.tree_id;
-
-            // cache line is 64 bytes on ARM64 and x64
-            // PackageIDs are 4 bytes
-            // Hence, we can fit up to 64 / 4 = 16 package IDs in a cache line
-            const unroll_count = comptime 64 / @sizeOf(PackageID);
-
-            while (remaining.len > unroll_count) {
-                comptime var i: usize = 0;
-                inline while (i < unroll_count) : (i += 1) {
-                    installer.installPackage(remaining[i], log_level);
-                }
-                remaining = remaining[unroll_count..];
-
-                // We want to minimize how often we call this function
-                // That's part of why we unroll this loop
-                if (this.pendingTaskCount() > 0) {
-                    try this.runTasks(
-                        *PackageInstaller,
-                        &installer,
-                        .{
-                            .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction,
-                            .onResolve = {},
-                            .onPackageManifestError = {},
-                            .onPackageDownloadError = {},
-                        },
-                        true,
-                        log_level,
-                    );
-                    if (!installer.options.do.install_packages) return error.InstallFailed;
-                }
-                this.tickLifecycleScripts();
-                this.reportSlowLifecycleScripts();
-            }
-
-            for (remaining) |dependency_id| {
-                installer.installPackage(dependency_id, log_level);
-            }
-
-            try this.runTasks(
-                *PackageInstaller,
-                &installer,
-                .{
-                    .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction,
-                    .onResolve = {},
-                    .onPackageManifestError = {},
-                    .onPackageDownloadError = {},
-                },
-                true,
-                log_level,
-            );
-            if (!installer.options.do.install_packages) return error.InstallFailed;
-
-            this.tickLifecycleScripts();
-            this.reportSlowLifecycleScripts();
-        }
-
-        while (this.pendingTaskCount() > 0 and installer.options.do.install_packages) {
-            const Closure = struct {
-                installer: *PackageInstaller,
-                err: ?anyerror = null,
-                manager: *PackageManager,
-
-                pub fn isDone(closure: *@This()) bool {
-                    const pm = closure.manager;
-                    closure.manager.runTasks(
-                        *PackageInstaller,
-                        closure.installer,
-                        .{
-                            .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction,
-                            .onResolve = {},
-                            .onPackageManifestError = {},
-                            .onPackageDownloadError = {},
-                        },
-                        true,
-                        pm.options.log_level,
-                    ) catch |err| {
-                        closure.err = err;
-                    };
-
-                    if (closure.err != null) {
-                        return true;
-                    }
-
-                    closure.manager.reportSlowLifecycleScripts();
-
-                    if (PackageManager.verbose_install and closure.manager.pendingTaskCount() > 0) {
-                        const pending_task_count = closure.manager.pendingTaskCount();
-                        if (pending_task_count > 0 and PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
-                            Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{pending_task_count});
-                        }
-                    }
-
-                    return closure.manager.pendingTaskCount() == 0 and closure.manager.hasNoMorePendingLifecycleScripts();
-                }
-            };
-
-            var closure = Closure{
-                .installer = &installer,
-                .manager = this,
-            };
-
-            // Whenever the event loop wakes up, we need to call `runTasks`
-            // If we call sleep() instead of sleepUntil(), it will wait forever until there are no more lifecycle scripts
-            // which means it will not call runTasks until _all_ current lifecycle scripts have finished running
-            this.sleepUntil(&closure, &Closure.isDone);
-
-            if (closure.err) |err| {
-                return err;
-            }
-        } else {
-            this.tickLifecycleScripts();
-            this.reportSlowLifecycleScripts();
-        }
-
-        for (installer.trees) |tree| {
-            if (comptime Environment.allow_assert) {
-                bun.assert(tree.pending_installs.items.len == 0);
-            }
-            const force = true;
-            installer.installAvailablePackages(log_level, force);
-        }
-
-        // .monotonic is okay because this value is only accessed on this thread.
-        this.finished_installing.store(true, .monotonic);
-        if (log_level.showProgress()) {
-            scripts_node.activate();
-        }
-
-        if (!installer.options.do.install_packages) return error.InstallFailed;
-
-        summary.successfully_installed = installer.successfully_installed;
-
-        // need to make sure bins are linked before completing any remaining scripts.
-        // this can happen if a package fails to download
-        installer.linkRemainingBins(log_level);
-        installer.completeRemainingScripts(log_level);
-
-        // .monotonic is okay because this value is only accessed on this thread.
-        while (this.pending_lifecycle_script_tasks.load(.monotonic) > 0) {
-            this.reportSlowLifecycleScripts();
-
-            this.sleep();
-        }
-
-        if (log_level.showProgress()) {
-            scripts_node.end();
-        }
-    }
-
-    return summary;
-}
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
 const Environment = bun.Environment;
 const Global = bun.Global;
 const Output = bun.Output;
@@ -365,16 +81,254 @@ const strings = bun.strings;
 const Bitset = bun.bit_set.DynamicBitSetUnmanaged;
 const Command = bun.cli.Command;
 const FileSystem = bun.fs.FileSystem;
-
 const install = bun.install;
 const Bin = install.Bin;
 const Lockfile = install.Lockfile;
 const PackageID = install.PackageID;
 const PackageInstall = install.PackageInstall;
-
 const PackageManager = install.PackageManager;
 const ProgressStrings = PackageManager.ProgressStrings;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
-
 const PackageInstaller = PackageManager.PackageInstaller;
 const TreeContext = PackageInstaller.TreeContext;
+
+pub fn installHoistedPackages(self: *PackageManager, ctx: Command.Context, workspace_filters: []const WorkspaceFilter, install_root_dependencies: bool, log_level: PackageManager.Options.LogLevel, packages_to_install: ?[]const PackageID) !PackageInstall.Summary {
+        bun.analytics.Features.hoisted_bun_install = (bun.analytics.Features.hoisted_bun_install + 1);
+        const original_trees = self.lockfile.buffers.trees;
+        const original_tree_dep_ids = self.lockfile.buffers.hoisted_dependencies;
+        _ = try self.lockfile.filter(self.log, self, install_root_dependencies, workspace_filters, packages_to_install);
+        defer {
+        {
+            self.lockfile.buffers.trees = original_trees;
+            self.lockfile.buffers.hoisted_dependencies = original_tree_dep_ids;
+        }
+        }
+        var root_node: *Progress.Node = undefined;
+        _ = &root_node;
+        var download_node: Progress.Node = undefined;
+        _ = &download_node;
+        var install_node: Progress.Node = undefined;
+        _ = &install_node;
+        var scripts_node: Progress.Node = undefined;
+        _ = &scripts_node;
+        const options = (&self.options);
+        var progress = (&self.progress);
+        _ = &progress;
+        if (log_level.showProgress()) {
+            progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
+            root_node = progress.start("", 0);
+            download_node = root_node.start(ProgressStrings.download(), 0);
+            install_node = root_node.start(ProgressStrings.install(), self.lockfile.buffers.hoisted_dependencies.items.len);
+            scripts_node = root_node.start(ProgressStrings.script(), 0);
+            self.downloads_node = (&download_node);
+            self.scripts_node = (&scripts_node);
+        }
+        defer {
+        {
+            if (log_level.showProgress()) {
+                _ = progress.root.end();
+                progress.* = .{};
+            }
+        }
+        }
+        var new_node_modules = false;
+        _ = &new_node_modules;
+        const cwd = bun.FD.cwd();
+        const node_modules_folder = brk: {
+        switch (bun.sys.openatOSPath(cwd, bun.OSPathLiteral("node_modules"), (bun.O.DIRECTORY | bun.O.RDONLY), 493)) {
+.result => |fd| {
+break :brk std.fs.Dir{ .fd = fd.cast() };
+},
+.err => {
+
+},
+}
+        new_node_modules = true;
+        if (bun.sys.mkdir("node_modules", 493).asErr()) |e| {
+            _ = &e;
+            if ((e.errno != @intFromEnum(bun.sys.E.EXIST))) {
+                _ = Output.err(e, "could not create the <b>\"node_modules\"<r> directory", .{});
+                _ = Global.crash();
+            }
+        }
+        break :brk (blk_catch_0: { break :blk_catch_0 ((bun.openDir(cwd.stdDir(), "node_modules")) catch |e| { _ = &e; _ = Output.err(e, "could not open the <b>\"node_modules\"<r> directory", .{});
+        break :blk_catch_0 Global.crash(); }); });
+};
+        var skip_delete = new_node_modules;
+        _ = &skip_delete;
+        var skip_verify_installed_version_number = new_node_modules;
+        _ = &skip_verify_installed_version_number;
+        if (options.enable.force_install) {
+            skip_verify_installed_version_number = true;
+            skip_delete = false;
+        }
+        var summary = PackageInstall.Summary;
+        _ = &summary;
+        {
+            var iterator = Lockfile.Tree.Iterator(.node_modules).init(self.lockfile);
+            _ = &iterator;
+            if (comptime Environment.isPosix) {
+                _ = Bin.Linker.ensureUmask();
+            }
+            var installer: PackageInstaller = brk: {
+            const _tmp_v2 = trees: {
+            const trees = self.lockfile.buffers.trees.items;
+            const completed_trees = try Bitset.initEmpty(self.allocator, trees.len);
+            var tree_ids_to_trees_the_id_depends_on = try Bitset.List.initEmpty(self.allocator, trees.len, trees.len);
+            _ = &tree_ids_to_trees_the_id_depends_on;
+            {
+                var deps = try Bitset.initEmpty(self.allocator, trees.len);
+                _ = &deps;
+                defer {
+                _ = deps.deinit(self.allocator);
+                }
+                for (cp_iter_slice(trees)) |_curr| {
+                    _ = &_curr;
+                    var curr = _curr;
+                    _ = &curr;
+                    _ = tree_ids_to_trees_the_id_depends_on.set(curr.id, curr.id);
+                    while ((curr.parent != Lockfile.Tree.invalid_id)) {
+                        _ = deps.set(curr.id);
+                        _ = tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps);
+                        curr = trees[@as(usize, @intCast(curr.parent))];
+                    }
+                    _ = deps.setAll(false);
+                }
+            }
+            if (comptime Environment.allow_assert) {
+                if ((trees.len > 0)) {
+                    _ = bun.assertWithLocation((tree_ids_to_trees_the_id_depends_on.at((trees.len - 1)).count() == 1), @src());
+                    _ = bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at((trees.len - 1)).isSet((trees.len - 1)), @src());
+                    _ = bun.assertWithLocation((tree_ids_to_trees_the_id_depends_on.at(0).count() == trees.len), @src());
+                }
+                {
+                    var j: i32 = 0;
+                    _ = &j;
+                    const __end_1 = trees.len;
+                    while (j < __end_1) : (j += 1) {
+                        _ = bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(j).isSet(j), @src());
+                    }
+                }
+            }
+            break :trees .{ .completed_trees = completed_trees, .tree_ids_to_trees_the_id_depends_on = tree_ids_to_trees_the_id_depends_on };
+};
+            const completed_trees = cp_unpack_elem(_tmp_v2, 0);
+            _ = &completed_trees;
+            const tree_ids_to_trees_the_id_depends_on = cp_unpack_elem(_tmp_v2, 1);
+            _ = &tree_ids_to_trees_the_id_depends_on;
+            var parts = self.lockfile.packages.slice();
+            _ = &parts;
+            break :brk PackageInstaller{ .manager = self, .options = (&self.options), .metas = parts.items(.@"meta"), .bins = parts.items(.bin), .root_node_modules_folder = node_modules_folder, .names = parts.items(.name), .pkg_name_hashes = parts.items(.name_hash), .resolutions = parts.items(.resolution), .pkg_dependencies = parts.items(.dependencies), .lockfile = self.lockfile, .node = (&install_node), .node_modules = .{ .path = std.array_list.Managed(u8).fromOwnedSlice(self.allocator, try self.allocator.dupe(u8, strings.withoutTrailingSlash(FileSystem.instance.top_level_dir))), .tree_id = 0 }, .progress = progress, .skip_verify_installed_version_number = skip_verify_installed_version_number, .skip_delete = skip_delete, .summary = (&summary), .force_install = options.enable.force_install, .successfully_installed = try Bitset.initEmpty(self.allocator, self.lockfile.packages.len), .command_ctx = ctx, .tree_ids_to_trees_the_id_depends_on = tree_ids_to_trees_the_id_depends_on, .completed_trees = completed_trees, .trees = trees: {
+            const trees = bun.handleOom(self.allocator.alloc(TreeContext, self.lockfile.buffers.trees.items.len));
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_3 = self.lockfile.buffers.trees.items.len;
+                while (i < __end_3) : (i += 1) {
+                    trees[cp_cast_int(usize, i)] = .{ .binaries = Bin.PriorityQueue.init(self.allocator, .{ .dependencies = (&self.lockfile.buffers.dependencies), .string_buf = (&self.lockfile.buffers.string_bytes) }) };
+                }
+            }
+            break :trees trees;
+}, .trusted_dependencies_from_update_requests = self.findTrustedDependenciesFromUpdateRequests(), .seen_bin_links = bun.StringHashMap(void).init(self.allocator) };
+};
+            _ = &installer;
+            _ = try installer.node_modules.path.append(std.fs.path.sep);
+            defer {
+            _ = installer.deinit();
+            }
+            while (iterator.next((&installer.completed_trees))) |node_modules| {
+                installer.node_modules.path.items.len = (strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1);
+                _ = try installer.node_modules.path.appendSlice(node_modules.relative_path);
+                installer.node_modules.tree_id = node_modules.tree_id;
+                var remaining = node_modules.dependencies;
+                _ = &remaining;
+                installer.current_tree_id = node_modules.tree_id;
+                const unroll_count = (comptime (64 / @sizeOf(PackageID)));
+                while ((remaining.len > unroll_count)) {
+                    comptime var i: usize = 0;
+                    _ = &i;
+                    inline while ((i < unroll_count)) : (i = (i + 1)) {
+                        _ = installer.installPackage(remaining[@as(usize, @intCast(i))], log_level);
+                    }
+                    remaining = remaining[unroll_count..];
+                    if ((self.pendingTaskCount() > 0)) {
+                        _ = try self.runTasks(*PackageInstaller, (&installer), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                        if ((!installer.options.do.install_packages)) {
+                            return error.InstallFailed;
+                        }
+                    }
+                    _ = self.tickLifecycleScripts();
+                    _ = self.reportSlowLifecycleScripts();
+                }
+                for (cp_iter_slice(remaining)) |dependency_id| {
+                    _ = &dependency_id;
+                    _ = installer.installPackage(dependency_id, log_level);
+                }
+                _ = try self.runTasks(*PackageInstaller, (&installer), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                if ((!installer.options.do.install_packages)) {
+                    return error.InstallFailed;
+                }
+                _ = self.tickLifecycleScripts();
+                _ = self.reportSlowLifecycleScripts();
+            }
+            while (((self.pendingTaskCount() > 0) and installer.options.do.install_packages)) {
+                const Closure = struct {
+    installer: *PackageInstaller,
+    err_val: ?anyerror = null,
+    manager: *PackageManager,
+
+pub fn isDone(closure: *@This()) bool {
+            const pm = closure.manager;
+            _ = (blk_catch_0: { break :blk_catch_0 ((closure.manager.runTasks(*PackageInstaller, closure.installer, .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, pm.options.log_level)) catch |e| { _ = &e; closure.err_val = e;
+            break :blk_catch_0 {}; }); });
+            if ((closure.err_val != null)) {
+                return true;
+            }
+            _ = closure.manager.reportSlowLifecycleScripts();
+            if ((PackageManager.verbose_install and (closure.manager.pendingTaskCount() > 0))) {
+                const pending_task_count = closure.manager.pendingTaskCount();
+                if (((pending_task_count > 0) and PackageManager.hasEnoughTimePassedBetweenWaitingMessages())) {
+                    _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ .pending_task_count = pending_task_count });
+                }
+            }
+            return ((closure.manager.pendingTaskCount() == 0) and closure.manager.hasNoMorePendingLifecycleScripts());
+    }
+};
+                var closure = Closure{ .installer = (&installer), .manager = self };
+                _ = &closure;
+                _ = self.sleepUntil((&closure), (&Closure.isDone));
+                if (closure.err_val) |e| {
+                    _ = &e;
+                    return e;
+                }
+            }
+            _ = self.tickLifecycleScripts();
+            _ = self.reportSlowLifecycleScripts();
+            for (cp_iter_slice(installer.trees)) |tree| {
+                _ = &tree;
+                if (comptime Environment.allow_assert) {
+                    _ = bun.assert((tree.pending_installs.items.len == 0));
+                }
+                const force = true;
+                _ = installer.installAvailablePackages(log_level, force);
+            }
+            _ = self.finished_installing.store(true, .monotonic);
+            if (log_level.showProgress()) {
+                _ = scripts_node.activate();
+            }
+            if ((!installer.options.do.install_packages)) {
+                return error.InstallFailed;
+            }
+            summary.successfully_installed = installer.successfully_installed;
+            _ = installer.linkRemainingBins(log_level);
+            _ = installer.completeRemainingScripts(log_level);
+            while ((self.pending_lifecycle_script_tasks.load(.monotonic) > 0)) {
+                _ = self.reportSlowLifecycleScripts();
+                _ = self.sleep();
+            }
+            if (log_level.showProgress()) {
+                _ = scripts_node.end();
+            }
+        }
+        return summary;
+}
