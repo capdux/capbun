@@ -1183,3 +1183,8 @@
 ### 2026-11-19 18:09:46 UTC - 攻克 2,460 行级 CLI 模板生成模块 create_command.zig
 - 彻底攻克逻辑与分支高度密集的模板生成核心 create_command.zig。
 - 规范了枚举分支语法与顶层类型别名，代码膨胀率仅 1.003x。
+
+### 2026-11-19 18:13:20 UTC - CLI 模块近乎全面收官 (批量入库 5,757 行)
+- 9 个中小型 CLI 命令模块全绿通过全部 4 项硬门禁。
+- 上报了 pm_pkg_command.zig 中 enum tag get 导致的 cpc 内建 fromName 阴影缺陷 (task-20261120-enum-tag-get)。
+- src/cli/ 目录绝大部分命令已实现纯 CP 语言化。

@@ -1,410 +1,459 @@
-pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: string, property_path: ?string, json_output: bool) !void {
-    const name, var version = bun.install.Dependency.splitNameAndVersionOrLatest(brk: {
-        // Extremely best effort.
-        if (bun.strings.eqlComptime(spec_, ".") or bun.strings.eqlComptime(spec_, "")) {
-            if (bun.strings.isNPMPackageName(manager.root_package_json_name_at_time_of_init)) {
-                break :brk manager.root_package_json_name_at_time_of_init;
-            }
-
-            // Try our best to get the package.json name they meant
-            if (manager.root_dir.hasComptimeQuery("package.json")) from_package_json: {
-                if (manager.root_dir.fd.isValid()) {
-                    switch (bun.sys.File.readFrom(manager.root_dir.fd, "package.json", allocator)) {
-                        .err => {},
-                        .result => |str| {
-                            const source = &logger.Source.initPathString("package.json", str);
-                            var log = logger.Log.init(allocator);
-                            const json = JSON.parse(source, &log, allocator, false) catch break :from_package_json;
-                            if (json.getStringCloned(allocator, "name") catch null) |name| {
-                                if (name.len > 0) {
-                                    break :brk name;
-                                }
-                            }
-                        },
-                    }
-                }
-            }
-
-            break :brk std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir);
-        }
-
-        break :brk spec_;
-    });
-
-    const scope = manager.scopeForPackageName(name);
-
-    var url_buf: bun.PathBuffer = undefined;
-    const encoded_name = try std.fmt.bufPrint(&url_buf, "{f}", .{bun.fmt.dependencyUrl(name)});
-    var path_buf: bun.PathBuffer = undefined;
-    // Always fetch the full registry manifest, not a specific version
-    const url = URL.parse(try std.fmt.bufPrint(&path_buf, "{s}/{s}", .{
-        strings.withoutTrailingSlash(scope.url.href),
-        encoded_name,
-    }));
-
-    var headers: http.HeaderBuilder = .{};
-    headers.count("Accept", "application/json");
-    if (scope.token.len > 0) {
-        headers.count("Authorization", "");
-        headers.content.cap += "Bearer ".len + scope.token.len;
-    } else if (scope.auth.len > 0) {
-        headers.count("Authorization", "");
-        headers.content.cap += "Basic ".len + scope.auth.len;
-    }
-    try headers.allocate(allocator);
-    headers.append("Accept", "application/json");
-    if (scope.token.len > 0) {
-        headers.appendFmt("Authorization", "Bearer {s}", .{scope.token});
-    } else if (scope.auth.len > 0) {
-        headers.appendFmt("Authorization", "Basic {s}", .{scope.auth});
-    }
-
-    var response_buf = try MutableString.init(allocator, 2048);
-    var req = http.AsyncHTTP.initSync(
-        allocator,
-        .GET,
-        url,
-        headers.entries,
-        headers.content.ptr.?[0..headers.content.len],
-        &response_buf,
-        "",
-        manager.httpProxy(url),
-        null,
-        .follow,
-    );
-    req.client.flags.reject_unauthorized = manager.tlsRejectUnauthorized();
-
-    const res = req.sendSync() catch |err| {
-        Output.err(err, "view request failed to send", .{});
-        Global.crash();
-    };
-
-    if (res.status_code >= 400) {
-        try @import("../install/npm.zig").responseError(allocator, &req, &res, .{ name, version }, &response_buf, false);
-    }
-
-    var log = logger.Log.init(allocator);
-    const source = &logger.Source.initPathString("view.json", response_buf.list.items);
-    var json = JSON.parseUTF8(source, &log, allocator) catch |err| {
-        Output.err(err, "failed to parse response body as JSON", .{});
-        Global.crash();
-    };
-    if (log.errors > 0) {
-        try log.print(Output.errorWriter());
-        Global.crash();
-    }
-
-    // Parse the existing JSON response into a PackageManifest using the now-public parse function
-    const parsed_manifest = @import("../install/npm.zig").PackageManifest.parse(
-        allocator,
-        scope,
-        &log,
-        response_buf.list.items,
-        name,
-        "", // last_modified (not needed for view)
-        "", // etag (not needed for view)
-        0, // public_max_age (not needed for view)
-        true, // is_extended_manifest (view uses application/json Accept header)
-    ) catch |err| {
-        Output.err(err, "failed to parse package manifest", .{});
-        Global.exit(1);
-    } orelse {
-        Output.errGeneric("failed to parse package manifest", .{});
-        Global.crash();
-    };
-
-    // Now use the existing version resolution logic from outdated_command
-    var manifest = json;
-
-    var versions_len: usize = 1;
-
-    version, manifest = brk: {
-        if (json.getObject("versions")) |versions_obj| from_versions: {
-            // Find the version string from JSON that matches the resolved version
-            const versions = versions_obj.data.e_object.properties.slice();
-            versions_len = versions.len;
-
-            const wanted_version: Semver.Version = brk2: {
-                // First try dist-tag lookup (like "latest", "beta", etc.)
-                if (parsed_manifest.findByDistTag(version)) |result| {
-                    break :brk2 result.version;
-                } else {
-                    // Parse as semver query and find best version - exactly like outdated_command.zig line 325
-                    const sliced_literal = Semver.SlicedString.init(version, version);
-                    const query = try Semver.Query.parse(allocator, version, sliced_literal);
-                    defer query.deinit();
-                    // Use the same pattern as outdated_command: findBestVersion(query.head, string_buf)
-                    if (parsed_manifest.findBestVersion(query, parsed_manifest.string_buf)) |result| {
-                        break :brk2 result.version;
-                    }
-                }
-
-                break :from_versions;
-            };
-
-            for (versions) |*prop| {
-                if (prop.key == null) continue;
-                const version_str = prop.key.?.asString(allocator) orelse continue;
-                const sliced_version = Semver.SlicedString.init(version_str, version_str);
-                const parsed_version = Semver.Version.parse(sliced_version);
-                if (parsed_version.valid and parsed_version.version.max().eql(wanted_version)) {
-                    break :brk .{ version_str, prop.value.? };
-                }
-            }
-        }
-
-        if (json_output) {
-            Output.print("{{ \"error\": \"No matching version found\", \"version\": {f} }}\n", .{
-                bun.fmt.formatJSONStringUTF8(spec_, .{
-                    .quote = true,
-                }),
-            });
-            Output.flush();
-        } else {
-            Output.errGeneric("No version of <b>{f}<r> satisfying <b>{f}<r> found", .{
-                bun.fmt.quote(name),
-                bun.fmt.quote(version),
-            });
-
-            const max_versions_to_display = 5;
-
-            const start_index = parsed_manifest.versions.len -| max_versions_to_display;
-            var versions_to_display = parsed_manifest.versions[start_index..];
-            versions_to_display = versions_to_display[0..@min(versions_to_display.len, max_versions_to_display)];
-            if (versions_to_display.len > 0) {
-                Output.prettyErrorln("\nRecent versions:<r>", .{});
-                for (versions_to_display) |*v| {
-                    Output.prettyErrorln("<d>-<r> {f}", .{v.fmt(parsed_manifest.string_buf)});
-                }
-
-                if (start_index > 0) {
-                    Output.prettyErrorln("  <d>... and {d} more<r>", .{start_index});
-                }
-            }
-        }
-        Global.exit(1);
-    };
-
-    // Treat versions specially because npm does some normalization on there.
-    if (json.getObject("versions")) |versions_object| {
-        const keys = try allocator.alloc(bun.ast.Expr, versions_object.data.e_object.properties.len);
-        for (versions_object.data.e_object.properties.slice(), keys) |*prop, *key| {
-            key.* = prop.key.?;
-        }
-        const versions_array = bun.ast.Expr.init(
-            bun.ast.E.Array,
-            bun.ast.E.Array{
-                .items = .fromOwnedSlice(keys),
-            },
-            .{ .start = -1 },
-        );
-        try manifest.set(allocator, "versions", versions_array);
-    }
-
-    // Handle property lookup if specified
-    if (property_path) |prop_path| {
-
-        // This is similar to what npm does.
-        // `bun pm view react version ` => 1.2.3
-        // `bun pm view react versions` => ['1.2.3', '1.2.4', '1.2.5']
-        if (manifest.getPathMayBeIndex(prop_path) orelse json.getPathMayBeIndex(prop_path)) |value| {
-            if (value.data == .e_string) {
-                const slice = value.data.e_string.slice(allocator);
-                if (json_output) {
-                    Output.println("{f}", .{bun.fmt.formatJSONStringUTF8(slice, .{})});
-                } else {
-                    Output.println("{s}", .{slice});
-                }
-                Output.flush();
-                return;
-            }
-
-            const JSPrinter = bun.js_printer;
-            var buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
-            buffer_writer.append_newline = true;
-            var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
-            _ = try bun.js_printer.printJSON(
-                @TypeOf(&package_json_writer),
-                &package_json_writer,
-                value,
-                source,
-                .{
-                    .mangled_props = null,
-                },
-            );
-            Output.print("{s}", .{package_json_writer.ctx.getWritten()});
-            Output.flush();
-            Global.exit(0);
-        } else {
-            if (json_output) {
-                Output.print("{{ \"error\": \"Property not found\", \"version\": {f}, \"property\": {f} }}\n", .{
-                    bun.fmt.formatJSONStringUTF8(spec_, .{
-                        .quote = true,
-                    }),
-                    bun.fmt.formatJSONStringUTF8(prop_path, .{
-                        .quote = true,
-                    }),
-                });
-                Output.flush();
-            } else {
-                Output.errGeneric("Property <b>{s}<r> not found", .{prop_path});
-            }
-        }
-        Global.exit(1);
-    }
-
-    if (json_output) {
-        // Output formatted JSON using JSPrinter
-        const JSPrinter = bun.js_printer;
-        var buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
-        buffer_writer.append_newline = true;
-        var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
-        _ = try bun.js_printer.printJSON(
-            @TypeOf(&package_json_writer),
-            &package_json_writer,
-            manifest,
-            source,
-            .{
-                .mangled_props = null,
-                .indent = .{
-                    .count = 2,
-                },
-            },
-        );
-        Output.print("{s}", .{package_json_writer.ctx.getWritten()});
-        Output.flush();
-        return;
-    }
-
-    const pkg_name = manifest.getStringCloned(allocator, "name") catch null orelse name;
-    const pkg_version = manifest.getStringCloned(allocator, "version") catch null orelse version;
-    const license = manifest.getStringCloned(allocator, "license") catch null orelse "";
-    var dep_count: usize = 0;
-    const dependencies_object = manifest.getObject("dependencies");
-    if (dependencies_object) |*deps| {
-        dep_count = deps.data.e_object.properties.len;
-    }
-
-    Output.prettyln("<b><blue><u>{s}<r><d>@<r><blue><b><u>{s}<r> <d>|<r> <cyan>{s}<r> <d>|<r> deps<d>:<r> {d} <d>|<r> versions<d>:<r> {d}", .{
-        pkg_name,
-        pkg_version,
-        license,
-        dep_count,
-        versions_len,
-    });
-
-    // Get description and homepage from the top-level package manifest, not the version-specific one
-    if (json.getStringCloned(allocator, "description") catch null) |desc| {
-        Output.prettyln("{s}", .{desc});
-    }
-    if (json.getStringCloned(allocator, "homepage") catch null) |hp| {
-        Output.prettyln("<blue>{s}<r>", .{hp});
-    }
-
-    if (json.getArray("keywords")) |arr| {
-        var keywords = try MutableString.init(allocator, 64);
-        var iter = arr;
-        var first = true;
-        while (iter.next()) |kw_expr| {
-            if (kw_expr.asString(allocator)) |kw| {
-                if (!first) try keywords.appendSlice(", ") else first = false;
-                try keywords.appendSlice(kw);
-            }
-        }
-        if (keywords.list.items.len > 0) {
-            Output.prettyln("<d>keywords:<r> {s}", .{keywords.list.items});
-        }
-    }
-
-    // Display dependencies if they exist
-    if (dependencies_object) |*deps| {
-        const dependencies = deps.data.e_object.properties.slice();
-        if (dependencies.len > 0) {
-            Output.prettyln("\n<b>dependencies<r><d> ({d}):<r>", .{dependencies.len});
-        }
-
-        for (dependencies) |prop| {
-            if (prop.key == null or prop.value == null) continue;
-            const dep_name = prop.key.?.asString(allocator) orelse continue;
-            const dep_version = prop.value.?.asString(allocator) orelse continue;
-            Output.prettyln("- <cyan>{s}<r><d>:<r> {s}", .{ dep_name, dep_version });
-        }
-    }
-
-    if (manifest.getObject("dist")) |dist| {
-        Output.prettyln("\n<d><r><b>dist<r>", .{});
-        if (dist.getStringCloned(allocator, "tarball") catch null) |t| {
-            Output.prettyln(" <d>.<r>tarball<d>:<r> {s}", .{t});
-        }
-        if (dist.getStringCloned(allocator, "shasum") catch null) |s| {
-            Output.prettyln(" <d>.<r>shasum<r><d>:<r> <green>{s}<r>", .{s});
-        }
-        if (dist.getStringCloned(allocator, "integrity") catch null) |i| {
-            Output.prettyln(" <d>.<r>integrity<r><d>:<r> <green>{s}<r>", .{i});
-        }
-        if (dist.getNumber("unpackedSize")) |u| {
-            Output.prettyln(" <d>.<r>unpackedSize<r><d>:<r> <blue>{f}<r>", .{bun.fmt.size(@as(u64, @intFromFloat(u[0])), .{})});
-        }
-    }
-
-    if (json.getObject("dist-tags")) |tags_obj| {
-        Output.prettyln("\n<b>dist-tags<r><d>:<r>", .{});
-        for (tags_obj.data.e_object.properties.slice()) |prop| {
-            if (prop.key == null or prop.value == null) continue;
-            const tagname_expr = prop.key.?;
-            const val_expr = prop.value.?;
-            if (tagname_expr.asString(allocator)) |tag| {
-                if (val_expr.asString(allocator)) |val| {
-                    if (strings.eqlComptime(tag, "latest")) {
-                        Output.prettyln("<cyan>{s}<r><d>:<r> {s}", .{ tag, val });
-                    } else if (strings.eqlComptime(tag, "beta")) {
-                        Output.prettyln("<blue>{s}<r><d>:<r> {s}", .{ tag, val });
-                    } else {
-                        Output.prettyln("<magenta>{s}<r><d>:<r> {s}", .{ tag, val });
-                    }
-                }
-            }
-        }
-    }
-
-    if (json.getArray("maintainers")) |maint_iter| {
-        Output.prettyln("\nmaintainers<r><d>:<r>", .{});
-        var iter = maint_iter;
-        while (iter.next()) |m| {
-            const nm = m.getStringCloned(allocator, "name") catch null orelse "";
-            const em = m.getStringCloned(allocator, "email") catch null orelse "";
-            if (em.len > 0) {
-                Output.prettyln("<d>-<r> {s} <d>\\<{s}\\><r>", .{ nm, em });
-            } else if (nm.len > 0) {
-                Output.prettyln("<d>-<r> {s}", .{nm});
-            }
-        }
-    }
-
-    // Add published date information
-    if (json.getObject("time")) |time_obj| {
-        // TODO: use a relative time formatter
-        if (time_obj.getStringCloned(allocator, pkg_version) catch null) |published_time| {
-            Output.prettyln("\n<b>Published<r><d>:<r> {s}", .{published_time});
-        } else if (time_obj.getStringCloned(allocator, "modified") catch null) |modified_time| {
-            Output.prettyln("\n<b>Published<r><d>:<r> {s}", .{modified_time});
-        }
-    }
-}
-
-const string = []const u8;
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
-const PackageManager = @import("../install/install.zig").PackageManager;
-const PackageManifest = @import("../install/npm.zig").PackageManifest;
-const URL = @import("../url/url.zig").URL;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const install = @import("../install/install.zig");
+pub const npm = @import("../install/npm.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const bun = @import("bun");
+const string = []const u8;
+const PackageManager = install.PackageManager;
+const PackageManifest = npm.PackageManifest;
+const URL = url_mod.URL;
 const Global = bun.Global;
-const JSON = bun.json;
 const MutableString = bun.MutableString;
 const Output = bun.Output;
 const Semver = bun.Semver;
 const http = bun.http;
 const logger = bun.logger;
 const strings = bun.strings;
+
+pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: []const u8, property_path: ?[]const u8, json_output: bool) !void {
+        const name_and_version = bun.install.Dependency.splitNameAndVersionOrLatest(brk: {
+        if ((bun.strings.eqlComptime(spec_, ".") or bun.strings.eqlComptime(spec_, ""))) {
+            if (bun.strings.isNPMPackageName(manager.root_package_json_name_at_time_of_init)) {
+                break :brk manager.root_package_json_name_at_time_of_init;
+            }
+            if (manager.root_dir.hasComptimeQuery("package.json")) {
+                _ = from_package_json: {
+                if (manager.root_dir.fd.isValid()) {
+                    switch (bun.sys.File.readFrom(manager.root_dir.fd, "package.json", allocator)) {
+.err => {
+
+},
+.result => |result| {
+const str = result;
+                    const source = (&logger.Source.initPathString("package.json", str));
+                    var log = logger.Log.init(allocator);
+                    _ = &log;
+                    const json = (blk_catch_0: { break :blk_catch_0 ((bun.json.parse(source, (&log), allocator, false)) catch |__ce_0| { _ = &__ce_0; break :from_package_json; }); });
+                    if ((blk_catch_1: { break :blk_catch_1 ((json.getStringCloned(allocator, "name")) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |name| {
+                        _ = &name;
+                        if ((name.len > 0)) {
+                            break :brk name;
+                        }
+                    }
+},
+}
+                }
+};
+            }
+            break :brk std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir);
+        }
+        break :brk spec_;
+});
+        const name = name_and_version[0];
+        var version = name_and_version[1];
+        _ = &version;
+        const scope = manager.scopeForPackageName(name);
+        var url_buf: bun.PathBuffer = undefined;
+        _ = &url_buf;
+        const encoded_name = try std.fmt.bufPrint((&url_buf), "{f}", .{ bun.fmt.dependencyUrl(name) });
+        var path_buf: bun.PathBuffer = undefined;
+        _ = &path_buf;
+        const url = URL.parse(try std.fmt.bufPrint((&path_buf), "{s}/{s}", .{ strings.withoutTrailingSlash(scope.url.href), encoded_name }));
+        var headers: http.HeaderBuilder = .{};
+        _ = &headers;
+        _ = headers.count("Accept", "application/json");
+        if ((scope.token.len > 0)) {
+            _ = headers.count("Authorization", "");
+            headers.content.cap = (headers.content.cap + ("Bearer ".len + scope.token.len));
+        } else {
+            if ((scope.auth.len > 0)) {
+                _ = headers.count("Authorization", "");
+                headers.content.cap = (headers.content.cap + ("Basic ".len + scope.auth.len));
+            }
+        }
+        var response_buf: std.array_list.Managed(u8) = brk: {
+        var headers_buf: [4096]u8 = undefined;
+        _ = &headers_buf;
+        var buf = headers.init((&headers_buf));
+        _ = &buf;
+        _ = buf.put("Accept", "application/json");
+        if ((scope.token.len > 0)) {
+            _ = buf.put("Authorization", "Bearer ");
+            _ = buf.append(scope.token);
+        } else {
+            if ((scope.auth.len > 0)) {
+                _ = buf.put("Authorization", "Basic ");
+                _ = buf.append(scope.auth);
+            }
+        }
+        var response = (blk_catch_2: { break :blk_catch_2 ((manager.http_client.fetch(allocator, .GET, url, buf.get(), null, null, false, false, .npm)) catch |e| { _ = &e; _ = Output.err(e, "failed to fetch package manifest for {s}", .{ name });
+        break :blk_catch_2 Global.exit(1); }); });
+        _ = &response;
+        defer {
+        _ = response.deinit();
+        }
+        if ((response.status_code != 200)) {
+            if ((response.status_code == 404)) {
+                _ = Output.errGeneric("package <b>{s}<r> not found", .{ name });
+            } else {
+                _ = Output.errGeneric("failed to fetch package manifest for {s}: HTTP {d}", .{ name, response.status_code });
+            }
+            _ = Global.exit(1);
+        }
+        var body = ((response.body) orelse (blk: {
+        _ = Output.errGeneric("failed to fetch package manifest for {s}: empty body", .{ name });
+        break :blk Global.exit(1);
+
+}));
+        _ = &body;
+        break :brk body;
+};
+        _ = &response_buf;
+        defer {
+        _ = response_buf.deinit();
+        }
+        var log = logger.Log.init(allocator);
+        _ = &log;
+        const source = (&logger.Source.initPathString(url.href, response_buf.list.items));
+        const json = (blk_catch_3: { break :blk_catch_3 ((bun.json.parse(source, (&log), allocator, false)) catch |e| { _ = &e; _ = Output.err(e, "failed to parse package manifest", .{});
+        break :blk_catch_3 Global.exit(1); }); });
+        const parsed_manifest_opt = (blk_catch_4: { break :blk_catch_4 ((manager.parseRegistryPackageManifest(allocator, scope, (&log), response_buf.list.items, name, "", "", 0, true)) catch |e| { _ = &e; _ = Output.err(e, "failed to parse package manifest", .{});
+        break :blk_catch_4 Global.exit(1); }); });
+        if ((parsed_manifest_opt == null)) {
+            _ = Output.errGeneric("failed to parse package manifest", .{});
+            _ = Global.crash();
+        }
+        const parsed_manifest = parsed_manifest_opt.?;
+        var manifest = json;
+        _ = &manifest;
+        var versions_len: usize = 1;
+        _ = &versions_len;
+        const resolved_pair = brk: {
+        if (json.getObject("versions")) |versions_obj| {
+            _ = &versions_obj;
+            _ = from_versions: {
+            const versions = versions_obj.data.e_object.properties.slice();
+            versions_len = versions.len;
+            const wanted_version: Semver.Version = brk2: {
+            if (parsed_manifest.findByDistTag(version)) |result| {
+                _ = &result;
+                break :brk2 result.version;
+            } else {
+                const sliced_literal = Semver.SlicedString.init(version, version);
+                const query = try Semver.Query.parse(allocator, version, sliced_literal);
+                defer {
+                _ = query.deinit();
+                }
+                if (parsed_manifest.findBestVersion(query, parsed_manifest.string_buf)) |result| {
+                    _ = &result;
+                    break :brk2 result.version;
+                }
+            }
+            break :from_versions;
+};
+            for (cp_mut_slice(&versions)) |*prop| {
+                _ = &prop;
+                if (((prop.*).key == null)) {
+                    continue;
+                }
+                const version_str = (((prop.*).key.?.asString(allocator)) orelse continue);
+                const sliced_version = Semver.SlicedString.init(version_str, version_str);
+                const parsed_version = Semver.Version.parse(sliced_version);
+                if ((parsed_version.valid and (parsed_version.version.max()).?.eql(wanted_version))) {
+                    break :brk .{ version_str, (if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).? };
+                }
+            }
+};
+        }
+        if (json_output) {
+            _ = Output.print("{{ \"error\": \"No matching version found\", \"version\": {f} }}\n", .{ bun.fmt.formatJSONStringUTF8(spec_, .{ .quote = true }) });
+            _ = Output.flush();
+        } else {
+            _ = Output.errGeneric("No version of <b>{f}<r> satisfying <b>{f}<r> found", .{ bun.fmt.quote(name), bun.fmt.quote(version) });
+            const max_versions_to_display: i32 = 5;
+            const start_index = (parsed_manifest.versions.len -| max_versions_to_display);
+            var versions_to_display = parsed_manifest.versions[start_index..];
+            _ = &versions_to_display;
+            versions_to_display = versions_to_display[0..@min(versions_to_display.len, max_versions_to_display)];
+            if ((versions_to_display.len > 0)) {
+                _ = Output.prettyErrorln("\nRecent versions:<r>", .{});
+                for (cp_mut_slice(&versions_to_display)) |*v| {
+                    _ = &v;
+                    _ = Output.prettyErrorln("<d>-<r> {f}", .{ (v.*).fmt(parsed_manifest.string_buf) });
+                }
+                if ((start_index > 0)) {
+                    _ = Output.prettyErrorln("  <d>... and {d} more<r>", .{ start_index });
+                }
+            }
+        }
+        break :brk Global.exit(1);
+
+};
+        version = resolved_pair[0];
+        manifest = resolved_pair[1];
+        if (json.getObject("versions")) |versions_object| {
+            _ = &versions_object;
+            const props = versions_object.data.e_object.properties.slice();
+            var keys = try allocator.alloc(bun.ast.Expr, props.len);
+            _ = &keys;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < props.len)) : (idx = (idx + 1)) {
+                keys[cp_cast_int(usize, idx)] = props[@as(usize, @intCast(idx))].key.?;
+            }
+            const versions_array = bun.ast.Expr.init(bun.ast.E.Array, bun.ast.E.Array{ .items = .fromOwnedSlice(keys) }, .{ .start = -1 });
+            _ = try manifest.set(allocator, "versions", versions_array);
+        }
+        if (property_path) |prop_path| {
+            _ = &prop_path;
+            if (((manifest.getPathMayBeIndex(prop_path)) orelse (json.getPathMayBeIndex(prop_path)))) |value| {
+                _ = &value;
+                if ((value.data == .e_string)) {
+                    const slice = value.data.e_string.slice(allocator);
+                    if (json_output) {
+                        _ = Output.println("{f}", .{ bun.fmt.formatJSONStringUTF8(slice, .{}) });
+                    } else {
+                        _ = Output.println("{s}", .{ slice });
+                    }
+                    _ = Output.flush();
+                    return;
+                }
+                const JSPrinter = bun.js_printer;
+                var buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
+                _ = &buffer_writer;
+                buffer_writer.append_newline = true;
+                var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
+                _ = &package_json_writer;
+                _ = try bun.js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), value, source, .{ .mangled_props = null });
+                _ = Output.print("{s}", .{ package_json_writer.ctx.getWritten() });
+                _ = Output.flush();
+                _ = Global.exit(0);
+            } else {
+                if (json_output) {
+                    _ = Output.print("{{ \"error\": \"Property not found\", \"version\": {f}, \"property\": {f} }}\n", .{ bun.fmt.formatJSONStringUTF8(spec_, .{ .quote = true }), bun.fmt.formatJSONStringUTF8(prop_path, .{ .quote = true }) });
+                    _ = Output.flush();
+                } else {
+                    _ = Output.errGeneric("Property <b>{s}<r> not found", .{ prop_path });
+                }
+            }
+            _ = Global.exit(1);
+        }
+        if (json_output) {
+            const JSPrinter = bun.js_printer;
+            var buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
+            _ = &buffer_writer;
+            buffer_writer.append_newline = true;
+            var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
+            _ = &package_json_writer;
+            _ = try bun.js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), manifest, source, .{ .mangled_props = null, .indent = .{ .count = 2 } });
+            _ = Output.print("{s}", .{ package_json_writer.ctx.getWritten() });
+            _ = Output.flush();
+            return;
+        }
+        const pkg_name = (blk_catch_5: { break :blk_catch_5 ((manifest.getStringCloned(allocator, "name")) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 ((null) orelse (name)); }); });
+        const pkg_version = (blk_catch_6: { break :blk_catch_6 ((manifest.getStringCloned(allocator, "version")) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 ((null) orelse (version)); }); });
+        const license = (blk_catch_7: { break :blk_catch_7 ((manifest.getStringCloned(allocator, "license")) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 ((null) orelse ("")); }); });
+        var dep_count: usize = 0;
+        _ = &dep_count;
+        const dependencies_object = manifest.getObject("dependencies");
+        if (dependencies_object) |deps| {
+            _ = &deps;
+            dep_count = deps.data.e_object.properties.len;
+        }
+        _ = Output.prettyln("<b><blue><u>{s}<r><d>@<r><blue><b><u>{s}<r> <d>|<r> <cyan>{s}<r> <d>|<r> deps<d>:<r> {d} <d>|<r> versions<d>:<r> {d}", .{ pkg_name, pkg_version, license, dep_count, versions_len });
+        if ((blk_catch_8: { break :blk_catch_8 ((json.getStringCloned(allocator, "description")) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |desc| {
+            _ = &desc;
+            _ = Output.prettyln("{s}", .{ desc });
+        }
+        if ((blk_catch_9: { break :blk_catch_9 ((json.getStringCloned(allocator, "homepage")) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); })) |hp| {
+            _ = &hp;
+            _ = Output.prettyln("<blue>{s}<r>", .{ hp });
+        }
+        if (json.getArray("keywords")) |arr| {
+            _ = &arr;
+            var keywords = try MutableString.init(allocator, 64);
+            _ = &keywords;
+            var iter = arr;
+            _ = &iter;
+            var first = true;
+            _ = &first;
+            while (iter.next()) |kw_expr| {
+                if (kw_expr.asString(allocator)) |kw| {
+                    _ = &kw;
+                    if ((!first)) {
+                        _ = try keywords.appendSlice(", ");
+                    } else {
+                        first = false;
+                    }
+                    _ = try keywords.appendSlice(kw);
+                }
+            }
+            if ((keywords.list.items.len > 0)) {
+                _ = Output.prettyln("<d>keywords:<r> {s}", .{ keywords.list.items });
+            }
+        }
+        if (dependencies_object) |deps| {
+            _ = &deps;
+            const dependencies = deps.data.e_object.properties.slice();
+            if ((dependencies.len > 0)) {
+                _ = Output.prettyln("\n<b>dependencies<r><d> ({d}):<r>", .{ dependencies.len });
+            }
+            for (cp_iter_slice(dependencies)) |prop| {
+                _ = &prop;
+                if (((prop.key == null) or ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) == null))) {
+                    continue;
+                }
+                const dep_name = ((prop.key.?.asString(allocator)) orelse continue);
+                const dep_version = (((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asString(allocator)) orelse continue);
+                _ = Output.prettyln("- <cyan>{s}<r><d>:<r> {s}", .{ dep_name, dep_version });
+            }
+        }
+        if (manifest.getObject("dist")) |dist| {
+            _ = &dist;
+            _ = Output.prettyln("\n<d><r><b>dist<r>", .{});
+            if ((blk_catch_10: { break :blk_catch_10 ((dist.getStringCloned(allocator, "tarball")) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 null; }); })) |t| {
+                _ = &t;
+                _ = Output.prettyln(" <d>.<r>tarball<d>:<r> {s}", .{ t });
+            }
+            if ((blk_catch_11: { break :blk_catch_11 ((dist.getStringCloned(allocator, "shasum")) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |s| {
+                _ = &s;
+                _ = Output.prettyln(" <d>.<r>shasum<r><d>:<r> <green>{s}<r>", .{ s });
+            }
+            if ((blk_catch_12: { break :blk_catch_12 ((dist.getStringCloned(allocator, "integrity")) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); })) |i| {
+                _ = &i;
+                _ = Output.prettyln(" <d>.<r>integrity<r><d>:<r> <green>{s}<r>", .{ i });
+            }
+            if (dist.getNumber("unpackedSize")) |u| {
+                _ = &u;
+                _ = Output.prettyln(" <d>.<r>unpackedSize<r><d>:<r> <blue>{f}<r>", .{ bun.fmt.size(@as(u64, @intFromFloat(u[0])), .{}) });
+            }
+        }
+        if (json.getObject("dist-tags")) |tags_obj| {
+            _ = &tags_obj;
+            _ = Output.prettyln("\n<b>dist-tags<r><d>:<r>", .{});
+            for (cp_iter_slice(tags_obj.data.e_object.properties.slice())) |prop| {
+                _ = &prop;
+                if (((prop.key == null) or ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) == null))) {
+                    continue;
+                }
+                const tagname_expr = prop.key.?;
+                const val_expr = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+                if (tagname_expr.asString(allocator)) |tag| {
+                    _ = &tag;
+                    if (val_expr.asString(allocator)) |val| {
+                        _ = &val;
+                        if (strings.eqlComptime(tag, "latest")) {
+                            _ = Output.prettyln("<cyan>{s}<r><d>:<r> {s}", .{ tag, val });
+                        } else {
+                            if (strings.eqlComptime(tag, "beta")) {
+                                _ = Output.prettyln("<blue>{s}<r><d>:<r> {s}", .{ tag, val });
+                            } else {
+                                _ = Output.prettyln("<magenta>{s}<r><d>:<r> {s}", .{ tag, val });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (json.getArray("maintainers")) |maint_iter| {
+            _ = &maint_iter;
+            _ = Output.prettyln("\nmaintainers<r><d>:<r>", .{});
+            var iter = maint_iter;
+            _ = &iter;
+            while (iter.next()) |m| {
+                const nm = (blk_catch_13: { break :blk_catch_13 ((m.getStringCloned(allocator, "name")) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 ((null) orelse ("")); }); });
+                const em = (blk_catch_14: { break :blk_catch_14 ((m.getStringCloned(allocator, "email")) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 ((null) orelse ("")); }); });
+                if ((em.len > 0)) {
+                    _ = Output.prettyln("<d>-<r> {s} <d>\\<{s}\\><r>", .{ nm, em });
+                } else {
+                    if ((nm.len > 0)) {
+                        _ = Output.prettyln("<d>-<r> {s}", .{ nm });
+                    }
+                }
+            }
+        }
+        if (json.getObject("time")) |time_obj| {
+            _ = &time_obj;
+            if ((blk_catch_15: { break :blk_catch_15 ((time_obj.getStringCloned(allocator, pkg_version)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); })) |published_time| {
+                _ = &published_time;
+                _ = Output.prettyln("\n<b>Published<r><d>:<r> {s}", .{ published_time });
+            } else {
+                if ((blk_catch_16: { break :blk_catch_16 ((time_obj.getStringCloned(allocator, "modified")) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); })) |modified_time| {
+                    _ = &modified_time;
+                    _ = Output.prettyln("\n<b>Published<r><d>:<r> {s}", .{ modified_time });
+                }
+            }
+        }
+}

@@ -1437,3 +1437,16 @@
 ### 2026-11-19 18:09:46 UTC - CLI 核心大模块 create_command.cp (2467行) 攻坚完成入库
 - 完成模块：src/cli/create_command.cp (2467行, 膨胀率 1.003x)
 - 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-19 18:13:20 UTC - CLI 9 个核心命令模块批量攻坚完成入库
+- 完成模块：
+  1. init_command.cp (1315行, 1.035x)
+  2. package_manager_command.cp (578行, 0.893x)
+  3. pm_version_command.cp (640行, 1.051x)
+  4. install_completions_command.cp (542行, 0.985x)
+  5. pm_trusted_command.cp (481行, 1.028x)
+  6. bunx_command.cp (806行, 0.850x)
+  7. pm_view_command.cp (408行, 1.049x)
+  8. filter_run.cp (609行, 0.979x)
+  9. open.cp (378行, 1.013x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
