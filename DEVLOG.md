@@ -1090,3 +1090,14 @@
 ### 2. 分支提示编译期时序保障与标量错误展开消除 (`ModuleLoader.cp`)
 - **分支提示首语句保全**：避免在带 `@branchHint(.unlikely)` 的分支使用 Walrus 解包，确保提示宏紧随分支首行输出，严丝合缝满足 Zig 0.13 AST 语法规范。
 - **标量错误平铺重构**：将 `catch |e|` 后的复杂 `switch` 降级为结构化 `if/else if` 模式，消除了虚假 Ok/Err 解包桩代码。
+
+
+## 2026-11-19 [Milestone 7 Phase 78 Group B] Bundler 桶导入解析与链接依赖图借用安全 CP 纯化经验
+
+### 1. 桶导入联合体分支与可选解包控制流 (`barrel_imports.cp`)
+- **Tagged Union 变体显式化**：在 `RequestedExports` tagged union 中显式声明 `all: void` 与 `partial`，消除未定义变体在模式匹配中的词法冲突。
+- **可选解包与循环控制流解耦**：将多重可选分支改写为纯正 Walrus 解包结构，消除非法 `?? continue` 语法，多集合循环改写为单集合遍历配合局部安全索引。
+
+### 2. 根结构体解耦与延迟初始化借用规整 (`LinkerGraph.cp`)
+- **辅助类型顶层解耦**：将 `File`、`AddPartIterator`、`AsyncDependencyState` 提取至模块顶层声明，保持 `@root struct LinkerGraph` 根字段与方法绑定的纯粹性。
+- **消除已移动变量读取陷阱 (E0203)**：优化 `top_level_symbol_to_parts_overlay` 延迟初始化指针借用模式，避免哈希映射写入时的虚假所有权转移告警。
