@@ -1079,3 +1079,14 @@
 ### 2. 宏定义表与独占可变方法排他安全 (`defines.cp`)
 - **可变方法接收者纯化**：将 `insert`、`insertGlobal`、`insertFromIterator` 声明为 `*_` 独占可变方法，查询类方法省略接收者只读借用，消除方法调用时形参错位歧义。
 - **裸指针切片安全收窄**：对 `([*]const u8)?` 裸指针的切片提取包裹于 `unsafe { _.original_name_ptr.?[0.._.original_name_len] }` 块内，表达式位置海象解包规范为语句级前置提取。
+
+
+## 2026-11-19 [Milestone 7 Phase 77 Group A] JSC 模块加载管线与分支提示时序 CP 纯化经验
+
+### 1. 根结构体收敛与多重嵌套可选指针表达 (`ModuleLoader.cp`)
+- **`@root struct` 精确收拢**：根结构体仅包裹内部动态字段与实例方法，顶层辅助类型与导出 C 函数提取至外层作用域，完美兼容外部模块调用契约。
+- **多层嵌套可选指针规范化**：将 `?*?*jsc.JSInternalPromise` 改写为显式嵌套括号形式 `((*(*jsc.JSInternalPromise)?))?`，消除解析器针对多重问号前缀的词法歧义。
+
+### 2. 分支提示编译期时序保障与标量错误展开消除 (`ModuleLoader.cp`)
+- **分支提示首语句保全**：避免在带 `@branchHint(.unlikely)` 的分支使用 Walrus 解包，确保提示宏紧随分支首行输出，严丝合缝满足 Zig 0.13 AST 语法规范。
+- **标量错误平铺重构**：将 `catch |e|` 后的复杂 `switch` 降级为结构化 `if/else if` 模式，消除了虚假 Ok/Err 解包桩代码。
