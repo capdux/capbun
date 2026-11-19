@@ -81,13 +81,13 @@ pub fn Package(comptime SemverIntType: type): type {
             this: *const @This(),
             pm: *PackageManager,
             old: *Lockfile,
-            new: *Lockfile,
+            new_lockfile: *Lockfile,
             package_id_mapping: []PackageID,
             cloner: *Cloner,
         ): !PackageID {
             const old_string_buf = old.buffers.string_bytes.items;
             const old_extern_string_buf = old.buffers.extern_strings.items;
-            let builder_ = new.stringBuilder();
+            let builder_ = new_lockfile.stringBuilder();
             let builder = &builder_;
             debug("Clone: {s}@{f} ({s}, {d} dependencies)", .{
                 this.name.slice(old_string_buf),
@@ -114,25 +114,25 @@ pub fn Package(comptime SemverIntType: type): type {
             builder.allocate()?;
 
             // should be unnecessary, but Just In Case
-            new.buffers.dependencies.ensureUnusedCapacity(new.allocator, old_dependencies.len)?;
-            new.buffers.resolutions.ensureUnusedCapacity(new.allocator, old_dependencies.len)?;
-            new.buffers.extern_strings.ensureUnusedCapacity(new.allocator, new_extern_string_count)?;
+            new_lockfile.buffers.dependencies.ensureUnusedCapacity(new_lockfile.allocator, old_dependencies.len)?;
+            new_lockfile.buffers.resolutions.ensureUnusedCapacity(new_lockfile.allocator, old_dependencies.len)?;
+            new_lockfile.buffers.extern_strings.ensureUnusedCapacity(new_lockfile.allocator, new_extern_string_count)?;
 
-            const prev_len = @as(u32, @truncate(new.buffers.dependencies.items.len));
+            const prev_len = @as(u32, @truncate(new_lockfile.buffers.dependencies.items.len));
             const end = prev_len + @as(u32, @truncate(old_dependencies.len));
             const max_package_id = @as(PackageID, @truncate(old.packages.len));
 
-            new.buffers.dependencies.items = new.buffers.dependencies.items.ptr[0..end];
-            new.buffers.resolutions.items = new.buffers.resolutions.items.ptr[0..end];
+            new_lockfile.buffers.dependencies.items = new_lockfile.buffers.dependencies.items.ptr[0..end];
+            new_lockfile.buffers.resolutions.items = new_lockfile.buffers.resolutions.items.ptr[0..end];
 
-            new.buffers.extern_strings.items.len += new_extern_string_count;
-            const new_extern_strings = new.buffers.extern_strings.items[new.buffers.extern_strings.items.len - new_extern_string_count ..];
+            new_lockfile.buffers.extern_strings.items.len += new_extern_string_count;
+            const new_extern_strings = new_lockfile.buffers.extern_strings.items[new_lockfile.buffers.extern_strings.items.len - new_extern_string_count ..];
 
-            const dependencies: []Dependency = new.buffers.dependencies.items[prev_len..end];
-            const resolutions: []PackageID = new.buffers.resolutions.items[prev_len..end];
+            const dependencies: []Dependency = new_lockfile.buffers.dependencies.items[prev_len..end];
+            const resolutions: []PackageID = new_lockfile.buffers.resolutions.items[prev_len..end];
 
-            const id = @as(PackageID, @truncate(new.packages.len));
-            const new_package = try new.appendPackageWithID(
+            const id = @as(PackageID, @truncate(new_lockfile.packages.len));
+            const new_package = try new_lockfile.appendPackageWithID(
                 {
                     name: builder.appendWithHash(
                         String,
@@ -142,7 +142,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     bin: this.bin.clone(
                         old_string_buf,
                         old_extern_string_buf,
-                        new.buffers.extern_strings.items,
+                        new_lockfile.buffers.extern_strings.items,
                         new_extern_strings,
                         *Lockfile.StringBuilder,
                         builder,
@@ -316,10 +316,10 @@ pub fn Package(comptime SemverIntType: type): type {
             const package_version = package_version_ptr.*;
 
             const dependency_groups = comptime brk: {
-                const group_count = @as(usize, @intFromBool(features.dependencies)) +
-                    @as(usize, @intFromBool(features.dev_dependencies)) +
-                    @as(usize, @intFromBool(features.optional_dependencies)) +
-                    @as(usize, @intFromBool(features.peer_dependencies));
+                const group_count = (if (features.dependencies) 1 else 0) +
+                    (if (features.dev_dependencies) 1 else 0) +
+                    (if (features.optional_dependencies) 1 else 0) +
+                    (if (features.peer_dependencies) 1 else 0);
                 let out_groups: [group_count]DependencyGroup = undefined;
                 let out_group_i: usize = 0;
 
@@ -560,7 +560,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 log: *logger.Log,
                 from_lockfile: *Lockfile,
                 to_lockfile: *Lockfile,
-                @"from": *PackageType,
+                from_package: *PackageType,
                 to: *PackageType,
                 update_requests: ([]PackageManager.UpdateRequest)?,
                 id_mapping: ([]PackageID)?,
@@ -568,8 +568,8 @@ pub fn Package(comptime SemverIntType: type): type {
                 let summary = Summary{};
                 const is_root = id_mapping != null;
                 let to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
-                const from_deps = @"from".dependencies.get(from_lockfile.buffers.dependencies.items);
-                const from_resolutions = @"from".resolutions.get(from_lockfile.buffers.resolutions.items);
+                const from_deps = from_package.dependencies.get(from_lockfile.buffers.dependencies.items);
+                const from_resolutions = from_package.resolutions.get(from_lockfile.buffers.resolutions.items);
                 let to_i: usize = 0;
 
                 if (from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count()) {
@@ -852,21 +852,28 @@ pub fn Package(comptime SemverIntType: type): type {
                                     break :update_mapping false;
                                 };
 
-                                let package_json_path: bun.AbsPath({ sep: .auto }) = .initTopLevelDir();
+                                let package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
                                 defer package_json_path.deinit();
 
                                 package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
                                 package_json_path.append("package.json");
 
-                                const source = &(bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap() catch {
+                                let source_file: bun.logger.Source = undefined;
+                                if (src_opt := bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap()) {
+                                    source_file = src_opt;
+                                } else {
                                     break :update_mapping false;
-                                });
+                                }
+                                const source = &source_file;
 
                                 let workspace_pkg: PackageType = {};
 
-                                const json = pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap() catch {
+                                let json: bun.PackageJSON = undefined;
+                                if (json_opt := pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap()) {
+                                    json = json_opt;
+                                } else {
                                     break :update_mapping false;
-                                };
+                                }
 
                                 let resolver: void = {};
                                 try workspace_pkg.parseWithJSON(
@@ -926,10 +933,10 @@ pub fn Package(comptime SemverIntType: type): type {
                 // number of from_deps could be greater than to_deps.
                 summary.add = @truncate((to_deps.len) -| (from_deps.len -| summary.remove));
 
-                if (@"from".resolution.tag != .root) {
+                if (from_package.resolution.tag != .root) {
                     inline for (Lockfile.Scripts.names) |hook| {
                         if (!@field(to.scripts, hook).eql(
-                            @field(@"from".scripts, hook),
+                            @field(from_package.scripts, hook),
                             to_lockfile.buffers.string_bytes.items,
                             from_lockfile.buffers.string_bytes.items,
                         )) {
@@ -1078,10 +1085,10 @@ pub fn Package(comptime SemverIntType: type): type {
                         FileSystem.instance.top_level_dir,
                         Path.joinAbsString(
                             FileSystem.instance.top_level_dir,
-                            &[_]string{
+                            [
                                 source.path.name.dir,
                                 dependency_version.value.folder.slice(buf),
-                            },
+                            ],
                             .auto,
                         ),
                     );
@@ -1164,10 +1171,10 @@ pub fn Package(comptime SemverIntType: type): type {
                                 Path.joinAbsStringBuf(
                                     FileSystem.instance.top_level_dir,
                                     &buf2,
-                                    &[_]string{
+                                    [
                                         source.path.name.dir,
                                         workspace,
-                                    },
+                                    ],
                                     .auto,
                                 ),
                                 .auto,
@@ -1374,11 +1381,11 @@ pub fn Package(comptime SemverIntType: type): type {
             }
 
             const dependency_groups = comptime brk: {
-                const group_count = @as(usize, @intFromBool(features.workspaces)) +
-                    @as(usize, @intFromBool(features.dependencies)) +
-                    @as(usize, @intFromBool(features.dev_dependencies)) +
-                    @as(usize, @intFromBool(features.optional_dependencies)) +
-                    @as(usize, @intFromBool(features.peer_dependencies));
+                const group_count = (if (features.workspaces) 1 else 0) +
+                    (if (features.dependencies) 1 else 0) +
+                    (if (features.dev_dependencies) 1 else 0) +
+                    (if (features.optional_dependencies) 1 else 0) +
+                    (if (features.peer_dependencies) 1 else 0);
                 let out_groups: [group_count]DependencyGroup = undefined;
                 let out_group_i: usize = 0;
 
@@ -1417,7 +1424,7 @@ pub fn Package(comptime SemverIntType: type): type {
             // `peerDependencies`. Track the original key string so the
             // post-build pass can emit a real `Dependency` for any meta-only
             // names that nothing in the build loop consumed.
-            let optional_peer_dependencies = std.ArrayHashMap(PackageNameHash, []const u8, ArrayIdentityContext.U64, false).init(allocator);
+            let optional_peer_dependencies = std.ArrayHashMap(PackageNameHash, string, ArrayIdentityContext.U64, false).init(allocator);
             defer optional_peer_dependencies.deinit();
 
             if (features.peer_dependencies) {
@@ -1502,13 +1509,15 @@ pub fn Package(comptime SemverIntType: type): type {
                             }
                             for (item of obj.properties.slice()) {
                                 const key = item.key.?.asString(allocator).?;
-                                const value = item.value.?.asString(allocator) orelse {
+                                let value: string = "";
+                                if (val_opt := item.value.?.asString(allocator)) {
+                                    value = val_opt;
+                                } else {
                                     log.addErrorFmt(source, item.value.?.loc, allocator,
-                                        // TODO: what if we could comptime call the syntax highlighter
                                         "{0s} expects a map of specifiers, e.g.\n  <r><green>\"{0s}\"<r>: {{\n    <green>\"bun\"<r>: <green>\"latest\"<r>\n  }}"
                                     , .{group.prop}) catch {};
                                     return error.InvalidPackageJSON;
-                                };
+                                }
 
                                 string_builder.count(key);
                                 string_builder.count(value);
@@ -1546,12 +1555,15 @@ pub fn Package(comptime SemverIntType: type): type {
                             const trusted: *TrustedDependenciesSet = &lockfile.trusted_dependencies.?;
                             trusted.ensureUnusedCapacity(allocator, arr.items.len)?;
                             for (item of arr.slice()) {
-                                const name = item.asString(allocator) orelse {
+                                let name: string = "";
+                                if (name_opt := item.asString(allocator)) {
+                                    name = name_opt;
+                                } else {
                                     log.addErrorFmt(source, q.loc, allocator,
                                         "trustedDependencies expects an array of strings, e.g.\n  <r><green>\"trustedDependencies\"<r>: [\n    <green>\"package_name\"<r>\n  ]"
                                     , {}) catch {};
                                     return error.InvalidPackageJSON;
-                                };
+                                }
                                 lockfile.trusted_dependencies.?.putAssumeCapacity(@as(TruncatedPackageNameHash, @truncate(String.Builder.stringHash(name))), {});
                             }
                         },
@@ -1788,7 +1800,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 for (workspace_names.values(), workspace_names.keys()) |value, note_path| {
                                     if (note_path.ptr == path.ptr) continue;
                                     if (strings.eqlLong(value.name, entry.name, true)) {
-                                        const note_abs_path = bun.handleOom(allocator.dupeZ(u8, Path.joinAbsStringZ(cwd, &.{ note_path, "package.json" }, .auto)));
+                                        const note_abs_path = bun.handleOom(allocator.dupeZ(u8, Path.joinAbsStringZ(cwd, [ note_path, "package.json" ], .auto)));
 
                                         const note_src = bun.sys.File.toSource(note_abs_path, allocator, {}).unwrap() catch logger.Source.initEmptyFile(note_abs_path);
 
@@ -1802,7 +1814,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 break :notes notes[0..i];
                             };
 
-                            const abs_path = Path.joinAbsStringZ(cwd, &.{ path, "package.json" }, .auto);
+                            const abs_path = Path.joinAbsStringZ(cwd, [ path, "package.json" ], .auto);
 
                             const src = bun.sys.File.toSource(abs_path, allocator, {}).unwrap() catch logger.Source.initEmptyFile(abs_path);
 
@@ -2008,26 +2020,26 @@ pub fn Package(comptime SemverIntType: type): type {
                 };
                 let data: [fields.len]Data = undefined;
                 for (fields, &data, 0..) |field_info, *elem, i| {
-                    elem.* = {
-                        size: @sizeOf(field_info.@"type"),
-                        size_index: i,
-                        Type: field_info.@"type",
-                        alignment: if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
+                    elem.* = .{
+                        .size = @sizeOf(field_info.type),
+                        .size_index = i,
+                        .Type = field_info.type,
+                        .alignment = if (@sizeOf(field_info.type) == 0) 1 else field_info.alignment,
                     };
                 }
                 const SortContext = struct {
                     data: []Data,
-                    pub fn swap(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) {
+                    pub fn swap(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) void {
                         const tmp = ctx.data[lhs];
                         ctx.data[lhs] = ctx.data[rhs];
                         ctx.data[rhs] = tmp;
                     }
-                    pub fn lessThan(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize): bool {
+                    pub fn lessThan(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) bool {
                         return ctx.data[lhs].alignment > ctx.data[rhs].alignment;
                     }
                 };
                 std.sort.insertionContext(0, fields.len, SortContext{
-                    data: &data,
+                    .data = &data,
                 });
                 let sizes_bytes: [fields.len]usize = undefined;
                 let field_indexes: [fields.len]usize = undefined;
@@ -2037,16 +2049,16 @@ pub fn Package(comptime SemverIntType: type): type {
                     index.* = elem.size_index;
                     Type.* = elem.Type;
                 }
-                break :blk {
-                    bytes: sizes_bytes,
-                    fields: field_indexes,
-                    Types: Types,
+                break :blk .{
+                    .bytes = sizes_bytes,
+                    .fields = field_indexes,
+                    .Types = Types,
                 };
             };
 
             const FieldsEnum = @typeInfo(List.Field).@"enum";
 
-            pub fn byteSize(list: List): usize {
+            pub fn byteSize(list: List) usize {
                 const sizes_vector: std.@"meta".Vector(sizes.bytes.len, usize) = sizes.bytes;
                 const capacity_vector: @Vector(sizes.bytes.len, usize) = @splat(list.len);
                 return @reduce(.Add, capacity_vector * sizes_vector);
@@ -2054,18 +2066,18 @@ pub fn Package(comptime SemverIntType: type): type {
 
             const AlignmentType = sizes.Types[sizes.fields[0]];
 
-            pub fn save(list: List, comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer)! {
-                writer.writeInt(u64, list.len, .little)?;
-                writer.writeInt(u64, @alignOf(@TypeOf(list.bytes)), .little)?;
-                writer.writeInt(u64, sizes.Types.len, .little)?;
-                const begin_at = stream.getPos()?;
-                writer.writeInt(u64, 0, .little)?;
-                const end_at = stream.getPos()?;
-                writer.writeInt(u64, 0, .little)?;
+            pub fn save(list: List, comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer) !void {
+                try writer.writeInt(u64, list.len, .little);
+                try writer.writeInt(u64, @alignOf(@TypeOf(list.bytes)), .little);
+                try writer.writeInt(u64, sizes.Types.len, .little);
+                const begin_at = try stream.getPos();
+                try writer.writeInt(u64, 0, .little);
+                const end_at = try stream.getPos();
+                try writer.writeInt(u64, 0, .little);
 
-                * = try Aligner.write(@TypeOf(list.bytes), Writer, writer, try stream.getPos());
+                _ = try Aligner.write(@TypeOf(list.bytes), Writer, writer, try stream.getPos());
 
-                const really_begin_at = stream.getPos()?;
+                const really_begin_at = try stream.getPos();
                 let sliced = list.slice();
 
                 inline for (FieldsEnum.fields) |field| {
@@ -2073,27 +2085,27 @@ pub fn Package(comptime SemverIntType: type): type {
                     if (comptime Environment.allow_assert) {
                         debug("save(\"{s}\") = {d} bytes", .{ field.name, std.mem.sliceAsBytes(value).len });
                         if (comptime strings.eqlComptime(field.name, "meta")) {
-                            for (m of value) {
-                                assert(m.has_install_script != .old);
+                            for (value) |meta| {
+                                assert(meta.has_install_script != .old);
                             }
                         }
                     }
                     comptime assertNoUninitializedPadding(@TypeOf(value));
                     if (comptime strings.eqlComptime(field.name, "resolution")) {
                         // copy each resolution to make sure the union is zero initialized
-                        for (val of value) {
+                        for (value) |val| {
                             const copy = val.copy();
-                            writer.writeAll(std.mem.asBytes(&copy))?;
+                            try writer.writeAll(std.mem.asBytes(&copy));
                         }
                     } else {
-                        writer.writeAll(std.mem.sliceAsBytes(value))?;
+                        try writer.writeAll(std.mem.sliceAsBytes(value));
                     }
                 }
 
-                const really_end_at = stream.getPos()?;
+                const really_end_at = try stream.getPos();
 
-                * = stream.pwrite(std.mem.asBytes(&really_begin_at), begin_at);
-                * = stream.pwrite(std.mem.asBytes(&really_end_at), end_at);
+                _ = stream.pwrite(std.mem.asBytes(&really_begin_at), begin_at);
+                _ = stream.pwrite(std.mem.asBytes(&really_end_at), end_at);
             }
 
             const PackagesLoadResult = struct {
@@ -2106,14 +2118,14 @@ pub fn Package(comptime SemverIntType: type): type {
                 end: usize,
                 allocator: Allocator,
                 migrate_from_v2: bool,
-            ): !PackagesLoadResult {
+            ) !PackagesLoadResult {
                 let reader = stream.reader();
 
-                const list_len = reader.readInt(u64, .little)?;
+                const list_len = try reader.readInt(u64, .little);
                 if (list_len > std.math.maxInt(u32) - 1)
                     return error.@"Lockfile validation failed: list is impossibly long";
 
-                const input_alignment = reader.readInt(u64, .little)?;
+                const input_alignment = try reader.readInt(u64, .little);
 
                 let list = List{};
 
@@ -2123,7 +2135,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     return error.@"Lockfile validation failed: alignment mismatch";
                 }
 
-                const field_count = reader.readInt(u64, .little)?;
+                const field_count = try reader.readInt(u64, .little);
                 switch (field_count) {
                     sizes.Types.len => {},
                     // "scripts" field is absent before v0.6.8
@@ -2134,13 +2146,13 @@ pub fn Package(comptime SemverIntType: type): type {
                     },
                 }
 
-                const begin_at = reader.readInt(u64, .little)?;
-                const end_at = reader.readInt(u64, .little)?;
-                if (begin_at > end || end_at > end || begin_at > end_at) {
+                const begin_at = try reader.readInt(u64, .little);
+                const end_at = try reader.readInt(u64, .little);
+                if (begin_at > end or end_at > end or begin_at > end_at) {
                     return error.@"Lockfile validation failed: invalid package list range";
                 }
                 stream.pos = begin_at;
-                list.ensureTotalCapacity(allocator, list_len)?;
+                try list.ensureTotalCapacity(allocator, list_len);
 
                 let needs_update = false;
                 if (migrate_from_v2) {
@@ -2148,35 +2160,35 @@ pub fn Package(comptime SemverIntType: type): type {
                     let list_for_migrating_from_v2 = OldPackageV2.List{};
                     defer list_for_migrating_from_v2.deinit(allocator);
 
-                    list_for_migrating_from_v2.ensureTotalCapacity(allocator, list_len)?;
+                    try list_for_migrating_from_v2.ensureTotalCapacity(allocator, list_len);
                     list_for_migrating_from_v2.len = list_len;
 
-                    loadFields(stream, end_at, OldPackageV2.List, &list_for_migrating_from_v2, &needs_update)?;
+                    try loadFields(stream, end_at, OldPackageV2.List, &list_for_migrating_from_v2, &needs_update);
 
-                    for (_pkg_id of 0..list_for_migrating_from_v2.len) {
+                    for (0..list_for_migrating_from_v2.len) |_pkg_id| {
                         const pkg_id: PackageID = @intCast(_pkg_id);
                         const old = list_for_migrating_from_v2.get(pkg_id);
-                        const new: PackageType = {
-                            name: old.name,
-                            name_hash: old.name_hash,
-                            @"meta": old.@"meta",
-                            bin: old.bin,
-                            dependencies: old.dependencies,
-                            resolutions: old.resolutions,
-                            scripts: old.scripts,
-                            resolution: switch (old.resolution.tag) {
-                                .uninitialized => .init({ uninitialized: old.resolution.value.uninitialized }),
-                                .root => .init({ root: old.resolution.value.root }),
-                                .npm => .init({ npm: old.resolution.value.npm.migrate() }),
-                                .folder => .init({ folder: old.resolution.value.folder }),
-                                .local_tarball => .init({ local_tarball: old.resolution.value.local_tarball }),
-                                .github => .init({ github: old.resolution.value.github }),
-                                .git => .init({ git: old.resolution.value.git }),
-                                .symlink => .init({ symlink: old.resolution.value.symlink }),
-                                .workspace => .init({ workspace: old.resolution.value.workspace }),
-                                .remote_tarball => .init({ remote_tarball: old.resolution.value.remote_tarball }),
-                                .single_file_module => .init({ single_file_module: old.resolution.value.single_file_module }),
-                                else => .init({ uninitialized: {} }),
+                        const new: PackageType = .{
+                            .name = old.name,
+                            .name_hash = old.name_hash,
+                            .meta = old.meta,
+                            .bin = old.bin,
+                            .dependencies = old.dependencies,
+                            .resolutions = old.resolutions,
+                            .scripts = old.scripts,
+                            .resolution = switch (old.resolution.tag) {
+                                .uninitialized => .init(.{ .uninitialized = old.resolution.value.uninitialized }),
+                                .root => .init(.{ .root = old.resolution.value.root }),
+                                .npm => .init(.{ .npm = old.resolution.value.npm.migrate() }),
+                                .folder => .init(.{ .folder = old.resolution.value.folder }),
+                                .local_tarball => .init(.{ .local_tarball = old.resolution.value.local_tarball }),
+                                .github => .init(.{ .github = old.resolution.value.github }),
+                                .git => .init(.{ .git = old.resolution.value.git }),
+                                .symlink => .init(.{ .symlink = old.resolution.value.symlink }),
+                                .workspace => .init(.{ .workspace = old.resolution.value.workspace }),
+                                .remote_tarball => .init(.{ .remote_tarball = old.resolution.value.remote_tarball }),
+                                .single_file_module => .init(.{ .single_file_module = old.resolution.value.single_file_module }),
+                                else => .init(.{ .uninitialized = {} }),
                             },
                         };
 
@@ -2184,16 +2196,16 @@ pub fn Package(comptime SemverIntType: type): type {
                     }
                 } else {
                     list.len = list_len;
-                    loadFields(stream, end_at, List, &list, &needs_update)?;
+                    try loadFields(stream, end_at, List, &list, &needs_update);
                 }
 
-                return {
-                    list: list,
-                    needs_update: needs_update,
+                return .{
+                    .list = list,
+                    .needs_update = needs_update,
                 };
             }
 
-            fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool)! {
+            fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool) !void {
                 let sliced = list.slice();
 
                 inline for (FieldsEnum.fields) |field| {
@@ -2209,8 +2221,8 @@ pub fn Package(comptime SemverIntType: type): type {
                             // need to check if any values were created from an older version of bun
                             // (currently just `has_install_script`). If any are found, the values need
                             // to be updated before saving the lockfile.
-                            for (*m of value) {
-                                if (m.needsUpdate()) {
+                            for (value) |*meta| {
+                                if (meta.needsUpdate()) {
                                     needs_update.* = true;
                                     break;
                                 }

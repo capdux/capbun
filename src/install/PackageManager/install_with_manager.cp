@@ -738,8 +738,8 @@ pub fn installWithManager(
                         error.ProcessWatchFailed => {
                             Output.errGeneric("failed to watch security scanner process", {});
                         },
-                        else => |scan_err| {
-                            Output.errGeneric("security scanner failed: {s}", .{@errorName(scan_err)});
+                        else => {
+                            Output.errGeneric("security scanner failed: {s}", .{@errorName(e)});
                         },
                     }
 

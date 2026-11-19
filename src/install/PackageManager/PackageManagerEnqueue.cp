@@ -589,131 +589,8 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
 
                 retry_with_new_resolve_result: while (true) {
                     const resolve_result = resolve_result_ catch |e| {
-                        switch (e) {
-                            error.DistTagNotFound => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (fail := failFn) {
-                                        fail(
-                                            mgr,
-                                            dependency,
-                                            id,
-                                            e,
-                                        );
-                                    } else {
-                                        mgr.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            mgr.allocator,
-                                            "Package \"{s}\" with tag \"{s}\" not found, but package exists",
-                                            .{
-                                                mgr.lockfile.str(&name),
-                                                mgr.lockfile.str(&version.value.dist_tag.tag),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-
-                                return;
-                            },
-                            error.NoMatchingVersion => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (fail := failFn) {
-                                        fail(
-                                            mgr,
-                                            dependency,
-                                            id,
-                                            e,
-                                        );
-                                    } else {
-                                        mgr.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            mgr.allocator,
-                                            "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>",
-                                            .{
-                                                mgr.lockfile.str(&version.literal),
-                                                mgr.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-                                return;
-                            },
-                            error.TooRecentVersion => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (fail := failFn) {
-                                        fail(
-                                            mgr,
-                                            dependency,
-                                            id,
-                                            e,
-                                        );
-                                    } else {
-                                        const age_gate_ms = mgr.options.minimum_release_age_ms ?? 0;
-                                        if (version.tag == .dist_tag) {
-                                            mgr.log.addErrorFmt(
-                                                null,
-                                                logger.Loc.Empty,
-                                                mgr.allocator,
-                                                "Package \"{s}\" with tag \"{s}\" not found<r> <d>(all versions blocked by minimum-release-age: {d} seconds)<r>",
-                                                .{
-                                                    mgr.lockfile.str(&name),
-                                                    mgr.lockfile.str(&version.value.dist_tag.tag),
-                                                    age_gate_ms / std.time.ms_per_s,
-                                                },
-                                            ) catch unreachable;
-                                        } else {
-                                            mgr.log.addErrorFmt(
-                                                null,
-                                                logger.Loc.Empty,
-                                                mgr.allocator,
-                                                "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(blocked by minimum-release-age: {d} seconds)<r>",
-                                                .{
-                                                    mgr.lockfile.str(&name),
-                                                    mgr.lockfile.str(&version.literal),
-                                                    age_gate_ms / std.time.ms_per_s,
-                                                },
-                                            ) catch unreachable;
-                                        }
-                                    }
-                                }
-                                return;
-                            },
-                            error.MissingPackageJSON => {
-                                if (dependency.behavior.isRequired()) {
-                                    if (fail := failFn) {
-                                        fail(
-                                            mgr,
-                                            dependency,
-                                            id,
-                                            e,
-                                        );
-                                    } else if (version.tag == .folder) {
-                                        mgr.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            mgr.allocator,
-                                            "Could not find package.json for \"file:{s}\" dependency \"{s}\"",
-                                            .{
-                                                mgr.lockfile.str(&version.value.folder),
-                                                mgr.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    } else {
-                                        mgr.log.addErrorFmt(
-                                            null,
-                                            logger.Loc.Empty,
-                                            mgr.allocator,
-                                            "Could not find package.json for dependency \"{s}\"",
-                                            .{
-                                                mgr.lockfile.str(&name),
-                                            },
-                                        ) catch unreachable;
-                                    }
-                                }
-                                return;
-                            },
-                            else => {
+                        if (e == error.DistTagNotFound) {
+                            if (dependency.behavior.isRequired()) {
                                 if (fail := failFn) {
                                     fail(
                                         mgr,
@@ -721,11 +598,128 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                                         id,
                                         e,
                                     );
-                                    return;
+                                } else {
+                                    mgr.log.addErrorFmt(
+                                        null,
+                                        logger.Loc.Empty,
+                                        mgr.allocator,
+                                        "Package \"{s}\" with tag \"{s}\" not found, but package exists",
+                                        .{
+                                            mgr.lockfile.str(&name),
+                                            mgr.lockfile.str(&version.value.dist_tag.tag),
+                                        },
+                                    ) catch unreachable;
                                 }
+                            }
 
-                                return e;
-                            },
+                            return;
+                        } else if (e == error.NoMatchingVersion) {
+                            if (dependency.behavior.isRequired()) {
+                                if (fail := failFn) {
+                                    fail(
+                                        mgr,
+                                        dependency,
+                                        id,
+                                        e,
+                                    );
+                                } else {
+                                    mgr.log.addErrorFmt(
+                                        null,
+                                        logger.Loc.Empty,
+                                        mgr.allocator,
+                                        "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>",
+                                        .{
+                                            mgr.lockfile.str(&version.literal),
+                                            mgr.lockfile.str(&name),
+                                        },
+                                    ) catch unreachable;
+                                }
+                            }
+                            return;
+                        } else if (e == error.TooRecentVersion) {
+                            if (dependency.behavior.isRequired()) {
+                                if (fail := failFn) {
+                                    fail(
+                                        mgr,
+                                        dependency,
+                                        id,
+                                        e,
+                                    );
+                                } else {
+                                    const age_gate_ms = mgr.options.minimum_release_age_ms ?? 0;
+                                    if (version.tag == .dist_tag) {
+                                        mgr.log.addErrorFmt(
+                                            null,
+                                            logger.Loc.Empty,
+                                            mgr.allocator,
+                                            "Package \"{s}\" with tag \"{s}\" not found<r> <d>(all versions blocked by minimum-release-age: {d} seconds)<r>",
+                                            .{
+                                                mgr.lockfile.str(&name),
+                                                mgr.lockfile.str(&version.value.dist_tag.tag),
+                                                age_gate_ms / std.time.ms_per_s,
+                                            },
+                                        ) catch unreachable;
+                                    } else {
+                                        mgr.log.addErrorFmt(
+                                            null,
+                                            logger.Loc.Empty,
+                                            mgr.allocator,
+                                            "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(blocked by minimum-release-age: {d} seconds)<r>",
+                                            .{
+                                                mgr.lockfile.str(&name),
+                                                mgr.lockfile.str(&version.literal),
+                                                age_gate_ms / std.time.ms_per_s,
+                                            },
+                                        ) catch unreachable;
+                                    }
+                                }
+                            }
+                            return;
+                        } else if (e == error.MissingPackageJSON) {
+                            if (dependency.behavior.isRequired()) {
+                                if (fail := failFn) {
+                                    fail(
+                                        mgr,
+                                        dependency,
+                                        id,
+                                        e,
+                                    );
+                                } else if (version.tag == .folder) {
+                                    mgr.log.addErrorFmt(
+                                        null,
+                                        logger.Loc.Empty,
+                                        mgr.allocator,
+                                        "Could not find package.json for \"file:{s}\" dependency \"{s}\"",
+                                        .{
+                                            mgr.lockfile.str(&version.value.folder),
+                                            mgr.lockfile.str(&name),
+                                        },
+                                    ) catch unreachable;
+                                } else {
+                                    mgr.log.addErrorFmt(
+                                        null,
+                                        logger.Loc.Empty,
+                                        mgr.allocator,
+                                        "Could not find package.json for dependency \"{s}\"",
+                                        .{
+                                            mgr.lockfile.str(&name),
+                                        },
+                                    ) catch unreachable;
+                                }
+                            }
+                            return;
+                        } else {
+                            if (fail := failFn) {
+                                fail(
+                                    mgr,
+                                    dependency,
+                                    id,
+                                    e,
+                                );
+                                return;
+                            }
+
+                            return e;
                         }
                     };
 

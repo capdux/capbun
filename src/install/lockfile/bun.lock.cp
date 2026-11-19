@@ -177,7 +177,7 @@ pub struct Stringifier {
             writer.writeAll("},\n")?;
 
             const TreeSortCtx = struct {
-                pub const Item = [[]const DependencyID, string, usize];
+                pub const Item = struct { []const DependencyID, string, usize };
 
                 fn isLessThan(_: void, l: Item, r: Item): bool {
                     let [_l_deps, l_rel_path, l_depth] = l;
@@ -1662,16 +1662,13 @@ pub fn parseIntoBinaryLockfile(
             const name_hash = String.Builder.stringHash(name_str);
             const name = string_buf.append(name_str)?;
 
-            let res = Resolution.fromTextLockfile(res_str, &string_buf) catch |e| switch (e) {
-                error.OutOfMemory => return e,
-                error.UnexpectedResolution => {
+            let res = Resolution.fromTextLockfile(res_str, &string_buf) catch |e| {
+                if (e == error.UnexpectedResolution) {
                     log.addErrorFmt(source, res_info.loc, allocator, "Unexpected resolution: {s}", .{res_str})?;
-                    return e;
-                },
-                error.InvalidSemver => {
+                } else if (e == error.InvalidSemver) {
                     log.addErrorFmt(source, res_info.loc, allocator, "Invalid package version: {s}", .{res_str})?;
-                    return e;
-                },
+                }
+                return e;
             };
 
             if (res.tag == .npm) {
@@ -1689,10 +1686,10 @@ pub fn parseIntoBinaryLockfile(
 
                 if (registry_str.len == 0) {
                     // Use scope-specific registry if available, otherwise fall back to default
-                    const registry_url = if (manager) |mgr|
-                        mgr.scopeForPackageName(name_str).url.href
-                    else
-                        Npm.Registry.default_url;
+                    let registry_url = Npm.Registry.default_url;
+                    if (mgr := manager) {
+                        registry_url = mgr.scopeForPackageName(name_str).url.href;
+                    }
 
                     const url = try ExtractTarball.buildURL(
                         registry_url,
@@ -2013,18 +2010,18 @@ pub fn parseIntoBinaryLockfile(
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
-                const res_id = pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch |e| switch (e) {
-                    error.InvalidPackageKey => {
+                const res_id = pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch |e| {
+                    if (e == error.InvalidPackageKey) {
                         log.addError(source, key.loc, "Invalid package path")?;
                         return error.InvalidPackageKey;
-                    },
-                    error.Unresolvable => {
+                    } else if (e == error.Unresolvable) {
                         if (dep.behavior.optional) {
                             continue;
                         }
                         dependencyResolutionFailure(dep, pkg_path, allocator, lockfile.buffers.string_bytes.items, source, log, key.loc)?;
                         return error.InvalidPackageInfo;
-                    },
+                    }
+                    return error.InvalidPackageInfo;
                 };
 
                 mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
@@ -2032,11 +2029,10 @@ pub fn parseIntoBinaryLockfile(
         }
 
         lockfile.resolve(log) catch |e| {
-            switch (e) {
-                error.OutOfMemory => |oom| return oom,
-                else => {
-                    return error.InvalidPackagesObject;
-                },
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                return error.InvalidPackagesObject;
             }
         };
     }

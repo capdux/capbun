@@ -1412,3 +1412,9 @@
   3. src/install/yarn.cp (1795行, 1.044x)
   4. src/install/hosted_git_info.cp (1422行, 0.861x)
 - 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-19 12:40:45 UTC - src/install/lockfile/ 100% 全量目录闭环与 extract_tarball.cp 迁移完成
+- 闭环目录：src/install/lockfile/ (13/13 模块全部达标入库，包括修复 Package.cp, bun.lock.cp 等核心大模块)
+- 修复模块：PackageManagerEnqueue.cp, install_with_manager.cp
+- 新增模块：extract_tarball.cp (613行, 0.962x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
