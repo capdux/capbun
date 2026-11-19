@@ -1397,3 +1397,10 @@
 - 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，静态 0 违例完全达标。
 ### [2026-11-19] `src/install/` 新增 3 个纯 CP 模块通过 4 项硬门禁
 - `src/install/repository.cp` (1.044x)、`src/install/lifecycle_script_runner.cp` (1.017x)、`src/install/TarballStream.cp` (1.017x) 及对应 `_.zig` 备份与 `.zig` 产物。
+
+### 2026-11-19 11:47:03 UTC - 核心关键大模块 JSValue, LinkerContext, PackageInstall 攻坚完成入库
+- 完成模块：
+  1. src/jsc/JSValue.cp (2519行, 1.000x)
+  2. src/bundler/LinkerContext.cp (2806行, 1.009x)
+  3. src/install/PackageInstall.cp (1515行, 1.000x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。

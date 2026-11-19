@@ -1154,3 +1154,7 @@
 - `@c pub struct`（替代 `pub const X = extern struct`）需将内部嵌套 `struct`/`enum`（如 `StorePathFormatter`, `Formatter`, `Phase`）提升至模块顶层，避免跳过 CP lowering。
 - `std.Io.Writer.Error!void` 为 `cpc` 可识别的格式化写入错误联合返回类型。
 - 字符串/路径切片在 `FileSystem.DirnameStore.instance.append` 中需使用顶层 `type string = []const u8;` 别名而非内联 `[]const u8`。
+
+### 2026-11-19 11:47:03 UTC - 恢复并攻克三个千行级核心大模块
+- JSValue.cp (2519行)、LinkerContext.cp (2806行)、PackageInstall.cp (1515行) 全部通过 4 项硬门禁。
+- 彻底解决了前期因子智能体被销毁导致的工作区遗留未合入问题，已完整落地至主仓。
