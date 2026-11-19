@@ -1,962 +1,138 @@
-pub const ScanImportsAndExportsError = bun.OOM || error{ImportResolutionFailed};
-
-pub fn scanImportsAndExports(this: *LinkerContext) ScanImportsAndExportsError!void {
-    const outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
-    defer outer_trace.end();
-    const reachable = this.graph.reachable_files;
-    const output_format = this.options.output_format;
-    {
-        var import_records_list: []ImportRecord.List = this.graph.ast.items(.import_records);
-
-        // var parts_list: [][]Part = this.graph.ast.items(.parts);
-        var exports_kind: []js_ast.ExportsKind = this.graph.ast.items(.exports_kind);
-        var entry_point_kinds: []EntryPoint.Kind = this.graph.files.items(.entry_point_kind);
-        var named_imports: []js_ast.Ast.NamedImports = this.graph.ast.items(.named_imports);
-        var flags: []JSMeta.Flags = this.graph.meta.items(.flags);
-
-        const input_files = this.parse_graph.input_files.items(.source);
-        const loaders: []const Loader = this.parse_graph.input_files.items(.loader);
-
-        const export_star_import_records: [][]u32 = this.graph.ast.items(.export_star_import_records);
-        const exports_refs: []Ref = this.graph.ast.items(.exports_ref);
-        const module_refs: []Ref = this.graph.ast.items(.module_ref);
-        const ast_flags_list = this.graph.ast.items(.flags);
-
-        const css_asts: []?*bun.css.BundlerStyleSheet = this.graph.ast.items(.css);
-
-        var symbols = &this.graph.symbols;
-        defer this.graph.symbols = symbols.*;
-
-        // Step 1: Figure out what modules must be CommonJS
-        for (reachable) |source_index_| {
-            const trace = bun.perf.trace("Bundler.FigureOutCommonJS");
-            defer trace.end();
-            const id = source_index_.get();
-
-            // does it have a JS AST?
-            if (!(id < import_records_list.len)) continue;
-
-            const import_records: []ImportRecord = import_records_list[id].slice();
-
-            // Is it CSS?
-            if (css_asts[id] != null) {
-                const css_ast = css_asts[id].?;
-                // Inline URLs for non-CSS files into the CSS file
-                _ = this.scanCSSImports(
-                    id,
-                    import_records,
-                    css_asts,
-                    input_files,
-                    loaders,
-                    this.log,
-                );
-
-                // Validate cross-file "composes: ... from" named imports
-                for (css_ast.composes.values()) |*composes| {
-                    for (composes.composes.slice()) |*compose| {
-                        if (compose.from == null or compose.from.? != .import_record_index) continue;
-                        const import_record_idx = compose.from.?.import_record_index;
-                        const record = &import_records[import_record_idx];
-                        if (!record.source_index.isValid()) continue;
-                        const other_css_ast = css_asts[record.source_index.get()] orelse continue;
-                        for (compose.names.slice()) |name| {
-                            if (!other_css_ast.local_scope.contains(name.v)) {
-                                try this.log.addErrorFmt(
-                                    &input_files[record.source_index.get()],
-                                    compose.loc,
-                                    this.allocator(),
-                                    "The name \"{s}\" never appears in \"{s}\" as a CSS modules locally scoped class name. Note that \"composes\" only works with single class selectors.",
-                                    .{
-                                        name.v,
-                                        input_files[record.source_index.get()].path.pretty,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                }
-                validateComposesFromProperties(this, id, css_ast, import_records_list, css_asts);
-
-                continue;
-            }
-
-            for (import_records) |record| {
-                if (!record.source_index.isValid()) {
-                    continue;
-                }
-
-                const other_file = record.source_index.get();
-                const other_flags = ast_flags_list[other_file];
-                // other file is empty
-                if (other_file >= exports_kind.len) continue;
-                const other_kind = exports_kind[other_file];
-
-                switch (record.kind) {
-                    .stmt => {
-                        // Importing using ES6 syntax from a file without any ES6 syntax
-                        // causes that module to be considered CommonJS-style, even if it
-                        // doesn't have any CommonJS exports.
-                        //
-                        // That means the ES6 imports will become undefined instead of
-                        // causing errors. This is for compatibility with older CommonJS-
-                        // style bundlers.
-                        //
-                        // We emit a warning in this case but try to avoid turning the module
-                        // into a CommonJS module if possible. This is possible with named
-                        // imports (the module stays an ECMAScript module but the imports are
-                        // rewritten with undefined) but is not possible with star or default
-                        // imports:
-                        //
-                        //   import * as ns from './empty-file'
-                        //   import defVal from './empty-file'
-                        //   console.log(ns, defVal)
-                        //
-                        // In that case the module *is* considered a CommonJS module because
-                        // the namespace object must be created.
-                        if ((record.flags.contains_import_star or record.flags.contains_default_alias) and
-                            !other_flags.has_lazy_export and !other_flags.force_cjs_to_esm and
-                            exports_kind[other_file] == .none)
-                        {
-                            exports_kind[other_file] = .cjs;
-                            flags[other_file].wrap = .cjs;
-                        }
-
-                        if (record.flags.contains_default_alias and
-                            other_flags.force_cjs_to_esm)
-                        {
-                            exports_kind[other_file] = .cjs;
-                            flags[other_file].wrap = .cjs;
-                        }
-                    },
-                    .require =>
-                    // Files that are imported with require() must be CommonJS modules
-                    {
-                        if (other_kind == .esm) {
-                            flags[other_file].wrap = .esm;
-                        } else {
-                            // TODO: introduce a NamedRequire for require("./foo").Bar AST nodes to support tree-shaking those.
-                            flags[other_file].wrap = .cjs;
-                            exports_kind[other_file] = .cjs;
-                        }
-                    },
-                    .dynamic => {
-                        if (!this.graph.code_splitting) {
-                            // If we're not splitting, then import() is just a require() that
-                            // returns a promise, so the imported file must be a CommonJS module
-                            if (exports_kind[other_file] == .esm) {
-                                flags[other_file].wrap = .esm;
-                            } else {
-                                // TODO: introduce a NamedRequire for require("./foo").Bar AST nodes to support tree-shaking those.
-                                flags[other_file].wrap = .cjs;
-                                exports_kind[other_file] = .cjs;
-                            }
-                        }
-                    },
-                    else => {},
-                }
-            }
-
-            const kind = exports_kind[id];
-
-            // If the output format doesn't have an implicit CommonJS wrapper, any file
-            // that uses CommonJS features will need to be wrapped, even though the
-            // resulting wrapper won't be invoked by other files. An exception is
-            // made for entry point files in CommonJS format (or when in pass-through mode).
-            if (kind == .cjs and (!entry_point_kinds[id].isEntryPoint() or output_format == .iife or output_format == .esm)) {
-                flags[id].wrap = .cjs;
-            }
-        }
-
-        if (comptime Environment.enable_logs) {
-            var cjs_count: usize = 0;
-            var esm_count: usize = 0;
-            var wrap_cjs_count: usize = 0;
-            var wrap_esm_count: usize = 0;
-            for (exports_kind) |kind| {
-                cjs_count += @intFromBool(kind == .cjs);
-                esm_count += @intFromBool(kind == .esm);
-            }
-
-            for (flags) |flag| {
-                wrap_cjs_count += @intFromBool(flag.wrap == .cjs);
-                wrap_esm_count += @intFromBool(flag.wrap == .esm);
-            }
-
-            debug("Step 1: {d} CommonJS modules (+ {d} wrapped), {d} ES modules (+ {d} wrapped)", .{
-                cjs_count,
-                wrap_cjs_count,
-                esm_count,
-                wrap_esm_count,
-            });
-        }
-
-        // Step 2: Propagate dynamic export status for export star statements that
-        // are re-exports from a module whose exports are not statically analyzable.
-        // In this case the export star must be evaluated at run time instead of at
-        // bundle time.
-
-        {
-            const trace = bun.perf.trace("Bundler.WrapDependencies");
-            defer trace.end();
-            var dependency_wrapper = DependencyWrapper{
-                .linker = this,
-                .flags = flags,
-                .import_records = import_records_list,
-                .exports_kind = exports_kind,
-                .entry_point_kinds = entry_point_kinds,
-                .export_star_map = std.AutoHashMap(u32, void).init(this.allocator()),
-                .export_star_records = export_star_import_records,
-                .output_format = output_format,
-            };
-            defer dependency_wrapper.export_star_map.deinit();
-
-            for (reachable) |source_index_| {
-                const source_index = source_index_.get();
-                const id = source_index;
-
-                // does it have a JS AST?
-                if (!(id < import_records_list.len)) continue;
-
-                if (flags[id].wrap != .none) {
-                    dependency_wrapper.wrap(id);
-                }
-
-                if (export_star_import_records[id].len > 0) {
-                    dependency_wrapper.export_star_map.clearRetainingCapacity();
-                    _ = dependency_wrapper.hasDynamicExportsDueToExportStar(id);
-                }
-
-                // Even if the output file is CommonJS-like, we may still need to wrap
-                // CommonJS-style files. Any file that imports a CommonJS-style file will
-                // cause that file to need to be wrapped. This is because the import
-                // method, whatever it is, will need to invoke the wrapper. Note that
-                // this can include entry points (e.g. an entry point that imports a file
-                // that imports that entry point).
-                for (import_records_list[id].slice()) |record| {
-                    if (record.source_index.isValid()) {
-                        if (exports_kind[record.source_index.get()] == .cjs) {
-                            dependency_wrapper.wrap(record.source_index.get());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 3: Resolve "export * from" statements. This must be done after we
-        // discover all modules that can have dynamic exports because export stars
-        // are ignored for those modules.
-        {
-            var export_star_ctx: ?ExportStarContext = null;
-            const trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
-            defer trace.end();
-            defer {
-                if (export_star_ctx) |*export_ctx| {
-                    export_ctx.source_index_stack.deinit();
-                }
-            }
-            var resolved_exports: []ResolvedExports = this.graph.meta.items(.resolved_exports);
-            var resolved_export_stars: []ExportData = this.graph.meta.items(.resolved_export_star);
-
-            for (reachable) |source_index_| {
-                const source_index = source_index_.get();
-                const id = source_index;
-
-                // Expression-style loaders defer code generation until linking. Code
-                // generation is done here because at this point we know that the
-                // "ExportsKind" field has its final value and will not be changed.
-                if (ast_flags_list[id].has_lazy_export) {
-                    try this.generateCodeForLazyExport(id);
-                }
-
-                // Propagate exports for export star statements
-                const export_star_ids = export_star_import_records[id];
-                if (export_star_ids.len > 0) {
-                    if (export_star_ctx == null) {
-                        export_star_ctx = ExportStarContext{
-                            .allocator = this.allocator(),
-                            .resolved_exports = resolved_exports,
-                            .import_records_list = import_records_list,
-                            .export_star_records = export_star_import_records,
-
-                            .imports_to_bind = this.graph.meta.items(.imports_to_bind),
-
-                            .source_index_stack = try std.array_list.Managed(u32).initCapacity(this.allocator(), 32),
-                            .exports_kind = exports_kind,
-                            .named_exports = this.graph.ast.items(.named_exports),
-                        };
-                    }
-                    export_star_ctx.?.addExports(&resolved_exports[id], source_index);
-                }
-
-                // Also add a special export so import stars can bind to it. This must be
-                // done in this step because it must come after CommonJS module discovery
-                // but before matching imports with exports.
-                resolved_export_stars[id] = ExportData{
-                    .data = .{
-                        .source_index = Index.source(source_index),
-                        .import_ref = exports_refs[id],
-                    },
-                };
-            }
-        }
-
-        if (comptime FeatureFlags.help_catch_memory_issues) {
-            this.checkForMemoryCorruption();
-        }
-
-        // Step 4: Match imports with exports. This must be done after we process all
-        // export stars because imports can bind to export star re-exports.
-        {
-            this.cycle_detector.clearRetainingCapacity();
-            const trace = bun.perf.trace("Bundler.MatchImportsWithExports");
-            defer trace.end();
-            const wrapper_part_indices = this.graph.meta.items(.wrapper_part_index);
-            const imports_to_bind = this.graph.meta.items(.imports_to_bind);
-            for (reachable) |source_index_| {
-                const source_index = source_index_.get();
-
-                // not a JS ast or empty
-                if (source_index >= named_imports.len) {
-                    continue;
-                }
-
-                const named_imports_ = &named_imports[source_index];
-                if (named_imports_.count() > 0) {
-                    this.matchImportsWithExportsForFile(
-                        named_imports_,
-                        &imports_to_bind[source_index],
-                        source_index,
-                    );
-
-                    if (this.log.errors > 0) {
-                        return error.ImportResolutionFailed;
-                    }
-                }
-                const export_kind = exports_kind[source_index];
-                var flag = flags[source_index];
-                // If we're exporting as CommonJS and this file was originally CommonJS,
-                // then we'll be using the actual CommonJS "exports" and/or "module"
-                // symbols. In that case make sure to mark them as such so they don't
-                // get minified.
-                if ((output_format == .cjs) and
-                    entry_point_kinds[source_index].isEntryPoint() and
-                    export_kind == .cjs and flag.wrap == .none)
-                {
-                    const exports_ref = symbols.follow(exports_refs[source_index]);
-                    const module_ref = symbols.follow(module_refs[source_index]);
-                    symbols.get(exports_ref).?.kind = .unbound;
-                    symbols.get(module_ref).?.kind = .unbound;
-                } else if (flag.force_include_exports_for_entry_point or export_kind != .cjs) {
-                    flag.needs_exports_variable = true;
-                    flags[source_index] = flag;
-                }
-
-                const wrapped_ref = this.graph.ast.items(.wrapper_ref)[source_index];
-
-                // Create the wrapper part for wrapped files. This is needed by a later step.
-                this.createWrapperForFile(
-                    flag.wrap,
-                    // if this one is null, the AST does not need to be wrapped.
-                    wrapped_ref,
-                    &wrapper_part_indices[source_index],
-                    source_index,
-                );
-            }
-        }
-
-        // Step 5: Create namespace exports for every file. This is always necessary
-        // for CommonJS files, and is also necessary for other files if they are
-        // imported using an import star statement.
-        // Note: `do` will wait for all to finish before moving forward
-        try this.parse_graph.pool.worker_pool.each(
-            this.allocator(),
-            this,
-            LinkerContext.doStep5,
-            this.graph.reachable_files,
-        );
-
-        // Some parts of the AST may now be owned by worker allocators. Transfer ownership back
-        // to the graph allocator.
-        this.graph.takeAstOwnership();
-    }
-
-    if (comptime FeatureFlags.help_catch_memory_issues) {
-        this.checkForMemoryCorruption();
-    }
-
-    // Step 6: Bind imports to exports. This adds non-local dependencies on the
-    // parts that declare the export to all parts that use the import. Also
-    // generate wrapper parts for wrapped files.
-    {
-        const trace = bun.perf.trace("Bundler.BindImportsToExports");
-        defer trace.end();
-        // const needs_export_symbol_from_runtime: []const bool = this.graph.meta.items(.needs_export_symbol_from_runtime);
-
-        var runtime_export_symbol_ref: Ref = Ref.None;
-        var entry_point_kinds: []EntryPoint.Kind = this.graph.files.items(.entry_point_kind);
-        var flags: []JSMeta.Flags = this.graph.meta.items(.flags);
-        var ast_fields = this.graph.ast.slice();
-
-        const wrapper_refs = ast_fields.items(.wrapper_ref);
-        const exports_kind = ast_fields.items(.exports_kind);
-        const exports_refs = ast_fields.items(.exports_ref);
-        const module_refs = ast_fields.items(.module_ref);
-        const named_imports = ast_fields.items(.named_imports);
-        const import_records_list = ast_fields.items(.import_records);
-        const export_star_import_records = ast_fields.items(.export_star_import_records);
-        const ast_flags = ast_fields.items(.flags);
-        for (reachable) |source_index_| {
-            const source_index = source_index_.get();
-            const id = source_index;
-
-            const is_entry_point = entry_point_kinds[source_index].isEntryPoint();
-            const aliases = this.graph.meta.items(.sorted_and_filtered_export_aliases)[id];
-            const flag = flags[id];
-            const wrap = flag.wrap;
-            const export_kind = exports_kind[id];
-            const source: *const Logger.Source = &this.parse_graph.input_files.items(.source)[source_index];
-
-            const exports_ref = exports_refs[id];
-
-            const module_ref = module_refs[id];
-
-            const string_buffer_len: usize = brk: {
-                var count: usize = 0;
-                if (is_entry_point and output_format == .esm) {
-                    for (aliases) |alias| {
-                        count += std.fmt.count("export_{f}", .{bun.fmt.fmtIdentifier(alias)});
-                    }
-                }
-
-                const ident_fmt_len: usize = if (source.identifier_name.len > 0)
-                    source.identifier_name.len
-                else
-                    std.fmt.count("{f}", .{source.fmtIdentifier()});
-
-                if (wrap == .esm and wrapper_refs[id].isValid()) {
-                    count += "init_".len + ident_fmt_len;
-                }
-
-                if (wrap != .cjs and export_kind != .cjs and output_format != .internal_bake_dev) {
-                    count += "exports_".len + ident_fmt_len;
-                    count += "module_".len + ident_fmt_len;
-                }
-
-                break :brk count;
-            };
-
-            const string_buffer = try this.allocator().alloc(u8, string_buffer_len);
-            var builder = bun.StringBuilder{
-                .len = 0,
-                .cap = string_buffer.len,
-                .ptr = string_buffer.ptr,
-            };
-
-            defer bun.assert(builder.len == builder.cap); // ensure we used all of it
-
-            // Pre-generate symbols for re-exports CommonJS symbols in case they
-            // are necessary later. This is done now because the symbols map cannot be
-            // mutated later due to parallelism.
-            if (is_entry_point and output_format == .esm) {
-                const copies = try this.allocator().alloc(Ref, aliases.len);
-
-                for (aliases, copies) |alias, *copy| {
-                    const original_name = builder.fmt("export_{f}", .{bun.fmt.fmtIdentifier(alias)});
-                    copy.* = this.graph.generateNewSymbol(source_index, .other, original_name);
-                }
-                this.graph.meta.items(.cjs_export_copies)[id] = copies;
-            }
-
-            // Use "init_*" for ESM wrappers instead of "require_*"
-            if (wrap == .esm) {
-                const ref = wrapper_refs[id];
-                if (ref.isValid()) {
-                    const original_name = builder.fmt(
-                        "init_{f}",
-                        .{source.fmtIdentifier()},
-                    );
-
-                    this.graph.symbols.get(ref).?.original_name = original_name;
-                }
-            }
-
-            // If this isn't CommonJS, then rename the unused "exports" and "module"
-            // variables to avoid them causing the identically-named variables in
-            // actual CommonJS files from being renamed. This is purely about
-            // aesthetics and is not about correctness. This is done here because by
-            // this point, we know the CommonJS status will not change further.
-            if (wrap != .cjs and export_kind != .cjs and output_format != .internal_bake_dev) {
-                const exports_name = builder.fmt("exports_{f}", .{source.fmtIdentifier()});
-                const module_name = builder.fmt("module_{f}", .{source.fmtIdentifier()});
-
-                // Note: it's possible for the symbols table to be resized
-                // so we cannot call .get() above this scope.
-                var exports_symbol: ?*js_ast.Symbol = if (exports_ref.isValid())
-                    this.graph.symbols.get(exports_ref)
-                else
-                    null;
-                var module_symbol: ?*js_ast.Symbol = if (module_ref.isValid())
-                    this.graph.symbols.get(module_ref)
-                else
-                    null;
-
-                if (exports_symbol != null)
-                    exports_symbol.?.original_name = exports_name;
-                if (module_symbol != null)
-                    module_symbol.?.original_name = module_name;
-            }
-
-            // Include the "__export" symbol from the runtime if it was used in the
-            // previous step. The previous step can't do this because it's running in
-            // parallel and can't safely mutate the "importsToBind" map of another file.
-            if (flag.needs_export_symbol_from_runtime) {
-                if (!runtime_export_symbol_ref.isValid()) {
-                    runtime_export_symbol_ref = this.runtimeFunction("__export");
-                }
-
-                bun.assert(runtime_export_symbol_ref.isValid());
-
-                try this.graph.generateSymbolImportAndUse(
-                    id,
-                    js_ast.namespace_export_part_index,
-                    runtime_export_symbol_ref,
-                    1,
-                    Index.runtime,
-                );
-            }
-            var imports_to_bind_list: []RefImportData = this.graph.meta.items(.imports_to_bind);
-            var parts_list: []Part.List = ast_fields.items(.parts);
-
-            var parts: []Part = parts_list[id].slice();
-
-            const imports_to_bind = &imports_to_bind_list[id];
-            for (imports_to_bind.keys(), imports_to_bind.values()) |ref_untyped, import_untyped| {
-                const ref: Ref = ref_untyped; // ZLS
-                const import: ImportData = import_untyped; // ZLS
-
-                const import_source_index = import.data.source_index.get();
-
-                if (named_imports[id].get(ref)) |named_import| {
-                    for (named_import.local_parts_with_uses.slice()) |part_index| {
-                        var part: *Part = &parts[part_index];
-                        const parts_declaring_symbol: []const u32 = this.graph.topLevelSymbolToParts(import_source_index, import.data.import_ref);
-
-                        const total_len = parts_declaring_symbol.len + @as(usize, import.re_exports.len) + @as(usize, part.dependencies.len);
-                        if (part.dependencies.cap < total_len) {
-                            bun.handleOom(part.dependencies.ensureTotalCapacity(this.allocator(), total_len));
-                        }
-
-                        // Depend on the file containing the imported symbol
-                        for (parts_declaring_symbol) |resolved_part_index| {
-                            part.dependencies.appendAssumeCapacity(.{
-                                .source_index = Index.source(import_source_index),
-                                .part_index = resolved_part_index,
-                            });
-                        }
-
-                        // Also depend on any files that re-exported this symbol in between the
-                        // file containing the import and the file containing the imported symbol
-                        part.dependencies.appendSliceAssumeCapacity(import.re_exports.slice());
-                    }
-                }
-
-                _ = this.graph.symbols.merge(ref, import.data.import_ref);
-            }
-
-            // If this is an entry point, depend on all exports so they are included
-            if (is_entry_point) {
-                const force_include_exports = flag.force_include_exports_for_entry_point;
-                const add_wrapper = wrap != .none;
-
-                const extra_count = @as(usize, @intFromBool(force_include_exports)) +
-                    @as(usize, @intFromBool(add_wrapper));
-
-                var dependencies = bun.handleOom(std.array_list.Managed(js_ast.Dependency).initCapacity(this.allocator(), extra_count));
-
-                var resolved_exports_list: *ResolvedExports = &this.graph.meta.items(.resolved_exports)[id];
-                for (aliases) |alias| {
-                    const exp = resolved_exports_list.get(alias).?;
-                    var target_source_index = exp.data.source_index;
-                    var target_ref = exp.data.import_ref;
-
-                    // If this is an import, then target what the import points to
-                    if (imports_to_bind_list[target_source_index.get()].get(target_ref)) |import_data| {
-                        target_source_index = import_data.data.source_index;
-                        target_ref = import_data.data.import_ref;
-
-                        bun.handleOom(dependencies.appendSlice(import_data.re_exports.slice()));
-                    }
-
-                    // Pull in all declarations of this symbol
-                    const top_to_parts = this.topLevelSymbolsToParts(target_source_index.get(), target_ref);
-                    bun.handleOom(dependencies.ensureUnusedCapacity(top_to_parts.len));
-                    for (top_to_parts) |part_index| {
-                        dependencies.appendAssumeCapacity(.{
-                            .source_index = target_source_index,
-                            .part_index = part_index,
-                        });
-                    }
-                }
-
-                bun.handleOom(dependencies.ensureUnusedCapacity(extra_count));
-
-                // Ensure "exports" is included if the current output format needs it
-                if (force_include_exports) {
-                    dependencies.appendAssumeCapacity(
-                        .{ .source_index = Index.source(source_index), .part_index = js_ast.namespace_export_part_index },
-                    );
-                }
-
-                // Include the wrapper if present
-                if (add_wrapper) {
-                    dependencies.appendAssumeCapacity(
-                        .{
-                            .source_index = Index.source(source_index),
-                            .part_index = this.graph.meta.items(.wrapper_part_index)[id].get(),
-                        },
-                    );
-                }
-
-                // Represent these constraints with a dummy part
-                const entry_point_part_index = this.graph.addPartToFile(
-                    id,
-                    .{
-                        .dependencies = js_ast.Dependency.List.moveFromList(&dependencies),
-                        .can_be_removed_if_unused = false,
-                    },
-                ) catch |err| bun.handleOom(err);
-
-                parts = parts_list[id].slice();
-                this.graph.meta.items(.entry_point_part_index)[id] = Index.part(entry_point_part_index);
-
-                // Pull in the "__toCommonJS" symbol if we need it due to being an entry point
-                if (force_include_exports and output_format != .internal_bake_dev) {
-                    try this.graph.generateRuntimeSymbolImportAndUse(
-                        source_index,
-                        Index.part(entry_point_part_index),
-                        "__toCommonJS",
-                        1,
-                    );
-                }
-            }
-
-            // Encode import-specific constraints in the dependency graph
-            const import_records: []ImportRecord = import_records_list[id].slice();
-            debug("Binding {d} imports for file {s} (#{d})", .{ import_records.len, source.path.text, id });
-
-            for (parts, 0..) |*part, part_index| {
-                var to_esm_uses: u32 = 0;
-                var to_common_js_uses: u32 = 0;
-                var runtime_require_uses: u32 = 0;
-
-                // Imports of wrapped files must depend on the wrapper
-                for (part.import_record_indices.slice()) |import_record_index| {
-                    var record = &import_records[import_record_index];
-                    const kind = record.kind;
-                    const other_id = record.source_index.value;
-
-                    // Don't follow external imports (this includes import() expressions)
-                    if (!record.source_index.isValid() or this.isExternalDynamicImport(record, source_index)) {
-                        if (output_format == .internal_bake_dev) continue;
-
-                        // This is an external import. Check if it will be a "require()" call.
-                        if (kind == .require or !output_format.keepES6ImportExportSyntax() or kind == .dynamic) {
-                            if (record.source_index.isValid() and kind == .dynamic and ast_flags[other_id].force_cjs_to_esm) {
-                                // If the CommonJS module was converted to ESM
-                                // and the developer `import("cjs_module")`, then
-                                // they may have code that expects the default export to return the CommonJS module.exports object
-                                // That module.exports object does not exist.
-                                // We create a default object with getters for each statically-known export
-                                // This is kind of similar to what Node.js does
-                                // Once we track usages of the dynamic import, we can remove this.
-                                if (!ast_fields.items(.named_exports)[other_id].contains("default"))
-                                    flags[other_id].needs_synthetic_default_export = true;
-
-                                continue;
-                            } else {
-                                // We should use "__require" instead of "require" if we're not
-                                // generating a CommonJS output file, since it won't exist otherwise.
-                                if (shouldCallRuntimeRequire(output_format)) {
-                                    runtime_require_uses += 1;
-                                }
-
-                                // If this wasn't originally a "require()" call, then we may need
-                                // to wrap this in a call to the "__toESM" wrapper to convert from
-                                // CommonJS semantics to ESM semantics.
-                                //
-                                // Unfortunately this adds some additional code since the conversion
-                                // is somewhat complex. As an optimization, we can avoid this if the
-                                // following things are true:
-                                //
-                                // - The import is an ES module statement (e.g. not an "import()" expression)
-                                // - The ES module namespace object must not be captured
-                                // - The "default" and "__esModule" exports must not be accessed
-                                //
-                                if (kind != .require and
-                                    (kind != .stmt or
-                                        record.flags.contains_import_star or
-                                        record.flags.contains_default_alias or
-                                        record.flags.contains_es_module_alias))
-                                {
-                                    // For dynamic imports to cross-chunk CJS modules, we need extra
-                                    // unwrapping in js_printer (.then((m)=>__toESM(m.default))).
-                                    // For other cases (static imports, truly external), use standard wrapping.
-                                    if (record.source_index.isValid() and
-                                        this.isExternalDynamicImport(record, source_index) and
-                                        exports_kind[record.source_index.get()] == .cjs)
-                                    {
-                                        // Cross-chunk dynamic import to CJS - needs special handling in printer
-                                        record.flags.wrap_with_to_esm = true;
-                                        to_esm_uses += 1;
-                                    } else if (kind != .dynamic) {
-                                        // Static imports to external CJS modules need __toESM wrapping
-                                        record.flags.wrap_with_to_esm = true;
-                                        to_esm_uses += 1;
-                                    }
-                                    // Dynamic imports to truly external modules: no wrapping (preserve native format)
-                                }
-                            }
-                        }
-                        continue;
-                    }
-
-                    bun.assert(@as(usize, @intCast(other_id)) < this.graph.meta.len);
-                    const other_flags = flags[other_id];
-                    const other_export_kind = exports_kind[other_id];
-                    const other_source_index = other_id;
-
-                    if (other_flags.wrap != .none) {
-                        // Depend on the automatically-generated require wrapper symbol
-                        const wrapper_ref = wrapper_refs[other_id];
-                        if (wrapper_ref.isValid()) {
-                            try this.graph.generateSymbolImportAndUse(
-                                source_index,
-                                @as(u32, @intCast(part_index)),
-                                wrapper_ref,
-                                1,
-                                Index.source(other_source_index),
-                            );
-                        }
-
-                        // This is an ES6 import of a CommonJS module, so it needs the
-                        // "__toESM" wrapper as long as it's not a bare "require()"
-                        if (kind != .require and other_export_kind == .cjs and output_format != .internal_bake_dev) {
-                            record.flags.wrap_with_to_esm = true;
-                            to_esm_uses += 1;
-                        }
-
-                        // If this is an ESM wrapper, also depend on the exports object
-                        // since the final code will contain an inline reference to it.
-                        // This must be done for "require()" and "import()" expressions
-                        // but does not need to be done for "import" statements since
-                        // those just cause us to reference the exports directly.
-                        if (other_flags.wrap == .esm and kind != .stmt) {
-                            try this.graph.generateSymbolImportAndUse(
-                                source_index,
-                                @as(u32, @intCast(part_index)),
-                                this.graph.ast.items(.exports_ref)[other_id],
-                                1,
-                                Index.source(other_source_index),
-                            );
-
-                            // If this is a "require()" call, then we should add the
-                            // "__esModule" marker to behave as if the module was converted
-                            // from ESM to CommonJS. This is done via a wrapper instead of
-                            // by modifying the exports object itself because the same ES
-                            // module may be simultaneously imported and required, and the
-                            // importing code should not see "__esModule" while the requiring
-                            // code should see "__esModule". This is an extremely complex
-                            // and subtle set of transpiler interop issues. See for example
-                            // https://github.com/evanw/esbuild/issues/1591.
-                            if (kind == .require) {
-                                record.flags.wrap_with_to_commonjs = true;
-                                to_common_js_uses += 1;
-                            }
-                        }
-                    } else if (kind == .stmt and export_kind == .esm_with_dynamic_fallback) {
-                        // This is an import of a module that has a dynamic export fallback
-                        // object. In that case we need to depend on that object in case
-                        // something ends up needing to use it later. This could potentially
-                        // be omitted in some cases with more advanced analysis if this
-                        // dynamic export fallback object doesn't end up being needed.
-                        try this.graph.generateSymbolImportAndUse(
-                            source_index,
-                            @as(u32, @intCast(part_index)),
-                            this.graph.ast.items(.exports_ref)[other_id],
-                            1,
-                            Index.source(other_source_index),
-                        );
-                    }
-                }
-
-                // If there's an ES6 export star statement of a non-ES6 module, then we're
-                // going to need the "__reExport" symbol from the runtime
-                var re_export_uses: u32 = 0;
-
-                for (export_star_import_records[id]) |import_record_index| {
-                    var record = &import_records[import_record_index];
-
-                    var happens_at_runtime = record.source_index.isInvalid() and (!is_entry_point or !output_format.keepES6ImportExportSyntax());
-                    if (record.source_index.isValid()) {
-                        const other_source_index = record.source_index.get();
-                        const other_id = other_source_index;
-                        bun.assert(@as(usize, @intCast(other_id)) < this.graph.meta.len);
-                        const other_export_kind = exports_kind[other_id];
-                        if (other_source_index != source_index and other_export_kind.isDynamic()) {
-                            happens_at_runtime = true;
-                        }
-
-                        if (other_export_kind.isESMWithDynamicFallback()) {
-                            // This looks like "__reExport(exports_a, exports_b)". Make sure to
-                            // pull in the "exports_b" symbol into this export star. This matters
-                            // in code splitting situations where the "export_b" symbol might live
-                            // in a different chunk than this export star.
-                            try this.graph.generateSymbolImportAndUse(
-                                source_index,
-                                @as(u32, @intCast(part_index)),
-                                this.graph.ast.items(.exports_ref)[other_id],
-                                1,
-                                Index.source(other_source_index),
-                            );
-                        }
-                    }
-
-                    if (happens_at_runtime) {
-                        // Depend on this file's "exports" object for the first argument to "__reExport"
-                        try this.graph.generateSymbolImportAndUse(
-                            source_index,
-                            @as(u32, @intCast(part_index)),
-                            this.graph.ast.items(.exports_ref)[id],
-                            1,
-                            Index.source(source_index),
-                        );
-                        this.graph.ast.items(.flags)[id].uses_exports_ref = true;
-                        record.flags.calls_runtime_re_export_fn = true;
-                        re_export_uses += 1;
-                    }
-                }
-
-                if (output_format != .internal_bake_dev) {
-                    // If there's an ES6 import of a CommonJS module, then we're going to need the
-                    // "__toESM" symbol from the runtime to wrap the result of "require()"
-                    try this.graph.generateRuntimeSymbolImportAndUse(
-                        source_index,
-                        Index.part(part_index),
-                        "__toESM",
-                        to_esm_uses,
-                    );
-
-                    // If there's a CommonJS require of an ES6 module, then we're going to need the
-                    // "__toCommonJS" symbol from the runtime to wrap the exports object
-                    try this.graph.generateRuntimeSymbolImportAndUse(
-                        source_index,
-                        Index.part(part_index),
-                        "__toCommonJS",
-                        to_common_js_uses,
-                    );
-
-                    // If there are unbundled calls to "require()" and we're not generating
-                    // code for node, then substitute a "__require" wrapper for "require".
-                    try this.graph.generateRuntimeSymbolImportAndUse(
-                        source_index,
-                        Index.part(part_index),
-                        "__require",
-                        runtime_require_uses,
-                    );
-
-                    try this.graph.generateRuntimeSymbolImportAndUse(
-                        source_index,
-                        Index.part(part_index),
-                        "__reExport",
-                        re_export_uses,
-                    );
-                }
-            }
-        }
-    }
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+const string = []const u8;
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-
-inline fn shouldCallRuntimeRequire(format: options.Format) bool {
-    return format != .cjs;
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const DependencyWrapper = struct {
+pub const bun = @import("bun");
+pub const DependencyWrapper = struct {
     linker: *LinkerContext,
     flags: []JSMeta.Flags,
     exports_kind: []js_ast.ExportsKind,
     import_records: []ImportRecord.List,
-    export_star_map: std.AutoHashMap(Index.Int, void),
+    export_star_map: std.AutoHashMap(Index.Int,void),
     entry_point_kinds: []EntryPoint.Kind,
     export_star_records: [][]u32,
     output_format: options.Format,
 
-    pub fn hasDynamicExportsDueToExportStar(this: *DependencyWrapper, source_index: Index.Int) bool {
-        // Terminate the traversal now if this file already has dynamic exports
-        const export_kind = this.exports_kind[source_index];
-        switch (export_kind) {
-            .cjs, .esm_with_dynamic_fallback => return true,
-            else => {},
-        }
+pub fn hasDynamicExportsDueToExportStar(self: *DependencyWrapper, source_index: Index.Int) bool {
+            const export_kind = self.exports_kind[@as(usize, @intCast(source_index))];
+            switch (export_kind) {
+.cjs, .esm_with_dynamic_fallback => {
+return true;
+},
+else => {
 
-        // Avoid infinite loops due to cycles in the export star graph
-        const has_visited = this.export_star_map.getOrPut(source_index) catch unreachable;
-        if (has_visited.found_existing) {
-            return false;
-        }
-
-        const records = this.import_records[source_index].slice();
-        for (this.export_star_records[source_index]) |id| {
-            const record = records[id];
-
-            // This file has dynamic exports if the exported imports are from a file
-            // that either has dynamic exports directly or transitively by itself
-            // having an export star from a file with dynamic exports.
-            const kind = this.entry_point_kinds[source_index];
-            if ((record.source_index.isInvalid() and (!kind.isEntryPoint() or !this.output_format.keepES6ImportExportSyntax())) or
-                (record.source_index.isValid() and record.source_index.get() != source_index and this.hasDynamicExportsDueToExportStar(record.source_index.get())))
-            {
-                this.exports_kind[source_index] = .esm_with_dynamic_fallback;
-                return true;
+},
+}
+            const has_visited = ((self.export_star_map.getOrPut(source_index)) catch unreachable);
+            if (has_visited.found_existing) {
+                return false;
             }
-        }
-
-        return false;
+            const records = self.import_records[@as(usize, @intCast(source_index))].slice();
+            for (cp_iter_slice(self.export_star_records[@as(usize, @intCast(source_index))])) |id| {
+                _ = &id;
+                const record = records[@as(usize, @intCast(id))];
+                const kind = self.entry_point_kinds[@as(usize, @intCast(source_index))];
+                if (((record.source_index.isInvalid() and ((!kind.isEntryPoint()) or (!self.output_format.keepES6ImportExportSyntax()))) or ((record.source_index.isValid() and (record.source_index.get() != source_index)) and self.hasDynamicExportsDueToExportStar(record.source_index.get())))) {
+                    self.exports_kind[cp_cast_int(usize, source_index)] = .esm_with_dynamic_fallback;
+                    return true;
+                }
+            }
+            return false;
     }
 
-    pub fn wrap(this: *DependencyWrapper, source_index: Index.Int) void {
-        var flags = this.flags[source_index];
-
-        if (flags.did_wrap_dependencies) return;
-        flags.did_wrap_dependencies = true;
-
-        // Never wrap the runtime file since it always comes first
-        if (source_index == Index.runtime.get()) {
-            return;
-        }
-
-        this.flags[source_index] = brk: {
-
-            // This module must be wrapped
-            if (flags.wrap == .none) {
-                flags.wrap = switch (this.exports_kind[source_index]) {
-                    .cjs => .cjs,
-                    else => .esm,
-                };
+pub fn wrap(self: *DependencyWrapper, source_index: Index.Int) void {
+            var flags = self.flags[@as(usize, @intCast(source_index))];
+            _ = &flags;
+            if (flags.did_wrap_dependencies) {
+                return;
+            }
+            flags.did_wrap_dependencies = true;
+            if ((source_index == Index.runtime.get())) {
+                return;
+            }
+            self.flags[cp_cast_int(usize, source_index)] = brk: {
+            if ((flags.wrap == .none)) {
+                flags.wrap = (switch (self.exports_kind[@as(usize, @intCast(source_index))]) {
+.cjs => .cjs,
+else => .esm,
+});
             }
             break :brk flags;
-        };
-
-        const records = this.import_records[source_index].slice();
-        for (records) |record| {
-            if (!record.source_index.isValid()) {
-                continue;
+};
+            const records = self.import_records[@as(usize, @intCast(source_index))].slice();
+            for (cp_iter_slice(records)) |record| {
+                _ = &record;
+                if ((!record.source_index.isValid())) {
+                    continue;
+                }
+                _ = self.wrap(record.source_index.get());
             }
-            this.wrap(record.source_index.get());
-        }
     }
 };
 
-const ExportStarContext = struct {
+pub const ExportStarContext = struct {
     import_records_list: []const ImportRecord.List,
     source_index_stack: std.array_list.Managed(Index.Int),
     exports_kind: []js_ast.ExportsKind,
@@ -966,275 +142,150 @@ const ExportStarContext = struct {
     export_star_records: []const []const Index.Int,
     allocator: std.mem.Allocator,
 
-    pub fn addExports(
-        this: *ExportStarContext,
-        resolved_exports: *ResolvedExports,
-        source_index: Index.Int,
-    ) void {
-        // Avoid infinite loops due to cycles in the export star graph
-        for (this.source_index_stack.items) |i| {
-            if (i == source_index)
-                return;
-        }
-        bun.handleOom(this.source_index_stack.append(source_index));
-        const stack_end_pos = this.source_index_stack.items.len;
-        defer this.source_index_stack.shrinkRetainingCapacity(stack_end_pos - 1);
-
-        const import_records = this.import_records_list[source_index].slice();
-
-        for (this.export_star_records[source_index]) |import_id| {
-            const other_source_index = import_records[import_id].source_index.get();
-
-            const other_id = other_source_index;
-            if (other_id >= this.named_exports.len)
-                // this AST was empty or it wasn't a JS AST
-                continue;
-
-            // Export stars from a CommonJS module don't work because they can't be
-            // statically discovered. Just silently ignore them in this case.
-            //
-            // We could attempt to check whether the imported file still has ES6
-            // exports even though it still uses CommonJS features. However, when
-            // doing this we'd also have to rewrite any imports of these export star
-            // re-exports as property accesses off of a generated require() call.
-            if (this.exports_kind[other_id] == .cjs)
-                continue;
-
-            var iter = this.named_exports[other_id].iterator();
-            next_export: while (iter.next()) |entry| {
-                const alias = entry.key_ptr.*;
-                const name = entry.value_ptr.*;
-
-                // ES6 export star statements ignore exports named "default"
-                if (strings.eqlComptime(alias, "default"))
-                    continue;
-
-                // This export star is shadowed if any file in the stack has a matching real named export
-                for (this.source_index_stack.items[0..stack_end_pos]) |prev| {
-                    if (this.named_exports[prev].contains(alias)) {
-                        continue :next_export;
-                    }
-                }
-
-                const gop = bun.handleOom(resolved_exports.getOrPut(this.allocator, alias));
-                if (!gop.found_existing) {
-                    // Initialize the re-export
-                    gop.value_ptr.* = .{
-                        .data = .{
-                            .import_ref = name.ref,
-                            .source_index = Index.source(other_source_index),
-                            .name_loc = name.alias_loc,
-                        },
-                    };
-
-                    // Make sure the symbol is marked as imported so that code splitting
-                    // imports it correctly if it ends up being shared with another chunk
-                    this.imports_to_bind[source_index].put(this.allocator, name.ref, .{
-                        .data = .{
-                            .import_ref = name.ref,
-                            .source_index = Index.source(other_source_index),
-                        },
-                    }) catch |err| bun.handleOom(err);
-                } else if (gop.value_ptr.data.source_index.get() != other_source_index) {
-                    // Two different re-exports colliding makes it potentially ambiguous
-                    gop.value_ptr.potentially_ambiguous_export_star_refs.append(this.allocator, .{
-                        .data = .{
-                            .source_index = Index.source(other_source_index),
-                            .import_ref = name.ref,
-                            .name_loc = name.alias_loc,
-                        },
-                    }) catch |err| bun.handleOom(err);
+pub fn addExports(self: *ExportStarContext, resolved_exports: *ResolvedExports, source_index: Index.Int) void {
+            for (self.source_index_stack.items) |i| {
+                _ = &i;
+                if ((i == source_index)) {
+                    return;
                 }
             }
-
-            // Search further through this file's export stars
-            this.addExports(resolved_exports, other_source_index);
-        }
+            _ = bun.handleOom(self.source_index_stack.append(source_index));
+            const stack_end_pos = self.source_index_stack.items.len;
+            defer {
+            _ = self.source_index_stack.shrinkRetainingCapacity((stack_end_pos - 1));
+            }
+            const import_records = self.import_records_list[@as(usize, @intCast(source_index))].slice();
+            for (cp_iter_slice(self.export_star_records[@as(usize, @intCast(source_index))])) |import_id| {
+                _ = &import_id;
+                const other_source_index = import_records[@as(usize, @intCast(import_id))].source_index.get();
+                const other_id = other_source_index;
+                if ((other_id >= self.named_exports.len)) {
+                    continue;
+                }
+                if ((self.exports_kind[@as(usize, @intCast(other_id))] == .cjs)) {
+                    continue;
+                }
+                var iter = self.named_exports[@as(usize, @intCast(other_id))].iterator();
+                _ = &iter;
+                next_export: while (iter.next()) |entry| {
+                    const alias = entry.key_ptr.*;
+                    const name = entry.value_ptr.*;
+                    if (strings.eqlComptime(alias, "default")) {
+                        continue;
+                    }
+                    for (cp_iter_slice(self.source_index_stack.items[0..stack_end_pos])) |prev| {
+                        _ = &prev;
+                        if (self.named_exports[@as(usize, @intCast(prev))].contains(alias)) {
+                            continue :next_export;
+                        }
+                    }
+                    const gop = bun.handleOom(resolved_exports.getOrPut(self.allocator, alias));
+                    if ((!gop.found_existing)) {
+                        gop.value_ptr.* = .{ .data = .{ .import_ref = name.@"ref", .source_index = Index.source(other_source_index), .name_loc = name.alias_loc } };
+                        _ = (blk_catch_1: { break :blk_catch_1 ((self.imports_to_bind[@as(usize, @intCast(source_index))].put(self.allocator, name.@"ref", .{ .data = .{ .import_ref = name.@"ref", .source_index = Index.source(other_source_index) } })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                    } else {
+                        if ((gop.value_ptr.data.source_index.get() != other_source_index)) {
+                            _ = (blk_catch_2: { break :blk_catch_2 ((gop.value_ptr.potentially_ambiguous_export_star_refs.append(self.allocator, .{ .data = .{ .source_index = Index.source(other_source_index), .import_ref = name.@"ref", .name_loc = name.alias_loc } })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                        }
+                    }
+                }
+                _ = self.addExports(resolved_exports, other_source_index);
+            }
     }
 };
 
-/// CSS modules spec says that the following is undefined behavior:
-///
-/// ```css
-/// .foo {
-///     composes: bar;
-///     color: red;
-/// }
-///
-/// .bar {
-///     color: blue;
-/// }
-/// ```
-///
-/// Specfically, composing two classes that both define the same property is undefined behavior.
-///
-/// We check this by recording, at parse time, properties that classes use in the `PropertyUsage` struct.
-/// Then here, we compare the properties of the two classes to ensure that there are no conflicts.
-///
-/// There is one case we skip, which is checking the properties of composing from the global scope (`composes: X from global`).
-///
-/// The reason we skip this is because it would require tracking _every_ property of _every_ class (not just CSS module local classes).
-/// This sucks because:
-/// 1. It introduces a performance hit even if the user did not use CSS modules
-/// 2. Composing from the global scope is pretty rare
-///
-/// We should find a way to do this without incurring performance penalties to the common cases.
-fn validateComposesFromProperties(
-    this: *LinkerContext,
-    index: Index.Int,
-    root_css_ast: *bun.css.BundlerStyleSheet,
-    import_records_list: []ImportRecord.List,
+pub const PropertyInFile = struct {
+    source_index: Index.Int,
+    range: bun.logger.Range,
+};
+
+pub const Visitor = struct {
+    visited: std.AutoArrayHashMap(Ref,void),
+    properties: bun.StringArrayHashMap(PropertyInFile),
+    all_import_records: []const ImportRecord.List,
     all_css_asts: []const ?*bun.css.BundlerStyleSheet,
-) void {
-    const PropertyInFile = struct {
-        source_index: Index.Int,
-        range: bun.logger.Range,
-    };
-    const Visitor = struct {
-        visited: std.AutoArrayHashMap(Ref, void),
-        properties: bun.StringArrayHashMap(PropertyInFile),
-        all_import_records: []const ImportRecord.List,
-        all_css_asts: []const ?*bun.css.BundlerStyleSheet,
-        all_symbols: *const Symbol.Map,
-        all_sources: []const Logger.Source,
-        temp_allocator: std.mem.Allocator,
-        allocator: std.mem.Allocator,
-        log: *Logger.Log,
+    all_symbols: *const Symbol.Map,
+    all_sources: []const Logger.Source,
+    temp_allocator: std.mem.Allocator,
+    allocator: std.mem.Allocator,
+    log: *Logger.Log,
 
-        pub fn deinit(v: *@This()) void {
-            v.visited.deinit();
-            v.properties.deinit();
-        }
+pub fn deinit(self: *Visitor) void {
+            _ = self.visited.deinit();
+            _ = self.properties.deinit();
+    }
 
-        fn addPropertyOrWarn(v: *@This(), local: Ref, property_name: []const u8, source_index: Index.Int, range: bun.logger.Range) void {
-            const entry = bun.handleOom(v.properties.getOrPut(property_name));
-
-            if (!entry.found_existing) {
-                entry.value_ptr.* = .{
-                    .source_index = source_index,
-                    .range = range,
-                };
+pub fn addPropertyOrWarn(self: *Visitor, local: Ref, property_name: []const u8, source_index: Index.Int, range: bun.logger.Range) void {
+            const entry = bun.handleOom(self.properties.getOrPut(property_name));
+            if ((!entry.found_existing)) {
+                entry.value_ptr.* = .{ .source_index = source_index, .range = range };
                 return;
             }
-
-            if (entry.value_ptr.source_index == source_index or entry.value_ptr.source_index == Index.invalid.get()) {
+            if (((entry.value_ptr.source_index == source_index) or (entry.value_ptr.source_index == Index.invalid.get()))) {
                 return;
             }
-
-            const local_original_name = v.all_symbols.get(local).?.original_name;
-
-            v.log.addMsg(.{
-                .kind = .err,
-                .data = Logger.rangeData(
-                    &v.all_sources[source_index],
-                    range,
-                    Logger.Log.allocPrint(
-                        v.allocator,
-                        "<r>The value of <b>{s}<r> in the class <b>{s}<r> is undefined.",
-                        .{ property_name, local_original_name },
-                    ) catch |err| bun.handleOom(err),
-                ).cloneLineText(v.log.clone_line_text, v.log.msgs.allocator) catch |err| bun.handleOom(err),
-                .notes = v.allocator.dupe(
-                    Logger.Data,
-                    &.{
-                        bun.logger.rangeData(
-                            &v.all_sources[entry.value_ptr.source_index],
-                            entry.value_ptr.range,
-                            bun.handleOom(Logger.Log.allocPrint(v.allocator, "The first definition of {s} is in this style rule:", .{property_name})),
-                        ),
-                        .{ .text = std.fmt.allocPrint(
-                            v.allocator,
-                            "The specification of \"composes\" does not define an order when class declarations from separate files are composed together. " ++
-                                "The value of the {f} property for {f} may change unpredictably as the code is edited. " ++
-                                "Make sure that all definitions of {f} for {f} are in a single file.",
-                            .{ bun.fmt.quote(property_name), bun.fmt.quote(local_original_name), bun.fmt.quote(property_name), bun.fmt.quote(local_original_name) },
-                        ) catch |err| bun.handleOom(err) },
-                    },
-                ) catch |err| bun.handleOom(err),
-            }) catch |err| bun.handleOom(err);
-
-            // Don't warn more than once
+            const local_original_name = (self.all_symbols.get(local)).?.original_name;
+            _ = (blk_catch_8: { break :blk_catch_8 ((self.log.addMsg(.{ .kind = .err, .data = (blk_catch_5: { break :blk_catch_5 ((Logger.rangeData((&self.all_sources[@as(usize, @intCast(source_index))]), range, (blk_catch_3: { break :blk_catch_3 ((Logger.Log.allocPrint(self.allocator, "<r>The value of <b>{s}<r> in the class <b>{s}<r> is undefined.", .{ property_name, local_original_name })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); })).cloneLineText(self.log.clone_line_text, self.log.msgs.allocator)) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); }), .notes = (blk_catch_7: { break :blk_catch_7 ((self.allocator.dupe(Logger.Data, (&.{ bun.logger.rangeData((&self.all_sources[@as(usize, @intCast(entry.value_ptr.source_index))]), entry.value_ptr.range, bun.handleOom(Logger.Log.allocPrint(self.allocator, "The first definition of {s} is in this style rule:", .{ property_name }))), Logger.Data{ .text = (blk_catch_6: { break :blk_catch_6 ((std.fmt.allocPrint(self.allocator, (("The specification of \"composes\" does not define an order when class declarations from separate files are composed together. " ++ "The value of the {f} property for {f} may change unpredictably as the code is edited. ") ++ "Make sure that all definitions of {f} for {f} are in a single file."), .{ bun.fmt.quote(property_name), bun.fmt.quote(local_original_name), bun.fmt.quote(property_name), bun.fmt.quote(local_original_name) })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); }) } }))) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); }) })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
             entry.value_ptr.source_index = Index.invalid.get();
-        }
+    }
 
-        fn clearRetainingCapacity(v: *@This()) void {
-            v.visited.clearRetainingCapacity();
-            v.properties.clearRetainingCapacity();
-        }
+pub fn clearRetainingCapacity(self: *Visitor) void {
+            _ = self.visited.clearRetainingCapacity();
+            _ = self.properties.clearRetainingCapacity();
+    }
 
-        fn visit(v: *@This(), idx: Index.Int, ast: *bun.css.BundlerStyleSheet, ref: Ref) void {
-            if (v.visited.contains(ref)) return;
-            v.visited.put(ref, {}) catch unreachable;
-
-            // This local name was in a style rule that
-            if (ast.composes.getPtr(ref)) |composes| {
-                for (composes.composes.sliceConst()) |*compose| {
-                    // is an import
-                    if (compose.from != null) {
-                        if (compose.from.? == .import_record_index) {
-                            const import_record_idx = compose.from.?.import_record_index;
-                            const record = v.all_import_records[idx].at(import_record_idx);
-                            if (record.source_index.isInvalid()) continue;
-                            const other_ast = v.all_css_asts[record.source_index.get()] orelse continue;
-                            for (compose.names.slice()) |name| {
-                                const other_name = other_ast.local_scope.get(name.v) orelse continue;
-                                const other_name_ref = other_name.ref.toRealRef(record.source_index.get());
-                                v.visit(record.source_index.get(), other_ast, other_name_ref);
+pub fn visit(self: *Visitor, idx: Index.Int, ast: *bun.css.BundlerStyleSheet, target_ref: Ref) void {
+            if (self.visited.contains(target_ref)) {
+                return;
+            }
+            _ = ((self.visited.put(target_ref, .{})) catch unreachable);
+            if (ast.composes.getPtr(target_ref)) |composes| {
+                _ = &composes;
+                for (cp_mut_slice(&composes.composes.sliceConst())) |*compose| {
+                    _ = &compose;
+                    if (((compose.*).@"from" != null)) {
+                        if (((compose.*).@"from".? == .import_record_index)) {
+                            const import_record_idx = (compose.*).@"from".?.import_record_index;
+                            const record = self.all_import_records[@as(usize, @intCast(idx))].at(import_record_idx);
+                            if (record.source_index.isInvalid()) {
+                                continue;
+                            }
+                            const other_ast = ((self.all_css_asts[@as(usize, @intCast(record.source_index.get()))]) orelse continue);
+                            for (cp_iter_slice((compose.*).names.slice())) |name| {
+                                _ = &name;
+                                const other_name = ((other_ast.local_scope.get(name.v)) orelse continue);
+                                const other_name_ref = other_name.@"ref".toRealRef(record.source_index.get());
+                                _ = self.visit(record.source_index.get(), other_ast, other_name_ref);
                             }
                         } else {
-                            bun.assert(compose.from.? == .global);
-                            // Otherwise it is composed from the global scope.
-                            //
-                            // See comment above for why we are skipping checking this for now.
+                            _ = bun.assert(((compose.*).@"from".? == .global));
                         }
                     } else {
-                        // inside this file
-                        for (compose.names.slice()) |name| {
-                            const name_entry = ast.local_scope.get(name.v) orelse continue;
-                            v.visit(idx, ast, name_entry.ref.toRealRef(idx));
+                        for (cp_iter_slice((compose.*).names.slice())) |name| {
+                            _ = &name;
+                            const name_entry = ((ast.local_scope.get(name.v)) orelse continue);
+                            _ = self.visit(idx, ast, name_entry.@"ref".toRealRef(idx));
                         }
                     }
                 }
             }
-
-            const property_usage = ast.local_properties.getPtr(ref) orelse return;
-            // Warn about cross-file composition with the same CSS properties
+            const property_usage = ((ast.local_properties.getPtr(target_ref)) orelse { return; });
             var iter = property_usage.bitset.iterator(.{});
+            _ = &iter;
             while (iter.next()) |property_tag| {
-                const property_id_tag: bun.css.PropertyIdTag = @enumFromInt(@as(u16, @intCast(property_tag)));
-                bun.assert(property_id_tag != .custom);
-                bun.assert(property_id_tag != .unparsed);
-                v.addPropertyOrWarn(ref, @tagName(property_id_tag), idx, property_usage.range);
+                const property_id_tag: bun.css.PropertyIdTag = @enumFromInt((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(property_tag)) == .@"enum") cp_cast_int(i32, @intFromEnum(property_tag)) else cp_cast_int(i32, property_tag)))) == .@"enum") cp_cast_int(u16, @intFromEnum((if (comptime @typeInfo(@TypeOf(property_tag)) == .@"enum") cp_cast_int(i32, @intFromEnum(property_tag)) else cp_cast_int(i32, property_tag)))) else cp_cast_int(u16, (if (comptime @typeInfo(@TypeOf(property_tag)) == .@"enum") cp_cast_int(i32, @intFromEnum(property_tag)) else cp_cast_int(i32, property_tag)))));
+                _ = bun.assert((property_id_tag != .custom));
+                _ = bun.assert((property_id_tag != .unparsed));
+                _ = self.addPropertyOrWarn(target_ref, @tagName(property_id_tag), idx, property_usage.range);
             }
-
-            for (property_usage.custom_properties) |property| {
-                v.addPropertyOrWarn(ref, property, idx, property_usage.range);
+            for (cp_iter_slice(property_usage.custom_properties)) |property| {
+                _ = &property;
+                _ = self.addPropertyOrWarn(target_ref, property, idx, property_usage.range);
             }
-        }
-    };
-    var sfb = std.heap.stackFallback(1024, this.graph.allocator);
-    const temp_allocator = sfb.get();
-    var visitor = Visitor{
-        .visited = std.AutoArrayHashMap(Ref, void).init(temp_allocator),
-        .properties = bun.StringArrayHashMap(PropertyInFile).init(temp_allocator),
-        .all_import_records = import_records_list,
-        .all_css_asts = all_css_asts,
-        .all_symbols = &this.graph.symbols,
-        .all_sources = this.parse_graph.input_files.items(.source),
-        .temp_allocator = temp_allocator,
-        .allocator = this.graph.allocator,
-        .log = this.log,
-    };
-    defer visitor.deinit();
-    for (root_css_ast.local_scope.values()) |local| {
-        visitor.clearRetainingCapacity();
-        visitor.visit(index, root_css_ast, local.ref.toRealRef(index));
     }
-}
+};
 
-const std = @import("std");
-
-const bun = @import("bun");
+pub const ScanImportsAndExportsError = (bun.OOM or error{ImportResolutionFailed});
 const Environment = bun.Environment;
 const FeatureFlags = bun.FeatureFlags;
 const ImportRecord = bun.ImportRecord;
@@ -1242,7 +293,6 @@ const Loader = bun.Loader;
 const Logger = bun.logger;
 const options = bun.options;
 const strings = bun.strings;
-
 const EntryPoint = bun.bundle_v2.EntryPoint;
 const ExportData = bun.bundle_v2.ExportData;
 const ImportData = bun.bundle_v2.ImportData;
@@ -1252,10 +302,567 @@ const Part = bun.bundle_v2.Part;
 const RefImportData = bun.bundle_v2.RefImportData;
 const ResolvedExports = bun.bundle_v2.ResolvedExports;
 const Symbol = bun.bundle_v2.Symbol;
-
 const LinkerContext = bun.bundle_v2.LinkerContext;
 const debug = LinkerContext.debug;
-
 const js_ast = bun.bundle_v2.js_ast;
 const Dependency = js_ast.Dependency;
 const Ref = bun.bundle_v2.js_ast.Ref;
+
+pub fn scanImportsAndExports(client: *LinkerContext) ScanImportsAndExportsError!void {
+        const outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
+        defer {
+        _ = outer_trace.end();
+        }
+        const reachable = client.graph.reachable_files;
+        const output_format = client.options.output_format;
+        {
+            var import_records_list: []ImportRecord.List = client.graph.ast.items(.import_records);
+            _ = &import_records_list;
+            var exports_kind: []js_ast.ExportsKind = client.graph.ast.items(.exports_kind);
+            _ = &exports_kind;
+            var entry_point_kinds: []EntryPoint.Kind = client.graph.files.items(.entry_point_kind);
+            _ = &entry_point_kinds;
+            var named_imports: []js_ast.Ast.NamedImports = client.graph.ast.items(.named_imports);
+            _ = &named_imports;
+            var flags: []JSMeta.Flags = client.graph.@"meta".items(.flags);
+            _ = &flags;
+            const input_files = client.parse_graph.input_files.items(.source);
+            const loaders: []const Loader = client.parse_graph.input_files.items(.loader);
+            const export_star_import_records: [][]u32 = client.graph.ast.items(.export_star_import_records);
+            const exports_refs: []Ref = client.graph.ast.items(.exports_ref);
+            const module_refs: []Ref = client.graph.ast.items(.module_ref);
+            const ast_flags_list = client.graph.ast.items(.flags);
+            const css_asts = client.graph.ast.items(.css);
+            for (cp_iter_slice(reachable)) |source_index_| {
+                _ = &source_index_;
+                const trace = bun.perf.trace("Bundler.FigureOutCommonJS");
+                defer {
+                _ = trace.end();
+                }
+                const id = source_index_.get();
+                if ((!(id < import_records_list.len))) {
+                    continue;
+                }
+                const import_records: []ImportRecord = import_records_list[@as(usize, @intCast(id))].slice();
+                if ((css_asts[@as(usize, @intCast(id))] != null)) {
+                    const css_ast = (css_asts[@as(usize, @intCast(id))]).?;
+                    _ = client.scanCSSImports(id, import_records, css_asts, input_files, loaders, client.log);
+                    for (css_ast.composes.values()) |*composes| {
+                        _ = &composes;
+                        for (cp_mut_slice(&(composes.*).composes.slice())) |*compose| {
+                            _ = &compose;
+                            if ((((compose.*).@"from" == null) or ((compose.*).@"from".? != .import_record_index))) {
+                                continue;
+                            }
+                            const import_record_idx = (compose.*).@"from".?.import_record_index;
+                            const record = (&import_records[@as(usize, @intCast(import_record_idx))]);
+                            if ((!record.source_index.isValid())) {
+                                continue;
+                            }
+                            const other_css_ast = ((css_asts[@as(usize, @intCast(record.source_index.get()))]) orelse continue);
+                            for (cp_iter_slice((compose.*).names.slice())) |name| {
+                                _ = &name;
+                                if ((!other_css_ast.local_scope.contains(name.v))) {
+                                    _ = try client.log.addErrorFmt((&input_files[@as(usize, @intCast(record.source_index.get()))]), (compose.*).loc, client.allocator(), "The name \"{s}\" never appears in \"{s}\" as a CSS modules locally scoped class name. Note that \"composes\" only works with single class selectors.", .{ name.v, input_files[@as(usize, @intCast(record.source_index.get()))].path.pretty });
+                                }
+                            }
+                        }
+                    }
+                    _ = validateComposesFromProperties(client, id, css_ast, import_records_list, css_asts);
+                    continue;
+                }
+                for (cp_iter_slice(import_records)) |record| {
+                    _ = &record;
+                    if ((!record.source_index.isValid())) {
+                        continue;
+                    }
+                    const other_file = record.source_index.get();
+                    const other_flags = ast_flags_list[@as(usize, @intCast(other_file))];
+                    if ((other_file >= exports_kind.len)) {
+                        continue;
+                    }
+                    const other_kind = exports_kind[@as(usize, @intCast(other_file))];
+                    switch (record.kind) {
+.stmt => {
+if (((((record.flags.contains_import_star or record.flags.contains_default_alias) and (!other_flags.has_lazy_export)) and (!other_flags.force_cjs_to_esm)) and (exports_kind[@as(usize, @intCast(other_file))] == .none))) {
+                        exports_kind[cp_cast_int(usize, other_file)] = .cjs;
+                        flags[@as(usize, @intCast(other_file))].wrap = .cjs;
+                    }
+                    if ((record.flags.contains_default_alias and other_flags.force_cjs_to_esm)) {
+                        exports_kind[cp_cast_int(usize, other_file)] = .cjs;
+                        flags[@as(usize, @intCast(other_file))].wrap = .cjs;
+                    }
+},
+.require => {
+if ((other_kind == .esm)) {
+                        flags[@as(usize, @intCast(other_file))].wrap = .esm;
+                    } else {
+                        flags[@as(usize, @intCast(other_file))].wrap = .cjs;
+                        exports_kind[cp_cast_int(usize, other_file)] = .cjs;
+                    }
+},
+.dynamic => {
+if ((!client.graph.code_splitting)) {
+                        if ((exports_kind[@as(usize, @intCast(other_file))] == .esm)) {
+                            flags[@as(usize, @intCast(other_file))].wrap = .esm;
+                        } else {
+                            flags[@as(usize, @intCast(other_file))].wrap = .cjs;
+                            exports_kind[cp_cast_int(usize, other_file)] = .cjs;
+                        }
+                    }
+},
+else => {
+
+},
+}
+                }
+                const kind = exports_kind[@as(usize, @intCast(id))];
+                if (((kind == .cjs) and (((!entry_point_kinds[@as(usize, @intCast(id))].isEntryPoint()) or (output_format == .iife)) or (output_format == .esm)))) {
+                    flags[@as(usize, @intCast(id))].wrap = .cjs;
+                }
+            }
+            if (comptime Environment.enable_logs) {
+                var cjs_count: usize = 0;
+                _ = &cjs_count;
+                var esm_count: usize = 0;
+                _ = &esm_count;
+                var wrap_cjs_count: usize = 0;
+                _ = &wrap_cjs_count;
+                var wrap_esm_count: usize = 0;
+                _ = &wrap_esm_count;
+                for (cp_iter_slice(exports_kind)) |kind| {
+                    _ = &kind;
+                    cjs_count = (cjs_count + @intFromBool((kind == .cjs)));
+                    esm_count = (esm_count + @intFromBool((kind == .esm)));
+                }
+                for (cp_iter_slice(flags)) |flag| {
+                    _ = &flag;
+                    wrap_cjs_count = (wrap_cjs_count + @intFromBool((flag.wrap == .cjs)));
+                    wrap_esm_count = (wrap_esm_count + @intFromBool((flag.wrap == .esm)));
+                }
+                _ = debug("Step 1: {d} CommonJS modules (+ {d} wrapped), {d} ES modules (+ {d} wrapped)", .{ cjs_count, wrap_cjs_count, esm_count, wrap_esm_count });
+            }
+            {
+                const trace = bun.perf.trace("Bundler.WrapDependencies");
+                defer {
+                _ = trace.end();
+                }
+                var dependency_wrapper = DependencyWrapper{ .linker = client, .flags = flags, .import_records = import_records_list, .exports_kind = exports_kind, .entry_point_kinds = entry_point_kinds, .export_star_map = std.AutoHashMap(u32, void).init(client.allocator()), .export_star_records = export_star_import_records, .output_format = output_format };
+                _ = &dependency_wrapper;
+                defer {
+                _ = dependency_wrapper.export_star_map.deinit();
+                }
+                for (cp_iter_slice(reachable)) |source_index_| {
+                    _ = &source_index_;
+                    const source_index = source_index_.get();
+                    const id = source_index;
+                    if ((!(id < import_records_list.len))) {
+                        continue;
+                    }
+                    if ((flags[@as(usize, @intCast(id))].wrap != .none)) {
+                        _ = dependency_wrapper.wrap(id);
+                    }
+                    if ((export_star_import_records[@as(usize, @intCast(id))].len > 0)) {
+                        _ = dependency_wrapper.export_star_map.clearRetainingCapacity();
+                        _ = dependency_wrapper.hasDynamicExportsDueToExportStar(id);
+                    }
+                    for (cp_iter_slice(import_records_list[@as(usize, @intCast(id))].slice())) |record| {
+                        _ = &record;
+                        if (record.source_index.isValid()) {
+                            if ((exports_kind[@as(usize, @intCast(record.source_index.get()))] == .cjs)) {
+                                _ = dependency_wrapper.wrap(record.source_index.get());
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                var export_star_ctx: ?ExportStarContext = null;
+                _ = &export_star_ctx;
+                const trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
+                defer {
+                _ = trace.end();
+                }
+                defer {
+                {
+                    if (export_star_ctx) |*export_ctx| {
+                        _ = &export_ctx;
+                        _ = (export_ctx.*).source_index_stack.deinit();
+                    }
+                }
+                }
+                var resolved_exports: []ResolvedExports = client.graph.@"meta".items(.resolved_exports);
+                _ = &resolved_exports;
+                var resolved_export_stars: []ExportData = client.graph.@"meta".items(.resolved_export_star);
+                _ = &resolved_export_stars;
+                for (cp_iter_slice(reachable)) |source_index_| {
+                    _ = &source_index_;
+                    const source_index = source_index_.get();
+                    const id = source_index;
+                    if (ast_flags_list[@as(usize, @intCast(id))].has_lazy_export) {
+                        _ = try client.generateCodeForLazyExport(id);
+                    }
+                    const export_star_ids = export_star_import_records[@as(usize, @intCast(id))];
+                    if ((export_star_ids.len > 0)) {
+                        if ((export_star_ctx == null)) {
+                            export_star_ctx = ExportStarContext{ .allocator = client.allocator(), .resolved_exports = resolved_exports, .import_records_list = import_records_list, .export_star_records = export_star_import_records, .imports_to_bind = client.graph.@"meta".items(.imports_to_bind), .source_index_stack = try std.array_list.Managed(u32).initCapacity(client.allocator(), 32), .exports_kind = exports_kind, .named_exports = client.graph.ast.items(.named_exports) };
+                        }
+                        _ = export_star_ctx.?.addExports((&resolved_exports[@as(usize, @intCast(id))]), source_index);
+                    }
+                    resolved_export_stars[cp_cast_int(usize, id)] = ExportData{ .data = .{ .source_index = Index.source(source_index), .import_ref = exports_refs[@as(usize, @intCast(id))] } };
+                }
+            }
+            if (comptime FeatureFlags.help_catch_memory_issues) {
+                _ = client.checkForMemoryCorruption();
+            }
+            {
+                _ = client.cycle_detector.clearRetainingCapacity();
+                const trace = bun.perf.trace("Bundler.MatchImportsWithExports");
+                defer {
+                _ = trace.end();
+                }
+                const wrapper_part_indices = client.graph.@"meta".items(.wrapper_part_index);
+                const imports_to_bind = client.graph.@"meta".items(.imports_to_bind);
+                for (cp_iter_slice(reachable)) |source_index_| {
+                    _ = &source_index_;
+                    const source_index = source_index_.get();
+                    if ((source_index >= named_imports.len)) {
+                        continue;
+                    }
+                    const named_imports_ = (&named_imports[@as(usize, @intCast(source_index))]);
+                    if ((named_imports_.count() > 0)) {
+                        _ = client.matchImportsWithExportsForFile(named_imports_, (&imports_to_bind[@as(usize, @intCast(source_index))]), source_index);
+                        if ((client.log.errors > 0)) {
+                            return error.ImportResolutionFailed;
+                        }
+                    }
+                    const export_kind = exports_kind[@as(usize, @intCast(source_index))];
+                    var flag = flags[@as(usize, @intCast(source_index))];
+                    _ = &flag;
+                    if (((((output_format == .cjs) and entry_point_kinds[@as(usize, @intCast(source_index))].isEntryPoint()) and (export_kind == .cjs)) and (flag.wrap == .none))) {
+                        const exports_ref = client.graph.symbols.follow(exports_refs[@as(usize, @intCast(source_index))]);
+                        const module_ref = client.graph.symbols.follow(module_refs[@as(usize, @intCast(source_index))]);
+                        (client.graph.symbols.get(exports_ref)).?.kind = .unbound;
+                        (client.graph.symbols.get(module_ref)).?.kind = .unbound;
+                    } else {
+                        if ((flag.force_include_exports_for_entry_point or (export_kind != .cjs))) {
+                            flag.needs_exports_variable = true;
+                            flags[cp_cast_int(usize, source_index)] = flag;
+                        }
+                    }
+                    const wrapped_ref = client.graph.ast.items(.wrapper_ref)[@as(usize, @intCast(source_index))];
+                    _ = client.createWrapperForFile(flag.wrap, wrapped_ref, (&wrapper_part_indices[@as(usize, @intCast(source_index))]), source_index);
+                }
+            }
+            _ = try client.parse_graph.pool.worker_pool.each(client.allocator(), client, LinkerContext.doStep5, client.graph.reachable_files);
+            _ = client.graph.takeAstOwnership();
+        }
+        if (comptime FeatureFlags.help_catch_memory_issues) {
+            _ = client.checkForMemoryCorruption();
+        }
+        {
+            const trace = bun.perf.trace("Bundler.BindImportsToExports");
+            defer {
+            _ = trace.end();
+            }
+            var runtime_export_symbol_ref: Ref = Ref.None;
+            _ = &runtime_export_symbol_ref;
+            var entry_point_kinds: []EntryPoint.Kind = client.graph.files.items(.entry_point_kind);
+            _ = &entry_point_kinds;
+            var flags: []JSMeta.Flags = client.graph.@"meta".items(.flags);
+            _ = &flags;
+            var ast_fields = client.graph.ast.slice();
+            _ = &ast_fields;
+            const wrapper_refs = ast_fields.items(.wrapper_ref);
+            const exports_kind = ast_fields.items(.exports_kind);
+            const exports_refs = ast_fields.items(.exports_ref);
+            const module_refs = ast_fields.items(.module_ref);
+            const named_imports = ast_fields.items(.named_imports);
+            const import_records_list = ast_fields.items(.import_records);
+            const export_star_import_records = ast_fields.items(.export_star_import_records);
+            const ast_flags = ast_fields.items(.flags);
+            for (cp_iter_slice(reachable)) |source_index_| {
+                _ = &source_index_;
+                const source_index = source_index_.get();
+                const id = source_index;
+                const is_entry_point = entry_point_kinds[@as(usize, @intCast(source_index))].isEntryPoint();
+                const aliases = client.graph.@"meta".items(.sorted_and_filtered_export_aliases)[@as(usize, @intCast(id))];
+                const flag = flags[@as(usize, @intCast(id))];
+                const wrap = flag.wrap;
+                const export_kind = exports_kind[@as(usize, @intCast(id))];
+                const source: *const Logger.Source = (&client.parse_graph.input_files.items(.source)[@as(usize, @intCast(source_index))]);
+                const exports_ref = exports_refs[@as(usize, @intCast(id))];
+                const module_ref = module_refs[@as(usize, @intCast(id))];
+                const string_buffer_len: usize = brk: {
+                var count: usize = 0;
+                _ = &count;
+                if ((is_entry_point and (output_format == .esm))) {
+                    for (cp_iter_slice(aliases)) |alias| {
+                        _ = &alias;
+                        count = (count + std.fmt.count("export_{f}", .{ bun.fmt.fmtIdentifier(alias) }));
+                    }
+                }
+                const ident_fmt_len: usize = (if ((source.identifier_name.len > 0)) source.identifier_name.len else std.fmt.count("{f}", .{ source.fmtIdentifier() }));
+                if (((wrap == .esm) and wrapper_refs[@as(usize, @intCast(id))].isValid())) {
+                    count = (count + ("init_".len + ident_fmt_len));
+                }
+                if ((((wrap != .cjs) and (export_kind != .cjs)) and (output_format != .internal_bake_dev))) {
+                    count = (count + ("exports_".len + ident_fmt_len));
+                    count = (count + ("module_".len + ident_fmt_len));
+                }
+                break :brk count;
+};
+                const string_buffer = try client.allocator().alloc(u8, string_buffer_len);
+                var builder = bun.StringBuilder{ .len = 0, .cap = string_buffer.len, .ptr = string_buffer.ptr };
+                _ = &builder;
+                defer {
+                _ = bun.assert((builder.len == builder.cap));
+                }
+                if ((is_entry_point and (output_format == .esm))) {
+                    var copies = try client.allocator().alloc(Ref, aliases.len);
+                    _ = &copies;
+                    var alias_i: usize = 0;
+                    _ = &alias_i;
+                    while ((alias_i < aliases.len)) : (alias_i = (alias_i + 1)) {
+                        const alias = aliases[@as(usize, @intCast(alias_i))];
+                        const original_name = builder.fmt("export_{f}", .{ bun.fmt.fmtIdentifier(alias) });
+                        copies[cp_cast_int(usize, alias_i)] = client.graph.generateNewSymbol(source_index, .other, original_name);
+                    }
+                    client.graph.@"meta".items(.cjs_export_copies)[cp_cast_int(usize, id)] = copies;
+                }
+                if ((wrap == .esm)) {
+                    const wrap_ref = wrapper_refs[@as(usize, @intCast(id))];
+                    if (wrap_ref.isValid()) {
+                        const original_name = builder.fmt("init_{f}", .{ source.fmtIdentifier() });
+                        (client.graph.symbols.get(wrap_ref)).?.original_name = original_name;
+                    }
+                }
+                if ((((wrap != .cjs) and (export_kind != .cjs)) and (output_format != .internal_bake_dev))) {
+                    const exports_name = builder.fmt("exports_{f}", .{ source.fmtIdentifier() });
+                    const module_name = builder.fmt("module_{f}", .{ source.fmtIdentifier() });
+                    var exports_symbol: ?*js_ast.Symbol = (if (exports_ref.isValid()) client.graph.symbols.get(exports_ref) else null);
+                    _ = &exports_symbol;
+                    var module_symbol: ?*js_ast.Symbol = (if (module_ref.isValid()) client.graph.symbols.get(module_ref) else null);
+                    _ = &module_symbol;
+                    if ((exports_symbol != null)) {
+                        exports_symbol.?.original_name = exports_name;
+                    }
+                    if ((module_symbol != null)) {
+                        module_symbol.?.original_name = module_name;
+                    }
+                }
+                if (flag.needs_export_symbol_from_runtime) {
+                    if ((!runtime_export_symbol_ref.isValid())) {
+                        runtime_export_symbol_ref = client.runtimeFunction("__export");
+                    }
+                    _ = bun.assert(runtime_export_symbol_ref.isValid());
+                    _ = try client.graph.generateSymbolImportAndUse(id, js_ast.namespace_export_part_index, runtime_export_symbol_ref, 1, Index.runtime);
+                }
+                var imports_to_bind_list: []RefImportData = client.graph.@"meta".items(.imports_to_bind);
+                _ = &imports_to_bind_list;
+                var parts_list: []Part.List = ast_fields.items(.parts);
+                _ = &parts_list;
+                var parts: []Part = parts_list[@as(usize, @intCast(id))].slice();
+                _ = &parts;
+                const imports_to_bind = (&imports_to_bind_list[@as(usize, @intCast(id))]);
+                const itb_keys = imports_to_bind.keys();
+                const itb_values = imports_to_bind.values();
+                var itb_i: usize = 0;
+                _ = &itb_i;
+                while ((itb_i < itb_keys.len)) : (itb_i = (itb_i + 1)) {
+                    const bound_ref: Ref = itb_keys[@as(usize, @intCast(itb_i))];
+                    const imp: ImportData = itb_values[@as(usize, @intCast(itb_i))];
+                    const import_source_index = imp.data.source_index.get();
+                    if (named_imports[@as(usize, @intCast(id))].get(bound_ref)) |named_import| {
+                        _ = &named_import;
+                        for (cp_iter_slice(named_import.local_parts_with_uses.slice())) |part_index| {
+                            _ = &part_index;
+                            var part: *Part = (&parts[@as(usize, @intCast(part_index))]);
+                            _ = &part;
+                            const parts_declaring_symbol: []const u32 = client.graph.topLevelSymbolToParts(import_source_index, imp.data.import_ref);
+                            const total_len = ((parts_declaring_symbol.len + (if (comptime @typeInfo(@TypeOf(imp.re_exports.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(imp.re_exports.len)) else cp_cast_int(usize, imp.re_exports.len))) + (if (comptime @typeInfo(@TypeOf(part.dependencies.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(part.dependencies.len)) else cp_cast_int(usize, part.dependencies.len)));
+                            if ((part.dependencies.cap < total_len)) {
+                                _ = bun.handleOom(part.dependencies.ensureTotalCapacity(client.allocator(), total_len));
+                            }
+                            for (cp_iter_slice(parts_declaring_symbol)) |resolved_part_index| {
+                                _ = &resolved_part_index;
+                                _ = part.dependencies.appendAssumeCapacity(.{ .source_index = Index.source(import_source_index), .part_index = resolved_part_index });
+                            }
+                            _ = part.dependencies.appendSliceAssumeCapacity(imp.re_exports.slice());
+                        }
+                    }
+                    _ = client.graph.symbols.merge(bound_ref, imp.data.import_ref);
+                }
+                if (is_entry_point) {
+                    const force_include_exports = flag.force_include_exports_for_entry_point;
+                    const add_wrapper = (wrap != .none);
+                    const extra_count = ((if (comptime @typeInfo(@TypeOf(@intFromBool(force_include_exports))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(force_include_exports))) else cp_cast_int(usize, @intFromBool(force_include_exports))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(add_wrapper))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(add_wrapper))) else cp_cast_int(usize, @intFromBool(add_wrapper))));
+                    var dependencies = bun.handleOom(std.array_list.Managed(js_ast.Dependency).initCapacity(client.allocator(), extra_count));
+                    _ = &dependencies;
+                    var resolved_exports_list: *ResolvedExports = (&client.graph.@"meta".items(.resolved_exports)[@as(usize, @intCast(id))]);
+                    _ = &resolved_exports_list;
+                    for (cp_iter_slice(aliases)) |alias| {
+                        _ = &alias;
+                        const exp = (resolved_exports_list.get(alias)).?;
+                        var target_source_index = exp.data.source_index;
+                        _ = &target_source_index;
+                        var target_ref = exp.data.import_ref;
+                        _ = &target_ref;
+                        if (imports_to_bind_list[@as(usize, @intCast(target_source_index.get()))].get(target_ref)) |import_data| {
+                            _ = &import_data;
+                            target_source_index = import_data.data.source_index;
+                            target_ref = import_data.data.import_ref;
+                            _ = bun.handleOom(dependencies.appendSlice(import_data.re_exports.slice()));
+                        }
+                        const top_to_parts = client.topLevelSymbolsToParts(target_source_index.get(), target_ref);
+                        _ = bun.handleOom(dependencies.ensureUnusedCapacity(top_to_parts.len));
+                        for (cp_iter_slice(top_to_parts)) |part_index| {
+                            _ = &part_index;
+                            _ = dependencies.appendAssumeCapacity(.{ .source_index = target_source_index, .part_index = part_index });
+                        }
+                    }
+                    _ = bun.handleOom(dependencies.ensureUnusedCapacity(extra_count));
+                    if (force_include_exports) {
+                        _ = dependencies.appendAssumeCapacity(.{ .source_index = Index.source(source_index), .part_index = js_ast.namespace_export_part_index });
+                    }
+                    if (add_wrapper) {
+                        _ = dependencies.appendAssumeCapacity(.{ .source_index = Index.source(source_index), .part_index = client.graph.@"meta".items(.wrapper_part_index)[@as(usize, @intCast(id))].get() });
+                    }
+                    const entry_point_part_index = (blk_catch_10: { break :blk_catch_10 ((client.graph.addPartToFile(id, .{ .dependencies = js_ast.Dependency.List.moveFromList((&dependencies)), .can_be_removed_if_unused = false })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                    parts = parts_list[@as(usize, @intCast(id))].slice();
+                    client.graph.@"meta".items(.entry_point_part_index)[cp_cast_int(usize, id)] = Index.part(entry_point_part_index);
+                    if ((force_include_exports and (output_format != .internal_bake_dev))) {
+                        _ = try client.graph.generateRuntimeSymbolImportAndUse(source_index, Index.part(entry_point_part_index), "__toCommonJS", 1);
+                    }
+                }
+                const import_records: []ImportRecord = import_records_list[@as(usize, @intCast(id))].slice();
+                _ = debug("Binding {d} imports for file {s} (#{d})", .{ import_records.len, source.path.text, id });
+                var part_index: usize = 0;
+                _ = &part_index;
+                while ((part_index < parts.len)) : (part_index = (part_index + 1)) {
+                    var part: *Part = (&parts[@as(usize, @intCast(part_index))]);
+                    _ = &part;
+                    var to_esm_uses: u32 = 0;
+                    _ = &to_esm_uses;
+                    var to_common_js_uses: u32 = 0;
+                    _ = &to_common_js_uses;
+                    var runtime_require_uses: u32 = 0;
+                    _ = &runtime_require_uses;
+                    for (cp_iter_slice(part.import_record_indices.slice())) |import_record_index| {
+                        _ = &import_record_index;
+                        var record = (&import_records[@as(usize, @intCast(import_record_index))]);
+                        _ = &record;
+                        const kind = record.kind;
+                        const other_id = (if (@typeInfo(@TypeOf(record.source_index)) == .@"enum") @intFromEnum(record.source_index) else record.source_index.value);
+                        if (((!record.source_index.isValid()) or client.isExternalDynamicImport(record, source_index))) {
+                            if ((output_format == .internal_bake_dev)) {
+                                continue;
+                            }
+                            if ((((kind == .require) or (!output_format.keepES6ImportExportSyntax())) or (kind == .dynamic))) {
+                                if (((record.source_index.isValid() and (kind == .dynamic)) and ast_flags[@as(usize, @intCast(other_id))].force_cjs_to_esm)) {
+                                    if ((!ast_fields.items(.named_exports)[@as(usize, @intCast(other_id))].contains("default"))) {
+                                        flags[@as(usize, @intCast(other_id))].needs_synthetic_default_export = true;
+                                    }
+                                    continue;
+                                } else {
+                                    if (shouldCallRuntimeRequire(output_format)) {
+                                        runtime_require_uses = (runtime_require_uses + 1);
+                                    }
+                                    if (((kind != .require) and ((((kind != .stmt) or record.flags.contains_import_star) or record.flags.contains_default_alias) or record.flags.contains_es_module_alias))) {
+                                        if (((record.source_index.isValid() and client.isExternalDynamicImport(record, source_index)) and (exports_kind[@as(usize, @intCast(record.source_index.get()))] == .cjs))) {
+                                            record.flags.wrap_with_to_esm = true;
+                                            to_esm_uses = (to_esm_uses + 1);
+                                        } else {
+                                            if ((kind != .dynamic)) {
+                                                record.flags.wrap_with_to_esm = true;
+                                                to_esm_uses = (to_esm_uses + 1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                        _ = bun.assert(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) < client.graph.@"meta".len));
+                        const other_flags = flags[@as(usize, @intCast(other_id))];
+                        const other_export_kind = exports_kind[@as(usize, @intCast(other_id))];
+                        const other_source_index = other_id;
+                        if ((other_flags.wrap != .none)) {
+                            const wrapper_ref = wrapper_refs[@as(usize, @intCast(other_id))];
+                            if (wrapper_ref.isValid()) {
+                                _ = try client.graph.generateSymbolImportAndUse(source_index, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))), wrapper_ref, 1, Index.source(other_source_index));
+                            }
+                            if ((((kind != .require) and (other_export_kind == .cjs)) and (output_format != .internal_bake_dev))) {
+                                record.flags.wrap_with_to_esm = true;
+                                to_esm_uses = (to_esm_uses + 1);
+                            }
+                            if (((other_flags.wrap == .esm) and (kind != .stmt))) {
+                                _ = try client.graph.generateSymbolImportAndUse(source_index, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))), client.graph.ast.items(.exports_ref)[@as(usize, @intCast(other_id))], 1, Index.source(other_source_index));
+                                if ((kind == .require)) {
+                                    record.flags.wrap_with_to_commonjs = true;
+                                    to_common_js_uses = (to_common_js_uses + 1);
+                                }
+                            }
+                        } else {
+                            if (((kind == .stmt) and (export_kind == .esm_with_dynamic_fallback))) {
+                                _ = try client.graph.generateSymbolImportAndUse(source_index, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))), client.graph.ast.items(.exports_ref)[@as(usize, @intCast(other_id))], 1, Index.source(other_source_index));
+                            }
+                        }
+                    }
+                    var re_export_uses: u32 = 0;
+                    _ = &re_export_uses;
+                    for (cp_iter_slice(export_star_import_records[@as(usize, @intCast(id))])) |import_record_index| {
+                        _ = &import_record_index;
+                        var record = (&import_records[@as(usize, @intCast(import_record_index))]);
+                        _ = &record;
+                        var happens_at_runtime = (record.source_index.isInvalid() and ((!is_entry_point) or (!output_format.keepES6ImportExportSyntax())));
+                        _ = &happens_at_runtime;
+                        if (record.source_index.isValid()) {
+                            const other_source_index = record.source_index.get();
+                            const other_id = other_source_index;
+                            _ = bun.assert(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(other_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(other_id)) else cp_cast_int(i32, other_id)))) < client.graph.@"meta".len));
+                            const other_export_kind = exports_kind[@as(usize, @intCast(other_id))];
+                            if (((other_source_index != source_index) and other_export_kind.isDynamic())) {
+                                happens_at_runtime = true;
+                            }
+                            if (other_export_kind.isESMWithDynamicFallback()) {
+                                _ = try client.graph.generateSymbolImportAndUse(source_index, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))), client.graph.ast.items(.exports_ref)[@as(usize, @intCast(other_id))], 1, Index.source(other_source_index));
+                            }
+                        }
+                        if (happens_at_runtime) {
+                            _ = try client.graph.generateSymbolImportAndUse(source_index, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(part_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(part_index)) else cp_cast_int(i32, part_index)))), client.graph.ast.items(.exports_ref)[@as(usize, @intCast(id))], 1, Index.source(source_index));
+                            client.graph.ast.items(.flags)[@as(usize, @intCast(id))].uses_exports_ref = true;
+                            record.flags.calls_runtime_re_export_fn = true;
+                            re_export_uses = (re_export_uses + 1);
+                        }
+                    }
+                    if ((output_format != .internal_bake_dev)) {
+                        _ = try client.graph.generateRuntimeSymbolImportAndUse(source_index, Index.part(part_index), "__toESM", to_esm_uses);
+                        _ = try client.graph.generateRuntimeSymbolImportAndUse(source_index, Index.part(part_index), "__toCommonJS", to_common_js_uses);
+                        _ = try client.graph.generateRuntimeSymbolImportAndUse(source_index, Index.part(part_index), "__require", runtime_require_uses);
+                        _ = try client.graph.generateRuntimeSymbolImportAndUse(source_index, Index.part(part_index), "__reExport", re_export_uses);
+                    }
+                }
+            }
+        }
+}
+
+pub inline fn shouldCallRuntimeRequire(format: options.Format) bool {
+        return (format != .cjs);
+}
+
+pub fn validateComposesFromProperties(client: *LinkerContext, index: Index.Int, root_css_ast: *bun.css.BundlerStyleSheet, import_records_list: []ImportRecord.List, all_css_asts: []const ?*bun.css.BundlerStyleSheet) void {
+        var sfb = std.heap.stackFallback(1024, client.graph.allocator);
+        _ = &sfb;
+        const temp_allocator = sfb.get();
+        var visitor = Visitor{ .visited = std.AutoArrayHashMap(Ref, void).init(temp_allocator), .properties = bun.StringArrayHashMap(PropertyInFile).init(temp_allocator), .all_import_records = import_records_list, .all_css_asts = all_css_asts, .all_symbols = (&client.graph.symbols), .all_sources = client.parse_graph.input_files.items(.source), .temp_allocator = temp_allocator, .allocator = client.graph.allocator, .log = client.log };
+        _ = &visitor;
+        defer {
+        _ = visitor.deinit();
+        }
+        for (root_css_ast.local_scope.values()) |local| {
+            _ = &local;
+            _ = visitor.clearRetainingCapacity();
+            _ = visitor.visit(index, root_css_ast, local.@"ref".toRealRef(index));
+        }
+}

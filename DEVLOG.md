@@ -1060,3 +1060,11 @@
 ### 2. 全局对象辅助类型提升与指针强转收窄 (`JSGlobalObject.cp`)
 - **嵌套类型顶层别名提升**：将 `GregorianDateTime`、`BunPluginTarget`、`SysErrOptions` 等提升至顶层为 `_T` 并通过 `pub const T = _T;` 导出，消解方法签名作用域同名歧义。
 - **指针转换收窄与冗余消除**：利用 `unsafe { @as(*DestType, expr) }` 结合 Zig 针对 `*anyopaque` 的安全隐式转换，消除嵌套 `@ptrCast` 产生的冗余警告与类型截断。
+
+
+## 2026-11-19 [Milestone 7 Phase 76 Group B] Bundler LinkerContext 导入导出扫描与悬垂别名借用根治 CP 纯化经验
+
+### 1. 悬垂指针别名与长生命周期借用冲突消除 (`scanImportsAndExports.cp`)
+- **根治 Zig 隐式内存安全隐患**：原版在顶层持有 `var symbols = &this.graph.symbols; defer this.graph.symbols = symbols.*;` 长跨度别名，并在数千行逻辑中与修改 `client` 的方法并发交叉。CP 借用检查器精准捕获该并发冲突，重构为在各分支按需直接调用 `client.graph.symbols.follow` 与 `get`，消除指针别名污染，根除内存悬垂。
+- **关键字与属性精准转义**：将 `import` 与 `ref` 严格转义/重构为 `imp`、`wrap_ref`、`bound_ref` 与 `name.@"ref"`，保障严格的词法匹配。
+- **辅助类型顶层分离**：将内嵌的 `PropertyInFile` 与 `Visitor` 提升至顶层结构体，多参数循环重构为 `while (i < len) : (i += 1)`。
