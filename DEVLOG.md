@@ -940,3 +940,14 @@
 - **子结构体顶层解耦与方法接收者绑定**：将 `Queue`、`PackageDownloadError`、`PackageResolveError` 提升至顶层为 `AsyncModuleQueue`，内部通过类型别名导出，确保实例方法全面具备 `self: *AsyncModuleQueue` 的可变接收者能力。
 - **标量错误匹配与解包遮蔽消除**：全面采用结构化 `if (result.err == ...) ... else if ...` 替代原生 `switch (err)`，避免生成虚假 Ok/Err 解包桩代码；消除形参 `e` 与解包载荷命名冲突。
 - **C 导出符号顶层收拢**：将 `Bun__onFulfillAsyncModule` 集中在顶部 `@c { ... }` 块声明，对多元素对齐指针包裹在 `unsafe { ... }` 块内进行强类型断言。
+
+
+## 2026-11-19 [Milestone 7 Phase 69 Group B] Bundler 线程池与文件产物输出 CP 纯化经验
+
+### 1. 线程池所有权转移与就地初始化契约 (`ThreadPool.cp`)
+- **所有权移动时序重构 (根除 E0203)**：在 `getWorker` 逻辑中，避免向哈希表赋值后再解引用原变量指针。调整为在本地完成 `worker.*` 字段与上下文的独占初始化，再转移所有权入哈希映射，彻底消除虚假的已移动变量再次读取报错。
+- **全局共享线程池状态顶层提升**：将 `IOThreadPool` 提升至顶层结构体，静态方法与原子计数器规范为 `static fn`，确保跨线程并发调度期间的类型借用安全。
+
+### 2. 输出文件产物联合体与缓存文件描述符状态机 (`OutputFile.cp`, `cache.cp`)
+- **嵌套匿名结构体具名化提升**：将 `OutputFile` 中的未命名联合与选项载荷提升为具名结构体 `ValueBuffer`、`OptionsDataBuffer`、`OptionsDataFile` 等，并对 CP 保留关键字 `@"move"` 与 `@"copy"` 严格转义。
+- **缓存文件描述符错误匹配**：消除对标量错误码的原生 `switch`，改用显式判断 `if (e == error.ENOENT)`，避免编译器生成冗余错误展开模板代码。
