@@ -2623,3 +2623,21 @@ Options:
 - 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Chunks 5`)**：
   - 攻坚 `src/bundler/linker_context/` 第 5 批 2 个核心模块（503~509 行，共 1,012 行）：`computeChunks.zig`, `doStep5.zig`；
 - 与正在攻坚 `src/jsc/` 的 **Worker 1 (`355ded9a`)** 保持双路满载并发。
+
+
+---
+
+## 2026-11-19 12:15:00 - Phase 72 Group B Batch 2 (LinkerContext Chunks 5): 2 个分块计算与 Step5 流程模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成 2 个 `src/bundler/linker_context/` 核心模块硬门禁独立验收：
+  1. `src/bundler/linker_context/computeChunks.cp` (452 行, 0.899x, **PASS**)
+  2. `src/bundler/linker_context/doStep5.cp` (459 行, 0.902x, **PASS**)
+- **4 项硬门禁指标全绿**：2 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 0.902x（净压缩约 10%），`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,168 / 1,295 模块 (90.20%)**！稳步迈向 91%！
+
+### 2. 流水线零等待接力新派发
+- **Worker 2 (`2c9849b6`)** 任务完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Chunks 6`)**：
+  - 攻坚 `src/bundler/linker_context/` 第 6 批 2 个模块（558~679 行，共 1,237 行）：`convertStmtsForChunk.zig`, `findImportedFilesInCSSOrder.zig`；
+- 与正在攻坚 `src/jsc/` 的 **Worker 1 (`355ded9a`)** 保持双路满载并发。

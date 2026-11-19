@@ -996,3 +996,13 @@
 ### 2. 跨分块依赖分析与产物落地磁盘安全 (`computeCrossChunkDependencies.cp`, `writeOutputFilesToDisk.cp`)
 - **多线程工作池静态遍历**：将 `CrossChunkDependencies` 提升为顶层结构体并声明 `pub static fn walk`，利用带步进的 `while` 循环替代带捕获的多集合遍历，保障多线程池调用下的生命周期安全。
 - **嵌套可选切片类型别名**：声明 `type MaybeByteSlice = ([]const u8)?;`，消除嵌套切片形参中的符号混淆；取消管道捕获，规范为可空判空前置守卫，根除悬垂切片。
+
+
+## 2026-11-19 [Milestone 7 Phase 72 Group B Batch 2] Bundler 分块拓扑排序与 Step5 并行调度 CP 纯化经验
+
+### 1. 结构体接收者解耦与辅助类型顶层提升 (`computeChunks.cp`)
+- **形参解耦与类型提升**：将 `this: *LinkerContext` 改写为标准 CP 模块形参 `ctx: *LinkerContext`，并将 `JSChunkKeyFormatter`、`Handler`、`ChunkSortContext` 提取至模块顶层，避免方法内嵌类型破坏 CP lowering 机制。
+- **关键字规避与范围遍历**：将保留字 `arena` 与 `ref` 转义为 `arena_alloc` 与 `sym_ref`，多重捕获循环重构为 `for (i of 0..keys.len)`，杜绝元组解包开销。
+
+### 2. Step5 阶段文件打开回退与错误捕获控制流 (`doStep5.cp`)
+- **错误捕获单出口重构**：针对目录 openat/fallback 逻辑，废除 `catch { break :label }` 嵌套，改写为纯正 CP 的 `open_res catch null` 与 `if/else` 单出口分支，根除 unreachable code 虚假错误。

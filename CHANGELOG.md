@@ -1262,3 +1262,12 @@
   - `writeOutputFilesToDisk.cp` (493 行, 1.021x)
 - **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.028x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,166 / 1,295 模块 (90.04%)**，正式突破 90% 大关！`src/bundler/linker_context/` 待迁移模块降至 9 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 72 Group B Batch 2] `src/bundler/linker_context/` 2 个核心分块计算与调度模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 2 个分块核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `computeChunks.cp` (452 行, 0.899x)
+  - `doStep5.cp` (459 行, 0.902x)
+- **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 0.902x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,168 / 1,295 模块 (90.20%)**，`src/bundler/linker_context/` 待迁移模块降至 5 个！
