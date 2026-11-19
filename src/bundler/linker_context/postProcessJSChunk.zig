@@ -1,1101 +1,82 @@
-/// This runs after we've already populated the compile results
-pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize) !void {
-    const trace = bun.perf.trace("Bundler.postProcessJSChunk");
-    defer trace.end();
-
-    _ = chunk_index;
-    const c = ctx.c;
-    bun.assert(chunk.content == .javascript);
-
-    js_ast.Expr.Data.Store.create();
-    js_ast.Stmt.Data.Store.create();
-
-    defer chunk.renamer.deinit(bun.default_allocator);
-
-    var arena = bun.ArenaAllocator.init(worker.allocator);
-    defer arena.deinit();
-
-    // Also generate the cross-chunk binding code
-    var cross_chunk_prefix: js_printer.PrintResult = undefined;
-    var cross_chunk_suffix: js_printer.PrintResult = undefined;
-
-    var runtime_scope: *Scope = &c.graph.ast.items(.module_scope)[c.graph.files.items(.input_file)[Index.runtime.value].get()];
-    var runtime_members = &runtime_scope.members;
-    const toCommonJSRef = c.graph.symbols.follow(runtime_members.get("__toCommonJS").?.ref);
-    const toESMRef = c.graph.symbols.follow(runtime_members.get("__toESM").?.ref);
-    const runtimeRequireRef = if (c.options.output_format == .cjs) null else c.graph.symbols.follow(runtime_members.get("__require").?.ref);
-
-    // Create ModuleInfo for ESM bytecode in --compile builds
-    const generate_module_info = c.options.generate_bytecode_cache and c.options.output_format == .esm and c.options.compile;
-    const loader = c.parse_graph.input_files.items(.loader)[chunk.entry_point.source_index];
-    const is_typescript = loader.isTypeScript();
-    const module_info: ?*analyze_transpiled_module.ModuleInfo = if (generate_module_info)
-        analyze_transpiled_module.ModuleInfo.create(bun.default_allocator, is_typescript) catch null
-    else
-        null;
-
-    {
-        const print_options = js_printer.Options{
-            .bundling = true,
-            .indent = .{},
-            .has_run_symbol_renamer = true,
-
-            .allocator = worker.allocator,
-            .require_ref = runtimeRequireRef,
-            .minify_whitespace = c.options.minify_whitespace,
-            .minify_identifiers = c.options.minify_identifiers,
-            .minify_syntax = c.options.minify_syntax,
-            .target = c.options.target,
-            .print_dce_annotations = c.options.emit_dce_annotations,
-            .mangled_props = &c.mangled_props,
-            .module_info = module_info,
-            // .const_values = c.graph.const_values,
-        };
-
-        var cross_chunk_import_records = ImportRecord.List.initCapacity(worker.allocator, chunk.cross_chunk_imports.len) catch unreachable;
-        defer cross_chunk_import_records.deinit(worker.allocator);
-        for (chunk.cross_chunk_imports.slice()) |import_record| {
-            cross_chunk_import_records.appendAssumeCapacity(
-                .{
-                    .kind = import_record.import_kind,
-                    .path = Fs.Path.init(ctx.chunks[import_record.chunk_index].unique_key),
-                    .range = Logger.Range.None,
-                },
-            );
-        }
-
-        const ast = c.graph.ast.get(chunk.entry_point.source_index);
-
-        cross_chunk_prefix = js_printer.print(
-            worker.allocator,
-            c.resolver.opts.target,
-            ast.toAST(),
-            c.getSource(chunk.entry_point.source_index),
-            print_options,
-            cross_chunk_import_records.slice(),
-            &[_]Part{
-                .{ .stmts = chunk.content.javascript.cross_chunk_prefix_stmts.slice() },
-            },
-            chunk.renamer,
-            false,
-        );
-        cross_chunk_suffix = js_printer.print(
-            worker.allocator,
-            c.resolver.opts.target,
-            ast.toAST(),
-            c.getSource(chunk.entry_point.source_index),
-            print_options,
-            &.{},
-            &[_]Part{
-                .{ .stmts = chunk.content.javascript.cross_chunk_suffix_stmts.slice() },
-            },
-            chunk.renamer,
-            false,
-        );
-    }
-
-    // Populate ModuleInfo with declarations collected during parallel printing,
-    // external import records from the original AST, and wrapper refs.
-    if (module_info) |mi| {
-        // 1. Add declarations collected by DeclCollector during parallel part printing.
-        // These come from the CONVERTED statements (after convertStmtsForChunk transforms
-        // export default → var, strips exports, etc.), so they match what's actually printed.
-        for (chunk.compile_results_for_chunk) |cr| {
-            const decls = switch (cr) {
-                .javascript => |js| js.decls,
-                else => continue,
-            };
-            for (decls) |decl| {
-                const var_kind: analyze_transpiled_module.ModuleInfo.VarKind = switch (decl.kind) {
-                    .declared => .declared,
-                    .lexical => .lexical,
-                };
-                const string_id = mi.str(decl.name) catch continue;
-                mi.addVar(string_id, var_kind) catch continue;
-            }
-        }
-
-        // 1b. Check if any source in this chunk uses import.meta. The per-part
-        // parallel printer does not have module_info, so the printer cannot set
-        // this flag during per-part printing. We derive it from the AST instead.
-        // Note: the runtime source (index 0) also uses import.meta (e.g.
-        // `import.meta.require`), so we must not skip it.
-        {
-            const all_ast_flags = c.graph.ast.items(.flags);
-            for (chunk.content.javascript.parts_in_chunk_in_order) |part_range| {
-                if (all_ast_flags[part_range.source_index.get()].has_import_meta) {
-                    mi.flags.contains_import_meta = true;
-                    break;
-                }
-            }
-        }
-
-        // 1c. Same idea for top-level await. The new JSC module loader decides
-        // sync vs async evaluation from JSModuleRecord::hasTLA(), which we set
-        // from this bit when constructing the record from cached module_info
-        // (BunAnalyzeTranspiledModule). Without it, a bytecode-compiled module
-        // that contains TLA gets evaluated on the sync path and the suspended
-        // generator is dropped — the entry promise resolves immediately and the
-        // process exits before the awaited value lands.
-        {
-            const tla_keywords = c.parse_graph.ast.items(.top_level_await_keyword);
-            const wraps = c.graph.meta.items(.flags);
-            for (chunk.content.javascript.parts_in_chunk_in_order) |part_range| {
-                const idx = part_range.source_index.get();
-                if (idx >= tla_keywords.len) continue;
-                if (wraps[idx].wrap != .none) continue;
-                if (!tla_keywords[idx].isEmpty()) {
-                    mi.flags.has_tla = true;
-                    break;
-                }
-            }
-        }
-
-        // 2. Collect truly-external imports from the original AST. Bundled imports
-        // (where source_index is valid) are removed by convertStmtsForChunk and
-        // re-created as cross-chunk imports — those are already captured by the
-        // printer when it prints cross_chunk_prefix_stmts above. Only truly-external
-        // imports (node built-ins, etc.) survive as s_import in per-file parts and
-        // need recording here.
-        const all_parts = c.graph.ast.items(.parts);
-        const all_flags = c.graph.meta.items(.flags);
-        const all_import_records = c.graph.ast.items(.import_records);
-        for (chunk.content.javascript.parts_in_chunk_in_order) |part_range| {
-            if (all_flags[part_range.source_index.get()].wrap == .cjs) continue;
-            const source_parts = all_parts[part_range.source_index.get()].slice();
-            const source_import_records = all_import_records[part_range.source_index.get()].slice();
-            var part_i = part_range.part_index_begin;
-            while (part_i < part_range.part_index_end) : (part_i += 1) {
-                for (source_parts[part_i].stmts) |stmt| {
-                    switch (stmt.data) {
-                        .s_import => |s| {
-                            const record = &source_import_records[s.import_record_index];
-                            if (record.path.is_disabled) continue;
-                            if (record.tag == .bun) continue;
-                            // Skip bundled imports — these are converted to cross-chunk
-                            // imports by the linker. The printer already recorded them
-                            // when printing cross_chunk_prefix_stmts.
-                            if (record.source_index.isValid()) continue;
-                            // Skip barrel-optimized-away imports — marked is_unused by
-                            // barrel_imports.zig. Never resolved (source_index invalid),
-                            // and removed by convertStmtsForChunk. Not in emitted code.
-                            if (record.flags.is_unused) continue;
-
-                            const import_path = record.path.text;
-                            const irp_id = mi.str(import_path) catch continue;
-                            mi.requestModule(irp_id, .none) catch continue;
-
-                            if (s.default_name) |name| {
-                                if (name.ref) |name_ref| {
-                                    const local_name = chunk.renamer.nameForSymbol(name_ref);
-                                    const local_name_id = mi.str(local_name) catch continue;
-                                    mi.addVar(local_name_id, .lexical) catch continue;
-                                    mi.addImportInfoSingle(irp_id, mi.str("default") catch continue, local_name_id, false) catch continue;
-                                }
-                            }
-
-                            for (s.items) |item| {
-                                if (item.name.ref) |name_ref| {
-                                    const local_name = chunk.renamer.nameForSymbol(name_ref);
-                                    const local_name_id = mi.str(local_name) catch continue;
-                                    mi.addVar(local_name_id, .lexical) catch continue;
-                                    mi.addImportInfoSingle(irp_id, mi.str(item.alias) catch continue, local_name_id, false) catch continue;
-                                }
-                            }
-
-                            if (record.flags.contains_import_star) {
-                                const local_name = chunk.renamer.nameForSymbol(s.namespace_ref);
-                                const local_name_id = mi.str(local_name) catch continue;
-                                mi.addVar(local_name_id, .lexical) catch continue;
-                                mi.addImportInfoNamespace(irp_id, local_name_id) catch continue;
-                            }
-                        },
-                        else => {},
-                    }
-                }
-            }
-        }
-
-        // 3. Add wrapper-generated declarations (init_xxx, require_xxx) that are
-        // not in any part statement.
-        const all_wrapper_refs = c.graph.ast.items(.wrapper_ref);
-        for (chunk.content.javascript.parts_in_chunk_in_order) |part_range| {
-            const source_index = part_range.source_index.get();
-            if (all_flags[source_index].wrap != .none) {
-                const wrapper_ref = all_wrapper_refs[source_index];
-                if (!wrapper_ref.isEmpty()) {
-                    const name = chunk.renamer.nameForSymbol(wrapper_ref);
-                    if (name.len > 0) {
-                        const string_id = mi.str(name) catch continue;
-                        mi.addVar(string_id, .declared) catch continue;
-                    }
-                }
-            }
-        }
-    }
-
-    // Generate the exports for the entry point, if there are any.
-    // This must happen before module_info serialization so the printer
-    // can populate export entries in module_info.
-    const entry_point_tail = brk: {
-        if (chunk.isEntryPoint()) {
-            break :brk generateEntryPointTailJS(
-                c,
-                toCommonJSRef,
-                toESMRef,
-                chunk.entry_point.source_index,
-                worker.allocator,
-                arena.allocator(),
-                chunk.renamer,
-                module_info,
-            );
-        }
-
-        break :brk CompileResult.empty;
-    };
-
-    // Store unserialized ModuleInfo on the chunk. Serialization is deferred to
-    // generateChunksInParallel after final chunk paths are computed, so that
-    // cross-chunk import specifiers (which use unique_key placeholders during
-    // printing) can be resolved to actual paths.
-    if (module_info) |mi| {
-        chunk.content.javascript.module_info = mi;
-    }
-
-    var j = StringJoiner{
-        .allocator = worker.allocator,
-        .watcher = .{
-            .input = chunk.unique_key,
-        },
-    };
-    errdefer j.deinit();
-    const output_format = c.options.output_format;
-
-    var line_offset: bun.SourceMap.LineColumnOffset.Optional = if (c.options.source_maps != .none) .{ .value = .{} } else .{ .null = {} };
-
-    // Concatenate the generated JavaScript chunks together
-
-    var newline_before_comment = false;
-    var is_executable = false;
-
-    // Extract hashbang and banner for entry points
-    const hashbang, const banner = if (chunk.isEntryPoint()) brk: {
-        const source_hashbang = c.graph.ast.items(.hashbang)[chunk.entry_point.source_index];
-
-        // If source file has a hashbang, use it
-        if (source_hashbang.len > 0) {
-            break :brk .{ source_hashbang, c.options.banner };
-        }
-
-        // Otherwise check if banner starts with hashbang
-        if (c.options.banner.len > 0 and strings.hasPrefixComptime(c.options.banner, "#!")) {
-            const newline_pos = strings.indexOfChar(c.options.banner, '\n') orelse c.options.banner.len;
-            const banner_hashbang = c.options.banner[0..newline_pos];
-
-            break :brk .{ banner_hashbang, std.mem.trimLeft(u8, c.options.banner[newline_pos..], "\r\n") };
-        }
-
-        // No hashbang anywhere
-        break :brk .{ "", c.options.banner };
-    } else .{ "", c.options.banner };
-
-    // Start with the hashbang if there is one. This must be done before the
-    // banner because it only works if it's literally the first character.
-    if (hashbang.len > 0) {
-        j.pushStatic(hashbang);
-        j.pushStatic("\n");
-        line_offset.advance(hashbang);
-        line_offset.advance("\n");
-        newline_before_comment = true;
-        is_executable = true;
-    }
-
-    // Add @bun comments and CJS wrapper start for each chunk when targeting Bun.
-    const is_bun = c.graph.ast.items(.target)[chunk.entry_point.source_index].isBun();
-    if (is_bun) {
-        const cjs_entry_chunk = "(function(exports, require, module, __filename, __dirname) {";
-        if (ctx.c.options.generate_bytecode_cache and output_format == .cjs) {
-            const input = "// @bun @bytecode @bun-cjs\n" ++ cjs_entry_chunk;
-            j.pushStatic(input);
-            line_offset.advance(input);
-        } else if (ctx.c.options.generate_bytecode_cache) {
-            j.pushStatic("// @bun @bytecode\n");
-            line_offset.advance("// @bun @bytecode\n");
-        } else if (output_format == .cjs) {
-            j.pushStatic("// @bun @bun-cjs\n" ++ cjs_entry_chunk);
-            line_offset.advance("// @bun @bun-cjs\n" ++ cjs_entry_chunk);
-        } else {
-            j.pushStatic("// @bun\n");
-            line_offset.advance("// @bun\n");
-        }
-    }
-
-    // Add the banner (excluding any hashbang part) for all chunks
-    if (banner.len > 0) {
-        j.pushStatic(banner);
-        line_offset.advance(banner);
-        if (!strings.endsWithChar(banner, '\n')) {
-            j.pushStatic("\n");
-            line_offset.advance("\n");
-        }
-        newline_before_comment = true;
-    }
-
-    // Add the top-level directive if present (but omit "use strict" in ES
-    // modules because all ES modules are automatically in strict mode)
-    if (chunk.isEntryPoint() and !output_format.isAlwaysStrictMode()) {
-        const flags: JSAst.Flags = c.graph.ast.items(.flags)[chunk.entry_point.source_index];
-
-        if (flags.has_explicit_use_strict_directive) {
-            j.pushStatic("\"use strict\";\n");
-            line_offset.advance("\"use strict\";\n");
-            newline_before_comment = true;
-        }
-    }
-
-    // For Kit, hoist runtime.js outside of the IIFE
-    const compile_results = chunk.compile_results_for_chunk;
-    if (c.options.output_format == .internal_bake_dev) {
-        for (compile_results) |compile_result| {
-            const source_index = compile_result.sourceIndex();
-            if (source_index != Index.runtime.value) break;
-            line_offset.advance(compile_result.code());
-            j.push(compile_result.code(), bun.default_allocator);
-        }
-    }
-
-    switch (c.options.output_format) {
-        .internal_bake_dev => {
-            const start = bun.bake.getHmrRuntime(if (c.options.target.isServerSide()) .server else .client);
-            j.pushStatic(start.code);
-            line_offset.advance(start.code);
-        },
-        .iife => {
-            // Bun does not do arrow function lowering. So the wrapper can be an arrow.
-            const start = if (c.options.minify_whitespace) "(()=>{" else "(() => {\n";
-            j.pushStatic(start);
-            line_offset.advance(start);
-        },
-        else => {}, // no wrapper
-    }
-
-    if (cross_chunk_prefix.result.code.len > 0) {
-        newline_before_comment = true;
-        line_offset.advance(cross_chunk_prefix.result.code);
-        j.push(cross_chunk_prefix.result.code, worker.allocator);
-    }
-
-    // Concatenate the generated JavaScript chunks together
-    var prev_filename_comment: Index.Int = 0;
-
-    var compile_results_for_source_map: std.MultiArrayList(CompileResultForSourceMap) = .{};
-    bun.handleOom(compile_results_for_source_map.setCapacity(worker.allocator, compile_results.len));
-
-    const show_comments = c.options.mode == .bundle and
-        !c.options.minify_whitespace;
-
-    const emit_targets_in_commands = show_comments and (if (ctx.c.framework) |fw| fw.server_components != null else false);
-
-    const sources: []const Logger.Source = c.parse_graph.input_files.items(.source);
-    const targets: []const options.Target = c.parse_graph.ast.items(.target);
-    for (compile_results) |compile_result| {
-        const source_index = compile_result.sourceIndex();
-        const is_runtime = source_index == Index.runtime.value;
-
-        // TODO: extracated legal comments
-
-        // Add a comment with the file path before the file contents
-        if (show_comments and source_index != prev_filename_comment and compile_result.code().len > 0) {
-            prev_filename_comment = source_index;
-
-            if (newline_before_comment) {
-                j.pushStatic("\n");
-                line_offset.advance("\n");
-            }
-
-            // Make sure newlines in the path can't cause a syntax error.
-            const CommentType = enum {
-                multiline,
-                single,
-            };
-
-            const pretty = sources[source_index].path.pretty;
-
-            // TODO: quote this. This is really janky.
-            const comment_type = if (strings.indexOfNewlineOrNonASCII(pretty, 0) != null)
-                CommentType.multiline
-            else
-                CommentType.single;
-
-            if (!c.options.minify_whitespace and
-                (output_format == .iife or output_format == .internal_bake_dev))
-            {
-                j.pushStatic("  ");
-                line_offset.advance("  ");
-            }
-
-            switch (comment_type) {
-                .multiline => {
-                    j.pushStatic("/* ");
-                    line_offset.advance("/* ");
-                },
-                .single => {
-                    j.pushStatic("// ");
-                    line_offset.advance("// ");
-                },
-            }
-
-            j.pushStatic(pretty);
-            line_offset.advance(pretty);
-
-            if (emit_targets_in_commands) {
-                j.pushStatic(" (");
-                line_offset.advance(" (");
-                const target = @tagName(targets[source_index].bakeGraph());
-                j.pushStatic(target);
-                line_offset.advance(target);
-                j.pushStatic(")");
-                line_offset.advance(")");
-            }
-
-            switch (comment_type) {
-                .multiline => {
-                    j.pushStatic(" */\n");
-                    line_offset.advance(" */\n");
-                },
-                .single => {
-                    j.pushStatic("\n");
-                    line_offset.advance("\n");
-                },
-            }
-        }
-
-        if (is_runtime) {
-            if (c.options.output_format != .internal_bake_dev) {
-                line_offset.advance(compile_result.code());
-                j.push(compile_result.code(), bun.default_allocator);
-            }
-        } else {
-            j.push(compile_result.code(), bun.default_allocator);
-
-            if (compile_result.sourceMapChunk()) |source_map_chunk| {
-                if (c.options.source_maps != .none) {
-                    try compile_results_for_source_map.append(worker.allocator, CompileResultForSourceMap{
-                        .source_map_chunk = source_map_chunk,
-                        .generated_offset = line_offset.value,
-                        .source_index = compile_result.sourceIndex(),
-                    });
-                }
-
-                line_offset.reset();
-            } else {
-                line_offset.advance(compile_result.code());
-            }
-        }
-
-        // TODO: metafile
-        newline_before_comment = compile_result.code().len > 0;
-    }
-
-    const tail_code = entry_point_tail.code();
-    if (tail_code.len > 0) {
-        // Stick the entry point tail at the end of the file. Deliberately don't
-        // include any source mapping information for this because it's automatically
-        // generated and doesn't correspond to a location in the input file.
-        j.push(tail_code, worker.allocator);
-    }
-
-    // Put the cross-chunk suffix inside the IIFE
-    if (cross_chunk_suffix.result.code.len > 0) {
-        if (newline_before_comment) {
-            j.pushStatic("\n");
-        }
-
-        j.push(cross_chunk_suffix.result.code, worker.allocator);
-    }
-
-    switch (output_format) {
-        .iife => {
-            const without_newline = "})();";
-
-            const with_newline = if (newline_before_comment)
-                without_newline ++ "\n"
-            else
-                without_newline;
-
-            j.pushStatic(with_newline);
-        },
-        .internal_bake_dev => {
-            {
-                const str = "}, {\n  main: ";
-                j.pushStatic(str);
-                line_offset.advance(str);
-            }
-            {
-                const input = c.parse_graph.input_files.items(.source)[chunk.entry_point.source_index].path;
-                var buf = MutableString.initEmpty(worker.allocator);
-                bun.handleOom(js_printer.quoteForJSON(input.pretty, &buf, true));
-                const str = buf.slice(); // worker.allocator is an arena
-                j.pushStatic(str);
-                line_offset.advance(str);
-            }
-            // {
-            //     const str = "\n  react_refresh: ";
-            //     j.pushStatic(str);
-            //     line_offset.advance(str);
-            // }
-            {
-                const str = "\n});";
-                j.pushStatic(str);
-                line_offset.advance(str);
-            }
-        },
-        .cjs => {
-            if (is_bun) {
-                j.pushStatic("})\n");
-                line_offset.advance("})\n");
-            }
-        },
-        else => {},
-    }
-
-    j.ensureNewlineAtEnd();
-    // TODO: maybeAppendLegalComments
-
-    if (c.options.footer.len > 0) {
-        if (newline_before_comment) {
-            j.pushStatic("\n");
-            line_offset.advance("\n");
-        }
-        j.pushStatic(ctx.c.options.footer);
-        line_offset.advance(ctx.c.options.footer);
-        j.pushStatic("\n");
-        line_offset.advance("\n");
-    }
-
-    chunk.intermediate_output = c.breakOutputIntoPieces(
-        worker.allocator,
-        &j,
-        @as(u32, @truncate(ctx.chunks.len)),
-    ) catch @panic("Unhandled out of memory error in breakOutputIntoPieces()");
-
-    // TODO: meta contents
-
-    chunk.isolated_hash = c.generateIsolatedHash(chunk);
-    chunk.flags.is_executable = is_executable;
-
-    if (c.options.source_maps != .none) {
-        const can_have_shifts = chunk.intermediate_output == .pieces;
-        chunk.output_source_map = try c.generateSourceMapForChunk(
-            chunk.isolated_hash,
-            worker,
-            compile_results_for_source_map,
-            c.resolver.opts.output_dir,
-            can_have_shifts,
-        );
-    }
-}
-
-/// Recursively walk a binding and add all declared names to `ModuleInfo`.
-/// Handles `b_identifier`, `b_array`, `b_object`, and `b_missing`.
-fn addBindingVarsToModuleInfo(
-    mi: *analyze_transpiled_module.ModuleInfo,
-    binding: Binding,
-    var_kind: analyze_transpiled_module.ModuleInfo.VarKind,
-    r: renamer.Renamer,
-    symbols: *const js_ast.Symbol.Map,
-) void {
-    switch (binding.data) {
-        .b_identifier => |b| {
-            const name = r.nameForSymbol(symbols.follow(b.ref));
-            if (name.len > 0) {
-                const str_id = mi.str(name) catch return;
-                mi.addVar(str_id, var_kind) catch {};
-            }
-        },
-        .b_array => |b| {
-            for (b.items) |item| {
-                addBindingVarsToModuleInfo(mi, item.binding, var_kind, r, symbols);
-            }
-        },
-        .b_object => |b| {
-            for (b.properties) |prop| {
-                addBindingVarsToModuleInfo(mi, prop.value, var_kind, r, symbols);
-            }
-        },
-        .b_missing => {},
-    }
-}
-
-pub fn generateEntryPointTailJS(
-    c: *LinkerContext,
-    toCommonJSRef: Ref,
-    toESMRef: Ref,
-    source_index: Index.Int,
-    allocator: std.mem.Allocator,
-    temp_allocator: std.mem.Allocator,
-    r: renamer.Renamer,
-    module_info: ?*analyze_transpiled_module.ModuleInfo,
-) CompileResult {
-    const flags: JSMeta.Flags = c.graph.meta.items(.flags)[source_index];
-    var stmts = std.array_list.Managed(Stmt).init(temp_allocator);
-    defer stmts.deinit();
-    const ast: JSAst = c.graph.ast.get(source_index);
-
-    switch (c.options.output_format) {
-        .esm => {
-            switch (flags.wrap) {
-                .cjs => {
-                    stmts.append(
-                        Stmt.alloc(
-                            // "export default require_foo();"
-                            S.ExportDefault,
-                            .{
-                                .default_name = .{
-                                    .loc = Logger.Loc.Empty,
-                                    .ref = ast.wrapper_ref,
-                                },
-                                .value = .{
-                                    .expr = Expr.init(
-                                        E.Call,
-                                        E.Call{
-                                            .target = Expr.initIdentifier(
-                                                ast.wrapper_ref,
-                                                Logger.Loc.Empty,
-                                            ),
-                                        },
-                                        Logger.Loc.Empty,
-                                    ),
-                                },
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                    ) catch unreachable;
-                },
-                else => {
-                    if (flags.wrap == .esm and ast.wrapper_ref.isValid()) {
-                        if (flags.is_async_or_has_async_dependency) {
-                            // "await init_foo();"
-                            stmts.append(
-                                Stmt.alloc(
-                                    S.SExpr,
-                                    .{
-                                        .value = Expr.init(
-                                            E.Await,
-                                            E.Await{
-                                                .value = Expr.init(
-                                                    E.Call,
-                                                    E.Call{
-                                                        .target = Expr.initIdentifier(
-                                                            ast.wrapper_ref,
-                                                            Logger.Loc.Empty,
-                                                        ),
-                                                    },
-                                                    Logger.Loc.Empty,
-                                                ),
-                                            },
-                                            Logger.Loc.Empty,
-                                        ),
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            ) catch unreachable;
-                        } else {
-                            // "init_foo();"
-                            stmts.append(
-                                Stmt.alloc(
-                                    S.SExpr,
-                                    .{
-                                        .value = Expr.init(
-                                            E.Call,
-                                            E.Call{
-                                                .target = Expr.initIdentifier(
-                                                    ast.wrapper_ref,
-                                                    Logger.Loc.Empty,
-                                                ),
-                                            },
-                                            Logger.Loc.Empty,
-                                        ),
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            ) catch unreachable;
-                        }
-                    }
-
-                    const sorted_and_filtered_export_aliases = c.graph.meta.items(.sorted_and_filtered_export_aliases)[source_index];
-
-                    if (sorted_and_filtered_export_aliases.len > 0) {
-                        const resolved_exports: ResolvedExports = c.graph.meta.items(.resolved_exports)[source_index];
-                        const imports_to_bind: RefImportData = c.graph.meta.items(.imports_to_bind)[source_index];
-
-                        // If the output format is ES6 modules and we're an entry point, generate an
-                        // ES6 export statement containing all exports. Except don't do that if this
-                        // entry point is a CommonJS-style module, since that would generate an ES6
-                        // export statement that's not top-level. Instead, we will export the CommonJS
-                        // exports as a default export later on.
-                        var items = std.array_list.Managed(js_ast.ClauseItem).init(temp_allocator);
-                        const cjs_export_copies = c.graph.meta.items(.cjs_export_copies)[source_index];
-
-                        var had_default_export = false;
-
-                        for (sorted_and_filtered_export_aliases, 0..) |alias, i| {
-                            var resolved_export = resolved_exports.get(alias).?;
-
-                            had_default_export = had_default_export or strings.eqlComptime(alias, "default");
-
-                            // If this is an export of an import, reference the symbol that the import
-                            // was eventually resolved to. We need to do this because imports have
-                            // already been resolved by this point, so we can't generate a new import
-                            // and have that be resolved later.
-                            if (imports_to_bind.get(resolved_export.data.import_ref)) |import_data| {
-                                resolved_export.data.import_ref = import_data.data.import_ref;
-                                resolved_export.data.source_index = import_data.data.source_index;
-                            }
-
-                            // Exports of imports need EImportIdentifier in case they need to be re-
-                            // written to a property access later on
-                            if (c.graph.symbols.get(resolved_export.data.import_ref).?.namespace_alias != null) {
-                                const temp_ref = cjs_export_copies[i];
-
-                                // Create both a local variable and an export clause for that variable.
-                                // The local variable is initialized with the initial value of the
-                                // export. This isn't fully correct because it's a "dead" binding and
-                                // doesn't update with the "live" value as it changes. But ES6 modules
-                                // don't have any syntax for bare named getter functions so this is the
-                                // best we can do.
-                                //
-                                // These input files:
-                                //
-                                //   // entry_point.js
-                                //   export {foo} from './cjs-format.js'
-                                //
-                                //   // cjs-format.js
-                                //   Object.defineProperty(exports, 'foo', {
-                                //     enumerable: true,
-                                //     get: () => Math.random(),
-                                //   })
-                                //
-                                // Become this output file:
-                                //
-                                //   // cjs-format.js
-                                //   var require_cjs_format = __commonJS((exports) => {
-                                //     Object.defineProperty(exports, "foo", {
-                                //       enumerable: true,
-                                //       get: () => Math.random()
-                                //     });
-                                //   });
-                                //
-                                //   // entry_point.js
-                                //   var cjs_format = __toESM(require_cjs_format());
-                                //   var export_foo = cjs_format.foo;
-                                //   export {
-                                //     export_foo as foo
-                                //   };
-                                //
-                                stmts.append(
-                                    Stmt.alloc(
-                                        S.Local,
-                                        .{
-                                            .decls = js_ast.G.Decl.List.fromSlice(
-                                                temp_allocator,
-                                                &.{
-                                                    .{
-                                                        .binding = Binding.alloc(
-                                                            temp_allocator,
-                                                            B.Identifier{
-                                                                .ref = temp_ref,
-                                                            },
-                                                            Logger.Loc.Empty,
-                                                        ),
-                                                        .value = Expr.init(
-                                                            E.ImportIdentifier,
-                                                            E.ImportIdentifier{
-                                                                .ref = resolved_export.data.import_ref,
-                                                            },
-                                                            Logger.Loc.Empty,
-                                                        ),
-                                                    },
-                                                },
-                                            ) catch unreachable,
-                                        },
-                                        Logger.Loc.Empty,
-                                    ),
-                                ) catch unreachable;
-
-                                items.append(
-                                    .{
-                                        .name = js_ast.LocRef{
-                                            .ref = temp_ref,
-                                            .loc = Logger.Loc.Empty,
-                                        },
-                                        .alias = alias,
-                                        .alias_loc = Logger.Loc.Empty,
-                                    },
-                                ) catch unreachable;
-                            } else {
-                                // Local identifiers can be exported using an export clause. This is done
-                                // this way instead of leaving the "export" keyword on the local declaration
-                                // itself both because it lets the local identifier be minified and because
-                                // it works transparently for re-exports across files.
-                                //
-                                // These input files:
-                                //
-                                //   // entry_point.js
-                                //   export * from './esm-format.js'
-                                //
-                                //   // esm-format.js
-                                //   export let foo = 123
-                                //
-                                // Become this output file:
-                                //
-                                //   // esm-format.js
-                                //   let foo = 123;
-                                //
-                                //   // entry_point.js
-                                //   export {
-                                //     foo
-                                //   };
-                                //
-                                items.append(.{
-                                    .name = js_ast.LocRef{
-                                        .ref = resolved_export.data.import_ref,
-                                        .loc = resolved_export.data.name_loc,
-                                    },
-                                    .alias = alias,
-                                    .alias_loc = resolved_export.data.name_loc,
-                                }) catch unreachable;
-                            }
-                        }
-
-                        stmts.append(
-                            Stmt.alloc(
-                                S.ExportClause,
-                                .{
-                                    .items = items.items,
-                                    .is_single_line = false,
-                                },
-                                Logger.Loc.Empty,
-                            ),
-                        ) catch unreachable;
-
-                        if (flags.needs_synthetic_default_export and !had_default_export) {
-                            var properties = G.Property.List.initCapacity(allocator, items.items.len) catch unreachable;
-                            const getter_fn_body = allocator.alloc(Stmt, items.items.len) catch unreachable;
-                            var remain_getter_fn_body = getter_fn_body;
-                            for (items.items) |export_item| {
-                                var fn_body = remain_getter_fn_body[0..1];
-                                remain_getter_fn_body = remain_getter_fn_body[1..];
-                                fn_body[0] = Stmt.alloc(
-                                    S.Return,
-                                    S.Return{
-                                        .value = Expr.init(
-                                            E.Identifier,
-                                            E.Identifier{
-                                                .ref = export_item.name.ref.?,
-                                            },
-                                            export_item.name.loc,
-                                        ),
-                                    },
-                                    Logger.Loc.Empty,
-                                );
-                                properties.appendAssumeCapacity(
-                                    G.Property{
-                                        .key = Expr.init(
-                                            E.String,
-                                            E.String{
-                                                .data = export_item.alias,
-                                                .is_utf16 = false,
-                                            },
-                                            export_item.alias_loc,
-                                        ),
-                                        .value = Expr.init(
-                                            E.Function,
-                                            E.Function{
-                                                .func = G.Fn{
-                                                    .body = G.FnBody{
-                                                        .loc = Logger.Loc.Empty,
-                                                        .stmts = fn_body,
-                                                    },
-                                                },
-                                            },
-                                            export_item.alias_loc,
-                                        ),
-                                        .kind = G.Property.Kind.get,
-                                        .flags = js_ast.Flags.Property.init(.{
-                                            .is_method = true,
-                                        }),
-                                    },
-                                );
-                            }
-                            stmts.append(
-                                Stmt.alloc(
-                                    S.ExportDefault,
-                                    S.ExportDefault{
-                                        .default_name = .{
-                                            .ref = Ref.None,
-                                            .loc = Logger.Loc.Empty,
-                                        },
-                                        .value = .{
-                                            .expr = Expr.init(
-                                                E.Object,
-                                                E.Object{
-                                                    .properties = properties,
-                                                },
-                                                Logger.Loc.Empty,
-                                            ),
-                                        },
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            ) catch unreachable;
-                        }
-                    }
-                },
-            }
-        },
-
-        // TODO: iife
-        .iife => {},
-
-        .internal_bake_dev => {
-            // nothing needs to be done here, as the exports are already
-            // forwarded in the module closure.
-        },
-
-        .cjs => {
-            switch (flags.wrap) {
-                .cjs => {
-                    // "module.exports = require_foo();"
-                    stmts.append(
-                        Stmt.assign(
-                            Expr.init(
-                                E.Dot,
-                                .{
-                                    .target = Expr.initIdentifier(c.unbound_module_ref, Logger.Loc.Empty),
-                                    .name = "exports",
-                                    .name_loc = Logger.Loc.Empty,
-                                },
-                                Logger.Loc.Empty,
-                            ),
-                            Expr.init(
-                                E.Call,
-                                .{
-                                    .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty),
-                                },
-                                Logger.Loc.Empty,
-                            ),
-                        ),
-                    ) catch unreachable;
-                },
-                .esm => {
-                    // "init_foo();"
-                    stmts.append(
-                        Stmt.alloc(
-                            S.SExpr,
-                            .{
-                                .value = Expr.init(
-                                    E.Call,
-                                    .{
-                                        .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty),
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                    ) catch unreachable;
-                },
-                else => {},
-            }
-
-            // TODO:
-            // If we are generating CommonJS for node, encode the known export names in
-            // a form that node can understand them. This relies on the specific behavior
-            // of this parser, which the node project uses to detect named exports in
-            // CommonJS files: https://github.com/guybedford/cjs-module-lexer. Think of
-            // this code as an annotation for that parser.
-        },
-    }
-
-    // Add generated local declarations from entry point tail to module_info.
-    // This captures vars like `var export_foo = cjs.foo` for CJS export copies.
-    if (module_info) |mi| {
-        for (stmts.items) |stmt| {
-            switch (stmt.data) {
-                .s_local => |s| {
-                    const var_kind: analyze_transpiled_module.ModuleInfo.VarKind = if (s.kind == .k_var) .declared else .lexical;
-                    for (s.decls.slice()) |decl| {
-                        addBindingVarsToModuleInfo(mi, decl.binding, var_kind, r, &c.graph.symbols);
-                    }
-                },
-                else => {},
-            }
-        }
-    }
-
-    if (stmts.items.len == 0) {
-        return .{
-            .javascript = .{
-                .source_index = source_index,
-                .result = .{
-                    .result = .{ .code = "" },
-                },
-            },
-        };
-    }
-
-    const print_options = js_printer.Options{
-        // TODO: IIFE indent
-        .indent = .{},
-        .has_run_symbol_renamer = true,
-
-        .allocator = allocator,
-        .to_esm_ref = toESMRef,
-        .to_commonjs_ref = toCommonJSRef,
-        .require_or_import_meta_for_source_callback = js_printer.RequireOrImportMeta.Callback.init(LinkerContext, LinkerContext.requireOrImportMetaForSource, c),
-
-        .minify_whitespace = c.options.minify_whitespace,
-        .print_dce_annotations = c.options.emit_dce_annotations,
-        .minify_syntax = c.options.minify_syntax,
-        .mangled_props = &c.mangled_props,
-        .module_info = module_info,
-        // .const_values = c.graph.const_values,
-    };
-
-    return .{
-        .javascript = .{
-            .result = js_printer.print(
-                allocator,
-                c.resolver.opts.target,
-                ast.toAST(),
-                c.getSource(source_index),
-                print_options,
-                ast.import_records.slice(),
-                &[_]Part{
-                    .{
-                        .stmts = stmts.items,
-                    },
-                },
-                r,
-                false,
-            ),
-            .source_index = source_index,
-        },
-    };
-}
-
-const analyze_transpiled_module = @import("../analyze_transpiled_module.zig");
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const analyze_transpiled_module = @import("../analyze_transpiled_module.zig");
+pub const bun = @import("bun");
 const ImportRecord = bun.ImportRecord;
 const Logger = bun.logger;
 const MutableString = bun.MutableString;
 const StringJoiner = bun.StringJoiner;
 const options = bun.options;
 const strings = bun.strings;
-
 const Chunk = bun.bundle_v2.Chunk;
 const CompileResult = bun.bundle_v2.CompileResult;
 const CompileResultForSourceMap = bun.bundle_v2.CompileResultForSourceMap;
@@ -1109,17 +90,619 @@ const ResolvedExports = bun.bundle_v2.ResolvedExports;
 const ThreadPool = bun.bundle_v2.ThreadPool;
 const js_printer = bun.bundle_v2.js_printer;
 const renamer = bun.bundle_v2.renamer;
-
 const LinkerContext = bun.bundle_v2.LinkerContext;
 const GenerateChunkCtx = bun.bundle_v2.LinkerContext.GenerateChunkCtx;
-
 const js_ast = bun.bundle_v2.js_ast;
 const B = js_ast.B;
 const Binding = js_ast.Binding;
 const E = js_ast.E;
 const Expr = js_ast.Expr;
 const G = js_ast.G;
+const Decl = G.Decl;
 const Ref = bun.bundle_v2.js_ast.Ref;
 const S = js_ast.S;
 const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
+
+pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize) !void {
+        const trace = bun.perf.trace("Bundler.postProcessJSChunk");
+        defer {
+        _ = trace.end();
+        }
+        _ = &chunk_index;
+        const c = ctx.c;
+        _ = bun.assert((chunk.content == .javascript));
+        _ = js_ast.Expr.Data.Store.create();
+        _ = js_ast.Stmt.Data.Store.create();
+        defer {
+        _ = chunk.renamer.deinit(bun.default_allocator);
+        }
+        var arena_ = bun.ArenaAllocator.init(worker.allocator);
+        _ = &arena_;
+        defer {
+        _ = arena_.deinit();
+        }
+        var cross_chunk_prefix: js_printer.PrintResult = undefined;
+        _ = &cross_chunk_prefix;
+        var cross_chunk_suffix: js_printer.PrintResult = undefined;
+        _ = &cross_chunk_suffix;
+        var runtime_scope: *Scope = (&c.graph.ast.items(.module_scope)[@as(usize, @intCast(c.graph.files.items(.input_file)[@as(usize, @intCast((if (@typeInfo(@TypeOf(Index.runtime)) == .@"enum") @intFromEnum(Index.runtime) else Index.runtime.value)))].get()))]);
+        _ = &runtime_scope;
+        var runtime_members = (&runtime_scope.members);
+        _ = &runtime_members;
+        const toCommonJSRef = c.graph.symbols.follow((runtime_members.get("__toCommonJS")).?.ref);
+        const toESMRef = c.graph.symbols.follow((runtime_members.get("__toESM")).?.ref);
+        const runtimeRequireRef = (if ((c.options.output_format == .cjs)) null else c.graph.symbols.follow((runtime_members.get("__require")).?.ref));
+        const generate_module_info = ((c.options.generate_bytecode_cache and (c.options.output_format == .esm)) and c.options.compile);
+        const loader = c.parse_graph.input_files.items(.loader)[@as(usize, @intCast(chunk.entry_point.source_index))];
+        const is_typescript = loader.isTypeScript();
+        const module_info: ?*analyze_transpiled_module.ModuleInfo = (if (generate_module_info) (blk_catch_0: { break :blk_catch_0 ((analyze_transpiled_module.ModuleInfo.create(bun.default_allocator, is_typescript)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); }) else null);
+        {
+            const print_options = js_printer.Options{ .bundling = true, .indent = .{}, .has_run_symbol_renamer = true, .allocator = worker.allocator, .require_ref = runtimeRequireRef, .minify_whitespace = c.options.minify_whitespace, .minify_identifiers = c.options.minify_identifiers, .minify_syntax = c.options.minify_syntax, .target = c.options.target, .print_dce_annotations = c.options.emit_dce_annotations, .mangled_props = (&c.mangled_props), .module_info = module_info };
+            var cross_chunk_import_records = ((ImportRecord.List.initCapacity(worker.allocator, chunk.cross_chunk_imports.len)) catch unreachable);
+            _ = &cross_chunk_import_records;
+            defer {
+            _ = cross_chunk_import_records.deinit(worker.allocator);
+            }
+            for (cp_iter_slice(chunk.cross_chunk_imports.slice())) |import_record| {
+                _ = &import_record;
+                _ = cross_chunk_import_records.appendAssumeCapacity(.{ .kind = import_record.import_kind, .path = Fs.Path.init(ctx.chunks[@as(usize, @intCast(import_record.chunk_index))].unique_key), .range = Logger.Range.None });
+            }
+            const ast = c.graph.ast.get(chunk.entry_point.source_index);
+            const prefix_parts: [1]Part = .{ Part{ .stmts = chunk.content.javascript.cross_chunk_prefix_stmts.slice() } };
+            cross_chunk_prefix = js_printer.print(worker.allocator, c.resolver.opts.target, ast.toAST(), c.getSource(chunk.entry_point.source_index), print_options, cross_chunk_import_records.slice(), (&prefix_parts), chunk.renamer, false);
+            const suffix_parts: [1]Part = .{ Part{ .stmts = chunk.content.javascript.cross_chunk_suffix_stmts.slice() } };
+            var empty_records: [0]ImportRecord = &.{};
+            _ = &empty_records;
+            cross_chunk_suffix = js_printer.print(worker.allocator, c.resolver.opts.target, ast.toAST(), c.getSource(chunk.entry_point.source_index), print_options, empty_records[0..0], (&suffix_parts), chunk.renamer, false);
+        }
+        if (module_info) |mi| {
+            _ = &mi;
+            for (cp_iter_slice(chunk.compile_results_for_chunk)) |cr| {
+                _ = &cr;
+                const decls = (switch (cr) {
+.javascript => |js| js.decls,
+else => continue,
+});
+                for (cp_iter_slice(decls)) |decl| {
+                    _ = &decl;
+                    const var_kind: analyze_transpiled_module.ModuleInfo.VarKind = (switch (decl.kind) {
+.declared => .declared,
+.lexical => .lexical,
+});
+                    const string_id = (blk_catch_2: { break :blk_catch_2 ((mi.str((if (@typeInfo(@TypeOf(decl)) == .@"enum" or @typeInfo(@TypeOf(decl)) == .@"union") @tagName(decl) else decl.name))) catch |__ce_2| { _ = &__ce_2; continue; }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((mi.addVar(string_id, var_kind)) catch |__ce_3| { _ = &__ce_3; continue; }); });
+                }
+            }
+            {
+                const all_ast_flags = c.graph.ast.items(.flags);
+                for (cp_iter_slice(chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
+                    _ = &part_range;
+                    if (all_ast_flags[@as(usize, @intCast(part_range.source_index.get()))].has_import_meta) {
+                        mi.flags.contains_import_meta = true;
+                        break;
+                    }
+                }
+            }
+            {
+                const tla_keywords = c.parse_graph.ast.items(.top_level_await_keyword);
+                const wraps = c.graph.meta.items(.flags);
+                for (cp_iter_slice(chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
+                    _ = &part_range;
+                    const idx = part_range.source_index.get();
+                    if ((idx >= tla_keywords.len)) {
+                        continue;
+                    }
+                    if ((wraps[@as(usize, @intCast(idx))].wrap != .none)) {
+                        continue;
+                    }
+                    if ((!tla_keywords[@as(usize, @intCast(idx))].isEmpty())) {
+                        mi.flags.has_tla = true;
+                        break;
+                    }
+                }
+            }
+            const all_parts = c.graph.ast.items(.parts);
+            const all_flags = c.graph.meta.items(.flags);
+            const all_import_records = c.graph.ast.items(.import_records);
+            for (cp_iter_slice(chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
+                _ = &part_range;
+                if ((all_flags[@as(usize, @intCast(part_range.source_index.get()))].wrap == .cjs)) {
+                    continue;
+                }
+                const source_parts = all_parts[@as(usize, @intCast(part_range.source_index.get()))].slice();
+                const source_import_records = all_import_records[@as(usize, @intCast(part_range.source_index.get()))].slice();
+                var part_i = part_range.part_index_begin;
+                _ = &part_i;
+                while ((part_i < part_range.part_index_end)) : (part_i = (part_i + 1)) {
+                    for (cp_iter_slice(source_parts[@as(usize, @intCast(part_i))].stmts)) |stmt| {
+                        _ = &stmt;
+                        switch (stmt.data) {
+.s_import => |s| {
+const record = (&source_import_records[@as(usize, @intCast(s.import_record_index))]);
+                        if (record.path.is_disabled) {
+                            continue;
+                        }
+                        if ((record.tag == .bun)) {
+                            continue;
+                        }
+                        if (record.source_index.isValid()) {
+                            continue;
+                        }
+                        if (record.flags.is_unused) {
+                            continue;
+                        }
+                        const import_path = record.path.text;
+                        const irp_id = (blk_catch_4: { break :blk_catch_4 ((mi.str(import_path)) catch |__ce_4| { _ = &__ce_4; continue; }); });
+                        _ = (blk_catch_5: { break :blk_catch_5 ((mi.requestModule(irp_id, .none)) catch |__ce_5| { _ = &__ce_5; continue; }); });
+                        if (s.default_name) |name| {
+                            _ = &name;
+                            if (name.ref) |name_ref| {
+                                _ = &name_ref;
+                                const local_name = chunk.renamer.nameForSymbol(name_ref);
+                                const local_name_id = (blk_catch_6: { break :blk_catch_6 ((mi.str(local_name)) catch |__ce_6| { _ = &__ce_6; continue; }); });
+                                _ = (blk_catch_7: { break :blk_catch_7 ((mi.addVar(local_name_id, .lexical)) catch |__ce_7| { _ = &__ce_7; continue; }); });
+                                _ = (blk_catch_9: { break :blk_catch_9 ((mi.addImportInfoSingle(irp_id, (blk_catch_8: { break :blk_catch_8 ((mi.str("default")) catch |__ce_8| { _ = &__ce_8; continue; }); }), local_name_id, false)) catch |__ce_9| { _ = &__ce_9; continue; }); });
+                            }
+                        }
+                        for (s.items) |item| {
+                            _ = &item;
+                            if ((if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref) |name_ref| {
+                                _ = &name_ref;
+                                const local_name = chunk.renamer.nameForSymbol(name_ref);
+                                const local_name_id = (blk_catch_10: { break :blk_catch_10 ((mi.str(local_name)) catch |__ce_10| { _ = &__ce_10; continue; }); });
+                                _ = (blk_catch_11: { break :blk_catch_11 ((mi.addVar(local_name_id, .lexical)) catch |__ce_11| { _ = &__ce_11; continue; }); });
+                                _ = (blk_catch_13: { break :blk_catch_13 ((mi.addImportInfoSingle(irp_id, (blk_catch_12: { break :blk_catch_12 ((mi.str(item.alias)) catch |__ce_12| { _ = &__ce_12; continue; }); }), local_name_id, false)) catch |__ce_13| { _ = &__ce_13; continue; }); });
+                            }
+                        }
+                        if (record.flags.contains_import_star) {
+                            const local_name = chunk.renamer.nameForSymbol(s.namespace_ref);
+                            const local_name_id = (blk_catch_14: { break :blk_catch_14 ((mi.str(local_name)) catch |__ce_14| { _ = &__ce_14; continue; }); });
+                            _ = (blk_catch_15: { break :blk_catch_15 ((mi.addVar(local_name_id, .lexical)) catch |__ce_15| { _ = &__ce_15; continue; }); });
+                            _ = (blk_catch_16: { break :blk_catch_16 ((mi.addImportInfoNamespace(irp_id, local_name_id)) catch |__ce_16| { _ = &__ce_16; continue; }); });
+                        }
+},
+else => {
+
+},
+}
+                    }
+                }
+            }
+            const all_wrapper_refs = c.graph.ast.items(.wrapper_ref);
+            for (cp_iter_slice(chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
+                _ = &part_range;
+                const source_index = part_range.source_index.get();
+                if ((all_flags[@as(usize, @intCast(source_index))].wrap != .none)) {
+                    const wrapper_ref = all_wrapper_refs[@as(usize, @intCast(source_index))];
+                    if ((!wrapper_ref.isEmpty())) {
+                        const name = chunk.renamer.nameForSymbol(wrapper_ref);
+                        if ((name.len > 0)) {
+                            const string_id = (blk_catch_17: { break :blk_catch_17 ((mi.str(name)) catch |__ce_17| { _ = &__ce_17; continue; }); });
+                            _ = (blk_catch_18: { break :blk_catch_18 ((mi.addVar(string_id, .declared)) catch |__ce_18| { _ = &__ce_18; continue; }); });
+                        }
+                    }
+                }
+            }
+        }
+        const entry_point_tail = brk: {
+        if (chunk.isEntryPoint()) {
+            break :brk generateEntryPointTailJS(c, toCommonJSRef, toESMRef, chunk.entry_point.source_index, worker.allocator, arena_.allocator(), chunk.renamer, module_info);
+        }
+        break :brk CompileResult.empty;
+};
+        if (module_info) |mi| {
+            _ = &mi;
+            chunk.content.javascript.module_info = mi;
+        }
+        var j = StringJoiner{ .allocator = worker.allocator, .watcher = .{ .input = chunk.unique_key } };
+        _ = &j;
+        errdefer {
+        _ = j.deinit();
+        }
+        const output_format = c.options.output_format;
+        var line_offset: bun.SourceMap.LineColumnOffset.Optional = (if ((c.options.source_maps != .none)) bun.SourceMap.LineColumnOffset.Optional{ .value = .{} } else bun.SourceMap.LineColumnOffset.Optional{ .@"null" = .{} });
+        _ = &line_offset;
+        var newline_before_comment = false;
+        _ = &newline_before_comment;
+        var is_executable = false;
+        _ = &is_executable;
+        var hashbang: []const u8 = "";
+        _ = &hashbang;
+        var banner: []const u8 = c.options.banner;
+        _ = &banner;
+        if (chunk.isEntryPoint()) {
+            const source_hashbang = c.graph.ast.items(.hashbang)[@as(usize, @intCast(chunk.entry_point.source_index))];
+            if ((source_hashbang.len > 0)) {
+                hashbang = source_hashbang;
+            } else {
+                if (((c.options.banner.len > 0) and strings.hasPrefixComptime(c.options.banner, "#!"))) {
+                    const newline_pos = ((strings.indexOfChar(c.options.banner, 10)) orelse (c.options.banner.len));
+                    hashbang = c.options.banner[0..newline_pos];
+                    banner = std.mem.trimLeft(u8, c.options.banner[newline_pos..], "\r\n");
+                }
+            }
+        }
+        if ((hashbang.len > 0)) {
+            _ = j.pushStatic(hashbang);
+            _ = j.pushStatic("\n");
+            _ = line_offset.advance(hashbang);
+            _ = line_offset.advance("\n");
+            newline_before_comment = true;
+            is_executable = true;
+        }
+        const is_bun = c.graph.ast.items(.target)[@as(usize, @intCast(chunk.entry_point.source_index))].isBun();
+        if (is_bun) {
+            const cjs_entry_chunk: []const u8 = "(function(exports, require, module, __filename, __dirname) {";
+            if ((ctx.c.options.generate_bytecode_cache and (output_format == .cjs))) {
+                const input = ("// @bun @bytecode @bun-cjs\n" ++ cjs_entry_chunk);
+                _ = j.pushStatic(input);
+                _ = line_offset.advance(input);
+            } else {
+                if (ctx.c.options.generate_bytecode_cache) {
+                    _ = j.pushStatic("// @bun @bytecode\n");
+                    _ = line_offset.advance("// @bun @bytecode\n");
+                } else {
+                    if ((output_format == .cjs)) {
+                        _ = j.pushStatic(("// @bun @bun-cjs\n" ++ cjs_entry_chunk));
+                        _ = line_offset.advance(("// @bun @bun-cjs\n" ++ cjs_entry_chunk));
+                    } else {
+                        _ = j.pushStatic("// @bun\n");
+                        _ = line_offset.advance("// @bun\n");
+                    }
+                }
+            }
+        }
+        if ((banner.len > 0)) {
+            _ = j.pushStatic(banner);
+            _ = line_offset.advance(banner);
+            if ((!strings.endsWithChar(banner, 10))) {
+                _ = j.pushStatic("\n");
+                _ = line_offset.advance("\n");
+            }
+            newline_before_comment = true;
+        }
+        if ((chunk.isEntryPoint() and (!output_format.isAlwaysStrictMode()))) {
+            const flags: JSAst.Flags = c.graph.ast.items(.flags)[@as(usize, @intCast(chunk.entry_point.source_index))];
+            if (flags.has_explicit_use_strict_directive) {
+                _ = j.pushStatic("\"use strict\";\n");
+                _ = line_offset.advance("\"use strict\";\n");
+                newline_before_comment = true;
+            }
+        }
+        const compile_results = chunk.compile_results_for_chunk;
+        if ((c.options.output_format == .internal_bake_dev)) {
+            for (cp_iter_slice(compile_results)) |compile_result| {
+                _ = &compile_result;
+                const source_index = compile_result.sourceIndex();
+                if ((source_index != (if (@typeInfo(@TypeOf(Index.runtime)) == .@"enum") @intFromEnum(Index.runtime) else Index.runtime.value))) {
+                    break;
+                }
+                _ = line_offset.advance(compile_result.code());
+                _ = j.push(compile_result.code(), bun.default_allocator);
+            }
+        }
+        switch (c.options.output_format) {
+.internal_bake_dev => {
+const start = bun.bake.getHmrRuntime((if (c.options.target.isServerSide()) .server else .client));
+        _ = j.pushStatic(start.code);
+        _ = line_offset.advance(start.code);
+},
+.iife => {
+const start = (if (c.options.minify_whitespace) "(()=>{" else "(() => {\n");
+        _ = j.pushStatic(start);
+        _ = line_offset.advance(start);
+},
+else => {
+
+},
+}
+        if ((cross_chunk_prefix.result.code.len > 0)) {
+            newline_before_comment = true;
+            _ = line_offset.advance(cross_chunk_prefix.result.code);
+            _ = j.push(cross_chunk_prefix.result.code, worker.allocator);
+        }
+        var prev_filename_comment: Index.Int = (if (comptime @typeInfo(Index.Int) == .@"enum") @as(Index.Int, @enumFromInt(0)) else @as(Index.Int, 0));
+        _ = &prev_filename_comment;
+        var compile_results_for_source_map: std.MultiArrayList(CompileResultForSourceMap) = .{};
+        _ = &compile_results_for_source_map;
+        _ = bun.handleOom(compile_results_for_source_map.setCapacity(worker.allocator, compile_results.len));
+        const show_comments = ((c.options.mode == .bundle) and (!c.options.minify_whitespace));
+        var emit_targets_in_commands = false;
+        _ = &emit_targets_in_commands;
+        if (show_comments) {
+            if (ctx.c.framework) |fw| {
+                _ = &fw;
+                emit_targets_in_commands = (fw.server_components != null);
+            }
+        }
+        const sources: []const Logger.Source = c.parse_graph.input_files.items(.source);
+        const targets: []const options.Target = c.parse_graph.ast.items(.target);
+        for (cp_iter_slice(compile_results)) |compile_result| {
+            _ = &compile_result;
+            const source_index = compile_result.sourceIndex();
+            const is_runtime = (source_index == (if (@typeInfo(@TypeOf(Index.runtime)) == .@"enum") @intFromEnum(Index.runtime) else Index.runtime.value));
+            if (((show_comments and (source_index != prev_filename_comment)) and (compile_result.code().len > 0))) {
+                prev_filename_comment = source_index;
+                if (newline_before_comment) {
+                    _ = j.pushStatic("\n");
+                    _ = line_offset.advance("\n");
+                }
+                const CommentType = enum {
+                multiline,
+                single,
+            };
+                const pretty = sources[@as(usize, @intCast(source_index))].path.pretty;
+                const comment_type = (if ((strings.indexOfNewlineOrNonASCII(pretty, 0) != null)) CommentType.multiline else CommentType.single);
+                if (((!c.options.minify_whitespace) and ((output_format == .iife) or (output_format == .internal_bake_dev)))) {
+                    _ = j.pushStatic("  ");
+                    _ = line_offset.advance("  ");
+                }
+                switch (comment_type) {
+.multiline => {
+_ = j.pushStatic("/* ");
+                _ = line_offset.advance("/* ");
+},
+.single => {
+_ = j.pushStatic("// ");
+                _ = line_offset.advance("// ");
+},
+}
+                _ = j.pushStatic(pretty);
+                _ = line_offset.advance(pretty);
+                if (emit_targets_in_commands) {
+                    _ = j.pushStatic(" (");
+                    _ = line_offset.advance(" (");
+                    const target = @tagName(targets[@as(usize, @intCast(source_index))].bakeGraph());
+                    _ = j.pushStatic(target);
+                    _ = line_offset.advance(target);
+                    _ = j.pushStatic(")");
+                    _ = line_offset.advance(")");
+                }
+                switch (comment_type) {
+.multiline => {
+_ = j.pushStatic(" */\n");
+                _ = line_offset.advance(" */\n");
+},
+.single => {
+_ = j.pushStatic("\n");
+                _ = line_offset.advance("\n");
+},
+}
+            }
+            if (is_runtime) {
+                if ((c.options.output_format != .internal_bake_dev)) {
+                    _ = line_offset.advance(compile_result.code());
+                    _ = j.push(compile_result.code(), bun.default_allocator);
+                }
+            } else {
+                _ = j.push(compile_result.code(), bun.default_allocator);
+                if (compile_result.sourceMapChunk()) |source_map_chunk| {
+                    _ = &source_map_chunk;
+                    if ((c.options.source_maps != .none)) {
+                        _ = try compile_results_for_source_map.append(worker.allocator, CompileResultForSourceMap{ .source_map_chunk = source_map_chunk, .generated_offset = (if (@typeInfo(@TypeOf(line_offset)) == .@"enum") @intFromEnum(line_offset) else line_offset.value), .source_index = compile_result.sourceIndex() });
+                    }
+                    _ = line_offset.reset();
+                } else {
+                    _ = line_offset.advance(compile_result.code());
+                }
+            }
+            newline_before_comment = (compile_result.code().len > 0);
+        }
+        const tail_code = entry_point_tail.code();
+        if ((tail_code.len > 0)) {
+            _ = j.push(tail_code, worker.allocator);
+        }
+        if ((cross_chunk_suffix.result.code.len > 0)) {
+            if (newline_before_comment) {
+                _ = j.pushStatic("\n");
+            }
+            _ = j.push(cross_chunk_suffix.result.code, worker.allocator);
+        }
+        switch (output_format) {
+.iife => {
+const without_newline: []const u8 = "})();";
+        const with_newline = (if (newline_before_comment) (without_newline ++ "\n") else without_newline);
+        _ = j.pushStatic(with_newline);
+},
+.internal_bake_dev => {
+{
+            const str: []const u8 = "}, {\n  main: ";
+            _ = j.pushStatic(str);
+            _ = line_offset.advance(str);
+        }
+        {
+            const input = c.parse_graph.input_files.items(.source)[@as(usize, @intCast(chunk.entry_point.source_index))].path;
+            var buf = MutableString.initEmpty(worker.allocator);
+            _ = &buf;
+            _ = bun.handleOom(js_printer.quoteForJSON(input.pretty, (&buf), true));
+            const str = buf.slice();
+            _ = j.pushStatic(str);
+            _ = line_offset.advance(str);
+        }
+        {
+            const str: []const u8 = "\n});";
+            _ = j.pushStatic(str);
+            _ = line_offset.advance(str);
+        }
+},
+.cjs => {
+if (is_bun) {
+            _ = j.pushStatic("})\n");
+            _ = line_offset.advance("})\n");
+        }
+},
+else => {
+
+},
+}
+        _ = j.ensureNewlineAtEnd();
+        if ((c.options.footer.len > 0)) {
+            if (newline_before_comment) {
+                _ = j.pushStatic("\n");
+                _ = line_offset.advance("\n");
+            }
+            _ = j.pushStatic(ctx.c.options.footer);
+            _ = line_offset.advance(ctx.c.options.footer);
+            _ = j.pushStatic("\n");
+            _ = line_offset.advance("\n");
+        }
+        chunk.intermediate_output = (blk_catch_19: { break :blk_catch_19 ((c.breakOutputIntoPieces(worker.allocator, (&j), @as(u32, @truncate(ctx.chunks.len)))) catch |__ce_19| { _ = &__ce_19; @panic("Unhandled out of memory error in breakOutputIntoPieces()"); }); });
+        chunk.isolated_hash = c.generateIsolatedHash(chunk);
+        chunk.flags.is_executable = is_executable;
+        if ((c.options.source_maps != .none)) {
+            const can_have_shifts = (chunk.intermediate_output == .pieces);
+            chunk.output_source_map = try c.generateSourceMapForChunk(chunk.isolated_hash, worker, compile_results_for_source_map, c.resolver.opts.output_dir, can_have_shifts);
+        }
+}
+
+pub fn addBindingVarsToModuleInfo(mi: *analyze_transpiled_module.ModuleInfo, binding: Binding, var_kind: analyze_transpiled_module.ModuleInfo.VarKind, r: renamer.Renamer, symbols: *const js_ast.Symbol.Map) void {
+        switch (binding.data) {
+.b_identifier => |b| {
+const name = r.nameForSymbol(symbols.follow(b.ref));
+        if ((name.len > 0)) {
+            const str_id = (blk_catch_20: { break :blk_catch_20 ((mi.str(name)) catch |__ce_20| { _ = &__ce_20; return; }); });
+            _ = (blk_catch_21: { break :blk_catch_21 ((mi.addVar(str_id, var_kind)) catch |__ce_21| { _ = &__ce_21;  }); });
+        }
+},
+.b_array => |b| {
+for (b.items) |item| {
+            _ = &item;
+            _ = addBindingVarsToModuleInfo(mi, item.binding, var_kind, r, symbols);
+        }
+},
+.b_object => |b| {
+for (cp_iter_slice(b.properties)) |prop| {
+            _ = &prop;
+            _ = addBindingVarsToModuleInfo(mi, (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value), var_kind, r, symbols);
+        }
+},
+.b_missing => {
+
+},
+}
+}
+
+pub fn generateEntryPointTailJS(c: *LinkerContext, toCommonJSRef: Ref, toESMRef: Ref, source_index: Index.Int, allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, r: renamer.Renamer, module_info: ?*analyze_transpiled_module.ModuleInfo) CompileResult {
+        const flags: JSMeta.Flags = c.graph.meta.items(.flags)[@as(usize, @intCast(source_index))];
+        var stmts = std.array_list.Managed(Stmt).init(temp_allocator);
+        _ = &stmts;
+        defer {
+        _ = stmts.deinit();
+        }
+        const ast: JSAst = c.graph.ast.get(source_index);
+        switch (c.options.output_format) {
+.esm => {
+switch (flags.wrap) {
+.cjs => {
+_ = ((stmts.append(Stmt.alloc(S.ExportDefault, S.ExportDefault{ .default_name = js_ast.LocRef{ .loc = Logger.Loc.Empty, .ref = ast.wrapper_ref }, .value = js_ast.StmtOrExpr{ .expr = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) } }, Logger.Loc.Empty))) catch unreachable);
+},
+else => {
+if (((flags.wrap == .esm) and ast.wrapper_ref.isValid())) {
+            if (flags.is_async_or_has_async_dependency) {
+                _ = ((stmts.append(Stmt.alloc(S.SExpr, S.SExpr{ .value = Expr.init(E.Await, E.Await{ .value = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty))) catch unreachable);
+            } else {
+                _ = ((stmts.append(Stmt.alloc(S.SExpr, S.SExpr{ .value = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty))) catch unreachable);
+            }
+        }
+        const sorted_and_filtered_export_aliases = c.graph.meta.items(.sorted_and_filtered_export_aliases)[@as(usize, @intCast(source_index))];
+        if ((sorted_and_filtered_export_aliases.len > 0)) {
+            const resolved_exports: ResolvedExports = c.graph.meta.items(.resolved_exports)[@as(usize, @intCast(source_index))];
+            const imports_to_bind: RefImportData = c.graph.meta.items(.imports_to_bind)[@as(usize, @intCast(source_index))];
+            var items = std.array_list.Managed(js_ast.ClauseItem).init(temp_allocator);
+            _ = &items;
+            const cjs_export_copies = c.graph.meta.items(.cjs_export_copies)[@as(usize, @intCast(source_index))];
+            var had_default_export = false;
+            _ = &had_default_export;
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(sorted_and_filtered_export_aliases)) |alias| {
+                _ = &alias;
+                defer {
+                i = (i + 1);
+                }
+                var resolved_export = (resolved_exports.get(alias)).?;
+                _ = &resolved_export;
+                had_default_export = (had_default_export or strings.eqlComptime(alias, "default"));
+                if (imports_to_bind.get(resolved_export.data.import_ref)) |import_data| {
+                    _ = &import_data;
+                    resolved_export.data.import_ref = import_data.data.import_ref;
+                    resolved_export.data.source_index = import_data.data.source_index;
+                }
+                if (((c.graph.symbols.get(resolved_export.data.import_ref)).?.namespace_alias != null)) {
+                    const temp_ref = cjs_export_copies[@as(usize, @intCast(i))];
+                    var single_decl: [1]Decl = undefined;
+                    _ = &single_decl;
+                    single_decl[cp_cast_int(usize, 0)] = Decl{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = temp_ref }, Logger.Loc.Empty), .value = Expr.init(E.ImportIdentifier, E.ImportIdentifier{ .ref = resolved_export.data.import_ref }, Logger.Loc.Empty) };
+                    _ = ((stmts.append(Stmt.alloc(S.Local, S.Local{ .decls = ((js_ast.G.Decl.List.fromSlice(temp_allocator, (&single_decl))) catch unreachable) }, Logger.Loc.Empty))) catch unreachable);
+                    _ = ((items.append(js_ast.ClauseItem{ .name = js_ast.LocRef{ .ref = temp_ref, .loc = Logger.Loc.Empty }, .alias = alias, .alias_loc = Logger.Loc.Empty })) catch unreachable);
+                } else {
+                    _ = ((items.append(js_ast.ClauseItem{ .name = js_ast.LocRef{ .ref = resolved_export.data.import_ref, .loc = resolved_export.data.name_loc }, .alias = alias, .alias_loc = resolved_export.data.name_loc })) catch unreachable);
+                }
+            }
+            _ = ((stmts.append(Stmt.alloc(S.ExportClause, S.ExportClause{ .items = items.items, .is_single_line = false }, Logger.Loc.Empty))) catch unreachable);
+            if ((flags.needs_synthetic_default_export and (!had_default_export))) {
+                var properties = ((G.Property.List.initCapacity(allocator, items.items.len)) catch unreachable);
+                _ = &properties;
+                const getter_fn_body = ((allocator.alloc(Stmt, items.items.len)) catch unreachable);
+                var remain_getter_fn_body = getter_fn_body;
+                _ = &remain_getter_fn_body;
+                for (items.items) |export_item| {
+                    _ = &export_item;
+                    var fn_body = remain_getter_fn_body[0..1];
+                    _ = &fn_body;
+                    remain_getter_fn_body = remain_getter_fn_body[1..];
+                    fn_body[cp_cast_int(usize, 0)] = Stmt.alloc(S.Return, S.Return{ .value = Expr.init(E.Identifier, E.Identifier{ .ref = (if (@typeInfo(@TypeOf(export_item)) == .@"enum" or @typeInfo(@TypeOf(export_item)) == .@"union") @tagName(export_item) else export_item.name).ref.? }, (if (@typeInfo(@TypeOf(export_item)) == .@"enum" or @typeInfo(@TypeOf(export_item)) == .@"union") @tagName(export_item) else export_item.name).loc) }, Logger.Loc.Empty);
+                    _ = properties.appendAssumeCapacity(G.Property{ .key = Expr.init(E.String, E.String{ .data = export_item.alias, .is_utf16 = false }, export_item.alias_loc), .value = Expr.init(E.Function, E.Function{ .func = G.Fn{ .body = G.FnBody{ .loc = Logger.Loc.Empty, .stmts = fn_body } } }, export_item.alias_loc), .kind = G.Property.Kind.get, .flags = js_ast.Flags.Property.init(.{ .is_method = true }) });
+                }
+                _ = ((stmts.append(Stmt.alloc(S.ExportDefault, S.ExportDefault{ .default_name = js_ast.LocRef{ .ref = Ref.None, .loc = Logger.Loc.Empty }, .value = js_ast.StmtOrExpr{ .expr = Expr.init(E.Object, E.Object{ .properties = properties }, Logger.Loc.Empty) } }, Logger.Loc.Empty))) catch unreachable);
+            }
+        }
+},
+}
+},
+.iife => {
+
+},
+.internal_bake_dev => {
+
+},
+.cjs => {
+switch (flags.wrap) {
+.cjs => {
+_ = ((stmts.append(Stmt.assign(Expr.init(E.Dot, E.Dot{ .target = Expr.initIdentifier(c.unbound_module_ref, Logger.Loc.Empty), .name = "exports", .name_loc = Logger.Loc.Empty }, Logger.Loc.Empty), Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty)))) catch unreachable);
+},
+.esm => {
+_ = ((stmts.append(Stmt.alloc(S.SExpr, S.SExpr{ .value = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty))) catch unreachable);
+},
+else => {
+
+},
+}
+},
+}
+        if (module_info) |mi| {
+            _ = &mi;
+            for (stmts.items) |stmt| {
+                _ = &stmt;
+                switch (stmt.data) {
+.s_local => |s| {
+const var_kind: analyze_transpiled_module.ModuleInfo.VarKind = (if ((s.kind == .k_var)) .declared else .lexical);
+                for (cp_iter_slice(s.decls.slice())) |decl| {
+                    _ = &decl;
+                    _ = addBindingVarsToModuleInfo(mi, decl.binding, var_kind, r, (&c.graph.symbols));
+                }
+},
+else => {
+
+},
+}
+            }
+        }
+        if ((stmts.items.len == 0)) {
+            return CompileResult{ .javascript = .{ .source_index = source_index, .result = js_printer.PrintResult{ .result = .{ .code = "" } } } };
+        }
+        const print_options = js_printer.Options{ .indent = .{}, .has_run_symbol_renamer = true, .allocator = allocator, .to_esm_ref = toESMRef, .to_commonjs_ref = toCommonJSRef, .require_or_import_meta_for_source_callback = js_printer.RequireOrImportMeta.Callback.init(LinkerContext, LinkerContext.requireOrImportMetaForSource, c), .minify_whitespace = c.options.minify_whitespace, .print_dce_annotations = c.options.emit_dce_annotations, .minify_syntax = c.options.minify_syntax, .mangled_props = (&c.mangled_props), .module_info = module_info };
+        const tail_parts: [1]Part = .{ Part{ .stmts = stmts.items } };
+        return CompileResult{ .javascript = .{ .result = js_printer.print(allocator, c.resolver.opts.target, ast.toAST(), c.getSource(source_index), print_options, ast.import_records.slice(), (&tail_parts), r, false), .source_index = source_index } };
+}

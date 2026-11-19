@@ -1038,3 +1038,14 @@
 
 ### 2. 分块文件生成与父指针推导收窄 (`generateCodeForFileInChunkJS.cp`)
 - **嵌套结构体提升与类型提示**：将 `DuplicateEntry` 与 `ModuleInfoReplacement` 提升至顶层定义；`@fieldParentPtr` 显式声明目标类型指针，避免多层指针类型推导断裂。
+
+
+## 2026-11-19 [Milestone 7 Phase 75 Group B] Bundler LinkerContext Metafile 生成与分块 JS 后处理 CP 纯化经验
+
+### 1. 结构体辅助类型顶层分离与排序比较契约 (`MetafileBuilder.cp`)
+- **辅助类型顶层解耦**：将内部嵌套辅助类型（`InputFileInfo`, `ModuleSize`, `ImportedByInfo`, `PathOnly`）提取至模块顶层，显式声明 `static fn lessThan` 比较函数，彻底消除内嵌结构体破坏 CP 方法 lowering 的缺陷。
+- **JSON 枚举标签关键字转义**：对 `std.json.Value` 的 `.string` / `.bool` 等枚举分支转义为 `.@"string"` / `.@"bool"`，避免与 CP 语言内置原生类型关键字冲突导致词法断裂。
+
+### 2. AST 声明节点固定数组与单写多读解构 (`postProcessJSChunk.cp`)
+- **固定数组零拷贝安全传递**：对单元素 AST 声明节点使用固定数组 `[1]G.Decl` 与类型别名 `type Decl = G.Decl;`，避免动态切片堆分配开销。
+- **解构作用域遮蔽消除**：规范 entry point banner 与 hashbang 的局部变量解包模式，杜绝函数作用域内同名循环变量的遮蔽冲突。

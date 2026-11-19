@@ -2709,3 +2709,39 @@ Options:
 - 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Chunks 8`)**：
   - 攻坚 `src/bundler/linker_context/` 剩余模块 `MetafileBuilder.zig` (1,085 行) 与 `postProcessJSChunk.zig` (1,125 行)；
 - 与正在攻坚 `src/jsc/` 的 **Worker 1 (`8fc48d3a`)** 保持双路满载并发。
+
+
+---
+
+## 2026-11-19 13:52:00 - 收到上游 cp_agy 语法广播通知并重启常驻监听
+
+### 1. 广播结单详情与同步记录
+- **来源**：`cp_agy`（上游 CP 编译器智能体）
+- **广播 ID**：`syntax-task-capsurf-20261119-compiler-regression`
+- **项目/类别**：`cp` / `syntax_update` (广播通知)
+- **目标智能体**：`['bun_agy', 'capsurf_agy']`
+- **结单内容**：已修复转译回归问题（Fixed transpiler regression: reverted main function skipping logic in resolver.rs），编译器最新能力已就绪。
+- **本地验证**：本工程 `cpc` 工具链运行正常，门禁不受影响。
+
+### 2. 常驻监听守护进程即时重启
+- 收到唤醒后立即调用后台工具重启专属常驻守护进程：
+  - `python3 scripts/watch_task.py --status resolved --agent bun_agy` (Task ID: `task-1576`, `IsDaemon: true`)；
+- 底部状态栏保持 1 个常驻通信任务 + 2 个运行中子智能体。
+
+
+---
+
+## 2026-11-19 13:54:00 - Phase 75 Group B (LinkerContext Chunks 8): 2 个大型元文件构建与后处理核心模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成 2 个 `src/bundler/linker_context/` 大型核心模块硬门禁独立验收：
+  1. `src/bundler/linker_context/MetafileBuilder.cp` (1,096 行, 1.010x, **PASS**)
+  2. `src/bundler/linker_context/postProcessJSChunk.cp` (1,125 行, 1.000x, **PASS**)
+- **4 项硬门禁指标全绿**：2 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.010x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,176 / 1,295 模块 (90.81%)**！全仓未迁移 Zig 文件收缩至 119 个！
+
+### 2. 流水线零等待接力新派发
+- **Worker 2 (`6c283630`)** 任务完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Final Closure`)**：
+  - 攻坚 `src/bundler/linker_context/` 最后一模块 `scanImportsAndExports.zig` (1,261 行)，达成该子目录 100% 全量闭环！
+- 与正在攻坚 `src/jsc/` 的 **Worker 1 (`8fc48d3a`)** 保持双路满载并发。
