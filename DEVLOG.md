@@ -1134,3 +1134,12 @@
 ### 2. 提升式安装依赖图多值解构 (`hoisted_install.cp`)
 - **多返回值解构纯化**：将 Zig 的 `const a, var b = trees: { ... }` 改写为 CP 原生解构 `const [completed_trees, tree_ids_to_trees_the_id_depends_on] = trees: { ... }`。
 - **控制流扁平化**：平滑重构 `while (...) { ... } else { ... }` 为顺序单出口控制流，确保控制流语义严密。
+
+## 2026-11-19: 启动全仓 CP 模块编译一致性校验
+- 发起 `/data/dev/bun/scripts/verify_cp.py`，对 `src/` 下所有 `.cp` 模块进行 `cpc --lib` 与 `zig ast-check` 双重自动化严苛校验。
+- 任务 ID: `task-76`。
+
+## 2026-11-19: 全仓一致性校验完成
+- 所有已迁移的 1198 个 `.cp` 模块通过双重校验 (`cpc --lib` + `ast-check`)。
+- 剩余待迁移 `.zig` 模块：2461 个。
+- 计划：接下来的工作将是持续的 `.zig` 到 `.cp` 迁移，按目录切片并行进行。
