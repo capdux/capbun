@@ -1017,3 +1017,14 @@
 ### 2. 根结构体与辅助类型顶层分离架构 (`rare_data.cp`)
 - **顶层模型解耦提升**：严格贯彻 `@root struct RareData` 规则，将 `PathBuf`、`ProxySlot`、`RefCountedEnvValue`、`AWSSignatureCache`、`EntropyCache`、`CleanupHook` 等 9 个二级结构体提升至模块顶层，避免嵌套类型跳过 CP 语法 lowering。
 - **可变借用与所有权转移收窄**：实例方法统一收拢至根结构体并采用 `*_` 接收者，配合泛型类型别名（如 `bun.ptr.Owned`），保证跨线程状态迁移时的无竞争排他安全性。
+
+
+## 2026-11-19 [Milestone 7 Phase 73 Group B] Bundler LinkerContext 语句重构与 CSS 拓扑排序 CP 纯化经验
+
+### 1. 分块语句重写与访问者模式提升 (`convertStmtsForChunk.cp`)
+- **访问者与嵌套结构体提升**：将函数内部局部结构体 `Visitor` 提升为顶层结构体，统一使用 `*_` 声明实例可变方法，保障 CP lowering 的全面生效。
+- **Switch 模式解包纯化**：将所有 `.tag => |payload|` 语法纯化为 `.tag payload =>`，消除了管道捕获在复杂语句块中的词法解析中断。
+
+### 2. CSS 导入拓扑排序与标号循环控制流 (`findImportedFilesInCSSOrder.cp`)
+- **自定义方法拦截绕过**：针对 `layers.replace(...)` 易被 `cpc` 误判为内建字符串替换的歧义，抽取 `const replaceFn = Chunk.CssImportOrder.Layers.replace; replaceFn(layers, ...)` 显式函数指针调用。
+- **跨层循环标号与带步进遍历**：将带标号的复杂嵌套遍历重构为 `next_forward: while (...) : (...)`，保证生成的 Zig 代码保留完整跳转标号。
