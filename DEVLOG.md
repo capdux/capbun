@@ -1049,3 +1049,14 @@
 ### 2. AST 声明节点固定数组与单写多读解构 (`postProcessJSChunk.cp`)
 - **固定数组零拷贝安全传递**：对单元素 AST 声明节点使用固定数组 `[1]G.Decl` 与类型别名 `type Decl = G.Decl;`，避免动态切片堆分配开销。
 - **解构作用域遮蔽消除**：规范 entry point banner 与 hashbang 的局部变量解包模式，杜绝函数作用域内同名循环变量的遮蔽冲突。
+
+
+## 2026-11-19 [Milestone 7 Phase 76 Group A] JSC WebWorker 并发调度与全局上下文环境 CP 纯化经验
+
+### 1. C 回调函数指针类型别名与反射注入防护 (`web_worker.cp`)
+- **顶层函数指针类型具名化**：在顶层声明 `pub type MicrotaskCallback = *const fn (ctx: *!);`，规避 `@c { ... }` 原型内直接省略 void 返回类型导致的 Zig 签名缺失。
+- **反射标识符冲突消除**：将局部变量 `const TypeInfo = @typeInfo(T);` 重命名为 `const info = @typeInfo(T);`，彻底消除 CP 编译器误判定为原生反射类型引发的 runtime reflection 注入与未声明 Map 报错。
+
+### 2. 全局对象辅助类型提升与指针强转收窄 (`JSGlobalObject.cp`)
+- **嵌套类型顶层别名提升**：将 `GregorianDateTime`、`BunPluginTarget`、`SysErrOptions` 等提升至顶层为 `_T` 并通过 `pub const T = _T;` 导出，消解方法签名作用域同名歧义。
+- **指针转换收窄与冗余消除**：利用 `unsafe { @as(*DestType, expr) }` 结合 Zig 针对 `*anyopaque` 的安全隐式转换，消除嵌套 `@ptrCast` 产生的冗余警告与类型截断。

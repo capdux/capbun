@@ -1307,3 +1307,12 @@
   - `postProcessJSChunk.cp` (1,125 行, 1.000x)
 - **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.010x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,176 / 1,295 模块 (90.81%)**，`src/bundler/linker_context/` 待迁移模块降至最后 1 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 76 Group A] `src/jsc/` 2 个全局对象与 WebWorker 核心模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 2 个 JSC 核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `web_worker.cp` (961 行, 0.980x)
+  - `JSGlobalObject.cp` (1,088 行, 1.015x)
+- **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.015x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,178 / 1,295 模块 (90.97%)**，`src/jsc/` 待迁移模块降至 5 个！
