@@ -1167,3 +1167,7 @@
 - lockfile 体系 13 个子模块实现 100% 纯 CP 语言闭环。
 - extract_tarball.zig 顺利攻克，消除多处数组字面量与解构限制。
 - 整个 src/install/ 目录 62 个 .cp 文件达到 100% PASS 门禁。
+
+### 2026-11-19 12:49:44 UTC - 攻克 4,500 行级 Bundler 核心中枢 bundle_v2.zig
+- 彻底攻克此前因 AST 括号匹配与双重借用报错的巨型模块 bundle_v2.zig。
+- 重构了 catch continue 跳转逻辑，利用 unsafe 块收窄内部图借用，代码膨胀率仅 1.012x。
