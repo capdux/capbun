@@ -2677,3 +2677,35 @@ Options:
 - 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Chunks 7`)**：
   - 攻坚 `src/bundler/linker_context/` 第 7 批 2 个核心模块（802~820 行，共 1,622 行）：`generateCodeForFileInChunkJS.zig`, `generateChunksInParallel.zig`；
 - 与正在攻坚 `src/jsc/` 的 **Worker 1 (`8412c98c`)** 保持双路满载并发。
+
+
+---
+
+## 2026-11-19 12:36:00 - 服务重启上下文恢复、后台常驻通信重启与全新双路并发重新分发
+
+### 1. 响应用户指令与恢复真实运行环境
+- 彻底销毁重启后处于 stopped 状态的旧子智能体，严禁复用旧 ID；
+- 真实调用后台工具启动常驻通信进程：
+  - `python3 scripts/watch_task.py --status resolved --agent bun_agy` (Task ID: `task-1530`, `IsDaemon: true`)；
+- **派发 2 个全新短生命周期并发子智能体接手未完成任务**：
+  - **Worker 1 (`8fc48d3a`, Role: `CP Migrator - JSC WebWorker & GlobalObject`)**：接手攻坚 `src/jsc/web_worker.cp` (981 行) 与 `src/jsc/JSGlobalObject.cp` (1,072 行)；
+  - **Worker 2 (`d843c2f8`, Role: `CP Migrator - LinkerContext Parallel & JSChunk`)**：接手攻坚 `src/bundler/linker_context/generateChunksInParallel.cp` (820 行，与已 100% PASS 的 `generateCodeForFileInChunkJS.cp` 汇合闭环）。
+- 底部状态栏真实呈现：1 个常驻通信任务 + 2 个运行中子智能体。
+
+
+---
+
+## 2026-11-19 13:23:00 - Phase 74 Group B (LinkerContext Chunks 7): 2 个并行分块与文件代码生成核心模块 100% 满绿闭环与 Git 原子提交
+
+### 1. 独立交叉复核全量通过
+- 主智能体通过 `python3 scripts/cpc_brief.py -n 8` 完成 2 个 `src/bundler/linker_context/` 核心模块硬门禁独立验收：
+  1. `src/bundler/linker_context/generateCodeForFileInChunkJS.cp` (803 行, 1.001x, **PASS**)
+  2. `src/bundler/linker_context/generateChunksInParallel.cp` (861 行, 1.050x, **PASS**)
+- **4 项硬门禁指标全绿**：2 个原始备份完好无损，0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.050x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓纯 CP 进度跃升**：全仓已完成纯 CP 迁移 **1,174 / 1,295 模块 (90.66%)**！全仓未迁移 Zig 文件收缩至 121 个！
+
+### 2. 流水线零等待接力新派发
+- **Worker 2 (`d843c2f8`)** 任务完成退场后立即按用完即弃原则销毁；
+- 紧接着启动 **Worker 2 (全新实例, Role: `CP Migrator - LinkerContext Chunks 8`)**：
+  - 攻坚 `src/bundler/linker_context/` 剩余模块 `MetafileBuilder.zig` (1,085 行) 与 `postProcessJSChunk.zig` (1,125 行)；
+- 与正在攻坚 `src/jsc/` 的 **Worker 1 (`8fc48d3a`)** 保持双路满载并发。

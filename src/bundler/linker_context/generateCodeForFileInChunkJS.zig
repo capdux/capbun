@@ -1,783 +1,166 @@
-pub fn generateCodeForFileInChunkJS(
-    c: *LinkerContext,
-    writer: *js_printer.BufferWriter,
-    r: renamer.Renamer,
-    chunk: *Chunk,
-    part_range: PartRange,
-    toCommonJSRef: Ref,
-    toESMRef: Ref,
-    runtimeRequireRef: ?Ref,
-    stmts: *StmtList,
-    allocator: std.mem.Allocator,
-    temp_allocator: std.mem.Allocator,
-    decl_collector: ?*DeclCollector,
-) js_printer.PrintResult {
-    const parts: []Part = c.graph.ast.items(.parts)[part_range.source_index.get()].slice()[part_range.part_index_begin..part_range.part_index_end];
-    const all_flags: []const JSMeta.Flags = c.graph.meta.items(.flags);
-    const flags = all_flags[part_range.source_index.get()];
-    const wrapper_part_index = if (flags.wrap != .none)
-        c.graph.meta.items(.wrapper_part_index)[part_range.source_index.get()]
-    else
-        Index.invalid;
-
-    // referencing everything by array makes the code a lot more annoying :(
-    var ast: JSAst = c.graph.ast.get(part_range.source_index.get());
-
-    // For HMR, part generation is entirely special cased.
-    // - export wrapping is already done.
-    // - imports are split from the main code.
-    // - one part range per file
-    if (c.options.output_format == .internal_bake_dev) brk: {
-        if (part_range.source_index.isRuntime()) {
-            @branchHint(.cold);
-            bun.debugAssert(c.dev_server == null);
-            break :brk; // this is from `bun build --format=internal_bake_dev`
-        }
-
-        const hmr_api_ref = ast.wrapper_ref;
-
-        for (parts) |part| {
-            c.convertStmtsForChunkForDevServer(stmts, part.stmts, allocator, &ast) catch |err|
-                return .{ .err = err };
-        }
-
-        const main_stmts_len = stmts.inside_wrapper_prefix.stmts.items.len + stmts.inside_wrapper_suffix.items.len;
-        const all_stmts_len = main_stmts_len + stmts.outside_wrapper_prefix.items.len + 1;
-
-        bun.handleOom(stmts.all_stmts.ensureUnusedCapacity(stmts.allocator, all_stmts_len));
-        stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_prefix.stmts.items);
-        stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_suffix.items);
-
-        const inner = stmts.all_stmts.items[0..main_stmts_len];
-
-        var clousure_args = bun.BoundedArray(G.Arg, 3).fromSlice(&.{
-            .{ .binding = Binding.alloc(temp_allocator, B.Identifier{
-                .ref = hmr_api_ref,
-            }, Logger.Loc.Empty) },
-        }) catch unreachable; // is within bounds
-
-        if (ast.flags.uses_module_ref or ast.flags.uses_exports_ref) {
-            clousure_args.appendSliceAssumeCapacity(&.{
-                .{
-                    .binding = Binding.alloc(temp_allocator, B.Identifier{
-                        .ref = ast.module_ref,
-                    }, Logger.Loc.Empty),
-                },
-                .{
-                    .binding = Binding.alloc(temp_allocator, B.Identifier{
-                        .ref = ast.exports_ref,
-                    }, Logger.Loc.Empty),
-                },
-            });
-        }
-
-        stmts.all_stmts.appendAssumeCapacity(Stmt.allocateExpr(temp_allocator, Expr.init(E.Function, .{ .func = .{
-            .args = bun.handleOom(temp_allocator.dupe(G.Arg, clousure_args.slice())),
-            .body = .{
-                .stmts = inner,
-                .loc = Logger.Loc.Empty,
-            },
-        } }, Logger.Loc.Empty)));
-        stmts.all_stmts.appendSliceAssumeCapacity(stmts.outside_wrapper_prefix.items);
-
-        ast.flags.uses_module_ref = true;
-
-        // TODO: there is a weird edge case where the pretty path is not computed
-        // it does not reproduce when debugging.
-        var source = c.getSource(part_range.source_index.get()).*;
-        if (source.path.text.ptr == source.path.pretty.ptr) {
-            source.path = genericPathWithPrettyInitialized(
-                source.path,
-                c.options.target,
-                c.resolver.fs.top_level_dir,
-                allocator,
-            ) catch |err| bun.handleOom(err);
-        }
-
-        return c.printCodeForFileInChunkJS(
-            r,
-            allocator,
-            writer,
-            stmts.all_stmts.items[main_stmts_len..],
-            &ast,
-            flags,
-            .None,
-            .None,
-            null,
-            part_range.source_index,
-            &source,
-        );
-    }
-
-    var needs_wrapper = false;
-
-    const namespace_export_part_index = js_ast.namespace_export_part_index;
-
-    stmts.reset();
-
-    const part_index_for_lazy_default_export: u32 = brk: {
-        if (ast.flags.has_lazy_export) {
-            if (c.graph.meta.items(.resolved_exports)[part_range.source_index.get()].get("default")) |default| {
-                break :brk c.graph.topLevelSymbolToParts(part_range.source_index.get(), default.data.import_ref)[0];
-            }
-        }
-        break :brk std.math.maxInt(u32);
-    };
-
-    const output_format = c.options.output_format;
-
-    // The top-level directive must come first (the non-wrapped case is handled
-    // by the chunk generation code, although only for the entry point)
-    if (flags.wrap != .none and ast.flags.has_explicit_use_strict_directive and !chunk.isEntryPoint() and !output_format.isAlwaysStrictMode()) {
-        stmts.inside_wrapper_prefix.appendNonDependency(Stmt.alloc(S.Directive, .{
-            .value = "use strict",
-        }, Logger.Loc.Empty)) catch unreachable;
-    }
-
-    // TODO: handle directive
-    if (namespace_export_part_index >= part_range.part_index_begin and
-        namespace_export_part_index < part_range.part_index_end and
-        parts[namespace_export_part_index].is_live)
-    {
-        c.convertStmtsForChunk(
-            part_range.source_index.get(),
-            stmts,
-            parts[namespace_export_part_index].stmts,
-            chunk,
-            temp_allocator,
-            flags.wrap,
-            &ast,
-        ) catch |err| {
-            bun.handleErrorReturnTrace(err, @errorReturnTrace());
-            return .{ .err = err };
-        };
-
-        switch (flags.wrap) {
-            .esm => {
-                stmts.appendSlice(.outside_wrapper_prefix, stmts.inside_wrapper_suffix.items) catch unreachable;
-            },
-            else => {
-                stmts.inside_wrapper_prefix.appendNonDependencySlice(stmts.inside_wrapper_suffix.items) catch unreachable;
-            },
-        }
-
-        stmts.inside_wrapper_suffix.clearRetainingCapacity();
-    }
-
-    // Add all other parts in this chunk
-    for (parts, 0..) |part, index_| {
-        const index = part_range.part_index_begin + @as(u32, @truncate(index_));
-        if (!part.is_live) {
-            // Skip the part if it's not in this chunk
-            continue;
-        }
-
-        if (index == namespace_export_part_index) {
-            // Skip the namespace export part because we already handled it above
-            continue;
-        }
-
-        if (index == wrapper_part_index.get()) {
-            // Skip the wrapper part because we already handled it above
-            needs_wrapper = true;
-            continue;
-        }
-
-        var single_stmts_list = [1]Stmt{undefined};
-        var part_stmts = part.stmts;
-
-        // If this could be a JSON or TOML file that exports a top-level object literal, go
-        // over the non-default top-level properties that ended up being imported
-        // and substitute references to them into the main top-level object literal.
-        // So this JSON file:
-        //
-        //   {
-        //     "foo": [1, 2, 3],
-        //     "bar": [4, 5, 6],
-        //   }
-        //
-        // is initially compiled into this:
-        //
-        //   export var foo = [1, 2, 3];
-        //   export var bar = [4, 5, 6];
-        //   export default {
-        //     foo: [1, 2, 3],
-        //     bar: [4, 5, 6],
-        //   };
-        //
-        // But we turn it into this if both "foo" and "default" are imported:
-        //
-        //   export var foo = [1, 2, 3];
-        //   export default {
-        //     foo,
-        //     bar: [4, 5, 6],
-        //   };
-        //
-        if (index == part_index_for_lazy_default_export) {
-            bun.assert(index != std.math.maxInt(u32));
-
-            const stmt = part_stmts[0];
-
-            if (stmt.data != .s_export_default)
-                @panic("expected Lazy default export to be an export default statement");
-
-            const default_export = stmt.data.s_export_default;
-            var default_expr = default_export.value.expr;
-
-            // Be careful: the top-level value in a JSON file is not necessarily an object
-            if (default_expr.data == .e_object) {
-                var new_properties = default_expr.data.e_object.properties.clone(temp_allocator) catch unreachable;
-
-                var resolved_exports = c.graph.meta.items(.resolved_exports)[part_range.source_index.get()];
-
-                // If any top-level properties ended up being imported directly, change
-                // the property to just reference the corresponding variable instead
-                for (new_properties.slice()) |*prop| {
-                    if (prop.key == null or prop.key.?.data != .e_string or prop.value == null) continue;
-                    const name = prop.key.?.data.e_string.slice(temp_allocator);
-                    if (strings.eqlComptime(name, "default") or
-                        strings.eqlComptime(name, "__esModule") or
-                        !bun.js_lexer.isIdentifier(name)) continue;
-
-                    if (resolved_exports.get(name)) |export_data| {
-                        const export_ref = export_data.data.import_ref;
-                        const export_part = ast.parts.slice()[c.graph.topLevelSymbolToParts(part_range.source_index.get(), export_ref)[0]];
-                        if (export_part.is_live) {
-                            prop.* = .{
-                                .key = prop.key,
-                                .value = Expr.initIdentifier(export_ref, prop.value.?.loc),
-                            };
-                        }
-                    }
-                }
-
-                default_expr = Expr.allocate(
-                    temp_allocator,
-                    E.Object,
-                    E.Object{
-                        .properties = new_properties,
-                    },
-                    default_expr.loc,
-                );
-            }
-
-            single_stmts_list[0] = Stmt.allocate(
-                temp_allocator,
-                S.ExportDefault,
-                .{
-                    .default_name = default_export.default_name,
-                    .value = .{ .expr = default_expr },
-                },
-                stmt.loc,
-            );
-            part_stmts = single_stmts_list[0..];
-        }
-
-        c.convertStmtsForChunk(
-            part_range.source_index.get(),
-            stmts,
-            part_stmts,
-            chunk,
-            temp_allocator,
-            flags.wrap,
-            &ast,
-        ) catch |err| return .{
-            .err = err,
-        };
-    }
-
-    // Hoist all import statements before any normal statements. ES6 imports
-    // are different than CommonJS imports. All modules imported via ES6 import
-    // statements are evaluated before the module doing the importing is
-    // evaluated (well, except for cyclic import scenarios). We need to preserve
-    // these semantics even when modules imported via ES6 import statements end
-    // up being CommonJS modules.
-    stmts.all_stmts.ensureUnusedCapacity(stmts.allocator, stmts.inside_wrapper_prefix.stmts.items.len + stmts.inside_wrapper_suffix.items.len) catch unreachable;
-    stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_prefix.stmts.items);
-    stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_suffix.items);
-    stmts.inside_wrapper_prefix.reset();
-    stmts.inside_wrapper_suffix.clearRetainingCapacity();
-
-    if (c.options.minify_syntax) {
-        mergeAdjacentLocalStmts(&stmts.all_stmts, temp_allocator);
-    }
-
-    var out_stmts: []js_ast.Stmt = stmts.all_stmts.items;
-
-    // Optionally wrap all statements in a closure
-    if (needs_wrapper) {
-        switch (flags.wrap) {
-            .cjs => {
-                // Only include the arguments that are actually used
-                var args = std.array_list.Managed(G.Arg).initCapacity(
-                    temp_allocator,
-                    if (ast.flags.uses_module_ref or ast.flags.uses_exports_ref) 2 else 0,
-                ) catch unreachable;
-
-                if (ast.flags.uses_module_ref or ast.flags.uses_exports_ref) {
-                    args.appendAssumeCapacity(
-                        G.Arg{
-                            .binding = Binding.alloc(
-                                temp_allocator,
-                                B.Identifier{
-                                    .ref = ast.exports_ref,
-                                },
-                                Logger.Loc.Empty,
-                            ),
-                        },
-                    );
-
-                    if (ast.flags.uses_module_ref) {
-                        args.appendAssumeCapacity(
-                            G.Arg{
-                                .binding = Binding.alloc(
-                                    temp_allocator,
-                                    B.Identifier{
-                                        .ref = ast.module_ref,
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            },
-                        );
-                    }
-                }
-
-                // TODO: variants of the runtime functions
-                var cjs_args = temp_allocator.alloc(Expr, 1) catch unreachable;
-                cjs_args[0] = Expr.init(
-                    E.Arrow,
-                    E.Arrow{
-                        .args = args.items,
-                        .body = .{
-                            .stmts = stmts.all_stmts.items,
-                            .loc = Logger.Loc.Empty,
-                        },
-                    },
-                    Logger.Loc.Empty,
-                );
-
-                const commonjs_wrapper_definition = Expr.init(
-                    E.Call,
-                    E.Call{
-                        .target = Expr.init(
-                            E.Identifier,
-                            E.Identifier{
-                                .ref = c.cjs_runtime_ref,
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                        .args = bun.BabyList(Expr).fromOwnedSlice(cjs_args),
-                    },
-                    Logger.Loc.Empty,
-                );
-
-                // "var require_foo = __commonJS(...);"
-                {
-                    var decls = temp_allocator.alloc(G.Decl, 1) catch unreachable;
-                    decls[0] = G.Decl{
-                        .binding = Binding.alloc(
-                            temp_allocator,
-                            B.Identifier{
-                                .ref = ast.wrapper_ref,
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                        .value = commonjs_wrapper_definition,
-                    };
-
-                    stmts.append(
-                        .outside_wrapper_prefix,
-                        Stmt.alloc(
-                            S.Local,
-                            S.Local{
-                                .decls = G.Decl.List.fromOwnedSlice(decls),
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                    ) catch unreachable;
-                }
-            },
-            .esm => {
-                // The wrapper only needs to be "async" if there is a transitive async
-                // dependency. For correctness, we must not use "async" if the module
-                // isn't async because then calling "require()" on that module would
-                // swallow any exceptions thrown during module initialization.
-                const is_async = flags.is_async_or_has_async_dependency;
-
-                const ExportHoist = struct {
-                    decls: std.ArrayListUnmanaged(G.Decl),
-                    allocator: std.mem.Allocator,
-
-                    pub fn wrapIdentifier(w: *@This(), loc: Logger.Loc, ref: Ref) Expr {
-                        w.decls.append(
-                            w.allocator,
-                            .{
-                                .binding = Binding.alloc(
-                                    w.allocator,
-                                    B.Identifier{
-                                        .ref = ref,
-                                    },
-                                    loc,
-                                ),
-                                .value = null,
-                            },
-                        ) catch |err| bun.handleOom(err);
-
-                        return Expr.initIdentifier(ref, loc);
-                    }
-                };
-
-                var hoist = ExportHoist{
-                    .decls = .{},
-                    .allocator = temp_allocator,
-                };
-
-                var inner_stmts = stmts.all_stmts.items;
-
-                // Hoist all top-level "var" and "function" declarations out of the closure
-                {
-                    var end: usize = 0;
-                    for (stmts.all_stmts.items) |stmt| {
-                        const transformed = switch (stmt.data) {
-                            .s_local => |local| stmt: {
-                                // "using" / "await using" declarations have disposal
-                                // side-effects tied to the scope they appear in, so
-                                // they must stay inside the closure rather than being
-                                // hoisted to `var` + assignment.
-                                if (local.kind.isUsing()) {
-                                    break :stmt stmt;
-                                }
-
-                                // Convert the declarations to assignments
-                                var value = Expr.empty;
-                                for (local.decls.slice()) |*decl| {
-                                    if (decl.value) |initializer| {
-                                        const can_be_moved = initializer.canBeMoved();
-                                        if (can_be_moved) {
-                                            // if the value can be moved, move the decl directly to preserve destructuring
-                                            // ie `const { main } = class { static main() {} }` => `var {main} = class { static main() {} }`
-                                            bun.handleOom(hoist.decls.append(hoist.allocator, decl.*));
-                                        } else {
-                                            // if the value cannot be moved, add every destructuring key separately
-                                            // ie `var { append } = { append() {} }` => `var append; __esm(() => ({ append } = { append() {} }))`
-                                            const binding = decl.binding.toExpr(&hoist);
-                                            value = value.joinWithComma(
-                                                binding.assign(initializer),
-                                                temp_allocator,
-                                            );
-                                        }
-                                    } else {
-                                        _ = decl.binding.toExpr(&hoist);
-                                    }
-                                }
-
-                                if (value.isEmpty()) {
-                                    continue;
-                                }
-
-                                break :stmt Stmt.allocateExpr(temp_allocator, value);
-                            },
-                            .s_function => {
-                                bun.handleOom(stmts.append(.outside_wrapper_prefix, stmt));
-                                continue;
-                            },
-                            .s_class => |class| stmt: {
-                                if (class.class.canBeMoved()) {
-                                    bun.handleOom(stmts.append(.outside_wrapper_prefix, stmt));
-                                    continue;
-                                }
-
-                                break :stmt Stmt.allocateExpr(
-                                    temp_allocator,
-                                    Expr.assign(hoist.wrapIdentifier(
-                                        class.class.class_name.?.loc,
-                                        class.class.class_name.?.ref.?,
-                                    ), .{
-                                        .data = .{ .e_class = &class.class },
-                                        .loc = stmt.loc,
-                                    }),
-                                );
-                            },
-                            else => stmt,
-                        };
-
-                        inner_stmts[end] = transformed;
-                        end += 1;
-                    }
-                    inner_stmts.len = end;
-                }
-
-                if (hoist.decls.items.len > 0) {
-                    stmts.append(
-                        .outside_wrapper_prefix,
-                        Stmt.alloc(
-                            S.Local,
-                            S.Local{
-                                .decls = G.Decl.List.moveFromList(&hoist.decls),
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                    ) catch unreachable;
-                    hoist.decls.items.len = 0;
-                }
-
-                if (inner_stmts.len > 0) {
-                    // See the comment in needsWrapperRef for why the symbol
-                    // is sometimes not generated.
-                    bun.assert(!ast.wrapper_ref.isEmpty()); // js_parser's needsWrapperRef thought wrapper was not needed
-
-                    // "__esm(() => { ... })"
-                    var esm_args = bun.handleOom(temp_allocator.alloc(Expr, 1));
-                    esm_args[0] = Expr.init(E.Arrow, .{
-                        .args = &.{},
-                        .is_async = is_async,
-                        .body = .{
-                            .stmts = inner_stmts,
-                            .loc = Logger.Loc.Empty,
-                        },
-                    }, Logger.Loc.Empty);
-
-                    // "var init_foo = __esm(...);"
-                    const value = Expr.init(E.Call, .{
-                        .target = Expr.initIdentifier(c.esm_runtime_ref, Logger.Loc.Empty),
-                        .args = bun.BabyList(Expr).fromOwnedSlice(esm_args),
-                    }, Logger.Loc.Empty);
-
-                    var decls = bun.handleOom(temp_allocator.alloc(G.Decl, 1));
-                    decls[0] = G.Decl{
-                        .binding = Binding.alloc(
-                            temp_allocator,
-                            B.Identifier{
-                                .ref = ast.wrapper_ref,
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                        .value = value,
-                    };
-
-                    stmts.append(
-                        .outside_wrapper_prefix,
-                        Stmt.alloc(S.Local, .{
-                            .decls = G.Decl.List.fromOwnedSlice(decls),
-                        }, Logger.Loc.Empty),
-                    ) catch |err| bun.handleOom(err);
-                } else {
-                    // // If this fails, then there will be places we reference
-                    // // `init_foo` without it actually existing.
-                    // bun.assert(ast.wrapper_ref.isEmpty());
-
-                    // TODO: the edge case where we are wrong is when there
-                    // are references to other ESM modules, but those get
-                    // fully hoisted. The look like side effects, but they
-                    // are removed.
-                    //
-                    // It is too late to retroactively delete the
-                    // wrapper_ref, since printing has already begun.  The
-                    // most we can do to salvage the situation is to print
-                    // an empty arrow function.
-                    //
-                    // This is marked as a TODO, because this can be solved
-                    // via a count of external modules, decremented during
-                    // linking.
-                    if (!ast.wrapper_ref.isEmpty()) {
-                        const value = Expr.init(E.Arrow, .{
-                            .args = &.{},
-                            .is_async = is_async,
-                            .body = .{
-                                .stmts = inner_stmts,
-                                .loc = Logger.Loc.Empty,
-                            },
-                        }, Logger.Loc.Empty);
-
-                        stmts.append(
-                            .outside_wrapper_prefix,
-                            Stmt.alloc(S.Local, .{
-                                .decls = G.Decl.List.fromSlice(temp_allocator, &.{.{
-                                    .binding = Binding.alloc(
-                                        temp_allocator,
-                                        B.Identifier{
-                                            .ref = ast.wrapper_ref,
-                                        },
-                                        Logger.Loc.Empty,
-                                    ),
-                                    .value = value,
-                                }}) catch |err| bun.handleOom(err),
-                            }, Logger.Loc.Empty),
-                        ) catch |err| bun.handleOom(err);
-                    }
-                }
-            },
-            else => {},
-        }
-
-        out_stmts = stmts.outside_wrapper_prefix.items;
-    }
-
-    if (out_stmts.len == 0) {
-        return .{
-            .result = .{
-                .code = "",
-                .source_map = null,
-            },
-        };
-    }
-
-    // Collect top-level declarations from the converted statements.
-    // This is done here (after convertStmtsForChunk) rather than in
-    // postProcessJSChunk, because convertStmtsForChunk transforms the AST
-    // (e.g. export default expr → var, export stripping) and the converted
-    // statements reflect what actually gets printed.
-    if (decl_collector) |dc| {
-        dc.collectFromStmts(out_stmts, r, c);
-    }
-
-    return c.printCodeForFileInChunkJS(
-        r,
-        allocator,
-        writer,
-        out_stmts,
-        &ast,
-        flags,
-        toESMRef,
-        toCommonJSRef,
-        runtimeRequireRef,
-        part_range.source_index,
-        c.getSource(part_range.source_index.get()),
-    );
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// @linkLibrary("z")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+const string = []const u8;
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const ExportHoist = struct {
+    decls: std.ArrayListUnmanaged(G.Decl) = .{},
+    allocator: std.mem.Allocator,
+
+pub fn wrapIdentifier(self: *ExportHoist, loc: Logger.Loc, sym_ref: Ref) Expr {
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.decls.append(self.allocator, .{ .binding = Binding.alloc(self.allocator, B.Identifier{ .ref = sym_ref }, loc), .value = null })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+            return Expr.initIdentifier(sym_ref, loc);
+    }
+};
 
 pub const DeclCollector = struct {
     decls: std.ArrayListUnmanaged(CompileResult.DeclInfo) = .{},
     allocator: std.mem.Allocator,
 
-    const CompileResult = bun.bundle_v2.CompileResult;
+pub fn collectFromStmts(self: *DeclCollector, stmts: []const Stmt, r: renamer.Renamer, c: *LinkerContext) void {
+            for (cp_iter_slice(stmts)) |stmt| {
+                _ = &stmt;
+                switch (stmt.data) {
+.s_local => |s| {
+const kind: CompileResult.DeclInfo.Kind = (if ((s.kind == .k_var)) .declared else .lexical);
+                for (cp_iter_slice(s.decls.slice())) |decl| {
+                    _ = &decl;
+                    _ = self.collectFromBinding(decl.binding, kind, r, c);
+                }
+},
+.s_function => |s| {
+if ((if (@typeInfo(@TypeOf(s.func)) == .@"enum" or @typeInfo(@TypeOf(s.func)) == .@"union") @tagName(s.func) else s.func.name)) |name_loc_ref| {
+                    _ = &name_loc_ref;
+                    if (name_loc_ref.ref) |name_ref| {
+                        _ = &name_ref;
+                        _ = self.addRef(name_ref, .lexical, r, c);
+                    }
+                }
+},
+.s_class => |s| {
+if (s.class.class_name) |class_name| {
+                    _ = &class_name;
+                    if (class_name.ref) |name_ref| {
+                        _ = &name_ref;
+                        _ = self.addRef(name_ref, .lexical, r, c);
+                    }
+                }
+},
+else => {
 
-    /// Collect top-level declarations from **converted** statements (after
-    /// `convertStmtsForChunk`). At that point, export statements have already
-    /// been transformed:
-    /// - `s_export_default` → `s_local` / `s_function` / `s_class`
-    /// - `s_export_clause` → removed entirely
-    /// - `s_export_from` / `s_export_star` → removed or converted to `s_import`
-    ///
-    /// Remaining `s_import` statements (external, non-bundled) don't need
-    /// handling here; their bindings are recorded separately in
-    /// `postProcessJSChunk` by scanning the original AST import records.
-    pub fn collectFromStmts(self: *DeclCollector, stmts: []const Stmt, r: renamer.Renamer, c: *LinkerContext) void {
-        for (stmts) |stmt| {
-            switch (stmt.data) {
-                .s_local => |s| {
-                    const kind: CompileResult.DeclInfo.Kind = if (s.kind == .k_var) .declared else .lexical;
-                    for (s.decls.slice()) |decl| {
-                        self.collectFromBinding(decl.binding, kind, r, c);
-                    }
-                },
-                .s_function => |s| {
-                    if (s.func.name) |name_loc_ref| {
-                        if (name_loc_ref.ref) |name_ref| {
-                            self.addRef(name_ref, .lexical, r, c);
-                        }
-                    }
-                },
-                .s_class => |s| {
-                    if (s.class.class_name) |class_name| {
-                        if (class_name.ref) |name_ref| {
-                            self.addRef(name_ref, .lexical, r, c);
-                        }
-                    }
-                },
-                else => {},
+},
+}
             }
-        }
     }
 
-    fn collectFromBinding(self: *DeclCollector, binding: Binding, kind: CompileResult.DeclInfo.Kind, r: renamer.Renamer, c: *LinkerContext) void {
-        switch (binding.data) {
-            .b_identifier => |b| {
-                self.addRef(b.ref, kind, r, c);
-            },
-            .b_array => |b| {
-                for (b.items) |item| {
-                    self.collectFromBinding(item.binding, kind, r, c);
-                }
-            },
-            .b_object => |b| {
-                for (b.properties) |prop| {
-                    self.collectFromBinding(prop.value, kind, r, c);
-                }
-            },
-            .b_missing => {},
-        }
+pub fn collectFromBinding(self: *DeclCollector, binding: Binding, kind: CompileResult.DeclInfo.Kind, r: renamer.Renamer, c: *LinkerContext) void {
+            switch (binding.data) {
+.b_identifier => |b| {
+_ = self.addRef(b.ref, kind, r, c);
+},
+.b_array => |b| {
+for (b.items) |item| {
+                _ = &item;
+                _ = self.collectFromBinding(item.binding, kind, r, c);
+            }
+},
+.b_object => |b| {
+for (cp_iter_slice(b.properties)) |prop| {
+                _ = &prop;
+                _ = self.collectFromBinding((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value), kind, r, c);
+            }
+},
+.b_missing => {
+
+},
+}
     }
 
-    fn addRef(self: *DeclCollector, ref: Ref, kind: CompileResult.DeclInfo.Kind, r: renamer.Renamer, c: *LinkerContext) void {
-        const followed = c.graph.symbols.follow(ref);
-        const name = r.nameForSymbol(followed);
-        if (name.len == 0) return;
-        self.decls.append(self.allocator, .{ .name = name, .kind = kind }) catch return;
+pub fn addRef(self: *DeclCollector, sym_ref: Ref, kind: CompileResult.DeclInfo.Kind, r: renamer.Renamer, c: *LinkerContext) void {
+            const followed = c.graph.symbols.follow(sym_ref);
+            const name = r.nameForSymbol(followed);
+            if ((name.len == 0)) {
+                return;
+            }
+            _ = (blk_catch_1: { break :blk_catch_1 ((self.decls.append(self.allocator, .{ .name = name, .kind = kind })) catch |__ce_1| { _ = &__ce_1; return; }); });
     }
+    const CompileResult = bun.bundle_v2.CompileResult;
 };
 
-fn mergeAdjacentLocalStmts(stmts: *std.ArrayListUnmanaged(Stmt), allocator: std.mem.Allocator) void {
-    if (stmts.items.len == 0)
-        return;
-
-    var did_merge_with_previous_local = false;
-    var end: usize = 1;
-
-    for (stmts.items[1..]) |stmt| {
-        // Try to merge with the previous variable statement
-        if (stmt.data == .s_local) {
-            var after = stmt.data.s_local;
-            if (stmts.items[end - 1].data == .s_local) {
-                var before = stmts.items[end - 1].data.s_local;
-                // It must be the same kind of variable statement (i.e. let/var/const)
-                if (before.canMergeWith(after)) {
-                    if (did_merge_with_previous_local) {
-                        // Avoid O(n^2) behavior for repeated variable declarations
-                        // Appending to this decls list is safe because did_merge_with_previous_local is true
-                        before.decls.appendSlice(allocator, after.decls.slice()) catch unreachable;
-                    } else {
-                        // Append the declarations to the previous variable statement
-                        did_merge_with_previous_local = true;
-
-                        var clone = bun.BabyList(G.Decl).initCapacity(allocator, before.decls.len + after.decls.len) catch unreachable;
-                        clone.appendSliceAssumeCapacity(before.decls.slice());
-                        clone.appendSliceAssumeCapacity(after.decls.slice());
-                        // we must clone instead of overwrite in-place incase the same S.Local is used across threads
-                        // https://github.com/oven-sh/bun/issues/2942
-                        stmts.items[end - 1] = Stmt.allocate(
-                            allocator,
-                            S.Local,
-                            S.Local{
-                                .decls = clone,
-                                .is_export = before.is_export,
-                                .was_commonjs_export = before.was_commonjs_export,
-                                .was_ts_import_equals = before.was_ts_import_equals,
-                                .kind = before.kind,
-                            },
-                            stmts.items[end - 1].loc,
-                        );
-                    }
-                    continue;
-                }
-            }
-        }
-
-        did_merge_with_previous_local = false;
-        stmts.items[end] = stmt;
-        end += 1;
-    }
-    stmts.items.len = end;
-}
-
-const std = @import("std");
-
-const bun = @import("bun");
 const BabyList = bun.BabyList;
 const Logger = bun.logger;
 const options = bun.options;
 const strings = bun.strings;
-
 const Chunk = bun.bundle_v2.Chunk;
 const Index = bun.bundle_v2.Index;
 const JSAst = bun.bundle_v2.JSAst;
@@ -787,10 +170,8 @@ const PartRange = bun.bundle_v2.PartRange;
 const genericPathWithPrettyInitialized = bun.bundle_v2.genericPathWithPrettyInitialized;
 const js_printer = bun.bundle_v2.js_printer;
 const renamer = bun.bundle_v2.renamer;
-
 const LinkerContext = bun.bundle_v2.LinkerContext;
 const StmtList = LinkerContext.StmtList;
-
 const js_ast = bun.bundle_v2.js_ast;
 const B = js_ast.B;
 const Binding = js_ast.Binding;
@@ -800,3 +181,297 @@ const G = js_ast.G;
 const Ref = bun.bundle_v2.js_ast.Ref;
 const S = js_ast.S;
 const Stmt = js_ast.Stmt;
+
+pub fn generateCodeForFileInChunkJS(c: *LinkerContext, writer: *js_printer.BufferWriter, r: renamer.Renamer, chunk: *Chunk, part_range: PartRange, toCommonJSRef: Ref, toESMRef: Ref, runtimeRequireRef: ?Ref, stmts: *StmtList, allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, decl_collector: ?*DeclCollector) js_printer.PrintResult {
+        const parts: []Part = c.graph.ast.items(.parts)[@as(usize, @intCast(part_range.source_index.get()))].slice()[part_range.part_index_begin..part_range.part_index_end];
+        const all_flags: []const JSMeta.Flags = c.graph.@"meta".items(.flags);
+        const flags = all_flags[@as(usize, @intCast(part_range.source_index.get()))];
+        const wrapper_part_index = (if ((flags.wrap != .none)) c.graph.@"meta".items(.wrapper_part_index)[@as(usize, @intCast(part_range.source_index.get()))] else Index.invalid);
+        var ast: JSAst = c.graph.ast.get(part_range.source_index.get());
+        _ = &ast;
+        if ((c.options.output_format == .internal_bake_dev)) {
+            _ = brk: {
+            if (part_range.source_index.isRuntime()) {
+                @branchHint(.cold);
+                _ = bun.debugAssert((c.dev_server == null));
+                break :brk;
+            }
+            const hmr_api_ref = ast.wrapper_ref;
+            for (cp_iter_slice(parts)) |part| {
+                _ = &part;
+                _ = (blk_catch_2: { break :blk_catch_2 ((c.convertStmtsForChunkForDevServer(stmts, part.stmts, allocator, (&ast))) catch |e| { _ = &e; return .{ .err = e }; }); });
+            }
+            const main_stmts_len = (stmts.inside_wrapper_prefix.stmts.items.len + stmts.inside_wrapper_suffix.items.len);
+            const all_stmts_len = ((main_stmts_len + stmts.outside_wrapper_prefix.items.len) + 1);
+            _ = bun.handleOom(stmts.all_stmts.ensureUnusedCapacity(stmts.allocator, all_stmts_len));
+            _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_prefix.stmts.items);
+            _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_suffix.items);
+            const inner = stmts.all_stmts.items[0..main_stmts_len];
+            var clousure_args = ((bun.BoundedArray(G.Arg, 3).fromSlice((&.{ G.Arg{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = hmr_api_ref }, Logger.Loc.Empty) } }))) catch unreachable);
+            _ = &clousure_args;
+            if ((ast.flags.uses_module_ref or ast.flags.uses_exports_ref)) {
+                _ = clousure_args.appendSliceAssumeCapacity((&.{ G.Arg{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.module_ref }, Logger.Loc.Empty) }, G.Arg{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.exports_ref }, Logger.Loc.Empty) } }));
+            }
+            _ = stmts.all_stmts.appendAssumeCapacity(Stmt.allocateExpr(temp_allocator, Expr.init(E.Function, .{ .func = .{ .args = bun.handleOom(temp_allocator.dupe(G.Arg, clousure_args.slice())), .body = .{ .stmts = inner, .loc = Logger.Loc.Empty } } }, Logger.Loc.Empty)));
+            _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.outside_wrapper_prefix.items);
+            ast.flags.uses_module_ref = true;
+            var source = (c.getSource(part_range.source_index.get())).*;
+            _ = &source;
+            if ((source.path.text.ptr == source.path.pretty.ptr)) {
+                source.path = (blk_catch_4: { break :blk_catch_4 ((genericPathWithPrettyInitialized(source.path, c.options.target, c.resolver.fs.top_level_dir, allocator)) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+            }
+            return c.printCodeForFileInChunkJS(r, allocator, writer, stmts.all_stmts.items[main_stmts_len..], (&ast), flags, .None, .None, null, part_range.source_index, (&source));
+};
+        }
+        var needs_wrapper = false;
+        _ = &needs_wrapper;
+        const namespace_export_part_index = js_ast.namespace_export_part_index;
+        _ = stmts.reset();
+        const part_index_for_lazy_default_export: u32 = brk: {
+        if (ast.flags.has_lazy_export) {
+            if (c.graph.@"meta".items(.resolved_exports)[@as(usize, @intCast(part_range.source_index.get()))].get("default")) |default| {
+                _ = &default;
+                break :brk c.graph.topLevelSymbolToParts(part_range.source_index.get(), default.data.import_ref)[0];
+            }
+        }
+        break :brk std.math.maxInt(u32);
+};
+        const output_format = c.options.output_format;
+        if (((((flags.wrap != .none) and ast.flags.has_explicit_use_strict_directive) and (!chunk.isEntryPoint())) and (!output_format.isAlwaysStrictMode()))) {
+            _ = ((stmts.inside_wrapper_prefix.appendNonDependency(Stmt.alloc(S.Directive, .{ .value = "use strict" }, Logger.Loc.Empty))) catch unreachable);
+        }
+        if ((((namespace_export_part_index >= part_range.part_index_begin) and (namespace_export_part_index < part_range.part_index_end)) and parts[@as(usize, @intCast(namespace_export_part_index))].is_live)) {
+            _ = (blk_catch_6: { break :blk_catch_6 ((c.convertStmtsForChunk(part_range.source_index.get(), stmts, parts[@as(usize, @intCast(namespace_export_part_index))].stmts, chunk, temp_allocator, flags.wrap, (&ast))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            return .{ .err = e }; }); });
+            switch (flags.wrap) {
+.esm => {
+_ = ((stmts.appendSlice(.outside_wrapper_prefix, stmts.inside_wrapper_suffix.items)) catch unreachable);
+},
+else => {
+_ = ((stmts.inside_wrapper_prefix.appendNonDependencySlice(stmts.inside_wrapper_suffix.items)) catch unreachable);
+},
+}
+            _ = stmts.inside_wrapper_suffix.clearRetainingCapacity();
+        }
+        var index_: usize = 0;
+        _ = &index_;
+        while ((index_ < parts.len)) : (index_ = (index_ + 1)) {
+            const part = parts[@as(usize, @intCast(index_))];
+            const index = (part_range.part_index_begin + @as(u32, @truncate(index_)));
+            if ((!part.is_live)) {
+                continue;
+            }
+            if ((index == namespace_export_part_index)) {
+                continue;
+            }
+            if ((index == wrapper_part_index.get())) {
+                needs_wrapper = true;
+                continue;
+            }
+            var single_stmts_list: [1]Stmt = undefined;
+            _ = &single_stmts_list;
+            var part_stmts = part.stmts;
+            _ = &part_stmts;
+            if ((index == part_index_for_lazy_default_export)) {
+                _ = bun.assert((index != std.math.maxInt(u32)));
+                const stmt = part_stmts[0];
+                if ((stmt.data != .s_export_default)) {
+                    _ = @panic("expected Lazy default export to be an export default statement");
+                }
+                const default_export = stmt.data.s_export_default;
+                var default_expr = (if (@typeInfo(@TypeOf(default_export)) == .@"enum") @intFromEnum(default_export) else default_export.value).expr;
+                _ = &default_expr;
+                if ((default_expr.data == .e_object)) {
+                    var new_properties = ((default_expr.data.e_object.properties.clone(temp_allocator)) catch unreachable);
+                    _ = &new_properties;
+                    var resolved_exports = c.graph.@"meta".items(.resolved_exports)[@as(usize, @intCast(part_range.source_index.get()))];
+                    _ = &resolved_exports;
+                    for (cp_mut_slice(&new_properties.slice())) |*prop| {
+                        _ = &prop;
+                        if (((((prop.*).key == null) or ((prop.*).key.?.data != .e_string)) or ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value) == null))) {
+                            continue;
+                        }
+                        const name = (prop.*).key.?.data.e_string.slice(temp_allocator);
+                        if (((strings.eqlComptime(name, "default") or strings.eqlComptime(name, "__esModule")) or (!bun.js_lexer.isIdentifier(name)))) {
+                            continue;
+                        }
+                        if (resolved_exports.get(name)) |export_data| {
+                            _ = &export_data;
+                            const export_ref = export_data.data.import_ref;
+                            const export_part = ast.parts.slice()[@as(usize, @intCast(c.graph.topLevelSymbolToParts(part_range.source_index.get(), export_ref)[0]))];
+                            if (export_part.is_live) {
+                                (prop.*).* = .{ .key = (prop.*).key, .value = Expr.initIdentifier(export_ref, (if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).?.loc) };
+                            }
+                        }
+                    }
+                    default_expr = Expr.allocate(temp_allocator, E.Object, E.Object{ .properties = new_properties }, default_expr.loc);
+                }
+                single_stmts_list[cp_cast_int(usize, 0)] = Stmt.allocate(temp_allocator, S.ExportDefault, .{ .default_name = default_export.default_name, .value = .{ .expr = default_expr } }, stmt.loc);
+                part_stmts = single_stmts_list[0..];
+            }
+            _ = (blk_catch_10: { break :blk_catch_10 ((c.convertStmtsForChunk(part_range.source_index.get(), stmts, part_stmts, chunk, temp_allocator, flags.wrap, (&ast))) catch |e| { _ = &e; return .{ .e = e }; }); });
+        }
+        _ = ((stmts.all_stmts.ensureUnusedCapacity(stmts.allocator, (stmts.inside_wrapper_prefix.stmts.items.len + stmts.inside_wrapper_suffix.items.len))) catch unreachable);
+        _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_prefix.stmts.items);
+        _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_suffix.items);
+        _ = stmts.inside_wrapper_prefix.reset();
+        _ = stmts.inside_wrapper_suffix.clearRetainingCapacity();
+        if (c.options.minify_syntax) {
+            _ = mergeAdjacentLocalStmts((&stmts.all_stmts), temp_allocator);
+        }
+        var out_stmts: []js_ast.Stmt = stmts.all_stmts.items;
+        _ = &out_stmts;
+        if (needs_wrapper) {
+            switch (flags.wrap) {
+.cjs => {
+var args = ((std.array_list.Managed(G.Arg).initCapacity(temp_allocator, (if ((ast.flags.uses_module_ref or ast.flags.uses_exports_ref)) 2 else 0))) catch unreachable);
+            _ = &args;
+            if ((ast.flags.uses_module_ref or ast.flags.uses_exports_ref)) {
+                _ = args.appendAssumeCapacity(G.Arg{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.exports_ref }, Logger.Loc.Empty) });
+                if (ast.flags.uses_module_ref) {
+                    _ = args.appendAssumeCapacity(G.Arg{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.module_ref }, Logger.Loc.Empty) });
+                }
+            }
+            var cjs_args = ((temp_allocator.alloc(Expr, 1)) catch unreachable);
+            _ = &cjs_args;
+            cjs_args[cp_cast_int(usize, 0)] = Expr.init(E.Arrow, E.Arrow{ .args = args.items, .body = .{ .stmts = stmts.all_stmts.items, .loc = Logger.Loc.Empty } }, Logger.Loc.Empty);
+            const commonjs_wrapper_definition = Expr.init(E.Call, E.Call{ .target = Expr.init(E.Identifier, E.Identifier{ .ref = c.cjs_runtime_ref }, Logger.Loc.Empty), .args = bun.BabyList(Expr).fromOwnedSlice(cjs_args) }, Logger.Loc.Empty);
+            {
+                var decls = ((temp_allocator.alloc(G.Decl, 1)) catch unreachable);
+                _ = &decls;
+                decls[cp_cast_int(usize, 0)] = G.Decl{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.wrapper_ref }, Logger.Loc.Empty), .value = commonjs_wrapper_definition };
+                _ = ((stmts.append(.outside_wrapper_prefix, Stmt.alloc(S.Local, S.Local{ .decls = G.Decl.List.fromOwnedSlice(decls) }, Logger.Loc.Empty))) catch unreachable);
+            }
+},
+.esm => {
+const is_async = flags.is_async_or_has_async_dependency;
+            var hoist = ExportHoist{ .decls = .{}, .allocator = temp_allocator };
+            _ = &hoist;
+            var inner_stmts = stmts.all_stmts.items;
+            _ = &inner_stmts;
+            {
+                var end: usize = 0;
+                _ = &end;
+                for (stmts.all_stmts.items) |stmt| {
+                    _ = &stmt;
+                    const transformed = (switch (stmt.data) {
+.s_local => |local| stmt: {
+                    if (local.kind.isUsing()) {
+                        break :stmt stmt;
+                    }
+                    var value = Expr.empty;
+                    _ = &value;
+                    for (cp_mut_slice(&local.decls.slice())) |*decl| {
+                        _ = &decl;
+                        if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |initializer| {
+                            _ = &initializer;
+                            const can_be_moved = initializer.canBeMoved();
+                            if (can_be_moved) {
+                                _ = bun.handleOom(hoist.decls.append(hoist.allocator, (decl.*).*));
+                            } else {
+                                const binding = (decl.*).binding.toExpr((&hoist));
+                                value = value.joinWithComma(binding.assign(initializer), temp_allocator);
+                            }
+                        } else {
+                            _ = (decl.*).binding.toExpr((&hoist));
+                        }
+                    }
+                    if (value.isEmpty()) {
+                        continue;
+                    }
+                    break :stmt Stmt.allocateExpr(temp_allocator, value);
+},
+.s_function => {
+{
+                        _ = bun.handleOom(stmts.append(.outside_wrapper_prefix, stmt));
+                        continue;
+                    }
+},
+.s_class => |cls| stmt: {
+                    if (cls.class.canBeMoved()) {
+                        _ = bun.handleOom(stmts.append(.outside_wrapper_prefix, stmt));
+                        continue;
+                    }
+                    break :stmt Stmt.allocateExpr(temp_allocator, Expr.assign(hoist.wrapIdentifier(cls.class.class_name.?.loc, cls.class.class_name.?.ref.?), .{ .data = .{ .e_class = (&cls.class) }, .loc = stmt.loc }));
+},
+else => stmt,
+});
+                    inner_stmts[cp_cast_int(usize, end)] = transformed;
+                    end = (end + 1);
+                }
+                inner_stmts.len = end;
+            }
+            if ((hoist.decls.items.len > 0)) {
+                _ = ((stmts.append(.outside_wrapper_prefix, Stmt.alloc(S.Local, S.Local{ .decls = G.Decl.List.moveFromList((&hoist.decls)) }, Logger.Loc.Empty))) catch unreachable);
+                hoist.decls.items.len = 0;
+            }
+            if ((inner_stmts.len > 0)) {
+                _ = bun.assert((!ast.wrapper_ref.isEmpty()));
+                var esm_args = bun.handleOom(temp_allocator.alloc(Expr, 1));
+                _ = &esm_args;
+                esm_args[cp_cast_int(usize, 0)] = Expr.init(E.Arrow, .{ .args = &.{}, .is_async = is_async, .body = .{ .stmts = inner_stmts, .loc = Logger.Loc.Empty } }, Logger.Loc.Empty);
+                const value = Expr.init(E.Call, .{ .target = Expr.initIdentifier(c.esm_runtime_ref, Logger.Loc.Empty), .args = bun.BabyList(Expr).fromOwnedSlice(esm_args) }, Logger.Loc.Empty);
+                var decls = bun.handleOom(temp_allocator.alloc(G.Decl, 1));
+                _ = &decls;
+                decls[cp_cast_int(usize, 0)] = G.Decl{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.wrapper_ref }, Logger.Loc.Empty), .value = value };
+                _ = (blk_catch_17: { break :blk_catch_17 ((stmts.append(.outside_wrapper_prefix, Stmt.alloc(S.Local, .{ .decls = G.Decl.List.fromOwnedSlice(decls) }, Logger.Loc.Empty))) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+            } else {
+                if ((!ast.wrapper_ref.isEmpty())) {
+                    const value = Expr.init(E.Arrow, .{ .args = &.{}, .is_async = is_async, .body = .{ .stmts = inner_stmts, .loc = Logger.Loc.Empty } }, Logger.Loc.Empty);
+                    _ = (blk_catch_19: { break :blk_catch_19 ((stmts.append(.outside_wrapper_prefix, Stmt.alloc(S.Local, .{ .decls = (blk_catch_18: { break :blk_catch_18 ((G.Decl.List.fromSlice(temp_allocator, (&.{ G.Decl{ .binding = Binding.alloc(temp_allocator, B.Identifier{ .ref = ast.wrapper_ref }, Logger.Loc.Empty), .value = value } }))) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); }) }, Logger.Loc.Empty))) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
+                }
+            }
+},
+else => {
+
+},
+}
+            out_stmts = stmts.outside_wrapper_prefix.items;
+        }
+        if ((out_stmts.len == 0)) {
+            return .{ .result = .{ .code = "", .source_map = null } };
+        }
+        if (decl_collector) |dc| {
+            _ = &dc;
+            _ = dc.collectFromStmts(out_stmts, r, c);
+        }
+        return c.printCodeForFileInChunkJS(r, allocator, writer, out_stmts, (&ast), flags, toESMRef, toCommonJSRef, runtimeRequireRef, part_range.source_index, c.getSource(part_range.source_index.get()));
+}
+
+pub fn mergeAdjacentLocalStmts(stmts: *std.ArrayListUnmanaged(Stmt), allocator: std.mem.Allocator) void {
+        if ((stmts.items.len == 0)) {
+            return;
+        }
+        var did_merge_with_previous_local = false;
+        _ = &did_merge_with_previous_local;
+        var end: usize = 1;
+        _ = &end;
+        for (cp_iter_slice(stmts.items[1..])) |stmt| {
+            _ = &stmt;
+            if ((stmt.data == .s_local)) {
+                var after = stmt.data.s_local;
+                _ = &after;
+                if ((stmts.items[@as(usize, @intCast((end - 1)))].data == .s_local)) {
+                    var before = stmts.items[@as(usize, @intCast((end - 1)))].data.s_local;
+                    _ = &before;
+                    if (before.canMergeWith(after)) {
+                        if (did_merge_with_previous_local) {
+                            _ = ((before.decls.appendSlice(allocator, after.decls.slice())) catch unreachable);
+                        } else {
+                            did_merge_with_previous_local = true;
+                            var clone = ((bun.BabyList(G.Decl).initCapacity(allocator, (before.decls.len + after.decls.len))) catch unreachable);
+                            _ = &clone;
+                            _ = clone.appendSliceAssumeCapacity(before.decls.slice());
+                            _ = clone.appendSliceAssumeCapacity(after.decls.slice());
+                            stmts.items[cp_cast_int(usize, (end - 1))] = Stmt.allocate(allocator, S.Local, S.Local{ .decls = clone, .is_export = before.is_export, .was_commonjs_export = before.was_commonjs_export, .was_ts_import_equals = before.was_ts_import_equals, .kind = before.kind }, stmts.items[@as(usize, @intCast((end - 1)))].loc);
+                        }
+                        continue;
+                    }
+                }
+            }
+            did_merge_with_previous_local = false;
+            stmts.items[cp_cast_int(usize, end)] = stmt;
+            end = (end + 1);
+        }
+        stmts.items.len = end;
+}

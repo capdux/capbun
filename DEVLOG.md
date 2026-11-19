@@ -1028,3 +1028,13 @@
 ### 2. CSS 导入拓扑排序与标号循环控制流 (`findImportedFilesInCSSOrder.cp`)
 - **自定义方法拦截绕过**：针对 `layers.replace(...)` 易被 `cpc` 误判为内建字符串替换的歧义，抽取 `const replaceFn = Chunk.CssImportOrder.Layers.replace; replaceFn(layers, ...)` 显式函数指针调用。
 - **跨层循环标号与带步进遍历**：将带标号的复杂嵌套遍历重构为 `next_forward: while (...) : (...)`，保证生成的 Zig 代码保留完整跳转标号。
+
+
+## 2026-11-19 [Milestone 7 Phase 74 Group B] Bundler LinkerContext 并行分块生成与条件返回值 CP 纯化经验
+
+### 1. 编译期条件返回值纯函数解耦 (`generateChunksInParallel.cp`)
+- **条件类型提取为顶层纯函数**：将原 Zig 的内联条件返回类型 `!if (is_dev_server) void else std.array_list.Managed(...)` 抽象为顶层泛型函数 `fn ReturnType(comptime is_dev_server: bool): type`，消除编译期分支表达式在函数签名中的词法歧义。
+- **循环与切片解构纯化**：将 `for (chunks, 0..) |*chunk, i|` 改写为标准 CP 区间索引 `for (i of 0..chunks.len)`，格式化数组采用 `[ a, b ]` 并在外层解包 Walrus `if (fw := c.framework)`，保障无竞争借用安全。
+
+### 2. 分块文件生成与父指针推导收窄 (`generateCodeForFileInChunkJS.cp`)
+- **嵌套结构体提升与类型提示**：将 `DuplicateEntry` 与 `ModuleInfoReplacement` 提升至顶层定义；`@fieldParentPtr` 显式声明目标类型指针，避免多层指针类型推导断裂。
