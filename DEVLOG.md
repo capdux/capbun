@@ -1101,3 +1101,14 @@
 ### 2. 根结构体解耦与延迟初始化借用规整 (`LinkerGraph.cp`)
 - **辅助类型顶层解耦**：将 `File`、`AddPartIterator`、`AsyncDependencyState` 提取至模块顶层声明，保持 `@root struct LinkerGraph` 根字段与方法绑定的纯粹性。
 - **消除已移动变量读取陷阱 (E0203)**：优化 `top_level_symbol_to_parts_overlay` 延迟初始化指针借用模式，避免哈希映射写入时的虚假所有权转移告警。
+
+
+## 2026-11-19 [Milestone 7 Phase 78 Group A] JSC IPC 消息队列与跨线程借用安全 CP 纯化经验
+
+### 1. 跨方法借用冲突解除与单写多读解耦 (`ipc.cp`)
+- **解除接收者并发持有借用冲突 (E0202)**：原 Zig 代码在 `_onWriteComplete` 中持有接收者借用并在后续执行队列操作，重构为 `static fn getOwnerGlobalThis(owner: IPCSendQueueOwner)`，解绑接收者所有权借用链，杜绝了指针悬挂隐患。
+- **排他指针可变解包 (E0201)**：在可选指针解包中采用 `if (*ipc_data := ipc)` 规范，保障后续 `serializeAndSend` 排他写入的绝对安全性。
+
+### 2. C-ABI 回调规范与关键字作用域净化 (`ipc.cp`)
+- **C ABI 回调标准化**：回调函数（`jsonIPCDataStringFreeCB`、`_windowsOnClosed`、`onServerPipeClose`）规范标注 `@callconv("c")`，省略冗余 void 返回。
+- **类型歧义与关键字规避**：消解 `SendQueue.SocketType`/`SocketUnion` 与外部顶层类型同名歧义；规避 CP 关键字 `from` 并重构为 `origin`，错误捕获重写为安全的语句级解包。
