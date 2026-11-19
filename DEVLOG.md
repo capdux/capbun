@@ -974,3 +974,14 @@
 ### 2. CSS 语法树准备与 HTML 分块 LOLHTML 回调 (`prepareCssAstsForChunk.cp`, `generateCompileResultForHtmlChunk.cp`)
 - **嵌套结构体提升与接收者收窄**：将内嵌的辅助结构体 `HTMLLoader` 与 `EndTagIndices` 提升至顶层模块作用域，确保 CP 编译器为实例方法完整生成 `*_` 独占可变绑定与返回类型省略。
 - **C-ABI 静态回调修饰**：将 LOLHTML C 回调函数标准修饰为 `@callconv("c") static fn`，并通过模块顶层 `type string = []const u8;` 彻底消除泛型签名词法紧缩解析错误。
+
+
+## 2026-11-19 [Milestone 7 Phase 71 Group A] JSC 宿主函数工厂与 JavaScriptCore 类型系统 CP 纯化经验
+
+### 1. JSType 枚举体系与接收者纯化 (`JSType.cp`)
+- **枚举实例方法访问纯化**：声明为 `pub enum JSType: u8`，在方法体内省略显式接收者，统一通过 `_` 进行只读访问，修饰符使用 `@inline fn`，彻底消除尾随多余符号与空语句。
+- **单写多读与零逃逸**：去除原版所有残留 `var`，将类型映射关系在编译期静态内联展开。
+
+### 2. 宿主函数包装器与匿名结构体 Lowering 提升 (`host_fn.cp`)
+- **包装结构体工厂顶层提升**：对于 `wrap1`..`wrap5` 与 `wrap4v`，将内联匿名结构体拆分提升为顶层泛型结构体函数 `WrapNStruct(func)`，消除函数返回时内联匿名结构体的语法解析边界歧义。
+- **匿名方法体内空值合并与类型构造**：在匿名方法体内将可能被误判为结构体字面量的 `?? { return ...; }` 统一改写为 `orelse { return ...; }`；利用编译期泛型类型构造器 `fn Optional(comptime T: type): type` 表达类型断言匹配，消解与三元操作符 `? :` 的解析冲突。

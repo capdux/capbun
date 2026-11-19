@@ -1243,3 +1243,12 @@
   - `generateCompileResultForHtmlChunk.cp` (351 行, 1.020x)
 - **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.027x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,161 / 1,295 模块 (89.65%)**，`src/bundler/linker_context/` 待迁移模块降至 12 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 71 Group A] `src/jsc/` 2 个宿主函数包装与类型系统核心模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 2 个 JSC 核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `JSType.cp` (840 行, 1.000x)
+  - `host_fn.cp` (813 行, 1.007x)
+- **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.007x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,163 / 1,295 模块 (89.81%)**，`src/jsc/` 待迁移模块降至 7 个！
