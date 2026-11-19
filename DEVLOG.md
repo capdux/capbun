@@ -906,3 +906,14 @@
 ### 2. 包安装入口与哈希完整性校验 (`install.cp`, `integrity.cp`)
 - **哈希算法分发类型安全**：在 `integrity.cp` 中，规范 `Algorithm` 枚举与 `Hash` 联合体的只读方法派发，利用 `_` 接收者消除隐式浅拷贝。
 - **安装全局状态借用隔离**：在 `install.cp` 中，废除原版裸 `var` 变量，统一改写为只读常量与线程局部/独占可变绑定，确保高并发安装期间的多线程单写多读安全。
+
+
+## 2026-11-19 [Milestone 7 Phase 68 Group A] JSC 转译存储与二进制 ArrayBuffer CP 纯化经验
+
+### 1. 转译存储任务队列与锁排他安全 (`RuntimeTranspilerStore.cp`)
+- **内部静态状态模块化提升**：将局部 `const BunDebugHolder = struct { var ... };` 结构解构为模块顶层 `let bun_debug_dir` 与 `let bun_debug_lock` 独占排他绑定，彻底消除 `var` 与匿名内部类。
+- **嵌套结构体提升与字段父指针**：将 `TranspilerJob` 与 `Fetcher` 提升至模块顶层，线程局部变量声明为 `@tls let`。`@fieldParentPtr` 显式声明具体强类型避免 Zig 0.13 类型推导失败。
+
+### 2. C-ABI ArrayBuffer 与定型数组枚举派发 (`array_buffer.cp`)
+- **C ABI 规范化与类型别名**：使用 `@c pub struct ArrayBuffer` 明确 C 互操作契约，嵌套的 `BinaryType`、`TypedArrayType`、`Strong` 提升至模块顶层并在结构体内声明别名，保证 CP 语法 lowering 覆盖全部分支方法。
+- **切片返回与指针收窄**：切片空值统一返回 `[]`，对多元素裸指针通过 `unsafe { ... }` 块安全解引用，根除悬垂引用。
