@@ -1112,3 +1112,14 @@
 ### 2. C-ABI 回调规范与关键字作用域净化 (`ipc.cp`)
 - **C ABI 回调标准化**：回调函数（`jsonIPCDataStringFreeCB`、`_windowsOnClosed`、`onServerPipeClose`）规范标注 `@callconv("c")`，省略冗余 void 返回。
 - **类型歧义与关键字规避**：消解 `SendQueue.SocketType`/`SocketUnion` 与外部顶层类型同名歧义；规避 CP 关键字 `from` 并重构为 `origin`，错误捕获重写为安全的语句级解包。
+
+
+## 2026-11-19 [Milestone 7 Phase 79 Group B] Bundler 分块产物结构体解耦与全局宏定义表 CP 纯化经验
+
+### 1. 结构体嵌套提升与类型别名映射 (`Chunk.cp`)
+- **多层嵌套类型提升防歧义**：将原 `Chunk.zig` 内部的 `IntermediateOutput`、`CssImportOrder` 等复杂类型提升为 `ChunkIntermediateOutput`、`ChunkCssImportOrder`，结构体内保留别名映射，彻底规避内部嵌套破坏 CP 方法 lowering 的缺陷。
+- **裸指针安全与单写多读**：`OutputPiece.data()` 对裸指针切片 `data_ptr[0..len]` 显式收窄包裹于 `unsafe { ... }` 块中，方法接收者严格遵循只读省略与独占 `*_`。
+
+### 2. 全局宏定义表切片与枚举关键字转义 (`defines-table.cp`)
+- **静态切片字面量标准对齐**：数百项字符串元组切片统一采用 `&[ ... ]` 表达，元组格式化使用纯 CP `[ ... ]` 语法。
+- **保留标识符精准转义**：对 `PureGlobalIdentifierValue` 内部的 `undefined` 枚举标签转义为 `@\"undefined\"`，消除语法解析冲突。
