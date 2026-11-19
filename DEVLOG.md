@@ -1006,3 +1006,14 @@
 
 ### 2. Step5 阶段文件打开回退与错误捕获控制流 (`doStep5.cp`)
 - **错误捕获单出口重构**：针对目录 openat/fallback 逻辑，废除 `catch { break :label }` 嵌套，改写为纯正 CP 的 `open_res catch null` 与 `if/else` 单出口分支，根除 unreachable code 虚假错误。
+
+
+## 2026-11-19 [Milestone 7 Phase 73 Group A] JSC C-ABI 字符串桥接与 RareData 稀疏元数据 CP 纯化经验
+
+### 1. C-ABI 结构体接收者与外联函数参数对接 (`ZigString.cp`)
+- **C ABI 规范化与实例接收者绑定**：将 `ZigString` 规范声明为 `@c pub struct ZigString`，确保 `cpc` 完整为只读方法生成值传递、为可变方法生成指针借用。
+- **外联 C 函数参数显式化**：对外联 C 包装函数，将参数显式声明为 `this_str: *const ZigString`，调用处通过 `&_` 安全借用传递地址，消除符号推导与形参数量冲突。
+
+### 2. 根结构体与辅助类型顶层分离架构 (`rare_data.cp`)
+- **顶层模型解耦提升**：严格贯彻 `@root struct RareData` 规则，将 `PathBuf`、`ProxySlot`、`RefCountedEnvValue`、`AWSSignatureCache`、`EntropyCache`、`CleanupHook` 等 9 个二级结构体提升至模块顶层，避免嵌套类型跳过 CP 语法 lowering。
+- **可变借用与所有权转移收窄**：实例方法统一收拢至根结构体并采用 `*_` 接收者，配合泛型类型别名（如 `bun.ptr.Owned`），保证跨线程状态迁移时的无竞争排他安全性。
