@@ -917,3 +917,14 @@
 ### 2. C-ABI ArrayBuffer 与定型数组枚举派发 (`array_buffer.cp`)
 - **C ABI 规范化与类型别名**：使用 `@c pub struct ArrayBuffer` 明确 C 互操作契约，嵌套的 `BinaryType`、`TypedArrayType`、`Strong` 提升至模块顶层并在结构体内声明别名，保证 CP 语法 lowering 覆盖全部分支方法。
 - **切片返回与指针收窄**：切片空值统一返回 `[]`，对多元素裸指针通过 `unsafe { ... }` 块安全解引用，根除悬垂引用。
+
+
+## 2026-11-19 [Milestone 7 Phase 68 Group B] Bundler HTML 扫描与服务端组件解析 CP 纯化经验
+
+### 1. 服务端组件解析任务与联合体解耦 (`ServerComponentParseTask.cp`)
+- **根模型与辅助联合体顶层提升**：使用 `@root struct ServerComponentParseTask` 组织核心调度，将 `ReferenceProxy` 与 `ClientEntryWrapper` 提取至模块顶层，避免泛型任务回调中的类型遮蔽。
+- **关键字与回调错误安全**：对 `@"ref"` 关键字字段转义，回调错误捕获改用 `catch bun.outOfMemory()` 明确标量错误分发。
+
+### 2. HTML 资产清单与标签处理器状态机 (`HTMLImportManifest.cp`, `HTMLScanner.cp`)
+- **Base64 缓冲区动态构建**：规范 `let base64_buf: [base64_buf_len]u8 = undefined;` 声明，对输出文件清单遍历采用带步进的 `while (i < len) : (i += 1)` 循环，消除未绑定索引越界风险。
+- **静态标签处理器数组**：将 Zig 风格的字面量 `[_]TagHandler{ ... }` 重写为纯正 CP 数组语法 `[ TagHandler{ ... }, ... ]`，消解嵌套 `break :blk`，利用海象解包 `if (dot_idx := ...)` 优雅降级提取路径扩展名。

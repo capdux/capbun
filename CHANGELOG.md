@@ -1194,3 +1194,13 @@
   - `array_buffer.cp` (627 行, 0.906x)
 - **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 0.973x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,147 / 1,295 模块 (88.57%)**，`src/jsc/` 待迁移模块降至 11 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 68 Group B] `src/bundler/` 3 个核心打包与扫描模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 3 个打包核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `ServerComponentParseTask.cp` (236 行, 0.955x)
+  - `HTMLImportManifest.cp` (262 行, 0.949x)
+  - `HTMLScanner.cp` (314 行, 1.019x)
+- **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.019x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,150 / 1,295 模块 (88.80%)**，突破 1,150 模块！`src/bundler/` 待迁移模块降至 17 个！
