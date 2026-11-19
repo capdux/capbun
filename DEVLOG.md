@@ -1188,3 +1188,7 @@
 - 9 个中小型 CLI 命令模块全绿通过全部 4 项硬门禁。
 - 上报了 pm_pkg_command.zig 中 enum tag get 导致的 cpc 内建 fromName 阴影缺陷 (task-20261120-enum-tag-get)。
 - src/cli/ 目录绝大部分命令已实现纯 CP 语言化。
+
+### 2026-11-19 18:30:50 UTC - js_parser/ast 节点大类首战告捷 (1,192 行迁移)
+- Stmt.cp, TypeScript.cp, Symbol.cp 顺利通过全部 4 项硬门禁。
+- 规避了 CP 关键字 ref / class 断裂问题，严格执行根结构体与辅助类型顶层分离原则。

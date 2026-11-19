@@ -1450,3 +1450,10 @@
   8. filter_run.cp (609行, 0.979x)
   9. open.cp (378行, 1.013x)
 - 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-19 18:30:50 UTC - src/js_parser/ast/ 首批核心 AST 模块 Stmt, TypeScript, Symbol 攻坚入库
+- 完成模块：
+  1. Stmt.cp (424行, 1.002x)
+  2. TypeScript.cp (463行, 0.981x)
+  3. Symbol.cp (305行, 0.626x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
