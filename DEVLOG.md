@@ -963,3 +963,14 @@
 - **嵌套结构体提升与泛型返回**：将 `ParserFeatures`、`ImportItemsForNamespace`、`Owner`、`AllocatedSlice` 提升至顶层结构体，针对 `addImportStmt` 动态数组返回提炼纯辅助函数 `ImportStmtReturnType`。
 - **位域修饰与关键字转义**：位域结构体改写为 `@packed(u8) pub struct Flags`，对保留关键字 `ref` 统一重构为 `SymbolRef` / `sym_ref`，字段声明转义为 `@"ref"`。
 - **标量错误匹配重构**：将 `catch |e| switch (e)` 重构为语句级 `if (e == error.OutOfMemory)`，规避标量错误展开缺陷。
+
+
+## 2026-11-19 [Milestone 7 Phase 71 Group B] Bundler LinkerContext 符号重命名与 HTML 分块产物构建 CP 纯化经验
+
+### 1. 符号重命名与保留关键字转义 (`renameSymbolsInChunk.cp`)
+- **关键字与属性转义**：对保留字 `ref` 与 `import` 进行精准字段转义（`@"ref"`, `@"import"`），杜绝语法推断冲突。
+- **前缀扫描与提前跳出**：利用带步进的 `while (idx < len) : (idx += 1)` 循环结构替代带 label 的循环，解决 CP 语法 lowering 中可能遗漏的循环跳转问题。
+
+### 2. CSS 语法树准备与 HTML 分块 LOLHTML 回调 (`prepareCssAstsForChunk.cp`, `generateCompileResultForHtmlChunk.cp`)
+- **嵌套结构体提升与接收者收窄**：将内嵌的辅助结构体 `HTMLLoader` 与 `EndTagIndices` 提升至顶层模块作用域，确保 CP 编译器为实例方法完整生成 `*_` 独占可变绑定与返回类型省略。
+- **C-ABI 静态回调修饰**：将 LOLHTML C 回调函数标准修饰为 `@callconv("c") static fn`，并通过模块顶层 `type string = []const u8;` 彻底消除泛型签名词法紧缩解析错误。
