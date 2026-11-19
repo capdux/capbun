@@ -1387,3 +1387,7 @@
   - `patch_install.cp` (575 行, 0.970x)
 - **4 项硬门禁全绿**：2 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 0.970x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,192 / 1,295 模块 (92.05%)**，正式跨越 92% 大关！`src/install/` 待迁移模块降至 16 个！
+
+### 2026-11-19 07:59:24 UTC - src/jsc/ 存量及核心异步任务模块净化完成
+- 完成模块：CppTask, GarbageCollectionController, JSCScheduler, PosixSignalHandle, WorkTask, ConcurrentPromiseTask, Task, event_loop 共 8 个核心模块已满足纯 CP 语法标准并合入主分支。
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，膨胀率区间 0.84x ~ 1.05x。

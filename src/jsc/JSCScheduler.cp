@@ -1,21 +1,22 @@
 // JavaScriptCore Scheduler and deferred work bindings in CP
 import { jsc, ConcurrentTask, Task, VirtualMachine } from "bun";
-const bun = @import("bun");
+import bun from "bun";
 
-pub const JSCDeferredWorkTask = opaque {
-    extern fn Bun__runDeferredWork(task: *JSCDeferredWorkTask) void;
+@opaque
+pub struct JSCDeferredWorkTask {
+    extern fn Bun__runDeferredWork(task: *JSCDeferredWorkTask);
 
-    pub fn run(task: *JSCDeferredWorkTask) bun.JSTerminated!void {
+    pub fn run(*_): bun.JSTerminated!void {
         const globalThis = bun.jsc.VirtualMachine.get().global;
-        var scope: bun.jsc.ExceptionValidationScope = undefined;
+        let scope: bun.jsc.ExceptionValidationScope = undefined;
         scope.init(globalThis, @src());
         defer scope.deinit();
-        Bun__runDeferredWork(task);
-        try scope.assertNoExceptionExceptTermination();
+        Bun__runDeferredWork(_);
+        scope.assertNoExceptionExceptTermination()?;
     }
-};
+}
 
-export fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delta: c_int): void {
+export fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delta: c_int) {
     jsc.markBinding(@src());
 
     if (delta > 0) {
@@ -25,22 +26,22 @@ export fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delt
     }
 }
 
-export fn Bun__queueJSCDeferredWorkTaskConcurrently(jsc_vm: *VirtualMachine, task: *JSCDeferredWorkTask): void {
+export fn Bun__queueJSCDeferredWorkTaskConcurrently(jsc_vm: *VirtualMachine, task: *JSCDeferredWorkTask) {
     jsc.markBinding(@src());
-    var loop = jsc_vm.eventLoop();
-    loop.enqueueTaskConcurrent(ConcurrentTask.new(.{
-        .task = Task.init(task),
-        .next = .auto_delete,
+    let loop = jsc_vm.eventLoop();
+    loop.enqueueTaskConcurrent(ConcurrentTask.new({
+        task: jsc.Task.init(task),
+        next: .auto_delete,
     }));
 }
 
-export fn Bun__tickWhilePaused(paused: *bool): void {
+export fn Bun__tickWhilePaused(paused: *bool) {
     jsc.markBinding(@src());
     VirtualMachine.get().eventLoop().tickWhilePaused(paused);
 }
 
 comptime {
-    _ = Bun__eventLoop__incrementRefConcurrently;
-    _ = Bun__queueJSCDeferredWorkTaskConcurrently;
-    _ = Bun__tickWhilePaused;
+    * = Bun__eventLoop__incrementRefConcurrently;
+    * = Bun__queueJSCDeferredWorkTaskConcurrently;
+    * = Bun__tickWhilePaused;
 }

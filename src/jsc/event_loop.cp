@@ -45,27 +45,27 @@ export class EventLoop {
     concurrent_tasks: ConcurrentTask.Queue = ConcurrentTask.Queue{};
     global: *jsc.JSGlobalObject = undefined;
     virtual_machine: *VirtualMachine = undefined;
-    waker: ?Waker = null;
-    forever_timer: ?*uws.Timer = null;
+    waker: Waker? = null;
+    forever_timer: *uws.Timer? = null;
     deferred_tasks: DeferredTaskQueue = .{};
-    uws_loop: if (Environment.isWindows) ?*uws.Loop else void = if (Environment.isWindows) null;
+    uws_loop: if (Environment.isWindows) *uws.Loop? else void = if (Environment.isWindows) null;
 
     debug: EventLoopDebug = .{};
     entered_event_loop_count: isize = 0;
     concurrent_ref: std.atomic.Value(i32) = std.atomic.Value(i32).init(0);
     imminent_gc_timer: std.atomic.Value(?*Timer.WTFTimer) = .{ .raw = null };
 
-    signal_handler: if (Environment.isPosix) ?*PosixSignalHandle else void = if (Environment.isPosix) null;
+    signal_handler: if (Environment.isPosix) *PosixSignalHandle? else void = if (Environment.isPosix) null;
 
     pub const Debug = EventLoopDebug;
 
-    pub fn enter(_: *EventLoop): void {
+    pub fn enter(_: *EventLoop) {
         log("enter() = {d}", .{_.entered_event_loop_count});
         _.entered_event_loop_count += 1;
         _.debug.enter();
     }
 
-    pub fn exit(_: *EventLoop): void {
+    pub fn exit(_: *EventLoop) {
         const count = _.entered_event_loop_count;
         log("exit() = {d}", .{count - 1});
 
@@ -101,7 +101,7 @@ export class EventLoop {
 
     pub const Queue = bun.LinearFifo(Task, .Dynamic);
 
-    pub fn tickWhilePaused(_: *EventLoop, done: *bool): void {
+    pub fn tickWhilePaused(_: *EventLoop, done: *bool) {
         while (!done.*) {
             _.virtual_machine.event_loop_handle.?.tick();
         }
@@ -141,17 +141,17 @@ export class EventLoop {
         try _.drainMicrotasksWithGlobal(_.global, _.virtual_machine.jsc_vm);
     }
 
-    pub fn maybeDrainMicrotasks(_: *EventLoop): void {
+    pub fn maybeDrainMicrotasks(_: *EventLoop) {
         if (_.entered_event_loop_count == 0 and !_.virtual_machine.is_inside_deferred_task_queue) {
             _.drainMicrotasksWithGlobal(_.global, _.virtual_machine.jsc_vm) catch {};
         }
     }
 
-    pub fn runCallback(_: *EventLoop, callback: jsc.JSValue, globalObject: *jsc.JSGlobalObject, recv: jsc.JSValue, arguments: []const jsc.JSValue): void {
+    pub fn runCallback(_: *EventLoop, callback: jsc.JSValue, globalObject: *jsc.JSGlobalObject, recv: jsc.JSValue, arguments: []const jsc.JSValue) {
         _.enter();
         defer _.exit();
-        _ = callback.call(globalObject, recv, arguments) catch |err|
-            globalObject.reportActiveExceptionAsUnhandled(err);
+        * = callback.call(globalObject, recv, arguments) catch |e|
+            globalObject.reportActiveExceptionAsUnhandled(e);
     }
 
     pub fn runCallbackWithResultAndForcefullyDrainMicrotasks(_: *EventLoop, callback: jsc.JSValue, globalObject: *jsc.JSGlobalObject, recv: jsc.JSValue, arguments: []const jsc.JSValue): !jsc.JSValue {
@@ -165,8 +165,8 @@ export class EventLoop {
         _.enter();
         defer _.exit();
 
-        const result = callback.call(globalObject, recv, arguments) catch |err| {
-            globalObject.reportActiveExceptionAsUnhandled(err);
+        const result = callback.call(globalObject, recv, arguments) catch |e| {
+            globalObject.reportActiveExceptionAsUnhandled(e);
             return .zero;
         };
         return result;
@@ -178,14 +178,14 @@ export class EventLoop {
         return counter;
     }
 
-    pub fn tickImmediateTasks(_: *EventLoop, virtual_machine: *VirtualMachine): void {
+    pub fn tickImmediateTasks(_: *EventLoop, virtual_machine: *VirtualMachine) {
         let to_run_now = _.immediate_tasks;
 
         _.immediate_tasks = _.next_immediate_tasks;
         _.next_immediate_tasks = .{};
 
         let exception_thrown = false;
-        for (to_run_now.items) |task| {
+        for (task of to_run_now.items) {
             exception_thrown = task.runImmediateTask(virtual_machine);
         }
 
@@ -208,15 +208,15 @@ export class EventLoop {
         _.next_immediate_tasks = to_run_now;
     }
 
-    fn tickConcurrent(_: *EventLoop): void {
-        _ = _.tickConcurrentWithCount();
+    fn tickConcurrent(_: *EventLoop) {
+        * = _.tickConcurrentWithCount();
     }
 
     pub fn hasPendingRefs(_: *const EventLoop): bool {
         return _.concurrent_ref.load(.seq_cst) > 0;
     }
 
-    fn updateCounts(_: *EventLoop): void {
+    fn updateCounts(_: *EventLoop) {
         const delta = _.concurrent_ref.swap(0, .seq_cst);
         let loop = _.virtual_machine.event_loop_handle.?;
         if (comptime Environment.isWindows) {
@@ -238,8 +238,8 @@ export class EventLoop {
         }
     }
 
-    pub fn runImminentGCTimer(_: *EventLoop): void {
-        if (_.imminent_gc_timer.swap(null, .seq_cst)) |timer| {
+    pub fn runImminentGCTimer(_: *EventLoop) {
+        if (timer := _.imminent_gc_timer.swap(null, .seq_cst)) {
             timer.run(_.virtual_machine);
         }
     }
@@ -248,7 +248,7 @@ export class EventLoop {
         _.updateCounts();
 
         if (comptime Environment.isPosix) {
-            if (_.signal_handler) |signal_handler| {
+            if (signal_handler := _.signal_handler) {
                 signal_handler.drain(_);
             }
         }
@@ -269,10 +269,10 @@ export class EventLoop {
         _.tasks.ensureUnusedCapacity(count) catch unreachable;
         let writable = _.tasks.writableSlice(0);
 
-        let to_destroy: ?*ConcurrentTask = null;
+        let to_destroy: (*ConcurrentTask)? = null;
 
-        while (iter.next()) |task| {
-            if (to_destroy) |dest| {
+        while (task := iter.next()) {
+            if (dest := to_destroy) {
                 to_destroy = null;
                 dest.deinit();
             }
@@ -287,7 +287,7 @@ export class EventLoop {
             if (writable.len == 0) break;
         }
 
-        if (to_destroy) |dest| {
+        if (dest := to_destroy) {
             dest.deinit();
         }
 
@@ -302,7 +302,7 @@ export class EventLoop {
         return _.virtual_machine.event_loop_handle.?;
     }
 
-    pub fn autoTick(_: *EventLoop): void {
+    pub fn autoTick(_: *EventLoop) {
         const loop = (if (comptime Environment.isWindows) _.uws_loop.? else _.virtual_machine.event_loop_handle.?);
         let ctx = _.virtual_machine;
 
@@ -349,7 +349,7 @@ export class EventLoop {
         _.global.handleRejectedPromises();
     }
 
-    pub fn tickPossiblyForever(_: *EventLoop): void {
+    pub fn tickPossiblyForever(_: *EventLoop) {
         let ctx = _.virtual_machine;
         const loop = (if (comptime Environment.isWindows) _.uws_loop.? else _.virtual_machine.event_loop_handle.?);
 
@@ -381,7 +381,7 @@ export class EventLoop {
         _.tick();
     }
 
-    pub fn autoTickActive(_: *EventLoop): void {
+    pub fn autoTickActive(_: *EventLoop) {
         let loop = (if (comptime Environment.isWindows) _.uws_loop.? else _.virtual_machine.event_loop_handle.?);
         let ctx = _.virtual_machine;
 
@@ -418,11 +418,11 @@ export class EventLoop {
         ctx.onAfterEventLoop();
     }
 
-    pub fn processGCTimer(_: *EventLoop): void {
+    pub fn processGCTimer(_: *EventLoop) {
         _.virtual_machine.gc_controller.processGCTimer();
     }
 
-    pub fn tick(_: *EventLoop): void {
+    pub fn tick(_: *EventLoop) {
         jsc.markBinding(@src());
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(_.global, @src());
@@ -460,7 +460,7 @@ export class EventLoop {
         _.global.handleRejectedPromises();
     }
 
-    pub fn tickTasksOnly(_: *EventLoop): void {
+    pub fn tickTasksOnly(_: *EventLoop) {
         _.tickConcurrent();
 
         let vm = _.virtual_machine;
@@ -473,7 +473,7 @@ export class EventLoop {
         }
     }
 
-    pub fn waitForPromise(_: *EventLoop, promise: jsc.AnyPromise): void {
+    pub fn waitForPromise(_: *EventLoop, promise: jsc.AnyPromise) {
         const jsc_vm = _.virtual_machine.jsc_vm;
         switch (promise.status()) {
             .pending => {
@@ -492,7 +492,7 @@ export class EventLoop {
         }
     }
 
-    pub fn waitForPromiseWithTermination(_: *EventLoop, promise: jsc.AnyPromise): void {
+    pub fn waitForPromiseWithTermination(_: *EventLoop, promise: jsc.AnyPromise) {
         const worker = _.virtual_machine.worker orelse @panic("EventLoop.waitForPromiseWithTermination: worker is not initialized");
         switch (promise.status()) {
             .pending => {
@@ -508,15 +508,15 @@ export class EventLoop {
         }
     }
 
-    pub fn enqueueTask(_: *EventLoop, task: Task): void {
+    pub fn enqueueTask(_: *EventLoop, task: Task) {
         _.tasks.writeItem(task) catch unreachable;
     }
 
-    pub fn enqueueImmediateTask(_: *EventLoop, task: *Timer.ImmediateObject): void {
+    pub fn enqueueImmediateTask(_: *EventLoop, task: *Timer.ImmediateObject) {
         bun.handleOom(_.immediate_tasks.append(bun.default_allocator, task));
     }
 
-    pub fn ensureWaker(_: *EventLoop): void {
+    pub fn ensureWaker(_: *EventLoop) {
         jsc.markBinding(@src());
         if (_.virtual_machine.event_loop_handle == null) {
             if (comptime Environment.isWindows) {
@@ -536,24 +536,24 @@ export class EventLoop {
         bun.uws.Loop.get().internal_loop_data.setParentEventLoop(bun.jsc.EventLoopHandle.init(_));
     }
 
-    pub fn performGC(_: *EventLoop): void {
+    pub fn performGC(_: *EventLoop) {
         _.virtual_machine.gc_controller.performGC();
     }
 
-    pub fn wakeup(_: *EventLoop): void {
+    pub fn wakeup(_: *EventLoop) {
         if (comptime Environment.isWindows) {
-            if (_.uws_loop) |loop| {
+            if (loop := _.uws_loop) {
                 loop.wakeup();
             }
             return;
         }
 
-        if (_.virtual_machine.event_loop_handle) |loop| {
+        if (loop := _.virtual_machine.event_loop_handle) {
             loop.wakeup();
         }
     }
 
-    pub fn enqueueTaskConcurrent(_: *EventLoop, task: *ConcurrentTask): void {
+    pub fn enqueueTaskConcurrent(_: *EventLoop, task: *ConcurrentTask) {
         if (comptime Environment.allow_assert) {
             if (_.virtual_machine.has_terminated) {
                 @panic("EventLoop.enqueueTaskConcurrent: VM has terminated");
@@ -568,7 +568,7 @@ export class EventLoop {
         _.wakeup();
     }
 
-    pub fn enqueueTaskConcurrentBatch(_: *EventLoop, batch: ConcurrentTask.Queue.Batch): void {
+    pub fn enqueueTaskConcurrentBatch(_: *EventLoop, batch: ConcurrentTask.Queue.Batch) {
         if (comptime Environment.allow_assert) {
             if (_.virtual_machine.has_terminated) {
                 @panic("EventLoop.enqueueTaskConcurrent: VM has terminated");
@@ -583,46 +583,46 @@ export class EventLoop {
         _.wakeup();
     }
 
-    pub fn refConcurrently(_: *EventLoop): void {
-        _ = _.concurrent_ref.fetchAdd(1, .seq_cst);
+    pub fn refConcurrently(_: *EventLoop) {
+        * = _.concurrent_ref.fetchAdd(1, .seq_cst);
         _.wakeup();
     }
 
-    pub fn unrefConcurrently(_: *EventLoop): void {
-        _ = _.concurrent_ref.fetchSub(1, .seq_cst);
+    pub fn unrefConcurrently(_: *EventLoop) {
+        * = _.concurrent_ref.fetchSub(1, .seq_cst);
         _.wakeup();
     }
 
-    pub fn release(*_): void {
+    pub fn release(*_) {
         _.tasks.deinit();
         _.immediate_tasks.clearAndFree(bun.default_allocator);
         _.next_immediate_tasks.clearAndFree(bun.default_allocator);
     }
 
-    pub fn deinit(*_): void {
+    pub fn deinit(*_) {
         _.release();
     }
 }
 
-@c fn noopForeverTimer(_: *uws.Timer): void {}
+@c fn noopForeverTimer(_: *uws.Timer) {}
 
-@c fn externRunCallback1(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue): void {
+@c fn externRunCallback1(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue) {
     global.bunVM().eventLoop().runCallback(callback, global, recv, &.{arg0});
 }
 
-@c fn externRunCallback2(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue, arg1: jsc.JSValue): void {
+@c fn externRunCallback2(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue, arg1: jsc.JSValue) {
     global.bunVM().eventLoop().runCallback(callback, global, recv, &.{ arg0, arg1 });
 }
 
-@c fn externRunCallback3(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue, arg1: jsc.JSValue, arg2: jsc.JSValue): void {
+@c fn externRunCallback3(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue, arg1: jsc.JSValue, arg2: jsc.JSValue) {
     global.bunVM().eventLoop().runCallback(callback, global, recv, &.{ arg0, arg1, arg2 });
 }
 
-@c fn externEnter(global: *jsc.JSGlobalObject): void {
+@c fn externEnter(global: *jsc.JSGlobalObject) {
     global.bunVM().eventLoop().enter();
 }
 
-@c fn externExit(global: *jsc.JSGlobalObject): void {
+@c fn externExit(global: *jsc.JSGlobalObject) {
     global.bunVM().eventLoop().exit();
 }
 

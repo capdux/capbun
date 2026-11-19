@@ -1,7 +1,7 @@
 // Generic WorkTask for JavaScriptCore in CP
 import { Async, jsc, ConcurrentTask, WorkPool, WorkPoolTask } from "bun";
-const std = @import("std");
-const bun = @import("bun");
+import std from "std";
+import bun from "bun";
 
 /// A generic task that runs work on a thread pool and executes a callback on the main JavaScript thread.
 /// Unlike ConcurrentPromiseTask which automatically resolves a Promise, WorkTask provides more flexibility
@@ -32,52 +32,52 @@ pub fn WorkTask(comptime Context: type): type {
         // This is a poll because we want it to enter the uSockets loop
         ref: Async.KeepAlive = .{},
 
-        pub fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context) *This {
-            var vm = globalThis.bunVM();
-            var this = bun.new(This, .{
+        pub static fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context): *This {
+            let vm = globalThis.bunVM();
+            let self = bun.new(This, .{
                 .event_loop = vm.eventLoop(),
                 .ctx = value,
                 .allocator = allocator,
                 .globalThis = globalThis,
                 .async_task_tracker = jsc.Debugger.AsyncTaskTracker.init(vm),
             });
-            this.ref.ref(this.event_loop.virtual_machine);
+            self.ref.ref(self.event_loop.virtual_machine);
 
-            return this;
+            return self;
         }
 
-        pub fn deinit(this: *This) void {
-            this.ref.unref(this.event_loop.virtual_machine);
-            bun.destroy(this);
+        pub fn deinit(self: *This) {
+            self.ref.unref(self.event_loop.virtual_machine);
+            bun.destroy(self);
         }
 
-        pub fn runFromThreadPool(task: *TaskType) void {
+        pub static fn runFromThreadPool(task: *TaskType) {
             jsc.markBinding(@src());
-            const this: *This = @fieldParentPtr("task", task);
-            Context.run(this.ctx, this);
+            const self: *This = @fieldParentPtr("task", task);
+            Context.run(self.ctx, self);
         }
 
-        pub fn runFromJS(this: *This) bun.JSTerminated!void {
-            var ctx = this.ctx;
-            const tracker = this.async_task_tracker;
-            const vm = this.event_loop.virtual_machine;
-            const globalThis = this.globalThis;
-            this.ref.unref(vm);
+        pub fn runFromJS(self: *This): bun.JSTerminated!void {
+            let ctx = self.ctx;
+            const tracker = self.async_task_tracker;
+            const vm = self.event_loop.virtual_machine;
+            const globalThis = self.globalThis;
+            self.ref.unref(vm);
 
             tracker.willDispatch(globalThis);
             defer tracker.didDispatch(globalThis);
             return ctx.then(globalThis);
         }
 
-        pub fn schedule(this: *This) void {
-            const vm = this.event_loop.virtual_machine;
-            this.ref.ref(vm);
-            this.async_task_tracker.didSchedule(this.globalThis);
-            WorkPool.schedule(&this.task);
+        pub fn schedule(self: *This) {
+            const vm = self.event_loop.virtual_machine;
+            self.ref.ref(vm);
+            self.async_task_tracker.didSchedule(self.globalThis);
+            WorkPool.schedule(&self.task);
         }
 
-        pub fn onFinish(this: *This) void {
-            this.event_loop.enqueueTaskConcurrent(this.concurrent_task.from(this, .manual_deinit));
+        pub fn onFinish(self: *This) {
+            self.event_loop.enqueueTaskConcurrent(self.concurrent_task.from(self, .manual_deinit));
         }
     };
 }

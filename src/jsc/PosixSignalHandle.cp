@@ -38,7 +38,7 @@ export class PosixSignalHandle {
         // Publish the new tail (Release so that the consumer sees the updated tail).
         _.tail.store(old_tail +% 1, .release);
 
-        if (VirtualMachine.getMainThreadVM()) |vm| {
+        if (vm := VirtualMachine.getMainThreadVM()) {
             vm.eventLoop().wakeup();
         }
 
@@ -47,7 +47,7 @@ export class PosixSignalHandle {
 
     /// Called by the main thread (single consumer).
     /// Returns `null` if the ring is empty, or the next signal otherwise.
-    pub fn dequeue(_: *PosixSignalHandle): ?u8 {
+    pub fn dequeue(_: *PosixSignalHandle): u8? {
         // Read the current head and tail.
         const old_head = _.head.load(.acquire);
         const tail_val = _.tail.load(.acquire);
@@ -69,8 +69,8 @@ export class PosixSignalHandle {
 
     /// Drain as many signals as possible and enqueue them as tasks in the event loop.
     /// Called by the main thread.
-    pub fn drain(_: *PosixSignalHandle, event_loop: *jsc.EventLoop): void {
-        while (_.dequeue()) |signal| {
+    pub fn drain(_: *PosixSignalHandle, event_loop: *jsc.EventLoop) {
+        while (signal := _.dequeue()) {
             let posix_signal_task: PosixSignalTask = undefined;
             let task = jsc.Task.init(&posix_signal_task);
             task.setUintptr(signal);
@@ -78,41 +78,41 @@ export class PosixSignalHandle {
         }
     }
 
-    pub fn release(*_): void {
+    pub fn release(*_) {
         bun.destroy(_);
     }
 
-    pub fn deinit(*_): void {
+    pub fn deinit(*_) {
         _.release();
     }
 }
 
-extern fn Bun__onSignalForJS(number: i32, globalObject: *jsc.JSGlobalObject): void;
+extern fn Bun__onSignalForJS(number: i32, globalObject: *jsc.JSGlobalObject);
 
 export class PosixSignalTask {
     number: u8;
 
     pub const new = bun.TrivialNew(@This());
 
-    pub fn runFromJSThread(number: u8, globalObject: *jsc.JSGlobalObject): void {
+    pub static fn runFromJSThread(number: u8, globalObject: *jsc.JSGlobalObject) {
         Bun__onSignalForJS(number, globalObject);
     }
 }
 
 /// This is the signal handler entry point. Calls enqueue on the ring buffer.
-export fn Bun__onPosixSignal(number: i32): void {
+export fn Bun__onPosixSignal(number: i32) {
     if (comptime Environment.isPosix) {
-        if (VirtualMachine.getMainThreadVM()) |vm| {
-            if (vm.eventLoop().signal_handler) |sh| {
-                _ = sh.enqueue(@intCast(number));
+        if (vm := VirtualMachine.getMainThreadVM()) {
+            if (sh := vm.eventLoop().signal_handler) {
+                * = sh.enqueue(@intCast(number));
             }
         }
     }
 }
 
-export fn Bun__ensureSignalHandler(): void {
+export fn Bun__ensureSignalHandler() {
     if (comptime Environment.isPosix) {
-        if (VirtualMachine.getMainThreadVM()) |vm| {
+        if (vm := VirtualMachine.getMainThreadVM()) {
             let el = vm.eventLoop();
             if (el.signal_handler == null) {
                 el.signal_handler = PosixSignalHandle.new(.{});
@@ -124,7 +124,7 @@ export fn Bun__ensureSignalHandler(): void {
 
 comptime {
     if (Environment.isPosix) {
-        _ = Bun__ensureSignalHandler;
-        _ = Bun__onPosixSignal;
+        * = Bun__ensureSignalHandler;
+        * = Bun__onPosixSignal;
     }
 }

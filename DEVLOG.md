@@ -1143,3 +1143,7 @@
 - 所有已迁移的 1198 个 `.cp` 模块通过双重校验 (`cpc --lib` + `ast-check`)。
 - 剩余待迁移 `.zig` 模块：2461 个。
 - 计划：接下来的工作将是持续的 `.zig` 到 `.cp` 迁移，按目录切片并行进行。
+
+### 2026-11-19 07:59:24 UTC - jsc 模块成果确认与主仓合入
+- 成功将 jsc-migrator 工作树中的 8 个合规 CP 模块（Task, event_loop, JSCScheduler 等）同步至主仓并完成验证。
+- 当前 src/jsc/ 目录已几乎全面收敛，仅余超大体量模块 JSValue.zig (2518行) 与 ConsoleObject.zig (3833行) 以及上报待修的 VirtualMachine.cp。

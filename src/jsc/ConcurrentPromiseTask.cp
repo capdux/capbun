@@ -1,7 +1,7 @@
 // Concurrent Promise Task for JavaScriptCore in CP
 import { Async, jsc, VirtualMachine, WorkPool, WorkPoolTask } from "bun";
-const std = @import("std");
-const bun = @import("bun");
+import std from "std";
+import bun from "bun";
 
 /// A generic task that runs work on a thread pool and resolves a JavaScript Promise with the result.
 /// This allows CPU-intensive operations to be performed off the main JavaScript thread while
@@ -26,44 +26,44 @@ pub fn ConcurrentPromiseTask(comptime Context: type): type {
 
         pub const new = bun.TrivialNew(@This());
 
-        pub fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context) *This {
-            var this = This.new(.{
+        pub static fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context): *This {
+            let self = This.new(.{
                 .event_loop = VirtualMachine.get().event_loop,
                 .ctx = value,
                 .allocator = allocator,
                 .globalThis = globalThis,
             });
-            var promise = jsc.JSPromise.create(globalThis);
-            this.promise.strong.set(globalThis, promise.toJS());
-            this.ref.ref(this.event_loop.virtual_machine);
-            return this;
+            let promise = jsc.JSPromise.create(globalThis);
+            self.promise.strong.set(globalThis, promise.toJS());
+            self.ref.ref(self.event_loop.virtual_machine);
+            return self;
         }
 
-        pub fn runFromThreadPool(task: *WorkPoolTask) void {
-            var this: *This = @fieldParentPtr("task", task);
-            Context.run(this.ctx);
-            this.onFinish();
+        pub static fn runFromThreadPool(task: *WorkPoolTask) {
+            let self: *This = @fieldParentPtr("task", task);
+            Context.run(self.ctx);
+            self.onFinish();
         }
 
-        pub fn runFromJS(this: *This) bun.JSTerminated!void {
-            const promise = this.promise.swap();
-            this.ref.unref(this.event_loop.virtual_machine);
+        pub fn runFromJS(self: *This): bun.JSTerminated!void {
+            const promise = self.promise.swap();
+            self.ref.unref(self.event_loop.virtual_machine);
 
-            var ctx = this.ctx;
+            let ctx = self.ctx;
             return ctx.then(promise);
         }
 
-        pub fn schedule(this: *This) void {
-            WorkPool.schedule(&this.task);
+        pub fn schedule(self: *This) {
+            WorkPool.schedule(&self.task);
         }
 
-        pub fn onFinish(this: *This) void {
-            this.event_loop.enqueueTaskConcurrent(this.concurrent_task.from(this, .manual_deinit));
+        pub fn onFinish(self: *This) {
+            self.event_loop.enqueueTaskConcurrent(self.concurrent_task.from(self, .manual_deinit));
         }
 
-        pub fn deinit(this: *This) void {
-            this.promise.deinit();
-            bun.destroy(this);
+        pub fn deinit(self: *This) {
+            self.promise.deinit();
+            bun.destroy(self);
         }
     };
 }

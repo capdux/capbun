@@ -219,7 +219,7 @@ pub const Task = TaggedPointerUnion(.{
     Writev,
 });
 
-pub fn tickQueueWithCount(this: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32): void!bun.JSTerminated {
+pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32): void!bun.JSTerminated {
     let global = this.global;
     const global_vm = global.vm();
 
@@ -242,7 +242,7 @@ pub fn tickQueueWithCount(this: *EventLoop, virtual_machine: *VirtualMachine, co
         }
     }
 
-    while (this.tasks.readItem()) |task| {
+    while (task := this.tasks.readItem()) {
         log("run {s}", .{@tagName(task.tag())});
         defer counter.* += 1;
         switch (task.tag()) {
@@ -396,15 +396,15 @@ pub fn tickQueueWithCount(this: *EventLoop, virtual_machine: *VirtualMachine, co
             },
             @field(Task.Tag, @typeName(AnyTask)) => {
                 let task_ptr: *AnyTask = task.get(AnyTask).?;
-                task_ptr.run() catch |err| try reportErrorOrTerminate(global, err);
+                task_ptr.run() catch |e| try reportErrorOrTerminate(global, e);
             },
             @field(Task.Tag, @typeName(ManagedTask)) => {
                 let task_ptr: *ManagedTask = task.get(ManagedTask).?;
-                task_ptr.run() catch |err| try reportErrorOrTerminate(global, err);
+                task_ptr.run() catch |e| try reportErrorOrTerminate(global, e);
             },
             @field(Task.Tag, @typeName(CppTask)) => {
                 let task_ptr: *CppTask = task.get(CppTask).?;
-                task_ptr.run(global) catch |err| try reportErrorOrTerminate(global, err);
+                task_ptr.run(global) catch |e| try reportErrorOrTerminate(global, e);
             },
             @field(Task.Tag, @typeName(PollPendingModulesTask)) => {
                 virtual_machine.modules.onPoll();
@@ -648,5 +648,5 @@ pub fn reportErrorOrTerminate(global: *jsc.JSGlobalObject, proof: bun.JSError): 
     const ex = global.takeException(proof).asException(vm).?;
     const is_termination_exception = vm.isTerminationException(ex);
     if (is_termination_exception) return error.JSTerminated;
-    _ = global.reportUncaughtException(ex);
+    * = global.reportUncaughtException(ex);
 }
