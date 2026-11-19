@@ -1223,3 +1223,13 @@
   - `ThreadPool.cp` (343 行, 0.942x)
 - **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.033x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
 - **全仓迁移进度提升**：全仓已迁移 **1,155 / 1,295 模块 (89.19%)**，突破 89% 大关！`src/bundler/` 待迁移模块降至 14 个！
+
+
+## 2026-11-19 [Milestone 7 Phase 70 Group B] `src/bundler/` 3 个打包入口与转译分析核心模块 100% 满绿闭环
+
+- **短生命周期子智能体完成 3 个打包核心模块向纯 CP 迁移（全部通过 4 项硬门禁）**：
+  - `entry_points.cp` (370 行, 0.989x)
+  - `AstBuilder.cp` (385 行, 1.027x)
+  - `analyze_transpiled_module.cp` (444 行, 1.118x)
+- **4 项硬门禁全绿**：3 个模块全部 0 `zig {}`、0 `var`、0 `tuple.@N`、0 `*anyopaque`，膨胀率均 <= 1.118x，`cpc --lib` 与 `zig ast-check` 双重 0 报错。
+- **全仓迁移进度提升**：全仓已迁移 **1,158 / 1,295 模块 (89.42%)**，`src/bundler/` 待迁移模块降至 8 个！

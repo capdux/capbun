@@ -951,3 +951,15 @@
 ### 2. 输出文件产物联合体与缓存文件描述符状态机 (`OutputFile.cp`, `cache.cp`)
 - **嵌套匿名结构体具名化提升**：将 `OutputFile` 中的未命名联合与选项载荷提升为具名结构体 `ValueBuffer`、`OptionsDataBuffer`、`OptionsDataFile` 等，并对 CP 保留关键字 `@"move"` 与 `@"copy"` 严格转义。
 - **缓存文件描述符错误匹配**：消除对标量错误码的原生 `switch`，改用显式判断 `if (e == error.ENOENT)`，避免编译器生成冗余错误展开模板代码。
+
+
+## 2026-11-19 [Milestone 7 Phase 70 Group B] Bundler 入口点生成与转译模块分析 CP 纯化经验
+
+### 1. 入口点接收者纯化与路径元组格式化 (`entry_points.cp`)
+- **多类型入口接收者统一**：将 `FallbackEntryPoint`、`ClientEntryPoint`、`ServerEntryPoint`、`MacroEntryPoint` 的生成与析构方法全部规范为标准 CP 接收者（`fn generate(*_, ...)`、`fn deinit(*_)`）。
+- **元组与静态数组切片**：消除了机械预转换生成的 `{ input_path }` 结构体解析歧义，严格转换为 CP 原生元组 `.{ input_path }`，路径拼接数组采用 `const parts: [2]string = [ ... ]`。
+
+### 2. AST 构建器与转译产物分析状态机 (`AstBuilder.cp`, `analyze_transpiled_module.cp`)
+- **嵌套结构体提升与泛型返回**：将 `ParserFeatures`、`ImportItemsForNamespace`、`Owner`、`AllocatedSlice` 提升至顶层结构体，针对 `addImportStmt` 动态数组返回提炼纯辅助函数 `ImportStmtReturnType`。
+- **位域修饰与关键字转义**：位域结构体改写为 `@packed(u8) pub struct Flags`，对保留关键字 `ref` 统一重构为 `SymbolRef` / `sym_ref`，字段声明转义为 `@"ref"`。
+- **标量错误匹配重构**：将 `catch |e| switch (e)` 重构为语句级 `if (e == error.OutOfMemory)`，规避标量错误展开缺陷。
