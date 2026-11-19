@@ -1,0 +1,590 @@
+pub fn ParseProperty(
+    comptime parser_feature__typescript: bool,
+    comptime parser_feature__jsx: JSXTransformType,
+    comptime parser_feature__scan_only: bool,
+): type {
+    return struct {
+        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+        const is_typescript_enabled = P.is_typescript_enabled;
+
+        static fn parseMethodExpression(p: *P, kind: Property.Kind, opts: *PropertyOpts, is_computed: bool, key: *Expr, key_range: logger.Range): (G.Property?)! {
+            if (p.lexer.token == .t_open_paren && kind != .get && kind != .set) {
+                // markSyntaxFeature object extensions
+            }
+
+            const loc = p.lexer.loc();
+            const scope_index = p.pushScopeForParsePass(.function_args, loc) catch unreachable;
+            let is_constructor = false;
+
+            // Forbid the names "constructor" and "prototype" in some cases
+            if (opts.is_class && !is_computed) {
+                switch (key.data) {
+                    .e_string => |str| {
+                        if (!opts.is_static && str.eqlComptime("constructor")) {
+                            if (kind == .get) {
+                                p.log.addRangeError(p.source, key_range, "Class constructor cannot be a getter") catch unreachable;
+                            } else if (kind == .set) {
+                                p.log.addRangeError(p.source, key_range, "Class constructor cannot be a setter") catch unreachable;
+                            } else if (opts.is_async) {
+                                p.log.addRangeError(p.source, key_range, "Class constructor cannot be an async function") catch unreachable;
+                            } else if (opts.is_generator) {
+                                p.log.addRangeError(p.source, key_range, "Class constructor cannot be a generator function") catch unreachable;
+                            } else {
+                                is_constructor = true;
+                            }
+                        } else if (opts.is_static && str.eqlComptime("prototype")) {
+                            p.log.addRangeError(p.source, key_range, "Invalid static method name \"prototype\"") catch unreachable;
+                        }
+                    },
+                    else => {},
+                }
+            }
+
+            let func = try p.parseFn(null, FnOrArrowDataParse{
+                async_range: opts.async_range,
+                needs_async_loc: key.loc,
+                has_async_range: !opts.async_range.isEmpty(),
+                allow_await: if (opts.is_async) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident,
+                allow_yield: if (opts.is_generator) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident,
+                allow_super_call: opts.class_has_extends && is_constructor,
+                allow_super_property: true,
+                allow_ts_decorators: opts.allow_ts_decorators,
+                is_constructor: is_constructor,
+                has_decorators: opts.ts_decorators.len > 0 || (opts.has_class_decorators && is_constructor),
+
+                // Only allow omitting the body if we're parsing TypeScript class
+                allow_missing_body_for_type_script: is_typescript_enabled && opts.is_class,
+            });
+
+            opts.has_argument_decorators = opts.has_argument_decorators || p.fn_or_arrow_data_parse.has_argument_decorators;
+            p.fn_or_arrow_data_parse.has_argument_decorators = false;
+
+            // "class Foo { foo(): void; foo(): void {} }"
+            if (func.flags.contains(.is_forward_declaration)) {
+                // Skip this property entirely
+                p.popAndDiscardScope(scope_index);
+                return null;
+            }
+
+            p.popScope();
+            func.flags.insert(.is_unique_formal_parameters);
+            const value = p.newExpr(E.Function{ func: func }, loc);
+
+            // Enforce argument rules for accessors
+            switch (kind) {
+                .get => {
+                    if (func.args.len > 0) {
+                        const r = js_lexer.rangeOfIdentifier(p.source, func.args[0].binding.loc);
+                        p.log.addRangeErrorFmt(p.source, r, p.allocator, "Getter {s} must have zero arguments", .{p.keyNameForError(key)}) catch unreachable;
+                    }
+                },
+                .set => {
+                    if (func.args.len != 1) {
+                        let r = js_lexer.rangeOfIdentifier(p.source, if (func.args.len > 0) func.args[0].binding.loc else loc);
+                        if (func.args.len > 1) {
+                            r = js_lexer.rangeOfIdentifier(p.source, func.args[1].binding.loc);
+                        }
+                        p.log.addRangeErrorFmt(p.source, r, p.allocator, "Setter {s} must have exactly 1 argument (there are {d})", .{ p.keyNameForError(key), func.args.len }) catch unreachable;
+                    }
+                },
+                else => {},
+            }
+
+            // Special-case private identifiers
+            switch (key.data) {
+                .e_private_identifier => |*private| {
+                    const declare: Symbol.Kind = switch (kind) {
+                        .get => if (opts.is_static)
+                            .private_static_get
+                        else
+                            .private_get,
+
+                        .set => if (opts.is_static)
+                            .private_static_set
+                        else
+                            .private_set,
+                        else => if (opts.is_static)
+                            .private_static_method
+                        else
+                            .private_method,
+                    };
+
+                    const name = p.loadNameFromRef(private.ref);
+                    if (strings.eqlComptime(name, "#constructor")) {
+                        p.log.addRangeError(p.source, key_range, "Invalid method name \"#constructor\"") catch unreachable;
+                    }
+                    private.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
+                },
+                else => {},
+            }
+
+            return G.Property{
+                ts_decorators: try ExprNodeList.fromSlice(p.allocator, opts.ts_decorators),
+                kind: kind,
+                flags: Flags.Property.init({
+                    is_computed: is_computed,
+                    is_method: true,
+                    is_static: opts.is_static,
+                }),
+                key: key.*,
+                value: value,
+                ts_metadata: .m_function,
+            };
+        }
+
+        pub static fn parseProperty(p: *P, kind_: Property.Kind, opts: *PropertyOpts, errors_: (*DeferredErrors)?): (G.Property?)! {
+            let kind = kind_;
+            let errors = errors_;
+            // This while loop exists to conserve stack space by reducing (but not completely eliminating) recursion.
+            restart: while (true) {
+                let key: Expr = Expr{ loc: logger.Loc.Empty, data: { e_missing: E.Missing{} } };
+                const key_range = p.lexer.range();
+                let is_computed = false;
+
+                switch (p.lexer.token) {
+                    .t_numeric_literal => {
+                        key = p.newExpr(E.Number{
+                            value: p.lexer.number,
+                        }, p.lexer.loc());
+                        // p.checkForLegacyOctalLiteral()
+                        p.lexer.next()?;
+                    },
+                    .t_string_literal => {
+                        key = p.parseStringLiteral()?;
+                    },
+                    .t_big_integer_literal => {
+                        key = p.newExpr(E.BigInt{ value: p.lexer.identifier }, p.lexer.loc());
+                        // markSyntaxFeature
+                        p.lexer.next()?;
+                    },
+                    .t_private_identifier => {
+                        if (!opts.is_class || (opts.ts_decorators.len > 0 && !p.options.features.standard_decorators)) {
+                            p.lexer.expected(.t_identifier)?;
+                        }
+
+                        key = p.newExpr(E.PrivateIdentifier{ ref: p.storeNameInRef(p.lexer.identifier) catch unreachable }, p.lexer.loc());
+                        p.lexer.next()?;
+                    },
+                    .t_open_bracket => {
+                        is_computed = true;
+                        // p.markSyntaxFeature(compat.objectExtensions, p.lexer.range())
+                        p.lexer.next()?;
+                        const wasIdentifier = p.lexer.token == .t_identifier;
+                        const expr = p.parseExpr(.comma)?;
+
+                        if (comptime is_typescript_enabled) {
+
+                            // Handle index signatures
+                            if (p.lexer.token == .t_colon && wasIdentifier && opts.is_class) {
+                                switch (expr.data) {
+                                    .e_identifier => {
+                                        p.lexer.next()?;
+                                        p.skipTypeScriptType(.lowest)?;
+                                        p.lexer.expect(.t_close_bracket)?;
+                                        p.lexer.expect(.t_colon)?;
+                                        p.skipTypeScriptType(.lowest)?;
+                                        p.lexer.expectOrInsertSemicolon()?;
+
+                                        // Skip this property entirely
+                                        return null;
+                                    },
+                                    else => {},
+                                }
+                            }
+                        }
+
+                        p.lexer.expect(.t_close_bracket)?;
+                        key = expr;
+                    },
+                    .t_asterisk => {
+                        if (kind != .normal || opts.is_generator) {
+                            p.lexer.unexpected()?;
+                            return error.SyntaxError;
+                        }
+
+                        p.lexer.next()?;
+                        opts.is_generator = true;
+                        kind = .normal;
+                        continue :restart;
+                    },
+
+                    else => {
+                        const name = p.lexer.identifier;
+                        const raw = p.lexer.raw();
+                        const name_range = p.lexer.range();
+
+                        if (!p.lexer.isIdentifierOrKeyword()) {
+                            p.lexer.expect(.t_identifier)?;
+                        }
+
+                        p.lexer.next()?;
+
+                        // Support contextual keywords
+                        if (kind == .normal && !opts.is_generator) {
+                            // Does the following token look like a key?
+                            const couldBeModifierKeyword = p.lexer.isIdentifierOrKeyword() || switch (p.lexer.token) {
+                                .t_open_bracket, .t_numeric_literal, .t_string_literal, .t_asterisk, .t_private_identifier => true,
+                                else => false,
+                            };
+
+                            // If so, check for a modifier keyword
+                            if (couldBeModifierKeyword) {
+                                // TODO: micro-optimization, use a smaller list for non-typescript files.
+                                if (keyword := js_lexer.PropertyModifierKeyword.List.get(name)) {
+                                    switch (keyword) {
+                                        .p_get => {
+                                            if (!opts.is_async && (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_static) == .p_get) {
+                                                kind = .get;
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+
+                                        .p_set => {
+                                            if (!opts.is_async && (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_static) == .p_set) {
+                                                // p.markSyntaxFeature(ObjectAccessors, name_range)
+                                                kind = .set;
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+                                        .p_async => {
+                                            if (!opts.is_async && (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_static) == .p_async && !p.lexer.has_newline_before) {
+                                                opts.is_async = true;
+                                                opts.async_range = name_range;
+
+                                                // p.markSyntaxFeature(ObjectAccessors, name_range)
+
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+                                        .p_static => {
+                                            if (!opts.is_static && !opts.is_async && opts.is_class && (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_get) == .p_static) {
+                                                opts.is_static = true;
+                                                kind = .normal;
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+                                        .p_declare => {
+                                            // skip declare keyword entirely
+                                            // https://github.com/oven-sh/bun/issues/1907
+                                            if (opts.is_class && is_typescript_enabled && strings.eqlComptime(raw, "declare")) {
+                                                const scope_index = p.scopes_in_order.items.len;
+                                                if (_prop := p.parseProperty(kind, opts, null)?) {
+                                                    let prop = _prop;
+                                                    if (prop.kind == .normal && prop.value == null && opts.ts_decorators.len > 0) {
+                                                        prop.kind = .declare;
+                                                        return prop;
+                                                    }
+                                                }
+
+                                                p.discardScopesUpTo(scope_index);
+                                                return null;
+                                            }
+                                        },
+                                        .p_abstract => {
+                                            if (opts.is_class && is_typescript_enabled && !opts.is_ts_abstract && strings.eqlComptime(raw, "abstract")) {
+                                                opts.is_ts_abstract = true;
+                                                const scope_index = p.scopes_in_order.items.len;
+                                                if (*prop := p.parseProperty(kind, opts, null)?) {
+                                                    if (prop.kind == .normal && prop.value == null && opts.ts_decorators.len > 0) {
+                                                        let prop_ = prop.*;
+                                                        prop_.kind = .abstract;
+                                                        return prop_;
+                                                    }
+                                                }
+                                                p.discardScopesUpTo(scope_index);
+                                                return null;
+                                            }
+                                        },
+                                        .p_accessor => {
+                                            // "accessor" keyword for auto-accessor fields (TC39 standard decorators)
+                                            if (opts.is_class && p.options.features.standard_decorators &&
+                                                (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_static) == .p_accessor)
+                                            {
+                                                kind = .auto_accessor;
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+                                        .p_private, .p_protected, .p_public, .p_readonly, .p_override => {
+                                            // Skip over TypeScript keywords
+                                            if (opts.is_class && is_typescript_enabled && (js_lexer.PropertyModifierKeyword.List.get(raw) ?? .p_static) == keyword) {
+                                                errors = null;
+                                                continue :restart;
+                                            }
+                                        },
+                                    }
+                                }
+                            } else if (p.lexer.token == .t_open_brace && strings.eqlComptime(name, "static")) {
+                                const loc = p.lexer.loc();
+                                p.lexer.next()?;
+
+                                const old_fn_or_arrow_data_parse = p.fn_or_arrow_data_parse;
+                                p.fn_or_arrow_data_parse = {
+                                    is_return_disallowed: true,
+                                    allow_super_property: true,
+                                    allow_await: .forbid_all,
+                                };
+
+                                * = try p.pushScopeForParsePass(.class_static_init, loc);
+                                let _parse_opts = ParseStatementOptions{};
+                                const stmts = p.parseStmtsUpTo(.t_close_brace, &_parse_opts)?;
+
+                                p.popScope();
+
+                                p.fn_or_arrow_data_parse = old_fn_or_arrow_data_parse;
+                                p.lexer.expect(.t_close_brace)?;
+
+                                const block = p.allocator.create(
+                                    G.ClassStaticBlock,
+                                ) catch unreachable;
+
+                                block.* = G.ClassStaticBlock{
+                                    stmts: js_ast.BabyList(Stmt).fromOwnedSlice(stmts),
+                                    loc: loc,
+                                };
+
+                                return G.Property{
+                                    kind: .class_static_block,
+                                    class_static_block: block,
+                                };
+                            }
+                        }
+
+                        // Handle invalid identifiers in property names
+                        // https://github.com/oven-sh/bun/issues/12039
+                        if (p.lexer.token == .t_syntax_error) {
+                            bun.handleOom(p.log.addRangeErrorFmt(p.source, name_range, p.allocator, "Unexpected {f}", .{bun.fmt.quote(name)}));
+                            return error.SyntaxError;
+                        }
+
+                        key = p.newExpr(E.String{ data: name }, name_range.loc);
+
+                        // Parse a shorthand property
+                        const isShorthandProperty = !opts.is_class &&
+                            kind == .normal &&
+                            p.lexer.token != .t_colon &&
+                            p.lexer.token != .t_open_paren &&
+                            p.lexer.token != .t_less_than &&
+                            !opts.is_generator &&
+                            !opts.is_async &&
+                            !js_lexer.Keywords.has(name);
+
+                        if (isShorthandProperty) {
+                            if ((p.fn_or_arrow_data_parse.allow_await != .allow_ident &&
+                                strings.eqlComptime(name, "await")) ||
+                                (p.fn_or_arrow_data_parse.allow_yield != .allow_ident &&
+                                    strings.eqlComptime(name, "yield")))
+                            {
+                                if (strings.eqlComptime(name, "await")) {
+                                    p.log.addRangeError(p.source, name_range, "Cannot use \"await\" here") catch unreachable;
+                                } else {
+                                    p.log.addRangeError(p.source, name_range, "Cannot use \"yield\" here") catch unreachable;
+                                }
+                            }
+
+                            const ref = p.storeNameInRef(name) catch unreachable;
+                            const value = p.newExpr(E.Identifier{ ref: ref }, key.loc);
+
+                            // Destructuring patterns have an optional default value
+                            let initializer: Expr? = null;
+                            if (errors != null && p.lexer.token == .t_equals) {
+                                errors.?.invalid_expr_default_value = p.lexer.range();
+                                p.lexer.next()?;
+                                initializer = p.parseExpr(.comma)?;
+                            }
+
+                            return G.Property{
+                                kind: kind,
+                                key: key,
+                                value: value,
+                                initializer: initializer,
+                                flags: Flags.Property.init({
+                                    was_shorthand: true,
+                                }),
+                            };
+                        }
+                    },
+                }
+
+                let has_type_parameters = false;
+                let has_definite_assignment_assertion_operator = false;
+
+                if (comptime is_typescript_enabled) {
+                    if (opts.is_class) {
+                        if (p.lexer.token == .t_question) {
+                            // "class X { foo?: number }"
+                            // "class X { foo!: number }"
+                            p.lexer.next()?;
+                        } else if (p.lexer.token == .t_exclamation &&
+                            !p.lexer.has_newline_before &&
+                            (kind == .normal || kind == .auto_accessor) &&
+                            !opts.is_async &&
+                            !opts.is_generator)
+                        {
+                            // "class X { foo!: number }"
+                            p.lexer.next()?;
+                            has_definite_assignment_assertion_operator = true;
+                        }
+                    }
+
+                    // "class X { foo?<T>(): T }"
+                    // "const x = { foo<T>(): T {} }"
+                    if (!has_definite_assignment_assertion_operator) {
+                        has_type_parameters = p.skipTypeScriptTypeParameters({ allow_const_modifier: true }) != .did_not_skip_anything?;
+                    }
+                }
+
+                // Parse a class field with an optional initial value
+                if (opts.is_class &&
+                    (kind == .normal || kind == .auto_accessor) && !opts.is_async &&
+                    !opts.is_generator &&
+                    p.lexer.token != .t_open_paren &&
+                    !has_type_parameters &&
+                    (p.lexer.token != .t_open_paren || has_definite_assignment_assertion_operator))
+                {
+                    let initializer: Expr? = null;
+                    let ts_metadata = TypeScript.Metadata.default;
+
+                    // Forbid the names "constructor" and "prototype" in some cases
+                    if (!is_computed) {
+                        switch (key.data) {
+                            .e_string => |str| {
+                                if (str.eqlComptime("constructor") || (opts.is_static && str.eqlComptime("prototype"))) {
+                                    // TODO: fmt error message to include string value.
+                                    p.log.addRangeError(p.source, key_range, "Invalid field name") catch unreachable;
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+
+                    if (comptime is_typescript_enabled) {
+                        // Skip over types
+                        if (p.lexer.token == .t_colon) {
+                            p.lexer.next()?;
+                            if (p.options.features.emit_decorator_metadata && opts.is_class && opts.ts_decorators.len > 0) {
+                                ts_metadata = p.skipTypeScriptTypeWithMetadata(.lowest)?;
+                            } else {
+                                p.skipTypeScriptType(.lowest)?;
+                            }
+                        }
+                    }
+
+                    if (p.lexer.token == .t_equals) {
+                        if (comptime is_typescript_enabled) {
+                            if (!opts.declare_range.isEmpty()) {
+                                p.log.addRangeError(p.source, p.lexer.range(), "Class fields that use \"declare\" cannot be initialized")?;
+                            }
+                        }
+
+                        p.lexer.next()?;
+
+                        // "this" and "super" property access is allowed in field initializers
+                        const old_is_this_disallowed = p.fn_or_arrow_data_parse.is_this_disallowed;
+                        const old_allow_super_property = p.fn_or_arrow_data_parse.allow_super_property;
+                        p.fn_or_arrow_data_parse.is_this_disallowed = false;
+                        p.fn_or_arrow_data_parse.allow_super_property = true;
+
+                        initializer = p.parseExpr(.comma)?;
+
+                        p.fn_or_arrow_data_parse.is_this_disallowed = old_is_this_disallowed;
+                        p.fn_or_arrow_data_parse.allow_super_property = old_allow_super_property;
+                    }
+
+                    // Special-case private identifiers
+                    switch (key.data) {
+                        .e_private_identifier => |*private| {
+                            const name = p.loadNameFromRef(private.ref);
+                            if (strings.eqlComptime(name, "#constructor")) {
+                                p.log.addRangeError(p.source, key_range, "Invalid field name \"#constructor\"") catch unreachable;
+                            }
+
+                            const declare: js_ast.Symbol.Kind = if (opts.is_static)
+                                .private_static_field
+                            else
+                                .private_field;
+
+                            private.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
+                        },
+                        else => {},
+                    }
+
+                    p.lexer.expectOrInsertSemicolon()?;
+
+                    return G.Property{
+                        ts_decorators: try ExprNodeList.fromSlice(p.allocator, opts.ts_decorators),
+                        kind: kind,
+                        flags: Flags.Property.init({
+                            is_computed: is_computed,
+                            is_static: opts.is_static,
+                        }),
+                        key: key,
+                        initializer: initializer,
+                        ts_metadata: ts_metadata,
+                    };
+                }
+
+                // Auto-accessor fields cannot be methods
+                if (kind == .auto_accessor && p.lexer.token == .t_open_paren) {
+                    p.log.addRangeError(p.source, key_range, "auto-accessor properties cannot have a method body") catch unreachable;
+                    return error.SyntaxError;
+                }
+
+                // Parse a method expression
+                if (p.lexer.token == .t_open_paren || kind != .normal || opts.is_class || opts.is_async || opts.is_generator) {
+                    return parseMethodExpression(p, kind, opts, is_computed, &key, key_range);
+                }
+
+                // Parse an object key/value pair
+                p.lexer.expect(.t_colon)?;
+                let property: G.Property = {
+                    kind: kind,
+                    flags: Flags.Property.init({
+                        is_computed: is_computed,
+                    }),
+                    key: key,
+                    value: Expr{ data: .e_missing, loc: {} },
+                };
+
+                p.parseExprOrBindings(.comma, errors, &property.value.?)?;
+                return property;
+            }
+        }
+    };
+}
+
+const string = []const u8;
+
+import bun from "bun";
+const logger = bun.logger;
+const strings = bun.strings;
+
+const js_ast = bun.ast;
+const E = js_ast.E;
+const Expr = js_ast.Expr;
+const ExprNodeList = js_ast.ExprNodeList;
+const Flags = js_ast.Flags;
+const Stmt = js_ast.Stmt;
+const Symbol = js_ast.Symbol;
+
+const G = js_ast.G;
+const Property = G.Property;
+
+const js_lexer = bun.js_lexer;
+const T = js_lexer.T;
+
+const js_parser = bun.js_parser;
+const AwaitOrYield = js_parser.AwaitOrYield;
+const DeferredErrors = js_parser.DeferredErrors;
+const FnOrArrowDataParse = js_parser.FnOrArrowDataParse;
+const JSXTransformType = js_parser.JSXTransformType;
+const ParseStatementOptions = js_parser.ParseStatementOptions;
+const PropertyOpts = js_parser.PropertyOpts;
+const TypeScript = js_parser.TypeScript;
+const options = js_parser.options;
+
+const List = std.ArrayListUnmanaged;

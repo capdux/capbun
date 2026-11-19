@@ -127,7 +127,8 @@ def code_tx(t):
     # struct literal: `.{ .a = 1, .b = 2 }` -> `{ a: 1, b: 2 }`
     # Also handle partials like `{ prop: "...", .ty = Value }` -> `{ prop: "...", ty: Value }`
     t = re.sub(r"(?<=[{,])\s*\.([A-Za-z_]\w*)\s*=(?!>)\s*", r" \1: ", t)
-    t = re.sub(r"\.\{\s*", r"{ ", t)
+    # Only change `.{` to `{` when it starts a struct with named fields
+    t = re.sub(r"\.\{\s*(?=[A-Za-z_@]\w*\s*:)", r"{ ", t)
     return t
 
 

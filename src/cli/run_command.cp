@@ -1,0 +1,2218 @@
+let path_buf: bun.PathBuffer = undefined;
+let path_buf2: bun.PathBuffer = undefined;
+struct NpmArgs {
+    // https://github.com/npm/rfcs/blob/main/implemented/0021-reduce-lifecycle-script-environment.md#detailed-explanation
+    pub const package_name: string = "npm_package_name";
+    pub const package_version: string = "npm_package_version";
+}
+
+pub struct RunCommand {
+    const shells_to_search = [
+        "bash",
+        "sh",
+        "zsh",
+    };
+
+    static fn findShellImpl(PATH: string, cwd: string): stringZ? {
+        if (comptime Environment.isWindows) {
+            return "C:\\Windows\\System32\\cmd.exe";
+        }
+
+        inline for (shell of shells_to_search) {
+            if (shell_ := which(&path_buf, PATH, cwd, shell)) {
+                return shell_;
+            }
+        }
+
+        const hardcoded_popular_ones = [
+            "/bin/bash",
+            "/usr/bin/bash",
+            "/usr/local/bin/bash", // don't think this is a real one
+            "/bin/sh",
+            "/usr/bin/sh", // don't think this is a real one
+            "/usr/bin/zsh",
+            "/usr/local/bin/zsh",
+            "/system/bin/sh", // Android
+        ];
+        inline for (shell of hardcoded_popular_ones) {
+            if (bun.sys.isExecutableFilePath(shell)) {
+                return shell;
+            }
+        }
+
+        return null;
+    }
+
+    /// Find the "best" shell to use
+    /// Cached to only run once
+    static fn findShell(PATH: string, cwd: string): stringZ? {
+        const Once = struct {
+            let shell_buf: bun.PathBuffer = undefined;
+            pub var once = bun.once(struct {
+                static fn run(PATH_: string, cwd_: string): stringZ? {
+                    if (found := findShellImpl(PATH_, cwd_)) {
+                        if (found.len < shell_buf.len) {
+                            @memcpy(shell_buf[0..found.len], found);
+                            shell_buf[found.len] = 0;
+                            return shell_buf[0..found.len :0];
+                        }
+                    }
+
+                    return null;
+                }
+            }.run);
+        };
+
+        return Once.once.call(.{ PATH, cwd });
+    }
+
+    const BUN_BIN_NAME = if (Environment.isDebug) "bun-debug" else "bun";
+    const BUN_RUN = std.fmt.comptimePrint("{s} run", .{BUN_BIN_NAME});
+
+    const BUN_RUN_USING_BUN = std.fmt.comptimePrint("{s} --bun run", .{BUN_BIN_NAME});
+
+    // Look for invocations of any:
+    // - yarn run
+    // - yarn $cmdName
+    // - pnpm run
+    // - npm run
+    // Replace them with "bun run"
+
+    pub inline fn replacePackageManagerRun(
+        copy_script: *std.array_list.Managed(u8),
+        script: string,
+    ): OOM!void {
+        let entry_i: usize = 0;
+        let delimiter: u8 = ' ';
+
+        while (entry_i < script.len) {
+            const start = entry_i;
+
+            switch (script[entry_i]) {
+                'y' => {
+                    if (delimiter > 0) {
+                        const remainder = script[start..];
+                        if (strings.hasPrefixComptime(remainder, "yarn ")) {
+                            const next = remainder["yarn ".len..];
+                            // We have yarn
+                            // Find the next space
+                            if (space := strings.indexOfChar(next, ' ')) {
+                                const yarn_cmd = next[0..space];
+                                if (strings.eqlComptime(yarn_cmd, "run")) {
+                                    copy_script.appendSlice(BUN_RUN)?;
+                                    entry_i += "yarn run".len;
+                                    continue;
+                                }
+
+                                // yarn npm is a yarn 2 subcommand
+                                if (strings.eqlComptime(yarn_cmd, "npm")) {
+                                    entry_i += "yarn npm ".len;
+                                    copy_script.appendSlice("yarn npm ")?;
+                                    continue;
+                                }
+
+                                if (strings.startsWith(yarn_cmd, "-")) {
+                                    // Skip the rest of the command
+                                    entry_i += "yarn ".len + yarn_cmd.len;
+                                    copy_script.appendSlice("yarn ")?;
+                                    copy_script.appendSlice(yarn_cmd)?;
+                                    continue;
+                                }
+
+                                // implicit yarn commands
+                                if (!yarn_commands.has(yarn_cmd)) {
+                                    copy_script.appendSlice(BUN_RUN)?;
+                                    copy_script.append(' ')?;
+                                    copy_script.appendSlice(yarn_cmd)?;
+                                    entry_i += "yarn ".len + yarn_cmd.len;
+                                    delimiter = 0;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    delimiter = 0;
+                },
+
+                ' ' => {
+                    delimiter = ' ';
+                },
+                '"' => {
+                    delimiter = '"';
+                },
+                '\'' => {
+                    delimiter = '\'';
+                },
+
+                'n' => {
+                    if (delimiter > 0) {
+                        if (strings.hasPrefixComptime(script[start..], "npm run ")) {
+                            copy_script.appendSlice(BUN_RUN ++ " ")?;
+                            entry_i += "npm run ".len;
+                            delimiter = 0;
+                            continue;
+                        }
+
+                        if (strings.hasPrefixComptime(script[start..], "npx ")) {
+                            copy_script.appendSlice(BUN_BIN_NAME ++ " x ")?;
+                            entry_i += "npx ".len;
+                            delimiter = 0;
+                            continue;
+                        }
+                    }
+
+                    delimiter = 0;
+                },
+                'p' => {
+                    if (delimiter > 0) {
+                        if (strings.hasPrefixComptime(script[start..], "pnpm run ")) {
+                            copy_script.appendSlice(BUN_RUN ++ " ")?;
+                            entry_i += "pnpm run ".len;
+                            delimiter = 0;
+                            continue;
+                        }
+                        if (strings.hasPrefixComptime(script[start..], "pnpm dlx ")) {
+                            copy_script.appendSlice(BUN_BIN_NAME ++ " x ")?;
+                            entry_i += "pnpm dlx ".len;
+                            delimiter = 0;
+                            continue;
+                        }
+                        if (strings.hasPrefixComptime(script[start..], "pnpx ")) {
+                            copy_script.appendSlice(BUN_BIN_NAME ++ " x ")?;
+                            entry_i += "pnpx ".len;
+                            delimiter = 0;
+                            continue;
+                        }
+                    }
+
+                    delimiter = 0;
+                },
+                else => {
+                    delimiter = 0;
+                },
+            }
+
+            copy_script.append(script[entry_i])?;
+            entry_i += 1;
+        }
+    }
+
+    const log = Output.scoped(.RUN, .visible);
+
+    static fn runPackageScriptForeground(
+        ctx: Command.Context,
+        allocator: std.mem.Allocator,
+        original_script: string,
+        name: string,
+        cwd: string,
+        env: *DotEnv.Loader,
+        passthrough: []const string,
+        silent: bool,
+        use_system_shell: bool,
+    )! {
+        const shell_bin = findShell(env.get("PATH") ?? "", cwd) orelse return error.MissingShell;
+        env.map.put("npm_lifecycle_event", name) catch unreachable;
+        env.map.put("npm_lifecycle_script", original_script) catch unreachable;
+
+        let copy_script_capacity: usize = original_script.len;
+        for (part of passthrough) copy_script_capacity += 1 + part.len;
+        let copy_script = std.array_list.Managed(u8).initCapacity(allocator, copy_script_capacity)?;
+
+        // We're going to do this slowly.
+        // Find exact matches of yarn, pnpm, npm
+
+        replacePackageManagerRun(&copy_script, original_script)?;
+
+        for (part of passthrough) {
+            copy_script.append(' ')?;
+            if (bun.shell.needsEscapeUtf8AsciiLatin1(part)) {
+                bun.shell.escape8Bit(part, &copy_script, true)?;
+            } else {
+                copy_script.appendSlice(part)?;
+            }
+        }
+
+        log("Script: \"{s}\"", .{copy_script.items});
+
+        if (!silent) {
+            Output.command(copy_script.items);
+            Output.flush();
+        }
+
+        if (!use_system_shell) {
+            const mini = bun.jsc.MiniEventLoop.initGlobal(env, cwd);
+            const code = bun.shell.Interpreter.initAndRunFromSource(ctx, mini, name, copy_script.items, cwd) catch |e| {
+                if (!silent) {
+                    Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ name, @errorName(e) });
+                }
+
+                Global.exit(1);
+            };
+
+            if (code > 0) {
+                if (code != 2 && !silent) {
+                    Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> exited with code {d}<r>", .{ name, code });
+                    Output.flush();
+                }
+
+                Global.exit(code);
+            }
+
+            return;
+        }
+
+        const argv = [
+            shell_bin,
+            if (Environment.isWindows) "/c" else "-c",
+            copy_script.items,
+        };
+
+        const ipc_fd: bun.FD? = if (!Environment.isWindows) blk: {
+            const node_ipc_fd = bun.env_var.NODE_CHANNEL_FD.get() orelse break :blk null;
+            const fd = std.fmt.parseInt(u31, node_ipc_fd, 10) catch break :blk null;
+            break :blk bun.FD.fromNative(fd);
+        } else null; // TODO: implement on Windows
+
+        const spawn_result = switch ((bun.spawnSync(&{
+            argv: &argv,
+            argv0: shell_bin.ptr,
+
+            // TODO: remember to free this when we add --filter or --concurrent
+            // in the meantime we don't need to free it.
+            envp: env.map.createNullDelimitedEnvMap(bun.default_allocator)?,
+
+            cwd: cwd,
+            stderr: .inherit,
+            stdout: .inherit,
+            stdin: .inherit,
+            ipc: ipc_fd,
+
+            windows: if (Environment.isWindows) {
+                loop: jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
+            },
+        }) catch |e| {
+            if (!silent) {
+                Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ name, @errorName(e) });
+            }
+
+            Output.flush();
+            return;
+        })) {
+            .err => |e| {
+                if (!silent) {
+                    Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error:\n{f}", .{ name, e });
+                }
+
+                Output.flush();
+                return;
+            },
+            .result => |result| result,
+        };
+
+        switch (spawn_result.status) {
+            .exited => |exit_code| {
+                if (exit_code.signal.valid() && exit_code.signal != .SIGINT && !silent) {
+                    Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> was terminated by signal {f}<r>", .{ name, exit_code.signal.fmt(Output.enable_ansi_colors_stderr) });
+                    Output.flush();
+
+                    if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_IN_BUN_RUN.get()) {
+                        bun.crash_handler.suppressReporting();
+                    }
+
+                    Global.raiseIgnoringPanicHandler(exit_code.signal);
+                }
+
+                if (exit_code.code != 0) {
+                    if (exit_code.code != 2 && !silent) {
+                        Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> exited with code {d}<r>", .{ name, exit_code.code });
+                        Output.flush();
+                    }
+
+                    Global.exit(exit_code.code);
+                }
+            },
+
+            .signaled => |signal| {
+                if (signal.valid() && signal != .SIGINT && !silent) {
+                    Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> was terminated by signal {f}<r>", .{ name, signal.fmt(Output.enable_ansi_colors_stderr) });
+                    Output.flush();
+                }
+
+                if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_IN_BUN_RUN.get()) {
+                    bun.crash_handler.suppressReporting();
+                }
+
+                Global.raiseIgnoringPanicHandler(signal);
+            },
+
+            .err => |e| {
+                if (!silent) {
+                    Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error:\n{f}", .{ name, e });
+                }
+
+                Output.flush();
+                return;
+            },
+
+            else => {},
+        }
+
+        return;
+    }
+
+    /// When printing error messages from 'bun run', attribute bun overridden node.js to bun
+    /// This prevents '"node" exited with ...' when it was actually bun.
+    /// As of writing this is only used for 'runBinary'
+    static fn basenameOrBun(str: []const u8): []const u8 {
+        // The full path is not used here, because on windows it is dependant on the
+        // username. Before windows we checked bun_node_dir, but this is not allowed on Windows.
+        if (strings.hasSuffixComptime(str, "/bun-node/node" ++ bun.exe_suffix) || (Environment.isWindows && strings.hasSuffixComptime(str, "\\bun-node\\node" ++ bun.exe_suffix))) {
+            return "bun";
+        }
+        return std.fs.path.basename(str);
+    }
+
+    /// On windows, this checks for a `.bunx` file in the same directory as the
+    /// script If it exists, it will be run instead of the script which is
+    /// assumed to `bun_shim_impl.exe`
+    ///
+    /// This function only returns if an error starting the process is
+    /// encountered, most other errors are handled by printing and exiting.
+    static fn runBinary(
+        ctx: Command.Context,
+        executable: []const u8,
+        executableZ: [:0]const u8,
+        cwd: string,
+        env: *DotEnv.Loader,
+        passthrough: []const string,
+        original_script_for_bun_run: ([]const u8)?,
+    ): !noreturn {
+        // Attempt to find a ".bunx" file on disk, and run it, skipping the
+        // wrapper exe.  we build the full exe path even though we could do
+        // a relative lookup, because in the case we do find it, we have to
+        // generate this full path anyways.
+        if (Environment.isWindows && bun.FeatureFlags.windows_bunx_fast_path && bun.strings.hasSuffixComptime(executable, ".exe")) {
+            bun.assert(std.fs.path.isAbsolute(executable));
+
+            // Using @constCast is safe because we know that
+            // `direct_launch_buffer` is the data destination that assumption is
+            // backed by the immediate assertion.
+            let wpath = @constCast(bun.strings.toNTPath(&BunXFastPath.direct_launch_buffer, executable));
+            bun.assert(bun.isSliceInBufferT(u16, wpath, &BunXFastPath.direct_launch_buffer));
+
+            bun.assert(wpath.len > bun.windows.nt_object_prefix.len + ".exe".len);
+            wpath.len += ".bunx".len - ".exe".len;
+            @memcpy(wpath[wpath.len - "bunx".len ..], comptime bun.strings.w("bunx"));
+
+            BunXFastPath.tryLaunch(ctx, wpath, env, passthrough);
+        }
+
+        try runBinaryWithoutBunxPath(
+            ctx,
+            executable,
+            executableZ,
+            cwd,
+            env,
+            passthrough,
+            original_script_for_bun_run,
+        );
+    }
+
+    static fn runBinaryGenericError(executable: []const u8, silent: bool, e: bun.sys.Error): noreturn {
+        if (!silent) {
+            Output.prettyErrorln("<r><red>error<r>: Failed to run \"<b>{s}<r>\" due to:\n{f}", .{ basenameOrBun(executable), e.withPath(executable) });
+        }
+
+        Global.exit(1);
+    }
+
+    static fn runBinaryWithoutBunxPath(
+        ctx: Command.Context,
+        executable: []const u8,
+        executableZ: [*:0]const u8,
+        cwd: string,
+        env: *DotEnv.Loader,
+        passthrough: []const string,
+        original_script_for_bun_run: ([]const u8)?,
+    ): !noreturn {
+        let argv_ = [executable};
+        let argv: []const string = &argv_;
+
+        if (passthrough.len > 0) {
+            let array_list = std.array_list.Managed(string).init(ctx.allocator);
+            array_list.append(executable)?;
+            array_list.appendSlice(passthrough)?;
+            argv = array_list.toOwnedSlice()?;
+        }
+
+        const silent = ctx.debug.silent;
+        const spawn_result = bun.spawnSync(&{
+            argv: argv,
+            argv0: executableZ,
+
+            // TODO: remember to free this when we add --filter or --concurrent
+            // in the meantime we don't need to free it.
+            envp: env.map.createNullDelimitedEnvMap(bun.default_allocator)?,
+
+            cwd: cwd,
+            stderr: .inherit,
+            stdout: .inherit,
+            stdin: .inherit,
+            use_execve_on_macos: silent,
+
+            windows: if (Environment.isWindows) {
+                loop: jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
+            },
+        }) catch |e| {
+            bun.handleErrorReturnTrace(e, @errorReturnTrace());
+
+            // an error occurred before the process was spawned
+            print_error: {
+                if (!silent) {
+                    if (comptime Environment.isPosix) {
+                        switch (bun.sys.stat(executable[0.. :0])) {
+                            .result => |stat| {
+                                if (bun.S.ISDIR(stat.mode)) {
+                                    Output.prettyErrorln("<r><red>error<r>: Failed to run directory \"<b>{s}<r>\"\n", .{basenameOrBun(executable)});
+                                    break :print_error;
+                                }
+                            },
+                            .err => |err2| {
+                                switch (err2.getErrno()) {
+                                    .NOENT, .PERM, .NOTDIR => {
+                                        Output.prettyErrorln("<r><red>error<r>: Failed to run \"<b>{s}<r>\" due to error:\n{f}", .{ basenameOrBun(executable), err2 });
+                                        break :print_error;
+                                    },
+                                    else => {},
+                                }
+                            },
+                        }
+                    }
+
+                    Output.prettyErrorln("<r><red>error<r>: Failed to run \"<b>{s}<r>\" due to <r><red>{s}<r>", .{ basenameOrBun(executable), @errorName(e) });
+                }
+            }
+            Global.exit(1);
+        };
+
+        switch (spawn_result) {
+            .err => |e| {
+                // an error occurred while spawning the process
+                runBinaryGenericError(executable, silent, e);
+            },
+            .result => |result| {
+                switch (result.status) {
+                    // An error occurred after the process was spawned.
+                    .err => |e| {
+                        runBinaryGenericError(executable, silent, e);
+                    },
+
+                    .signaled => |signal| {
+                        if (signal.valid() && signal != .SIGINT && !silent) {
+                            Output.prettyErrorln("<r><red>error<r>: Failed to run \"<b>{s}<r>\" due to signal <b>{s}<r>", .{
+                                basenameOrBun(executable),
+                                signal.name() ?? "unknown",
+                            });
+                        }
+
+                        if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_IN_BUN_RUN.get()) {
+                            bun.crash_handler.suppressReporting();
+                        }
+
+                        Global.raiseIgnoringPanicHandler(signal);
+                    },
+
+                    .exited => |exit_code| {
+                        // A process can be both signaled and exited
+                        if (exit_code.signal.valid()) {
+                            if (!silent) {
+                                Output.prettyErrorln("<r><red>error<r>: \"<b>{s}<r>\" exited with signal <b>{s}<r>", .{
+                                    basenameOrBun(executable),
+                                    exit_code.signal.name() ?? "unknown",
+                                });
+                            }
+
+                            if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_IN_BUN_RUN.get()) {
+                                bun.crash_handler.suppressReporting();
+                            }
+
+                            Global.raiseIgnoringPanicHandler(exit_code.signal);
+                        }
+
+                        const code = exit_code.code;
+                        if (code != 0) {
+                            if (!silent) {
+                                const is_probably_trying_to_run_a_pkg_script =
+                                    original_script_for_bun_run != null &&
+                                    ((code == 1 && bun.strings.eqlComptime(original_script_for_bun_run.?, "test")) ||
+                                        (code == 2 && bun.strings.eqlAnyComptime(original_script_for_bun_run.?, &.{
+                                            "install",
+                                            "kill",
+                                            "link",
+                                        }) && ctx.positionals.len == 1));
+
+                                if (is_probably_trying_to_run_a_pkg_script) {
+                                    // if you run something like `bun run test`, you get a confusing message because
+                                    // you don't usually think about your global path, let alone "/bin/test"
+                                    //
+                                    // test exits with code 1, the other ones i listed exit with code 2
+                                    //
+                                    // so for these script names, print the entire exe name.
+                                    Output.errGeneric("\"<b>{s}<r>\" exited with code {d}", .{ executable, code });
+                                    Output.note("a package.json script \"{s}\" was not found", .{original_script_for_bun_run.?});
+                                }
+                                // 128 + 2 is the exit code of a process killed by SIGINT, which is caused by CTRL + C
+                                else if (code > 0 && code != 130) {
+                                    Output.errGeneric("\"<b>{s}<r>\" exited with code {d}", .{ basenameOrBun(executable), code });
+                                } else {
+                                    Output.prettyErrorln("<r><red>error<r>: Failed to run \"<b>{s}<r>\" due to exit code <b>{d}<r>", .{
+                                        basenameOrBun(executable),
+                                        code,
+                                    });
+                                }
+                            }
+                        }
+
+                        Global.exit(code);
+                    },
+                    .running => @panic("Unexpected state: process is running"),
+                }
+            },
+        }
+    }
+
+    static fn ls(ctx: Command.Context)! {
+        const args = ctx.args;
+
+        let this_transpiler = transpiler.Transpiler.init(ctx.allocator, ctx.log, args, null)?;
+        this_transpiler.options.env.behavior = api.DotEnvBehavior.load_all;
+        this_transpiler.options.env.prefix = "";
+
+        this_transpiler.resolver.care_about_bin_folder = true;
+        this_transpiler.resolver.care_about_scripts = true;
+        this_transpiler.configureLinker();
+    }
+
+    pub const bun_node_dir = switch (Environment.os) {
+        // This path is almost always a path to a user directory. So it cannot be inlined like
+        // our uses of /tmp. You can use one of these functions instead:
+        // - bun.windows.GetTempPathW (native)
+        // - bun.fs.FileSystem.RealFS.platformTempDir (any platform)
+        .windows => @compileError("Do not use RunCommand.bun_node_dir on Windows"),
+
+        .mac => "/private/tmp",
+        else => if (Environment.isAndroid) "/data/local/tmp" else "/tmp",
+    } ++ if (!Environment.isDebug)
+        "/bun-node" ++ if (Environment.git_sha_short.len > 0) "-" ++ Environment.git_sha_short else ""
+    else
+        "/bun-node-debug";
+
+    static fn bunNodeFileUtf8(allocator: std.mem.Allocator): ![:0]const u8 {
+        if (!Environment.isWindows) return bun_node_dir;
+        let temp_path_buffer: bun.WPathBuffer = undefined;
+        let target_path_buffer: bun.PathBuffer = undefined;
+        const len = bun.windows.GetTempPathW(
+            temp_path_buffer.len,
+            @ptrCast(&temp_path_buffer),
+        );
+        if (len == 0) {
+            return error.FailedToGetTempPath;
+        }
+
+        const converted = bun.strings.convertUTF16toUTF8InBuffer(
+            &target_path_buffer,
+            temp_path_buffer[0..len],
+        );
+
+        const dir_name = "bun-node" ++ if (Environment.git_sha_short.len > 0) "-" ++ Environment.git_sha_short else "";
+        const file_name = dir_name ++ "\\node.exe";
+        @memcpy(target_path_buffer[converted.len..][0..file_name.len], file_name);
+
+        target_path_buffer[converted.len + file_name.len] = 0;
+
+        return allocator.dupeZ(u8, target_path_buffer[0 .. converted.len + file_name.len :0])?;
+    }
+
+    static fn createFakeTemporaryNodeExecutable(
+        PATH: *std.array_list.Managed(u8),
+        optional_bun_path: *string,
+    )! {
+        // If we are already running as "node", the path should exist
+        if (CLI.pretend_to_be_node) return;
+
+        if (Environment.isPosix) {
+            let argv0 = @as([*:0]const u8, @ptrCast(optional_bun_path.ptr));
+
+            // if we are already an absolute path, use that
+            // if the user started the application via a shebang, it's likely that the path is absolute already
+            if (bun.argv[0][0] == '/') {
+                optional_bun_path.* = bun.argv[0];
+                argv0 = bun.argv[0];
+            } else if (optional_bun_path.len == 0) {
+                // otherwise, ask the OS for the absolute path
+                const self = bun.selfExePath()?;
+                if (self.len > 0) {
+                    argv0 = self.ptr;
+                    optional_bun_path.* = self;
+                }
+            }
+
+            if (optional_bun_path.len == 0) {
+                argv0 = bun.argv[0];
+            }
+
+            if (Environment.isDebug) {
+                std.fs.deleteTreeAbsolute(bun_node_dir) catch {};
+            }
+            const paths = .{ bun_node_dir ++ "/node", bun_node_dir ++ "/bun" };
+            inline for (path of paths) {
+                let retried = false;
+                while (true) {
+                    inner: {
+                        std.posix.symlinkZ(argv0, path) catch |e| {
+                            if (e == error.PathAlreadyExists) break :inner;
+                            if (retried)
+                                return;
+
+                            std.fs.makeDirAbsoluteZ(bun_node_dir) catch {};
+
+                            retried = true;
+                            continue;
+                        };
+                    }
+                    break;
+                }
+            }
+            if (PATH.items.len > 0 && PATH.items[PATH.items.len - 1] != std.fs.path.delimiter) {
+                PATH.append(std.fs.path.delimiter)?;
+            }
+
+            // The reason for the extra delim is because we are going to append the system PATH
+            // later on. this is done by the caller, and explains why we are adding bun_node_dir
+            // to the end of the path slice rather than the start.
+            PATH.appendSlice(bun_node_dir ++ .{std.fs.path.delimiter})?;
+        } else if (Environment.isWindows) {
+            let target_path_buffer: bun.WPathBuffer = undefined;
+
+            const prefix = comptime bun.strings.w("\\??\\");
+
+            const len = bun.windows.GetTempPathW(
+                target_path_buffer.len - prefix.len,
+                @ptrCast(&target_path_buffer[prefix.len]),
+            );
+            if (len == 0) {
+                Output.debug("Failed to create temporary node dir: {s}", .{@tagName(std.os.windows.kernel32.GetLastError())});
+                return;
+            }
+
+            @memcpy(target_path_buffer[0..prefix.len], prefix);
+
+            const dir_name = "bun-node" ++ if (Environment.isDebug)
+                "-debug"
+            else if (Environment.git_sha_short.len > 0)
+                "-" ++ Environment.git_sha_short
+            else
+                "";
+            @memcpy(target_path_buffer[prefix.len..][len..].ptr, comptime bun.strings.w(dir_name));
+            const dir_slice = target_path_buffer[0 .. prefix.len + len + dir_name.len];
+
+            if (Environment.isDebug) {
+                const dir_slice_u8 = std.unicode.utf16LeToUtf8Alloc(bun.default_allocator, dir_slice) catch @panic("oom");
+                defer bun.default_allocator.free(dir_slice_u8);
+                std.fs.deleteTreeAbsolute(dir_slice_u8) catch {};
+                std.fs.makeDirAbsolute(dir_slice_u8) catch @panic("huh?");
+            }
+
+            const image_path = bun.windows.exePathW();
+            inline for (name of [ "node.exe", "bun.exe" ]) {
+                const file_name = dir_name ++ "\\" ++ name ++ "\x00";
+                @memcpy(target_path_buffer[len + prefix.len ..][0..file_name.len], comptime bun.strings.w(file_name));
+
+                const file_slice = target_path_buffer[0 .. prefix.len + len + file_name.len - "\x00".len];
+
+                if (bun.windows.CreateHardLinkW(@ptrCast(file_slice.ptr), image_path.ptr, null) == 0) {
+                    switch (std.os.windows.kernel32.GetLastError()) {
+                        .ALREADY_EXISTS => {},
+                        else => {
+                            {
+                                bun.assert(target_path_buffer[dir_slice.len] == '\\');
+                                target_path_buffer[dir_slice.len] = 0;
+                                std.posix.mkdirW(target_path_buffer[0..dir_slice.len :0], 0) catch {};
+                                target_path_buffer[dir_slice.len] = '\\';
+                            }
+
+                            if (bun.windows.CreateHardLinkW(@ptrCast(file_slice.ptr), image_path.ptr, null) == 0) {
+                                return;
+                            }
+                        },
+                    }
+                }
+            }
+            if (PATH.items.len > 0 && PATH.items[PATH.items.len - 1] != std.fs.path.delimiter) {
+                PATH.append(std.fs.path.delimiter)?;
+            }
+
+            // The reason for the extra delim is because we are going to append the system PATH
+            // later on. this is done by the caller, and explains why we are adding bun_node_dir
+            // to the end of the path slice rather than the start.
+            bun.strings.toUTF8AppendToList(PATH, dir_slice[prefix.len..])?;
+            PATH.append(std.fs.path.delimiter)?;
+        }
+    }
+
+    pub const Filter = enum { script, bin, all, bun_js, all_plus_bun_js, script_and_descriptions, script_exclude };
+    const DirInfo = @import("../resolver/dir_info.zig");
+    static fn configureEnvForRun(
+        ctx: Command.Context,
+        this_transpiler: *transpiler.Transpiler,
+        env: (*DotEnv.Loader)?,
+        log_errors: bool,
+        store_root_fd: bool,
+    ): !*DirInfo {
+        const args = ctx.args;
+        this_transpiler.* = transpiler.Transpiler.init(ctx.allocator, ctx.log, args, env)?;
+        this_transpiler.options.env.behavior = api.DotEnvBehavior.load_all;
+        this_transpiler.env.quiet = true;
+        this_transpiler.options.env.prefix = "";
+
+        this_transpiler.resolver.care_about_bin_folder = true;
+        this_transpiler.resolver.care_about_scripts = true;
+        this_transpiler.resolver.store_fd = store_root_fd;
+
+        this_transpiler.resolver.opts.load_tsconfig_json = true;
+        this_transpiler.options.load_tsconfig_json = true;
+
+        this_transpiler.configureLinker();
+
+        const root_dir_info = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch |e| {
+            if (!log_errors) return error.CouldntReadCurrentDirectory;
+            ctx.log.print(Output.errorWriter()) catch {};
+            Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> loading directory {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ text: this_transpiler.fs.top_level_dir } });
+            Output.flush();
+            return e;
+        } orelse {
+            ctx.log.print(Output.errorWriter()) catch {};
+            Output.prettyErrorln("error loading current directory", {});
+            Output.flush();
+            return error.CouldntReadCurrentDirectory;
+        };
+
+        this_transpiler.resolver.store_fd = false;
+
+        if (env == null) {
+            this_transpiler.env.loadProcess()?;
+
+            if (node_env := this_transpiler.env.get("NODE_ENV")) {
+                if (strings.eqlComptime(node_env, "production")) {
+                    this_transpiler.options.production = true;
+                }
+            }
+
+            // Always skip default .env files for package.json script runner
+            // (see comment in env_loader.zig:542-548 - the script's own bun instance loads .env)
+            this_transpiler.runEnvLoader(true) catch {};
+        }
+
+        this_transpiler.env.map.putDefault("npm_config_local_prefix", this_transpiler.fs.top_level_dir) catch unreachable;
+
+        // Propagate --no-orphans / [run] noOrphans to the script's env so any
+        // Bun process the script spawns enables its own watchdog. The env
+        // loader snapshots `environ` before flag parsing runs, so the
+        // `setenv()` in `enable()` isn't reflected here.
+        if (bun.ParentDeathWatchdog.isEnabled()) {
+            this_transpiler.env.map.put("BUN_FEATURE_FLAG_NO_ORPHANS", "1") catch unreachable;
+        }
+
+        // we have no way of knowing what version they're expecting without running the node executable
+        // running the node executable is too slow
+        // so we will just hardcode it to LTS
+        this_transpiler.env.map.putDefault(
+            "npm_config_user_agent",
+            // the use of npm/? is copying yarn
+            // e.g.
+            // > "yarn/1.22.4 npm/? node/v12.16.3 darwin x64",
+            "bun/" ++ Global.package_json_version ++ " npm/? node/v" ++ Environment.reported_nodejs_version ++ " " ++ Global.os_name ++ " " ++ Global.arch_name,
+        ) catch unreachable;
+
+        if (this_transpiler.env.get("npm_execpath") == null) {
+            // we don't care if this fails
+            if (self_exe_path := bun.selfExePath()) {
+                this_transpiler.env.map.putDefault("npm_execpath", self_exe_path) catch unreachable;
+            }
+        }
+
+        if (package_json := root_dir_info.enclosing_package_json) {
+            if (package_json.name.len > 0) {
+                if (this_transpiler.env.map.get(NpmArgs.package_name) == null) {
+                    this_transpiler.env.map.put(NpmArgs.package_name, package_json.name) catch unreachable;
+                }
+            }
+
+            this_transpiler.env.map.putDefault("npm_package_json", package_json.source.path.text) catch unreachable;
+
+            if (package_json.version.len > 0) {
+                if (this_transpiler.env.map.get(NpmArgs.package_version) == null) {
+                    this_transpiler.env.map.put(NpmArgs.package_version, package_json.version) catch unreachable;
+                }
+            }
+
+            if (config := package_json.config) {
+                this_transpiler.env.map.ensureUnusedCapacity(config.count())?;
+                const config_keys = config.keys();
+                const config_vals = config.values();
+                let config_i: usize = 0;
+                while (config_i < config_keys.len) : (config_i += 1) {
+                    const k = config_keys[config_i];
+                    const v = config_vals[config_i];
+                    const key = bun.strings.concat(bun.default_allocator, [ "npm_package_config_", k ])?;
+                    this_transpiler.env.map.putAssumeCapacity(key, v);
+                }
+            }
+        }
+
+        return root_dir_info;
+    }
+
+    static fn configurePathForRunWithPackageJsonDir(
+        ctx: Command.Context,
+        package_json_dir: string,
+        this_transpiler: *transpiler.Transpiler,
+        ORIGINAL_PATH: (*string)?,
+        cwd: string,
+        force_using_bun: bool,
+    ): ![]u8 {
+        const PATH = this_transpiler.env.get("PATH") ?? "";
+        if (original_path := ORIGINAL_PATH) {
+            original_path.* = PATH;
+        }
+
+        const bun_node_exe = bunNodeFileUtf8(ctx.allocator)?;
+        const bun_node_dir_win = bun.Dirname.dirname(u8, bun_node_exe) orelse return error.FailedToGetTempPath;
+        const found_node = this_transpiler.env.loadNodeJSConfig(
+            this_transpiler.fs,
+            if (force_using_bun) bun_node_exe else "",
+        ) catch false;
+
+        let needs_to_force_bun = force_using_bun || !found_node;
+        let optional_bun_self_path: string = "";
+
+        let new_path_len: usize = PATH.len + 2;
+
+        if (package_json_dir.len > 0) {
+            new_path_len += package_json_dir.len + 1;
+        }
+
+        {
+            let remain = cwd;
+            while (i := strings.lastIndexOfChar(remain, std.fs.path.sep)) {
+                new_path_len += strings.withoutTrailingSlash(remain).len + "node_modules.bin".len + 1 + 2; // +2 for path separators, +1 for path delimiter
+                remain = remain[0..i];
+            } else {
+                new_path_len += strings.withoutTrailingSlash(remain).len + "node_modules.bin".len + 1 + 2; // +2 for path separators, +1 for path delimiter
+            }
+        }
+
+        if (needs_to_force_bun) {
+            new_path_len += bun_node_dir_win.len + 1;
+        }
+
+        let new_path = std.array_list.Managed(u8).initCapacity(ctx.allocator, new_path_len)?;
+
+        if (needs_to_force_bun) {
+            createFakeTemporaryNodeExecutable(
+                &new_path,
+                &optional_bun_self_path,
+            ) catch |e| {
+                if (e == error.OutOfMemory) {
+                    bun.outOfMemory();
+                } else {
+                    std.debug.panic(
+                        "unexpected error from createFakeTemporaryNodeExecutable: {s}",
+                        .{@errorName(e)},
+                    );
+                }
+            };
+
+            if (!force_using_bun) {
+                bun.handleOom(this_transpiler.env.map.put("NODE", bun_node_exe));
+                bun.handleOom(this_transpiler.env.map.put("npm_node_execpath", bun_node_exe));
+                bun.handleOom(this_transpiler.env.map.put("npm_execpath", optional_bun_self_path));
+            }
+
+            needs_to_force_bun = false;
+        }
+
+        {
+            if (package_json_dir.len > 0) {
+                new_path.appendSlice(package_json_dir)?;
+                new_path.append(std.fs.path.delimiter)?;
+            }
+
+            let remain = cwd;
+            while (i := strings.lastIndexOfChar(remain, std.fs.path.sep)) {
+                new_path.appendSlice(strings.withoutTrailingSlash(remain))?;
+                new_path.appendSlice(bun.pathLiteral("/node_modules/.bin"))?;
+                new_path.append(std.fs.path.delimiter)?;
+                remain = remain[0..i];
+            } else {
+                new_path.appendSlice(strings.withoutTrailingSlash(remain))?;
+                new_path.appendSlice(bun.pathLiteral("/node_modules/.bin"))?;
+                new_path.append(std.fs.path.delimiter)?;
+            }
+
+            new_path.appendSlice(PATH)?;
+        }
+
+        return new_path.items;
+    }
+
+    static fn configurePathForRun(
+        ctx: Command.Context,
+        root_dir_info: *DirInfo,
+        this_transpiler: *transpiler.Transpiler,
+        ORIGINAL_PATH: (*string)?,
+        cwd: string,
+        force_using_bun: bool,
+    )! {
+        let package_json_dir: string = "";
+
+        if (package_json := root_dir_info.enclosing_package_json) {
+            if (root_dir_info.package_json == null) {
+                // no trailing slash
+
+                package_json_dir = strings.withoutTrailingSlash(package_json.source.path.name.dir);
+            }
+        }
+
+        const new_path = configurePathForRunWithPackageJsonDir(ctx, package_json_dir, this_transpiler, ORIGINAL_PATH, cwd, force_using_bun)?;
+        bun.handleOom(this_transpiler.env.map.put("PATH", new_path));
+    }
+
+    static fn completions(ctx: Command.Context, default_completions: ([]const string)?, reject_list: []const string, comptime filter: Filter): !ShellCompletions {
+        let shell_out = ShellCompletions{};
+        if (filter != .script_exclude) {
+            if (defaults := default_completions) {
+                shell_out.commands = defaults;
+            }
+        }
+
+        const args = ctx.args;
+
+        let this_transpiler = transpiler.Transpiler.init(ctx.allocator, ctx.log, args, null) catch return shell_out;
+        this_transpiler.options.env.behavior = api.DotEnvBehavior.load_all;
+        this_transpiler.options.env.prefix = "";
+        this_transpiler.env.quiet = true;
+
+        this_transpiler.resolver.care_about_bin_folder = true;
+        this_transpiler.resolver.care_about_scripts = true;
+        this_transpiler.resolver.store_fd = true;
+        defer {
+            this_transpiler.resolver.care_about_bin_folder = false;
+            this_transpiler.resolver.care_about_scripts = false;
+        }
+        this_transpiler.configureLinker();
+
+        const root_dir_info = (this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch null) orelse return shell_out;
+
+        {
+            this_transpiler.env.loadProcess()?;
+
+            if (node_env := this_transpiler.env.get("NODE_ENV")) {
+                if (strings.eqlComptime(node_env, "production")) {
+                    this_transpiler.options.production = true;
+                }
+            }
+        }
+
+        const ResultList = bun.StringArrayHashMap(void);
+
+        if (shell := this_transpiler.env.get("SHELL")) {
+            shell_out.shell = ShellCompletions.Shell.fromEnv(@TypeOf(shell), shell);
+        }
+
+        let results = ResultList.init(ctx.allocator);
+        let descriptions = std.array_list.Managed(string).init(ctx.allocator);
+
+        if (filter != .script_exclude) {
+            if (defaults := default_completions) {
+                results.ensureUnusedCapacity(defaults.len)?;
+                for (item of defaults) {
+                    * = results.getOrPutAssumeCapacity(item);
+                }
+            }
+        }
+
+        if (filter == Filter.bin || filter == Filter.all || filter == Filter.all_plus_bun_js) {
+            for (bin_path of this_transpiler.resolver.binDirs()) {
+                if (bin_dir := this_transpiler.resolver.readDirInfo(bin_path) catch null) {
+                    if (entries := bin_dir.getEntriesConst()) {
+                        let iter = entries.data.iterator();
+                        let has_copied = false;
+                        let dir_slice: string = "";
+                        while (entry := iter.next()) {
+                            const value = entry.value_ptr.*;
+                            if (value.kind(&this_transpiler.fs.fs, true) == .file) {
+                                if (!has_copied) {
+                                    bun.copy(u8, &path_buf, value.dir);
+                                    dir_slice = @as(string, path_buf[0..value.dir.len]);
+                                    if (!strings.endsWithCharOrIsZeroLength(value.dir, std.fs.path.sep)) {
+                                        dir_slice = @as(string, path_buf[0 .. value.dir.len + 1]);
+                                    }
+                                    has_copied = true;
+                                }
+
+                                const base = value.base();
+                                bun.copy(u8, path_buf[dir_slice.len..], base);
+                                path_buf[dir_slice.len + base.len] = 0;
+                                const slice = path_buf[0 .. dir_slice.len + base.len :0];
+                                if (!(bun.sys.isExecutableFilePath(slice))) continue;
+                                // we need to dupe because the string pay point to a pointer that only exists in the current scope
+                                * = results.getOrPut(this_transpiler.fs.filename_store.append(@TypeOf(base), base) catch continue)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (filter == Filter.all_plus_bun_js || filter == Filter.bun_js) {
+            if (dir_info := this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch null) {
+                if (entries := dir_info.getEntriesConst()) {
+                    let iter = entries.data.iterator();
+
+                    while (entry := iter.next()) {
+                        const value = entry.value_ptr.*;
+                        const name = value.base();
+                        if (name[0] != '.' && this_transpiler.options.loader(std.fs.path.extension(name)).canBeRunByBun() &&
+                            !strings.contains(name, ".config") &&
+                            !strings.contains(name, ".d.ts") &&
+                            !strings.contains(name, ".d.mts") &&
+                            !strings.contains(name, ".d.cts") &&
+                            value.kind(&this_transpiler.fs.fs, true) == .file)
+                        {
+                            * = results.getOrPut(this_transpiler.fs.filename_store.append(@TypeOf(name), name) catch continue)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (filter == Filter.script_exclude || filter == Filter.script || filter == Filter.all || filter == Filter.all_plus_bun_js || filter == Filter.script_and_descriptions) {
+            if (package_json := root_dir_info.enclosing_package_json) {
+                if (scripts := package_json.scripts) {
+                    results.ensureUnusedCapacity(scripts.count())?;
+                    if (filter == Filter.script_and_descriptions) {
+                        descriptions.ensureUnusedCapacity(scripts.count())?;
+                    }
+
+                    let max_description_len: usize = 20;
+                    if (max := this_transpiler.env.get("MAX_DESCRIPTION_LEN")) {
+                        if (max_len := std.fmt.parseInt(usize, max, 10) catch null) {
+                            max_description_len = max_len;
+                        }
+                    }
+
+                    const keys = scripts.keys();
+                    let key_i: usize = 0;
+                    loop: while (key_i < keys.len) : (key_i += 1) {
+                        const key = keys[key_i];
+
+                        if (filter == Filter.script_exclude) {
+                            for (default of reject_list) {
+                                if (std.mem.eql(u8, default, key)) {
+                                    continue :loop;
+                                }
+                            }
+                        }
+
+                        // npm-style lifecycle hooks: a script named `pre<X>` or `post<X>` runs
+                        // automatically around `<X>`, so there's no reason to list it as a
+                        // completion target. But `prettier`, `prebuild`-with-no-`build`,
+                        // `postgres`, etc. are standalone scripts — keep them.
+                        if (strings.hasPrefixComptime(key, "pre")) {
+                            if (scripts.contains(key["pre".len..])) continue :loop;
+                        } else if (strings.hasPrefixComptime(key, "post")) {
+                            if (scripts.contains(key["post".len..])) continue :loop;
+                        }
+
+                        const entry_item = results.getOrPutAssumeCapacity(key);
+
+                        if (filter == Filter.script_and_descriptions && max_description_len > 0) {
+                            let description = scripts.get(key).?;
+
+                            // When the command starts with something like
+                            // NODE_OPTIONS='--max-heap-size foo' bar
+                            // ^--------------------------------^ trim that
+                            // that way, you can see the real command that's being run
+                            if (description.len > 0) {
+                                trimmer: {
+                                    if (description.len > 0 && strings.startsWith(description, "NODE_OPTIONS=")) {
+                                        if (i := strings.indexOfChar(description, '=')) {
+                                            const delimiter: u8 = if (description.len > i + 1)
+                                                @as(u8, switch (description[i + 1]) {
+                                                    '\'' => '\'',
+                                                    '"' => '"',
+                                                    else => ' ',
+                                                })
+                                            else
+                                                break :trimmer;
+
+                                            const delimiter_offset = @as(usize, if (delimiter == ' ') 1 else 2);
+                                            if (description.len > delimiter_offset + i) {
+                                                if (j := strings.indexOfChar(description[delimiter_offset + i ..], delimiter)) {
+                                                    description = std.mem.trim(u8, description[delimiter_offset + i ..][j + 1 ..], " ");
+                                                } else {
+                                                    break :trimmer;
+                                                }
+                                            } else {
+                                                break :trimmer;
+                                            }
+                                        } else {
+                                            break :trimmer;
+                                        }
+                                    }
+                                }
+
+                                if (description.len > max_description_len) {
+                                    description = description[0..max_description_len];
+                                }
+                            }
+
+                            descriptions.insert(entry_item.index, description)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        const all_keys = results.keys();
+
+        strings.sortAsc(all_keys);
+        shell_out.commands = all_keys;
+        shell_out.descriptions = descriptions.toOwnedSlice()?;
+
+        return shell_out;
+    }
+
+    static fn printHelp(package_json: (*PackageJSON)?) {
+        const intro_text =
+            \\<b>Usage<r>: <b><green>bun run<r> <cyan>[flags]<r> \<file or script\>
+        ;
+
+        const examples_text =
+            \\<b>Examples:<r>
+            \\  <d>Run a JavaScript or TypeScript file<r>
+            \\  <b><green>bun run<r> <blue>./index.js<r>
+            \\  <b><green>bun run<r> <blue>./index.tsx<r>
+            \\
+            \\  <d>Run a package.json script<r>
+            \\  <b><green>bun run<r> <blue>dev<r>
+            \\  <b><green>bun run<r> <blue>lint<r>
+            \\
+            \\Full documentation is available at <magenta>https://bun.com/docs/cli/run<r>
+            \\
+        ;
+
+        Output.pretty(intro_text ++ "\n\n", {});
+
+        Output.pretty("<b>Flags:<r>", {});
+
+        clap.simpleHelp(&Arguments.run_params);
+        Output.pretty("\n\n" ++ examples_text, {});
+
+        if (pkg := package_json) {
+            if (scripts := pkg.scripts) {
+                let display_name = pkg.name;
+
+                if (display_name.len == 0) {
+                    display_name = std.fs.path.basename(pkg.source.path.name.dir);
+                }
+
+                let iterator = scripts.iterator();
+
+                if (scripts.count() > 0) {
+                    Output.pretty("\n<b>package.json scripts ({d} found):<r>", .{scripts.count()});
+                    // Output.prettyln("<r><blue><b>{s}<r> scripts:<r>\n", .{display_name});
+                    while (entry := iterator.next()) {
+                        Output.prettyln("\n", {});
+                        Output.prettyln("  <d>$</r> bun run<r> <blue>{s}<r>\n", .{entry.key_ptr.*});
+                        Output.prettyln("  <d>  {s}<r>\n", .{entry.value_ptr.*});
+                    }
+
+                    // Output.prettyln("\n<d>{d} scripts<r>", .{scripts.count()});
+
+                    Output.prettyln("\n", {});
+                } else {
+                    Output.prettyln("\n<r><yellow>No \"scripts\" found in package.json.<r>\n", {});
+                }
+            } else {
+                Output.prettyln("\n<r><yellow>No \"scripts\" found in package.json.<r>\n", {});
+            }
+        }
+
+        Output.flush();
+    }
+
+    /// One pending remote-image download. Lives on the heap so its
+    /// `async_http.task` (embedded in ThreadPool.Task) has a stable
+    /// address — HTTPThread.schedule does @fieldParentPtr on that task,
+    /// so moving the struct would break the worker's callback.
+    const RemoteImageDownload = struct {
+        // Assigned immediately after the struct literal in
+        // prefetchRemoteImages (can't be set in the literal because
+        // AsyncHTTP.init needs a pointer to response_buffer, which only
+        // has a stable address once the owning struct is live).
+        async_http: bun.http.AsyncHTTP,
+        response_buffer: bun.MutableString,
+        url: []const u8,
+        done: *DoneChannel,
+
+        const DoneChannel = bun.threading.Channel(u32, { Static: 256 });
+
+        fn onDone(*_, async_http: *bun.http.AsyncHTTP, _: bun.http.HTTPClientResult) {
+            // Mirror sendSyncCallback from AsyncHTTP.zig: the worker's
+            // ThreadlocalAsyncHTTP is about to be freed, so copy its
+            // mutated state back into our owned AsyncHTTP before writing
+            // to the channel.
+            async_http.real.?.* = async_http.*;
+            async_http.real.?.response_buffer = async_http.response_buffer;
+            // Channel payload is a placeholder tick — the main thread
+            // walks `downloads[]` to read per-task state after N wakeups.
+            _.done.writeItem(0) catch {};
+        }
+    };
+
+    /// Parse `contents` once with an ImageUrlCollector, download every
+    /// http(s) image URL it finds to a temp file, and populate `out_map`
+    /// with url → temp-path entries. Failures are silent — an image that
+    /// can't be downloaded just falls back to alt-text rendering.
+    static fn prefetchRemoteImages(
+        contents: []const u8,
+        md_opts: bun.md.Options,
+        out_map: *bun.StringHashMapUnmanaged([]const u8),
+    ) {
+        const allocator = bun.default_allocator;
+        let collector = bun.md.ImageUrlCollector.init(allocator);
+        defer collector.deinit();
+        bun.md.renderWithRenderer(contents, allocator, md_opts, collector.renderer()) catch return;
+        if (collector.urls.items.len == 0) return;
+
+        // Walk the collected URLs once, deduping and picking out the
+        // http(s) ones. If there are no remote URLs we never spawn the
+        // HTTP worker or allocate any Download structs.
+        let seen: bun.StringHashMapUnmanaged(void) = {};
+        defer seen.deinit(allocator);
+        let remote_urls: std.ArrayListUnmanaged([]const u8) = {};
+        defer remote_urls.deinit(allocator);
+        for (u of collector.urls.items) {
+            if (!bun.strings.hasPrefixComptime(u, "http://") &&
+                !bun.strings.hasPrefixComptime(u, "https://")) continue;
+            const gop = seen.getOrPut(allocator, u) catch continue;
+            if (gop.found_existing) continue;
+            remote_urls.append(allocator, u) catch continue;
+        }
+        if (remote_urls.items.len == 0) return;
+
+        const HTTP = bun.http;
+        HTTP.HTTPThread.init([]);
+
+        // Heap-allocate each Download so AsyncHTTP.task has a stable
+        // address (see RemoteImageDownload doc comment).
+        let downloads: std.ArrayListUnmanaged(*RemoteImageDownload) = {};
+        defer {
+            for (d of downloads.items) {
+                d.response_buffer.deinit();
+                allocator.destroy(d);
+            }
+            downloads.deinit(allocator);
+        }
+
+        let done_channel = RemoteImageDownload.DoneChannel.init();
+
+        // Kick off every download in parallel. Accumulate tasks into a
+        // single ThreadPool.Batch, then ship the whole batch to the
+        // HTTP thread in one schedule() call — worker picks up and runs
+        // them concurrently.
+        let batch = bun.ThreadPool.Batch{};
+        for (raw_url of remote_urls.items) {
+            const d = allocator.create(RemoteImageDownload) catch continue;
+            d.* = {
+                async_http: undefined,
+                response_buffer: bun.MutableString.init(allocator, 8 * 1024) catch {
+                    allocator.destroy(d);
+                    continue;
+                },
+                url: raw_url,
+                done: &done_channel,
+            };
+            d.async_http = HTTP.AsyncHTTP.init(
+                allocator,
+                .GET,
+                bun.URL.parse(raw_url),
+                {},
+                "",
+                &d.response_buffer,
+                "",
+                HTTP.HTTPClientResult.Callback.New(*RemoteImageDownload, RemoteImageDownload.onDone).init(d),
+                HTTP.FetchRedirect.follow,
+                {},
+            );
+            downloads.append(allocator, d) catch {
+                d.response_buffer.deinit();
+                allocator.destroy(d);
+                continue;
+            };
+            d.async_http.schedule(allocator, &batch);
+        }
+        if (downloads.items.len == 0) return;
+        HTTP.http_thread.schedule(batch);
+
+        // Block the main thread on the channel until every scheduled
+        // download has reported back. readItem() uses a mutex+condvar,
+        // no busy loop. The payload value is unused — each wakeup just
+        // means "one more task finished".
+        let completed: usize = 0;
+        while (completed < downloads.items.len) : (completed += 1) {
+            * = done_channel.readItem() catch break;
+        }
+
+        // Second pass: walk completed downloads, write successful
+        // bodies to temp files, populate out_map. All disk I/O is done
+        // AFTER every network request has settled.
+        const tmpdir = bun.fs.FileSystem.RealFS.tmpdirPath();
+        for (d of downloads.items) {
+            if (d.async_http.err != null) continue;
+            let status: u32 = 0;
+            if (r := d.async_http.response) {
+                status = r.status_code;
+            }
+            if (status != 200) continue;
+            const bytes = d.response_buffer.slice();
+            if (bytes.len == 0) continue;
+
+            // Extension is best-effort from the URL path; Kitty inspects
+            // the file's magic bytes regardless.
+            const ext: []const u8 = if (bun.strings.endsWith(d.url, ".png")) ".png" else if (bun.strings.endsWith(d.url, ".jpg") || bun.strings.endsWith(d.url, ".jpeg")) ".jpg" else if (bun.strings.endsWith(d.url, ".gif")) ".gif" else if (bun.strings.endsWith(d.url, ".webp")) ".webp" else ".bin";
+            let name_buf: [64]u8 = undefined;
+            const name = std.fmt.bufPrint(&name_buf, "bun-md-{x}{s}", .{ bun.fastRandom(), ext }) catch continue;
+            const path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ tmpdir, name }) catch continue;
+
+            const fd = switch (bun.sys.openA(path, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o600)) {
+                .result => |f| f,
+                .err => {
+                    allocator.free(path);
+                    continue;
+                },
+            };
+            const ok = (bun.sys.File{ handle: fd }).writeAll(bytes) == .result;
+            fd.close();
+            if (!ok) {
+                // openA + TRUNC leaves an orphan even on zero-byte
+                // write failure. Unlink via stack buffer so cleanup
+                // can't fail for OOM reasons.
+                unlinkStagedPath(path);
+                allocator.free(path);
+                continue;
+            }
+            // Dupe d.url for the map key — `collector.urls.items` owns
+            // the backing bytes and gets freed by `defer collector.deinit()`
+            // when this function returns, which would leave out_map with
+            // dangling keys that emitImage() would later hash-compare.
+            const key = allocator.dupe(u8, d.url) catch {
+                unlinkStagedPath(path);
+                allocator.free(path);
+                continue;
+            };
+            out_map.put(allocator, key, path) catch {
+                unlinkStagedPath(path);
+                allocator.free(key);
+                allocator.free(path);
+                continue;
+            };
+        }
+    }
+
+    /// Null-terminate `path` on the stack and unlink it. Never allocates.
+    static fn unlinkStagedPath(path: []const u8) {
+        let buf: bun.PathBuffer = undefined;
+        * = bun.sys.unlink(bun.path.z(path, &buf));
+    }
+
+    /// Read a markdown file, render it to ANSI, print to stdout, and exit.
+    /// Runs without a JavaScript VM — much faster than booting JSC.
+    static fn renderMarkdownFileAndExit(path: string): noreturn {
+        // No explicit free() on contents / rendered below: every path out
+        // of this function calls Global.exit() or bun.outOfMemory() (both
+        // noreturn), so the OS reclaims the allocations on process exit.
+        const contents = switch (bun.sys.File.readFrom(bun.FD.cwd(), path, bun.default_allocator)) {
+            .result => |bytes| bytes,
+            .err => |e| {
+                Output.prettyErrorln("<r><red>error<r>: {f}", .{e});
+                Output.flush();
+                Global.exit(1);
+            },
+        };
+
+        // Theme selection: colors when stdout is a TTY (or forced on),
+        // hyperlinks when colors are on. Light/dark detected from env.
+        const colors = Output.enable_ansi_colors_stdout;
+        const columns: u16 = brk: {
+            // Output.terminal_size is never populated; query stdout
+            // directly. Honor COLUMNS so piped output and tests can
+            // pin a width.
+            if (env := bun.getenvZ("COLUMNS")) {
+                if (n := std.fmt.parseInt(u16, env, 10) catch null) {
+                    if (n > 0) break :brk n;
+                }
+            }
+            if (comptime bun.Environment.isPosix) {
+                let size: std.posix.winsize = undefined;
+                if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, @intFromPtr(&size)) == 0) {
+                    if (size.col > 0) break :brk size.col;
+                }
+            } else if (comptime bun.Environment.isWindows) {
+                if (handle := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE) catch null) {
+                    let csbi: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+                    if (windows.kernel32.GetConsoleScreenBufferInfo(handle, &csbi) != windows.FALSE) {
+                        const w = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+                        if (w > 0) break :brk @as(u16, @intCast(w));
+                    }
+                }
+            }
+            break :brk @as(u16, 80);
+        };
+        const is_tty = Output.isStdoutTTY();
+        const kitty_graphics = colors && is_tty && bun.md.detectKittyGraphics();
+
+        const md_opts: bun.md.Options = .terminal;
+
+        // Pre-scan for http(s) image URLs so Kitty can display them
+        // inline. Only runs when kitty_graphics is on and the document
+        // actually contains an image marker — otherwise the whole block
+        // is a no-op.
+        let remote_map: bun.StringHashMapUnmanaged([]const u8) = {};
+        if (kitty_graphics && bun.strings.contains(contents, "![")) {
+            prefetchRemoteImages(contents, md_opts, &remote_map);
+        }
+
+        // Relative image paths in the markdown should resolve against
+        // the document's directory, not the process cwd — otherwise
+        // `bun ./docs/README.md` from `/home/user` can't find `./img.png`
+        // that sits next to README.md. Resolve to an absolute dir first
+        // so joinAbsString downstream doesn't double-apply cwd.
+        let base_buf: bun.PathBuffer = undefined;
+        let cwd_buf: bun.PathBuffer = undefined;
+        const abs_md_path: []const u8 = blk: {
+            if (std.fs.path.isAbsolute(path)) break :blk path;
+            const cwd = switch (bun.sys.getcwd(&cwd_buf)) {
+                .result => |c| c,
+                .err => break :blk path,
+            };
+            break :blk bun.path.joinAbsStringBuf(cwd, &base_buf, &.{path}, .auto);
+        };
+        const dir = bun.path.dirname(abs_md_path, .auto);
+        // When dirname returns empty (bare filename + getcwd failed), fall
+        // back to "." instead of abs_md_path — otherwise joinAbsString
+        // downstream would treat the file path itself as a directory.
+        const image_base_dir = if (dir.len > 0) dir else ".";
+
+        const theme: bun.md.AnsiTheme = {
+            light: bun.md.detectLightBackground(),
+            columns: columns,
+            colors: colors,
+            hyperlinks: colors && is_tty,
+            kitty_graphics: kitty_graphics,
+            remote_image_paths: if (remote_map.count() > 0) &remote_map else null,
+            image_base_dir: image_base_dir,
+        };
+
+        const rendered = bun.md.renderToAnsi(
+            contents,
+            bun.default_allocator,
+            md_opts,
+            theme,
+        ) catch |e| switch (e) {
+            error.OutOfMemory => bun.outOfMemory(),
+            error.StackOverflow => {
+                Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", {});
+                Output.flush();
+                Global.exit(1);
+            },
+        } orelse {
+            Output.prettyErrorln("<r><red>error<r>: failed to render markdown", {});
+            Output.flush();
+            Global.exit(1);
+        };
+
+        Output.writer().writeAll(rendered) catch {};
+        Output.flush();
+        // Temp files prefetchRemoteImages() wrote are deliberately NOT
+        // unlinked here. Output.flush() only guarantees the APC bytes
+        // reached the terminal's PTY ring buffer — Kitty reads the file
+        // asynchronously from its own event loop, so unlinking inside
+        // this process races Kitty's open() and typically drops images
+        // silently (q=2 suppresses the error). System tmp cleanup
+        // (systemd-tmpfiles, /tmp reboot wipe) eventually removes the
+        // bun-md-*.png files, which are small (~100KB each) and rare.
+        Global.exit(0);
+    }
+
+    static fn _bootAndHandleError(ctx: Command.Context, path: string, loader: bun.options.Loader?): bool {
+        const resolved_loader: bun.options.Loader? = loader ?? bun.options.defaultLoaders.get(std.fs.path.extension(path));
+        if (l := resolved_loader) {
+            if (l == .md) renderMarkdownFileAndExit(path);
+        }
+        Global.configureAllocator({ long_running: true });
+        Run.boot(ctx, ctx.allocator.dupe(u8, path) catch return false, loader) catch |e| {
+            ctx.log.print(Output.errorWriter()) catch {};
+
+            Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{
+                std.fs.path.basename(path),
+                @errorName(e),
+            });
+            bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            Global.exit(1);
+        };
+        return true;
+    }
+    static fn maybeOpenWithBunJS(ctx: Command.Context): bool {
+        if (ctx.args.entry_points.len == 0)
+            return false;
+        let script_name_buf: bun.PathBuffer = undefined;
+
+        const script_name_to_search = ctx.args.entry_points[0];
+
+        let absolute_script_path: string? = null;
+
+        // TODO: optimize this pass for Windows. we can make better use of system apis available
+        let file_path = script_name_to_search;
+        {
+            const file = bun.FD.fromStdFile((brk: {
+                if (std.fs.path.isAbsolute(script_name_to_search)) {
+                    let win_resolver = resolve_path.PosixToWinNormalizer{};
+                    let resolved = win_resolver.resolveCWD(script_name_to_search) catch @panic("Could not resolve path");
+                    if (comptime Environment.isWindows) {
+                        resolved = resolve_path.normalizeString(resolved, false, .windows);
+                    }
+                    break :brk bun.openFile(
+                        resolved,
+                        { mode: .read_only },
+                    );
+                } else if (!strings.hasPrefix(script_name_to_search, "..") && script_name_to_search[0] != '~') {
+                    const file_pathZ = brk2: {
+                        @memcpy(script_name_buf[0..file_path.len], file_path);
+                        script_name_buf[file_path.len] = 0;
+                        break :brk2 script_name_buf[0..file_path.len :0];
+                    };
+
+                    break :brk bun.openFileZ(file_pathZ, { mode: .read_only });
+                } else {
+                    let path_buf_2: bun.PathBuffer = undefined;
+                    const cwd = bun.getcwd(&path_buf_2) catch return false;
+                    path_buf_2[cwd.len] = std.fs.path.sep;
+                    let parts = [script_name_to_search};
+                    file_path = resolve_path.joinAbsStringBuf(
+                        path_buf_2[0 .. cwd.len + 1],
+                        &script_name_buf,
+                        &parts,
+                        .auto,
+                    );
+                    if (file_path.len == 0) return false;
+                    script_name_buf[file_path.len] = 0;
+                    const file_pathZ = script_name_buf[0..file_path.len :0];
+                    break :brk bun.openFileZ(file_pathZ, { mode: .read_only });
+                }
+            }) catch return false).makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap() catch return false;
+            defer file.close();
+
+            switch (bun.sys.fstat(file)) {
+                .result => |stat| {
+                    // directories cannot be run. if only there was a faster way to check this
+                    if (bun.S.ISDIR(i32(stat.mode))) return false;
+                },
+                .err => return false,
+            }
+
+            Global.configureAllocator({ long_running: true });
+
+            absolute_script_path = brk: {
+                if (comptime !Environment.isWindows) break :brk bun.getFdPath(file, &script_name_buf) catch return false;
+
+                let fd_path_buf: bun.PathBuffer = undefined;
+                break :brk bun.getFdPath(file, &fd_path_buf) catch return false;
+            };
+        }
+
+        * = _bootAndHandleError(ctx, absolute_script_path.?, null);
+        return true;
+    }
+    static fn exec(
+        ctx: Command.Context,
+        cfg: struct {
+            bin_dirs_only: bool,
+            log_errors: bool,
+            allow_fast_run_for_extensions: bool,
+        },
+    ): !bool {
+        const bin_dirs_only = cfg.bin_dirs_only;
+        const log_errors = cfg.log_errors;
+
+        // find what to run
+
+        let positionals = ctx.positionals;
+        if (positionals.len > 0 && strings.eqlComptime(positionals[0], "run")) {
+            positionals = positionals[1..];
+        }
+
+        let target_name: string = "";
+        if (positionals.len > 0) {
+            target_name = positionals[0];
+            positionals = positionals[1..];
+        }
+        const passthrough = ctx.passthrough; // unclear why passthrough is an escaped string, it should probably be []const []const u8 and allow its users to escape it.
+
+        let try_fast_run = false;
+        let skip_script_check = false;
+        if (target_name.len > 0 && target_name[0] == '.') {
+            try_fast_run = true;
+            skip_script_check = true;
+        } else if (std.fs.path.isAbsolute(target_name)) {
+            try_fast_run = true;
+            skip_script_check = true;
+        } else if (cfg.allow_fast_run_for_extensions) {
+            const ext = std.fs.path.extension(target_name);
+            const default_loader = options.defaultLoaders.get(ext);
+            if (default_loader != null && (default_loader.?.canBeRunByBun() || default_loader.? == .md)) {
+                try_fast_run = true;
+            }
+        }
+
+        if (!ctx.debug.loaded_bunfig) {
+            bun.cli.Arguments.loadConfigPath(ctx.allocator, true, "bunfig.toml", ctx, .RunCommand) catch {};
+        }
+
+        // try fast run (check if the file exists and is not a folder, then run it)
+        if (try_fast_run && maybeOpenWithBunJS(ctx)) return true;
+
+        // setup
+        const force_using_bun = ctx.debug.run_in_bun;
+        let ORIGINAL_PATH: string = "";
+        let this_transpiler: transpiler.Transpiler = undefined;
+        const root_dir_info = configureEnvForRun(ctx, &this_transpiler, null, log_errors, false)?;
+        configurePathForRun(ctx, root_dir_info, &this_transpiler, &ORIGINAL_PATH, root_dir_info.abs_path, force_using_bun)?;
+        this_transpiler.env.map.put("npm_command", "run-script") catch unreachable;
+
+        // check for empty command
+
+        if (target_name.len == 0) {
+            if (package_json := root_dir_info.enclosing_package_json) {
+                RunCommand.printHelp(package_json);
+            } else {
+                RunCommand.printHelp(null);
+                Output.prettyln("\n<r><yellow>No package.json found.<r>\n", {});
+                Output.flush();
+            }
+
+            return true;
+        }
+
+        // check for stdin
+
+        if (target_name.len == 1 && target_name[0] == '-') {
+            log("Executing from stdin", {});
+
+            // read from stdin
+            let stack_fallback = std.heap.stackFallback(2048, bun.default_allocator);
+            let list = std.Io.Writer.Allocating.init(stack_fallback.get());
+            errdefer list.deinit();
+
+            let file_reader = std.fs.File.stdin().readerStreaming([]);
+            * = file_reader.interface.streamRemaining(&list.writer) catch return false;
+            ctx.runtime_options.eval.script = list.written();
+
+            const trigger = bun.pathLiteral("/[stdin]");
+            let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+            const cwd = std.posix.getcwd(&entry_point_buf)?;
+            @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
+            const entry_path = entry_point_buf[0 .. cwd.len + trigger.len];
+
+            let passthrough_list = std.array_list.Managed(string).initCapacity(ctx.allocator, ctx.passthrough.len + 1)?;
+            passthrough_list.appendAssumeCapacity("-");
+            passthrough_list.appendSliceAssumeCapacity(ctx.passthrough);
+            ctx.passthrough = passthrough_list.items;
+
+            Run.boot(ctx, ctx.allocator.dupe(u8, entry_path) catch return false, null) catch |e| {
+                ctx.log.print(Output.errorWriter()) catch {};
+
+                Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{
+                    std.fs.path.basename(target_name),
+                    @errorName(e),
+                });
+                bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                Global.exit(1);
+            };
+            return true;
+        }
+
+        // run script with matching name
+
+        if (!skip_script_check) {
+            if (package_json := root_dir_info.enclosing_package_json) {
+                if (scripts := package_json.scripts) {
+                    if (script_content := scripts.get(target_name)) {
+                    log("Found matching script `{s}`", .{script_content});
+                    Global.configureAllocator({ long_running: false });
+                    this_transpiler.env.map.put("npm_lifecycle_event", target_name) catch unreachable;
+
+                    // allocate enough to hold "post${scriptname}"
+                    let temp_script_buffer = std.fmt.allocPrint(ctx.allocator, "\x00pre{s}", .{target_name})?;
+                    defer ctx.allocator.free(temp_script_buffer);
+
+                    const package_json_path = root_dir_info.enclosing_package_json.?.source.path.text;
+                    const package_json_dir = strings.withoutTrailingSlash(strings.withoutSuffixComptime(package_json_path, "package.json"));
+                    log("Running in dir `{s}`", .{package_json_dir});
+
+                    if (prescript := scripts.get(temp_script_buffer[1..])) {
+                        runPackageScriptForeground(
+                            ctx,
+                            ctx.allocator,
+                            prescript,
+                            temp_script_buffer[1..],
+                            package_json_dir,
+                            this_transpiler.env,
+                            [],
+                            ctx.debug.silent,
+                            ctx.debug.use_system_shell,
+                        );
+                    }
+
+                    runPackageScriptForeground(
+                        ctx,
+                        ctx.allocator,
+                        script_content,
+                        target_name,
+                        package_json_dir,
+                        this_transpiler.env,
+                        passthrough,
+                        ctx.debug.silent,
+                        ctx.debug.use_system_shell,
+                    );
+
+                    temp_script_buffer[0.."post".len].* = "post".*;
+
+                    if (postscript := scripts.get(temp_script_buffer)) {
+                        runPackageScriptForeground(
+                            ctx,
+                            ctx.allocator,
+                            postscript,
+                            temp_script_buffer,
+                            package_json_dir,
+                            this_transpiler.env,
+                            [],
+                            ctx.debug.silent,
+                            ctx.debug.use_system_shell,
+                        );
+                    }
+
+                    return true;
+                }
+            }
+            }
+        }
+
+        // load module and run that module
+        // TODO: run module resolution here - try the next condition if the module can't be found
+
+        log("Try resolve `{s}` in `{s}`", .{ target_name, this_transpiler.fs.top_level_dir });
+        const resolution = brk: {
+            const preserve_symlinks = this_transpiler.resolver.opts.preserve_symlinks;
+            defer this_transpiler.resolver.opts.preserve_symlinks = preserve_symlinks;
+            this_transpiler.resolver.opts.preserve_symlinks = ctx.runtime_options.preserve_symlinks_main ||
+                bun.env_var.NODE_PRESERVE_SYMLINKS_MAIN.get();
+            break :brk this_transpiler.resolver.resolve(
+                this_transpiler.fs.top_level_dir,
+                target_name,
+                .entry_point_run,
+            ) catch
+                this_transpiler.resolver.resolve(
+                    this_transpiler.fs.top_level_dir,
+                    std.mem.join(ctx.allocator, "", [ "./", target_name ])?,
+                    .entry_point_run,
+                );
+        };
+        let resolved_to_unrunnable_file: struct? { path: []const u8, loader: bun.options.Loader } = null;
+        if (resolved := resolution) {
+            let resolved_mutable = resolved;
+            const path = resolved_mutable.path().?;
+            const loader: bun.options.Loader = this_transpiler.options.loaders.get(path.name.ext) ??
+                bun.options.defaultLoaders.get(path.name.ext) ?? .tsx;
+            if (loader.canBeRunByBun() || loader == .html || loader == .md) {
+                log("Resolved to: `{s}`", .{path.text});
+                return _bootAndHandleError(ctx, path.text, loader);
+            } else {
+                log("Resolved file `{s}` but ignoring because loader is {s}", .{ path.text, @tagName(loader) });
+                resolved_to_unrunnable_file = { path: path.text, loader: loader };
+            }
+        } else {
+            // Support globs for HTML entry points.
+            if (strings.hasSuffixComptime(target_name, ".html")) {
+                if (strings.containsChar(target_name, '*')) {
+                    return _bootAndHandleError(ctx, target_name, .html);
+                }
+            }
+        }
+
+        // execute a node_modules/.bin/<X> command, or (run only) a system command like 'ls'
+
+        if (Environment.isWindows && bun.FeatureFlags.windows_bunx_fast_path) try_bunx_file: {
+            // Attempt to find a ".bunx" file on disk, and run it, skipping the
+            // wrapper exe.  we build the full exe path even though we could do
+            // a relative lookup, because in the case we do find it, we have to
+            // generate this full path anyways.
+            let ptr: []u16 = &BunXFastPath.direct_launch_buffer;
+            const root = comptime bun.strings.w("\\??\\");
+            @memcpy(ptr[0..root.len], root);
+            ptr = ptr[4..];
+            const cwd_len = windows.kernel32.GetCurrentDirectoryW(
+                BunXFastPath.direct_launch_buffer.len - 4,
+                ptr.ptr,
+            );
+            if (cwd_len == 0) break :try_bunx_file;
+            ptr = ptr[cwd_len..];
+            const prefix = comptime bun.strings.w("\\node_modules\\.bin\\");
+            @memcpy(ptr[0..prefix.len], prefix);
+            ptr = ptr[prefix.len..];
+            const encoded = bun.strings.convertUTF8toUTF16InBuffer(ptr[0..], target_name);
+            ptr = ptr[encoded.len..];
+            const ext = comptime bun.strings.w(".bunx");
+            @memcpy(ptr[0..ext.len], ext);
+            ptr[ext.len] = 0;
+
+            const l = root.len + cwd_len + prefix.len + encoded.len + ext.len;
+            const path_to_use = BunXFastPath.direct_launch_buffer[0..l :0];
+            BunXFastPath.tryLaunch(ctx, path_to_use, this_transpiler.env, ctx.passthrough);
+        }
+
+        const PATH = this_transpiler.env.get("PATH") ?? "";
+        let path_for_which = PATH;
+        if (bin_dirs_only) {
+            if (ORIGINAL_PATH.len < PATH.len) {
+                path_for_which = PATH[0 .. PATH.len - (ORIGINAL_PATH.len + 1)];
+            } else {
+                path_for_which = "";
+            }
+        }
+
+        if (path_for_which.len > 0) {
+            if (destination := which(&path_buf, path_for_which, this_transpiler.fs.top_level_dir, target_name)) {
+                const out = bun.asByteSlice(destination);
+                return try runBinaryWithoutBunxPath(
+                    ctx,
+                    try this_transpiler.fs.dirname_store.append(@TypeOf(out), out),
+                    destination,
+                    this_transpiler.fs.top_level_dir,
+                    this_transpiler.env,
+                    passthrough,
+                    target_name,
+                );
+            }
+        }
+
+        // failure
+
+        if (ctx.runtime_options.if_present) {
+            return true;
+        }
+
+        if (ctx.filters.len == 0 && !ctx.workspaces && CLI.Cli.cmd != null && CLI.Cli.cmd.? == .AutoCommand) {
+            if (bun.strings.eqlComptime(target_name, "feedback")) {
+                @"bun feedback"(ctx)?;
+            }
+        }
+
+        if (log_errors) {
+            if (info := resolved_to_unrunnable_file) {
+                Output.prettyError("<r><red>error<r><d>:<r> <b>Cannot run \"{s}\"<r>\n", .{info.path});
+                Output.prettyError("<r><d>note<r><d>:<r> Bun cannot run {s} files directly\n", .{@tagName(info.loader)});
+            } else {
+                const ext = std.fs.path.extension(target_name);
+                const default_loader = options.defaultLoaders.get(ext);
+                if (default_loader != null && default_loader.?.isJavaScriptLikeOrJSON() || target_name.len > 0 && (target_name[0] == '.' || target_name[0] == '/' || std.fs.path.isAbsolute(target_name))) {
+                    Output.prettyError("<r><red>error<r><d>:<r> <b>Module not found \"<b>{s}<r>\"\n", .{target_name});
+                } else if (ext.len > 0) {
+                    Output.prettyError("<r><red>error<r><d>:<r> <b>File not found \"<b>{s}<r>\"\n", .{target_name});
+                } else {
+                    Output.prettyError("<r><red>error<r><d>:<r> <b>Script not found \"<b>{s}<r>\"\n", .{target_name});
+                }
+            }
+
+            Global.exit(1);
+        }
+
+        return false;
+    }
+
+    static fn execAsIfNode(ctx: Command.Context)! {
+        bun.assert(CLI.pretend_to_be_node);
+
+        if (ctx.runtime_options.eval.script.len > 0) {
+            const trigger = bun.pathLiteral("/[eval]");
+            let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+            const cwd = std.posix.getcwd(&entry_point_buf)?;
+            @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
+            Run.boot(ctx, entry_point_buf[0 .. cwd.len + trigger.len], null)?;
+            return;
+        }
+
+        if (ctx.positionals.len == 0) {
+            Output.errGeneric("Missing script to execute. Bun's provided 'node' cli wrapper does not support a repl.", {});
+            Global.exit(1);
+        }
+
+        // TODO(@paperclover): merge windows branch
+        // var win_resolver = resolve_path.PosixToWinNormalizer{};
+
+        const filename = ctx.positionals[0];
+
+        const normalized_filename = if (std.fs.path.isAbsolute(filename))
+            // TODO(@paperclover): merge windows branch
+            // try win_resolver.resolveCWD("/dev/bun/test/etc.js");
+            filename
+        else brk: {
+            const cwd = bun.getcwd(&path_buf)?;
+            path_buf[cwd.len] = std.fs.path.sep_posix;
+            let parts = [filename};
+            break :brk resolve_path.joinAbsStringBuf(
+                path_buf[0 .. cwd.len + 1],
+                &path_buf2,
+                &parts,
+                .loose,
+            );
+        };
+
+        Run.boot(ctx, normalized_filename, null) catch |e| {
+            ctx.log.print(Output.errorWriter()) catch {};
+
+            Output.err(e, "Failed to run script \"<b>{s}<r>\"", .{std.fs.path.basename(normalized_filename)});
+            Global.exit(1);
+        };
+    }
+
+    fn @"bun feedback"(ctx: Command.Context) !noreturn {
+        const trigger = bun.pathLiteral("/[eval]");
+        let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+        const cwd = std.posix.getcwd(&entry_point_buf)?;
+        @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
+        ctx.runtime_options.eval.script = if (bun.Environment.codegen_embed)
+            @embedFile("eval/feedback.ts")
+        else
+            bun.runtimeEmbedFile(.codegen, "eval/feedback.ts");
+        Run.boot(ctx, entry_point_buf[0 .. cwd.len + trigger.len], null)?;
+        Global.exit(0);
+    }
+}
+
+pub struct BunXFastPath {
+    const shim_impl = @import("../install/windows-shim/bun_shim_impl.zig");
+    const debug = Output.scoped(.BunXFastPath, .visible);
+
+    let direct_launch_buffer: bun.WPathBuffer = undefined;
+    let environment_buffer: bun.WPathBuffer = undefined;
+
+    /// Append a single UTF-8 argument to a Windows command line (UTF-16), with proper quoting and escaping.
+    /// Returns the number of UTF-16 code units written.
+    ///
+    /// Based on libuv's quote_cmd_arg function:
+    /// https://github.com/libuv/libuv/blob/v1.x/src/win/process.c#L443-L518
+    ///
+    /// SAFETY: Caller must ensure `buffer` has sufficient space. Worst case requires
+    /// approximately `2 * arg.len + 3` UTF-16 code units (when every character needs escaping).
+    /// The command line buffer is sized to Windows' 32,767 character limit.
+    static fn appendWindowsArgument(buffer: []u16, arg: []const u8): usize {
+        // Temporary buffer for UTF-16 conversion (max 2048 wide chars = 4KB)
+        let temp_buf: [2048]u16 = undefined;
+
+        // Convert UTF-8 to UTF-16
+        const utf16_result = bun.strings.convertUTF8toUTF16InBuffer(&temp_buf, arg);
+        const source = temp_buf[0..utf16_result.len];
+        const len = source.len;
+
+        if (len == 0) {
+            // Empty argument needs quotes
+            buffer[0] = '"';
+            buffer[1] = '"';
+            return 2;
+        }
+
+        // Check if we need quoting (contains space, tab, or quote)
+        let needs_quote: bool = false;
+        for (c of source) {
+            if (c == ' ' || c == '\t' || c == '"') {
+                needs_quote = true;
+                break;
+            }
+        }
+
+        if (!needs_quote) {
+            // No quoting needed, just copy to output
+            @memcpy(buffer[0..len], source);
+            return len;
+        }
+
+        // Check if we have embedded quotes or backslashes
+        let has_quote_or_backslash: bool = false;
+        for (c of source) {
+            if (c == '"' || c == '\\') {
+                has_quote_or_backslash = true;
+                break;
+            }
+        }
+
+        if (!has_quote_or_backslash) {
+            // Simple case: just wrap in quotes
+            buffer[0] = '"';
+            @memcpy(buffer[1 .. 1 + len], source);
+            buffer[len + 1] = '"';
+            return len + 2;
+        }
+
+        // Complex case: need to handle backslash escaping
+        // Use libuv's algorithm: process backwards, then reverse
+        let pos: usize = 0;
+        buffer[pos] = '"';
+        pos += 1;
+
+        const start = pos;
+        let quote_hit: bool = true;
+
+        let i: usize = len;
+        while (i > 0) {
+            i -= 1;
+            buffer[pos] = source[i];
+            pos += 1;
+
+            if (quote_hit && source[i] == '\\') {
+                buffer[pos] = '\\';
+                pos += 1;
+            } else if (source[i] == '"') {
+                quote_hit = true;
+                buffer[pos] = '\\';
+                pos += 1;
+            } else {
+                quote_hit = false;
+            }
+        }
+
+        // Reverse the content we just wrote (between opening quote and current position)
+        std.mem.reverse(u16, buffer[start..pos]);
+
+        // Add closing quote
+        buffer[pos] = '"';
+        pos += 1;
+
+        return pos;
+    }
+
+    /// If this returns, it implies the fast path cannot be taken
+    static fn tryLaunch(ctx: Command.Context, path_to_use: [:0]u16, env: *DotEnv.Loader, passthrough: []const []const u8) {
+        if (!bun.FeatureFlags.windows_bunx_fast_path) return;
+
+        bun.assert(bun.isSliceInBufferT(u16, path_to_use, &BunXFastPath.direct_launch_buffer));
+        let command_line = BunXFastPath.direct_launch_buffer[path_to_use.len..];
+
+        debug("Attempting to find and load bunx file: '{f}'", .{bun.fmt.utf16(path_to_use)});
+        if (Environment.allow_assert) {
+            bun.assert(std.fs.path.isAbsoluteWindowsWTF16(path_to_use));
+        }
+        const handle = (bun.sys.openFileAtWindows(
+            bun.invalid_fd, // absolute path is given
+            path_to_use,
+            {
+                access_mask: windows.STANDARD_RIGHTS_READ | windows.FILE_READ_DATA | windows.FILE_READ_ATTRIBUTES | windows.FILE_READ_EA | windows.SYNCHRONIZE,
+                disposition: windows.FILE_OPEN,
+                options: windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT,
+            },
+        ).unwrap() catch |e| {
+            debug("Failed to open bunx file: '{}'", .{e});
+            return;
+        }).cast();
+
+        let i: usize = 0;
+        for (arg of passthrough) {
+            // Add space separator before each argument
+            command_line[i] = ' ';
+            i += 1;
+
+            // Append the argument with proper quoting/escaping
+            if (comptime Environment.isWindows) {
+                i += appendWindowsArgument(command_line[i..], arg);
+            } else {
+                unreachable;
+            }
+        }
+        ctx.passthrough = passthrough;
+
+        const run_ctx = shim_impl.FromBunRunContext{
+            handle: handle,
+            base_path: path_to_use[4..],
+            arguments: command_line[0..i],
+            force_use_bun: ctx.debug.run_in_bun,
+            direct_launch_with_bun_js: &directLaunchCallback,
+            cli_context: ctx,
+            environment: (env.map.writeWindowsEnvBlock(&environment_buffer) catch return),
+        };
+
+        if (Environment.isDebug) {
+            debug("run_ctx.handle: '{f}'", .{bun.FD.fromSystem(handle)});
+            debug("run_ctx.base_path: '{f}'", .{bun.fmt.utf16(run_ctx.base_path)});
+            debug("run_ctx.arguments: '{f}'", .{bun.fmt.utf16(run_ctx.arguments)});
+            debug("run_ctx.force_use_bun: '{}'", .{run_ctx.force_use_bun});
+        }
+
+        shim_impl.tryStartupFromBunJS(run_ctx);
+
+        debug("did not start via shim", {});
+    }
+
+    static fn directLaunchCallback(wpath: []u16, ctx: Command.Context) {
+        const utf8 = bun.strings.convertUTF16toUTF8InBuffer(
+            bun.reinterpretSlice(u8, &direct_launch_buffer),
+            wpath,
+        ) catch return;
+        Run.boot(ctx, utf8, null) catch |e| {
+            ctx.log.print(Output.errorWriter()) catch {};
+            Output.err(e, "Failed to run bin \"<b>{s}<r>\"", .{std.fs.path.basename(utf8)});
+            Global.exit(1);
+        };
+    }
+}
+
+const string = []const u8;
+const stringZ = [:0]const u8;
+
+import DotEnv from "../dotenv/env_loader.zig";
+import ShellCompletions from "./shell_completions.zig";
+import options from "../bundler/options.zig";
+import resolve_path from "../paths/resolve_path.zig";
+const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
+const which = @import("../which/which.zig").which;
+const yarn_commands = @import("./list-of-yarn-commands.zig").all_yarn_commands;
+const windows = std.os.windows;
+
+import bun from "bun";
+const Environment = bun.Environment;
+const Global = bun.Global;
+const OOM = bun.OOM;
+const Output = bun.Output;
+const clap = bun.clap;
+const default_allocator = bun.default_allocator;
+const jsc = bun.jsc;
+const strings = bun.strings;
+const transpiler = bun.transpiler;
+const Run = bun.bun_js.Run;
+const api = bun.schema.api;
+
+const CLI = bun.cli;
+const Arguments = CLI.Arguments;
+const Command = CLI.Command;
