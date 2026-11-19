@@ -928,3 +928,15 @@
 ### 2. HTML 资产清单与标签处理器状态机 (`HTMLImportManifest.cp`, `HTMLScanner.cp`)
 - **Base64 缓冲区动态构建**：规范 `let base64_buf: [base64_buf_len]u8 = undefined;` 声明，对输出文件清单遍历采用带步进的 `while (i < len) : (i += 1)` 循环，消除未绑定索引越界风险。
 - **静态标签处理器数组**：将 Zig 风格的字面量 `[_]TagHandler{ ... }` 重写为纯正 CP 数组语法 `[ TagHandler{ ... }, ... ]`，消解嵌套 `break :blk`，利用海象解包 `if (dot_idx := ...)` 优雅降级提取路径扩展名。
+
+
+## 2026-11-19 [Milestone 7 Phase 69 Group A] JSC 转译持久化缓存与异步模块解析队列 CP 纯化经验
+
+### 1. 转译缓存索引与文件锁排他安全 (`RuntimeTranspilerCache.cp`)
+- **文件锁与哈希表借用安全**：在缓存读取与写入生命周期中，严格利用只读借用参数解构缓存条目，避免跨线程写入时的别名竞态。
+- **缓冲区切片与计算常量收拢**：对定长元数据缓存抽取编译期独立常量，根治复合表达式在数组定义中的歧义解析。
+
+### 2. 异步模块依赖解析与错误标量模式匹配 (`AsyncModule.cp`)
+- **子结构体顶层解耦与方法接收者绑定**：将 `Queue`、`PackageDownloadError`、`PackageResolveError` 提升至顶层为 `AsyncModuleQueue`，内部通过类型别名导出，确保实例方法全面具备 `self: *AsyncModuleQueue` 的可变接收者能力。
+- **标量错误匹配与解包遮蔽消除**：全面采用结构化 `if (result.err == ...) ... else if ...` 替代原生 `switch (err)`，避免生成虚假 Ok/Err 解包桩代码；消除形参 `e` 与解包载荷命名冲突。
+- **C 导出符号顶层收拢**：将 `Bun__onFulfillAsyncModule` 集中在顶部 `@c { ... }` 块声明，对多元素对齐指针包裹在 `unsafe { ... }` 块内进行强类型断言。
