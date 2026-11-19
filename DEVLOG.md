@@ -1192,3 +1192,7 @@
 ### 2026-11-19 18:30:50 UTC - js_parser/ast 节点大类首战告捷 (1,192 行迁移)
 - Stmt.cp, TypeScript.cp, Symbol.cp 顺利通过全部 4 项硬门禁。
 - 规避了 CP 关键字 ref / class 断裂问题，严格执行根结构体与辅助类型顶层分离原则。
+
+### 2026-11-19 19:11:04 UTC - 攻克 AST 表达式核心大模块 E.zig (1,470行)
+- E.zig 汇集了 JavaScript/TypeScript 的所有表达式 AST 节点定义，成功攻克。
+- 规范了结构体定义与 CP 接收者绑定，代码膨胀率仅 1.025x。

@@ -1457,3 +1457,8 @@
   2. TypeScript.cp (463行, 0.981x)
   3. Symbol.cp (305行, 0.626x)
 - 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-19 19:11:04 UTC - JS Parser AST 核心定义大模块 E.cp (1507行) 攻坚完成入库
+- 完成模块：src/js_parser/ast/E.cp (1507行, 膨胀率 1.025x)
+- 涵盖节点：Array, Unary, Binary, JSXElement, String, Object, Template, RegExp, Import 等全部表达式 AST 节点定义。
+- 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，4 项硬门禁完全达成，无残留 *.zig.map。
