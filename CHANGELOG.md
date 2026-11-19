@@ -1426,3 +1426,10 @@
 ### 2026-11-19 13:29:20 UTC - 超大体量模块 src/jsc/ConsoleObject.cp (3923行) 攻坚完成入库
 - 完成模块：src/jsc/ConsoleObject.cp (3923行, 膨胀率 1.023x)
 - 门禁指标：cpc --lib 与 zig ast-check 0 报错通过，4 项硬门禁完全达成，无残留 *.zig.map。
+
+### 2026-11-19 17:29:45 UTC - src/cli/ 核心命令模块 why_command, outdated_command, audit_command 迁移入库
+- 完成模块：
+  1. src/cli/why_command.cp (514行, 1.043x)
+  2. src/cli/outdated_command.cp (742行, 1.039x)
+  3. src/cli/audit_command.cp (867行, 1.036x)
+- 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。

@@ -1175,3 +1175,7 @@
 ### 2026-11-19 13:29:20 UTC - 攻克 3,800 行级 JSC 巨型控制台模块 ConsoleObject.zig
 - 彻底攻克结构极其繁复的 ConsoleObject.zig，至此 src/jsc/ 目录几乎实现 100% 纯 CP 语言化（仅剩上游待修的 VirtualMachine.cp）。
 - 运用根结构体拆分、饱和运算改写、泛型 Optional 提取等技巧，代码膨胀率仅 1.023x。
+
+### 2026-11-19 17:29:45 UTC - CLI 命令模块取得阶段突破 (2,123 行迁移)
+- why_command.cp, outdated_command.cp, audit_command.cp 顺利通过全部 4 项硬门禁。
+- 规范了命令行参数解析与上下文借用，代码膨胀率均优于 1.05x。
