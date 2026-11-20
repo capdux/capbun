@@ -230,7 +230,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
                 } else null;
 
                 // Prefixed properties only support RGB.
-                const prefix_images: *const SmallList(T, 1) = if (rgb) |*r| r else this;
+                var prefix_images: *const SmallList(T, 1) = this;
+                if (rgb != null) {
+                    prefix_images = &rgb.?;
+                }
 
                 // Legacy -webkit-gradient()
                 if (prefixes.webkit and targets.browsers != null and css.prefixes.Feature.isWebkitGradient(targets.browsers.?)) {

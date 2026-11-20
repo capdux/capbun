@@ -18,7 +18,7 @@ pub const WTFExternalSharedDescriptor = struct {
 pub const WTFStringImplStruct = extern struct {
     m_refCount: u32 = 0,
     m_length: u32 = 0,
-    m_ptr: *WTFStringImplPtr,
+    m_ptr: WTFStringImplPtr,
     m_hashAndFlags: u32 = 0,
 
 pub fn refCount(self: *const WTFStringImplStruct) u32 {

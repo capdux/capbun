@@ -795,7 +795,7 @@ export class NetworkSink {
         if (this.ended) return .success;
         this.ended = true;
         if (task := this.task) {
-            * = sys.handleOom(task.writeBytes("", true));
+            * = bun.handleOom(task.writeBytes("", true));
         }
         this.signal.close(err);
         return .success;
@@ -811,7 +811,7 @@ export class NetworkSink {
             let value = this.endPromise.value();
             if (!this.ended) {
                 this.ended = true;
-                * = sys.handleOom(task.writeBytes("", true));
+                * = bun.handleOom(task.writeBytes("", true));
                 this.signal.close(null);
             }
             return .{ .result = value };
@@ -829,6 +829,10 @@ export class NetworkSink {
         }
         return 0;
     }
+}
+
+comptime {
+    * = NetworkSink.JSSink.createObject;
 }
 
 pub type OnFirstWriteFn = *const fn (*!?) void;

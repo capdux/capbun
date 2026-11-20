@@ -454,6 +454,12 @@ pub fn push(self: *@This(), batch: Batch) void {
             if ((self.len == 0)) {
                 self.* = batch;
             } else {
+                if (batch.head) |h| {
+                    _ = &h;
+                    self.tail.?.node.next = (&h.node);
+                } else {
+                    self.tail.?.node.next = null;
+                }
                 self.tail = batch.tail;
                 self.len = (self.len + batch.len);
             }

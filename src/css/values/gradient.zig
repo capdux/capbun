@@ -1428,54 +1428,52 @@ const Allocator = std.mem.Allocator;
 
 pub fn GradientItem(comptime D: type) type {
         return union(enum) {
-        /// A color stop.
-        color_stop: ColorStop(D),
-        /// A color interpolation hint.
-        hint: D,
+    color_stop: ColorStop(D),
+    hint: D,
 
-        pub fn toCss(this: *const @This(), dest: *Printer) PrintErr!void {
-            return switch (this.*) {
-                .color_stop => |*c| try c.toCss(dest),
-                .hint => |*h| try css.generic.toCss(D, h, dest),
-            };
-        }
+pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
+            return (switch (self.*) {
+.color_stop => |*c| try c.toCss(dest),
+.hint => |*h| try css.generic.toCss(D, h, dest),
+});
+    }
 
-        pub fn eql(this: *const GradientItem(D), other: *const GradientItem(D)) bool {
-            return css.implementEql(@This(), this, other);
-        }
+pub fn eql(self: *const @This(), other: *const GradientItem(D)) bool {
+            return css.implementEql(@This(), self, other);
+    }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
+pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), self, allocator);
+    }
 
-        pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers) bool {
-            return switch (this.*) {
-                .color_stop => |*c| c.color.isCompatible(browsers),
-                .hint => css.compat.Feature.isCompatible(.gradient_interpolation_hints, browsers),
-            };
-        }
+pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+            return (switch (self.*) {
+.color_stop => |*c| c.color.isCompatible(browsers),
+.hint => css.compat.Feature.isCompatible(.gradient_interpolation_hints, browsers),
+});
+    }
 
-        /// Returns a fallback gradient item for the given color fallback type.
-        pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) GradientItem(D) {
-            return switch (this.*) {
-                .color_stop => |*stop| .{
-                    .color_stop = .{
-                        .color = stop.color.getFallback(allocator, kind),
-                        .position = if (stop.position) |*p| p.deepClone(allocator) else null,
-                    },
-                },
-                .hint => this.deepClone(allocator),
-            };
-        }
+pub fn getFallback(self: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) GradientItem(D) {
+            return (switch (self.*) {
+.color_stop => |*stop| blk: {
+            var cs: GradientItem(D) = .{ .color_stop = .{ .color = stop.color.getFallback(allocator, kind), .position = null } };
+            _ = &cs;
+            if ((stop.position != null)) {
+                cs.color_stop.position = stop.position.?.deepClone(allocator);
+            }
+            break :blk cs;
+},
+.hint => self.deepClone(allocator),
+});
+    }
 
-        /// Returns the color fallback types needed for the given browser targets.
-        pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets) css.ColorFallbackKind {
-            return switch (this.*) {
-                .color_stop => |*stop| stop.color.getNecessaryFallbacks(targets),
-                .hint => css.ColorFallbackKind{},
-            };
-        }
-    };
+pub fn getNecessaryFallbacks(self: *const @This(), targets: css.targets.Targets) css.ColorFallbackKind {
+            return (switch (self.*) {
+.color_stop => |*stop| stop.color.getNecessaryFallbacks(targets),
+.hint => css.ColorFallbackKind{  },
+});
+    }
+};
 }
 
 pub fn WebKitGradientPointComponent(comptime S: type) type {

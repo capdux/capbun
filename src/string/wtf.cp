@@ -4,9 +4,9 @@ import std from "std";
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
 
-export const WTFStringImpl = *WTFStringImplStruct;
+pub const WTFStringImpl = *WTFStringImplStruct;
 
-export @c union WTFStringImplPtr {
+pub @c union WTFStringImplPtr {
     latin1: [*]const u8,
     utf16: [*]const u16,
 }
@@ -228,7 +228,7 @@ export @c struct WTFStringImplStruct {
 }
 
 /// Behaves like `WTF::Ref<WTF::StringImpl>`.
-export const WTFString = bun.ptr.ExternalShared(WTFStringImplStruct);
+pub const WTFString = bun.ptr.ExternalShared(WTFStringImplStruct);
 
 export struct StringImplAllocator {
     static fn alloc(ptr: *!, len: usize, _: std.mem.Alignment, _: usize): ([*]u8)? {

@@ -1003,7 +1003,7 @@ pub fn ignoreRemainingResponseBody(self: *FetchTasklet) void {
             self.ignore_data = true;
     }
 
-pub fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) callconv(.c) void {
+pub fn bunFetchResponseFinalize(tasklet: *FetchTasklet) void {
             _ = log("onResponseFinalize", .{});
             if (tasklet.native_response) |response| {
                 _ = &response;
@@ -1366,3 +1366,7 @@ const ResumableSinkBackpressure = jsc.WebCore.ResumableSinkBackpressure;
 const Blob = jsc.WebCore.Blob;
 const AnyBlob = jsc.WebCore.Blob.Any;
 const log = Output.scoped(.FetchTasklet, .visible);
+
+pub export fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) callconv(.c) void {
+        _ = FetchTasklet.bunFetchResponseFinalize(tasklet);
+}

@@ -333,12 +333,16 @@ pub fn Err(comptime T: type) type {
         }
 
         pub fn addToLogger(this: @This(), log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !void {
+            var msg_data: logger.Data = .{
+                .location = null,
+                .text = try std.fmt.allocPrint(allocator, "{f}", .{this.kind}),
+            };
+            if (this.loc != null) {
+                msg_data.location = try this.loc.?.toLocation(source, allocator);
+            }
             try log.addMsg(.{
                 .kind = .err,
-                .data = .{
-                    .location = if (this.loc) |*loc| try loc.toLocation(source, allocator) else null,
-                    .text = try std.fmt.allocPrint(allocator, "{f}", .{this.kind}),
-                },
+                .data = msg_data,
             });
 
             log.errors += 1;

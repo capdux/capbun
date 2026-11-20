@@ -1260,6 +1260,11 @@ pub const Installer = struct {
                         target_package_name = strings.StringOrTinyString.init(installer.lockfile.str(&pkg_names[replacement_pkg_id]));
                     }
 
+                    let target_nm_path = &node_modules_path;
+                    if (target_node_modules_path != null) {
+                        target_nm_path = &target_node_modules_path.?;
+                    }
+
                     let bin_linker: Bin.Linker = .{
                         .bin = bin,
                         .global_bin_path = installer.manager.options.bin_path,
@@ -1268,7 +1273,7 @@ pub const Installer = struct {
                         .string_buf = string_buf,
                         .extern_string_buf = installer.lockfile.buffers.extern_strings.items,
                         .seen = &seen,
-                        .target_node_modules_path = if (target_node_modules_path) |*path| path else &node_modules_path,
+                        .target_node_modules_path = target_nm_path,
                         .node_modules_path = &node_modules_path,
                         .abs_target_buf = abs_target_buf,
                         .abs_dest_buf = abs_dest_buf,
@@ -1639,6 +1644,11 @@ pub const Installer = struct {
                 target_package_name = strings.StringOrTinyString.init(this.lockfile.str(&pkg_names[replacement_pkg_id]));
             }
 
+            let target_nm_path = &node_modules_path;
+            if (target_node_modules_path != null) {
+                target_nm_path = &target_node_modules_path.?;
+            }
+
             let bin_linker: Bin.Linker = .{
                 .bin = bin,
                 .global_bin_path = this.manager.options.bin_path,
@@ -1647,7 +1657,7 @@ pub const Installer = struct {
                 .extern_string_buf = extern_string_buf,
                 .seen = &seen,
                 .node_modules_path = &node_modules_path,
-                .target_node_modules_path = if (target_node_modules_path) |*path| path else &node_modules_path,
+                .target_node_modules_path = target_nm_path,
                 .target_package_name = if (target_node_modules_path != null) target_package_name else package_name,
                 .abs_target_buf = link_target_buf,
                 .abs_dest_buf = link_dest_buf,

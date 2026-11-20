@@ -72,10 +72,14 @@ pub const JSS3Error = extern struct {
     path: bun.String = bun.String.empty,
 
     pub fn init(code: []const u8, message: []const u8, path: ?[]const u8) JSS3Error {
+        var path_str = bun.String.empty;
+        if (path != null) {
+            path_str = bun.String.init(path.?);
+        }
         return .{
             .code = bun.String.createAtomIfPossible(code),
             .message = bun.String.createAtomIfPossible(message),
-            .path = if (path) |p| bun.String.init(p) else bun.String.empty,
+            .path = path_str,
         };
     }
 

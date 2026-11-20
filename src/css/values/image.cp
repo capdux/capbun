@@ -114,13 +114,16 @@ pub const Image = union(enum) {
         let res = css.SmallList(Image, 6){};
 
         // Get RGB fallbacks if needed.
-        const rgb = if (fallbacks.rgb)
+        let rgb = if (fallbacks.rgb)
             this.getFallback(allocator, ColorFallbackKind.RGB)
         else
             null;
 
         // Prefixed properties only support RGB.
-        const prefix_image = if (rgb) |r| &r else this;
+        let prefix_image = this;
+        if (rgb != null) {
+            prefix_image = &rgb.?;
+        }
 
         // Legacy -webkit-gradient()
         if (prefixes.webkit and

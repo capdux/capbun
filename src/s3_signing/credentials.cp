@@ -363,13 +363,22 @@ pub const S3Credentials = struct {
             }
             const session_token: ?[]const u8 = if (this.sessionToken.len == 0) null else this.sessionToken;
 
-            const acl: ?[]const u8 = if (signOptions.acl) |acl_value| acl_value.toString() else null;
+            let acl: ?[]const u8 = null;
+            if (signOptions.acl != null) {
+                acl = signOptions.acl.?.toString();
+            }
 
-            const storage_class: ?[]const u8 = if (signOptions.storage_class) |storage_class| storage_class.toString() else null;
+            let storage_class: ?[]const u8 = null;
+            if (signOptions.storage_class != null) {
+                storage_class = signOptions.storage_class.?.toString();
+            }
 
             if (this.accessKeyId.len == 0 or this.secretAccessKey.len == 0) return error.MissingCredentials;
             const signQuery = signQueryOption != null;
-            const expires = if (signQueryOption) |options| options.expires else 0;
+            let expires: @TypeOf(signQueryOption.?.expires) = 0;
+            if (signQueryOption != null) {
+                expires = signQueryOption.?.expires;
+            }
             const method_name = switch (method) {
                 .GET => "GET",
                 .POST => "POST",
@@ -481,7 +490,10 @@ pub const S3Credentials = struct {
 
             const service_name = "s3";
 
-            const aws_content_hash = if (content_hash) |hash| hash else ("UNSIGNED-PAYLOAD");
+            let aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
+            if (content_hash != null) {
+                aws_content_hash = content_hash.?;
+            }
             let tmp_buffer: [4096]u8 = undefined;
 
             const authorization = brk: {

@@ -380,7 +380,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             const has_responded = resp.hasResponded();
             if (!has_responded) {
                 const original_state = ctx.defer_deinit_until_callback_completes;
-                var should_deinit_context = if (original_state) |defer_deinit| defer_deinit.* else false;
+                var should_deinit_context = false;
+                if (original_state != null) {
+                    should_deinit_context = original_state.?.*;
+                }
                 ctx.defer_deinit_until_callback_completes = &should_deinit_context;
                 ctx.runErrorHandler(
                     value,

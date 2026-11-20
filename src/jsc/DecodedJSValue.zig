@@ -25,7 +25,7 @@ pub const JSCEncodedValueDescriptor = extern union {
 };
 
 pub const DecodedJSValue = extern struct {
-    u: *JSCEncodedValueDescriptor,
+    u: JSCEncodedValueDescriptor,
 
 pub fn encode(self: DecodedJSValue) jsc.JSValue {
             return @enumFromInt(self.u.asInt64);

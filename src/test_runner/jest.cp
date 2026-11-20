@@ -331,7 +331,9 @@ pub struct Jest {
     }
 }
 
-@export(&Jest.Bun__Jest__createTestModuleObject, { name: "Bun__Jest__createTestModuleObject" });
+@export @c pub fn Bun__Jest__createTestModuleObject(globalObject: *JSGlobalObject): JSValue {
+    return Jest.createTestModule(globalObject) catch return JSValue.zero;
+}
 
 pub struct on_unhandled_rejection {
     pub static fn onUnhandledRejection(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, rejection: JSValue) {

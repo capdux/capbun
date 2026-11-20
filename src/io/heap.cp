@@ -23,7 +23,11 @@ pub fn Intrusive(
         context: Context,
 
         pub fn insert(self: *Self, v: *T) void {
-            self.root = if (self.root) |root| self.meld(v, root) else v;
+            if (root := self.root) {
+                self.root = self.meld(v, root);
+            } else {
+                self.root = v;
+            }
         }
 
         pub fn peek(self: *const Self) ?*T {
@@ -69,10 +73,11 @@ pub fn Intrusive(
 
         pub fn deleteMin(self: *Self) ?*T {
             const root = self.root orelse return null;
-            self.root = if (root.heap.child) |child|
-                self.combine_siblings(child)
-            else
-                null;
+            if (child := root.heap.child) {
+                self.root = self.combine_siblings(child);
+            } else {
+                self.root = null;
+            }
 
             root.heap = .{};
             return root;

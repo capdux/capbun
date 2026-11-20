@@ -1326,9 +1326,10 @@ pub const PackageInstall = struct {
                 .result => {},
             }
         } else {
-            let dest_dir = if (subdir) |dir| brk: {
-                break :brk bun.MakePath.makeOpenPath(destination_dir, dir, .{}) catch |err| return Result.fail(err, .linking_dependency, @errorReturnTrace());
-            } else destination_dir;
+            let dest_dir = destination_dir;
+            if (subdir != null) {
+                dest_dir = bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{}) catch |err| return Result.fail(err, .linking_dependency, @errorReturnTrace());
+            }
             defer {
                 if (subdir != null) dest_dir.close();
             }

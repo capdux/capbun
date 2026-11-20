@@ -318,7 +318,7 @@ pub fn GlobWalker_(
     comptime Accessor: type,
     comptime sentinel: bool,
 ) type {
-    const is_ignored: fn ([]const u8) bool = if (comptime ignore_filter_fn) |func| func else dummyFilterFalse;
+    const is_ignored: *const fn ([]const u8) bool = if (comptime ignore_filter_fn != null) ignore_filter_fn.? else dummyFilterFalse;
 
     const count_fds = Accessor.count_fds and bun.Environment.isDebug;
 

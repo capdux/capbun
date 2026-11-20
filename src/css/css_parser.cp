@@ -1732,7 +1732,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             pub const Prelude = AtRulePreludeT;
             pub const AtRule = void;
 
-            pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
+            static fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
                 const PreludeEnum = enum {
                     import,
                     charset,
@@ -1757,8 +1757,9 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 if (input.tryParse(Parser.expectIdentMatching, .{"layer"}) == .result)
                                     .{ .value = null }
                                 else if (input.tryParse(Parser.expectFunctionMatching, .{"layer"}) == .result) brk: {
+                                    const empty_layer_ctx: void = undefined;
                                     break :brk .{
-                                        .value = switch (input.parseNestedBlock(LayerName, {}, voidWrap(LayerName, LayerName.parse))) {
+                                        .value = switch (input.parseNestedBlock(LayerName, empty_layer_ctx, voidWrap(LayerName, LayerName.parse))) {
                                             .result => |v| v,
                                             .err => |e| return .{ .err = e },
                                         },
@@ -1797,7 +1798,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                         },
                         .namespace => {
                             if (@intFromEnum(parser.state) > @intFromEnum(State.namespaces)) {
-                                return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = {} }) };
+                                return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = @as(void, undefined) }) };
                             }
 
                             const prefix = switch (input.tryParse(Parser.expectIdent, .{})) {
@@ -1888,12 +1889,16 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                         const prefix = prelude.namespace.prefix;
                         const url = prelude.namespace.url;
 
+                        let ns_rule = NamespaceRule{
+                            .prefix = null,
+                            .url = url,
+                            .loc = loc,
+                        };
+                        if (p := prefix) {
+                            ns_rule.prefix = .{ .v = p };
+                        }
                         parser.rules.v.append(parser.allocator, .{
-                            .namespace = NamespaceRule{
-                                .prefix = if (prefix) |p| .{ .v = p } else null,
-                                .url = url,
-                                .loc = loc,
-                            },
+                            .namespace = ns_rule,
                         }) catch |err| bun.handleOom(err);
 
                         return .success;

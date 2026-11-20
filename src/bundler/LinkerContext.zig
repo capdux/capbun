@@ -169,10 +169,10 @@ pub const LinkerContext = struct {
                 // was generated. This will be preserved so that remapping
                 // stack traces can show the source code, even after incremental
                 // rebuilds occur.
-                const alloc = if (worker.ctx.transpiler.options.dev_server) |dev|
-                    dev.allocator()
-                else
-                    worker.allocator;
+                var alloc = worker.allocator;
+                if (worker.ctx.transpiler.options.dev_server != null) {
+                    alloc = worker.ctx.transpiler.options.dev_server.?.allocator();
+                }
 
                 SourceMapData.computeQuotedSourceContents(task.ctx, alloc, task.source_index);
             }

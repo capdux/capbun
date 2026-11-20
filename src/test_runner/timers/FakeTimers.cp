@@ -283,7 +283,11 @@ fn advanceTimersByTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     if (!arg.isNumber()) {
         return globalObject.throwInvalidArguments("advanceTimersToNextTimer() expects a number of milliseconds", .{});
     }
-    const current = current_time.getTimespecNow() ?? return globalObject.throwInvalidArguments("Fake timers not initialized. Initialize with useFakeTimers() first.", .{});
+    const current_opt = current_time.getTimespecNow();
+    if (current_opt == null) {
+        return globalObject.throwInvalidArguments("Fake timers not initialized. Initialize with useFakeTimers() first.", .{});
+    }
+    const current = current_opt.?;
     const arg_number = arg.asNumber();
     const max_advance = std.math.maxInt(u32);
     if (arg_number < 0 || arg_number > max_advance) {
@@ -382,7 +386,7 @@ pub const timerFnsCount = fake_timers_fns.len;
 pub fn putTimersFns(globalObject: *jsc.JSGlobalObject, jest: jsc.JSValue, vi: jsc.JSValue) {
     inline for (fake_timer_fn of fake_timers_fns) {
         const str = bun.ZigString.static(fake_timer_fn.name);
-        const jsvalue = jsc.JSFunction.create(globalObject, fake_timer_fn.name, fake_timer_fn.func, fake_timer_fn.arity, .{});
+        const jsvalue = jsc.JSFunction.create(globalObject, fake_timer_fn.name, jsc.toJSHostFn(fake_timer_fn.func.*), fake_timer_fn.arity, .{});
         vi.put(globalObject, str, jsvalue);
         jest.put(globalObject, str, jsvalue);
     }

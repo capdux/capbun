@@ -1,20 +1,20 @@
 import builtin from "builtin";
 
 /// ABI-compatible with `JSC::EncodedValueDescriptor.asBits`.
-@c pub struct EncodedValueBits {
+pub @c struct EncodedValueBits {
     payload: i32,
     tag: i32,
 }
 
 /// ABI-compatible with `JSC::EncodedValueDescriptor`.
-@c pub union JSCEncodedValueDescriptor {
+pub @c union JSCEncodedValueDescriptor {
     asInt64: i64,
     ptr: (*jsc.JSCell)?,
     asBits: EncodedValueBits,
 }
 
 /// ABI-compatible with `JSC::JSValue`.
-@c pub struct DecodedJSValue {
+pub @c struct DecodedJSValue {
     pub const EncodedValueDescriptor = JSCEncodedValueDescriptor;
 
     u: JSCEncodedValueDescriptor,

@@ -485,7 +485,7 @@ pub enum Target {
 
         if (target == .node) {
             exts.ensureTotalCapacity(out_extensions_list.len * 2) catch unreachable;
-            for (ext of out_extensions_list) {
+            for (ext of out_extensions_list[0..]) {
                 exts.put(ext, ".mjs") catch unreachable;
             }
         } else {
@@ -493,7 +493,7 @@ pub enum Target {
             exts.put(".mjs", ".js") catch unreachable;
         }
 
-        for (ext of out_extensions_list) {
+        for (ext of out_extensions_list[0..]) {
             exts.put(ext, ".js") catch unreachable;
         }
 

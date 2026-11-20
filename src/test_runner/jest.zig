@@ -403,6 +403,10 @@ const RegularExpression = jsc.RegularExpression;
 const VirtualMachine = jsc.VirtualMachine;
 const ZigString = jsc.ZigString;
 
+pub export fn Bun__Jest__createTestModuleObject(globalObject: *JSGlobalObject) callconv(.c) JSValue {
+        return (blk_catch_5: { break :blk_catch_5 ((Jest.createTestModule(globalObject)) catch |__ce_5| { _ = &__ce_5; return JSValue.zero; }); });
+}
+
 pub fn consumeArg(globalThis: *JSGlobalObject, should_write: bool, str_idx: *usize, args_idx: *usize, array_list: *std.array_list.Managed(u8), arg: *const JSValue, fallback: []const u8) !void {
         if (should_write) {
             const owned_slice = try arg.toSliceOrNull(globalThis);

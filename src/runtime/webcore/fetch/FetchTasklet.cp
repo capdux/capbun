@@ -964,7 +964,7 @@ export class FetchTasklet {
         _.ignore_data = true;
     }
 
-    @c pub export static fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) {
+    pub static fn bunFetchResponseFinalize(tasklet: *FetchTasklet) {
         log("onResponseFinalize", .{});
         if (response := tasklet.native_response) {
             const body = response.getBodyValue();
@@ -1369,4 +1369,8 @@ export class FetchTasklet {
         if (task.javascript_vm.isShuttingDown()) return;
         task.javascript_vm.eventLoop().enqueueTaskConcurrent(task.concurrent_task.from(task, .manual_deinit));
     }
+}
+
+@export @c pub fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) {
+    FetchTasklet.bunFetchResponseFinalize(tasklet);
 }

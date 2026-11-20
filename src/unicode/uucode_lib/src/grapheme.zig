@@ -94,75 +94,62 @@ const FieldEnum = getpkg.FieldEnum;
 
 pub fn CustomIterator(comptime CodePointIterator: type, comptime GB: type, comptime State: type, comptime grapheme_break_field: FieldEnum, comptime customIsBreak: *const fn (GB, GB, *State) bool) type {
         return struct {
-        // This "i" is part of the documented API of this iterator, pointing to
-        // the current location of the iterator in the underlying bytes (the
-        // `i` of the CodePointIterator).
-        i: usize,
+    i: usize,
+    state: State,
+    next_cp_it: CodePointIterator,
+    next_cp: ?u21,
+    next_gb: GB,
 
-        state: State,
-        next_cp_it: CodePointIterator,
-        next_cp: ?u21,
-        next_gb: GB,
-
-        const Self = @This();
-
-        pub fn init(cp_it: CodePointIterator) Self {
+pub fn init(cp_it: CodePointIterator) Self {
             var next_cp_it = cp_it;
+            _ = &next_cp_it;
             const i = next_cp_it.i;
             const next_cp = next_cp_it.next();
+            var next_gb: GB = .other;
+            _ = &next_gb;
+            if (next_cp) |code_point| {
+                _ = &code_point;
+                next_gb = getpkg.get(grapheme_break_field, code_point);
+            }
+            return .{ .state = .default, .i = i, .next_cp_it = next_cp_it, .next_cp = next_cp, .next_gb = next_gb };
+    }
 
-            return .{
-                .state = .default,
-                .i = i,
-                .next_cp_it = next_cp_it,
-                .next_cp = next_cp,
-                .next_gb = if (next_cp) |code_point|
-                    getpkg.get(grapheme_break_field, code_point)
-                else
-                    .other,
-            };
-        }
-
-        pub fn nextCodePoint(self: *Self) ?IteratorResult {
-            if (self.next_cp == null) return null;
-
+pub fn nextCodePoint(self: *@This()) ?IteratorResult {
+            if ((self.next_cp == null)) {
+                return null;
+            }
             const cp1 = self.next_cp.?;
             const gb1 = self.next_gb;
             self.i = self.next_cp_it.i;
             self.next_cp = self.next_cp_it.next();
-
             if (self.next_cp) |cp2| {
+                _ = &cp2;
                 self.next_gb = getpkg.get(grapheme_break_field, cp2);
-                const is_break = customIsBreak(gb1, self.next_gb, &self.state);
-                return IteratorResult{
-                    .code_point = cp1,
-                    .is_break = is_break,
-                };
+                const is_break = customIsBreak(gb1, self.next_gb, (&self.state));
+                return IteratorResult{ .code_point = cp1, .is_break = is_break };
             } else {
-                return IteratorResult{
-                    .code_point = cp1,
-                    .is_break = true,
-                };
+                return IteratorResult{ .code_point = cp1, .is_break = true };
             }
-        }
+    }
 
-        pub fn peekCodePoint(self: Self) ?IteratorResult {
+pub fn peekCodePoint(self: @This()) ?IteratorResult {
             var it = self;
+            _ = &it;
             return it.nextCodePoint();
-        }
+    }
 
-        pub fn nextGrapheme(self: *Self) ?Grapheme {
+pub fn nextGrapheme(self: *@This()) ?Grapheme {
             const start = self.i;
-            return while (self.nextCodePoint()) |result| {
-                if (result.is_break) break .{ .start = start, .end = self.i };
-            } else null;
-        }
+            _ = &start;
+    }
 
-        pub fn peekGrapheme(self: Self) ?Grapheme {
+pub fn peekGrapheme(self: @This()) ?Grapheme {
             var it = self;
+            _ = &it;
             return it.nextGrapheme();
-        }
-    };
+    }
+    const Self = @This();
+};
 }
 
 pub fn Iterator(comptime CodePointIterator: type) type {

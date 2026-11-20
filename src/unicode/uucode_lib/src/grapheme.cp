@@ -33,15 +33,17 @@ pub fn CustomIterator(
             const i = next_cp_it.i;
             const next_cp = next_cp_it.next();
 
+            let next_gb: GB = .other;
+            if (code_point := next_cp) {
+                next_gb = getpkg.get(grapheme_break_field, code_point);
+            }
+
             return .{
                 .state = .default,
                 .i = i,
                 .next_cp_it = next_cp_it,
                 .next_cp = next_cp,
-                .next_gb = if (next_cp) |code_point|
-                    getpkg.get(grapheme_break_field, code_point)
-                else
-                    .other,
+                .next_gb = next_gb,
             };
         }
 

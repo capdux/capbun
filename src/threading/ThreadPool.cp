@@ -152,7 +152,11 @@ pub const Batch = struct {
         if (self.len == 0) {
             self.* = batch;
         } else {
-            self.tail.?.node.next = if (batch.head) |h| &h.node else null;
+            if (h := batch.head) {
+                self.tail.?.node.next = &h.node;
+            } else {
+                self.tail.?.node.next = null;
+            }
             self.tail = batch.tail;
             self.len += batch.len;
         }

@@ -1077,11 +1077,17 @@ pub fn GradientItem(comptime D: type): type {
         /// Returns a fallback gradient item for the given color fallback type.
         pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) GradientItem(D) {
             return switch (this.*) {
-                .color_stop => |*stop| .{
-                    .color_stop = .{
-                        .color = stop.color.getFallback(allocator, kind),
-                        .position = if (stop.position) |*p| p.deepClone(allocator) else null,
-                    },
+                .color_stop => |*stop| blk: {
+                    let cs: GradientItem(D) = .{
+                        .color_stop = .{
+                            .color = stop.color.getFallback(allocator, kind),
+                            .position = null,
+                        },
+                    };
+                    if (stop.position != null) {
+                        cs.color_stop.position = stop.position.?.deepClone(allocator);
+                    }
+                    break :blk cs;
                 },
                 .hint => this.deepClone(allocator),
             };

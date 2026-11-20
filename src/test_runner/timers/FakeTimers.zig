@@ -396,7 +396,11 @@ pub fn advanceTimersByTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Ca
         if ((!arg.isNumber())) {
             return globalObject.throwInvalidArguments("advanceTimersToNextTimer() expects a number of milliseconds", .{});
         }
-        const current = ((current_time.getTimespecNow()) orelse { return .{ .ok = globalObject.throwInvalidArguments("Fake timers not initialized. Initialize with useFakeTimers() first.", .{}) }; });
+        const current_opt = current_time.getTimespecNow();
+        if ((current_opt == null)) {
+            return globalObject.throwInvalidArguments("Fake timers not initialized. Initialize with useFakeTimers() first.", .{});
+        }
+        const current = current_opt.?;
         const arg_number = arg.asNumber();
         const max_advance = std.math.maxInt(u32);
         if (((arg_number < 0) or (arg_number > max_advance))) {
@@ -484,7 +488,7 @@ pub fn isFakeTimers(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JS
 pub fn putTimersFns(globalObject: *jsc.JSGlobalObject, jest: jsc.JSValue, vi: jsc.JSValue) void {
         inline for (fake_timers_fns) |fake_timer_fn| {
             const str = bun.ZigString.static((if (@typeInfo(@TypeOf(fake_timer_fn)) == .@"enum" or @typeInfo(@TypeOf(fake_timer_fn)) == .@"union") @tagName(fake_timer_fn) else fake_timer_fn.name));
-            const jsvalue = jsc.JSFunction.create(globalObject, (if (@typeInfo(@TypeOf(fake_timer_fn)) == .@"enum" or @typeInfo(@TypeOf(fake_timer_fn)) == .@"union") @tagName(fake_timer_fn) else fake_timer_fn.name), fake_timer_fn.func, fake_timer_fn.arity, .{});
+            const jsvalue = jsc.JSFunction.create(globalObject, (if (@typeInfo(@TypeOf(fake_timer_fn)) == .@"enum" or @typeInfo(@TypeOf(fake_timer_fn)) == .@"union") @tagName(fake_timer_fn) else fake_timer_fn.name), jsc.toJSHostFn(fake_timer_fn.func.*), fake_timer_fn.arity, .{});
             _ = vi.put(globalObject, str, jsvalue);
             _ = jest.put(globalObject, str, jsvalue);
         }

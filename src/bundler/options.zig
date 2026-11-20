@@ -165,7 +165,7 @@ pub fn outExtensions(target: Target, allocator: std.mem.Allocator) bun.StringHas
             const out_extensions_list: [8][]const u8 = .{ ".js", ".cjs", ".mts", ".cts", ".ts", ".tsx", ".jsx", ".json" };
             if ((target == .node)) {
                 _ = ((exts.ensureTotalCapacity((out_extensions_list.len * 2))) catch unreachable);
-                for (cp_iter_slice(out_extensions_list)) |ext| {
+                for (cp_iter_slice(out_extensions_list[0..])) |ext| {
                     _ = &ext;
                     _ = ((exts.put(ext, ".mjs")) catch unreachable);
                 }
@@ -173,7 +173,7 @@ pub fn outExtensions(target: Target, allocator: std.mem.Allocator) bun.StringHas
                 _ = ((exts.ensureTotalCapacity((out_extensions_list.len + 1))) catch unreachable);
                 _ = ((exts.put(".mjs", ".js")) catch unreachable);
             }
-            for (cp_iter_slice(out_extensions_list)) |ext| {
+            for (cp_iter_slice(out_extensions_list[0..])) |ext| {
                 _ = &ext;
                 _ = ((exts.put(ext, ".js")) catch unreachable);
             }

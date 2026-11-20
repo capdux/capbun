@@ -16,10 +16,9 @@ const bun = @import("bun");
     disabled: bool = false;
 
     pub fn init(_: *GarbageCollectionController, vm: *VirtualMachine) {
-        const actual = uws.Loop.get();
-        _.gc_timer = uws.Timer.createFallthrough(actual, _);
-        _.gc_repeating_timer = uws.Timer.createFallthrough(actual, _);
-        actual.internal_loop_data.jsc_vm = vm.jsc_vm;
+        _.gc_timer = uws.Timer.createFallthrough(uws.Loop.get(), _);
+        _.gc_repeating_timer = uws.Timer.createFallthrough(uws.Loop.get(), _);
+        uws.Loop.get().internal_loop_data.jsc_vm = vm.jsc_vm;
 
         if (comptime Environment.isDebug) {
             if (bun.env_var.BUN_TRACK_LAST_FN_NAME.get()) {

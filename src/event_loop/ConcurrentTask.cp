@@ -30,7 +30,10 @@ export class ConcurrentTask {
         _,
 
         pub inline fn init(ptr: ?*ConcurrentTask, auto_del: bool) PackedNextPtr {
-            const ptr_bits = if (ptr) |p| @intFromPtr(p) else 0;
+            let ptr_bits: usize = 0;
+            if (ptr != null) {
+                ptr_bits = @intFromPtr(ptr.?);
+            }
             return @enumFromInt(ptr_bits | @intFromBool(auto_del));
         }
 
@@ -41,7 +44,10 @@ export class ConcurrentTask {
 
         pub inline fn setPtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask) void {
             const auto_del = @intFromEnum(self.*) & 1;
-            const ptr_bits = if (ptr) |p| @intFromPtr(p) else 0;
+            let ptr_bits: usize = 0;
+            if (ptr != null) {
+                ptr_bits = @intFromPtr(ptr.?);
+            }
             self.* = @enumFromInt(ptr_bits | auto_del);
         }
 
@@ -56,7 +62,10 @@ export class ConcurrentTask {
         }
 
         pub inline fn atomicStorePtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask, ordering: std.builtin.AtomicOrder) void {
-            const ptr_bits = if (ptr) |p| @intFromPtr(p) else 0;
+            let ptr_bits: usize = 0;
+            if (ptr != null) {
+                ptr_bits = @intFromPtr(ptr.?);
+            }
             const self_ptr: *usize = @ptrCast(self);
             const auto_del_bit = @atomicLoad(usize, self_ptr, .monotonic) & 1;
             @atomicStore(usize, self_ptr, ptr_bits | auto_del_bit, ordering);

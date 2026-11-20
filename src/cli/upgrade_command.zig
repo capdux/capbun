@@ -89,7 +89,7 @@ pub fn isCurrent(self: Version) bool {
     }
 
 pub fn @"export"() void {
-            _ = *const Bun__githubURL;
+            _ = *const bun_github_url_val;
             _ = *const Bun__githubBaselineURL;
     }
     pub const platform_label = (switch (Environment.os) {
@@ -111,7 +111,7 @@ pub fn @"export"() void {
     pub const profile_folder_name = ((("bun-" ++ triplet) ++ suffix) ++ "-profile");
     pub const profile_zip_filename = (profile_folder_name ++ ".zip");
     const current_version: []const u8 = ("bun-v" ++ Global.package_json_version);
-    pub const Bun__githubURL: [*:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, zip_filename });
+    pub const bun_github_url_val: [*:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, zip_filename });
     pub const Bun__githubBaselineURL: [:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, baseline_zip_filename });
 };
 
@@ -718,6 +718,7 @@ pub fn jsCloseTempDirHandle(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSErr
 const string = []const u8;
 const stringZ = [:0]const u8;
 pub var initialized_store = false;
+pub export const Bun__githubURL: [*:0]const u8 = Version.bun_github_url_val;
 var github_repository_url_buf: bun.PathBuffer = undefined;
 var current_executable_buf: bun.PathBuffer = undefined;
 var unzip_path_buf: bun.PathBuffer = undefined;

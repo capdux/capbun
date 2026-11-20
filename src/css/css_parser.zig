@@ -64,7 +64,7 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
@@ -4812,222 +4812,194 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
             };
     const This = @This();
     pub const AtRuleParser = struct {
-                pub const Prelude = AtRulePreludeT;
-                pub const AtRule = void;
     
-                pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
-                    const PreludeEnum = enum {
+    pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
+                const PreludeEnum = enum {
                         import,
                         charset,
                         namespace,
                         @"custom-media",
                         property,
                     };
-                    const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
-    
-                    if (Map.getASCIIICaseInsensitive(name)) |prelude| {
-                        switch (prelude) {
-                            .@"import" => {
-                                if (@intFromEnum(parser.state) > @intFromEnum(State.imports)) {
-                                    return .{ .err = input.newCustomError(@as(ParserError, ParserError.unexpected_import_rule)) };
-                                }
-                                const url_str = switch (input.expectUrlOrString()) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-    
-                                const layer: ?ImportPreludeLayer =
-                                    if (input.tryParse(Parser.expectIdentMatching, .{"layer"}) == .result)
-                                        .{ .value = null }
-                                    else if (input.tryParse(Parser.expectFunctionMatching, .{"layer"}) == .result) brk: {
-                                        break :brk .{
-                                            .value = switch (input.parseNestedBlock(LayerName, {}, voidWrap(LayerName, LayerName.parse))) {
-                                                .result => |v| v,
-                                                .err => |e| return .{ .err = e },
-                                            },
-                                        };
-                                    } else null;
-    
-                                const supports = if (input.tryParse(Parser.expectFunctionMatching, .{"supports"}) == .result) brk: {
-                                    const Func = struct {
-                                        pub fn do(_: void, p: *Parser) Result(SupportsCondition) {
-                                            const result = p.tryParse(SupportsCondition.parse, .{});
-                                            if (result == .err) return SupportsCondition.parseDeclaration(p);
-                                            return result;
-                                        }
-                                    };
-                                    break :brk switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
-                                        .result => |v| v,
-                                        .err => |e| return .{ .err = e },
-                                    };
-                                } else null;
-    
-                                const media = switch (MediaList.parse(input)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-    
-                                return .{
-                                    .result = .{
-                                        .@"import" = ImportPreludeTuple{
-                                            .url = url_str,
-                                            .media = media,
-                                            .supports = supports,
-                                            .layer = layer,
-                                        },
-                                    },
-                                };
-                            },
-                            .namespace => {
-                                if (@intFromEnum(parser.state) > @intFromEnum(State.namespaces)) {
-                                    return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = {} }) };
-                                }
-    
-                                const prefix = switch (input.tryParse(Parser.expectIdent, .{})) {
-                                    .result => |v| v,
-                                    .err => null,
-                                };
-                                const namespace = switch (input.expectUrlOrString()) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-                                const ns_val = NamespacePreludeTuple{ .prefix = prefix, .url = namespace };
-                                return .{ .result = .{ .namespace = ns_val } };
-                            },
-                            .charset => {
-                                // @charset is removed by rust-cssparser if it's the first rule in the stylesheet.
-                                // Anything left is technically invalid, however, users often concatenate CSS files
-                                // together, so we are more lenient and simply ignore @charset rules in the middle of a file.
-                                if (input.expectString().asErr()) |e| return .{ .err = e };
-                                return .{ .result = .charset };
-                            },
-                            .@"custom-media" => {
-                                const custom_media_name = switch (DashedIdentFns.parse(input)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-                                const media = switch (MediaList.parse(input)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-                                return .{
-                                    .result = .{
-                                        .custom_media = CustomMediaPreludeTuple{
-                                            .name = custom_media_name,
-                                            .query = media,
-                                        },
-                                    },
-                                };
-                            },
-                            .property => {
-                                const property_name = switch (DashedIdentFns.parse(input)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-                                const prop_tuple = PropertyPreludeTuple{ .name = property_name };
-                                return .{ .result = .{ .property = prop_tuple } };
-                            },
-                        }
-                    }
-    
-                    const Nested = NestedRuleParser(AtRuleParserT);
-                    var nested_rule_parser: Nested = parser.nested();
-                    return Nested.AtRuleParser.parsePrelude(&nested_rule_parser, name, input);
-                }
-    
-                pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
-                    parser.state = .body;
-                    var nested_parser = parser.nested();
-                    return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock(&nested_parser, prelude, start, input);
-                }
-    
-                pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
-                    const loc_ = start.sourceLocation();
-                    const loc = css_rules.Location{
-                        .source_index = parser.options.source_index,
-                        .line = loc_.line,
-                        .column = loc_.column,
-                    };
-    
+                const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
+                if (Map.getASCIIICaseInsensitive(name)) |prelude| {
+                    _ = &prelude;
                     switch (prelude) {
-                        .@"import" => {
-                            parser.state = State.imports;
-                            var import_rule = ImportRule{
-                                .url = prelude.@"import".url,
-                                .media = prelude.@"import".media,
-                                .supports = prelude.@"import".supports,
-                                .layer = if (prelude.@"import".layer != null) .{ .v = prelude.@"import".layer.?.value } else null,
-                                .loc = loc,
-                            };
-                            AtRuleParserT.CustomAtRuleParser.onImportRule(parser.at_rule_parser, &import_rule, @intCast(start.position), @intCast(start.position + 1));
-                            parser.rules.v.append(parser.allocator, .{
-                                .@"import" = import_rule,
-                            }) catch |err| bun.handleOom(err);
-                            return .success;
-                        },
-                        .namespace => {
-                            parser.state = State.namespaces;
-    
-                            const prefix = prelude.namespace.prefix;
-                            const url = prelude.namespace.url;
-    
-                            parser.rules.v.append(parser.allocator, .{
-                                .namespace = NamespaceRule{
-                                    .prefix = if (prefix) |p| .{ .v = p } else null,
-                                    .url = url,
-                                    .loc = loc,
-                                },
-                            }) catch |err| bun.handleOom(err);
-    
-                            return .success;
-                        },
-                        .custom_media => {
-                            const name = prelude.custom_media.name;
-                            const query = prelude.custom_media.query;
-                            parser.state = State.body;
-                            parser.rules.v.append(
-                                parser.allocator,
-                                .{
-                                    .custom_media = css_rules.custom_media.CustomMediaRule{
-                                        .name = name,
-                                        .query = query,
-                                        .loc = loc,
-                                    },
-                                },
-                            ) catch |err| bun.handleOom(err);
-                            return .success;
-                        },
-                        .layer => {
-                            if (@intFromEnum(parser.state) <= @intFromEnum(State.layers)) {
-                                parser.state = .layers;
-                            } else {
-                                parser.state = .body;
-                            }
-                            var nested_parser = parser.nested();
-                            const result = NestedRuleParser(AtRuleParserT).AtRuleParser.ruleWithoutBlock(&nested_parser, prelude, start);
-                            return result;
-                        },
-                        .charset => return .success,
-                        .unknown => {
-                            const name = prelude.unknown.name;
-                            const prelude2 = prelude.unknown.tokens;
-                            parser.rules.v.append(parser.allocator, .{ .unknown = UnknownAtRule{
-                                .name = name,
-                                .prelude = prelude2,
-                                .block = null,
-                                .loc = loc,
-                            } }) catch |err| bun.handleOom(err);
-                            return .success;
-                        },
-                        .custom => {
-                            parser.state = .body;
-                            var nested_parser = parser.nested();
-                            return NestedRuleParser(AtRuleParserT).AtRuleParser.ruleWithoutBlock(&nested_parser, prelude, start);
-                        },
-                        else => return .{ .err = undefined },
+    .@"import" => {
+    if ((@intFromEnum(parser.state) > @intFromEnum(State.imports))) {
+                        return .{ .err = input.newCustomError((if (comptime @typeInfo(ParserError) == .@"enum") @as(ParserError, @enumFromInt(ParserError.unexpected_import_rule)) else @as(ParserError, ParserError.unexpected_import_rule))) };
                     }
+                    const url_str = (switch (input.expectUrlOrString()) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    const layer: ?ImportPreludeLayer = (if ((input.tryParse(Parser.expectIdentMatching, .{ "layer" }) == .result)) .{ .value = null } else (if ((input.tryParse(Parser.expectFunctionMatching, .{ "layer" }) == .result)) brk: {
+                    const empty_layer_ctx: void = undefined;
+                    break :brk .{ .value = (switch (input.parseNestedBlock(LayerName, empty_layer_ctx, voidWrap(LayerName, LayerName.parse))) {
+    .result => |v| v,
+    .err => |e| {
+    return .{ .err = e };
+    },
+    }) };
+    } else null));
+                    const supports = (if ((input.tryParse(Parser.expectFunctionMatching, .{ "supports" }) == .result)) brk: {
+                    const Func = struct {
+    
+    pub fn do(_: void, p: *Parser) Result(SupportsCondition) {
+                const result = p.tryParse(SupportsCondition.parse, .{});
+                if ((result == .err)) {
+                    return SupportsCondition.parseDeclaration(p);
                 }
-            };
+                return result;
+        }
+    };
+                    break :brk (switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
+    .result => |v| v,
+    .err => |e| {
+    return .{ .err = e };
+    },
+    });
+    } else null);
+                    const media = (switch (MediaList.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    return .{ .result = .{ .@"import" = ImportPreludeTuple{ .url = url_str, .media = media, .supports = supports, .layer = layer } } };
+    },
+    .namespace => {
+    if ((@intFromEnum(parser.state) > @intFromEnum(State.namespaces))) {
+                        return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = @as(void, undefined) }) };
+                    }
+                    const prefix = (switch (input.tryParse(Parser.expectIdent, .{})) {
+    .result => |v| v,
+    .err => null,
+    });
+                    const namespace = (switch (input.expectUrlOrString()) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    const ns_val = NamespacePreludeTuple{ .prefix = prefix, .url = namespace };
+                    return .{ .result = .{ .namespace = ns_val } };
+    },
+    .charset => {
+    if (input.expectString().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    return .{ .result = .charset };
+    },
+    .@"custom-media" => {
+    const custom_media_name = (switch (DashedIdentFns.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    const media = (switch (MediaList.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    return .{ .result = .{ .custom_media = CustomMediaPreludeTuple{ .name = custom_media_name, .query = media } } };
+    },
+    .property => {
+    const property_name = (switch (DashedIdentFns.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    const prop_tuple = PropertyPreludeTuple{ .name = property_name };
+                    return .{ .result = .{ .property = prop_tuple } };
+    },
+    }
+                }
+                const Nested = NestedRuleParser(AtRuleParserT);
+                var nested_rule_parser: Nested = parser.nested();
+                _ = &nested_rule_parser;
+                return Nested.AtRuleParser.parsePrelude((&nested_rule_parser), name, input);
+        }
+    
+    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+                parser.state = .body;
+                var nested_parser = parser.nested();
+                _ = &nested_parser;
+                return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock((&nested_parser), prelude, start, input);
+        }
+    
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule,void) {
+                const loc_ = start.sourceLocation();
+                const loc = css_rules.Location{ .source_index = parser.options.source_index, .line = loc_.line, .column = loc_.column };
+                switch (prelude) {
+    .@"import" => {
+    parser.state = State.imports;
+                var import_rule = ImportRule{ .url = prelude.@"import".url, .media = prelude.@"import".media, .supports = prelude.@"import".supports, .layer = (if ((prelude.@"import".layer != null)) .{ .v = (if (@typeInfo(@TypeOf(prelude.@"import".layer.?)) == .@"enum") @intFromEnum(prelude.@"import".layer.?) else prelude.@"import".layer.?.value) } else null), .loc = loc };
+                _ = &import_rule;
+                _ = AtRuleParserT.CustomAtRuleParser.onImportRule(parser.at_rule_parser, (&import_rule), @intCast(start.position), @intCast((start.position + 1)));
+                _ = (blk_catch_0: { break :blk_catch_0 ((parser.rules.v.append(parser.allocator, .{ .@"import" = import_rule })) catch |err| { _ = &err; break :blk_catch_0 bun.handleOom(err); }); });
+                return .success;
+    },
+    .namespace => {
+    parser.state = State.namespaces;
+                const prefix = prelude.namespace.prefix;
+                const url = prelude.namespace.url;
+                var ns_rule = NamespaceRule{ .prefix = null, .url = url, .loc = loc };
+                _ = &ns_rule;
+                if (prefix) |p| {
+                    _ = &p;
+                    ns_rule.prefix = .{ .v = p };
+                }
+                _ = (blk_catch_1: { break :blk_catch_1 ((parser.rules.v.append(parser.allocator, .{ .namespace = ns_rule })) catch |err| { _ = &err; break :blk_catch_1 bun.handleOom(err); }); });
+                return .success;
+    },
+    .custom_media => {
+    const name = (if (@typeInfo(@TypeOf(prelude.custom_media)) == .@"enum" or @typeInfo(@TypeOf(prelude.custom_media)) == .@"union") @tagName(prelude.custom_media) else prelude.custom_media.name);
+                const query = prelude.custom_media.query;
+                parser.state = State.body;
+                _ = (blk_catch_2: { break :blk_catch_2 ((parser.rules.v.append(parser.allocator, .{ .custom_media = css_rules.custom_media.CustomMediaRule{ .name = name, .query = query, .loc = loc } })) catch |err| { _ = &err; break :blk_catch_2 bun.handleOom(err); }); });
+                return .success;
+    },
+    .layer => {
+    if ((@intFromEnum(parser.state) <= @intFromEnum(State.layers))) {
+                    parser.state = .layers;
+                } else {
+                    parser.state = .body;
+                }
+                var nested_parser = parser.nested();
+                _ = &nested_parser;
+                const result = NestedRuleParser(AtRuleParserT).AtRuleParser.ruleWithoutBlock((&nested_parser), prelude, start);
+                return result;
+    },
+    .charset => {
+    return .success;
+    },
+    .unknown => {
+    const name = (if (@typeInfo(@TypeOf(prelude.unknown)) == .@"enum" or @typeInfo(@TypeOf(prelude.unknown)) == .@"union") @tagName(prelude.unknown) else prelude.unknown.name);
+                const prelude2 = prelude.unknown.tokens;
+                _ = (blk_catch_3: { break :blk_catch_3 ((parser.rules.v.append(parser.allocator, .{ .unknown = UnknownAtRule{ .name = name, .prelude = prelude2, .block = null, .loc = loc } })) catch |err| { _ = &err; break :blk_catch_3 bun.handleOom(err); }); });
+                return .success;
+    },
+    .custom => {
+    parser.state = .body;
+                var nested_parser = parser.nested();
+                _ = &nested_parser;
+                return NestedRuleParser(AtRuleParserT).AtRuleParser.ruleWithoutBlock((&nested_parser), prelude, start);
+    },
+    else => {
+    return .{ .err = undefined };
+    },
+    }
+        }
+        pub const Prelude = AtRulePreludeT;
+        pub const AtRule = void;
+    };
     pub const QualifiedRuleParser = struct {
     
     pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {

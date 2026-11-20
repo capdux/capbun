@@ -1459,3 +1459,8 @@
   - `Type!void` 错位需写成 `: !Type`，`@as(EnumTag, union_val)` 会误插入 `@enumFromInt`，统一改用 `std.meta.activeTag(...)`；`?.` 仅用于可选链，错误联合先 `?` 解包再 `.unwrap()`；
   - 多行 `\\` 字符串在函数多参中会被拆参，统一改 `\n` 单行；`Output.err` 必须传位置元组 `.{ x }`；`std.array_list.Managed([]u8)` 需用 `@TypeOf(empty_mut_str)` 避免 `[]u8` 被误判为 `&.{}`；
   - 修复 `scripts/cpc_brief.py` 失败时返回退出码 1，结合全仓 `rg -n` 批量排雷打破“修 1 处等 40 秒”的洋葱循环。
+- **[2026-11-21] `bun-debug` 首次启动排障与 ABI/语义经验**：
+  - **ABI 值字段顺序**：`@c pub union` / `export @c union` 会导致 `cpc` 将结构体内的该联合体字段自动指针化为 `*Union`，改为 `pub @c union` 即可保留值布局（已修复 `WTFStringImplPtr` 与 `JSCEncodedValueDescriptor`）；
+  - **错误联合中的枚举返回**：返回类型为 `!EnumType`（如 `anyerror!Continuation`）时，`return .tag;` 会被 `cpc` 误降级为 `return error.tag;`，必须显式写为 `return EnumType.tag;`（已修复 `parseSuffix.cp` 109 处）；
+  - **单例指针防 RAII 自动释放**：`const actual = uws.Loop.get();` 会触发 `cpc` 注入 `defer actual.release()` 提前释放全局事件循环，借用单例直接内联调用；
+  - **表达式 `if (opt) |x|` 静默丢弃**：`x = if (opt) |v| ...` 会被 `cpc` 静默丢弃整句，统一改写为语句级 `if (v := opt)`。

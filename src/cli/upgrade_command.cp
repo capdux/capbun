@@ -58,7 +58,7 @@ pub struct Version {
 
     const current_version: string = "bun-v" ++ Global.package_json_version;
 
-    pub export const Bun__githubURL: [*:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{
+    pub const bun_github_url_val: [*:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{
         Global.package_json_version,
         zip_filename,
     });
@@ -73,10 +73,12 @@ pub struct Version {
     }
 
     static fn @"export"() {
-        * = &Bun__githubURL;
+        * = &bun_github_url_val;
         * = &Bun__githubBaselineURL;
     }
 }
+
+pub export const Bun__githubURL: [*:0]const u8 = Version.bun_github_url_val;
 
 let github_repository_url_buf: bun.PathBuffer = undefined;
 let current_executable_buf: bun.PathBuffer = undefined;

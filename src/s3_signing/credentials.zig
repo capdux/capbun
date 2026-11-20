@@ -367,13 +367,22 @@ pub const S3Credentials = struct {
             }
             const session_token: ?[]const u8 = if (this.sessionToken.len == 0) null else this.sessionToken;
 
-            const acl: ?[]const u8 = if (signOptions.acl) |acl_value| acl_value.toString() else null;
+            var acl: ?[]const u8 = null;
+            if (signOptions.acl != null) {
+                acl = signOptions.acl.?.toString();
+            }
 
-            const storage_class: ?[]const u8 = if (signOptions.storage_class) |storage_class| storage_class.toString() else null;
+            var storage_class: ?[]const u8 = null;
+            if (signOptions.storage_class != null) {
+                storage_class = signOptions.storage_class.?.toString();
+            }
 
             if (this.accessKeyId.len == 0 or this.secretAccessKey.len == 0) return error.MissingCredentials;
             const signQuery = signQueryOption != null;
-            const expires = if (signQueryOption) |options| options.expires else 0;
+            var expires: @TypeOf(signQueryOption.?.expires) = 0;
+            if (signQueryOption != null) {
+                expires = signQueryOption.?.expires;
+            }
             const method_name = switch (method) {
                 .GET => "GET",
                 .POST => "POST",
@@ -485,7 +494,10 @@ pub const S3Credentials = struct {
 
             const service_name = "s3";
 
-            const aws_content_hash = if (content_hash) |hash| hash else ("UNSIGNED-PAYLOAD");
+            var aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
+            if (content_hash != null) {
+                aws_content_hash = content_hash.?;
+            }
             var tmp_buffer: [4096]u8 = undefined;
 
             const authorization = brk: {
@@ -852,12 +864,14 @@ pub fn get(key: Key) []const u8 {
                 storage_class: bool,
             };
     const table = init: {
-                var t: [128][]const u8 = undefined;
-                for (0..128) |i| {
-                    t[i] = generate(@bitCast(@as(u7, @intCast(i))));
-                }
-                break :init t;
-            };
+            var t: [128][]const u8 = undefined;
+            _ = &t;
+            for (0..128) |i| {
+                _ = &i;
+                t[cp_cast_int(usize, i)] = generate(@bitCast(@as(u7, @intCast(i))));
+            }
+            break :init t;
+    };
 };
 const CanonicalRequest = struct {
         fn fmtString(comptime key: SignedHeaders.Key) []const u8 {

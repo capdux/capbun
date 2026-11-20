@@ -204,10 +204,10 @@ pub fn upgrade(this: *NodeHTTPResponse, data_value: JSValue, sec_websocket_proto
         break :brk sec_websocket_extensions_str.?.slice();
     };
 
-    const websocket_key = if (this.upgrade_context.request) |request|
-        request.header("sec-websocket-key") orelse ""
-    else
-        this.upgrade_context.sec_websocket_key;
+    var websocket_key = this.upgrade_context.sec_websocket_key;
+    if (this.upgrade_context.request != null) {
+        websocket_key = this.upgrade_context.request.?.header("sec-websocket-key") orelse "";
+    }
 
     if (this.raw_response) |raw_response| {
         this.raw_response = null;

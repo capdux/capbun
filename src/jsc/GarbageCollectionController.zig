@@ -77,12 +77,9 @@ gc_repeating_timer_fast: bool = true,
 disabled: bool = false,
 
 pub fn init(self: *GarbageCollectionController, vm: *VirtualMachine) void {
-        const actual = uws.Loop.get();
-        var __actual_moved = false; _ = &__actual_moved;
-        defer if (!__actual_moved) { const __T = @TypeOf(actual); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = actual.release() catch {}; } else { actual.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = actual; _drop_val.release(); } };
-        self.gc_timer = uws.Timer.createFallthrough(actual, self);
-        self.gc_repeating_timer = uws.Timer.createFallthrough(actual, self);
-        actual.internal_loop_data.jsc_vm = vm.jsc_vm;
+        self.gc_timer = uws.Timer.createFallthrough(uws.Loop.get(), self);
+        self.gc_repeating_timer = uws.Timer.createFallthrough(uws.Loop.get(), self);
+        uws.Loop.get().internal_loop_data.jsc_vm = vm.jsc_vm;
         if (comptime Environment.isDebug) {
             if (bun.env_var.BUN_TRACK_LAST_FN_NAME.get()) {
                 vm.eventLoop().debug.track_last_fn_name = true;

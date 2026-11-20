@@ -21,8 +21,12 @@ pub fn Intrusive(comptime T: type, comptime Context: type, comptime less: anytyp
     context: Context,
 
 pub fn insert(self: *@This(), v: *T) void {
-        _ = self;
-        _ = v;
+            if (self.root) |root| {
+                _ = &root;
+                self.root = self.meld(v, root);
+            } else {
+                self.root = v;
+            }
     }
 
 pub fn peek(self: *const @This()) ?*T {
@@ -66,16 +70,22 @@ pub fn findMaxInternal(ctx: Context, node: *T, current_max: *T) *T {
 
 pub fn deleteMin(self: *@This()) ?*T {
             const root = ((self.root) orelse { return null; });
+            if (root.heap.child) |child| {
+                _ = &child;
+                self.root = self.combine_siblings(child);
+            } else {
+                self.root = null;
+            }
             root.heap = .{};
             return root;
     }
 
 pub fn remove(self: *@This(), v: *T) void {
-            const prev = ((v.heap.prev) orelse (({
+            const prev = ((v.heap.prev) orelse {
             _ = assert((self.root.? == v));
             _ = self.deleteMin();
             return;
-})));
+});
             if (v.heap.next) |next| {
                 _ = &next;
                 next.heap.prev = prev;
@@ -129,17 +139,17 @@ pub fn combine_siblings(self: *@This(), left: *T) *T {
             var root: *T = left;
             _ = &root;
             while (true) {
-                var b = ((a.heap.next) orelse (({
+                var b = ((a.heap.next) orelse {
                 root = a;
                 break;
-})));
+});
                 _ = &b;
                 a.heap.next = null;
                 b = self.meld(a, b);
-                const next_a = ((b.heap.next) orelse (({
+                const next_a = ((b.heap.next) orelse {
                 root = b;
                 break;
-})));
+});
                 a = next_a;
             }
             while (true) {

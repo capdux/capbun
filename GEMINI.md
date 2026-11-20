@@ -241,3 +241,8 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - `cpc_brief.py` 失败时必须返回非 0 退出码，严禁在 `FAIL(ast-check)` 时继续串联运行 40 秒的 `bun run zig:check`；
    - 发现任意新模式错误（如 `Type!void`、未定长数组字面量）后，立即用 `rg -n` 一次性扫描全仓 `.zig` 批量排雷，打破“改 1 处 → 等 40 秒”的洋葱循环；
    - 仅修改 `.cp -> .zig` 且无构建配置变更时，可跳过外层 `scripts/build.ts` configure 包装以缩短单轮验证耗时。
+5. **运行时/ABI 致命雷区固化（2026-11-21 `bun-debug` 联调沉淀）**：
+   - `@c` 联合体值字段：`pub @c union` 必须 `pub` 在 `@c` 前（禁 `export @c union` 或 `@c pub union`），否则引用它的结构体字段会被自动指针化为 `*Union` 破坏 C++ ABI 布局；
+   - 错误联合中返回枚举：`!EnumType` 函数体内严禁 `return .tag;`，否则 `cpc` 会降级为 `return error.tag;`，必须显式写 `return EnumType.tag;`；
+   - 借用单例防 RAII 自动释放：严禁将带 `.release()`/`.deinit()` 的借用单例（如 `uws.Loop.get()`）绑定到局部 `const`/`let`，避免 `cpc` 自动注入 `defer release()`；
+   - 表达式 `if (opt) |x|`：严禁在赋值/字段初始化中使用旧 Zig `= if (opt) |x|`（会被 `cpc` 静默丢弃），统一改写为语句级 `if (x := opt)`。

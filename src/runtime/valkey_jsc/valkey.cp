@@ -849,7 +849,10 @@ pub const ValkeyClient = struct {
 
         // We handle subscriptions specially because they are not regular commands and their failure will potentially
         // cause the client to drop out of subscriber mode.
-        const request_is_subscribe = if (pair_maybe) |p| p.meta.subscription_request else false;
+        let request_is_subscribe = false;
+        if (pair_maybe != null) {
+            request_is_subscribe = pair_maybe.?.meta.subscription_request;
+        }
         if (this.parent().isSubscriber() or request_is_subscribe) {
             debug("This client is a subscriber. Handling as subscriber...", .{});
 

@@ -97,7 +97,7 @@ pub fn handleTypescriptAs(p: *P, level: Level) anyerror!Continuation {
                 switch (p.lexer.token) {
 .t_plus_plus, .t_minus_minus, .t_no_substitution_template_literal, .t_template_head, .t_open_paren, .t_open_bracket, .t_question_dot => {
 p.forbid_suffix_after_as_loc = p.lexer.loc();
-                return error.done;
+                return Continuation.done;
 },
 else => {
 
@@ -105,11 +105,11 @@ else => {
 }
                 if (p.lexer.token.isAssign()) {
                     p.forbid_suffix_after_as_loc = p.lexer.loc();
-                    return error.done;
+                    return Continuation.done;
                 }
-                return error.next;
+                return Continuation.next;
             }
-            return error.done;
+            return Continuation.done;
     }
 
 pub fn t_dot(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
@@ -139,7 +139,7 @@ else => {
                 left.* = p.newExpr(E.Dot{ .target = target, .name = name, .name_loc = name_loc, .optional_chain = old_optional_chain }, left.loc);
             }
             optional_chain.* = old_optional_chain;
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_question_dot(p: *P, level: Level, optional_chain: *OptOptionalChain, left: *Expr) anyerror!Continuation {
@@ -164,7 +164,7 @@ _ = try p.lexer.next();
 },
 .t_open_paren => {
 if (level.gte(.call)) {
-                return error.done;
+                return Continuation.done;
             }
             const list_loc = try p.parseCallArgs();
             left.* = p.newExpr(E.Call{ .target = left.*, .args = list_loc.list, .close_paren_loc = list_loc.loc, .optional_chain = optional_start }, left.loc);
@@ -179,7 +179,7 @@ if (comptime (!is_typescript_enabled)) {
                 _ = try p.lexer.expected(.t_open_paren);
             }
             if (level.gte(.call)) {
-                return error.done;
+                return Continuation.done;
             }
             const list_loc = try p.parseCallArgs();
             left.* = p.newExpr(E.Call{ .target = left.*, .args = list_loc.list, .close_paren_loc = list_loc.loc, .optional_chain = optional_start }, left.loc);
@@ -205,7 +205,7 @@ if (((p.lexer.token == .t_private_identifier) and p.allow_private_identifiers)) 
             if ((((optional_start) orelse (.continuation)) == .start)) {
                 optional_chain.* = .continuation;
             }
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_no_substitution_template_literal(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
@@ -215,7 +215,7 @@ pub fn t_no_substitution_template_literal(p: *P, _: Level, _: *OptOptionalChain,
             const head = p.lexer.rawTemplateContents();
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Template{ .tag = left.*, .head = .{ .raw = head } }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_template_head(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
@@ -226,12 +226,12 @@ pub fn t_template_head(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain
             const partsGroup = try p.parseTemplateParts(true);
             const tag = left.*;
             left.* = p.newExpr(E.Template{ .tag = tag, .head = .{ .raw = head }, .parts = partsGroup }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_open_bracket(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr, flags: Expr.EFlags) anyerror!Continuation {
             if ((flags == .ts_decorator)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             const old_allow_in = p.allow_in;
@@ -241,22 +241,22 @@ pub fn t_open_bracket(p: *P, optional_chain: *OptOptionalChain, old_optional_cha
             _ = try p.lexer.expect(.t_close_bracket);
             left.* = p.newExpr(E.Index{ .target = left.*, .index = index, .optional_chain = old_optional_chain }, left.loc);
             optional_chain.* = old_optional_chain;
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_open_paren(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if (level.gte(.call)) {
-                return error.done;
+                return Continuation.done;
             }
             const list_loc = try p.parseCallArgs();
             left.* = p.newExpr(E.Call{ .target = left.*, .args = list_loc.list, .close_paren_loc = list_loc.loc, .optional_chain = old_optional_chain }, left.loc);
             optional_chain.* = old_optional_chain;
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_question(p: *P, level: Level, errors: ?*DeferredErrors, left: *Expr) anyerror!Continuation {
             if (level.gte(.conditional)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             if (((is_typescript_enabled and (left.loc.start == p.latest_arrow_arg_loc.start)) and (((p.lexer.token == .t_colon) or (p.lexer.token == .t_close_paren)) or (p.lexer.token == .t_comma)))) {
@@ -265,7 +265,7 @@ pub fn t_question(p: *P, level: Level, errors: ?*DeferredErrors, left: *Expr) an
                     return error.SyntaxError;
                 }
                 errors.?.invalid_expr_after_question = p.lexer.range();
-                return error.done;
+                return Continuation.done;
             }
             const ternary = p.newExpr(E.If{ .test_ = left.*, .yes = undefined, .no = undefined }, left.loc);
             const old_allow_in = p.allow_in;
@@ -275,12 +275,12 @@ pub fn t_question(p: *P, level: Level, errors: ?*DeferredErrors, left: *Expr) an
             _ = try p.lexer.expect(.t_colon);
             _ = try p.parseExprWithFlags(.comma, .none, (&ternary.data.e_if.no));
             left.* = ternary;
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_exclamation(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain) anyerror!Continuation {
             if (p.lexer.has_newline_before) {
-                return error.done;
+                return Continuation.done;
             }
             if ((!is_typescript_enabled)) {
                 _ = try p.lexer.unexpected();
@@ -288,300 +288,300 @@ pub fn t_exclamation(p: *P, optional_chain: *OptOptionalChain, old_optional_chai
             }
             _ = try p.lexer.next();
             optional_chain.* = old_optional_chain;
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_minus_minus(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if ((p.lexer.has_newline_before or level.gte(.postfix))) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Unary{ .op = .un_post_dec, .value = left.* }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_plus_plus(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if ((p.lexer.has_newline_before or level.gte(.postfix))) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Unary{ .op = .un_post_inc, .value = left.* }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_comma(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.comma)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_comma, .left = left.*, .right = try p.parseExpr(.comma) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_plus(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.add)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_add, .left = left.*, .right = try p.parseExpr(.add) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_plus_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_add_assign, .left = left.*, .right = try p.parseExpr(@as(Op.Level, @enumFromInt((@intFromEnum(Op.Level.assign) - 1)))) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_minus(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.add)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_sub, .left = left.*, .right = try p.parseExpr(.add) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_minus_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_sub_assign, .left = left.*, .right = try p.parseExpr(Op.Level.sub(Op.Level.assign, 1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_asterisk(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.multiply)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_mul, .left = left.*, .right = try p.parseExpr(.multiply) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_asterisk_asterisk(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.exponentiation)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_pow, .left = left.*, .right = try p.parseExpr(Op.Level.exponentiation.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_asterisk_asterisk_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_pow_assign, .left = left.*, .right = try p.parseExpr(Op.Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_asterisk_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_mul_assign, .left = left.*, .right = try p.parseExpr(Op.Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_percent(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.multiply)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_rem, .left = left.*, .right = try p.parseExpr(Op.Level.multiply) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_percent_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_rem_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_slash(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.multiply)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_div, .left = left.*, .right = try p.parseExpr(Level.multiply) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_slash_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_div_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_equals_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.equals)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_loose_eq, .left = left.*, .right = try p.parseExpr(Level.equals) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_exclamation_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.equals)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_loose_ne, .left = left.*, .right = try p.parseExpr(Level.equals) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_equals_equals_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.equals)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_strict_eq, .left = left.*, .right = try p.parseExpr(Level.equals) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_exclamation_equals_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.equals)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_strict_ne, .left = left.*, .right = try p.parseExpr(Level.equals) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((is_typescript_enabled and p.trySkipTypeScriptTypeArgumentsWithBacktracking())) {
                 optional_chain.* = old_optional_chain;
-                return error.next;
+                return Continuation.next;
             }
             if (level.gte(.compare)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_lt, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_less_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.compare)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_le, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.compare)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_gt, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.compare)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_ge, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_less_than_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((is_typescript_enabled and p.trySkipTypeScriptTypeArgumentsWithBacktracking())) {
                 optional_chain.* = old_optional_chain;
-                return error.next;
+                return Continuation.next;
             }
             if (level.gte(.shift)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_shl, .left = left.*, .right = try p.parseExpr(.shift) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_less_than_less_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_shl_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than_greater_than(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.shift)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_shr, .left = left.*, .right = try p.parseExpr(.shift) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than_greater_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_shr_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than_greater_than_greater_than(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.shift)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_u_shr, .left = left.*, .right = try p.parseExpr(.shift) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_greater_than_greater_than_greater_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_u_shr_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_question_question(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.nullish_coalescing)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             const prev = left.*;
             left.* = p.newExpr(E.Binary{ .op = .bin_nullish_coalescing, .left = prev, .right = try p.parseExpr(.nullish_coalescing) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_question_question_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_nullish_coalescing_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_bar_bar(p: *P, level: Level, left: *Expr, flags: Expr.EFlags) anyerror!Continuation {
             if (level.gte(.logical_or)) {
-                return error.done;
+                return Continuation.done;
             }
             if (level.eql(.nullish_coalescing)) {
                 _ = try p.lexer.unexpected();
@@ -597,21 +597,21 @@ pub fn t_bar_bar(p: *P, level: Level, left: *Expr, flags: Expr.EFlags) anyerror!
                     return error.SyntaxError;
                 }
             }
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_bar_bar_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_ampersand_ampersand(p: *P, level: Level, left: *Expr, flags: Expr.EFlags) anyerror!Continuation {
             if (level.gte(.logical_and)) {
-                return error.done;
+                return Continuation.done;
             }
             if (level.eql(.nullish_coalescing)) {
                 _ = try p.lexer.unexpected();
@@ -626,84 +626,84 @@ pub fn t_ampersand_ampersand(p: *P, level: Level, left: *Expr, flags: Expr.EFlag
                     return error.SyntaxError;
                 }
             }
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_ampersand_ampersand_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_logical_and_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_bar(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.bitwise_or)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_or, .left = left.*, .right = try p.parseExpr(.bitwise_or) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_bar_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_or_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_ampersand(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.bitwise_and)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_and, .left = left.*, .right = try p.parseExpr(.bitwise_and) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_ampersand_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_and_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_caret(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.bitwise_xor)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_xor, .left = left.*, .right = try p.parseExpr(.bitwise_xor) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_caret_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_bitwise_xor_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_equals(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.assign)) {
-                return error.done;
+                return Continuation.done;
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_assign, .left = left.*, .right = try p.parseExpr(Level.assign.sub(1)) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_in(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if ((level.gte(.compare) or (!p.allow_in))) {
-                return error.done;
+                return Continuation.done;
             }
             switch (left.data) {
 .e_unary => |unary| {
@@ -716,12 +716,12 @@ else => {
 }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_in, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn t_instanceof(p: *P, level: Level, left: *Expr) anyerror!Continuation {
             if (level.gte(.compare)) {
-                return error.done;
+                return Continuation.done;
             }
             if ((!p.options.suppress_warnings_about_weird_code)) {
                 switch (left.data) {
@@ -736,7 +736,7 @@ else => {
             }
             _ = try p.lexer.next();
             left.* = p.newExpr(E.Binary{ .op = .bin_instanceof, .left = left.*, .right = try p.parseExpr(.compare) }, left.loc);
-            return error.next;
+            return Continuation.next;
     }
 
 pub fn parseSuffix(p: *P, left_and_out: *Expr, level: Level, errors: ?*DeferredErrors, flags: Expr.EFlags) !void {

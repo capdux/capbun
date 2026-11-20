@@ -144,6 +144,12 @@ pub fn exec(ctx: Command.Context, fetcher: ?*BundleV2.DependenciesScanner) !void
             this_transpiler.options.footer = ctx.bundler_options.footer;
             this_transpiler.options.drop = ctx.args.drop;
             this_transpiler.options.bundler_feature_flags = Runtime.Features.initBundlerFeatureFlags(allocator, ctx.args.feature_flags);
+            if (ctx.bundler_options.allow_unresolved) |a| {
+                _ = &a;
+                this_transpiler.options.allow_unresolved = options.AllowUnresolved.fromStrings(a);
+            } else {
+                this_transpiler.options.allow_unresolved = .all;
+            }
             this_transpiler.options.css_chunking = ctx.bundler_options.css_chunking;
             this_transpiler.options.metafile = ((ctx.bundler_options.metafile.len > 0) or (ctx.bundler_options.metafile_md.len > 0));
             this_transpiler.options.output_dir = ctx.bundler_options.outdir;

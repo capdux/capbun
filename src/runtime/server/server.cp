@@ -1494,11 +1494,15 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     } else if (comptime has_h3) if (this.h3_listener) |h3l| {
                         port = @intCast(h3l.getLocalPort());
                     };
-                    break :blk bun.fmt.URLFormatter{
+                    let fmt = bun.fmt.URLFormatter{
                         .proto = if (comptime ssl_enabled) .https else .http,
-                        .hostname = if (tcp.hostname) |hostname| bun.sliceTo(@constCast(hostname), 0) else null,
+                        .hostname = null,
                         .port = port,
                     };
+                    if (tcp.hostname != null) {
+                        fmt.hostname = bun.sliceTo(@constCast(tcp.hostname.?), 0);
+                    }
+                    break :blk fmt;
                 },
             };
 
@@ -1812,17 +1816,17 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             const base_url = try bun.default_allocator.dupe(u8, strings.trim(config.base_url.href, "/"));
             errdefer bun.default_allocator.free(base_url);
 
-            const dev_server = if (config.bake) |*bake_options|
-                try bun.bake.DevServer.init(.{
-                    .arena = bake_options.arena.allocator(),
-                    .root = bake_options.root,
-                    .framework = bake_options.framework,
-                    .bundler_options = bake_options.bundler_options,
+            let dev_server: ?*bun.bake.DevServer = null;
+            if (config.bake != null) {
+                dev_server = try bun.bake.DevServer.init(.{
+                    .arena = config.bake.?.arena.allocator(),
+                    .root = config.bake.?.root,
+                    .framework = config.bake.?.framework,
+                    .bundler_options = config.bake.?.bundler_options,
                     .vm = global.bunVM(),
                     .broadcast_console_log_from_browser_to_server = config.broadcast_console_log_from_browser_to_server_for_bake,
-                })
-            else
-                null;
+                });
+            }
             errdefer if (dev_server) |d| d.deinit();
 
             let server = ThisServer.new(.{
@@ -3205,7 +3209,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     if (comptime has_h3) {
                         if (this.h3_app) |h3_app| {
                             // Same UDP port as the TCP listener so Alt-Svc works.
-                            const h3_port: u16 = if (this.listener) |ls| @intCast(ls.getLocalPort()) else tcp.port;
+                            let h3_port: u16 = tcp.port;
+                            if (this.listener != null) {
+                                h3_port = @intCast(this.listener.?.getLocalPort());
+                            }
                             h3_app.listenWithConfig(this, onH3Listen, .{
                                 .port = h3_port,
                                 .host = @constCast(host), // TODO(cpc): [task-bun-20261120-sentinel-ptr-const]
