@@ -39,11 +39,11 @@ export const S3ListObjectsOptions = S3ListObjects.S3ListObjectsOptions;
 export const getListObjectsOptionsFromJS = S3ListObjects.getListObjectsOptionsFromJS;
 
 pub fn stat(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
-    callback: fn (S3StatResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
-    proxy_url: ?string,
+    callback: fn (S3StatResult, *!) JSTerminatedError!void,
+    callback_context: *!,
+    proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
     const req_opts = .{
@@ -58,11 +58,11 @@ pub fn stat(
 }
 
 pub fn download(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
-    callback: fn (S3DownloadResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
-    proxy_url: ?string,
+    callback: fn (S3DownloadResult, *!) JSTerminatedError!void,
+    callback_context: *!,
+    proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
     const req_opts = .{
@@ -77,17 +77,17 @@ pub fn download(
 }
 
 pub fn downloadSlice(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     offset: usize,
-    size: ?usize,
-    callback: fn (S3DownloadResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
-    proxy_url: ?string,
+    size: usize?,
+    callback: fn (S3DownloadResult, *!) JSTerminatedError!void,
+    callback_context: *!,
+    proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
-    let range: ?string = brk: {
-        if (size) |size_| {
+    let range: string? = brk: {
+        if (size_ := size) {
             let end = (offset + size_) - if (size_ > 0) 1 else 0;
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }
@@ -108,11 +108,11 @@ pub fn downloadSlice(
 }
 
 pub fn delete(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
-    callback: fn (S3DeleteResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
-    proxy_url: ?string,
+    callback: fn (S3DeleteResult, *!) JSTerminatedError!void,
+    callback_context: *!,
+    proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
     const req_opts = .{
@@ -127,24 +127,24 @@ pub fn delete(
 }
 
 pub fn listObjects(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     listOptions: S3ListObjectsOptions,
-    callback: fn (S3ListObjectsResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
-    proxy_url: ?string,
+    callback: fn (S3ListObjectsResult, *!) JSTerminatedError!void,
+    callback_context: *!,
+    proxy_url: string?,
 ): JSTerminatedError!void {
     let search_params = ByteList {};
 
     handleOom(search_params.appendSlice(default_allocator, "?"));
 
-    if (listOptions.continuation_token) |continuation_token| {
+    if (continuation_token := listOptions.continuation_token) {
         let buff = handleOom(default_allocator.alloc(u8, continuation_token.len * 3));
         defer default_allocator.free(buff);
         let encoded = S3Credentials.encodeURIComponent(continuation_token, buff, true) catch unreachable;
         handleOom(search_params.appendFmt(default_allocator, "continuation-token={s}", .{ encoded }));
     }
 
-    if (listOptions.delimiter) |delimiter| {
+    if (delimiter := listOptions.delimiter) {
         let buff = handleOom(default_allocator.alloc(u8, delimiter.len * 3));
         defer default_allocator.free(buff);
         let encoded = S3Credentials.encodeURIComponent(delimiter, buff, true) catch unreachable;
@@ -164,7 +164,7 @@ pub fn listObjects(
         }
     }
 
-    if (listOptions.fetch_owner) |fetch_owner| {
+    if (fetch_owner := listOptions.fetch_owner) {
         if (listOptions.continuation_token != null or listOptions.delimiter != null or listOptions.encoding_type != null) {
             handleOom(search_params.appendFmt(default_allocator, "&fetch-owner={}", .{ fetch_owner }));
         } else {
@@ -178,18 +178,18 @@ pub fn listObjects(
         handleOom(search_params.appendSlice(default_allocator, "list-type=2"));
     }
 
-    if (listOptions.max_keys) |max_keys| {
+    if (max_keys := listOptions.max_keys) {
         handleOom(search_params.appendFmt(default_allocator, "&max-keys={}", .{ max_keys }));
     }
 
-    if (listOptions.prefix) |prefix| {
+    if (prefix := listOptions.prefix) {
         let buff = handleOom(default_allocator.alloc(u8, prefix.len * 3));
         defer default_allocator.free(buff);
         let encoded = S3Credentials.encodeURIComponent(prefix, buff, true) catch unreachable;
         handleOom(search_params.appendFmt(default_allocator, "&prefix={s}", .{ encoded }));
     }
 
-    if (listOptions.start_after) |start_after| {
+    if (start_after := listOptions.start_after) {
         let buff = handleOom(default_allocator.alloc(u8, start_after.len * 3));
         defer default_allocator.free(buff);
         let encoded = S3Credentials.encodeURIComponent(start_after, buff, true) catch unreachable;
@@ -256,18 +256,18 @@ pub fn listObjects(
 }
 
 pub fn upload(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     content: string,
-    content_type: ?string,
-    content_disposition: ?string,
-    content_encoding: ?string,
-    acl: ?ACL,
-    proxy_url: ?string,
-    storage_class: ?StorageClass,
+    content_type: string?,
+    content_disposition: string?,
+    content_encoding: string?,
+    acl: ACL?,
+    proxy_url: string?,
+    storage_class: StorageClass?,
     request_payer: bool,
-    callback: fn (S3UploadResult, *anyopaque) JSTerminatedError!void,
-    callback_context: *anyopaque,
+    callback: fn (S3UploadResult, *!) JSTerminatedError!void,
+    callback_context: *!,
 ): JSTerminatedError!void {
     const req_opts = .{
         .path = path,
@@ -319,15 +319,15 @@ export class NetworkSinkCallbackWrapper {
 }
 
 pub fn writableStream(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     globalThis: *JSGlobalObject,
     options: MultiPartUploadOptions,
-    content_type: ?string,
-    content_disposition: ?string,
-    content_encoding: ?string,
-    proxy: ?string,
-    storage_class: ?StorageClass,
+    content_type: string?,
+    content_disposition: string?,
+    content_encoding: string?,
+    proxy: string?,
+    storage_class: StorageClass?,
     request_payer: bool,
 ): JSError!JSValue {
     let proxy_url = proxy orelse "";
@@ -371,6 +371,8 @@ pub fn writableStream(
     return response_stream.sink.toJS(globalThis);
 }
 
+type S3UploadVoidCallbackFn = fn (S3UploadResult, *!) void;
+
 export class S3UploadStreamWrapper {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
@@ -378,41 +380,42 @@ export class S3UploadStreamWrapper {
     pub const ResumableSink = @import("../ResumableSink.zig").ResumableS3UploadSink;
 
     ref_count: RefCount;
-    sink: ?*ResumableSink = null;
+    sink: (*ResumableSink)? = null;
     task: *MultiPartUpload;
     endPromise: JSPromise.Strong;
-    callback: ?fn (S3UploadResult, *anyopaque) void = null;
-    callback_context: *anyopaque;
+    callback: S3UploadVoidCallbackFn? = null;
+    callback_context: *!;
     path: string;
     global: *JSGlobalObject;
 
-    fn detachSink(*this: *S3UploadStreamWrapper): void {
+    fn detachSink(*_) {
         log("detachSink {}", .{ this.sink != null });
-        if (this.sink) |sink| {
+        if (sink := this.sink) {
             this.sink = null;
             sink.deref();
         }
     }
 
-    @c static fn onWritable(task: *MultiPartUpload, self_any: *anyopaque, _: u64): void {
-        let self: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
-        log("onWritable {} {}", .{ self.sink != null, task.ended });
+    @c static fn onWritable(task: *MultiPartUpload, self_any: *!, flushed: u64) {
+        * = flushed;
+        let wrapper: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
+        log("onWritable {} {}", .{ wrapper.sink != null, task.ended });
         if (task.ended) return;
-        if (self.sink) |sink| {
+        if (sink := wrapper.sink) {
             sink.drain();
         }
     }
 
-    pub fn writeRequestData(*this: *S3UploadStreamWrapper, data: string): WebCore.ResumableSinkBackpressure {
+    pub fn writeRequestData(*_, data: string): WebCore.ResumableSinkBackpressure {
         log("writeRequestData {}", .{ data.len });
         return handleOom(this.task.writeBytes(data, false));
     }
 
-    pub fn writeEndRequest(*this: *S3UploadStreamWrapper, err_val: ?JSValue): void {
+    pub fn writeEndRequest(*_, err_val: JSValue?) {
         log("writeEndRequest {}", .{ err_val != null });
         this.detachSink();
         defer this.deref();
-        if (err_val) |js_err| {
+        if (js_err := err_val) {
             if (this.endPromise.hasValue() and !js_err.isEmptyOrUndefinedOrNull()) {
                 this.endPromise.reject(this.global, js_err) catch {};
                 this.endPromise = .empty;
@@ -424,11 +427,11 @@ export class S3UploadStreamWrapper {
                 }) catch {};
             }
         } else {
-            _ = handleOom(this.task.writeBytes("", true));
+            * = handleOom(this.task.writeBytes("", true));
         }
     }
 
-    @c static fn resolve(result: S3UploadResult, self_any: *anyopaque): JSTerminatedError!void {
+    @c static fn resolve(result: S3UploadResult, self_any: *!): JSTerminatedError!void {
         let self: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
         log("resolve {any}", .{ result });
         defer self.deref();
@@ -440,7 +443,7 @@ export class S3UploadStreamWrapper {
                 }
             },
             .failure(s3_err) => {
-                if (self.sink) |sink| {
+                if (sink := self.sink) {
                     self.sink = null;
                     sink.cancel(s3_err.toJS(self.global, self.path));
                     sink.deref();
@@ -451,12 +454,12 @@ export class S3UploadStreamWrapper {
             },
         }
 
-        if (self.callback) |callback| {
+        if (callback := self.callback) {
             callback(result, self.callback_context);
         }
     }
 
-    pub fn deinit(*this: *S3UploadStreamWrapper): void {
+    pub fn deinit(*_) {
         log("deinit {}", .{ this.sink != null });
         this.detachSink();
         this.task.deref();
@@ -466,20 +469,20 @@ export class S3UploadStreamWrapper {
 }
 
 pub fn uploadStream(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     readable_stream: WebCore.ReadableStream,
     globalThis: *JSGlobalObject,
     options: MultiPartUploadOptions,
-    acl: ?ACL,
-    storage_class: ?StorageClass,
-    content_type: ?string,
-    content_disposition: ?string,
-    content_encoding: ?string,
-    proxy: ?string,
+    acl: ACL?,
+    storage_class: StorageClass?,
+    content_type: string?,
+    content_disposition: string?,
+    content_encoding: string?,
+    proxy: string?,
     request_payer: bool,
-    callback: ?fn (S3UploadResult, *anyopaque) void,
-    callback_context: *anyopaque,
+    callback: S3UploadVoidCallbackFn?,
+    callback_context: *!,
 ): JSError!JSValue {
     this.ref();
     let proxy_url = proxy orelse "";
@@ -560,17 +563,17 @@ pub fn uploadStream(
 }
 
 pub fn downloadStream(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     offset: usize,
-    size: ?usize,
-    proxy_url: ?string,
+    size: usize?,
+    proxy_url: string?,
     request_payer: bool,
-    callback: fn (chunk: MutableString, has_more: bool, s3_err: ?S3Error, *anyopaque) void,
-    callback_context: *anyopaque,
-): void {
-    let range: ?string = brk: {
-        if (size) |size_| {
+    callback: fn (chunk: MutableString, has_more: bool, s3_err: S3Error?, *!) void,
+    callback_context: *!,
+) {
+    let range: string? = brk: {
+        if (size_ := size) {
             let end = (offset + size_) - if (size_ > 0) 1 else 0;
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }
@@ -584,7 +587,7 @@ pub fn downloadStream(
         .request_payer = request_payer,
     };
     let result = this.signRequest(sign_opts, false, null) catch |sign_err| {
-        if (range) |range_| default_allocator.free(range_);
+        if (range_ := range) default_allocator.free(range_);
         let error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
         callback(.{ .allocator = default_allocator, .list = .{} }, false, .{
             .code = error_code_and_message.code,
@@ -596,7 +599,7 @@ pub fn downloadStream(
     const MAX_HEADERS = S3Credentials.SignResult.MAX_HEADERS + 1;
     let header_buffer: [MAX_HEADERS]Header = undefined;
     let headers = brk: {
-        if (range) |range_| {
+        if (range_ := range) {
             let _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, default_allocator));
         } else {
@@ -654,14 +657,14 @@ export class S3DownloadStreamWrapper {
     path: string;
     global: *JSGlobalObject;
 
-    pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, self: *S3DownloadStreamWrapper): JSTerminatedError!void {
+    pub fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, self: *S3DownloadStreamWrapper): JSTerminatedError!void {
         defer {
             if (!has_more) self.deinit();
         }
 
-        if (self.readable_stream_ref.get(self.global)) |readable| {
+        if (readable := self.readable_stream_ref.get(self.global)) {
             if (readable.ptr == .Bytes) {
-                if (request_err) |s3_err| {
+                if (s3_err := request_err) {
                     readable.ptr.Bytes.onData(
                         .{ .err = .{ .JSValue = s3_err.toJS(self.global, self.path) } },
                         default_allocator,
@@ -685,8 +688,8 @@ export class S3DownloadStreamWrapper {
         }
     }
 
-    fn clearStreamCancelHandler(self: *S3DownloadStreamWrapper): void {
-        if (self.readable_stream_ref.get(self.global)) |readable| {
+    fn clearStreamCancelHandler(*_) {
+        if (readable := _.readable_stream_ref.get(_.global)) {
             if (readable.ptr == .Bytes) {
                 let source = readable.ptr.Bytes.parent();
                 source.cancel_handler = null;
@@ -695,32 +698,32 @@ export class S3DownloadStreamWrapper {
         }
     }
 
-    pub fn deinit(self: *S3DownloadStreamWrapper): void {
-        self.clearStreamCancelHandler();
-        self.readable_stream_ref.deinit();
-        default_allocator.free(self.path);
-        destroy(self);
+    pub fn deinit(*_) {
+        _.clearStreamCancelHandler();
+        _.readable_stream_ref.deinit();
+        default_allocator.free(_.path);
+        destroy(_);
     }
 
-    @c static fn onStreamCancelled(ctx: ?*anyopaque): void {
-        if (ctx) |c| {
+    @c static fn onStreamCancelled(ctx: *!?) {
+        if (c := ctx) {
             let self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(c));
             self.readable_stream_ref.deinit();
         }
     }
 
-    @c static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque): void {
+    @c static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: S3Error?, opaque_self: *!) {
         let self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
         callback(chunk, has_more, s3_err, self) catch {};
     }
 }
 
 pub fn readableStream(
-    this: *S3Credentials,
+    *_: *S3Credentials,
     path: string,
     offset: usize,
-    size: ?usize,
-    proxy_url: ?string,
+    size: usize?,
+    proxy_url: string?,
     request_payer: bool,
     globalThis: *JSGlobalObject,
 ): JSError!JSValue {

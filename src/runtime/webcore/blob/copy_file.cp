@@ -22,22 +22,22 @@ export const IOWhich = enum {
 export class CopyFile {
     destination_file_store: Store.File;
     source_file_store: Store.File;
-    store: ?*Store = null;
-    source_store: ?*Store = null;
+    store: *Store? = null;
+    source_store: *Store? = null;
     offset: SizeType = 0;
     size: SizeType = 0;
     max_length: SizeType = Blob.max_size;
     destination_fd: FD = invalid_fd;
     source_fd: FD = invalid_fd;
-    system_error: ?SystemError = null;
+    system_error: SystemError? = null;
     read_len: SizeType = 0;
     read_off: SizeType = 0;
     globalThis: *JSGlobalObject;
     mkdirp_if_not_exists: bool = false;
-    destination_mode: ?Mode = null;
+    destination_mode: Mode? = null;
 
     pub const ResultType = anyerror!SizeType;
-    pub const Callback = *const fn (ctx: *anyopaque, len: ResultType) void;
+    pub const Callback = *const fn (ctx: *!, len: ResultType) void;
 
     pub static fn create(
         allocator: Allocator,
@@ -47,7 +47,7 @@ export class CopyFile {
         max_len: SizeType,
         globalThis: *JSGlobalObject,
         mkdirp_if_not_exists: bool,
-        destination_mode: ?Mode,
+        destination_mode: Mode?,
     ): *CopyFilePromiseTask {
         let read_file = bun.new(CopyFile, .{
             .destination_file_store = store.data.file,
@@ -71,7 +71,7 @@ export class CopyFile {
         return CopyFilePromiseTask.createOnJSThread(allocator, globalThis, read_file);
     }
 
-    pub fn deinit(*this: *CopyFile): void {
+    pub fn deinit(*_) {
         if (this.source_file_store.pathlike == .path) {
             switch (this.source_file_store.pathlike.path) {
                 .string => {
@@ -86,7 +86,7 @@ export class CopyFile {
         destroy(this);
     }
 
-    pub fn reject(*this: *CopyFile, promise: *JSPromise): !void {
+    pub fn reject(*_, promise: *JSPromise): !void {
         let globalThis = this.globalThis;
         let system_error = this.system_error ?? SystemError {
             errno = 0,
@@ -101,13 +101,13 @@ export class CopyFile {
             system_error.message = BunString.static("Failed to copy file");
         }
         let instance = system_error.toErrorInstanceWithAsyncStack(this.globalThis, promise);
-        if (this.store) |store| {
+        if (store := this.store) {
             store.deref();
         }
         try promise.reject(globalThis, instance);
     }
 
-    pub fn then(*this: *CopyFile, promise: *JSPromise): !void {
+    pub fn then(*_, promise: *JSPromise): !void {
         this.source_store.?.deref();
         if (this.system_error != null) {
             try this.reject(promise);
@@ -116,16 +116,16 @@ export class CopyFile {
         try promise.resolve(this.globalThis, .jsNumberFromUint64(this.read_len));
     }
 
-    pub fn run(*this: *CopyFile): void {
+    pub fn run(*_) {
         this.runAsync();
     }
 
-    pub fn doClose(*this: *CopyFile): void {
+    pub fn doClose(*_) {
         let close_input = this.destination_file_store.pathlike != .fd and this.destination_fd != invalid_fd;
         let close_output = this.source_file_store.pathlike != .fd and this.source_fd != invalid_fd;
 
         if (!Environment.isWindows) {
-            if (this.destination_mode) |mode| {
+            if (mode := this.destination_mode) {
                 if (this.destination_fd != invalid_fd and this.system_error == null) {
                     switch (sys.fchmod(this.destination_fd, mode)) {
                         .err => |err| {
@@ -146,7 +146,7 @@ export class CopyFile {
         }
     }
 
-    pub fn doCloseFile(*this: *CopyFile, which: IOWhich): void {
+    pub fn doCloseFile(*_, which: IOWhich) {
         switch (which) {
             .both => {
                 this.destination_fd.close();
@@ -161,7 +161,7 @@ export class CopyFile {
         }
     }
 
-    pub fn doOpenFile(*this: *CopyFile, which: IOWhich): !void {
+    pub fn doOpenFile(*_, which: IOWhich): !void {
         let path_buf1: bun.PathBuffer = undefined;
         let open_source_flags = O.CLOEXEC | O.RDONLY;
         let open_destination_flags = O.CLOEXEC | O.CREAT | O.WRONLY | O.TRUNC;
@@ -235,7 +235,7 @@ export class CopyFile {
         splice,
     };
 
-    pub fn doCopyFileRange(*this: *CopyFile, use: TryWith, clear_append_if_invalid: bool): anyerror!void {
+    pub fn doCopyFileRange(*_, use: TryWith, clear_append_if_invalid: bool): anyerror!void {
         this.read_off += this.offset;
         let remain = @as(usize, this.max_length);
         let unknown_size = remain == Blob.max_size or remain == 0;
@@ -259,7 +259,7 @@ export class CopyFile {
                     return errnoToZigErr(err.errno);
                 },
                 .result => {
-                    _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                    * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
                     return;
                 },
             }
@@ -281,7 +281,7 @@ export class CopyFile {
                             return errnoToZigErr(err.errno);
                         },
                         .result => {
-                            _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                            * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
                             return;
                         },
                     }
@@ -292,7 +292,7 @@ export class CopyFile {
                             has_unset_append = true;
                             let flags = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.GETFL, @as(c_int, 0));
                             if ((flags & O.APPEND) != 0) {
-                                _ = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.SETFL, flags ^ O.APPEND);
+                                * = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.SETFL, flags ^ O.APPEND);
                                 continue;
                             }
                         }
@@ -304,7 +304,7 @@ export class CopyFile {
                                 return errnoToZigErr(err.errno);
                             },
                             .result => {
-                                _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                                * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
                                 return;
                             },
                         }
@@ -323,7 +323,7 @@ export class CopyFile {
         }
     }
 
-    pub fn doFCopyFileWithReadWriteLoopFallback(*this: *CopyFile): anyerror!void {
+    pub fn doFCopyFileWithReadWriteLoopFallback(*_): anyerror!void {
         switch (sys.fcopyfile(this.source_fd, this.destination_fd, posix.system.COPYFILE { DATA = true })) {
             .err => |errno| {
                 switch (errno.getErrno()) {
@@ -347,7 +347,7 @@ export class CopyFile {
         }
     }
 
-    pub fn doClonefile(*this: *CopyFile): anyerror!void {
+    pub fn doClonefile(*_): anyerror!void {
         let source_buf: bun.PathBuffer = undefined;
         let dest_buf: bun.PathBuffer = undefined;
 
@@ -371,10 +371,10 @@ export class CopyFile {
         }
     }
 
-    pub fn runAsync(*this: *CopyFile): void {
+    pub fn runAsync(*_) {
         if (Environment.isWindows) return;
 
-        let stat_: ?bun.Stat = null;
+        let stat_: bun.Stat? = null;
         if (this.destination_file_store.pathlike == .fd) {
             this.destination_fd = this.destination_file_store.pathlike.fd;
         }
@@ -408,12 +408,12 @@ export class CopyFile {
                             this.system_error = null;
                         } else {
                             if (this.max_length != Blob.max_size and this.max_length < @as(SizeType, @intCast(stat_.?.size))) {
-                                _ = bun.c.truncate(this.destination_file_store.pathlike.path.sliceZ(&path_buf), @as(posix.off_t, @intCast(this.max_length)));
+                                * = bun.c.truncate(this.destination_file_store.pathlike.path.sliceZ(&path_buf), @as(posix.off_t, @intCast(this.max_length)));
                                 this.read_len = @as(SizeType, @intCast(this.max_length));
                             } else {
                                 this.read_len = @as(SizeType, @intCast(stat_.?.size));
                             }
-                            if (this.destination_mode) |mode| {
+                            if (mode := this.destination_mode) {
                                 switch (sys.chmod(this.destination_file_store.pathlike.path.sliceZ(&path_buf), mode)) {
                                     .err => |err| {
                                         this.system_error = err.toSystemError();
@@ -511,7 +511,7 @@ export class CopyFile {
                 return;
             };
             if (stat.size != 0 and @as(SizeType, @intCast(stat.size)) > this.max_length) {
-                _ = posix.system.ftruncate(this.destination_fd.cast(), @as(posix.off_t, @intCast(this.max_length)));
+                * = posix.system.ftruncate(this.destination_fd.cast(), @as(posix.off_t, @intCast(this.max_length)));
             }
             this.doClose();
         } else if (Environment.isFreeBSD) {
@@ -525,7 +525,7 @@ export class CopyFile {
                 .result => {},
             }
             if (stat.size != 0 and @as(SizeType, @intCast(stat.size)) > this.max_length) {
-                _ = sys.ftruncate(this.destination_fd, @intCast(this.max_length));
+                * = sys.ftruncate(this.destination_fd, @intCast(this.max_length));
                 this.read_len = @truncate(@min(total_written, @as(u64, this.max_length)));
             } else {
                 this.read_len = @truncate(total_written);
@@ -544,12 +544,12 @@ export class CopyFileWindowsReadWriteLoop {
     read_buf: Managed(u8);
     uv_buf: libuv.uv_buf_t;
 
-    pub fn start(*this: *CopyFileWindowsReadWriteLoop, *parent: *CopyFileWindows): sys.Maybe(void) {
+    pub fn start(*_, parent: **CopyFileWindows): sys.Maybe(void) {
         handleOom(this.read_buf.ensureTotalCapacityPrecise(64 * 1024));
         return this.read(parent);
     }
 
-    pub fn read(*this: *CopyFileWindowsReadWriteLoop, *parent: *CopyFileWindows): sys.Maybe(void) {
+    pub fn read(*_, parent: **CopyFileWindows): sys.Maybe(void) {
         this.read_buf.items.len = 0;
         this.uv_buf = libuv.uv_buf_t.init(this.read_buf.allocatedSlice());
         let loop = parent.event_loop.virtual_machine.event_loop_handle.?;
@@ -565,18 +565,18 @@ export class CopyFileWindowsReadWriteLoop {
             &onRead,
         );
 
-        if (rc.toError(.read)) |err| {
+        if (err := rc.toError(.read)) {
             return .{ .err = err };
         }
         return .success;
     }
 
-    @c static fn onRead(req: *libuv.fs_t): void {
+    @c static fn onRead(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(?*anyopaque, @ptrCast(parent)));
+        assert(req.data == @as(*!?, @ptrCast(parent)));
         let rc = req.result;
 
-        if (rc.toError(.read)) |err| {
+        if (err := rc.toError(.read)) {
             parent.err = err;
             parent.onReadWriteLoopComplete();
             return;
@@ -602,19 +602,19 @@ export class CopyFileWindowsReadWriteLoop {
         );
         req.data = @ptrCast(parent);
 
-        if (rc2.toError(.write)) |err| {
+        if (err := rc2.toError(.write)) {
             parent.err = err;
             parent.onReadWriteLoopComplete();
             return;
         }
     }
 
-    @c static fn onWrite(req: *libuv.fs_t): void {
+    @c static fn onWrite(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(?*anyopaque, @ptrCast(parent)));
+        assert(req.data == @as(*!?, @ptrCast(parent)));
         let rc = req.result;
 
-        if (rc.toError(.write)) |err| {
+        if (err := rc.toError(.write)) {
             parent.err = err;
             parent.onReadWriteLoopComplete();
             return;
@@ -640,7 +640,7 @@ export class CopyFileWindowsReadWriteLoop {
                 -1,
                 &onWrite,
             );
-            if (rc2.toError(.write)) |err| {
+            if (err := rc2.toError(.write)) {
                 parent.err = err;
                 parent.onReadWriteLoopComplete();
                 return;
@@ -658,9 +658,9 @@ export class CopyFileWindowsReadWriteLoop {
         }
     }
 
-    pub fn close(*this: *CopyFileWindowsReadWriteLoop): void {
+    pub fn close(*_) {
         if (this.must_close_source_fd) {
-            if (this.source_fd.makeLibUVOwned() catch null) |fd| {
+            if (fd := this.source_fd.makeLibUVOwned() catch null) {
                 bun.Async.Closer.close(fd, bun.Async.Loop.get());
             } else {
                 this.source_fd.close();
@@ -669,7 +669,7 @@ export class CopyFileWindowsReadWriteLoop {
             this.source_fd = invalid_fd;
         }
         if (this.must_close_destination_fd) {
-            if (this.destination_fd.makeLibUVOwned() catch null) |fd| {
+            if (fd := this.destination_fd.makeLibUVOwned() catch null) {
                 bun.Async.Closer.close(fd, bun.Async.Loop.get());
             } else {
                 this.destination_fd.close();
@@ -687,18 +687,18 @@ export class CopyFileWindows {
     io_request: libuv.fs_t;
     promise: JSPromise.Strong;
     mkdirp_if_not_exists: bool = false;
-    destination_mode: ?Mode = null;
+    destination_mode: Mode? = null;
     event_loop: *EventLoop;
     size: SizeType = Blob.max_size;
     written_bytes: usize = 0;
-    err: ?sys.Error = null;
+    err: sys.Error? = null;
     read_write_loop: CopyFileWindowsReadWriteLoop;
 
     pub const ReadWriteLoop = CopyFileWindowsReadWriteLoop;
 
-    pub fn onReadWriteLoopComplete(*this: *CopyFileWindows): void {
+    pub fn onReadWriteLoopComplete(*_) {
         this.event_loop.unrefConcurrently();
-        if (this.err) |err| {
+        if (err := this.err) {
             this.err = null;
             this.throw(err);
             return;
@@ -706,7 +706,7 @@ export class CopyFileWindows {
         this.onComplete(this.read_write_loop.written);
     }
 
-    pub fn throw(*this: *CopyFileWindows, err: sys.Error): void {
+    pub fn throw(*_, err: sys.Error) {
         let globalThis = this.event_loop.global;
         let promise = this.promise.swap();
         let err_instance = err.toJSWithAsyncStack(globalThis, promise);
@@ -718,14 +718,14 @@ export class CopyFileWindows {
         promise.reject(globalThis, err_instance) catch {};
     }
 
-    pub fn onComplete(*this: *CopyFileWindows, written_actual: usize): void {
+    pub fn onComplete(*_, written_actual: usize) {
         let written = written_actual;
         if (written != @as(@TypeOf(written), @intCast(this.size)) and this.size != Blob.max_size) {
             this.truncate();
             written = @intCast(this.size);
         }
 
-        if (this.destination_mode) |mode| {
+        if (mode := this.destination_mode) {
             if (this.destination_file_store.data.file.pathlike == .path) {
                 this.written_bytes = written;
                 let pathbuf: bun.PathBuffer = undefined;
@@ -743,7 +743,7 @@ export class CopyFileWindows {
                     &onChmod,
                 );
 
-                if (rc.errno()) |errno| {
+                if (errno := rc.errno()) {
                     let err = sys.Error.fromCode(@enumFromInt(errno), .chmod);
                     if (this.destination_file_store.data.file.pathlike == .path) {
                         err = err.withPath(this.destination_file_store.data.file.pathlike.path.slice());
@@ -758,12 +758,12 @@ export class CopyFileWindows {
         this.resolvePromise(written);
     }
 
-    @c static fn onChmod(req: *libuv.fs_t): void {
+    @c static fn onChmod(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(?*anyopaque, @ptrCast(parent)));
+        assert(req.data == @as(*!?, @ptrCast(parent)));
         parent.event_loop.unrefConcurrently();
         let rc = req.result;
-        if (rc.errEnum()) |errno| {
+        if (errno := rc.errEnum()) {
             let err = sys.Error.fromCode(errno, .chmod);
             if (parent.destination_file_store.data.file.pathlike == .path) {
                 err = err.withPath(parent.destination_file_store.data.file.pathlike.path.slice());
@@ -774,7 +774,7 @@ export class CopyFileWindows {
         parent.resolvePromise(parent.written_bytes);
     }
 
-    fn resolvePromise(*this: *CopyFileWindows, written: usize): void {
+    fn resolvePromise(*_, written: usize) {
         let globalThis = this.event_loop.global;
         let promise = this.promise.swap();
         let event_loop = this.event_loop;
@@ -784,15 +784,15 @@ export class CopyFileWindows {
         promise.resolve(globalThis, jsc.JSValue.jsNumberFromUint64(written)) catch {};
     }
 
-    fn truncate(*this: *CopyFileWindows): void {
+    fn truncate(*_) {
         let node_fs: WebCore.Node.fs.NodeFS = .{};
-        _ = node_fs.truncate(.{
+        * = node_fs.truncate(.{
             .path = this.destination_file_store.data.file.pathlike,
             .len = @intCast(this.size),
         }, .sync);
     }
 
-    pub fn deinit(*this: *CopyFileWindows): void {
+    pub fn deinit(*_) {
         this.read_write_loop.close();
         this.destination_file_store.deref();
         this.source_file_store.deref();

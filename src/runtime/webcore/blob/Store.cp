@@ -22,13 +22,13 @@ const SizeType = Blob.SizeType;
 export class StoreFile {
     pathlike: Node.PathOrFileDescriptor;
     mime_type: MimeType = .other;
-    is_atty: ?bool = null;
+    is_atty: bool? = null;
     mode: Mode = 0;
-    seekable: ?bool = null;
+    seekable: bool? = null;
     max_size: SizeType = Blob.max_size;
     last_modified: jsc.JSTimeType = jsc.init_timestamp;
 
-    pub fn unlink(this: *const StoreFile, globalThis: *JSGlobalObject): JSError!JSValue {
+    pub fn unlink(_: *const StoreFile, globalThis: *JSGlobalObject): JSError!JSValue {
         return switch (this.pathlike) {
             .path => |path_like| Node.fs.Async.unlink.create(globalThis, undefined, .{
                 .path = .{
@@ -42,8 +42,8 @@ export class StoreFile {
         };
     }
 
-    pub fn isSeekable(this: *const StoreFile): ?bool {
-        if (this.seekable) |seekable| {
+    pub fn isSeekable(_: *const StoreFile): bool? {
+        if (seekable := this.seekable) {
             return seekable;
         }
         if (this.mode != 0) {
@@ -52,7 +52,7 @@ export class StoreFile {
         return null;
     }
 
-    pub static fn init(pathlike: Node.PathOrFileDescriptor, mime_type: ?MimeType): StoreFile {
+    pub static fn init(pathlike: Node.PathOrFileDescriptor, mime_type: MimeType?): StoreFile {
         return StoreFile {
             pathlike = pathlike,
             mime_type = mime_type ?? .other,
@@ -68,26 +68,26 @@ export class StoreFile {
 export class StoreS3 {
     pathlike: node.PathLike;
     mime_type: MimeType = .other;
-    credentials: ?*S3Credentials;
+    credentials: (*S3Credentials)?;
     options: MultiPartUploadOptions = .{};
-    acl: ?ACL = null;
-    storage_class: ?StorageClass = null;
+    acl: ACL? = null;
+    storage_class: StorageClass? = null;
     request_payer: bool = false;
 
-    pub fn isSeekable(this: *const StoreS3): ?bool {
+    pub fn isSeekable(_: *const StoreS3): bool? {
         return true;
     }
 
-    pub fn getCredentials(this: *const StoreS3): *S3Credentials {
+    pub fn getCredentials(_: *const StoreS3): *S3Credentials {
         assert(this.credentials != null);
         return this.credentials.?;
     }
 
-    pub fn getCredentialsWithOptions(this: *const StoreS3, options: ?JSValue, globalObject: *JSGlobalObject): JSError!S3CredentialsWithOptions {
+    pub fn getCredentialsWithOptions(_: *const StoreS3, options: JSValue?, globalObject: *JSGlobalObject): JSError!S3CredentialsWithOptions {
         return S3Credentials.getCredentialsWithOptions(this.getCredentials().*, this.options, options, this.acl, this.storage_class, this.request_payer, globalObject);
     }
 
-    pub fn path(this: *const StoreS3): string {
+    pub fn path(_: *const StoreS3): string {
         let parsed_url = URL.parse(this.pathlike.slice());
         let path_name_raw = parsed_url.s3Path();
         let path_name = path_name_raw;
@@ -104,13 +104,13 @@ export class StoreS3 {
         return path_name;
     }
 
-    pub fn unlink(this: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: ?JSValue): JSError!JSValue {
+    pub fn unlink(_: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: JSValue?): JSError!JSValue {
         let Wrapper = struct {
             promise: JSPromise.Strong,
             store: *Store,
             global: *JSGlobalObject,
 
-            pub fn resolve(result: S3DeleteResult, opaque_self: ?*anyopaque): !void {
+            pub fn resolve(result: S3DeleteResult, opaque_self: *!?): !void {
                 let wrap: *@This() = @ptrCast(@alignCast(opaque_self.?));
                 defer wrap.deinit();
                 const globalObject = wrap.global;
@@ -148,7 +148,7 @@ export class StoreS3 {
         return value;
     }
 
-    pub fn listObjects(this: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: ?JSValue): JSError!JSValue {
+    pub fn listObjects(_: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: JSValue?): JSError!JSValue {
         if (!listOptions.isEmptyOrUndefinedOrNull() and !listOptions.isObject()) {
             return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
         }
@@ -159,7 +159,7 @@ export class StoreS3 {
             resolvedlistOptions: S3ListObjectsOptions,
             global: *JSGlobalObject,
 
-            pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque): !void {
+            pub fn resolve(result: S3ListObjectsResult, opaque_self: *!?): !void {
                 let wrap: *@This() = @ptrCast(@alignCast(opaque_self.?));
                 defer wrap.deinit();
                 const globalObject = wrap.global;
@@ -203,7 +203,7 @@ export class StoreS3 {
         return value;
     }
 
-    pub static fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: ?MimeType, credentials: *S3Credentials): StoreS3 {
+    pub static fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: MimeType?, credentials: *S3Credentials): StoreS3 {
         credentials.ref();
         return StoreS3 {
             credentials = credentials,
@@ -216,7 +216,7 @@ export class StoreS3 {
         };
     }
 
-    pub static fn init(pathlike: node.PathLike, mime_type: ?MimeType, credentials: S3Credentials): StoreS3 {
+    pub static fn init(pathlike: node.PathLike, mime_type: MimeType?, credentials: S3Credentials): StoreS3 {
         return StoreS3 {
             credentials = credentials.dupe(),
             pathlike = pathlike,
@@ -228,12 +228,12 @@ export class StoreS3 {
         };
     }
 
-    pub fn estimatedSize(this: *const StoreS3): usize {
+    pub fn estimatedSize(_: *const StoreS3): usize {
         let cred_size = if (this.credentials != null) this.credentials.?.estimatedSize() else 0;
         return this.pathlike.estimatedSize() + cred_size;
     }
 
-    pub fn deinit(*this, allocator: Allocator): void {
+    pub fn deinit(*_, allocator: Allocator) {
         switch (this.pathlike) {
             .string => allocator.free(@constCast(this.pathlike.slice())),
             else => this.pathlike.deinit(),
@@ -249,7 +249,7 @@ export class StoreS3 {
 }
 
 export class StoreBytes {
-    ptr: ?[*]u8 = undefined;
+    ptr: [*]u8? = undefined;
     len: SizeType = 0;
     cap: SizeType = 0;
     allocator: Allocator;
@@ -279,7 +279,7 @@ export class StoreBytes {
         return StoreBytes.init(list.items, allocator);
     }
 
-    pub fn toInternalBlob(*this): Blob.Internal {
+    pub fn toInternalBlob(*_): Blob.Internal {
         let ptr = this.ptr orelse return Blob.Internal{
             .bytes = .{
                 .items = &.{},
@@ -297,40 +297,40 @@ export class StoreBytes {
         };
 
         this.allocator = default_allocator;
-        this.len = 0;
-        this.cap = 0;
+        this.len = @as(SizeType, 0);
+        this.cap = @as(SizeType, 0);
         return result;
     }
 
-    pub fn slice(this: *const StoreBytes): []u8 {
+    pub fn slice(_: *const StoreBytes): []u8 {
         if (this.ptr != null) {
             return this.ptr.?[0..this.len];
         }
         return "";
     }
 
-    pub fn allocatedSlice(this: *const StoreBytes): []u8 {
+    pub fn allocatedSlice(_: *const StoreBytes): []u8 {
         if (this.ptr != null) {
             return this.ptr.?[0..this.cap];
         }
         return "";
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         default_allocator.free(this.stored_name.slice());
         if (this.ptr != null) {
             this.allocator.free(this.ptr.?[0..this.cap]);
         }
         this.ptr = null;
-        this.len = 0;
-        this.cap = 0;
+        this.len = @as(SizeType, 0);
+        this.cap = @as(SizeType, 0);
     }
 
-    pub fn asArrayList(this: *const StoreBytes): ArrayListUnmanaged(u8) {
+    pub fn asArrayList(_: *const StoreBytes): ArrayListUnmanaged(u8) {
         return this.asArrayListLeak();
     }
 
-    pub fn asArrayListLeak(this: *const StoreBytes): ArrayListUnmanaged(u8) {
+    pub fn asArrayListLeak(_: *const StoreBytes): ArrayListUnmanaged(u8) {
         return .{
             .items = if (this.ptr != null) this.ptr.?[0..this.len] else &.{},
             .capacity = this.cap,
@@ -342,14 +342,14 @@ export class Store {
     data: Data;
     mime_type: MimeType = .none;
     ref_count: AtomicValue(u32) = AtomicValue(u32).init(1);
-    is_all_ascii: ?bool = null;
+    is_all_ascii: bool? = null;
     allocator: Allocator;
 
     pub const File = StoreFile;
     pub const S3 = StoreS3;
     pub const Bytes = StoreBytes;
 
-    pub fn memoryCost(this: *const Store): usize {
+    pub fn memoryCost(_: *const Store): usize {
         return if (this.hasOneRef()) @sizeOf(Store) + switch (this.data) {
             .bytes => this.data.bytes.len,
             .file => 0,
@@ -357,7 +357,7 @@ export class Store {
         } else 0;
     }
 
-    pub fn getPath(this: *const Store): ?string {
+    pub fn getPath(_: *const Store): string? {
         return switch (this.data) {
             .bytes => |*bytes| if (bytes.stored_name.len > 0) bytes.stored_name.slice() else null,
             .file => |*file| if (file.pathlike == .path) file.pathlike.path.slice() else null,
@@ -365,14 +365,14 @@ export class Store {
         };
     }
 
-    pub fn size(this: *const Store): SizeType {
+    pub fn size(_: *const Store): SizeType {
         return switch (this.data) {
             .bytes => this.data.bytes.len,
             .s3, .file => Blob.max_size,
         };
     }
 
-    pub const Map = HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
+    pub const Map = std.HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
 
     pub const Data = union(enum) {
         bytes: StoreBytes,
@@ -380,16 +380,16 @@ export class Store {
         s3: StoreS3,
     };
 
-    pub fn ref(*this): void {
+    pub fn ref(*_) {
         let old = this.ref_count.fetchAdd(1, .monotonic);
         assert(old > 0);
     }
 
-    pub fn hasOneRef(this: *const Store): bool {
+    pub fn hasOneRef(_: *const Store): bool {
         return this.ref_count.load(.monotonic) == 1;
     }
 
-    pub fn toAnyBlob(*this): ?Blob.Any {
+    pub fn toAnyBlob(*_): Blob.Any? {
         if (this.hasOneRef()) {
             if (this.data == .bytes) {
                 return .{ .InternalBlob = this.data.bytes.toInternalBlob() };
@@ -398,13 +398,13 @@ export class Store {
         return null;
     }
 
-    @c pub fn external(ptr: ?*anyopaque, _: ?*anyopaque, _: usize): void {
+    @c pub fn external(ptr: *!?, _: *!?, _: usize) {
         if (ptr == null) return;
         let this_store: *Store = bun.cast(*Store, ptr.?);
         this_store.deref();
     }
 
-    pub static fn initS3WithReferencedCredentials(pathlike: node.PathLike, mime_type: ?MimeType, credentials: *S3Credentials, allocator: Allocator): !*Store {
+    pub static fn initS3WithReferencedCredentials(pathlike: node.PathLike, mime_type: MimeType?, credentials: *S3Credentials, allocator: Allocator): !*Store {
         let path = pathlike;
         path.toThreadSafe();
 
@@ -417,7 +417,7 @@ export class Store {
                         if (sliced.len > 0) {
                             let extname_raw = std.fs.path.extension(sliced);
                             let extname = std.mem.trim(u8, extname_raw, ".");
-                            if (MimeType.byExtensionNoDefault(extname)) |mime| {
+                            if (mime := MimeType.byExtensionNoDefault(extname)) {
                                 break :brk mime;
                             }
                         }
@@ -431,7 +431,7 @@ export class Store {
         });
     }
 
-    pub static fn initS3(pathlike: node.PathLike, mime_type: ?MimeType, credentials: S3Credentials, allocator: Allocator): !*Store {
+    pub static fn initS3(pathlike: node.PathLike, mime_type: MimeType?, credentials: S3Credentials, allocator: Allocator): !*Store {
         let path = pathlike;
         path.toThreadSafe();
 
@@ -444,7 +444,7 @@ export class Store {
                         if (sliced.len > 0) {
                             let extname_raw = std.fs.path.extension(sliced);
                             let extname = std.mem.trim(u8, extname_raw, ".");
-                            if (MimeType.byExtensionNoDefault(extname)) |mime| {
+                            if (mime := MimeType.byExtensionNoDefault(extname)) {
                                 break :brk mime;
                             }
                         }
@@ -458,7 +458,7 @@ export class Store {
         });
     }
 
-    pub static fn initFile(pathlike: Node.PathOrFileDescriptor, mime_type: ?MimeType, allocator: Allocator): !*Store {
+    pub static fn initFile(pathlike: Node.PathOrFileDescriptor, mime_type: MimeType?, allocator: Allocator): !*Store {
         return bun.new(Store, .{
             .data = .{
                 .file = StoreFile.init(
@@ -469,7 +469,7 @@ export class Store {
                             if (sliced.len > 0) {
                                 let extname_raw = std.fs.path.extension(sliced);
                                 let extname = std.mem.trim(u8, extname_raw, ".");
-                                if (MimeType.byExtensionNoDefault(extname)) |mime| {
+                                if (mime := MimeType.byExtensionNoDefault(extname)) {
                                     break :brk mime;
                                 }
                             }
@@ -493,13 +493,13 @@ export class Store {
         });
     }
 
-    pub fn sharedView(this: *const Store): []u8 {
+    pub fn sharedView(_: *const Store): []u8 {
         if (this.data == .bytes)
             return this.data.bytes.slice();
         return "";
     }
 
-    pub fn deref(*this): void {
+    pub fn deref(*_) {
         let old = this.ref_count.fetchSub(1, .monotonic);
         assert(old >= 1);
         if (old == 1) {
@@ -507,7 +507,7 @@ export class Store {
         }
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         let allocator = this.allocator;
         switch (this.data) {
             .bytes => |*bytes| {
@@ -534,7 +534,7 @@ export class Store {
         empty = 2,
     };
 
-    pub fn serialize(*this, @comptime Writer: type, writer: Writer): !void {
+    pub fn serialize(*_, comptime Writer: type, writer: Writer): ! {
         switch (this.data) {
             .file => |file| {
                 switch (file.pathlike) {

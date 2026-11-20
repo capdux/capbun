@@ -1,16 +1,17 @@
 // CookieMap opaque bridge in CP
-const bun = @import("bun");
+import bun from "bun";
 
-pub const CookieMap = opaque {
-    extern fn CookieMap__write(cookie_map: *CookieMap, global_this: *bun.jsc.JSGlobalObject, kind: bun.uws.ResponseKind, uws_http_response: *anyopaque) void;
+@c {
+    fn CookieMap__write(cookie_map: *CookieMap, global_this: *bun.jsc.JSGlobalObject, kind: bun.uws.ResponseKind, uws_http_response: *!);
+    fn CookieMap__deref(cookie_map: *CookieMap);
+    fn CookieMap__ref(cookie_map: *CookieMap);
+}
 
-    pub fn write(this: *CookieMap, globalThis: *bun.jsc.JSGlobalObject, kind: bun.uws.ResponseKind, uws_http_response: *anyopaque): bun.JSError!void {
-        return bun.jsc.fromJSHostCallGeneric(globalThis, @src(), CookieMap__write, .{ this, globalThis, kind, uws_http_response });
+@opaque pub struct CookieMap {
+    pub fn write(*_, globalThis: *bun.jsc.JSGlobalObject, kind: bun.uws.ResponseKind, uws_http_response: *!): bun.JSError!void {
+        return bun.jsc.fromJSHostCallGeneric(globalThis, @src(), CookieMap__write, .{ _, globalThis, kind, uws_http_response });
     }
 
-    extern fn CookieMap__deref(cookie_map: *CookieMap): void;
     pub const deref = CookieMap__deref;
-
-    extern fn CookieMap__ref(cookie_map: *CookieMap): void;
     pub const ref = CookieMap__ref;
-};
+}

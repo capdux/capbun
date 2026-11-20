@@ -2968,3 +2968,5 @@ Options:
 - [2026-11-20 04:45:03 UTC] [收到 cp_agy 结单并已 ack] 工单 `task-bun-20261120-lib-err-error-shadow`（内部运行时重命名为 `__CpErr` 按需导出 `Err`/`Error`）；修复 `css_parser.cp` 余下 2 处小错后全门禁 PASS (1.011x)，`src/css/` 实现 100% 零违例闭环。
 
 - [2026-11-20 04:46:13 UTC] 验收并提交基础库 22 模块存量净化（io 5 + threading 5 + paths 3 + aio 3 + event_loop 2 + router 2 + semver 2），膨胀率 0.608x~1.153x，全部 4 项硬门禁 PASS。
+
+- [2026-11-20 04:50:57 UTC] 验收并提交 `src/runtime/webcore/` 最后 10 模块存量净化（CookieMap, Sink, blob 4, s3 4），膨胀率 0.635x~1.142x，10/10 全 PASS。

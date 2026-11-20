@@ -15,8 +15,7 @@ import {
 } from "bun";
 import { meta, mem, fmt } from "std";
 import { ArrayBufferSink } from "./ArrayBufferSink";
-
-const bun = @import("bun");
+import bun from "bun";
 
 const Syscall = sys;
 const Subprocess = api.Subprocess;
@@ -88,6 +87,8 @@ export class UTF8Fallback {
     }
 }
 
+type MaybeSyscallErr = Syscall.Error?;
+
 export class Sink {
     ptr: *!;
     vtable: VTable;
@@ -95,7 +96,7 @@ export class Sink {
     used: bool = false;
 
     pub const pending = Sink{
-        .ptr = @as(*anyopaque, @ptrFromInt(0xaaaaaaaa)),
+        .ptr = @ptrFromInt(0xaaaaaaaa),
         .vtable = undefined,
     };
 
@@ -124,11 +125,11 @@ export class Sink {
     }
 
     pub const VTable = struct {
-        pub const WriteUTF16Fn = *const fn (this: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const WriteUTF8Fn = *const fn (this: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const WriteLatin1Fn = *const fn (this: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const EndFn = *const fn (this: *anyopaque, err: ?Syscall.Error) sys.Maybe(void);
-        pub const ConnectFn = *const fn (this: *anyopaque, signal: streams.Signal) sys.Maybe(void);
+        pub const WriteUTF16Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
+        pub const WriteUTF8Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
+        pub const WriteLatin1Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
+        pub const EndFn = fn (ctx: *!, err: MaybeSyscallErr) sys.Maybe(void);
+        pub const ConnectFn = fn (ctx: *!, signal: streams.Signal) sys.Maybe(void);
 
         connect: ConnectFn,
         write: WriteUTF8Fn,
@@ -136,24 +137,24 @@ export class Sink {
         writeUTF16: WriteUTF16Fn,
         end: EndFn,
 
-        pub fn wrap(
+        pub static fn wrap(
             comptime Wrapped: type,
-        ) VTable {
+        ): VTable {
             const Functions = struct {
-                pub fn onWrite(this: *anyopaque, data: streams.Result) streams.Result.Writable {
-                    return Wrapped.write(cast(*Wrapped, this), data);
+                pub static fn onWrite(ctx: *!, data: streams.Result): streams.Result.Writable {
+                    return Wrapped.write(cast(*Wrapped, ctx), data);
                 }
-                pub fn onConnect(this: *anyopaque, signal: streams.Signal) sys.Maybe(void) {
-                    return Wrapped.connect(cast(*Wrapped, this), signal);
+                pub static fn onConnect(ctx: *!, signal: streams.Signal): sys.Maybe(void) {
+                    return Wrapped.connect(cast(*Wrapped, ctx), signal);
                 }
-                pub fn onWriteLatin1(this: *anyopaque, data: streams.Result) streams.Result.Writable {
-                    return Wrapped.writeLatin1(cast(*Wrapped, this), data);
+                pub static fn onWriteLatin1(ctx: *!, data: streams.Result): streams.Result.Writable {
+                    return Wrapped.writeLatin1(cast(*Wrapped, ctx), data);
                 }
-                pub fn onWriteUTF16(this: *anyopaque, data: streams.Result) streams.Result.Writable {
-                    return Wrapped.writeUTF16(cast(*Wrapped, this), data);
+                pub static fn onWriteUTF16(ctx: *!, data: streams.Result): streams.Result.Writable {
+                    return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
                 }
-                pub fn onEnd(this: *anyopaque, err: ?Syscall.Error) sys.Maybe(void) {
-                    return Wrapped.end(cast(*Wrapped, this), err);
+                pub static fn onEnd(ctx: *!, err: Syscall.Error?): sys.Maybe(void) {
+                    return Wrapped.end(cast(*Wrapped, ctx), err);
                 }
             };
 
@@ -167,7 +168,7 @@ export class Sink {
         }
     };
 
-    pub fn end(*_, err: ?Syscall.Error): sys.Maybe(void) {
+    pub fn end(*_, err: Syscall.Error?): sys.Maybe(void) {
         if (_.status == .closed) {
             return .success;
         }
@@ -261,11 +262,11 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return @sizeOf(ThisSink) + SinkType.memoryCost(&this.sink);
         }
 
-        const AssignToStreamFn = *const fn (*JSGlobalObject, JSValue, *anyopaque, **anyopaque) callconv(.c) JSValue;
+        const AssignToStreamFn = *const fn (*JSGlobalObject, JSValue, *!, **void) callconv(.c) JSValue;
         const OnCloseFn = *const fn (JSValue, JSValue) callconv(.c) void;
         const OnReadyFn = *const fn (JSValue, JSValue, JSValue) callconv(.c) void;
         const OnStartFn = *const fn (JSValue, *JSGlobalObject) callconv(.c) void;
-        const CreateObjectFn = *const fn (*JSGlobalObject, *anyopaque, usize) callconv(.c) JSValue;
+        const CreateObjectFn = *const fn (*JSGlobalObject, *!, usize) callconv(.c) JSValue;
         const SetDestroyCallbackFn = *const fn (JSValue, usize) callconv(.c) void;
         const DetachPtrFn = *const fn (JSValue) callconv(.c) void;
 
@@ -277,7 +278,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" });
         const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" }).*;
 
-        pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *anyopaque, jsvalue_ptr: **anyopaque): JSValue {
+        pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *!, jsvalue_ptr: **void): JSValue {
             return assignToStreamExtern(globalThis, stream, ptr, jsvalue_ptr);
         }
 
@@ -297,7 +298,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return onStartExtern(ptr, globalThis);
         }
 
-        pub fn createObject(globalThis: *JSGlobalObject, object: *anyopaque, destructor: usize): JSValue {
+        pub fn createObject(globalThis: *JSGlobalObject, object: *!, destructor: usize): JSValue {
             jsc.markBinding(@src());
             return createObjectExtern(globalThis, object, destructor);
         }
@@ -330,7 +331,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return createObject(globalThis, @ptrCast(this), 0);
         }
 
-        pub fn finalize(ptr: *anyopaque) callconv(.c) void {
+        pub fn finalize(ptr: *!) callconv(.c) void {
             let this = cast(*ThisSink, ptr);
             this.sink.finalize();
         }
@@ -476,7 +477,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return this.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
         }
 
-        pub fn close(globalThis: *JSGlobalObject, sink_ptr: ?*anyopaque) callconv(.c) JSValue {
+        pub fn close(globalThis: *JSGlobalObject, sink_ptr: *!?) callconv(.c) JSValue {
             jsc.markBinding(@src());
             const this: *ThisSink = cast(*ThisSink, sink_ptr orelse return .js_undefined);
 
@@ -569,7 +570,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return result;
         }
 
-        pub fn endWithSink(ptr: *anyopaque, globalThis: *JSGlobalObject) callconv(jsc.conv) JSValue {
+        pub fn endWithSink(ptr: *!, globalThis: *JSGlobalObject) callconv(jsc.conv) JSValue {
             jsc.markBinding(@src());
             let this = cast(*ThisSink, ptr);
 
@@ -582,7 +583,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return this.sink.endFromJS(globalThis).toJS(globalThis) catch .zero;
         }
 
-        pub fn updateRef(ptr: *anyopaque, value: bool) callconv(.c) void {
+        pub fn updateRef(ptr: *!, value: bool) callconv(.c) void {
             jsc.markBinding(@src());
             let this = cast(*ThisSink, ptr);
             if (comptime @hasDecl(SinkType, "updateRef"))
@@ -595,7 +596,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         const jsEnd = jsc.toJSHostFn(@This().end);
         const jsConstruct = jsc.toJSHostFn(construct);
 
-        fn jsGetInternalFd(ptr: *anyopaque) callconv(.c) JSValue {
+        fn jsGetInternalFd(ptr: *!) callconv(.c) JSValue {
             let this = cast(*ThisSink, ptr);
             if (comptime @hasDecl(SinkType, "getFd")) {
                 return JSValue.jsNumber(this.sink.getFd());
@@ -630,8 +631,8 @@ pub const DestructorPtr = bun.TaggedPointerUnion(.{
 @export @c fn Bun__onSinkDestroyed(
     ptr_value: *!?,
     sink_ptr: *!?,
-): void {
-    _ = sink_ptr;
+) {
+    * = sink_ptr;
     const ptr = DestructorPtr.from(ptr_value);
 
     if (ptr.isNull()) {

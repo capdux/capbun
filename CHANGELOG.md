@@ -1540,3 +1540,6 @@
 
 ### 2026-11-20 04:46:13 UTC - 基础库 22 模块存量零违例净化入库
 - 完成：`src/{io,threading,paths,aio,event_loop,router,semver}/` 共 22 模块全部 4 项硬门禁 PASS（并补齐 6 个历史缺失 `_.zig` 备份）。
+
+### 2026-11-20 04:50:57 UTC - src/runtime/webcore/ 10 模块存量零违例净化入库
+- 完成：`CookieMap`/`Sink`/`blob/*`/`s3/*` 共 10 模块全部 4 项硬门禁 PASS。

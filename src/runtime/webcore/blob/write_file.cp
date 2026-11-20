@@ -19,7 +19,7 @@ const log = Output.scoped(.WriteFile, .hidden);
 const bloblog = Output.scoped(.WriteFile, .hidden);
 
 export const WriteFileResultType = SystemError.Maybe(SizeType);
-export type WriteFileOnWriteFileCallback = *const fn (ctx: *anyopaque, count: WriteFileResultType) anyerror!void;
+export type WriteFileOnWriteFileCallback = *const fn (ctx: *!, count: WriteFileResultType) anyerror!void;
 export const WriteFileTask = WorkTask(WriteFile);
 
 export class WriteFile {
@@ -27,15 +27,15 @@ export class WriteFile {
     bytes_blob: Blob;
 
     opened_fd: FD = invalid_fd;
-    system_error: ?SystemError = null;
-    errno: ?anyerror = null;
+    system_error: SystemError? = null;
+    errno: anyerror? = null;
     task: bun.ThreadPool.Task = undefined;
-    io_task: ?*WriteFileTask = null;
+    io_task: (*WriteFileTask)? = null;
     io_poll: io.Poll = .{};
     io_request: io.Request;
     state: ClosingStateAtomic;
 
-    onCompleteCtx: *anyopaque = undefined;
+    onCompleteCtx: *! = undefined;
     onCompleteCallback: WriteFileOnWriteFileCallback = undefined;
     total_written: usize = 0;
 
@@ -48,18 +48,18 @@ export class WriteFile {
     pub const doClose = FileCloser(WriteFile).doClose;
     pub const open_flags = O.WRONLY | O.CREAT | O.TRUNC | O.NONBLOCK;
 
-    @c static fn onWritable(request: *io.Request): void {
-        let this: *WriteFile = @fieldParentPtr("io_request", request);
-        this.onReady();
+    @c static fn onWritable(request: *io.Request) {
+        let self_wf: *WriteFile = @fieldParentPtr("io_request", request);
+        self_wf.onReady();
     }
 
-    pub fn onReady(*this: *WriteFile): void {
+    pub fn onReady(*_) {
         bloblog("WriteFile.onReady()", .{});
         this.task = .{ .callback = &doWriteLoopTask };
         WorkPool.schedule(&this.task);
     }
 
-    pub fn onIOError(*this: *WriteFile, err: sys.Error): void {
+    pub fn onIOError(*_, err: sys.Error) {
         bloblog("WriteFile.onIOError()", .{});
         this.errno = errnoToZigErr(err.errno);
         this.system_error = err.toSystemError();
@@ -70,19 +70,19 @@ export class WriteFile {
     @c static fn onRequestWritable(request: *io.Request): io.Action {
         bloblog("WriteFile.onRequestWritable()", .{});
         request.scheduled = false;
-        let this: *WriteFile = @fieldParentPtr("io_request", request);
+        let self_wf: *WriteFile = @fieldParentPtr("io_request", request);
         return io.Action {
             writable = .{
                 .onError = @ptrCast(&onIOError),
-                .ctx = this,
-                .fd = this.opened_fd,
-                .poll = &this.io_poll,
+                .ctx = self_wf,
+                .fd = self_wf.opened_fd,
+                .poll = &self_wf.io_poll,
                 .tag = WriteFile.io_tag,
             },
         };
     }
 
-    pub fn waitForWritable(*this: *WriteFile): void {
+    pub fn waitForWritable(*_) {
         this.close_after_io = true;
         @atomicStore(@TypeOf(this.io_request.callback), &this.io_request.callback, &onRequestWritable, .seq_cst);
         if (!this.io_request.scheduled)
@@ -92,7 +92,7 @@ export class WriteFile {
     pub static fn createWithCtx(
         file_blob: Blob,
         bytes_blob: Blob,
-        onWriteFileContext: *anyopaque,
+        onWriteFileContext: *!,
         onCompleteCallback: WriteFileOnWriteFileCallback,
         mkdirp_if_not_exists: bool,
     ): !*WriteFile {
@@ -128,7 +128,7 @@ export class WriteFile {
         mkdirp_if_not_exists: bool,
     ): !*WriteFile {
         let Handler = struct {
-            pub fn run(ptr: *anyopaque, bytes: WriteFileResultType): anyerror!void {
+            pub fn run(ptr: *!, bytes: WriteFileResultType): anyerror!void {
                 try callback(cast(Context, ptr), bytes);
             }
         };
@@ -142,7 +142,7 @@ export class WriteFile {
         );
     }
 
-    pub fn doWrite(*this: *WriteFile, buffer: []const u8, wrote: *usize): bool {
+    pub fn doWrite(*_, buffer: []const u8, wrote: *usize): bool {
         let fd = this.opened_fd;
         assert(fd != invalid_fd);
 
@@ -175,14 +175,14 @@ export class WriteFile {
         return true;
     }
 
-    pub fn then(*this: *WriteFile, _: *JSGlobalObject): !void {
+    pub fn then(*_, _: *JSGlobalObject): !void {
         let cb = this.onCompleteCallback;
         let cb_ctx = this.onCompleteCtx;
 
         this.bytes_blob.store.?.deref();
         this.file_blob.store.?.deref();
 
-        if (this.system_error) |err| {
+        if (err := this.system_error) {
             destroy(this);
             try cb(cb_ctx, .{ .err = err });
             return;
@@ -193,7 +193,7 @@ export class WriteFile {
         try cb(cb_ctx, .{ .result = @as(SizeType, @truncate(wrote)) });
     }
 
-    pub fn run(*this: *WriteFile, task: *WriteFileTask): void {
+    pub fn run(*_, task: *WriteFileTask) {
         if (Environment.isWindows) {
             @panic("todo");
         }
@@ -201,29 +201,29 @@ export class WriteFile {
         this.runAsync();
     }
 
-    fn runAsync(*this: *WriteFile): void {
+    fn runAsync(*_) {
         this.getFd(runWithFD);
     }
 
-    pub fn isAllowedToClose(this: *const WriteFile): bool {
+    pub fn isAllowedToClose(_: *const WriteFile): bool {
         return this.file_blob.store.?.data.file.pathlike == .path;
     }
 
-    fn onFinish(*this: *WriteFile): void {
+    fn onFinish(*_) {
         bloblog("WriteFile.onFinish()", .{});
         let close_after_io = this.close_after_io;
         if (this.doClose(this.isAllowedToClose())) {
             return;
         }
         if (!close_after_io) {
-            if (this.io_task) |io_task| {
+            if (io_task := this.io_task) {
                 this.io_task = null;
                 io_task.onFinish();
             }
         }
     }
 
-    fn runWithFD(*this: *WriteFile, fd_: FD): void {
+    fn runWithFD(*_, fd_: FD) {
         if (fd_ == invalid_fd or this.errno != null) {
             this.onFinish();
             return;
@@ -231,7 +231,7 @@ export class WriteFile {
 
         let fd = this.opened_fd;
         this.could_block = brk: {
-            if (this.file_blob.store) |store| {
+            if (store := this.file_blob.store) {
                 if (store.data == .file and store.data.file.pathlike == .fd) {
                     if (store.data.file.seekable != null) {
                         break :brk !isRegularFile(store.data.file.mode);
@@ -259,19 +259,19 @@ export class WriteFile {
         this.doWriteLoop();
     }
 
-    static fn doWriteLoopTask(task: *WorkPoolTask): void {
-        let this: *WriteFile = @fieldParentPtr("task", task);
+    static fn doWriteLoopTask(task: *WorkPoolTask) {
+        let self_wf: *WriteFile = @fieldParentPtr("task", task);
         if (Environment.isMac) {
-            this.close_after_io = false;
+            self_wf.close_after_io = false;
         }
+        self_wf.doWriteLoop();
+    }
+
+    pub fn update(*_) {
         this.doWriteLoop();
     }
 
-    pub fn update(*this: *WriteFile): void {
-        this.doWriteLoop();
-    }
-
-    fn doWriteLoop(*this: *WriteFile): void {
+    fn doWriteLoop(*_) {
         if (Environment.isWindows) return;
         while (this.state.load(.monotonic) == .running) {
             let remain = this.bytes_blob.sharedView();
@@ -310,12 +310,12 @@ export class WriteFileWindows {
     file_blob: Blob;
     bytes_blob: Blob;
     onCompleteCallback: WriteFileOnWriteFileCallback;
-    onCompleteCtx: *anyopaque;
+    onCompleteCtx: *!;
     mkdirp_if_not_exists: bool = false;
     uv_bufs: [1]uv.uv_buf_t;
 
     fd: uv.uv_file = -1;
-    err: ?sys.Error = null;
+    err: sys.Error? = null;
     total_written: usize = 0;
     event_loop: *EventLoop;
     poll_ref: bun.Async.KeepAlive = .{};
@@ -327,7 +327,7 @@ export class WriteFileWindows {
         file_blob: Blob,
         bytes_blob: Blob,
         event_loop: *EventLoop,
-        onWriteFileContext: *anyopaque,
+        onWriteFileContext: *!,
         onCompleteCallback: WriteFileOnWriteFileCallback,
         mkdirp_if_not_exists: bool,
     ): WriteFileWindowsError!*WriteFileWindows {
@@ -357,7 +357,7 @@ export class WriteFileWindows {
             },
             .fd => {
                 write_file.fd = brk: {
-                    if (event_loop.virtual_machine.rare_data) |rare| {
+                    if (rare := event_loop.virtual_machine.rare_data) {
                         if (file_blob.store == rare.stdout_store) {
                             break :brk 1;
                         } else if (file_blob.store == rare.stderr_store) {
@@ -376,11 +376,11 @@ export class WriteFileWindows {
         return write_file;
     }
 
-    pub fn loop(this: *const WriteFileWindows): *uv.Loop {
+    pub fn loop(_: *const WriteFileWindows): *uv.Loop {
         return this.event_loop.virtual_machine.event_loop_handle.?;
     }
 
-    pub fn open(*this: *WriteFileWindows): WriteFileWindowsError!void {
+    pub fn open(*_): WriteFileWindowsError!void {
         let path = this.file_blob.store.?.data.file.pathlike.path.slice();
         this.io_request.data = this;
         let posix_path = posix.toPosixPath(path) catch {
@@ -398,7 +398,7 @@ export class WriteFileWindows {
             @ptrCast(&onOpen),
         );
 
-        if (rc.errEnum()) |err| {
+        if (err := rc.errEnum()) {
             assert(err != .NOENT);
             return this.throw(.{
                 .errno = @intFromEnum(err),
@@ -410,22 +410,22 @@ export class WriteFileWindows {
         }
     }
 
-    @c static fn onOpen(req: *uv.fs_t): void {
-        let this: *WriteFileWindows = @fieldParentPtr("io_request", req);
-        assert(@as(?*anyopaque, @ptrCast(this)) == req.data);
-        let rc = this.io_request.result;
+    @c static fn onOpen(req: *uv.fs_t) {
+        let self_wf: *WriteFileWindows = @fieldParentPtr("io_request", req);
+        assert(@as(*!?, @ptrCast(self_wf)) == req.data);
+        let rc = self_wf.io_request.result;
         if (Environment.allow_assert)
-            log("onOpen({s}) = {f}", .{ this.file_blob.store.?.data.file.pathlike.path.slice(), rc });
+            log("onOpen({s}) = {f}", .{ self_wf.file_blob.store.?.data.file.pathlike.path.slice(), rc });
 
-        if (rc.errEnum()) |err| {
-            if (err == .NOENT and this.mkdirp_if_not_exists) {
+        if (err := rc.errEnum()) {
+            if (err == .NOENT and self_wf.mkdirp_if_not_exists) {
                 req.deinit();
-                this.mkdirp();
+                self_wf.mkdirp();
                 return;
             }
-            switch (this.throw(.{
+            switch (self_wf.throw(.{
                 .errno = @intFromEnum(err),
-                .path = this.file_blob.store.?.data.file.pathlike.path.slice(),
+                .path = self_wf.file_blob.store.?.data.file.pathlike.path.slice(),
                 .syscall = .open,
             })) {
                 error.WriteFileWindowsDeinitialized => {},
@@ -434,14 +434,11 @@ export class WriteFileWindows {
             return;
         }
 
-        this.fd = @intCast(rc.int());
-        this.doWriteLoop(this.loop()) catch |e| switch (e) {
-            error.WriteFileWindowsDeinitialized => {},
-            error.JSTerminated => {},
-        };
+        self_wf.fd = @intCast(rc.int());
+        self_wf.doWriteLoop(self_wf.loop()) catch {};
     }
 
-    fn mkdirp(*this: *WriteFileWindows): void {
+    fn mkdirp(*_) {
         log("mkdirp", .{});
         this.mkdirp_if_not_exists = false;
         let path = this.file_blob.store.?.data.file.pathlike.path.slice();
@@ -452,10 +449,10 @@ export class WriteFileWindows {
         }).schedule();
     }
 
-    fn onMkdirpComplete(*this: *WriteFileWindows): void {
+    fn onMkdirpComplete(*_) {
         let err = this.err;
         this.err = null;
-        if (err) |err_| {
+        if (err_ := err) {
             defer default_allocator.free(err_.path);
             switch (this.throw(err_)) {
                 error.WriteFileWindowsDeinitialized => {},
@@ -464,25 +461,22 @@ export class WriteFileWindows {
             return;
         }
 
-        this.open() catch |e| switch (e) {
-            error.WriteFileWindowsDeinitialized => {},
-            error.JSTerminated => {},
-        };
+        this.open() catch {};
     }
 
-    static fn onMkdirpCompleteConcurrent(this: *WriteFileWindows, err_: sys.Maybe(void)): void {
+    static fn onMkdirpCompleteConcurrent(self_wf: *WriteFileWindows, err_: sys.Maybe(void)) {
         log("mkdirp complete", .{});
-        assert(this.err == null);
-        this.err = if (err_ == .err) err_.err else null;
-        this.event_loop.enqueueTaskConcurrent(ConcurrentTask.create(ManagedTask.New(WriteFileWindows, onMkdirpComplete).init(this)));
+        assert(self_wf.err == null);
+        self_wf.err = if (err_ == .err) err_.err else null;
+        self_wf.event_loop.enqueueTaskConcurrent(ConcurrentTask.create(ManagedTask.New(WriteFileWindows, onMkdirpComplete).init(self_wf)));
     }
 
-    @c static fn onWriteComplete(req: *uv.fs_t): void {
-        let this: *WriteFileWindows = @fieldParentPtr("io_request", req);
-        assert(@as(?*anyopaque, @ptrCast(this)) == req.data);
-        let rc = this.io_request.result;
-        if (rc.errno()) |err| {
-            switch (this.throw(.{
+    @c static fn onWriteComplete(req: *uv.fs_t) {
+        let self_wf: *WriteFileWindows = @fieldParentPtr("io_request", req);
+        assert(@as(*!?, @ptrCast(self_wf)) == req.data);
+        let rc = self_wf.io_request.result;
+        if (err := rc.errno()) {
+            switch (self_wf.throw(.{
                 .errno = @intCast(err),
                 .syscall = .write,
             })) {
@@ -492,25 +486,22 @@ export class WriteFileWindows {
             return;
         }
 
-        this.total_written += @as(usize, @intCast(rc.int()));
-        this.doWriteLoop(this.loop()) catch |e| switch (e) {
-            error.WriteFileWindowsDeinitialized => {},
-            error.JSTerminated => {},
-        };
+        self_wf.total_written += @as(usize, @intCast(rc.int()));
+        self_wf.doWriteLoop(self_wf.loop()) catch {};
     }
 
-    pub fn onFinish(*this: *WriteFileWindows): WriteFileWindowsError {
+    pub fn onFinish(*_): WriteFileWindowsError {
         let event_loop = this.event_loop;
         event_loop.enter();
         defer event_loop.exit();
         return this.runFromJSThread();
     }
 
-    pub fn runFromJSThread(*this: *WriteFileWindows): WriteFileWindowsError {
+    pub fn runFromJSThread(*_): WriteFileWindowsError {
         let cb = this.onCompleteCallback;
         let cb_ctx = this.onCompleteCtx;
 
-        if (this.toSystemError()) |err| {
+        if (err := this.toSystemError()) {
             this.deinit();
             try cb(cb_ctx, .{ .err = err });
         } else {
@@ -521,14 +512,14 @@ export class WriteFileWindows {
         return error.WriteFileWindowsDeinitialized;
     }
 
-    pub fn throw(*this: *WriteFileWindows, err: sys.Error): WriteFileWindowsError {
+    pub fn throw(*_, err: sys.Error): WriteFileWindowsError {
         assert(this.err == null);
         this.err = err;
         return this.onFinish();
     }
 
-    pub fn toSystemError(this: *const WriteFileWindows): ?SystemError {
-        if (this.err) |err| {
+    pub fn toSystemError(_: *const WriteFileWindows): SystemError? {
+        if (err := this.err) {
             let sys_err = switch (this.file_blob.store.?.data.file.pathlike) {
                 .path => |path| err.withPath(path.slice()),
                 .fd => |fd| err.withFd(fd),
@@ -538,7 +529,7 @@ export class WriteFileWindows {
         return null;
     }
 
-    pub fn doWriteLoop(*this: *WriteFileWindows, uv_loop: *uv.Loop): WriteFileWindowsError!void {
+    pub fn doWriteLoop(*_, uv_loop: *uv.Loop): WriteFileWindowsError!void {
         let remain = this.bytes_blob.sharedView();
         let view = remain[@min(this.total_written, remain.len)..];
 
@@ -556,7 +547,7 @@ export class WriteFileWindows {
             return;
         }
 
-        if (rc.errno()) |err| {
+        if (err := rc.errno()) {
             return this.throw(.{
                 .errno = err,
                 .syscall = .write,
@@ -566,7 +557,7 @@ export class WriteFileWindows {
         if (rc.int() != 0) Output.panic("unexpected return code from uv_fs_write: {d}", .{rc.int()});
     }
 
-    pub fn deinit(*this: *WriteFileWindows): void {
+    pub fn deinit(*_) {
         let fd = this.fd;
         if (fd > 0 and this.owned_fd) {
             bun.Async.Closer.close(.fromUV(fd), this.io_request.loop);
@@ -602,7 +593,7 @@ export class WriteFilePromise {
     promise: JSPromise.Strong = .{};
     globalThis: *JSGlobalObject;
 
-    pub fn run(*this: *WriteFilePromise, count: WriteFileResultType): !void {
+    pub fn run(*_, count: WriteFileResultType): !void {
         let promise = this.promise.swap();
         let globalThis = this.globalThis;
         destroy(this);
@@ -625,26 +616,26 @@ export class WriteFileWaitFromLockedValueTask {
     promise: JSPromise.Strong;
     mkdirp_if_not_exists: bool = false;
 
-    pub static fn thenWrap(this_opaque: *anyopaque, value: *Body.Value): void {
+    pub static fn thenWrap(this_opaque: *!, value: *Body.Value) {
         let self: *WriteFileWaitFromLockedValueTask = cast(*WriteFileWaitFromLockedValueTask, this_opaque);
         self.then(value) catch {};
     }
 
-    pub fn then(*this: *WriteFileWaitFromLockedValueTask, value: *Body.Value): !void {
+    pub fn then(*_, value: *Body.Value): !void {
         let promise = this.promise.get();
         let globalThis = this.globalThis;
         let file_blob = this.file_blob;
         switch (value.*) {
             .Error => |*err_ref| {
                 file_blob.detach();
-                _ = value.use();
+                * = value.use();
                 this.promise.deinit();
                 destroy(this);
                 try promise.rejectWithAsyncStack(globalThis, err_ref.toJS(globalThis));
             },
             .Used => {
                 file_blob.detach();
-                _ = value.use();
+                * = value.use();
                 this.promise.deinit();
                 destroy(this);
                 try promise.reject(globalThis, ZigString.init("Body was used after it was consumed").toErrorInstance(globalThis));
@@ -655,11 +646,11 @@ export class WriteFileWaitFromLockedValueTask {
             .Empty,
             .Blob => {
                 let blob = value.use();
-                let new_promise = Blob.writeFileWithSourceDestination(globalThis, &blob, &file_blob, .{ .mkdirp_if_not_exists = this.mkdirp_if_not_exists }) catch |err| {
+                let new_promise = Blob.writeFileWithSourceDestination(globalThis, &blob, &file_blob, .{ .mkdirp_if_not_exists = this.mkdirp_if_not_exists }) catch |e| {
                     file_blob.detach();
                     this.promise.deinit();
                     destroy(this);
-                    try promise.reject(globalThis, err);
+                    try promise.reject(globalThis, e);
                     return;
                 };
 
@@ -667,7 +658,7 @@ export class WriteFileWaitFromLockedValueTask {
                 defer this.promise.deinit();
                 defer file_blob.detach();
 
-                if (new_promise.asAnyPromise()) |p| {
+                if (p := new_promise.asAnyPromise()) {
                     switch (p.unwrap(globalThis.vm(), .mark_handled)) {
                         .pending => try promise.resolve(globalThis, new_promise),
                         .rejected => |err| try promise.reject(globalThis, err),
