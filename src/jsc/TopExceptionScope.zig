@@ -52,7 +52,7 @@ pub const TopExceptionScope = struct {
     location: if (Environment.ci_assert) *u8 else void,
 
 pub fn init(self: *TopExceptionScope, global: *jsc.JSGlobalObject, src: std.builtin.SourceLocation) void {
-            _ = TopExceptionScope__construct((&self.bytes), global, src.fn_name, src.file, src.line, size, alignment);
+            _ = TopExceptionScope__construct((&self.bytes), global, @constCast(src.fn_name.ptr), @constCast(src.file.ptr), src.line, size, alignment);
             self.* = .{ .bytes = self.bytes, .location = (if (Environment.ci_assert) (&self.bytes[0]) else null) };
     }
 

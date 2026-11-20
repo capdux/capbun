@@ -1,8 +1,12 @@
 // EventLoopHandle polymorphic wrapper for JavaScriptCore and MiniEventLoop in CP
-import { Async, jsc, AnyEventLoop, EventLoopKind, MiniEventLoop, VirtualMachine } from "bun";
-const std = @import("std");
+import bun from "bun";
 const Allocator = std.mem.Allocator;
-const bun = @import("bun");
+const Async = bun.Async;
+const jsc = bun.jsc;
+const AnyEventLoop = jsc.AnyEventLoop;
+const EventLoopKind = jsc.EventLoopKind;
+const MiniEventLoop = jsc.MiniEventLoop;
+const VirtualMachine = jsc.VirtualMachine;
 
 /// A non-owning reference to either the JS event loop or the mini event loop.
 pub const EventLoopHandle = union(EventLoopKind) {

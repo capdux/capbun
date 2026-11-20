@@ -3006,3 +3006,5 @@ Options:
 - [2026-11-20 05:57:46 UTC] 验收并提交 `zig:check` Runtime+Bundler+Bake 簇 13 模块语义修复（13/13 全 PASS），并追加 3 条新坑至 `CP_PITFALLS.md`。
 
 - [2026-11-20 05:58:47 UTC] 验收并提交 `zig:check` Parser/CSS/Install/Test 簇 11 模块语义修复（11/11 全 PASS），并定位外部 `SSLConfig.cp` / `PackageManagerTask.cp` 导出形态问题。
+
+- [2026-11-20 06:03:08 UTC] 验收并提交第 2 轮 `zig:check` JSC 簇 8 模块修复（8/8 全 PASS），并定位 3 处外部根因（`pool.cp`/`VM.cp`/`resolver/fs.cp`）。

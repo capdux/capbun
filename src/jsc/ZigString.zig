@@ -500,7 +500,7 @@ pub extern "c" fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global
 pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject) JSValue {
             if ((len > String.max_length())) {
                 _ = bun.default_allocator.free(ptr[0..len]);
-                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                _ = (blk_catch_2: { break :blk_catch_2 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_2| { _ = &__ce_2;  }); });
                 return .zero;
             }
             return ZigString__toExternalU16(ptr, len, global);
@@ -633,7 +633,7 @@ pub fn toExternalValue(self: ZigString, global: *JSGlobalObject) JSValue {
             _ = self.assertGlobal();
             if ((self.len > String.max_length())) {
                 _ = bun.default_allocator.free(@constCast(self.byteSlice()));
-                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                _ = (blk_catch_3: { break :blk_catch_3 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_3| { _ = &__ce_3;  }); });
                 return .zero;
             }
             return bun.cpp.ZigString__toExternalValue(self, global);
@@ -650,7 +650,7 @@ pub extern "c" fn ZigString__external(this_str: *const ZigString, global: *JSGlo
 pub fn external(self: ZigString, global: *JSGlobalObject, ctx: ?*anyopaque, callback: *const fn (?*anyopaque, ?*anyopaque, usize) void) JSValue {
             if ((self.len > String.max_length())) {
                 _ = callback(ctx, @ptrCast(@constCast(self.byteSlice().ptr)), self.len);
-                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                _ = (blk_catch_4: { break :blk_catch_4 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_4| { _ = &__ce_4;  }); });
                 return .zero;
             }
             return ZigString.ZigString__external((&self), global, ctx, callback);

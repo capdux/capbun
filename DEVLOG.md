@@ -1323,3 +1323,6 @@
 
 ### 2026-11-20 05:58:47 UTC - zig:check 杂项簇修复经验
 - `[0; 3]` 替代 `.{0} ** 3`、`std.mem.zeroes(void)` 替代 `void` 字段 `{}`、`pub const U = union` 避免字段自动指针化。
+
+### 2026-11-20 06:03:08 UTC - zig:check 第 2 轮 JSC 簇修复经验
+- `FFI.cp` 用移位构造 `NUMBER_TAG_U64` 避 `i64::MAX` 溢出、`array_buffer.cp` 补 `@callconv("c")`、`ErrorCode.cp` 小写绑定规避 `&UpperCase.Const`。

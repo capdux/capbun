@@ -1594,3 +1594,6 @@
 
 ### 2026-11-20 05:58:47 UTC - zig:check Parser/CSS/Install/Test 簇 11 模块语义修复入库
 - 完成：`analytics`/`css_parser`/`border_image`/`GlobWalker`/`bin`/`dependency`/`lifecycle_script_runner`/`resolution`/`ast/G`/`renamer`/`snapshot` 11/11 全 PASS。
+
+### 2026-11-20 06:03:08 UTC - zig:check 第 2 轮 JSC 簇 8 模块语义修复入库
+- 完成：`GeneratedBindings`/`FFI`/`ErrorCode`/`EventLoopHandle`/`TopExceptionScope`/`ZigString`/`array_buffer`/`host_fn` 8/8 全 PASS。

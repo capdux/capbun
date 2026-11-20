@@ -24,17 +24,18 @@ pub export let ValueTrue: EncodedJSValue = EncodedJSValue{
     asInt64: TrueI64,
 };
 pub type JSContext = (*void)?;
+const NUMBER_TAG_U64 = @as(c_ulonglong, 0xfffe) << @as(c_ulonglong, 48);
 pub inline fn JSVALUE_IS_CELL(arg_val: EncodedJSValue): bool {
     const val = arg_val;
-    return !(((@as(c_ulonglong, @bitCast(val.asInt64)) & @as(c_ulonglong, 18446181123756130304)) | @as(c_ulonglong, @bitCast(@as(c_longlong, @as(c_int, 2))))) != 0);
+    return !(((@as(c_ulonglong, @bitCast(val.asInt64)) & NUMBER_TAG_U64) | @as(c_ulonglong, @bitCast(@as(c_longlong, @as(c_int, 2))))) != 0);
 }
 pub inline fn JSVALUE_IS_INT32(arg_val: EncodedJSValue): @"bool" {
     const val = arg_val;
-    return (@as(c_ulonglong, @bitCast(val.asInt64)) & @as(c_ulonglong, 18446181123756130304)) == @as(c_ulonglong, 18446181123756130304);
+    return (@as(c_ulonglong, @bitCast(val.asInt64)) & NUMBER_TAG_U64) == NUMBER_TAG_U64;
 }
 pub inline fn JSVALUE_IS_NUMBER(arg_val: EncodedJSValue): @"bool" {
     const val = arg_val;
-    return (@as(c_ulonglong, @bitCast(val.asInt64)) & @as(c_ulonglong, 18446181123756130304)) != 0;
+    return (@as(c_ulonglong, @bitCast(val.asInt64)) & NUMBER_TAG_U64) != 0;
 }
 pub inline fn JSVALUE_TO_UINT64(arg_value: EncodedJSValue): u64 {
     const value = arg_value;
@@ -85,7 +86,7 @@ pub inline fn INT64_TO_JSVALUE(arg_globalObject: *!?, arg_val: i64): EncodedJSVa
     return INT64_TO_JSVALUE_SLOW(global, val).asEncoded();
 }
 pub inline fn INT32_TO_JSVALUE(arg_val: i32): EncodedJSValue {
-    return { asInt64: @as(i64, @bitCast(@as(c_ulonglong, 18446181123756130304) | @as(c_ulonglong, @bitCast(@as(c_ulonglong, @as(u32, @bitCast(arg_val))))))) };
+    return { asInt64: @as(i64, @bitCast(NUMBER_TAG_U64 | @as(c_ulonglong, @bitCast(@as(c_ulonglong, @as(u32, @bitCast(arg_val))))))) };
 }
 pub inline fn DOUBLE_TO_JSVALUE(arg_val: f64): EncodedJSValue {
     let res: EncodedJSValue = { asDouble: arg_val };

@@ -56,8 +56,8 @@ pub struct TopExceptionScope {
         TopExceptionScope__construct(
             &_.bytes,
             global,
-            src.fn_name,
-            src.file,
+            @constCast(src.fn_name.ptr),
+            @constCast(src.file.ptr),
             src.line,
             size,
             alignment,
