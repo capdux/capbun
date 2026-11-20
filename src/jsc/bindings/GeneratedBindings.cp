@@ -136,10 +136,11 @@ const binding_internals = struct {
         if (!@hasDecl(import_DevServer, "getDeinitCountForTesting"))
             @compileError("Missing binding declaration \"getDeinitCountForTesting\" in \"DevServer.zig\"");
         out.* = @as(bun.JSError!usize, import_DevServer.getDeinitCountForTesting(
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -152,10 +153,11 @@ const binding_internals = struct {
         defer arg_str_utf8.deinit();
         out.* = @as(bun.JSError!i32, import_NodeModuleModule._stat(
             arg_str_utf8.slice(),
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -167,10 +169,11 @@ const binding_internals = struct {
             arg_global,
             arg_a.*,
             arg_b.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -188,10 +191,11 @@ const binding_internals = struct {
             if (buf.b_set) buf.b_value else null,
             arg_c.*,
             if (buf.d_set) buf.d_value else null,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -205,10 +209,11 @@ const binding_internals = struct {
             arg_global,
             arg_code_utf8.slice(),
             arg_formatter.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -228,10 +233,11 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!usize, import_BunObject.gc(
             global.bunVM(),
             arg_force.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -247,10 +253,11 @@ const binding_internals = struct {
         if (!@hasDecl(import_node_os, "freemem"))
             @compileError("Missing binding declaration \"freemem\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!u64, import_node_os.freemem(
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -260,10 +267,11 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!i32, import_node_os.getPriority(
             arg_global,
             arg_pid.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -272,10 +280,11 @@ const binding_internals = struct {
             @compileError("Missing binding declaration \"homedir\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.homedir(
             arg_global,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -304,10 +313,11 @@ const binding_internals = struct {
         if (!@hasDecl(import_node_os, "release"))
             @compileError("Missing binding declaration \"release\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.release(
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -315,10 +325,11 @@ const binding_internals = struct {
         if (!@hasDecl(import_node_os, "totalmem"))
             @compileError("Missing binding declaration \"totalmem\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!u64, import_node_os.totalmem(
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -327,10 +338,11 @@ const binding_internals = struct {
             @compileError("Missing binding declaration \"uptime\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!f64, import_node_os.uptime(
             arg_global,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -346,10 +358,11 @@ const binding_internals = struct {
         if (!@hasDecl(import_node_os, "version"))
             @compileError("Missing binding declaration \"version\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.version(
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -360,10 +373,11 @@ const binding_internals = struct {
             arg_global,
             arg_pid.*,
             arg_priority.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }
@@ -373,10 +387,11 @@ const binding_internals = struct {
         @as(bun.JSError!void, import_node_os.setPriority2(
             arg_global,
             arg_priority.*,
-        )) catch |e| switch (e) {
-            error.JSError => return false,
-            error.OutOfMemory => arg_global.throwOutOfMemory() catch return false,
-            error.JSTerminated => return false,
+        )) catch |e| {
+            if (e == error.OutOfMemory) {
+                * = arg_global.throwOutOfMemory();
+            }
+            return false;
         };
         return true;
     }

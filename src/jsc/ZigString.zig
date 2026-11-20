@@ -500,7 +500,7 @@ pub extern "c" fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global
 pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject) JSValue {
             if ((len > String.max_length())) {
                 _ = bun.default_allocator.free(ptr[0..len]);
-                _ = (blk_catch_2: { break :blk_catch_2 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_2| { _ = &__ce_2;  }); });
+                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 return .zero;
             }
             return ZigString__toExternalU16(ptr, len, global);
@@ -573,7 +573,7 @@ pub fn toSliceFast(self: ZigString, allocator: std.mem.Allocator) Slice {
             if ((self.len == 0)) {
                 return Slice.empty;
             }
-            if (self.is16Bit((&self))) {
+            if (self.is16Bit()) {
                 const buffer = bun.handleOom(self.toOwnedSlice(allocator));
                 return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buffer.ptr, .len = @as(u32, @truncate(buffer.len)) };
             }
@@ -584,7 +584,7 @@ pub fn toSlice(self: ZigString, allocator: std.mem.Allocator) Slice {
             if ((self.len == 0)) {
                 return Slice.empty;
             }
-            if (self.is16Bit((&self))) {
+            if (self.is16Bit()) {
                 const buffer = bun.handleOom(self.toOwnedSlice(allocator));
                 return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buffer.ptr, .len = @as(u32, @truncate(buffer.len)) };
             }
@@ -633,7 +633,7 @@ pub fn toExternalValue(self: ZigString, global: *JSGlobalObject) JSValue {
             _ = self.assertGlobal();
             if ((self.len > String.max_length())) {
                 _ = bun.default_allocator.free(@constCast(self.byteSlice()));
-                _ = (blk_catch_3: { break :blk_catch_3 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_3| { _ = &__ce_3;  }); });
+                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 return .zero;
             }
             return bun.cpp.ZigString__toExternalValue(self, global);
@@ -648,9 +648,9 @@ pub fn toExternalValueWithCallback(self: ZigString, global: *JSGlobalObject, cal
 pub extern "c" fn ZigString__external(this_str: *const ZigString, global: *JSGlobalObject, ctx: ?*anyopaque, callback: *const fn (?*anyopaque, ?*anyopaque, usize) void) callconv(.c) JSValue;
 
 pub fn external(self: ZigString, global: *JSGlobalObject, ctx: ?*anyopaque, callback: *const fn (?*anyopaque, ?*anyopaque, usize) void) JSValue {
-            if ((self.len > String.max_length)) {
+            if ((self.len > String.max_length())) {
                 _ = callback(ctx, @ptrCast(@constCast(self.byteSlice().ptr)), self.len);
-                _ = (blk_catch_4: { break :blk_catch_4 ((global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw()) catch |__ce_4| { _ = &__ce_4;  }); });
+                _ = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 return .zero;
             }
             return ZigString.ZigString__external((&self), global, ctx, callback);
@@ -847,7 +847,7 @@ pub const StringPointer = struct {
 const string = []const u8;
 const Environment = bun.Environment;
 const Mimalloc = bun.mimalloc;
-const NullableAllocator = bun.NullableAllocator;
+const NullableAllocator = (if (@hasDecl(bun.NullableAllocator, "NullableAllocator")) bun.NullableAllocator.NullableAllocator else bun.NullableAllocator);
 const OOM = bun.OOM;
 const String = bun.String;
 const strings = bun.strings;

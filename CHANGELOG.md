@@ -1582,3 +1582,6 @@
 
 ### 2026-11-20 05:49:30 UTC - 全仓 281 个旧 prelude .zig 同步升级 & 启动 zig:check 语义清零
 - 修复 `src/sys/sys.cp` 导入路径并重编译 281 个 `.zig` 产物，首次全仓 `bun run zig:check` 6 秒跑通解析仅余 156 处语义错误。
+
+### 2026-11-20 05:53:46 UTC - zig:check JSC 核心簇 4 模块语义修复入库
+- 完成：`host_fn`/`JSValue`/`GeneratedBindings`/`ZigString` 语义修复，消除 28 处 `zig:check` 报错且 4 项硬门禁全 PASS。

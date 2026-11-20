@@ -1311,3 +1311,6 @@
 
 ### 2026-11-20 05:49:30 UTC - 进入全仓 Zig 语义编译阶段（zig:check 156 错）
 - 全仓 1,293 模块首次进入 `bun run zig:check` 跨模块语义检查仅 156 错（高度集中于 `baby_list`/`host_fn`/`string`/`JSValue` 与少量 `pub` 可见性），启动 3 路并发清零。
+
+### 2026-11-20 05:53:46 UTC - zig:check JSC 核心簇修复经验
+- `toJSHostCall` 用 `@as(JSValue ! HostFnError, ...)` 避误包 `.{ .ok = ... }`；纯 error set 调用改 `* = expr` 替代 `catch {}`；`NotCellMask` 安全转 `u64` 位掩码。

@@ -575,7 +575,7 @@
     pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
         if (len > String.max_length()) {
             bun.default_allocator.free(ptr[0..len]);
-            global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw() catch {}; // TODO: propagate?
+            * = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw(); // TODO: propagate?
             return .zero;
         }
         return ZigString__toExternalU16(ptr, len, global);
@@ -649,7 +649,7 @@
     pub fn toSliceFast(allocator: std.mem.Allocator): Slice {
         if (_.len == 0)
             return Slice.empty;
-        if (is16Bit(&_)) {
+        if (_.is16Bit()) {
             const buffer = bun.handleOom(_.toOwnedSlice(allocator));
             return Slice{
                 allocator: NullableAllocator.init(allocator),
@@ -669,7 +669,7 @@
     pub fn toSlice(allocator: std.mem.Allocator): Slice {
         if (_.len == 0)
             return Slice.empty;
-        if (is16Bit(&_)) {
+        if (_.is16Bit()) {
             const buffer = bun.handleOom(_.toOwnedSlice(allocator));
             return Slice{
                 allocator: NullableAllocator.init(allocator),
@@ -737,7 +737,7 @@
         _.assertGlobal();
         if (_.len > String.max_length()) {
             bun.default_allocator.free(@constCast(_.byteSlice()));
-            global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw() catch {}; // TODO: propagate?
+            * = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw(); // TODO: propagate?
             return .zero;
         }
         return bun.cpp.ZigString__toExternalValue(_, global);
@@ -766,9 +766,9 @@
         ctx: *!?,
         callback: *const fn (ctx: *!?, ptr: *!?, len: usize) void,
     ): JSValue {
-        if (_.len > String.max_length) {
+        if (_.len > String.max_length()) {
             callback(ctx, @ptrCast(@constCast(_.byteSlice().ptr)), _.len);
-            global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw() catch {}; // TODO: propagate?
+            * = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", {}).throw(); // TODO: propagate?
             return .zero;
         }
 
@@ -859,7 +859,7 @@ type string = []const u8;
 import bun from "bun";
 const Environment = bun.Environment;
 const Mimalloc = bun.mimalloc;
-const NullableAllocator = bun.NullableAllocator;
+const NullableAllocator = if (@hasDecl(bun.NullableAllocator, "NullableAllocator")) bun.NullableAllocator.NullableAllocator else bun.NullableAllocator;
 const OOM = bun.OOM;
 const String = bun.String;
 const strings = bun.strings;

@@ -268,7 +268,7 @@ pub fn toJSHostCall(globalThis: *JSGlobalObject, src: std.builtin.SourceLocation
         defer {
         _ = scope.deinit();
         }
-        const returned: HostFnError!JSValue = .{ .ok = @call(.auto, function, args) };
+        const returned = @as(HostFnError!JSValue, @call(.auto, function, args));
         const normal = (blk_catch_3: { break :blk_catch_3 ((returned) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return globalThis.throwOutOfMemoryValue();
         }
@@ -329,7 +329,7 @@ pub inline fn parseErrorSet(T: type, errors: []const std.builtin.Type.Error) Par
 
 pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) void {
         if ((e == error.OutOfMemory)) {
-            _ = (blk_catch_4: { break :blk_catch_4 ((globalThis.throwOutOfMemory()) catch |__ce_4| { _ = &__ce_4;  }); });
+            _ = globalThis.throwOutOfMemory();
         }
 }
 

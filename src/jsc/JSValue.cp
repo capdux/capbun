@@ -1144,9 +1144,10 @@ pub const JSValue = enum(i64) {
     }
 
     pub inline fn isCell(this: JSValue) bool {
+        const not_cell_mask: u64 = if (comptime FFI.NotCellMask < 0) @as(u64, @bitCast(@as(i64, FFI.NotCellMask))) else @as(u64, FFI.NotCellMask);
         return switch (this) {
             .zero, .js_undefined, .null, .true, .false => false,
-            else => (@as(u64, @bitCast(@intFromEnum(this))) & FFI.NotCellMask) == 0,
+            else => (@as(u64, @bitCast(@intFromEnum(this))) & not_cell_mask) == 0,
         };
     }
 
