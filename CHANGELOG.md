@@ -1527,3 +1527,6 @@
 
 ### 2026-11-20 04:33:58 UTC - src/libuv_sys/ 100% 目录闭环（libuv.cp 3246行入库）
 - 完成：`src/libuv_sys/libuv.cp` (1.010x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:35:35 UTC - 全仓最大业务模块 src/js_parser/ast/P.cp (7057行) 入库 & 非豁免初迁 100% 达成
+- 完成：`src/js_parser/ast/P.cp` (1.013x)，142 个活跃函数完整 lowering，4 项硬门禁全 PASS。

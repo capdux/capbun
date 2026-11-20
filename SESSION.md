@@ -2960,3 +2960,5 @@ Options:
 - [2026-11-20 04:30:41 UTC] 复检解封并提交 `src/cli/multi_run.cp` (1.009x PASS)；重新向 `cp_agy` 投递 2 项历史遗留 prelude/enum 缺陷工单 `task-bun-20261120-prelude-target-shadow`（阻断 `options.cp`）与 `task-bun-20261120-enum-tag-get-fromname`（阻断 `pm_pkg_command.cp`）。
 
 - [2026-11-20 04:33:58 UTC] 验收并提交 `src/libuv_sys/libuv.cp` (3246行, 1.010x)——`src/libuv_sys/` 100% 闭环；全仓非豁免模块仅余 `P.zig`（攻坚中）及 5 个已完成待 `cp_agy` 结单模块。
+
+- [2026-11-20 04:35:35 UTC] 【全仓非豁免初迁 100% 达成】验收并提交最大业务模块 `src/js_parser/ast/P.cp` (7057行, 1.013x)；全仓 1293 个非豁免模块全部拥有 `.cp` 源码（5 个已完成待 `cp_agy` 结单）。同步进入下一阶段「全仓存量 `.cp` 零违例净化」，已派发 3 路并发子智能体清理早期 83 个含静态门禁违例的 `.cp` 文件。
