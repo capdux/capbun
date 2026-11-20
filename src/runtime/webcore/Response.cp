@@ -797,7 +797,9 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
                 headers: null,
             };
         } else if (arguments[1].isObject()) {
-            _init = (Init.init(globalThis, arguments[1])?) ?? unreachable;
+            if (v := Init.init(globalThis, arguments[1])?) {
+                _init = v;
+            } else unreachable;
         } else {
             if (!globalThis.hasException()) {
                 return globalThis.throwInvalidArguments("Failed to construct 'Response': The provided body value is not of type 'ResponseInit'", .{});

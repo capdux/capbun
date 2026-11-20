@@ -388,7 +388,11 @@ pub const CryptoHasher = union(enum) {
                     return throwHmacConsumed(globalObject);
                 };
                 break :brk .{
-                    .hmac = hmac.copy(),
+                    .hmac = hmac.copy() catch {
+                        const err = createCryptoError(globalObject, BoringSSL.ERR_get_error());
+                        BoringSSL.ERR_clear_error();
+                        return globalObject.throwValue(err);
+                    },
                 };
             },
             .zig => .{ .zig = this.zig.copy() },

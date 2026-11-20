@@ -929,7 +929,7 @@ pub struct TestingAPIs {
         if (this_jsvalue != .zero) {
             jsc.Codegen.JSSubprocess.ipcCallbackSetCached(this_jsvalue, globalThis, .zero);
 
-            if (callback := client.consumeOnDisconnectCallback(this_jsvalue, globalThis)) {
+            if (callback := consumeOnDisconnectCallback(this_jsvalue, globalThis)) {
                 const args: [1]JSValue = [JSValue.@"true"];
                 globalThis.bunVM().eventLoop().runCallback(callback, globalThis, this_jsvalue, &args);
             }

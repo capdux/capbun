@@ -482,7 +482,7 @@ pub fn NewSocket(comptime ssl: bool) type {
                     this.socket = Socket.from(s);
                 },
                 .fd => |f| {
-                    const s = group.fromFd(kind, ssl_ctx, @sizeOf(OpaquePtr), f.native(), false) orelse
+                    const s = group.fromFd(kind, ssl_ctx, @sizeOf(OpaquePtr), f, false) orelse
                         return error.ConnectionFailed;
                     s.ext(*This).* = this;
                     this.socket = Socket.from(s);

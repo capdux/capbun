@@ -182,7 +182,11 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
         defer {
         _ = WebPFree(bitstream.ptr);
         }
-        const mux = ((WebPNewInternal(WEBP_MUX_ABI_VERSION)) orelse { return .{ .ok = error.OutOfMemory }; });
+        const mux_opt = WebPNewInternal(WEBP_MUX_ABI_VERSION);
+        if ((mux_opt == null)) {
+            return error.OutOfMemory;
+        }
+        const mux = mux_opt.?;
         defer {
         _ = WebPMuxDelete(mux);
         }

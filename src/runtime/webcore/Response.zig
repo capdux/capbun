@@ -760,7 +760,12 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
             _init = Init{ .status_code = 200, .headers = null };
         } else {
             if (arguments[1].isObject()) {
-                if (_init == null) { _init = unreachable; }
+                if (try Init.init(globalThis, arguments[1])) |v| {
+                    _ = &v;
+                    _init = v;
+                } else {
+                    _ = unreachable;
+                }
             } else {
                 if ((!globalThis.hasException())) {
                     return globalThis.throwInvalidArguments("Failed to construct 'Response': The provided body value is not of type 'ResponseInit'", .{});

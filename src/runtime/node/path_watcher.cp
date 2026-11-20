@@ -643,7 +643,7 @@ struct Linux {
                 const wd = ev.watch_descriptor;
 
                 // Kernel retired this wd (rm_watch, or the watched inode is gone).
-                if (ev.mask & IN.IGNORED != 0) {
+                if ((ev.mask & IN.IGNORED) != 0) {
                     if (owners := plat.wd_map.getPtr(wd)) {
                         for (o of owners.items) {
                             bun.default_allocator.free(o.subpath);

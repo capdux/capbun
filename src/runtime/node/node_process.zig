@@ -245,13 +245,13 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
                 if ((param.takes_value != .none)) {
                     if (param.names.long) |name| {
                         _ = &name;
-                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = ("--" ++ name), .val = .{} };
+                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = ("--" ++ name), .val = undefined };
                         i = (i + 1);
                     }
                     if (param.names.short) |name| {
                         _ = &name;
                         const short_str: [2]u8 = .{ 45, name };
-                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = (&short_str), .val = .{} };
+                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = (&short_str), .val = undefined };
                         i = (i + 1);
                     }
                 }

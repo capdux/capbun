@@ -437,7 +437,7 @@ pub struct TestingAPIs {
     }
 
     static fn init(fd: FD, event_loop_handle: auto): *FileSink {
-        let this_sink = sys.new(FileSink, .{
+        let this_sink = bun.new(FileSink, .{
             .ref_count = .init(),
             .writer = .{},
             .fd = fd,

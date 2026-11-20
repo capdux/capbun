@@ -451,7 +451,9 @@ pub fn transform_(self: *HTMLRewriter, global: *JSGlobalObject, response_value: 
                         }
                     }
                     if (is_async) {
-                        var duped_err = e.dupe(sink.global);
+                        var mut_e = e;
+                        _ = &mut_e;
+                        var duped_err = mut_e.dupe(sink.global);
                         _ = &duped_err;
                         _ = (blk_catch_2: { break :blk_catch_2 ((sinkBodyValue.toErrorInstance((&duped_err), sink.global)) catch |__ce_2| { _ = &__ce_2;  }); });
                     } else {

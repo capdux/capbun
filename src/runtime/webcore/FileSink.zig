@@ -458,7 +458,7 @@ pub fn protectJSWrapper(self: *FileSink, globalThis: *JSGlobalObject, js_wrapper
 }
 
 pub fn init(fd: FD, event_loop_handle: anytype) *FileSink {
-        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .writer = .{}, .fd = fd, .event_loop_handle = EventLoopHandle.init(event_loop_handle) });
+        var this_sink = bun.new(FileSink, .{ .ref_count = .init(), .writer = .{}, .fd = fd, .event_loop_handle = EventLoopHandle.init(event_loop_handle) });
         _ = &this_sink;
         _ = live_count.fetchAdd(1, .monotonic);
         _ = this_sink.writer.setParent(this_sink);

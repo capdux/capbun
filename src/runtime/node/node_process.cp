@@ -137,12 +137,12 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             for (param of auto_params) {
                 if (param.takes_value != .none) {
                     if (name := param.names.long) {
-                        entries[i] = ProcessParamKV{ key: "--" ++ name, val: .{} };
+                        entries[i] = ProcessParamKV{ key: "--" ++ name, val: undefined };
                         i += 1;
                     }
                     if (name := param.names.short) {
                         const short_str: [2]u8 = ['-', name];
-                        entries[i] = ProcessParamKV{ key: &short_str, val: .{} };
+                        entries[i] = ProcessParamKV{ key: &short_str, val: undefined };
                         i += 1;
                     }
                 }

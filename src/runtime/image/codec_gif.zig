@@ -218,7 +218,7 @@ if (((i + 10) > bytes.len)) {
             const ipacked = bytes[@as(usize, @intCast((i + 9)))];
             const interlace = ((ipacked & 64) != 0);
             const has_lct = ((ipacked & 128) != 0);
-            const lct_size: usize = (if (has_lct) cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)), @intCast(((ipacked & 7) + 1))) else 0);
+            const lct_size: usize = (if (has_lct) cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)), @as(u6, @intCast(((ipacked & 7) + 1)))) else 0);
             i = (i + 10);
             if (((w == 0) or (h == 0))) {
                 return error.DecodeFailed;

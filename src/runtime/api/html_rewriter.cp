@@ -545,7 +545,8 @@ pub struct HTMLRewriter {
                     sinkBodyValue.Locked.task = null;
                 }
                 if (is_async) {
-                    let duped_err = e.dupe(sink.global);
+                    let mut_e = e;
+                    let duped_err = mut_e.dupe(sink.global);
                     sinkBodyValue.toErrorInstance(&duped_err, sink.global) catch {}; // TODO: properly propagate exception upwards
                 } else {
                     let ret_err = createLOLHTMLError(sink.global);

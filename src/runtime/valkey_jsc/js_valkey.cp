@@ -369,10 +369,14 @@ pub struct JSValkeyClient {
         else
             protocol_utf8.slice();
 
-        const uri: valkey.Protocol = if (protocol_slice.len > 0)
-            valkey.Protocol.Map.get(protocol_slice) orelse return globalObject.throw("Expected url protocol to be one of redis, valkey, rediss, valkeys, redis+tls, redis+unix, redis+tls+unix", .{})
-        else
-            .standalone;
+        let uri: valkey.Protocol = .standalone;
+        if (protocol_slice.len > 0) {
+            if (p := valkey.Protocol.Map.get(protocol_slice)) {
+                uri = p;
+            } else {
+                return globalObject.throw("Expected url protocol to be one of redis, valkey, rediss, valkeys, redis+tls, redis+unix, redis+tls+unix", .{});
+            }
+        }
 
         // Extract all URL components
         const username_str = parsed_url.username();

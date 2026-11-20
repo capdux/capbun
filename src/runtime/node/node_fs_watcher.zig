@@ -707,7 +707,7 @@ pub fn emitAbort(self: *FSWatcher, e: jsc.JSValue) void {
                 if (js.listenerGetCached(js_this)) |listener| {
                     _ = &listener;
                     _ = listener.ensureStillAlive();
-                    var args: [2]jsc.JSValue = .{ _EventType.@"error".toJS(self.globalThis), (if (e.isEmptyOrUndefinedOrNull()) jsc.CommonAbortReason.UserAbort.toJS(self.globalThis) else e) };
+                    var args: [2]jsc.JSValue = .{ Bun__domEventNameToJS(self.globalThis, .@"error"), (if (e.isEmptyOrUndefinedOrNull()) jsc.CommonAbortReason.UserAbort.toJS(self.globalThis) else e) };
                     _ = &args;
                     _ = (blk_catch_2: { break :blk_catch_2 ((listener.callWithGlobalThis(self.globalThis, (&args))) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 self.globalThis.clearException(); }); });
                 }
@@ -729,7 +729,7 @@ pub fn emitError(self: *FSWatcher, e: bun.sys.Error) void {
                     _ = listener.ensureStillAlive();
                     const globalObject = self.globalThis;
                     const err_js = (blk_catch_3: { break :blk_catch_3 ((e.toJS(globalObject)) catch |__ce_3| { _ = &__ce_3; return; }); });
-                    var args: [2]jsc.JSValue = .{ _EventType.@"error".toJS(globalObject), err_js };
+                    var args: [2]jsc.JSValue = .{ Bun__domEventNameToJS(globalObject, .@"error"), err_js };
                     _ = &args;
                     _ = (blk_catch_4: { break :blk_catch_4 ((listener.callWithGlobalThis(globalObject, (&args))) catch |err_val| { _ = &err_val; break :blk_catch_4 self.globalThis.reportActiveExceptionAsUnhandled(err_val); }); });
                 }

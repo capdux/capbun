@@ -318,7 +318,16 @@ pub fn createNoJsNoPubsub(globalObject: *jsc.JSGlobalObject, arguments: []const 
             _ = protocol_utf8.deinit();
             }
             const protocol_slice = (if (((protocol_utf8.slice().len > 0) and (protocol_utf8.slice()[@as(usize, @intCast((protocol_utf8.slice().len - 1)))] == 58))) protocol_utf8.slice()[0..(protocol_utf8.slice().len - 1)] else protocol_utf8.slice());
-            const uri: valkey.Protocol = (if ((protocol_slice.len > 0)) ((valkey.Protocol.Map.get(protocol_slice)) orelse { return .{ .ok = globalObject.throw("Expected url protocol to be one of redis, valkey, rediss, valkeys, redis+tls, redis+unix, redis+tls+unix", .{}) }; }) else .standalone);
+            var uri: valkey.Protocol = .standalone;
+            _ = &uri;
+            if ((protocol_slice.len > 0)) {
+                if (valkey.Protocol.Map.get(protocol_slice)) |p| {
+                    _ = &p;
+                    uri = p;
+                } else {
+                    return globalObject.throw("Expected url protocol to be one of redis, valkey, rediss, valkeys, redis+tls, redis+unix, redis+tls+unix", .{});
+                }
+            }
             const username_str = parsed_url.username();
             defer {
             _ = username_str.deref();

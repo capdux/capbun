@@ -722,7 +722,7 @@ export class UDPSocket {
         if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
         const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
-        const res = send_fn(socket, @ptrCast(payloads.ptr), lens, addr_ptrs);
+        const res = send_fn(socket, @ptrCast(payloads), lens, addr_ptrs);
         if (err := getUSError(res, .send, true)) {
             return globalThis.throwValue(try err.toJS(globalThis));
         }

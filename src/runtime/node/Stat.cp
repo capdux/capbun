@@ -24,14 +24,14 @@ pub fn StatType(comptime big: bool): type {
                     sec: @intCast(ts.sec),
                     nsec: @intCast(ts.nsec),
                 };
-                return @as(u64, @intCast(@max(bun.timespec.nsSigned(&ts_val), 0)));
+                return @as(u64, @intCast(@max(ts_val.nsSigned(), 0)));
             }
 
             const ts_pos: bun.timespec = {
                 sec: @intCast(ts.sec),
                 nsec: @intCast(ts.nsec),
             };
-            return bun.timespec.ns(&ts_pos);
+            return ts_pos.ns();
         }
 
         fn toTimeMS(ts: StatTimespec): Float {

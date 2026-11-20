@@ -537,7 +537,7 @@ pub struct FSWatcher {
             if (listener := js.listenerGetCached(js_this)) {
                 listener.ensureStillAlive();
                 let args: [2]jsc.JSValue = [
-                    _EventType.@"error".toJS(_.globalThis),
+                    Bun__domEventNameToJS(_.globalThis, .@"error"),
                     if (e.isEmptyOrUndefinedOrNull()) jsc.CommonAbortReason.UserAbort.toJS(_.globalThis) else e,
                 ];
                 * = listener.callWithGlobalThis(
@@ -560,7 +560,7 @@ pub struct FSWatcher {
                 const globalObject = _.globalThis;
                 const err_js = e.toJS(globalObject) catch return;
                 let args: [2]jsc.JSValue = [
-                    _EventType.@"error".toJS(globalObject),
+                    Bun__domEventNameToJS(globalObject, .@"error"),
                     err_js,
                 ];
                 * = listener.callWithGlobalThis(

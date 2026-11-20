@@ -879,7 +879,7 @@ pub fn onAfterIPCClosed(client: *Subprocess) void {
         }
         if ((this_jsvalue != .zero)) {
             _ = jsc.Codegen.JSSubprocess.ipcCallbackSetCached(this_jsvalue, globalThis, .zero);
-            if (client.consumeOnDisconnectCallback(this_jsvalue, globalThis)) |callback| {
+            if (consumeOnDisconnectCallback(this_jsvalue, globalThis)) |callback| {
                 _ = &callback;
                 const args: [1]JSValue = .{ JSValue.@"true" };
                 _ = globalThis.bunVM().eventLoop().runCallback(callback, globalThis, this_jsvalue, (&args));

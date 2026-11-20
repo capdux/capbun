@@ -2449,7 +2449,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
     comptime validatePathT(T, "resolveWindowsT");
 
     const isSepT = isSepWindowsT;
-    const max_path_sz = MAX_PATH_SIZE(T);
+    const max_path_sz = comptime MAX_PATH_SIZE(T);
     let tmpBuf: [max_path_sz]T = undefined;
 
     // Backed by tmpBuf.

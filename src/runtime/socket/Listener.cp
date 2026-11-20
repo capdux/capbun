@@ -503,7 +503,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
             err.put(globalObject, ZigString.static("syscall"), try bun.String.createUTF8ForJS(globalObject, "listen"));
             err.put(globalObject, ZigString.static("errno"), JSValue.jsNumber(errno));
             err.put(globalObject, ZigString.static("address"), ZigString.initUTF8(hostname).toJS(globalObject));
-            if (p := port != null) err.put(globalObject, ZigString.static("port"), .jsNumber(p));
+            if (p := port) err.put(globalObject, ZigString.static("port"), .jsNumber(p));
             if (str := bun.sys.SystemErrno.init(errno)) {
                 err.put(globalObject, ZigString.static("code"), ZigString.init(@tagName(str)).toJS(globalObject));
             }

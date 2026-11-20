@@ -113,10 +113,10 @@ pub inline fn init(stat_: *const Syscall.PosixStat) @This() {
 pub inline fn toNanoseconds(ts: StatTimespec) u64 {
             if ((ts.sec < 0)) {
                 const ts_val: bun.timespec = .{ .sec = @intCast(ts.sec), .nsec = @intCast(ts.nsec) };
-                return @as(u64, @intCast(@max(bun.timespec.nsSigned((&ts_val)), 0)));
+                return @as(u64, @intCast(@max(ts_val.nsSigned(), 0)));
             }
             const ts_pos: bun.timespec = .{ .sec = @intCast(ts.sec), .nsec = @intCast(ts.nsec) };
-            return bun.timespec.ns((&ts_pos));
+            return ts_pos.ns();
     }
 
 pub fn toTimeMS(ts: StatTimespec) Float {

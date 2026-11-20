@@ -182,8 +182,9 @@ pub struct FileSystemRouter {
         path: string,
     ) {
         let vm = globalThis.bunVM();
-        if (dir := vm.transpiler.fs.fs.getDirectory(path)) {
-            if (entries := dir.entries) {
+        const root_dir_info = vm.transpiler.resolver.readDirInfo(path) catch return;
+        if (dir := root_dir_info) {
+            if (entries := dir.getEntriesConst()) {
                 let iter = entries.data.iterator();
                 outer: while (entry_ptr := iter.next()) {
                     const entry = entry_ptr.value_ptr.*;

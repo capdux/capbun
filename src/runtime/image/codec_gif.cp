@@ -161,7 +161,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
                 const ipacked = bytes[i + 9];
                 const interlace = (ipacked & 0x40) != 0;
                 const has_lct = (ipacked & 0x80) != 0;
-                const lct_size: usize = if (has_lct) @as(usize, 1) << @intCast((ipacked & 7) + 1) else 0;
+                const lct_size: usize = if (has_lct) @as(usize, 1) << @as(u6, @intCast((ipacked & 7) + 1)) else 0;
                 i += 10;
                 if (w == 0 || h == 0) return error.DecodeFailed;
                 codecs.guard(w, h, max_pixels)?;

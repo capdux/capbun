@@ -154,7 +154,9 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
     // returns, so `bitstream`/`profile` must outlive the assemble call
     // (both do — `bitstream` is freed below, `profile` is caller-owned).
     defer WebPFree(bitstream.ptr);
-    const mux = WebPNewInternal(WEBP_MUX_ABI_VERSION) ?? return error.OutOfMemory;
+    const mux_opt = WebPNewInternal(WEBP_MUX_ABI_VERSION);
+    if (mux_opt == null) return error.OutOfMemory;
+    const mux = mux_opt.?;
     defer WebPMuxDelete(mux);
     const img: WebPData = { bytes: bitstream.ptr, size: bitstream.len };
     if (WebPMuxSetImage(mux, &img, 0) != WEBP_MUX_OK) return error.EncodeFailed;

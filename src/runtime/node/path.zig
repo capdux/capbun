@@ -2094,7 +2094,7 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
 pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: []T) MaybeSlice(T) {
         _ = (comptime validatePathT(T, "resolveWindowsT"));
         const isSepT = isSepWindowsT;
-        const max_path_sz = MAX_PATH_SIZE(T);
+        const max_path_sz = (comptime MAX_PATH_SIZE(T));
         _ = &max_path_sz;
         var tmpBuf: [max_path_sz]T = undefined;
         _ = &tmpBuf;

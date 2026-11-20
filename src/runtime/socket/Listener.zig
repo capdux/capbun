@@ -747,7 +747,7 @@ const err: bun.jsc.SystemError = .{ .errno = @intFromEnum(bun.sys.SystemErrno.EI
             _ = err.put(globalObject, ZigString.static("syscall"), try bun.String.createUTF8ForJS(globalObject, "listen"));
             _ = err.put(globalObject, ZigString.static("errno"), JSValue.jsNumber(errno));
             _ = err.put(globalObject, ZigString.static("address"), ZigString.initUTF8(hostname).toJS(globalObject));
-            if ((port != null)) |p| {
+            if (port) |p| {
                 _ = &p;
                 _ = err.put(globalObject, ZigString.static("port"), .jsNumber(p));
             }

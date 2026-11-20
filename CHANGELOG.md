@@ -1756,3 +1756,5 @@
 - **[2026-11-20] Wave 22 A 组 (19 模块)**：更新 `cli/test_command`, `sql_jsc/{postgres/PostgresSQLConnection,mysql/MySQLConnection}`, `sql/{mysql/protocol/{Auth,OKPacket},postgres/protocol/BackendKeyData}`, `js_parser/{ast/{Expr,P,Stmt,parse,parseFn,parseJSXElement,parseSuffix,parseTypescript,skipTypescript},runtime}`, `js_printer/js_printer`, `resolver/{package_json,resolver}`。
 
 - **[2026-11-20] Wave 22 B 组 (21 模块)**：更新 `jsc/{AnyPromise,VirtualMachine,GarbageCollectionController,RuntimeTranspilerCache,ConsoleObject,ModuleLoader,hot_reloader,ipc}`, `bun`, `runtime/server/server`, `shell/shell`, `shell_parser/braces`, `runtime/api/{Archive,cron,BunObject,bun/js_bun_spawn_bindings}`, `runtime/webcore/{fetch/FetchTasklet,ResumableSink,s3/client}`, `runtime/socket/ssl_wrapper`, `bundler_jsc/output_file_jsc`。
+
+- **[2026-11-20] Wave 22 E 组 (21 模块)**：更新 `runtime/{api/{UnsafeObject,bun/subprocess,filesystem_router,html_rewriter},crypto/CryptoHasher,ffi/ffi,image/{codec_gif,codec_webp},node/{Stat,node_fs_watcher,node_process,path,path_watcher},socket/{Listener,UpgradedDuplex,socket,udp_socket},valkey_jsc/js_valkey,webcore/{FileSink,Request,Response}}`。

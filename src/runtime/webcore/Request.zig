@@ -624,7 +624,10 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
                 if (value.asDirect(Request)) |request| {
                     _ = &request;
                     if ((values_to_try.len == 1)) {
-                        _ = try request.cloneInto(req, bun.default_allocator, globalThis, fields.contains(.url));
+                        _ = try request.cloneInto((blk: {
+                        break :blk req;
+
+}), bun.default_allocator, globalThis, fields.contains(.url));
                         success = true;
                         return req;
                     }

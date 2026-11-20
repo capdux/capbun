@@ -526,7 +526,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                     const ev: *align(1) const InotifyEvent = @ptrCast(buf[i..].ptr);
                     i = (i + (@sizeOf(InotifyEvent) + ev.name_len));
                     const wd = ev.watch_descriptor;
-                    if ((ev.mask & (IN.IGNORED != 0))) {
+                    if (((ev.mask & IN.IGNORED) != 0)) {
                         if (plat.wd_map.getPtr(wd)) |owners| {
                             _ = &owners;
                             for (owners.items) |o| {
