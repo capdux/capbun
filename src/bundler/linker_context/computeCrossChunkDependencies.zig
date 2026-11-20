@@ -114,7 +114,7 @@ pub fn walk(deps: *CrossChunkDependencies, chunk: *Chunk, chunk_index: usize) vo
                             import_record.path.text = _chunks[@as(usize, @intCast(other_chunk_index))].unique_key;
                             import_record.source_index = Index.invalid;
                             if ((other_chunk_index != chunk_index)) {
-                                _ = ((chunk_meta.dynamic_imports.put(other_chunk_index, .{})) catch unreachable);
+                                _ = ((chunk_meta.dynamic_imports.put(other_chunk_index, @as(void, undefined))) catch unreachable);
                             }
                         }
                     }
@@ -300,7 +300,7 @@ pub fn computeCrossChunkDependenciesWithChunkMetas(c: *LinkerContext, chunks: []
             }
             if ((chunk_meta.dynamic_imports.count() > 0)) {
                 const dynamic_chunk_indices = chunk_meta.dynamic_imports.keys();
-                _ = std.sort.pdq(Index.Int, dynamic_chunk_indices, .{}, std.sort.asc(Index.Int));
+                _ = std.sort.pdq(Index.Int, dynamic_chunk_indices, @as(void, undefined), std.sort.asc(Index.Int));
                 const new_imports = bun.handleOom(chunk.cross_chunk_imports.writableSlice(c.allocator(), dynamic_chunk_indices.len));
                 var dynamic_idx: usize = 0;
                 _ = &dynamic_idx;

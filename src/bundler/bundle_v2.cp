@@ -2649,7 +2649,7 @@ pub struct BundleV2 {
         let chunks = _.allocator().alloc(
             Chunk,
             1 + start.css_entry_points.count() + html_files.count(),
-        );
+        )?;
 
         // First is a chunk to contain all JavaScript modules.
         chunks[0] = {
@@ -3070,7 +3070,7 @@ pub struct BundleV2 {
                         import_record.range.loc,
                         _.allocator(),
                         "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle",
-                        [],
+                        {},
                     ) catch @panic("unexpected log error");
                     continue;
                 }
@@ -3083,7 +3083,7 @@ pub struct BundleV2 {
                         import_record.range.loc,
                         _.allocator(),
                         "Framework does not have a separate SSR graph to put this import into",
-                        [],
+                        {},
                     ) catch @panic("unexpected log error");
                     continue;
                 }
@@ -3317,7 +3317,7 @@ pub struct BundleV2 {
                         import_record.range,
                         _.allocator(),
                         "Browser builds cannot import HTML files.",
-                        [],
+                        {},
                     ) catch |oom_err| bun.handleOom(oom_err);
                     continue;
                 }

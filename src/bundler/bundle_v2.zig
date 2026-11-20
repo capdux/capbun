@@ -1645,7 +1645,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
                     js_part_ranges[cp_cast_int(usize, idx)] = .{ .source_index = source_index, .part_index_begin = 0, .part_index_end = parts[@as(usize, @intCast(source_index.get()))].len };
                 }
             }
-            var chunks = self.allocator().alloc(Chunk, ((1 + start.css_entry_points.count()) + html_files.count()));
+            var chunks = try self.allocator().alloc(Chunk, ((1 + start.css_entry_points.count()) + html_files.count()));
             _ = &chunks;
             chunks[cp_cast_int(usize, 0)] = .{ .entry_point = .{ .entry_point_id = 0, .source_index = 0, .is_entry_point = true }, .content = .{ .javascript = .{ .files_in_chunk_order = @as([]Index.Int, @ptrCast(js_reachable_files)), .parts_in_chunk_in_order = js_part_ranges } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             for (chunks[1..][0..start.css_entry_points.count()], start.css_entry_points.keys()) |*chunk, entry_point| {
@@ -1888,12 +1888,12 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &target;
                 if ((import_record.tag == .bake_resolve_to_ssr_graph)) {
                     if ((self.framework == null)) {
-                        _ = (blk_catch_52: { break :blk_catch_52 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", &.{})) catch |__ce_52| { _ = &__ce_52; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_52: { break :blk_catch_52 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_52| { _ = &__ce_52; @panic("unexpected log error"); }); });
                         continue;
                     }
                     const is_supported = ((self.framework.?.server_components != null) and self.framework.?.server_components.?.separate_ssr_graph);
                     if ((!is_supported)) {
-                        _ = (blk_catch_53: { break :blk_catch_53 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", &.{})) catch |__ce_53| { _ = &__ce_53; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_53: { break :blk_catch_53 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_53| { _ = &__ce_53; @panic("unexpected log error"); }); });
                         continue;
                     }
                     transpiler = (blk: {
@@ -2038,7 +2038,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     _ = brk: {
                     if (((path.loader((&self.transpiler.options.loaders)) == .html) and ((import_record.loader == null) or (import_record.loader.? == .html)))) {
                         const log = self.logForResolutionFailures(source.path.text, bake_graph);
-                        _ = (blk_catch_62: { break :blk_catch_62 ((log.addRangeErrorFmt(source, import_record.range, self.allocator(), "Browser builds cannot import HTML files.", &.{})) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_62: { break :blk_catch_62 ((log.addRangeErrorFmt(source, import_record.range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
                         continue;
                     }
                     if ((loader == .css)) {

@@ -839,7 +839,11 @@ pub fn migrateYarnLockfile(
 
         let name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
         if (is_npm_alias && entry.resolved != null) {
-            name = YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?) ?? YarnLockEntry.getNameFromSpec(entry.specs[0]);
+            if (resolved_name := YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?)) {
+                name = resolved_name;
+            } else {
+                name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
+            }
         } else if (is_direct_url) {
             name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
         } else if (repo_name := entry.git_repo_name) {
@@ -929,7 +933,11 @@ pub fn migrateYarnLockfile(
 
         let base_name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
         if (is_npm_alias && entry.resolved != null) {
-            base_name = YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?) ?? YarnLockEntry.getNameFromSpec(entry.specs[0]);
+            if (resolved_name := YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?)) {
+                base_name = resolved_name;
+            } else {
+                base_name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
+            }
         }
         const package_id = yarn_entry_to_package_id[yarn_idx];
 

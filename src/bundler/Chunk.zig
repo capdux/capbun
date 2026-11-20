@@ -407,9 +407,9 @@ pub fn codeWithSourceMapShifts(self: *@This(), allocator_to_use: ?std.mem.Alloca
             switch (self.*) {
 .pieces => |pieces| {
 const entry_point_chunks_for_scb = linker_graph.files.items(.entry_point_chunk_index);
-            var shift = (if (enable_source_map_shifts) SourceMap.SourceMapShifts{ .after = .{}, .before = .{} } else undefined);
+            var shift: SourceMap.SourceMapShifts = (if (enable_source_map_shifts) SourceMap.SourceMapShifts{ .after = .{}, .before = .{} } else undefined);
             _ = &shift;
-            var shifts = (if (enable_source_map_shifts) try std.ArrayList(SourceMap.SourceMapShifts).initCapacity(bun.default_allocator, (pieces.len + 1)) else undefined);
+            var shifts: std.ArrayList(SourceMap.SourceMapShifts) = (if (enable_source_map_shifts) try std.ArrayList(SourceMap.SourceMapShifts).initCapacity(bun.default_allocator, (pieces.len + 1)) else undefined);
             _ = &shifts;
             if (enable_source_map_shifts) {
                 _ = shifts.appendAssumeCapacity(shift);

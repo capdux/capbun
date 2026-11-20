@@ -1993,7 +1993,8 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     };
 
-                    if ((try seen_deps.getOrPut(allocator, dep_name)).found_existing) {
+                    const seen_gop2 = seen_deps.getOrPut(allocator, dep_name)?;
+                    if (seen_gop2.found_existing) {
                         lockfile.buffers.resolutions.items[dep_id] = res_id;
                         continue;
                     }

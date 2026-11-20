@@ -925,7 +925,12 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
             var name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
             _ = &name;
             if ((is_npm_alias and (entry.resolved != null))) {
-                if (name == null) { name = YarnLockEntry.getNameFromSpec(entry.specs[0]); }
+                if (YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?)) |resolved_name| {
+                    _ = &resolved_name;
+                    name = resolved_name;
+                } else {
+                    name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
+                }
             } else {
                 if (is_direct_url) {
                     name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
@@ -1020,7 +1025,12 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
             var base_name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
             _ = &base_name;
             if ((is_npm_alias and (entry.resolved != null))) {
-                if (base_name == null) { base_name = YarnLockEntry.getNameFromSpec(entry.specs[0]); }
+                if (YarnLockEntry.getPackageNameFromResolvedUrl(entry.resolved.?)) |resolved_name| {
+                    _ = &resolved_name;
+                    base_name = resolved_name;
+                } else {
+                    base_name = YarnLockEntry.getNameFromSpec(entry.specs[0]);
+                }
             }
             const package_id = yarn_entry_to_package_id[@as(usize, @intCast(yarn_idx))];
             if (((package_id < package_id_to_yarn_idx.len) and (package_id_to_yarn_idx[@as(usize, @intCast(package_id))] != std.math.maxInt(usize)))) {

@@ -130,7 +130,8 @@ pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: 
                 _ = output_files.insertForChunk(options.OutputFile.init(.{ .data = .{ .saved = 0 }, .hash = null, .loader = chunk.content.loader(), .input_path = "", .display_size = 0, .output_kind = .chunk, .input_loader = .js, .output_path = "", .is_executable = false, .source_map_index = null, .bytecode_index = null, .module_info_index = null, .side = .client, .entry_point_index = null, .referenced_css_chunks = &.{} }));
                 continue;
             }
-            const trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
+            var trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
+            _ = &trace2;
             defer {
             _ = trace2.end();
             }

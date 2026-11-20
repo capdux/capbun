@@ -175,7 +175,7 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
 }, (((ch.*).template.placeholder.hash) orelse ((ch.*).isolated_hash)), (ch.*).content.loader(), (if ((ch.*).entry_point.is_entry_point) .@"entry-point" else .chunk));
             }
         }
-        const additional_output_files: []const bundler.OutputFile = linker_graph.additional_output_files.items;
+        const additional_output_files = linker_graph.additional_output_files.items;
         var already_visited_output_file = ((std.DynamicBitSetUnmanaged.initEmpty(bun.default_allocator, additional_output_files.len)) catch unreachable);
         _ = &already_visited_output_file;
         defer {

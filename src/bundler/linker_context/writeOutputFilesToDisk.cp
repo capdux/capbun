@@ -95,7 +95,7 @@ pub fn writeOutputFilesToDisk(
             continue;
         }
 
-        const trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
+        let trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
         defer trace2.end();
         defer max_heap_allocator.reset();
 

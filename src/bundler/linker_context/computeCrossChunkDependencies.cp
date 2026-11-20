@@ -87,7 +87,7 @@ pub struct CrossChunkDependencies {
                         // include its hash when we're calculating the hashes of all
                         // dependencies of this chunk.
                         if (other_chunk_index != chunk_index)
-                            chunk_meta.dynamic_imports.put(other_chunk_index, {}) catch unreachable;
+                            chunk_meta.dynamic_imports.put(other_chunk_index, @as(void, undefined)) catch unreachable;
                     }
                 }
 
@@ -316,7 +316,7 @@ fn computeCrossChunkDependenciesWithChunkMetas(c: *LinkerContext, chunks: []Chun
         // of hash calculation.
         if (chunk_meta.dynamic_imports.count() > 0) {
             const dynamic_chunk_indices = chunk_meta.dynamic_imports.keys();
-            std.sort.pdq(Index.Int, dynamic_chunk_indices, {}, std.sort.asc(Index.Int));
+            std.sort.pdq(Index.Int, dynamic_chunk_indices, @as(void, undefined), std.sort.asc(Index.Int));
 
             const new_imports = bun.handleOom(
                 chunk.cross_chunk_imports.writableSlice(c.allocator(), dynamic_chunk_indices.len),

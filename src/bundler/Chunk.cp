@@ -459,14 +459,14 @@ pub const ChunkIntermediateOutput = union(enum) {
             .pieces pieces => {
                 const entry_point_chunks_for_scb = linker_graph.files.items(.entry_point_chunk_index);
 
-                let shift = if (enable_source_map_shifts)
+                let shift: SourceMap.SourceMapShifts = if (enable_source_map_shifts)
                     SourceMap.SourceMapShifts{
                         after: {},
                         before: {},
                     }
                 else
                     undefined;
-                let shifts = if (enable_source_map_shifts)
+                let shifts: std.ArrayList(SourceMap.SourceMapShifts) = if (enable_source_map_shifts)
                     std.ArrayList(SourceMap.SourceMapShifts).initCapacity(bun.default_allocator, pieces.len + 1)?
                 else
                     undefined;

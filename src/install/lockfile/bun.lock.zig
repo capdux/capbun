@@ -1591,7 +1591,8 @@ else => {
                             _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
                             return error.InvalidPackageInfo;
 })));
-                            if (try seen_deps.getOrPut(allocator, dep_name).found_existing) {
+                            const seen_gop2 = try seen_deps.getOrPut(allocator, dep_name);
+                            if (seen_gop2.found_existing) {
                                 lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
                                 continue;
                             }
