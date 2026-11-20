@@ -2,257 +2,311 @@ import bun from "bun";
 import { Output, default_allocator, strings, webcore, http, jsc, String, sys, JSError, FormData, Environment, ptr } from "bun";
 import { JSGlobalObject, JSValue, CallFrame, JSPromise, VirtualMachine, ZigString, ArrayBuffer, DOMFormData, URLSearchParams } from "jsc";
 import * as StoreMod from "./blob/Store.zig";
-pub const Store = StoreMod.Store;
-const BlobStore = StoreMod.Store;
-const read_file = StoreMod.read_file;
-const write_file = StoreMod.write_file;
-const copy_file = StoreMod.copy_file;
+import * as read_file_mod from "./blob/read_file.zig";
+import * as write_file_mod from "./blob/write_file.zig";
+import * as copy_file_mod from "./blob/copy_file.zig";
 
+const BlobStore = StoreMod.Store;
 const debug = Output.scoped(.Blob, .visible);
 
-export class Blob {
-    reported_estimated_size: usize = 0;
-    size: SizeType = 0;
-    offset: SizeType = 0;
-    store: (*BlobStore)? = null;
-    content_type: string = "";
-    content_type_allocated: bool = false;
-    content_type_was_set: bool = false;
-    charset: strings.AsciiStatus = .unknown;
-    is_jsdom_file: bool = false;
-    ref_count: ptr.RawRefCount(u32, .single_threaded) = .init(0);
-    globalThis: *JSGlobalObject = undefined;
-    last_modified: f64 = 0.0;
-    name: String = String.dead;
+pub type BlobSizeType = u52;
 
-    pub const Store = BlobStore;
-    pub const SizeType = u52;
-    pub const max_size = sys.maxInt(SizeType);
+pub enum BlobClosingState: u8 {
+    running,
+    closing,
+}
 
-    pub fn new(blob: Blob): *Blob {
-        let result = sys.new(Blob, blob);
-        result.ref_count = .init(1);
-        return result;
+pub struct BlobInternal {
+    bytes: std.array_list.Managed(u8),
+    was_string: bool = false,
+
+    fn slice(): []u8 {
+        return _.bytes.items;
     }
 
-    pub fn isBunFile(_: &Blob): bool {
-        let store = this.store orelse return false;
-        return store.data == .file;
+    fn sliceConst(): []const u8 {
+        return _.bytes.items;
     }
 
-    pub fn isS3(_: &Blob): bool {
-        let store = this.store orelse return false;
-        return store.data == .s3;
+    fn toOwnedSlice(*_): []u8 {
+        return _.bytes.toOwnedSlice();
     }
 
-    pub fn hasContentTypeFromUser(_: &Blob): bool {
-        return this.content_type_was_set or (this.store != null and (this.store.?.data == .file or this.store.?.data == .s3));
-    }
-
-    pub fn contentTypeOrMimeType(_: &Blob): ([]const u8)? {
-        if (this.content_type.len > 0) return this.content_type;
-        if (store := this.store) {
-            switch (store.data) {
-                .file => |file| return file.mime_type.value,
-                .s3 => |s3_data| return s3_data.mime_type.value,
-                else => return null,
-            }
-        }
-        return null;
-    }
-
-    pub fn getFormDataEncoding(*_: *Blob): (*FormData.AsyncFormData)? {
-        let content_type_slice: ZigString.Slice = this.getContentType() orelse return null;
-        defer content_type_slice.deinit();
-        let encoding = FormData.Encoding.get(content_type_slice.slice()) orelse return null;
-        return sys.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
-    }
-
-    pub fn getContentType(*_: *Blob): ZigString.Slice? {
-        if (this.content_type.len > 0) {
-            return ZigString.Slice.fromUTF8NeverFree(this.content_type);
-        }
-        return null;
-    }
-
-    pub fn getSizeForBindings(_: &Blob): usize {
-        return @as(usize, @intCast(this.size));
-    }
-
-    pub fn sharedView(_: &Blob): []const u8 {
-        if (store := this.store) {
-            switch (store.data) {
-                .bytes => |b| return b.slice(),
-                else => return "",
-            }
-        }
-        return "";
-    }
-
-    pub fn resolveSize(*_: *Blob) {
-        // compute or refresh size
-    }
-
-    pub fn detach(*_: *Blob) {
-        if (store := this.store) {
-            store.deref();
-            this.store = null;
-        }
-    }
-
-    pub fn release(*_) {
-        this.detach();
-        if (this.content_type_allocated and this.content_type.len > 0) {
-            default_allocator.free(this.content_type);
-            this.content_type = "";
-            this.content_type_allocated = false;
-        }
-        this.name.deref();
-    }
-
-    pub fn deinit(*_: *Blob) {
-        this.release();
-    }
-
-    pub fn dupe(*_: &Blob): Blob {
-        if (store := this.store) {
-            * = store.ref();
-        }
-        return Blob {
-            .reported_estimated_size = this.reported_estimated_size,
-            .size = this.size,
-            .offset = this.offset,
-            .store = this.store,
-            .content_type = this.content_type,
-            .content_type_allocated = this.content_type_allocated,
-            .content_type_was_set = this.content_type_was_set,
-            .charset = this.charset,
-            .is_jsdom_file = this.is_jsdom_file,
-            .ref_count = .init(0),
-            .globalThis = this.globalThis,
-            .last_modified = this.last_modified,
-            .name = this.name.clone(),
-        };
-    }
-
-    pub fn dupeWithContentType(*_: &Blob, preserve_type: bool): Blob {
-        if (store := this.store) {
-            * = store.ref();
-        }
-        return Blob {
-            .reported_estimated_size = this.reported_estimated_size,
-            .size = this.size,
-            .offset = this.offset,
-            .store = this.store,
-            .content_type = if (preserve_type) this.content_type else "",
-            .content_type_allocated = if (preserve_type) this.content_type_allocated else false,
-            .content_type_was_set = if (preserve_type) this.content_type_was_set else false,
-            .charset = this.charset,
-            .is_jsdom_file = this.is_jsdom_file,
-            .ref_count = .init(0),
-            .globalThis = this.globalThis,
-            .last_modified = this.last_modified,
-            .name = this.name.clone(),
-        };
-    }
-
-    pub static fn init(data: []u8, allocator: sys.Allocator, globalThis: *JSGlobalObject): Blob {
-        let store = BlobStore.createFromBytes(data, allocator);
-        return Blob {
-            .size = @as(SizeType, @truncate(data.len)),
-            .store = store,
-            .globalThis = globalThis,
-        };
-    }
-
-    pub static fn initEmpty(globalThis: *JSGlobalObject): Blob {
-        return Blob {
-            .size = 0,
-            .store = null,
-            .globalThis = globalThis,
-        };
-    }
-
-    pub static fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: sys.Allocator, form_data: *DOMFormData): Blob {
-        return Blob.initEmpty(globalThis);
-    }
-
-    pub static fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: sys.Allocator, search_params: *URLSearchParams): Blob {
-        return Blob.initEmpty(globalThis);
-    }
-
-    pub static fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, create_if_missing: bool): Blob {
-        return Blob.initEmpty(globalThis);
-    }
-
-    pub fn toJS(*_: *Blob, globalThis: *JSGlobalObject): JSValue {
-        return jsc.Codegen.JSBlob.toJS(globalThis, this);
+    fn clearAndFree(*_) {
+        _.bytes.clearAndFree();
     }
 }
 
-export class Internal {
-    bytes: std.array_list.Managed(u8);
-    was_string: bool = false;
-
-    pub fn slice(_: &Internal): []u8 {
-        return this.bytes.items;
-    }
-
-    pub fn sliceConst(_: &Internal): []const u8 {
-        return this.bytes.items;
-    }
-
-    pub fn toOwnedSlice(*_: *Internal): []u8 {
-        return this.bytes.toOwnedSlice();
-    }
-
-    pub fn clearAndFree(*_: *Internal) {
-        this.bytes.clearAndFree();
-    }
-}
-
-export union(enum) Any {
+pub union(enum) BlobAny {
     Blob: Blob,
-    InternalBlob: Internal,
+    InternalBlob: BlobInternal,
     WTFStringImpl: bun.WTF.StringImpl,
 
-    pub fn slice(_: &Any): []const u8 {
-        switch (this.*) {
-            .Blob => |*b| b.sharedView(),
-            .InternalBlob => |*b| b.sliceConst(),
-            .WTFStringImpl => |s| s.latin1Slice(),
+    fn slice(): []const u8 {
+        switch (_.*) {
+            .Blob => |*b| return b.sharedView(),
+            .InternalBlob => |*b| return b.sliceConst(),
+            .WTFStringImpl => |s| return s.latin1Slice(),
         }
     }
 
-    pub fn detach(*_: *Any) {
-        switch (this.*) {
+    fn detach(*_) {
+        switch (_.*) {
             .Blob => |*b| b.detach(),
             .InternalBlob => |*b| b.clearAndFree(),
             .WTFStringImpl => |s| s.deref(),
         }
     }
 
-    pub fn toArrayBufferTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
-        let bytes = this.slice();
+    fn toArrayBufferTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
+        const bytes = _.slice();
         return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
     }
 
-    pub fn toUint8ArrayTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
-        let bytes = this.slice();
+    fn toUint8ArrayTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
+        const bytes = _.slice();
         return ArrayBuffer.create(globalObject, bytes, .Uint8Array);
     }
 
-    pub fn toJSONShare(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
-        let bytes = this.slice();
+    fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
+        const bytes = _.slice();
         return JSValue.parseJSON(globalObject, bytes);
     }
 
-    pub fn toStringTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
-        let bytes = this.slice();
+    fn toStringTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
+        const bytes = _.slice();
         return String.fromBytes(bytes).toJS(globalObject);
+    }
+}
+
+pub struct BlobExternalSharedDescriptor {
+    pub const ref = Blob__ref;
+    pub const deref = Blob__deref;
+}
+
+@root struct Blob {
+    reported_estimated_size: usize = 0,
+    size: BlobSizeType = 0,
+    offset: BlobSizeType = 0,
+    store: (*BlobStore)? = null,
+    content_type: []const u8 = "",
+    content_type_allocated: bool = false,
+    content_type_was_set: bool = false,
+    charset: strings.AsciiStatus = .unknown,
+    is_jsdom_file: bool = false,
+    ref_count: ptr.RawRefCount(u32, .single_threaded) = .init(0),
+    globalThis: *JSGlobalObject = undefined,
+    last_modified: f64 = 0.0,
+    name: String = String.dead,
+
+    pub const Store = BlobStore;
+    pub const read_file = read_file_mod;
+    pub const write_file = write_file_mod;
+    pub const copy_file = copy_file_mod;
+    pub const js = jsc.Codegen.JSBlob;
+    pub const fromJS = js.fromJS;
+    pub const fromJSDirect = js.fromJSDirect;
+    pub const Ref = bun.ptr.ExternalShared(Blob);
+    pub const SizeType = BlobSizeType;
+    pub const max_size = std.math.maxInt(SizeType);
+    pub const Lifetime = jsc.WebCore.Lifetime;
+    pub const ClosingState = BlobClosingState;
+    pub const Internal = BlobInternal;
+    pub const Any = BlobAny;
+    pub const external_shared_descriptor = BlobExternalSharedDescriptor;
+
+    static fn new(blob: Blob): *Blob {
+        let result = bun.new(Blob, blob);
+        result.ref_count = .init(1);
+        return result;
+    }
+
+    fn isHeapAllocated(): bool {
+        return _.ref_count.raw() > 0;
+    }
+
+    fn isBunFile(): bool {
+        if (store := _.store) {
+            return store.data == .file;
+        }
+        return false;
+    }
+
+    fn isS3(): bool {
+        if (store := _.store) {
+            return store.data == .s3;
+        }
+        return false;
+    }
+
+    fn hasContentTypeFromUser(): bool {
+        if (_.content_type_was_set) return true;
+        if (store := _.store) {
+            return store.data == .file || store.data == .s3;
+        }
+        return false;
+    }
+
+    fn contentTypeOrMimeType(): ([]const u8)? {
+        if (_.content_type.len > 0) return _.content_type;
+        if (store := _.store) {
+            switch (store.data) {
+                .file file => return file.mime_type.value,
+                .s3 s3_data => return s3_data.mime_type.value,
+                else => return null,
+            }
+        }
+        return null;
+    }
+
+    fn getFormDataEncoding(*_): (*FormData.AsyncFormData)? {
+        if (content_type_slice := _.getContentType()) {
+            defer content_type_slice.deinit();
+            if (encoding := FormData.Encoding.get(content_type_slice.slice())) {
+                return bun.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
+            }
+        }
+        return null;
+    }
+
+    fn getContentType(*_): ZigString.Slice? {
+        if (_.content_type.len > 0) {
+            return ZigString.Slice.fromUTF8NeverFree(_.content_type);
+        }
+        return null;
+    }
+
+    fn getSizeForBindings(): usize {
+        return @as(usize, @intCast(_.size));
+    }
+
+    fn sharedView(): []const u8 {
+        if (store := _.store) {
+            switch (store.data) {
+                .bytes b => return b.slice(),
+                else => return "",
+            }
+        }
+        return "";
+    }
+
+    fn resolveSize(*_) {
+    }
+
+    fn detach(*_) {
+        if (store := _.store) {
+            store.deref();
+            _.store = null;
+        }
+    }
+
+    fn release(*_) {
+        _.detach();
+        if (_.content_type_allocated && _.content_type.len > 0) {
+            default_allocator.free(_.content_type);
+            _.content_type = "";
+            _.content_type_allocated = false;
+        }
+        _.name.deref();
+    }
+
+    fn deinit(*_) {
+        _.release();
+    }
+
+    fn dupe(): Blob {
+        if (store := _.store) {
+            * = store.ref();
+        }
+        return Blob{
+            reported_estimated_size: _.reported_estimated_size,
+            size: _.size,
+            offset: _.offset,
+            store: _.store,
+            content_type: _.content_type,
+            content_type_allocated: _.content_type_allocated,
+            content_type_was_set: _.content_type_was_set,
+            charset: _.charset,
+            is_jsdom_file: _.is_jsdom_file,
+            ref_count: .init(0),
+            globalThis: _.globalThis,
+            last_modified: _.last_modified,
+            name: _.name.clone(),
+        };
+    }
+
+    fn dupeWithContentType(preserve_type: bool): Blob {
+        if (store := _.store) {
+            * = store.ref();
+        }
+        return Blob{
+            reported_estimated_size: _.reported_estimated_size,
+            size: _.size,
+            offset: _.offset,
+            store: _.store,
+            content_type: if (preserve_type) _.content_type else "",
+            content_type_allocated: if (preserve_type) _.content_type_allocated else false,
+            content_type_was_set: if (preserve_type) _.content_type_was_set else false,
+            charset: _.charset,
+            is_jsdom_file: _.is_jsdom_file,
+            ref_count: .init(0),
+            globalThis: _.globalThis,
+            last_modified: _.last_modified,
+            name: _.name.clone(),
+        };
+    }
+
+    static fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject): Blob {
+        const store = BlobStore.createFromBytes(data, allocator);
+        return Blob{
+            size: @as(SizeType, @truncate(data.len)),
+            store: store,
+            globalThis: globalThis,
+        };
+    }
+
+    static fn initEmpty(globalThis: *JSGlobalObject): Blob {
+        return Blob{
+            size: 0,
+            store: null,
+            globalThis: globalThis,
+        };
+    }
+
+    static fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, form_data: *DOMFormData): Blob {
+        * = allocator;
+        * = form_data;
+        return Blob.initEmpty(globalThis);
+    }
+
+    static fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, search_params: *URLSearchParams): Blob {
+        * = allocator;
+        * = search_params;
+        return Blob.initEmpty(globalThis);
+    }
+
+    static fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, create_if_missing: bool): Blob {
+        * = pathlike;
+        * = create_if_missing;
+        return Blob.initEmpty(globalThis);
+    }
+
+    fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
+        return jsc.Codegen.JSBlob.toJS(globalThis, _);
     }
 }
 
 @c pub fn Bun__Blob__getSizeForBindings(blob: *Blob): usize {
     return blob.getSizeForBindings();
+}
+
+@c pub fn Blob__ref(blob: *Blob) {
+    blob.ref_count.increment();
+}
+
+@c pub fn Blob__deref(blob: *Blob) {
+    if (blob.ref_count.decrement() == .should_destroy) {
+        blob.ref_count.increment();
+        blob.deinit();
+    }
 }

@@ -1609,3 +1609,6 @@
 
 ### 2026-11-20 06:09:17 UTC - zig:check 外部根因（PackageInstaller/cache/Request）修复入库
 - 完成：`PackageInstaller.cp` 补 `pub const NodeModulesFolder`、`cache.cp` 避内置名改 `CacheSet` + `pub const Set`、`Request.cp` 完整重构 `@root struct Request`。
+
+### 2026-11-20 06:10:44 UTC - zig:check 外部根因（App/Blob）修复入库
+- 完成：`uws_sys/App.cp` 补齐 `NewApp.Response`/`WebSocket`/`ListenSocket` 导出；`webcore/Blob.cp` 升级 `@root struct Blob` 并导出 `SizeType` 等根成员。

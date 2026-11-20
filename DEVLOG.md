@@ -1338,3 +1338,6 @@
 
 ### 2026-11-20 06:09:17 UTC - 跨模块根因修复经验（PackageInstaller/cache/Request）
 - 发现 `pub struct Set` 与内置 `Set` 重名会被静默跳过（改名 `CacheSet` + `pub const Set = CacheSet;` 即解决）；`Request.cp` 由旧式 `export class` 完整升级为 `@root struct Request`。
+
+### 2026-11-20 06:10:44 UTC - 跨模块根因修复经验（App/Blob）
+- `App.cp` 用命名空间导入消除 `NewApp` 内部同名冲突；`Blob.cp` 由 `export class` 升级 `@root struct Blob` 暴露根字段与 `SizeType`。

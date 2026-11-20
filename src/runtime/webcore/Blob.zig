@@ -60,6 +60,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -85,237 +93,59 @@ const ArrayBuffer = @import("jsc").ArrayBuffer;
 const DOMFormData = @import("jsc").DOMFormData;
 const URLSearchParams = @import("jsc").URLSearchParams;
 pub const StoreMod = @import("./blob/Store.zig");
-pub const Blob = struct {
-    reported_estimated_size: usize = 0,
-    size: SizeType = 0,
-    offset: SizeType = 0,
-    store: ?*BlobStore = null,
-    content_type: []const u8 = "",
-    content_type_allocated: bool = false,
-    content_type_was_set: bool = false,
-    charset: strings.AsciiStatus = .unknown,
-    is_jsdom_file: bool = false,
-    ref_count: ptr.RawRefCount(u32,.single_threaded) = .init(0),
-    globalThis: *JSGlobalObject = undefined,
-    last_modified: f64 = 0.0,
-    name: String = String.dead,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.reported_estimated_size = 0; self_ptr.size = 0; self_ptr.offset = 0; self_ptr.store = null; self_ptr.content_type = ""; self_ptr.content_type_allocated = false; self_ptr.content_type_was_set = false; self_ptr.charset = .unknown; self_ptr.is_jsdom_file = false; self_ptr.ref_count = .init(0); self_ptr.globalThis = undefined; self_ptr.last_modified = 0.0; self_ptr.name = String.dead; return self_ptr; }
-
-pub fn new(self: *const Blob, blob: Blob) *Blob {
-        _ = self;
-            var result = sys.new(Blob, blob);
-            var __result_moved = false; _ = &__result_moved;
-            defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
-            result.ref_count = .init(1);
-            __result_moved = true;
-            return result;
-    }
-
-pub fn isBunFile(self: *const Blob) bool {
-            var store = ((self.store) orelse { return false; });
-            _ = &store;
-            return (store.data == .file);
-    }
-
-pub fn isS3(self: *const Blob) bool {
-            var store = ((self.store) orelse { return false; });
-            _ = &store;
-            return (store.data == .s3);
-    }
-
-pub fn hasContentTypeFromUser(self: *const Blob) bool {
-            return (self.content_type_was_set or ((self.store != null) and ((self.store.?.data == .file) or (self.store.?.data == .s3))));
-    }
-
-pub fn contentTypeOrMimeType(self: *const Blob) ?[]const u8 {
-            if ((self.content_type.len > 0)) {
-                return self.content_type;
-            }
-            if (self.store) |store| {
-                _ = &store;
-                switch (store.data) {
-.file => |file| {
-return (if (@typeInfo(@TypeOf(file.mime_type)) == .@"enum") @intFromEnum(file.mime_type) else file.mime_type.value);
-},
-.s3 => |s3_data| {
-return (if (@typeInfo(@TypeOf(s3_data.mime_type)) == .@"enum") @intFromEnum(s3_data.mime_type) else s3_data.mime_type.value);
-},
-else => {
-return null;
-},
-}
-            }
-            return null;
-    }
-
-pub fn getFormDataEncoding(self: *Blob) ?*FormData.AsyncFormData {
-            var content_type_slice: ZigString.Slice = ((self.getContentType()) orelse { return null; });
-            _ = &content_type_slice;
-            defer {
-            _ = content_type_slice.deinit();
-            }
-            var encoding = ((FormData.Encoding.get(content_type_slice.slice())) orelse { return null; });
-            var __encoding_moved = false; _ = &__encoding_moved;
-            defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
-            return sys.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
-    }
-
-pub fn getContentType(self: *Blob) ?ZigString.Slice {
-            if ((self.content_type.len > 0)) {
-                return ZigString.Slice.fromUTF8NeverFree(self.content_type);
-            }
-            return null;
-    }
-
-pub fn getSizeForBindings(self: *const Blob) usize {
-            return @as(usize, @intCast(self.size));
-    }
-
-pub fn sharedView(self: *const Blob) []const u8 {
-            if (self.store) |store| {
-                _ = &store;
-                switch (store.data) {
-.bytes => |b| {
-return b.slice();
-},
-else => {
-return "";
-},
-}
-            }
-            return "";
-    }
-
-pub fn resolveSize(self: *Blob) void {
-        _ = self;
-    }
-
-pub fn detach(self: *Blob) void {
-            if (self.store) |store| {
-                _ = &store;
-                _ = store.deref();
-                self.store = null;
-            }
-    }
-
-pub fn release(self: *Blob) void {
-            _ = self.detach();
-            if ((self.content_type_allocated and (self.content_type.len > 0))) {
-                _ = default_allocator.free(self.content_type);
-                self.content_type = "";
-                self.content_type_allocated = false;
-            }
-            _ = self.name.deref();
-    }
-
-pub fn deinit(self: *Blob) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-    }
-
-pub fn dupe(self: *Blob) Blob {
-            if (self.store) |store| {
-                _ = &store;
-                _ = store.ref();
-            }
-            return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = self.content_type, .content_type_allocated = self.content_type_allocated, .content_type_was_set = self.content_type_was_set, .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
-    }
-
-pub fn dupeWithContentType(self: *Blob, preserve_type: bool) Blob {
-            if (self.store) |store| {
-                _ = &store;
-                _ = store.ref();
-            }
-            return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = (if (preserve_type) self.content_type else ""), .content_type_allocated = (if (preserve_type) self.content_type_allocated else false), .content_type_was_set = (if (preserve_type) self.content_type_was_set else false), .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
-    }
-
-pub fn init(data: []u8, allocator: sys.Allocator, globalThis: *JSGlobalObject) Blob {
-            var store = BlobStore.createFromBytes(data, allocator);
-            var __store_moved = false; _ = &__store_moved;
-            defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
-            return Blob{ .size = @as(SizeType, @truncate(data.len)), .store = store, .globalThis = globalThis };
-    }
-
-pub fn initEmpty(globalThis: *JSGlobalObject) Blob {
-            return Blob{ .size = 0, .store = null, .globalThis = globalThis };
-    }
-
-pub fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: sys.Allocator, form_data: *DOMFormData) Blob {
-        _ = allocator;
-        _ = form_data;
-            return Blob.initEmpty(globalThis);
-    }
-
-pub fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: sys.Allocator, search_params: *URLSearchParams) Blob {
-        _ = allocator;
-        _ = search_params;
-            return Blob.initEmpty(globalThis);
-    }
-
-pub fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, create_if_missing: bool) Blob {
-        _ = pathlike;
-        _ = create_if_missing;
-            return Blob.initEmpty(globalThis);
-    }
-
-pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
-            return jsc.Codegen.JSBlob.toJS(globalThis, self);
-    }
-    pub const Store = BlobStore;
-    pub const SizeType = u52;
-    pub const max_size = sys.maxInt(SizeType);
+pub const read_file_mod = @import("./blob/read_file.zig");
+pub const write_file_mod = @import("./blob/write_file.zig");
+pub const copy_file_mod = @import("./blob/copy_file.zig");
+pub const BlobClosingState = enum(u8) {
+    running,
+    closing,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const Internal = struct {
+pub const BlobInternal = struct {
     bytes: std.array_list.Managed(u8),
     was_string: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.was_string = false; return self_ptr; }
 
-pub fn init(self: *Internal, bytes: std.array_list.Managed(u8), was_string: bool) void {
-        var __bytes_moved = false; _ = &__bytes_moved;
-        defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
-            self.bytes = bytes;
-            self.was_string = was_string;
-    }
-
-pub fn slice(self: *const Internal) []u8 {
+pub fn slice(self: BlobInternal) []u8 {
             return self.bytes.items;
     }
 
-pub fn sliceConst(self: *const Internal) []const u8 {
+pub fn sliceConst(self: BlobInternal) []const u8 {
             return self.bytes.items;
     }
 
-pub fn toOwnedSlice(self: *Internal) []u8 {
+pub fn toOwnedSlice(self: *BlobInternal) []u8 {
             return self.bytes.toOwnedSlice();
     }
 
-pub fn clearAndFree(self: *Internal) void {
+pub fn clearAndFree(self: *BlobInternal) void {
             _ = self.bytes.clearAndFree();
     }
 };
 
-pub const Any = union(enum) {
+pub const BlobAny = union(enum) {
     Blob: Blob,
-    InternalBlob: *Internal,
+    InternalBlob: BlobInternal,
     WTFStringImpl: bun.WTF.StringImpl,
 
-pub fn slice(self: *const Any) []const u8 {
+pub fn slice(self: *const BlobAny) []const u8 {
             switch (self.*) {
 .Blob => |*b| {
-_ = b.sharedView();
+return b.sharedView();
 },
 .InternalBlob => |*b| {
-_ = b.sliceConst();
+return b.sliceConst();
 },
 .WTFStringImpl => |s| {
-_ = s.latin1Slice();
+return s.latin1Slice();
 },
 }
     }
 
-pub fn detach(self: *Any) void {
+pub fn detach(self: *BlobAny) void {
             switch (self.*) {
 .Blob => |*b| {
 _ = b.detach();
@@ -329,38 +159,253 @@ _ = s.deref();
 }
     }
 
-pub fn toArrayBufferTransfer(self: *Any, globalObject: *JSGlobalObject) JSError!JSValue {
-            var bytes = self.slice();
-            _ = &bytes;
+pub fn toArrayBufferTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
+            const bytes = self.slice();
             return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
     }
 
-pub fn toUint8ArrayTransfer(self: *Any, globalObject: *JSGlobalObject) JSError!JSValue {
-            var bytes = self.slice();
-            _ = &bytes;
+pub fn toUint8ArrayTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
+            const bytes = self.slice();
             return ArrayBuffer.create(globalObject, bytes, .Uint8Array);
     }
 
-pub fn toJSONShare(self: *Any, globalObject: *JSGlobalObject) JSError!JSValue {
-            var bytes = self.slice();
-            _ = &bytes;
+pub fn toJSONShare(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
+            const bytes = self.slice();
             return JSValue.parseJSON(globalObject, bytes);
     }
 
-pub fn toStringTransfer(self: *Any, globalObject: *JSGlobalObject) JSError!JSValue {
-            var bytes = self.slice();
-            _ = &bytes;
+pub fn toStringTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
+            const bytes = self.slice();
             return String.fromBytes(bytes).toJS(globalObject);
     }
 };
 
-pub const Store = StoreMod.Store;
+pub const BlobExternalSharedDescriptor = struct {
+    pub const ref = Blob__ref;
+    pub const deref = Blob__deref;
+};
+
+pub const Blob = @This();
+
+reported_estimated_size: usize = 0,
+size: BlobSizeType = 0,
+offset: BlobSizeType = 0,
+store: ?*BlobStore = null,
+content_type: []const u8 = "",
+content_type_allocated: bool = false,
+content_type_was_set: bool = false,
+charset: strings.AsciiStatus = .unknown,
+is_jsdom_file: bool = false,
+ref_count: ptr.RawRefCount(u32,.single_threaded) = .init(0),
+globalThis: *JSGlobalObject = undefined,
+last_modified: f64 = 0.0,
+name: String = String.dead,
+
+pub fn new(blob: Blob) *Blob {
+        var result = bun.new(Blob, blob);
+        var __result_moved = false; _ = &__result_moved;
+        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        result.ref_count = .init(1);
+        __result_moved = true;
+        return result;
+}
+
+pub fn isHeapAllocated(self: Blob) bool {
+        return (self.ref_count.raw() > 0);
+}
+
+pub fn isBunFile(self: Blob) bool {
+        if (self.store) |store| {
+            _ = &store;
+            return (store.data == .file);
+        }
+        return false;
+}
+
+pub fn isS3(self: Blob) bool {
+        if (self.store) |store| {
+            _ = &store;
+            return (store.data == .s3);
+        }
+        return false;
+}
+
+pub fn hasContentTypeFromUser(self: Blob) bool {
+        if (self.content_type_was_set) {
+            return true;
+        }
+        if (self.store) |store| {
+            _ = &store;
+            return ((store.data == .file) or (store.data == .s3));
+        }
+        return false;
+}
+
+pub fn contentTypeOrMimeType(self: Blob) ?[]const u8 {
+        if ((self.content_type.len > 0)) {
+            return self.content_type;
+        }
+        if (self.store) |store| {
+            _ = &store;
+            switch (store.data) {
+.file => |file| {
+return (if (@typeInfo(@TypeOf(file.mime_type)) == .@"enum") @intFromEnum(file.mime_type) else file.mime_type.value);
+},
+.s3 => |s3_data| {
+return (if (@typeInfo(@TypeOf(s3_data.mime_type)) == .@"enum") @intFromEnum(s3_data.mime_type) else s3_data.mime_type.value);
+},
+else => {
+return null;
+},
+}
+        }
+        return null;
+}
+
+pub fn getFormDataEncoding(self: *Blob) ?*FormData.AsyncFormData {
+        if (self.getContentType()) |content_type_slice| {
+            _ = &content_type_slice;
+            defer {
+            _ = content_type_slice.deinit();
+            }
+            if (FormData.Encoding.get(content_type_slice.slice())) |encoding| {
+                _ = &encoding;
+                return bun.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
+            }
+        }
+        return null;
+}
+
+pub fn getContentType(self: *Blob) ?ZigString.Slice {
+        if ((self.content_type.len > 0)) {
+            return ZigString.Slice.fromUTF8NeverFree(self.content_type);
+        }
+        return null;
+}
+
+pub fn getSizeForBindings(self: Blob) usize {
+        return @as(usize, @intCast(self.size));
+}
+
+pub fn sharedView(self: Blob) []const u8 {
+        if (self.store) |store| {
+            _ = &store;
+            switch (store.data) {
+.bytes => |b| {
+return b.slice();
+},
+else => {
+return "";
+},
+}
+        }
+        return "";
+}
+
+pub fn resolveSize(self: *Blob) void {
+    _ = self;
+}
+
+pub fn detach(self: *Blob) void {
+        if (self.store) |store| {
+            _ = &store;
+            _ = store.deref();
+            self.store = null;
+        }
+}
+
+pub fn release(self: *Blob) void {
+        _ = self.detach();
+        if ((self.content_type_allocated and (self.content_type.len > 0))) {
+            _ = default_allocator.free(self.content_type);
+            self.content_type = "";
+            self.content_type_allocated = false;
+        }
+        _ = self.name.deref();
+}
+
+pub fn deinit(self: *Blob) void {
+        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+}
+
+pub fn dupe(self: Blob) Blob {
+        if (self.store) |store| {
+            _ = &store;
+            _ = store.ref();
+        }
+        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = self.content_type, .content_type_allocated = self.content_type_allocated, .content_type_was_set = self.content_type_was_set, .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
+}
+
+pub fn dupeWithContentType(self: Blob, preserve_type: bool) Blob {
+        if (self.store) |store| {
+            _ = &store;
+            _ = store.ref();
+        }
+        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = (if (preserve_type) self.content_type else ""), .content_type_allocated = (if (preserve_type) self.content_type_allocated else false), .content_type_was_set = (if (preserve_type) self.content_type_was_set else false), .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
+}
+
+pub fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject) Blob {
+        const store = BlobStore.createFromBytes(data, allocator);
+        var __store_moved = false; _ = &__store_moved;
+        defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
+        return Blob{ .size = @as(SizeType, @truncate(data.len)), .store = store, .globalThis = globalThis };
+}
+
+pub fn initEmpty(globalThis: *JSGlobalObject) Blob {
+        return Blob{ .size = 0, .store = null, .globalThis = globalThis };
+}
+
+pub fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, form_data: *DOMFormData) Blob {
+        _ = &allocator;
+        _ = &form_data;
+        return Blob.initEmpty(globalThis);
+}
+
+pub fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, search_params: *URLSearchParams) Blob {
+        _ = &allocator;
+        _ = &search_params;
+        return Blob.initEmpty(globalThis);
+}
+
+pub fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, create_if_missing: bool) Blob {
+        _ = &pathlike;
+        _ = &create_if_missing;
+        return Blob.initEmpty(globalThis);
+}
+
+pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
+        return jsc.Codegen.JSBlob.toJS(globalThis, self);
+}
+pub const Store = BlobStore;
+pub const read_file = read_file_mod;
+pub const write_file = write_file_mod;
+pub const copy_file = copy_file_mod;
+pub const js = jsc.Codegen.JSBlob;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
+pub const Ref = bun.ptr.ExternalShared(Blob);
+pub const SizeType = BlobSizeType;
+pub const max_size = std.math.maxInt(SizeType);
+pub const Lifetime = jsc.WebCore.Lifetime;
+pub const ClosingState = BlobClosingState;
+pub const Internal = BlobInternal;
+pub const Any = BlobAny;
+pub const external_shared_descriptor = BlobExternalSharedDescriptor;
+pub const BlobSizeType = u52;
 const BlobStore = StoreMod.Store;
-const read_file = StoreMod.read_file;
-const write_file = StoreMod.write_file;
-const copy_file = StoreMod.copy_file;
 const debug = Output.scoped(.Blob, .visible);
 
 pub fn Bun__Blob__getSizeForBindings(blob: *Blob) callconv(.c) usize {
         return blob.getSizeForBindings();
+}
+
+pub fn Blob__ref(blob: *Blob) callconv(.c) void {
+        _ = blob.ref_count.increment();
+}
+
+pub fn Blob__deref(blob: *Blob) callconv(.c) void {
+        if ((blob.ref_count.decrement() == .should_destroy)) {
+            _ = blob.ref_count.increment();
+            _ = blob.deinit();
+        }
 }

@@ -3016,3 +3016,5 @@ Options:
 - [2026-11-20 06:05:50 UTC] 验收并提交 3 处跨模块根因修复：`collections/pool.cp` (0.943x), `jsc/VM.cp` (0.976x), `resolver/fs.cp` (1.005x)，全部 PASS。
 
 - [2026-11-20 06:09:17 UTC] 验收并提交 3 处外部根因修复：`PackageInstaller.cp` (1.010x), `bundler/cache.cp` (1.045x), `runtime/webcore/Request.cp` (1.023x)，全部 PASS。
+
+- [2026-11-20 06:10:44 UTC] 验收并提交外部根因 `uws_sys/App.cp` (0.777x) 与 `runtime/webcore/Blob.cp` (0.061x，升级 `@root struct Blob`)，全部 PASS。
