@@ -228,7 +228,8 @@ pub struct Routes {
         }
 
         if (path.len == 0) {
-            if (index := _.index) {
+            if (_.index != null) {
+                const index = _.index.?;
                 return Match{
                     .params = params,
                     .name = index.name,
@@ -1076,8 +1077,9 @@ pub struct Pattern {
                 return null;
             };
             offset = pattern.len;
-            kind = @max(@intFromEnum(@as(Pattern.Tag, pattern.value)), kind);
-            if (@intFromEnum(@as(Pattern.Tag, pattern.value)) > @intFromEnum(Pattern.Tag.static)) {
+            const tag = std.meta.activeTag(pattern.value);
+            kind = @max(@intFromEnum(tag), kind);
+            if (@intFromEnum(tag) > @intFromEnum(Pattern.Tag.static)) {
                 count += 1;
             }
         }

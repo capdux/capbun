@@ -1216,7 +1216,7 @@ pub fn loadDefines(self: *BundleOptions, allocator: std.mem.Allocator, loader_: 
             if (self.defines_loaded) {
                 return;
             }
-            self.define = definesFromTransformOptions(allocator, self.log, self.transform_options.define, self.target, loader_, env, node_env: {
+            self.define = try definesFromTransformOptions(allocator, self.log, self.transform_options.define, self.target, loader_, env, node_env: {
             if (loader_) |e| {
                 _ = &e;
                 if (((e.map.get("BUN_ENV")) orelse (e.map.get("NODE_ENV")))) |env_| {
@@ -1946,7 +1946,7 @@ pub fn definesFromTransformOptions(allocator: std.mem.Allocator, log: *logger.Lo
         if (((behavior == .load_all_without_inlining) or (behavior == .disable))) {
             break :load_env;
         }
-        break :load_env env.copyForDefine(defines.RawDefines, (&user_defines), defines.UserDefinesArray, (&environment_defines), framework.toAPI().defaults, framework.behavior, framework.prefix, allocator);
+        break :load_env try env.copyForDefine(defines.RawDefines, (&user_defines), defines.UserDefinesArray, (&environment_defines), framework.toAPI().defaults, framework.behavior, framework.prefix, allocator);
 
 };
         if ((behavior != .load_all_without_inlining)) {

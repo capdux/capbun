@@ -805,13 +805,17 @@ pub fn getComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) ?En
             const query = (query_var[0..query_str.len]).*;
             const result = ((entry.data.getAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
 
-pub fn hash(self: @This(), _: []const u8) @TypeOf(query_hashed) {
-        _ = self;
+pub fn hash(self: @This(), _key: []const u8) @TypeOf(query_hashed) {
+            const _self = self;
+            _ = &_self;
+            _ = &_key;
             return query_hashed;
     }
 
-pub fn eql(self: @This(), _: []const u8, b: []const u8) bool {
-        _ = self;
+pub fn eql(self: @This(), _key: []const u8, b: []const u8) bool {
+            const _self = self;
+            _ = &_self;
+            _ = &_key;
             return strings.eqlComptime(b, query);
     }
 }, .{})) orelse { return null; });
@@ -828,13 +832,17 @@ pub fn hasComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) boo
             const query_hashed = (comptime std.hash_map.hashString((&query)));
             return entry.data.containsAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
 
-pub fn hash(self: @This(), _: []const u8) @TypeOf(query_hashed) {
-        _ = self;
+pub fn hash(self: @This(), _key: []const u8) @TypeOf(query_hashed) {
+            const _self = self;
+            _ = &_self;
+            _ = &_key;
             return query_hashed;
     }
 
-pub fn eql(self: @This(), _: []const u8, b: []const u8) bool {
-        _ = self;
+pub fn eql(self: @This(), _key: []const u8, b: []const u8) bool {
+            const _self = self;
+            _ = &_self;
+            _ = &_key;
             return strings.eqlComptime(b, (&query));
     }
 }, .{});
@@ -1070,7 +1078,7 @@ pub fn entriesAt(self: *RealFS, index: allocators.IndexType, generation: bun.Gen
                     defer {
                     _ = handle.close();
                     }
-                    const new_entry = (blk_catch_8: { break :blk_catch_8 ((self.readdir(false, (&existing.entries.data), existing.entries.dir, generation, handle.stdDir(), void, void, .{})) catch |e| { _ = &e; _ = existing.entries.data.clearAndFree(bun.default_allocator);
+                    const new_entry = (blk_catch_8: { break :blk_catch_8 ((RealFS.readdir(self, false, (&existing.entries.data), existing.entries.dir, generation, handle.stdDir(), void, void, .{})) catch |e| { _ = &e; _ = existing.entries.data.clearAndFree(bun.default_allocator);
                     return ((self.readDirectoryError(existing.entries.dir, e)) catch unreachable); }); });
                     _ = existing.entries.data.clearAndFree(bun.default_allocator);
                     existing.entries.* = new_entry;
@@ -1195,7 +1203,7 @@ const opt = try fs.entries.put((&get_or_put_result), EntriesOption{ .@"err" = Di
     }
 
 pub fn readDirectory(fs: *RealFS, _dir: []const u8, _handle: ?std.fs.Dir, generation: bun.Generation, store_fd: bool) !*EntriesOption {
-            return RealFS.readDirectoryWithIterator(fs, _dir, _handle, generation, store_fd, void, .{});
+            return RealFS.readDirectoryWithIterator(fs, _dir, _handle, generation, store_fd, void, undefined);
     }
 
 pub fn readDirectoryWithIterator(fs: *RealFS, dir_maybe_trail_slash: []const u8, maybe_handle: ?std.fs.Dir, generation: bun.Generation, store_fd: bool, comptime Iterator: type, iterator: Iterator) !*EntriesOption {

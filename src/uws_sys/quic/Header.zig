@@ -45,8 +45,7 @@ pub const Qpack = enum(u8) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn classify(self: Qpack, hdr_name: []const u8) ?Class {
-        _ = self;
+pub fn classify(hdr_name: []const u8) ?Class {
             return map.getAnyCase(hdr_name);
     }
     

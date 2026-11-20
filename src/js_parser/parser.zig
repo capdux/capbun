@@ -295,6 +295,12 @@ pub const RelocateVars = struct {
     pub const Mode = enum { normal, for_in_or_for_of };
 };
 
+pub const VisitArgsOpts = struct {
+    body: []Stmt = &.{},
+    has_rest_arg: bool = false,
+    is_unique_formal_parameters: bool = false,
+};
+
 pub const TransposeState = struct {
     is_await_target: bool = false,
     is_then_catch_target: bool = false,
@@ -372,6 +378,11 @@ pub fn parse(comptime P: type, p: *P) anyerror!JSXTag {
     }
         }
     };
+};
+
+pub const ExprOrLetStmt = struct {
+    stmt_or_expr: js_ast.StmtOrExpr,
+    decls: []G.Decl = &.{},
 };
 
 pub const ExprIn = struct {
@@ -562,6 +573,27 @@ pub fn mergeInto(self: DeferredErrors, to: *DeferredErrors) void {
     const None = DeferredErrors{ .invalid_expr_default_value = null, .invalid_expr_after_question = null, .array_spread_feature = null };
 };
 
+pub const ImportClause = struct {
+    items: []js_ast.ClauseItem = &.{},
+    is_single_line: bool = false,
+    had_type_only_imports: bool = false,
+};
+
+pub const PropertyOpts = struct {
+    async_range: logger.Range = logger.Range.None,
+    declare_range: logger.Range = logger.Range.None,
+    is_async: bool = false,
+    is_generator: bool = false,
+    is_static: bool = false,
+    is_class: bool = false,
+    class_has_extends: bool = false,
+    allow_ts_decorators: bool = false,
+    is_ts_abstract: bool = false,
+    ts_decorators: []Expr = &.{},
+    has_argument_decorators: bool = false,
+    has_class_decorators: bool = false,
+};
+
 pub const ScanPassResult = struct {
     import_records: ListManaged(ImportRecord),
     named_imports: js_ast.Ast.NamedImports,
@@ -597,9 +629,21 @@ pub const FindSymbolResult = struct {
     is_inside_with_scope: bool = false,
 };
 
+pub const ExportClauseResult = struct {
+    clauses: []js_ast.ClauseItem = &.{},
+    is_single_line: bool = false,
+    had_type_only_exports: bool = false,
+};
+
 pub const DeferredTsDecorators = struct {
     values: []js_ast.Expr,
     scope_index: usize,
+};
+
+pub const ParseClassOptions = struct {
+    ts_decorators: []Expr = &.{},
+    allow_ts_decorators: bool = false,
+    is_type_script_declare: bool = false,
 };
 
 pub const ParseStatementOptions = struct {
@@ -635,7 +679,7 @@ pub const PrefillStringLiteral = struct {
 };
 
 pub const PrefillValue = struct {
-    pub const EThis = E.This;
+    pub const EThis = std.mem.zeroes(E.This);
     pub const Zero = E.Number{ .value = 0.0 };
 };
 
@@ -657,9 +701,9 @@ pub const PrefillData = struct {
     pub var BMissing: B = B{ .b_missing = BMissing_ };
     pub var BMissing_: B.Missing = B.Missing;
     pub var EMissing: Expr.Data = Expr.Data{ .e_missing = EMissing_ };
-    pub var EMissing_: E.Missing = E.Missing;
+    pub var EMissing_: E.Missing = std.mem.zeroes(E.Missing);
     pub var SEmpty: Stmt.Data = Stmt.Data{ .s_empty = SEmpty_ };
-    pub var SEmpty_: S.Empty = S.Empty;
+    pub var SEmpty_: S.Empty = std.mem.zeroes(S.Empty);
     pub var Filename: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.Filename };
     pub var LineNumber: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.LineNumber };
     pub var ColumnNumber: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.ColumnNumber };
@@ -670,7 +714,7 @@ pub const PrefillData = struct {
     pub var props: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.props) };
     pub var _owner: Expr.Data = Expr.Data{ .e_string = (&Prefill.String._owner) };
     pub var REACT_ELEMENT_TYPE: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.REACT_ELEMENT_TYPE };
-    pub const This = Expr.Data{ .e_this = E.This };
+    pub const This = Expr.Data{ .e_this = std.mem.zeroes(E.This) };
     pub const Zero = Expr.Data{ .e_number = PrefillValue.Zero };
 };
 

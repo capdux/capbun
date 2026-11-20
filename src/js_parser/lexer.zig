@@ -1972,8 +1972,7 @@ pub fn toUTF8EString(lexer: *LexerType) !js_ast.E.String {
             return res;
     }
 
-pub inline fn assertNotJSON(self: @This(), _: *const LexerType) void {
-        _ = self;
+pub inline fn assertNotJSON() void {
             if (comptime is_json) {
                 _ = @compileError("JSON should not reach this point");
             }
@@ -2791,7 +2790,11 @@ pub inline fn isIdentifierContinue(codepoint: i32) bool {
 }
 
 pub fn isWhitespace(cp: CodePoint) bool {
-    _ = cp;
+        const res = (switch (cp) {
+11, 9, 12, ' ', 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8239, 8287, 12288, 65279 => true,
+else => false,
+});
+        return res;
 }
 
 pub fn isIdentifier(text: []const u8) bool {

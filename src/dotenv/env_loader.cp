@@ -722,7 +722,7 @@
             if (count == 0) return;
             const elapsed = @as(f64, @floatFromInt((std.time.nanoTimestamp() - start))) / std.time.ns_per_ms;
 
-            const all = [
+            const all: [8][]const u8 = [
                 ".env.development.local",
                 ".env.production.local",
                 ".env.test.local",
@@ -732,7 +732,7 @@
                 ".env.test",
                 ".env",
             ];
-            const loaded = [
+            const loaded: [8]bool = [
                 this.@".env.development.local" != null,
                 this.@".env.production.local" != null,
                 this.@".env.test.local" != null,
@@ -1111,9 +1111,9 @@
                         const default_value = if (strings.hasPrefixComptime(value[end..], ":-")) brk: {
                             end += ":-".len;
                             const value_start = end;
-                            while (end < value.len) : (end += 1) {
+                            while_loop: while (end < value.len) : (end += 1) {
                                 switch (value[end]) {
-                                    '}', '\\' => break,
+                                    '}', '\\' => break :while_loop,
                                     else => continue,
                                 }
                             }

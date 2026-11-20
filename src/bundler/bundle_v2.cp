@@ -1902,7 +1902,7 @@ pub struct BundleV2 {
 
     pub const Result = union(enum) {
         pending: void,
-        e: anyerror,
+        @"err": anyerror,
         value: BuildResult,
 
         fn deinit(*_) {

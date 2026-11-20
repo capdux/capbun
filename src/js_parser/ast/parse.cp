@@ -423,7 +423,7 @@ pub fn Parse(
                     }
 
                     let item = items[i];
-                    const tuple = p.convertExprToBindingAndInitializer(&item, &invalidLog, is_spread);
+                    const tuple = p.convertExprToBindingAndInitializer(unsafe { &item }, &invalidLog, is_spread);
                     // double allocations
                     args.append(G.Arg{
                         binding: tuple.binding ?? Binding{ data: Prefill.Data.BMissing, loc: item.loc },

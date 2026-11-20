@@ -180,7 +180,7 @@ pub struct Parser {
         scan_pass.approximate_newline_count = p.lexer.approximate_newline_count;
     }
 
-    fn toLazyExportAST(*_, expr: Expr, comptime runtime_api_call: []u8, symbols: Symbol.List): !js_ast.Result {
+    fn toLazyExportAST(*_, expr: Expr, comptime runtime_api_call: []const u8, symbols: Symbol.List): !js_ast.Result {
         let p: JavaScriptParser = undefined;
         JavaScriptParser.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
         defer p.lexer.deinit();

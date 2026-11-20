@@ -403,9 +403,9 @@ pub fn isTopLevel(self: TopLevelFull) bool {
 pub const BinaryExpressionVisitorStruct = struct {
     e: *E.Binary,
     level: Level = .lowest,
-    flags: ExprFlag.Set = ExprFlag.None,
+    flags: ExprFlag.Set = ExprFlag.Set.initEmpty(),
     left_level: Level = .lowest,
-    left_flags: ExprFlag.Set = ExprFlag.None,
+    left_flags: ExprFlag.Set = ExprFlag.Set.initEmpty(),
     entry: *const Op = undefined,
     wrap: bool = false,
     right_level: Level = .lowest,
@@ -5530,7 +5530,7 @@ pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols: js_a
             const exports_ref = tree.exports_ref;
             const module_ref = tree.module_ref;
             const parts = tree.parts;
-            const dont_break_the_code: struct { *anyopaque, *anyopaque, *anyopaque } = .{ tree.module_ref, tree.exports_ref, tree.require_ref };
+            const dont_break_the_code: [3]Ref = .{ tree.module_ref, tree.exports_ref, tree.require_ref };
             inline for (dont_break_the_code) |r| {
                 if (symbols.get(r)) |symbol| {
                     _ = &symbol;
@@ -5678,7 +5678,7 @@ pub fn printJSON(comptime Writer: type, _writer: Writer, expr: Expr, source: *co
         defer {
         _ = printer.binary_expression_stack.clearAndFree();
         }
-        _ = printer.printExpr(expr, Level.lowest, ExprFlag.Set);
+        _ = printer.printExpr(expr, Level.lowest, ExprFlag.Set.initEmpty());
         _ = try printer.writer.getError();
         _ = try printer.writer.done();
         return @as(usize, @intCast(@max(printer.writer.written, 0)));

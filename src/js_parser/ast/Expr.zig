@@ -772,7 +772,7 @@ pub fn @"as"(data: Data, comptime tag: Tag) ?@FieldType(Data,@tagName(tag)) {
             return (if ((data == tag)) @field(data, @tagName(tag)) else null);
     }
 
-pub fn clone(self: *const Data, allocator: std.mem.Allocator) !Data {
+pub fn clone(self: Data, allocator: std.mem.Allocator) !Data {
             return (switch (self) {
 .e_array => |el| {
 {
@@ -932,7 +932,7 @@ else => self,
 });
     }
 
-pub fn deepClone(self: *const Data, allocator: std.mem.Allocator) !Data {
+pub fn deepClone(self: Data, allocator: std.mem.Allocator) !Data {
             return (switch (self) {
 .e_array => |el| {
 {
@@ -1115,7 +1115,7 @@ else => self,
 });
     }
 
-pub fn writeToHasher(self: *const Data, hasher: anytype, symbol_table: anytype) void {
+pub fn writeToHasher(self: Data, hasher: anytype, symbol_table: anytype) void {
             _ = writeAnyToHasher(hasher, std.@"meta".activeTag(self));
             switch (self) {
 .e_name_of_symbol => |e| {
@@ -1225,7 +1225,7 @@ _ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.w
 }
     }
 
-pub fn canBeConstValue(self: *const Data) bool {
+pub fn canBeConstValue(self: Data) bool {
             return (switch (self) {
 .e_number, .e_boolean, .e_branch_boolean, .e_null, .e_undefined, .e_inlined_enum => true,
 .e_string => |str| (str.next == null),
@@ -1541,7 +1541,7 @@ if ((right == .e_require_main)) {
             return Equality.unknown;
     }
 
-pub inline fn isStringValue(self: *const Data) bool {
+pub inline fn isStringValue(self: Data) bool {
             return ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(self)) else @as(Expr.Tag, self)) == .e_string);
     }
     pub const Equality = DataEquality;
@@ -1667,7 +1667,7 @@ pub inline fn initIdentifier(r: Ref, loc: logger.Loc) Expr {
 }
 
 pub fn toEmpty(expr: Expr) Expr {
-        return Expr{ .data = .{ .e_missing = E.Missing }, .loc = expr.loc };
+        return Expr{ .data = .{ .e_missing = std.mem.zeroes(E.Missing) }, .loc = expr.loc };
 }
 
 pub fn isEmpty(expr: Expr) bool {
@@ -2360,7 +2360,7 @@ return Expr{ .loc = loc, .data = Data{ .e_jsx_element = brk: {
         break :brk item;
 } } };
 } else if (Type == E.Missing) {
-return Expr{ .loc = loc, .data = Data{ .e_missing = E.Missing } };
+return Expr{ .loc = loc, .data = Data{ .e_missing = std.mem.zeroes(E.Missing) } };
 } else if (Type == E.Number) {
 return Expr{ .loc = loc, .data = Data{ .e_number = st } };
 } else if (Type == E.BigInt) {
@@ -2493,7 +2493,7 @@ return Expr{ .loc = loc, .data = Data{ .e_private_identifier = st } };
 } else if (Type == E.JSXElement) {
 return Expr{ .loc = loc, .data = Data{ .e_jsx_element = Data.Store.append(Type, st) } };
 } else if (Type == E.Missing) {
-return Expr{ .loc = loc, .data = Data{ .e_missing = E.Missing } };
+return Expr{ .loc = loc, .data = Data{ .e_missing = std.mem.zeroes(E.Missing) } };
 } else if (Type == E.Number) {
 return Expr{ .loc = loc, .data = Data{ .e_number = st } };
 } else if (Type == E.BigInt) {

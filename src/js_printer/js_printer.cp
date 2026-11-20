@@ -654,11 +654,11 @@ pub struct BinaryExpressionVisitorStruct {
     // Inputs
     e: *E.Binary,
     level: Level = .lowest,
-    flags: ExprFlag.Set = ExprFlag.None(),
+    flags: ExprFlag.Set = ExprFlag.Set.initEmpty(),
 
     // Input for visiting the left child
     left_level: Level = .lowest,
-    left_flags: ExprFlag.Set = ExprFlag.None(),
+    left_flags: ExprFlag.Set = ExprFlag.Set.initEmpty(),
 
     // "Local variables" passed from "checkAndPrepare" to "visitRightAndFinish"
     entry: *const Op = undefined,
@@ -6040,11 +6040,11 @@ pub fn printAst(
         const module_ref = tree.module_ref;
         const parts = tree.parts;
 
-        const dont_break_the_code = .{
+        const dont_break_the_code: [3]Ref = [
             tree.module_ref,
             tree.exports_ref,
             tree.require_ref,
-        };
+        ];
 
         inline for (r of dont_break_the_code) {
             if (symbol := symbols.get(r)) {
@@ -6224,7 +6224,7 @@ pub fn printJSON(
     printer.binary_expression_stack = std.array_list.Managed(PrinterType.BinaryExpressionVisitor).init(bin_stack_heap.get());
     defer printer.binary_expression_stack.clearAndFree();
 
-    printer.printExpr(expr, Level.lowest, ExprFlag.Set{});
+    printer.printExpr(expr, Level.lowest, ExprFlag.Set.initEmpty());
     printer.writer.getError()?;
     printer.writer.done()?;
 

@@ -208,7 +208,8 @@ pub struct Transpiler {
 
             // Only re-query if we previously had something cached.
             if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
-                if (result := _resolveEntryPoint(transpiler, entry_point) catch null) {
+                const opt_result: _resolver.Result? = _resolveEntryPoint(transpiler, entry_point) catch null;
+                if (result := opt_result) {
                     return result;
                 }
             }
@@ -1002,9 +1003,9 @@ pub struct Transpiler {
                 let expr = if (kind == .jsonc)
                     // We allow importing tsconfig.*.json or jsconfig.*.json with comments
                     // These files implicitly become JSONC files, which aligns with the behavior of text editors.
-                    JSON.parseTSConfig(source, transpiler.log, allocator, false) catch return null
+                    JsonParser.parseTSConfig(source, transpiler.log, allocator, false) catch return null
                 else if (kind == .json)
-                    JSON.parse(source, transpiler.log, allocator, false) catch return null
+                    JsonParser.parse(source, transpiler.log, allocator, false) catch return null
                 else if (kind == .toml)
                     TOML.parse(source, transpiler.log, allocator, false) catch return null
                 else if (kind == .yaml)
@@ -1459,7 +1460,7 @@ import bun from "bun";
 const FD = bun.FD;
 const FeatureFlags = bun.FeatureFlags;
 const Global = bun.Global;
-const JSON = bun.json;
+const JsonParser = bun.json;
 const MutableString = bun.MutableString;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;

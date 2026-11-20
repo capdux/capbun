@@ -1067,7 +1067,8 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
                     result.flags.experimental_decorators = (result.flags.experimental_decorators or tsconfig.experimental_decorators);
                 }
                 if ((((!kind.isFromCSS()) and (module_type == .unknown)) and ((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).ext.len == 4))) {
-                    if (module_type == null) { module_type = .unknown; }
+                    const mt = ((ModuleTypeMap.getWithLength((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).ext, 4)) orelse (.unknown));
+                    module_type = mt;
                 }
                 if (dir.getEntries(r.generation)) |entries| {
                     _ = &entries;
@@ -1181,7 +1182,7 @@ pub fn resolveWithoutSymlinks(r: *ThisResolver, source_dir: []const u8, input_im
                     }
                     return .{ .success = Result{ .path_pair = .{ .primary = Path.init(import_path) }, .flags = .{ .is_external = true } } };
                 }
-                var normalizer = ResolvePath.PosixToWinNormalizer;
+                var normalizer: ResolvePath.PosixToWinNormalizer = .{};
                 _ = &normalizer;
                 if (r.loadAsFileOrDirectory(normalizer.resolve(source_dir, import_path), kind)) |entry| {
                     _ = &entry;
@@ -2622,7 +2623,7 @@ pub fn matchTSConfigPaths(r: *ThisResolver, tsconfig: *const TSConfigJSON, path:
                     var matched_text_with_suffix_len: usize = 0;
                     _ = &matched_text_with_suffix_len;
                     if ((total_length != null)) {
-                        const suffix = std.mem.trimLeft(u8, original_path[(((total_length.?)) orelse (original_path.len))..], "*");
+                        const suffix = std.mem.trimLeft(u8, original_path[total_length.?..], "*");
                         matched_text_with_suffix_len = (matched_text.len + suffix.len);
                         if ((matched_text_with_suffix_len > matched_text_with_suffix.len)) {
                             continue;
@@ -2776,7 +2777,7 @@ pub fn loadFromMainField(r: *ThisResolver, path: []const u8, dir_info: *DirInfo,
                         if (r.checkBrowserMap(browser_scope, field_rel_path, .AbsolutePath)) |remap| {
                             _ = &remap;
                             if ((remap.len == 0)) {
-                                const paths: [][]const u8 = .{ path, field_rel_path };
+                                const paths: [2][]const u8 = .{ path, field_rel_path };
                                 const new_path = ((r.fs.absAlloc(r.allocator, (&paths))) catch unreachable);
                                 var _path = Path.init(new_path);
                                 _ = &_path;
@@ -2788,7 +2789,7 @@ pub fn loadFromMainField(r: *ThisResolver, path: []const u8, dir_info: *DirInfo,
                     }
                 }
             }
-            const _paths: [][]const u8 = .{ path, field_rel_path };
+            const _paths: [2][]const u8 = .{ path, field_rel_path };
             const field_abs_path = r.fs.absBuf((&_paths), bufs(.field_abs_path));
             if (r.loadAsFile(field_abs_path, extension_order)) |result| {
                 _ = &result;
@@ -2884,7 +2885,7 @@ pub fn loadAsIndexWithBrowserRemapping(r: *ThisResolver, dir_info: *DirInfo, pat
                         if (r.checkBrowserMap(browser_scope, field_rel_path, .AbsolutePath)) |remap| {
                             _ = &remap;
                             if ((remap.len == 0)) {
-                                const paths: [][]const u8 = .{ path, field_rel_path };
+                                const paths: [2][]const u8 = .{ path, field_rel_path };
                                 const new_path = r.fs.absBuf((&paths), bufs(.remap_path));
                                 var _path = Path.init(new_path);
                                 _ = &_path;
@@ -3221,7 +3222,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                 break :append_bin_dir;
                             }
                         }
-                        _ = (blk_catch_81: { break :blk_catch_81 ((bin_folders.append((blk_catch_80: { break :blk_catch_80 ((r.fs.dirname_store.append(&.{}, u8, bin_path)) catch |__ce_80| { _ = &__ce_80; break :append_bin_dir; }); }))) catch |__ce_81| { _ = &__ce_81;  }); });
+                        _ = (blk_catch_81: { break :blk_catch_81 ((bin_folders.append((blk_catch_80: { break :blk_catch_80 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_80| { _ = &__ce_80; break :append_bin_dir; }); }))) catch |__ce_81| { _ = &__ce_81;  }); });
                     }
                 }
                 if (info.isNodeModules()) {
@@ -3249,7 +3250,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                     break :append_bin_dir;
                                 }
                             }
-                            _ = (blk_catch_86: { break :blk_catch_86 ((bin_folders.append((blk_catch_85: { break :blk_catch_85 ((r.fs.dirname_store.append(&.{}, u8, bin_path)) catch |__ce_85| { _ = &__ce_85; break :append_bin_dir; }); }))) catch |__ce_86| { _ = &__ce_86;  }); });
+                            _ = (blk_catch_86: { break :blk_catch_86 ((bin_folders.append((blk_catch_85: { break :blk_catch_85 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_85| { _ = &__ce_85; break :append_bin_dir; }); }))) catch |__ce_86| { _ = &__ce_86;  }); });
                         }
                     }
                 }

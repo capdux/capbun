@@ -199,7 +199,7 @@ var partial_iter = partial.iterator();
             for (cp_iter_slice(needed_records.keys())) |rec_idx| {
                 _ = &rec_idx;
                 if ((rec_idx < ast.import_records.len)) {
-                    _ = try needed_paths.put(needed_paths_alloc, ast.import_records.slice()[@as(usize, @intCast(rec_idx))].path.text, .{});
+                    _ = try needed_paths.put(needed_paths_alloc, ast.import_records.slice()[@as(usize, @intCast(rec_idx))].path.text, undefined);
                 }
             }
             var dev_export_iter = named_exports.iterator();
@@ -346,12 +346,12 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
 
 },
 .partial => |*p| {
-_ = try p.put(client.allocator(), alias, .{});
+_ = try p.put(client.allocator(), alias, undefined);
 },
 }
                     } else {
                         gop.value_ptr.* = .{ .partial = .{} };
-                        _ = try gop.value_ptr.partial.put(client.allocator(), alias, .{});
+                        _ = try gop.value_ptr.partial.put(client.allocator(), alias, undefined);
                     }
                     if (client.transpiler.options.dev_server) |dev| {
                         _ = &dev;
@@ -540,7 +540,7 @@ const alias_gop = try p.getOrPut(client.allocator(), item.alias);
 }
                     } else {
                         gop.value_ptr.* = .{ .partial = .{} };
-                        _ = try gop.value_ptr.partial.put(client.allocator(), item.alias, .{});
+                        _ = try gop.value_ptr.partial.put(client.allocator(), item.alias, undefined);
                     }
                 }
             }
@@ -556,7 +556,7 @@ const alias_gop = try p.getOrPut(client.allocator(), item.alias);
                     _ = &rec;
                     if ((rec.flags.is_unused and (!rec.flags.is_internal))) {
                         if (unDeferRecord(barrel_ir, @as(u32, @intCast(rec_i)))) {
-                            _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, .{});
+                            _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined);
                         }
                     }
                     rec_i = (rec_i + 1);
@@ -568,7 +568,7 @@ const alias_gop = try p.getOrPut(client.allocator(), item.alias);
             if (resolveBarrelExport(alias, graph_ast_snapshot.items(.named_exports)[@as(usize, @intCast(barrel_idx))], graph_ast_snapshot.items(.named_imports)[@as(usize, @intCast(barrel_idx))])) |resolution| {
                 _ = &resolution;
                 if (unDeferRecord(barrel_ir, resolution.import_record_index)) {
-                    _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, .{});
+                    _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined);
                 }
                 const propagate_alias = ((resolution.original_alias) orelse (alias));
                 if ((resolution.import_record_index < barrel_ir.len)) {
@@ -590,7 +590,7 @@ const alias_gop = try p.getOrPut(client.allocator(), item.alias);
                         continue;
                     }
                     if (unDeferRecord(barrel_ir, star_idx)) {
-                        _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, .{});
+                        _ = try barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined);
                     }
                     var star_rec = barrel_ir.slice()[@as(usize, @intCast(star_idx))];
                     _ = &star_rec;

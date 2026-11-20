@@ -191,7 +191,7 @@ pub struct RelocateVars {
 }
 
 pub struct VisitArgsOpts {
-    body: []Stmt = &([_]Stmt{}),
+    body: []Stmt = [],
     has_rest_arg: bool = false,
 
     // This is true if the function is an arrow function or a method
@@ -359,7 +359,7 @@ pub inline fn generatedSymbolName(name: []const u8): []const u8 {
 
 pub struct ExprOrLetStmt {
     stmt_or_expr: js_ast.StmtOrExpr,
-    decls: []G.Decl = &([_]G.Decl{}),
+    decls: []G.Decl = [],
 }
 
 pub const FunctionKind = enum { stmt, expr };
@@ -772,7 +772,7 @@ pub struct DeferredErrors {
 }
 
 pub struct ImportClause {
-    items: []js_ast.ClauseItem = &([_]js_ast.ClauseItem{}),
+    items: []js_ast.ClauseItem = [],
     is_single_line: bool = false,
     had_type_only_imports: bool = false,
 }
@@ -789,7 +789,7 @@ pub struct PropertyOpts {
     class_has_extends: bool = false,
     allow_ts_decorators: bool = false,
     is_ts_abstract: bool = false,
-    ts_decorators: []Expr = &[_]Expr{},
+    ts_decorators: []Expr = [],
     has_argument_decorators: bool = false,
     has_class_decorators: bool = false,
 }
@@ -830,7 +830,7 @@ pub struct FindSymbolResult {
     is_inside_with_scope: bool = false,
 }
 pub struct ExportClauseResult {
-    clauses: []js_ast.ClauseItem = &([_]js_ast.ClauseItem{}),
+    clauses: []js_ast.ClauseItem = [],
     is_single_line: bool = false,
     had_type_only_exports: bool = false,
 }
@@ -846,7 +846,7 @@ pub struct DeferredTsDecorators {
 const LexicalDecl = enum(u8) { forbid, allow_all, allow_fn_inside_if, allow_fn_inside_label };
 
 pub struct ParseClassOptions {
-    ts_decorators: []Expr = &[_]Expr{},
+    ts_decorators: []Expr = [],
     allow_ts_decorators: bool = false,
     is_type_script_declare: bool = false,
 }
@@ -898,7 +898,7 @@ pub struct PrefillStringLiteral {
 }
 
 pub struct PrefillValue {
-    pub const EThis = E.This{};
+    pub const EThis = std.mem.zeroes(E.This);
     pub const Zero = E.Number{ value: 0.0 };
 }
 
@@ -922,10 +922,10 @@ pub struct PrefillData {
     static let BMissing_: B.Missing = B.Missing{};
 
     static let EMissing: Expr.Data = Expr.Data{ e_missing: EMissing_ };
-    static let EMissing_: E.Missing = E.Missing{};
+    static let EMissing_: E.Missing = std.mem.zeroes(E.Missing);
 
     static let SEmpty: Stmt.Data = Stmt.Data{ s_empty: SEmpty_ };
-    static let SEmpty_: S.Empty = S.Empty{};
+    static let SEmpty_: S.Empty = std.mem.zeroes(S.Empty);
 
     static let Filename: Expr.Data = Expr.Data{ e_string: &Prefill.String.Filename };
     static let LineNumber: Expr.Data = Expr.Data{ e_string: &Prefill.String.LineNumber };
@@ -937,7 +937,7 @@ pub struct PrefillData {
     static let props: Expr.Data = Expr.Data{ e_string: &Prefill.String.props };
     static let _owner: Expr.Data = Expr.Data{ e_string: &Prefill.String._owner };
     static let REACT_ELEMENT_TYPE: Expr.Data = Expr.Data{ e_string: &Prefill.String.REACT_ELEMENT_TYPE };
-    pub const This = Expr.Data{ e_this: E.This{} };
+    pub const This = Expr.Data{ e_this: std.mem.zeroes(E.This) };
     pub const Zero = Expr.Data{ e_number: PrefillValue.Zero };
 }
 

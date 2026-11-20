@@ -2555,7 +2555,7 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
     };
     pub const Result = union(enum) {
         pending: void,
-        e: anyerror,
+        @"err": anyerror,
         value: BuildResult,
     
     pub fn deinit(self: *@This()) void {

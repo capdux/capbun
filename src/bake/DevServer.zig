@@ -740,6 +740,7 @@ pub const Magic = (if (Environment.isDebug) MagicDebug else MagicRelease);
 pub const internal_prefix = "/_bun";
 pub const asset_prefix = (internal_prefix ++ "/asset");
 pub const client_prefix = (internal_prefix ++ "/client");
+pub const source_dir_prefix = (internal_prefix ++ "/src");
 pub const TestingBatchEvents = union(enum) {
     disabled,
     enable_after_bundle,
@@ -1406,10 +1407,10 @@ pub fn setRoutes(dev: *DevServer, server: anytype) !bool {
         _ = app.any(internal_prefix, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
         _ = app.ws((internal_prefix ++ "/hmr"), dev, 0, uws.WebSocketBehavior.wrap(DevServer, HmrSocket, is_ssl, .{}));
         if (bun.FeatureFlags.bake_debugging_features) {
-            _ = app.get((internal_prefix ++ "/incremental_visualizer"), *DevServer, dev, wrapGenericRequestHandler(onIncrementalVisualizer, is_ssl));
-            _ = app.get((internal_prefix ++ "/memory_visualizer"), *DevServer, dev, wrapGenericRequestHandler(onMemoryVisualizer, is_ssl));
-            _ = app.get((internal_prefix ++ "/iv"), *DevServer, dev, redirectHandler((internal_prefix ++ "/incremental_visualizer"), is_ssl));
-            _ = app.get((internal_prefix ++ "/mv"), *DevServer, dev, redirectHandler((internal_prefix ++ "/memory_visualizer"), is_ssl));
+            _ = app.get((internal_prefix ++ "/incremental_visualizer"), dev, wrapGenericRequestHandler(onIncrementalVisualizer, is_ssl));
+            _ = app.get((internal_prefix ++ "/memory_visualizer"), dev, wrapGenericRequestHandler(onMemoryVisualizer, is_ssl));
+            _ = app.get((internal_prefix ++ "/iv"), dev, redirectHandler((internal_prefix ++ "/incremental_visualizer"), is_ssl));
+            _ = app.get((internal_prefix ++ "/mv"), dev, redirectHandler((internal_prefix ++ "/memory_visualizer"), is_ssl));
         }
         if ((dev.framework.file_system_router_types.len > 0)) {
             _ = app.any("/*", dev, wrapGenericRequestHandler(onRequest, is_ssl));
@@ -3631,7 +3632,7 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
 pub fn onWebSocketUpgrade(dev: *DevServer, res: anytype, req: *Request, upgrade_ctx: *uws.WebSocketUpgradeContext, id: usize) void {
         _ = assert((id == 0));
         const dw = HmrSocket.new(dev, res);
-        _ = bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, .{}));
+        _ = bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
         _ = res.upgrade(*HmrSocket, dw, ((req.header("sec-websocket-key")) orelse ("")), ((req.header("sec-websocket-protocol")) orelse ("")), ((req.header("sec-websocket-extension")) orelse ("")), upgrade_ctx);
 }
 

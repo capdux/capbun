@@ -40,6 +40,7 @@ pub const Magic = if (Environment.isDebug) MagicDebug else MagicRelease;
 pub const internal_prefix = "/_bun";
 pub const asset_prefix = internal_prefix ++ "/asset";
 pub const client_prefix = internal_prefix ++ "/client";
+pub const source_dir_prefix = internal_prefix ++ "/src";
 
 pub type OptDir = (std.fs.Dir)?;
 pub type DumpDir = if (bun.FeatureFlags.bake_debugging_features) OptDir else void;
@@ -890,25 +891,21 @@ pub fn setRoutes(dev: *DevServer, server: auto): !bool {
     if (bun.FeatureFlags.bake_debugging_features) {
         app.get(
             internal_prefix ++ "/incremental_visualizer",
-            *DevServer,
             dev,
             wrapGenericRequestHandler(onIncrementalVisualizer, is_ssl),
         );
         app.get(
             internal_prefix ++ "/memory_visualizer",
-            *DevServer,
             dev,
             wrapGenericRequestHandler(onMemoryVisualizer, is_ssl),
         );
         app.get(
             internal_prefix ++ "/iv",
-            *DevServer,
             dev,
             redirectHandler(internal_prefix ++ "/incremental_visualizer", is_ssl),
         );
         app.get(
             internal_prefix ++ "/mv",
-            *DevServer,
             dev,
             redirectHandler(internal_prefix ++ "/memory_visualizer", is_ssl),
         );
@@ -3946,7 +3943,7 @@ pub fn onWebSocketUpgrade(
     assert(id == 0);
 
     const dw = HmrSocket.new(dev, res);
-    bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, {}));
+    bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
     * = res.upgrade(
         *HmrSocket,
         dw,

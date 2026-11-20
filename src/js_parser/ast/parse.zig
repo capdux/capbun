@@ -427,7 +427,10 @@ else => {
 }
                     var item = items[@as(usize, @intCast(i))];
                     _ = &item;
-                    const tuple = p.convertExprToBindingAndInitializer(item, (&invalidLog), is_spread);
+                    const tuple = p.convertExprToBindingAndInitializer((blk: {
+                    break :blk item;
+
+}), (&invalidLog), is_spread);
                     _ = ((args.append(G.Arg{ .binding = ((tuple.binding) orelse (Binding{ .data = Prefill.Data.BMissing, .loc = item.loc })), .default = tuple.expr })) catch unreachable);
                 }
                 if ((((p.lexer.token == .t_equals_greater_than) or (((comptime is_typescript_enabled) and (invalidLog.items.len == 0)) and p.trySkipTypeScriptArrowReturnTypeWithBacktracking())) or opts.force_arrow_fn)) {

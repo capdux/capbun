@@ -350,7 +350,8 @@ pub struct StoreGetResult {
         let new_weak_ref_count: u32 = 1;
 
         let found = false;
-        for (i of 0..store.weak_refs.count) {
+        let i: usize = 0;
+        while (i < store.weak_refs.count) : (i += 1) {
             const item_ref = store.weak_refs.peekItem(i);
             if (item_ref.key() == key) {
                 new_weak_ref_count += item_ref.count;
@@ -391,7 +392,8 @@ pub struct StoreGetResult {
         let entry = store.entries.getPtr(key) ??
             return false;
         let found = false;
-        for (i of 0..store.weak_refs.count) {
+        let i: usize = 0;
+        while (i < store.weak_refs.count) : (i += 1) {
             let item_ref = store.weak_refs.peekItemMut(i);
             if (item_ref.key() == key) {
                 if (item_ref.count > 0) item_ref.count -= 1;

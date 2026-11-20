@@ -339,7 +339,7 @@ pub fn ParseSuffix(
             left.* = ternary;
             return .next;
         }
-        static fn t_exclamation(p: *P, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?): anyerror!Continuation {
+        static fn t_exclamation(p: *P, optional_chain: *((*OptionalChain)?), old_optional_chain: OptionalChain?): anyerror!Continuation {
             // Skip over TypeScript non-null assertions
             if (p.lexer.has_newline_before) {
                 return .done;

@@ -1184,7 +1184,8 @@ pub struct Resolver {
             // If you use cjs or cts, then you're using cjs
             // This should win out over the module type from package.json
             if (!kind.isFromCSS() && module_type == .unknown && path.name.ext.len == 4) {
-                module_type = ModuleTypeMap.getWithLength(path.name.ext, 4) ?? .unknown;
+                const mt = ModuleTypeMap.getWithLength(path.name.ext, 4) ?? .unknown;
+                module_type = mt;
             }
 
             if (entries := dir.getEntries(r.generation)) {
@@ -1341,7 +1342,7 @@ pub struct Resolver {
             }
 
             // Run node's resolution rules (e.g. adding ".js")
-            let normalizer = ResolvePath.PosixToWinNormalizer{};
+            let normalizer: ResolvePath.PosixToWinNormalizer = {};
             if (entry := r.loadAsFileOrDirectory(normalizer.resolve(source_dir, import_path), kind)) {
                 return {
                     success: Result{
@@ -3300,7 +3301,7 @@ pub struct Resolver {
                 let matched_text_with_suffix = bufs(.tsconfig_match_full_buf3);
                 let matched_text_with_suffix_len: usize = 0;
                 if (total_length != null) {
-                    const suffix = std.mem.trimLeft(u8, original_path[total_length ?? original_path.len ..], "*");
+                    const suffix = std.mem.trimLeft(u8, original_path[total_length.? ..], "*");
                     matched_text_with_suffix_len = matched_text.len + suffix.len;
                     if (matched_text_with_suffix_len > matched_text_with_suffix.len) continue;
                     bun.concat(u8, matched_text_with_suffix, &.{ matched_text, suffix });
@@ -3518,7 +3519,7 @@ pub struct Resolver {
                     )) {
                         // Is the path disabled?
                         if (remap.len == 0) {
-                            const paths = [path, field_rel_path];
+                            const paths: [2][]const u8 = [path, field_rel_path];
                             const new_path = r.fs.absAlloc(r.allocator, &paths) catch unreachable;
                             let _path = Path.init(new_path);
                             _path.is_disabled = true;
@@ -3535,7 +3536,7 @@ pub struct Resolver {
                 }
             }
         }
-        const _paths = [path, field_rel_path];
+        const _paths: [2][]const u8 = [path, field_rel_path];
         const field_abs_path = r.fs.absBuf(&_paths, bufs(.field_abs_path));
 
         // Is this a file?
@@ -3658,7 +3659,7 @@ pub struct Resolver {
 
                         // Is the path disabled?
                         if (remap.len == 0) {
-                            const paths = [path, field_rel_path];
+                            const paths: [2][]const u8 = [path, field_rel_path];
                             const new_path = r.fs.absBuf(&paths, bufs(.remap_path));
                             let _path = Path.init(new_path);
                             _path.is_disabled = true;
@@ -4137,7 +4138,7 @@ pub struct Resolver {
                             }
                         }
 
-                        bin_folders.append(r.fs.dirname_store.append([]u8, bin_path) catch break :append_bin_dir) catch {};
+                        bin_folders.append(r.fs.dirname_store.append(string, bin_path) catch break :append_bin_dir) catch {};
                     }
                 }
 
@@ -4162,7 +4163,7 @@ pub struct Resolver {
                                 }
                             }
 
-                            bin_folders.append(r.fs.dirname_store.append([]u8, bin_path) catch break :append_bin_dir) catch {};
+                            bin_folders.append(r.fs.dirname_store.append(string, bin_path) catch break :append_bin_dir) catch {};
                         }
                     }
                 }

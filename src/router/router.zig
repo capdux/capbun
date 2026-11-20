@@ -235,8 +235,8 @@ pub fn matchPageWithAllocator(self: *Routes, __: []const u8, url_path: URLPath, 
                 redirect = false;
             }
             if ((path.len == 0)) {
-                if (self.index) |index| {
-                    _ = &index;
+                if ((self.index != null)) {
+                    const index = self.index.?;
                     return Match{ .params = params, .name = (if (@typeInfo(@TypeOf(index)) == .@"enum" or @typeInfo(@TypeOf(index)) == .@"union") @tagName(index) else index.name), .path = (index).?.abs_path.slice(), .pathname = url_path.pathname, .basename = (index).?.basename, .hash = index_route_hash, .file_path = (index).?.abs_path.slice(), .query_string = url_path.query_string, .client_framework_enabled = self.client_framework_enabled };
                 }
                 return null;
@@ -883,8 +883,11 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
                 __sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .CatchAllMustBeAtTheEnd)) {  _ = (blk_catch_32: { break :blk_catch_32 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Catch-all route must be at the end of the path", .{})) catch |__ce_32| { _ = &__ce_32;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidCatchAllRoute)) {  _ = (blk_catch_33: { break :blk_catch_33 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid catch-all route, e.g. should be [...param]", .{})) catch |__ce_33| { _ = &__ce_33;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidOptionalCatchAllRoute)) {  _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid optional catch-all route, e.g. should be [[...param]]", .{})) catch |__ce_34| { _ = &__ce_34;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidRoutePattern)) {  _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid dynamic route", .{})) catch |__ce_35| { _ = &__ce_35;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingParamName)) {  _ = (blk_catch_36: { break :blk_catch_36 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a parameter name, e.g. [param]", .{})) catch |__ce_36| { _ = &__ce_36;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .PatternMissingClosingBracket)) {  _ = (blk_catch_37: { break :blk_catch_37 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a closing bracket]", .{})) catch |__ce_37| { _ = &__ce_37;  }); }); break :__sw_blk_2; } }  }
                 return null; }); });
                 offset = pattern.len;
-                kind = @max(@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum") @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))), kind);
-                if ((@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum") @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))) > @intFromEnum(Pattern.Tag.static))) {
+                const tag = std.meta.activeTag(pattern.value);
+                var __tag_moved = false; _ = &__tag_moved;
+                defer if (!__tag_moved) { const __T = @TypeOf(tag); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tag.release() catch {}; } else { tag.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tag; _drop_val.release(); } };
+                kind = @max(@intFromEnum(tag), kind);
+                if ((@intFromEnum(tag) > @intFromEnum(Pattern.Tag.static))) {
                     count = (count + 1);
                 }
             }

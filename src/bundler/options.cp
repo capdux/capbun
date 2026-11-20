@@ -1468,7 +1468,7 @@ pub fn definesFromTransformOptions(
             framework.behavior,
             framework.prefix,
             allocator,
-        );
+        )?;
     }
 
     if (behavior != .load_all_without_inlining) {
@@ -1943,7 +1943,7 @@ pub struct BundleOptions {
             },
             _.drop,
             _.dead_code_elimination && _.minify_syntax,
-        );
+        )?;
         _.defines_loaded = true;
     }
 

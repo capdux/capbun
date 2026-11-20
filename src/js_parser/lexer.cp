@@ -2132,7 +2132,7 @@ fn NewLexer_(
             return res;
         }
 
-        inline fn assertNotJSON(_: *const LexerType) {
+        static inline fn assertNotJSON() {
             if (comptime is_json) @compileError("JSON should not reach this point");
             if (comptime is_json) unreachable;
         }
@@ -3049,7 +3049,7 @@ pub inline fn isIdentifierContinue(codepoint: i32): bool {
 }
 
 pub fn isWhitespace(cp: CodePoint): bool {
-    return switch (cp) {
+    const res = switch (cp) {
         0x000B, // line tabulation
         0x0009, // character tabulation
         0x000C, // form feed
@@ -3071,10 +3071,10 @@ pub fn isWhitespace(cp: CodePoint): bool {
         0x202F, // narrow no-break space
         0x205F, // medium mathematical space
         0x3000, // ideographic space
-        0xFEFF, // zero width non-breaking space
-        => true,
+        0xFEFF => true, // zero width non-breaking space
         else => false,
     };
+    return res;
 }
 
 pub fn isIdentifier(text: string): bool {

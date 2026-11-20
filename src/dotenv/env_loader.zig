@@ -703,8 +703,8 @@ pub fn printLoaded(self: *@This(), start: i128) void {
                 return;
             }
             const elapsed = (@as(f64, @floatFromInt((std.time.nanoTimestamp() - start))) / std.time.ns_per_ms);
-            const all: [][]const u8 = .{ ".env.development.local", ".env.production.local", ".env.test.local", ".env.local", ".env.development", ".env.production", ".env.test", ".env" };
-            const loaded: []bool = .{ (self.@".env.development.local" != null), (self.@".env.production.local" != null), (self.@".env.test.local" != null), (self.@".env.local" != null), (self.@".env.development" != null), (self.@".env.production" != null), (self.@".env.test" != null), (self.@".env" != null) };
+            const all: [8][]const u8 = .{ ".env.development.local", ".env.production.local", ".env.test.local", ".env.local", ".env.development", ".env.production", ".env.test", ".env" };
+            const loaded: [8]bool = .{ (self.@".env.development.local" != null), (self.@".env.production.local" != null), (self.@".env.test.local" != null), (self.@".env.local" != null), (self.@".env.development" != null), (self.@".env.production" != null), (self.@".env.test" != null), (self.@".env" != null) };
             var loaded_i: u8 = 0;
             _ = &loaded_i;
             _ = Output.printElapsed(elapsed);
@@ -1067,10 +1067,10 @@ break;
                         const default_value = (if (strings.hasPrefixComptime(value[end..], ":-")) brk: {
                         end = (end + ":-".len);
                         const value_start = end;
-                        while ((end < value.len)) : (end = (end + 1)) {
+                        while_loop: while ((end < value.len)) : (end = (end + 1)) {
                             switch (value[@as(usize, @intCast(end))]) {
 '}', '\\' => {
-break :brk;
+break :while_loop;
 },
 else => {
 _ = continue;

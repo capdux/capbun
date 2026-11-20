@@ -18,7 +18,7 @@ pub fn SkipTypescript(
 
         static fn skipTypeScriptType(p: *P, level: js_ast.Op.Level): anyerror!void {
             p.markTypeScriptOnly();
-            p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, {})?;
+            p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, undefined)?;
         }
 
         static fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level): anyerror!TypeScript.Metadata {
@@ -1160,24 +1160,24 @@ pub fn SkipTypescript(
                         return true;
                     }
                     return !backtrack;
-                }
+                } else {
+                    const result = func(p) catch |e| brk: {
+                        if (e == error.Backtrack || p.lexer.did_panic) {
+                            backtrack = true;
+                        }
+                        break :brk SkipTypeParameterResult.did_not_skip_anything;
+                    };
 
-                const result = func(p) catch |e| brk: {
-                    if (e == error.Backtrack || p.lexer.did_panic) {
-                        backtrack = true;
+                    if (backtrack) {
+                        p.lexer.restore(&old_lexer);
                     }
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-                };
 
-                if (backtrack) {
-                    p.lexer.restore(&old_lexer);
+                    if (comptime ReturnType == void || ReturnType == bool)
+                        // If we did not backtrack, then we skipped successfully.
+                        return !backtrack;
+
+                    return result;
                 }
-
-                if (comptime ReturnType == void || ReturnType == bool)
-                    // If we did not backtrack, then we skipped successfully.
-                    return !backtrack;
-
-                return result;
             }
 
             static fn lexerBacktrackerWithArgs(p: *P, func: auto, args: auto, comptime ReturnType: type): ReturnType {
@@ -1207,21 +1207,21 @@ pub fn SkipTypescript(
                         return true;
                     }
                     return backtrack;
-                }
+                } else {
+                    const result = @call(.auto, func, args) catch |e| brk: {
+                        if (e == error.Backtrack) {
+                            backtrack = true;
+                        }
+                        break :brk SkipTypeParameterResult.did_not_skip_anything;
+                    };
 
-                const result = @call(.auto, func, args) catch |e| brk: {
-                    if (e == error.Backtrack) {
-                        backtrack = true;
+                    if (backtrack) {
+                        p.lexer.restore(&old_lexer);
                     }
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-                };
 
-                if (backtrack) {
-                    p.lexer.restore(&old_lexer);
+                    if (comptime ReturnType == void || ReturnType == bool) return backtrack;
+                    return result;
                 }
-
-                if (comptime ReturnType == void || ReturnType == bool) return backtrack;
-                return result;
             }
 
             static fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P): anyerror!SkipTypeParameterResult {

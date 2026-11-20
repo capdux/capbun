@@ -3337,7 +3337,7 @@ pub fn NewParser_(
 
             return Ref{
                 inner_index: inner_index,
-                source_index: i32(p.source.index.get()),
+                source_index: u31(p.source.index.get()),
                 tag: .symbol,
             };
         }
@@ -3755,8 +3755,8 @@ pub fn NewParser_(
 
             if (@intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr) && (@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)) {
                 return Ref.initSourceEnd({
-                    source_index: i32(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)),
-                    inner_index: i32(name.len),
+                    source_index: u31(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)),
+                    inner_index: u31(name.len),
                     tag: .source_contents_slice,
                 });
             } else {
@@ -3854,7 +3854,8 @@ pub fn NewParser_(
                 }
             }
 
-            p.current_scope = current_scope.parent ?? p.panic("Internal error: attempted to call popScope() on the topmost scope", {});
+            const parent_scope = current_scope.parent ?? p.panic("Internal error: attempted to call popScope() on the topmost scope", {});
+            p.current_scope = parent_scope;
         }
 
         static fn markExprAsParenthesized(p_unused: *P, expr: *Expr) {

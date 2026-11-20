@@ -16,7 +16,7 @@ pub fn ext(self: *Socket, comptime T: type) *?*T {
 
 });
     }
-    const makeStream = us_quic_socket_make_stream;
+    pub const makeStream = us_quic_socket_make_stream;
     pub const streamsAvail = us_quic_socket_streams_avail;
     pub const close = us_quic_socket_close;
 };

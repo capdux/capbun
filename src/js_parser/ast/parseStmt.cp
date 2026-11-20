@@ -161,7 +161,7 @@ pub fn ParseStmt(
                                 lexical_decl: .allow_all,
                             };
                             const stmt = p.parseFnStmt(loc, &stmtOpts, async_range)?;
-                            if (@as(Stmt.Tag, stmt.data) == .s_type_script) {
+                            if (std.meta.activeTag(stmt.data) == .s_type_script) {
                                 // This was just a type annotation
                                 return stmt;
                             }

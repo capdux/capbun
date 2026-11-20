@@ -172,7 +172,7 @@ pub inline fn initIdentifier(r: Ref, loc: logger.Loc): Expr {
 }
 
 pub fn toEmpty(expr: Expr): Expr {
-    return Expr{ data: { e_missing: E.Missing{} }, loc: expr.loc };
+    return Expr{ data: { e_missing: std.mem.zeroes(E.Missing) }, loc: expr.loc };
 }
 pub fn isEmpty(expr: Expr): bool {
     return expr.data == .e_missing;
@@ -1022,7 +1022,7 @@ pub fn allocate(allocator: std.mem.Allocator, comptime Type: type, st: Type, loc
             };
         },
         E.Missing => {
-            return Expr{ loc: loc, data: Data{ e_missing: E.Missing{} } };
+            return Expr{ loc: loc, data: Data{ e_missing: std.mem.zeroes(E.Missing) } };
         },
         E.Number => {
             return Expr{
@@ -1395,7 +1395,7 @@ pub fn init(comptime Type: type, st: Type, loc: logger.Loc): Expr {
             };
         },
         E.Missing => {
-            return Expr{ loc: loc, data: Data{ e_missing: E.Missing{} } };
+            return Expr{ loc: loc, data: Data{ e_missing: std.mem.zeroes(E.Missing) } };
         },
         E.Number => {
             return Expr{

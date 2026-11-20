@@ -10,7 +10,7 @@ const NewStore = js_ast.NewStore;
 const S = js_ast.S;
 
 type string = []const u8;
-const None = S.Empty{};
+const None = std.mem.zeroes(S.Empty);
 
 pub let icount: usize = 0;
 
@@ -272,7 +272,7 @@ pub fn StoredData(tag: Tag): type {
         icount += 1;
 
         return switch (comptime StatementType) {
-            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: S.Empty{} } },
+            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: std.mem.zeroes(S.Empty) } },
             S.Block => Stmt.comptime_init("s_block", S.Block, origData, loc),
             S.Break => Stmt.comptime_init("s_break", S.Break, origData, loc),
             S.Class => Stmt.comptime_init("s_class", S.Class, origData, loc),
@@ -346,7 +346,7 @@ pub fn StoredData(tag: Tag): type {
             S.Debugger => Stmt{ loc: loc, data: { s_debugger: origData } },
             S.Directive => Stmt.comptime_alloc("s_directive", S.Directive, origData, loc),
             S.DoWhile => Stmt.comptime_alloc("s_do_while", S.DoWhile, origData, loc),
-            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: S.Empty{} } },
+            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: std.mem.zeroes(S.Empty) } },
             S.Enum => Stmt.comptime_alloc("s_enum", S.Enum, origData, loc),
             S.ExportClause => Stmt.comptime_alloc("s_export_clause", S.ExportClause, origData, loc),
             S.ExportDefault => Stmt.comptime_alloc("s_export_default", S.ExportDefault, origData, loc),
@@ -390,7 +390,7 @@ pub fn StoredData(tag: Tag): type {
             S.Debugger => Stmt{ loc: loc, data: { s_debugger: origData } },
             S.Directive => Stmt.allocateData(allocator, "s_directive", S.Directive, origData, loc),
             S.DoWhile => Stmt.allocateData(allocator, "s_do_while", S.DoWhile, origData, loc),
-            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: S.Empty{} } },
+            S.Empty => Stmt{ loc: loc, data: Data{ s_empty: std.mem.zeroes(S.Empty) } },
             S.Enum => Stmt.allocateData(allocator, "s_enum", S.Enum, origData, loc),
             S.ExportClause => Stmt.allocateData(allocator, "s_export_clause", S.ExportClause, origData, loc),
             S.ExportDefault => Stmt.allocateData(allocator, "s_export_default", S.ExportDefault, origData, loc),

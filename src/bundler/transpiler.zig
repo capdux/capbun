@@ -229,7 +229,8 @@ pub fn resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_res
             break :name bun.path.joinAbsStringBufZ(transpiler.fs.top_level_dir, (&cache_bust_buf), (&parts), .auto);
 };
             if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
-                if ((blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 @as(_resolver.Result, null); }); })) |result| {
+                const opt_result: ?_resolver.Result = (blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 @as(_resolver.Result, null); }); });
+                if (opt_result) |result| {
                     _ = &result;
                     return result;
                 }
@@ -656,7 +657,7 @@ if (source.isWebAssembly()) {
 });
 },
 inline .toml, .yaml, .json, .jsonc, .json5 => |kind| {
-var expr = (if ((kind == .jsonc)) (blk_catch_20: { break :blk_catch_20 ((JSON.parseTSConfig(source, transpiler.log, allocator, false)) catch |__ce_20| { _ = &__ce_20; return null; }); }) else (if ((kind == .json)) (blk_catch_21: { break :blk_catch_21 ((JSON.parse(source, transpiler.log)) catch |__ce_21| { _ = &__ce_21; return null; }); }) else (if ((kind == .toml)) (blk_catch_22: { break :blk_catch_22 ((TOML.parse(source, transpiler.log, allocator, false)) catch |__ce_22| { _ = &__ce_22; return null; }); }) else (if ((kind == .yaml)) (blk_catch_23: { break :blk_catch_23 ((YAML.parse(source, transpiler.log, allocator)) catch |__ce_23| { _ = &__ce_23; return null; }); }) else (if ((kind == .json5)) (blk_catch_24: { break :blk_catch_24 ((JSON5.parse(source, transpiler.log, allocator)) catch |__ce_24| { _ = &__ce_24; return null; }); }) else @compileError("unreachable"))))));
+var expr = (if ((kind == .jsonc)) (blk_catch_20: { break :blk_catch_20 ((JsonParser.parseTSConfig(source, transpiler.log, allocator, false)) catch |__ce_20| { _ = &__ce_20; return null; }); }) else (if ((kind == .json)) (blk_catch_21: { break :blk_catch_21 ((JsonParser.parse(source, transpiler.log, allocator, false)) catch |__ce_21| { _ = &__ce_21; return null; }); }) else (if ((kind == .toml)) (blk_catch_22: { break :blk_catch_22 ((TOML.parse(source, transpiler.log, allocator, false)) catch |__ce_22| { _ = &__ce_22; return null; }); }) else (if ((kind == .yaml)) (blk_catch_23: { break :blk_catch_23 ((YAML.parse(source, transpiler.log, allocator)) catch |__ce_23| { _ = &__ce_23; return null; }); }) else (if ((kind == .json5)) (blk_catch_24: { break :blk_catch_24 ((JSON5.parse(source, transpiler.log, allocator)) catch |__ce_24| { _ = &__ce_24; return null; }); }) else @compileError("unreachable"))))));
             _ = &expr;
             var symbols: []js_ast.Symbol = &.{};
             _ = &symbols;
@@ -928,7 +929,7 @@ const Linker = linker.Linker;
 const FD = bun.FD;
 const FeatureFlags = bun.FeatureFlags;
 const Global = bun.Global;
-const JSON = bun.json;
+const JsonParser = bun.json;
 const MutableString = bun.MutableString;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;

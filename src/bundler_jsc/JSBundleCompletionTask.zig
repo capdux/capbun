@@ -132,7 +132,8 @@ pub fn configureBundler(self: *JSBundleCompletionTask, transpiler: *Transpiler, 
             transpiler.options.packages = config.packages;
             transpiler.options.allow_unresolved = (if ((config.allow_unresolved != null)) options.AllowUnresolved.fromStrings(config.allow_unresolved.?.keys()) else .all);
             transpiler.options.code_splitting = config.code_splitting;
-            if (transpiler.options.emit_dce_annotations == null) { transpiler.options.emit_dce_annotations = (!config.minify.whitespace); }
+            const emit_dce = ((config.emit_dce_annotations) orelse ((!config.minify.whitespace)));
+            transpiler.options.emit_dce_annotations = emit_dce;
             transpiler.options.ignore_dce_annotations = config.ignore_dce_annotations;
             transpiler.options.css_chunking = config.css_chunking;
             transpiler.options.compile_to_standalone_html = brk: {
@@ -353,7 +354,7 @@ pub fn onComplete(self: *JSBundleCompletionTask) bun.JSTerminated!void {
                     if ((compile_result != .success)) {
                         _ = bun.handleOom(self.log.addError(null, Logger.Loc.Empty, bun.handleOom(self.log.msgs.allocator.dupe(u8, compile_result.err.slice()))));
                         _ = (if (@typeInfo(@TypeOf(self.result)) == .@"enum") @intFromEnum(self.result) else self.result.value).deinit();
-                        self.result = .{ .err = error.CompilationFailed };
+                        self.result = .{ .@"err" = error.CompilationFailed };
                     }
                 }
             }

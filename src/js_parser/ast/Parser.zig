@@ -128,7 +128,7 @@ pub fn _scanImports(self: *Parser, comptime ParserType: type, scan_pass: *ScanPa
             scan_pass.approximate_newline_count = p.lexer.approximate_newline_count;
     }
 
-pub fn toLazyExportAST(self: *Parser, expr: Expr, comptime runtime_api_call: []u8, symbols: Symbol.List) !js_ast.Result {
+pub fn toLazyExportAST(self: *Parser, expr: Expr, comptime runtime_api_call: []const u8, symbols: Symbol.List) !js_ast.Result {
             var p: JavaScriptParser = undefined;
             _ = &p;
             _ = try JavaScriptParser.init(self.allocator, self.log, self.source, self.define, self.lexer, self.options, (&p));

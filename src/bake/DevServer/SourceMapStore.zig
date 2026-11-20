@@ -395,18 +395,15 @@ pub fn addWeakRef(store: *Self, key: Key) void {
         _ = &new_weak_ref_count;
         var found = false;
         _ = &found;
-        {
-            var i: i32 = 0;
-            _ = &i;
-            const __end_4 = store.weak_refs.count;
-            while (i < __end_4) : (i += 1) {
-                const item_ref = store.weak_refs.peekItem(i);
-                if ((item_ref.key() == key)) {
-                    new_weak_ref_count = (new_weak_ref_count + item_ref.count);
-                    _ = store.weak_refs.orderedRemoveItem(i);
-                    found = true;
-                    break;
-                }
+        var i: usize = 0;
+        _ = &i;
+        while ((i < store.weak_refs.count)) : (i = (i + 1)) {
+            const item_ref = store.weak_refs.peekItem(i);
+            if ((item_ref.key() == key)) {
+                new_weak_ref_count = (new_weak_ref_count + item_ref.count);
+                _ = store.weak_refs.orderedRemoveItem(i);
+                found = true;
+                break;
             }
         }
         if ((!found)) {
@@ -432,26 +429,23 @@ pub fn removeOrUpgradeWeakRef(store: *Self, key: Key, mode: RemoveOrUpgradeMode)
         _ = &entry;
         var found = false;
         _ = &found;
-        {
-            var i: i32 = 0;
-            _ = &i;
-            const __end_5 = store.weak_refs.count;
-            while (i < __end_5) : (i += 1) {
-                var item_ref = store.weak_refs.peekItemMut(i);
-                _ = &item_ref;
-                if ((item_ref.key() == key)) {
-                    if ((item_ref.count > 0)) {
-                        item_ref.count = (item_ref.count - 1);
-                    }
-                    if ((mode == .remove)) {
-                        _ = store.unref(key);
-                    }
-                    if ((item_ref.count == 0)) {
-                        _ = store.weak_refs.orderedRemoveItem(i);
-                    }
-                    found = true;
-                    break;
+        var i: usize = 0;
+        _ = &i;
+        while ((i < store.weak_refs.count)) : (i = (i + 1)) {
+            var item_ref = store.weak_refs.peekItemMut(i);
+            _ = &item_ref;
+            if ((item_ref.key() == key)) {
+                if ((item_ref.count > 0)) {
+                    item_ref.count = (item_ref.count - 1);
                 }
+                if ((mode == .remove)) {
+                    _ = store.unref(key);
+                }
+                if ((item_ref.count == 0)) {
+                    _ = store.weak_refs.orderedRemoveItem(i);
+                }
+                found = true;
+                break;
             }
         }
         if ((!found)) {
@@ -465,8 +459,8 @@ pub fn locateWeakRef(self: *SourceMapStore, key: Key) ?WeakRefLocation {
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_6 = self.weak_refs.count;
-            while (i < __end_6) : (i += 1) {
+            const __end_4 = self.weak_refs.count;
+            while (i < __end_4) : (i += 1) {
                 const item_ref = self.weak_refs.peekItem(@intCast(i));
                 if ((item_ref.key() == key)) {
                     return WeakRefLocation{ .index = @intCast(i), .@"ref" = item_ref };

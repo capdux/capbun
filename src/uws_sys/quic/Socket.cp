@@ -10,7 +10,7 @@
     fn status(*_, buf: []u8): i32 {
         return us_quic_socket_status(_, buf.ptr, @intCast(buf.len));
     }
-    const makeStream = us_quic_socket_make_stream;
+    pub const makeStream = us_quic_socket_make_stream;
     pub const streamsAvail = us_quic_socket_streams_avail;
     pub const close = us_quic_socket_close;
     fn ext(*_, comptime T: type): *(*T)? {

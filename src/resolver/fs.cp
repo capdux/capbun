@@ -699,11 +699,17 @@ pub struct Path {
             const result = entry.data.getAdapted(
                 @as([]const u8, &query),
                 struct {
-                    fn hash(_: @This(), _: []const u8): @TypeOf(query_hashed) {
+                    fn hash(_key: []const u8): @TypeOf(query_hashed) {
+                        const _self = _;
+                        * = _self;
+                        * = _key;
                         return query_hashed;
                     }
 
-                    fn eql(_: @This(), _: []const u8, b: []const u8): bool {
+                    fn eql(_key: []const u8, b: []const u8): bool {
+                        const _self = _;
+                        * = _self;
+                        * = _key;
                         return strings.eqlComptime(b, query);
                     }
                 }{},
@@ -734,11 +740,17 @@ pub struct Path {
             return entry.data.containsAdapted(
                 @as([]const u8, &query),
                 struct {
-                    fn hash(_: @This(), _: []const u8): @TypeOf(query_hashed) {
+                    fn hash(_key: []const u8): @TypeOf(query_hashed) {
+                        const _self = _;
+                        * = _self;
+                        * = _key;
                         return query_hashed;
                     }
 
-                    fn eql(_: @This(), _: []const u8, b: []const u8): bool {
+                    fn eql(_key: []const u8, b: []const u8): bool {
+                        const _self = _;
+                        * = _self;
+                        * = _key;
                         return strings.eqlComptime(b, &query);
                     }
                 }{},
@@ -1001,7 +1013,8 @@ pub struct RealFS {
                     };
                     defer handle.close();
 
-                    const new_entry = _.readdir(
+                    const new_entry = RealFS.readdir(
+                        _,
                         false,
                         &existing.entries.data,
                         existing.entries.dir,
@@ -1316,7 +1329,7 @@ pub struct RealFS {
             generation: bun.Generation,
             store_fd: bool,
         ): !*EntriesOption {
-            return RealFS.readDirectoryWithIterator(fs, _dir, _handle, generation, store_fd, void, {});
+            return RealFS.readDirectoryWithIterator(fs, _dir, _handle, generation, store_fd, void, undefined);
         }
 
         // One of the learnings here

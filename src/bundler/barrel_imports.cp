@@ -145,7 +145,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
 
         for (rec_idx of needed_records.keys()) {
             if (rec_idx < ast.import_records.len) {
-                needed_paths.put(needed_paths_alloc, ast.import_records.slice()[rec_idx].path.text, {})?;
+                needed_paths.put(needed_paths_alloc, ast.import_records.slice()[rec_idx].path.text, undefined)?;
             }
         }
 
@@ -335,11 +335,11 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
             if (gop.found_existing) {
                 switch (gop.value_ptr.*) {
                     .all => {},
-                    .partial => |*p| p.put(client.allocator(), alias, {})?,
+                    .partial => |*p| p.put(client.allocator(), alias, undefined)?,
                 }
             } else {
                 gop.value_ptr.* = .{ partial: .{} };
-                gop.value_ptr.partial.put(client.allocator(), alias, {})?;
+                gop.value_ptr.partial.put(client.allocator(), alias, undefined)?;
             }
             // Persist the export request on DevServer so it survives across builds.
             if (dev := client.transpiler.options.dev_server) {
@@ -509,7 +509,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
                 }
             } else {
                 gop.value_ptr.* = .{ partial: .{} };
-                gop.value_ptr.partial.put(client.allocator(), item.alias, {})?;
+                gop.value_ptr.partial.put(client.allocator(), item.alias, undefined)?;
             }
         }
 
@@ -524,7 +524,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
             for (rec of barrel_ir.slice()) {
                 if (rec.flags.is_unused && !rec.flags.is_internal) {
                     if (unDeferRecord(barrel_ir, @as(u32, @intCast(rec_i)))) {
-                        barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, {})?;
+                        barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined)?;
                     }
                 }
                 rec_i += 1;
@@ -536,7 +536,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
         const graph_ast_snapshot = client.graph.ast.slice();
         if (resolution := resolveBarrelExport(alias, graph_ast_snapshot.items(.named_exports)[barrel_idx], graph_ast_snapshot.items(.named_imports)[barrel_idx])) {
             if (unDeferRecord(barrel_ir, resolution.import_record_index)) {
-                barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, {})?;
+                barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined)?;
             }
 
             const propagate_alias = resolution.original_alias ?? alias;
@@ -559,7 +559,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
             for (star_idx of graph_ast_snapshot.items(.export_star_import_records)[barrel_idx]) {
                 if (star_idx >= barrel_ir.len) continue;
                 if (unDeferRecord(barrel_ir, star_idx)) {
-                    barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, {})?;
+                    barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined)?;
                 }
                 let star_rec = barrel_ir.slice()[star_idx];
                 if (!star_rec.source_index.isValid()) {
