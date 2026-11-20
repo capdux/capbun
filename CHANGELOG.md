@@ -1512,3 +1512,6 @@
 
 ### 2026-11-20 04:12:36 UTC - src/install/ 100% 全目录闭环（bin.cp, dependency.cp 入库）
 - 完成：`bin.cp` (1.041x), `dependency.cp` (1.044x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:17:00 UTC - src/sys/windows/ 100% 目录闭环（windows.cp 4108行入库）
+- 完成：`windows.cp` (1.014x)，4 项硬门禁全 PASS。

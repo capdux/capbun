@@ -1242,3 +1242,6 @@
 
 ### 2026-11-20 04:12:36 UTC - src/install/ 100% 收官经验
 - 规避局部变量命名为 `any`（会被 codegen 误替为 `anytype`）、`enum` 方法去 `pub inline`、顶层 `comptime` 位移常量展开，膨胀率 1.041x~1.044x。
+
+### 2026-11-20 04:17:00 UTC - Windows 系统层迁移经验
+- 统一 `pub @c struct`/`pub @c union` 与 `@callconv("winapi")` 外部声明，拆分匿名联合体，膨胀率 1.014x。
