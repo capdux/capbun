@@ -1427,3 +1427,5 @@
 - **[2026-11-20] Wave 14 Batch B 核心修复**：`PipeReader` `BufferedReaderVTable` 5 回调补 `static fn`；`ipc.cp` `IPCSocketUnion` 改值类型联合并补 `pub const Target = FromEnum;`；`subprocess.cp` 用 `@call(.auto, @field(SignalCode, "name"), ...)` 绕开枚举 `.name` 魔法；`interpreter.cp` 用顶层 `OptParser`/`OptLexResult` 修复可选指针优先级。
 
 - **[2026-11-20] Wave 14 Batch E 修复要点**：`napi.cp` 7 处回调改 `@c fn (...)` 消除双层 `*const`；`logger`/`streams` 用 `@field` 替代元组解构消除 `CpUnpackElemType`；`ReadableStream`/`quic/Context` 用顶层指针别名保留 `*?*T` 二级指针。
+
+- **[2026-11-20] Wave 14 Batch D+F 核心修复**：`AnyTask`/`AnyTaskWithExtraContext`/`FileSink` 升级 `@root struct` 打通根导出；`SignalCode` 6 个枚举函数补 `static fn`；`cron.cp` 与 `lifecycle_script_runner.cp` mixin 回调补 `static fn` 显式接源指针，彻底消除 `PipeReader` 签名不匹配；`uws_sys/WebSocket.cp` 补回 `publishWithOptions`。

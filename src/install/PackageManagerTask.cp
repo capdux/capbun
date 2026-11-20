@@ -242,7 +242,7 @@ fn readAndExtract(
                             task_ptr.request.package_manifest.name.slice(),
                         ]) catch unreachable;
                         task_ptr.status = Status.fail;
-                        task_ptr.data = { package_manifest: {} };
+                        task_ptr.data = .{ .package_manifest = .{} };
                         return;
                     },
                 }

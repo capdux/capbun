@@ -229,7 +229,8 @@ pub type CStringSlice = []CString;
             has_any = true;
         }
         if (dh_params_file := generated.dh_params_file.get()) {
-            result.dh_params_file_name = (try handlePath(global, "dhParamsFile", dh_params_file)).ptr;
+            const dh_path = handlePath(global, "dhParamsFile", dh_params_file)?;
+            result.dh_params_file_name = dh_path.ptr;
             has_any = true;
         }
         if (server_name := generated.server_name.get()) {
@@ -362,7 +363,7 @@ fn freeString(str_ptr: *OptCString) {
 
 fn cloneStrings(slice: CStringSlice?): CStringSlice? {
     const inner = slice orelse return null;
-    let result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
+    let result = bun.handleOom(bun.default_allocator.alloc(CString, inner.len));
     let i: usize = 0;
     while (i < inner.len) : (i += 1) {
         result[i] = bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(inner[i])));

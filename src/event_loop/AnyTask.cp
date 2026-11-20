@@ -5,22 +5,24 @@ const bun = @import("bun");
 const jsc = bun.jsc;
 const Task = jsc.Task;
 
-pub const AnyTask = struct {
-    ctx: *!? = null,
-    callback: *const fn (*!) bun.JSError!void,
+type AnyTaskCallback = fn (*!) bun.JSError!void;
 
-    pub fn task(this: *AnyTask) Task {
-        return Task.init(this);
+@root struct AnyTask {
+    ctx: *!? = null,
+    callback: AnyTaskCallback,
+
+    pub fn task(*_): Task {
+        return Task.init(_);
     }
 
-    pub fn run(this: *AnyTask) bun.JSError!void {
+    pub fn run(*_): bun.JSError!void {
         @setRuntimeSafety(false);
-        const cb = this.callback;
-        const context = this.ctx;
+        const cb = _.callback;
+        const context = _.ctx;
         try cb(context.?);
     }
 
-    pub fn New(comptime Type: type, comptime Callback: anytype) type {
+    pub static fn New(comptime Type: type, comptime Callback: anytype): type {
         return struct {
             pub fn init(ctx: *Type) AnyTask {
                 return AnyTask{
@@ -29,9 +31,10 @@ pub const AnyTask = struct {
                 };
             }
 
-            pub fn wrap(this: *!?) bun.JSError!void {
-                return @call(bun.callmod_inline, Callback, .{@as(*Type, @ptrCast(@alignCast(this.?)))});
+            pub fn wrap(ptr: *!) bun.JSError!void {
+                const typed: *Type = @ptrCast(@alignCast(ptr));
+                return @call(bun.callmod_inline, Callback, .{typed});
             }
         };
     }
-};
+}

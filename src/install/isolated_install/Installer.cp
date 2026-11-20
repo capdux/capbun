@@ -54,7 +54,7 @@ pub const Installer = struct {
 
     store: *const Store,
 
-    task_queue: bun.UnboundedQueue(Task, .next) = {},
+    task_queue: bun.UnboundedQueue(Task, .next) = .{},
     tasks: []Task,
 
     supported_backend: std.atomic.Value(PackageInstall.Method),

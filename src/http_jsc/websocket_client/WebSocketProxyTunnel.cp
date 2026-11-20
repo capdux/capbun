@@ -82,12 +82,12 @@ const RefCount = bun.ptr.RefCount(WebSocketProxyTunnel, "ref_count", WebSocketPr
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
 
-@c export fn WebSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient)  {
+@c fn webSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient) {
     tunnel.setConnectedWebSocket(ws);
 }
 
 comptime {
-    @export(&WebSocketProxyTunnel__setConnectedWebSocket, { name: "WebSocketProxyTunnel__setConnectedWebSocket" });
+    @export(&webSocketProxyTunnel__setConnectedWebSocket, .{ .name = "WebSocketProxyTunnel__setConnectedWebSocket" });
 }
 
 @root struct WebSocketProxyTunnel {

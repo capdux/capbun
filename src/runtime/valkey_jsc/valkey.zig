@@ -220,11 +220,11 @@ pub const ValkeyClient = struct {
     retry_attempts: u32 = 0,
     max_retries: u32 = 20, // Maximum retry attempts
 
-    flags: ConnectionFlags = {},
+    flags: ConnectionFlags = ConnectionFlags{},
     allocator: std.mem.Allocator,
 
     // Auto-pipelining
-    auto_flusher: AutoFlusher = {},
+    auto_flusher: AutoFlusher = AutoFlusher{},
 
     vm: *jsc.VirtualMachine,
 
@@ -1243,7 +1243,7 @@ pub const ValkeyClient = struct {
     }
 };
 const debug = bun.Output.scoped(.Redis, .visible);
-var empty_connection_strings: [0]u8 = &.{};
+var empty_connection_strings: [0]u8 = std.mem.zeroes([0]u8);
 const jsc = bun.jsc;
 const uws = bun.uws;
 const AutoFlusher = jsc.WebCore.AutoFlusher;

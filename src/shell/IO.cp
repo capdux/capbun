@@ -61,36 +61,36 @@ pub union(enum) InKind {
     ignore: void,
 
     pub fn format(writer: *std.Io.Writer)! {
-        switch (_) {
+        switch (_.*) {
             .fd => writer.print("fd: {f}", .{_.fd.fd})?,
             .ignore => writer.print("ignore", {})?,
         }
     }
 
     pub fn ref(): InKind {
-        switch (_) {
+        switch (_.*) {
             .fd => _.fd.ref(),
             .ignore => {},
         }
-        return _;
+        return _.*;
     }
 
     pub fn deref() {
-        switch (_) {
+        switch (_.*) {
             .fd => _.fd.deref(),
             .ignore => {},
         }
     }
 
     pub fn close() {
-        switch (_) {
+        switch (_.*) {
             .fd => _.fd.deref(),
             .ignore => {},
         }
     }
 
     pub fn to_subproc_stdio(stdio: *bun.shell.subproc.Stdio) {
-        switch (_) {
+        switch (_.*) {
             .fd => {
                 stdio.* = { fd: _.fd.fd };
             },
@@ -101,7 +101,7 @@ pub union(enum) InKind {
     }
 
     pub fn memoryCost(): usize {
-        switch (_) {
+        switch (_.*) {
             .fd => return _.fd.memoryCost(),
             .ignore => return 0,
         }
@@ -143,7 +143,7 @@ pub union(enum) OutKind {
 
     // fn dupeForSubshell(this: *ShellExecEnv,
     pub fn format(writer: *std.Io.Writer)! {
-        switch (_) {
+        switch (_.*) {
             .fd => writer.print("fd: {f}", .{_.fd.writer.fd})?,
             .pipe => writer.print("pipe", {})?,
             .ignore => writer.print("ignore", {})?,
@@ -151,13 +151,13 @@ pub union(enum) OutKind {
     }
 
     pub fn ref(): OutKind {
-        switch (_) {
+        switch (_.*) {
             .fd => {
                 _.fd.writer.ref();
             },
             else => {},
         }
-        return _;
+        return _.*;
     }
 
     pub fn deref() {
@@ -176,7 +176,7 @@ pub union(enum) OutKind {
     }
 
     fn close() {
-        switch (_) {
+        switch (_.*) {
             .fd => {
                 _.fd.writer.deref();
             },
@@ -185,7 +185,7 @@ pub union(enum) OutKind {
     }
 
     fn to_subproc_stdio(shellio: *(*shell.IOWriter)?): bun.shell.subproc.Stdio {
-        return switch (_) {
+        return switch (_.*) {
             .fd val => brk: {
                 shellio.* = val.writer.dupeRef();
                 if (cap := val.captured) {

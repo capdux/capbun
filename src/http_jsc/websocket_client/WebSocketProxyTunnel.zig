@@ -33,7 +33,7 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 comptime {
-    _ = @export(*const WebSocketProxyTunnel__setConnectedWebSocket, .{ .name = "WebSocketProxyTunnel__setConnectedWebSocket" });
+    _ = @export((&webSocketProxyTunnel__setConnectedWebSocket), .{ .name = "WebSocketProxyTunnel__setConnectedWebSocket" });
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -388,6 +388,6 @@ const RefCount = bun.ptr.RefCount(WebSocketProxyTunnel, "ref_count", WebSocketPr
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
 
-pub fn WebSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient) callconv(.c) void {
+pub fn webSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient) callconv(.c) void {
         _ = tunnel.setConnectedWebSocket(ws);
 }

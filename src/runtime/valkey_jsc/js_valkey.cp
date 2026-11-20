@@ -485,9 +485,7 @@ pub struct JSValkeyClient {
                 .connection_strings = connection_strings,
                 .socket = .{
                     .SocketTCP = .{
-                        .socket = .{
-                            .detached = {},
-                        },
+                        .socket = .detached,
                     },
                 },
                 .tls = if (options.tls != .none) options.tls else if (uri.isTLS()) .enabled else .none,
@@ -566,9 +564,7 @@ pub struct JSValkeyClient {
                 .connection_strings = connection_strings_copy,
                 .socket = .{
                     .SocketTCP = .{
-                        .socket = .{
-                            .detached = {},
-                        },
+                        .socket = .detached,
                     },
                 },
                 .tls = tls,
@@ -1092,7 +1088,7 @@ pub struct JSValkeyClient {
             ctx: this,
             task: undefined,
         };
-        holder.task = jsc.AnyTask.AnyTask.New(Holder, Holder.run).init(holder);
+        holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
 
         this.client.vm.enqueueTask(jsc.Task.init(&holder.task));
     }

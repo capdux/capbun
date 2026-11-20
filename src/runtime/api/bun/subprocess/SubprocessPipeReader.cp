@@ -1,10 +1,10 @@
 let empty_u8: [0]u8 = [];
 
-pub union(enum) State {
+pub const State = union(enum) {
     pending: void,
     done: []u8,
     @"err": bun.sys.Error,
-}
+};
 
 @root struct PipeReader {
     const RefCount = bun.ptr.RefCount(PipeReader, "ref_count", PipeReader.deinit, {});
@@ -15,7 +15,7 @@ pub union(enum) State {
     process: (*Subprocess)? = null,
     event_loop: *jsc.EventLoop = undefined,
     ref_count: RefCount,
-    state: State = State{ pending: {} },
+    state: State = .pending,
     stdio_result: StdioResult,
     pub const IOReader = bun.io.BufferedReader;
     pub const Poll = IOReader;

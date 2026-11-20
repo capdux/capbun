@@ -201,7 +201,7 @@ pub fn readZ(self: Reader) AnyMySQLError.Error!Data {
 
 pub const MySQLConnection = @This();
 
-@"#socket": Socket = Socket{ .SocketTCP = .{ .socket = .{ .detached = .{} } } },
+@"#socket": Socket = Socket{ .SocketTCP = .{ .socket = .detached } },
 status: ConnectionState = .disconnected,
 @"#write_buffer": OffsetByteList = OffsetByteList{  },
 @"#read_buffer": OffsetByteList = OffsetByteList{  },
@@ -716,10 +716,10 @@ _ = debug("Unexpected auth packet: 0x{x:0>2}", .{ first_byte });
 }
 
 pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
-        const request = ((self.queue.current()) orelse (({
+        const request = ((self.queue.current()) orelse {
         _ = debug("Received unexpected command response", .{});
         return error.UnexpectedPacket;
-})));
+});
         _ = request.ref();
         defer {
         _ = request.deref();
@@ -782,7 +782,7 @@ pub fn sendHandshakeResponse(self: *MySQLConnection) AnyMySQLError.Error!void {
 .sha256_password => "sha256_password",
 });
         }
-        var response = HandshakeResponse41{ .capability_flags = self.@"#capabilities", .max_packet_size = 0, .character_set = CharacterSet.default, .username = Data{ .temporary = self.@"#user" }, .database = Data{ .temporary = self.@"#database" }, .auth_plugin_name = Data{ .temporary = plugin_name }, .auth_response = Data{ .empty = .{} }, .sequence_id = self.@"#sequence_id" };
+        var response = HandshakeResponse41{ .capability_flags = self.@"#capabilities", .max_packet_size = 0, .character_set = CharacterSet.default, .username = Data{ .temporary = self.@"#user" }, .database = Data{ .temporary = self.@"#database" }, .auth_plugin_name = Data{ .temporary = plugin_name }, .auth_response = Data.empty, .sequence_id = self.@"#sequence_id" };
         _ = &response;
         defer {
         _ = response.deinit();
@@ -851,19 +851,19 @@ pub fn handlePreparedStatement(self: *MySQLConnection, comptime Context: type, r
         _ = debug("handlePreparedStatement", .{});
         const first_byte = try reader.int(u8);
         _ = reader.skip(-1);
-        var request = ((self.queue.current()) orelse (({
+        var request = ((self.queue.current()) orelse {
         _ = debug("Unexpected prepared statement packet missing request", .{});
         return error.UnexpectedPacket;
-})));
+});
         _ = &request;
         _ = request.ref();
         defer {
         _ = request.deref();
         }
-        var statement = ((request.getStatement()) orelse (({
+        var statement = ((request.getStatement()) orelse {
         _ = debug("Unexpected prepared statement packet missing statement", .{});
         return error.UnexpectedPacket;
-})));
+});
         _ = &statement;
         _ = statement.ref();
         defer {
@@ -974,10 +974,10 @@ pub fn handleResultSet(self: *MySQLConnection, comptime Context: type, reader: N
         const first_byte = try reader.int(u8);
         _ = debug("handleResultSet: {x:0>2}", .{ first_byte });
         _ = reader.skip(-1);
-        var request = ((self.queue.current()) orelse (({
+        var request = ((self.queue.current()) orelse {
         _ = debug("Unexpected result set packet", .{});
         return error.UnexpectedPacket;
-})));
+});
         _ = &request;
         _ = request.ref();
         defer {
@@ -1008,10 +1008,10 @@ var err_pkt = ErrorPacket{  };
         _ = self.getJSConnection().onErrorPacket(request, err_pkt);
 },
 else => |packet_type| {
-var statement = ((request.getStatement()) orelse (({
+var statement = ((request.getStatement()) orelse {
         _ = debug("Unexpected result set packet", .{});
         return error.UnexpectedPacket;
-})));
+});
         _ = &statement;
         _ = statement.ref();
         defer {

@@ -239,7 +239,7 @@ pub fn onIOError(self: *ReadFile, err: sys.Error) void {
             _ = WorkPool.schedule((&self.task));
     }
 
-pub fn onRequestReadable(request: *io.Request) callconv(.c) io.Action {
+pub fn onRequestReadable(request: *io.Request) io.Action {
             _ = bloblog("ReadFile.onRequestReadable", .{});
             request.scheduled = false;
             var self_rf: *ReadFile = @alignCast(@fieldParentPtr("io_request", request));

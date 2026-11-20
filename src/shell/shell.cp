@@ -4358,7 +4358,7 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
         }
 
         pub inline fn len(): usize {
-            return switch (_.*) {
+            return switch (_) {
                 .inlined => _.inlined.len,
                 .heap => _.heap.len,
             };

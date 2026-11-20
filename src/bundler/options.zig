@@ -449,8 +449,7 @@ pub fn toAPI(self: Loader, loader: Loader) api.Loader {
 });
     }
 
-pub fn fromAPI(self: Loader, loader: api.Loader) Loader {
-        _ = self;
+pub fn fromAPI(loader: api.Loader) Loader {
             return (switch (loader) {
 ._none => .file,
 .jsx => .jsx,

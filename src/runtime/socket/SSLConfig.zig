@@ -302,7 +302,8 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
         }
         if (generated.dh_params_file.get()) |dh_params_file| {
             _ = &dh_params_file;
-            result.dh_params_file_name = try handlePath(global, "dhParamsFile", dh_params_file).ptr;
+            const dh_path = try handlePath(global, "dhParamsFile", dh_params_file);
+            result.dh_params_file_name = dh_path.ptr;
             has_any = true;
         }
         if (generated.server_name.get()) |server_name| {
@@ -532,7 +533,7 @@ pub fn freeString(str_ptr: *OptCString) void {
 
 pub fn cloneStrings(slice: ?CStringSlice) ?CStringSlice {
         const inner = ((slice) orelse { return null; });
-        var result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
+        var result = bun.handleOom(bun.default_allocator.alloc(CString, inner.len));
         var __result_moved = false; _ = &__result_moved;
         defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
         var i: usize = 0;

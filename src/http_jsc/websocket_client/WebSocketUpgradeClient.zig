@@ -216,8 +216,8 @@ const DeflateParams = WebSocketDeflate.Params;
 const ByteList = std.ArrayListUnmanaged(u8);
 const ZigSlice = jsc.ZigString.Slice;
 const log = Output.scoped(.WebSocketUpgradeClient, .visible);
-const empty_u8: [0]u8 = &.{};
-const empty_zig_slices: [0]ZigSlice = &.{};
+const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
+const empty_zig_slices: [0]ZigSlice = std.mem.zeroes([0]ZigSlice);
 const empty_byte_slices: [0][]const u8 = &.{};
 
 pub fn buildConnectRequest(target_host: []const u8, target_port: u16, proxy_authorization: []const ?u8, proxy_headers: ?Headers) std.mem.Allocator.Error![]u8 {

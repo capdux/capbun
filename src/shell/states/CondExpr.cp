@@ -120,7 +120,7 @@ pub struct ShellCondExprStatTask {
         while (_.state != .done) {
             switch (_.state) {
                 .idle => {
-                    _.state = { expanding_args: { expansion: undefined } };
+                    _.state = { expanding_args: { idx: 0, expansion: undefined, last_exit_code: 0 } };
                     continue;
                 },
                 .expanding_args => {
@@ -268,7 +268,8 @@ pub struct ShellCondExprStatTask {
         _.state = {
             stat_complete: { stat: result },
         };
-        _.next().run();
+        let y = _.next();
+        y.run();
     }
 
     static fn enqueueCb(ctx: *CondExpr) {

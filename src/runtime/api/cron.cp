@@ -21,37 +21,38 @@ const dummy_zero: [1]i32 = [0];
 
 /// Shared base for CronRegisterJob and CronRemoveJob.
 fn CronJobBase(comptime Self: type): type {
-    * = Self;
     return struct {
-        pub fn loop(_: *const Self): *bun.Async.Loop {
+        static fn loop(job: *const Self): *bun.Async.Loop {
+            * = job;
             if (comptime bun.Environment.isWindows)
                 return jsc.VirtualMachine.get().uvLoop()
             else
                 return bun.uws.Loop.get();
         }
 
-        pub fn eventLoop(_: *const Self): *jsc.EventLoop {
+        static fn eventLoop(job: *const Self): *jsc.EventLoop {
+            * = job;
             return jsc.VirtualMachine.get().eventLoop();
         }
 
-        pub fn onReaderDone(*_) {
-            bun.assert(_.remaining_fds > 0);
-            _.remaining_fds -= 1;
-            _.maybeFinished();
+        static fn onReaderDone(job: *Self) {
+            bun.assert(job.remaining_fds > 0);
+            job.remaining_fds -= 1;
+            job.maybeFinished();
         }
 
-        pub fn onReaderError(*_, e: bun.sys.Error) {
-            bun.assert(_.remaining_fds > 0);
-            _.remaining_fds -= 1;
-            if (_.err_msg == null)
-                _.err_msg = std.fmt.allocPrint(bun.default_allocator, "Failed to read process output: {s}", .{ @tagName(e.getErrno())}) catch null;
-            _.maybeFinished();
+        static fn onReaderError(job: *Self, e: bun.sys.Error) {
+            bun.assert(job.remaining_fds > 0);
+            job.remaining_fds -= 1;
+            if (job.err_msg == null)
+                job.err_msg = std.fmt.allocPrint(bun.default_allocator, "Failed to read process output: {s}", .{ @tagName(e.getErrno())}) catch null;
+            job.maybeFinished();
         }
 
-        pub fn onProcessExit(*_, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
-            _.has_called_process_exit = true;
-            _.exit_status = status;
-            _.maybeFinished();
+        static fn onProcessExit(job: *Self, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
+            job.has_called_process_exit = true;
+            job.exit_status = status;
+            job.maybeFinished();
         }
     };
 }

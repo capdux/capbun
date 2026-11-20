@@ -299,7 +299,7 @@ pub @c struct ResolutionType<SemverIntType> {
 
         pub fn fmt(string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep): Formatter {
             return Formatter{
-                resolution: _,
+                resolution: &_,
                 buf: string_bytes,
                 path_sep: path_sep,
             };

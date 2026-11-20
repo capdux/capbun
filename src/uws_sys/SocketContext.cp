@@ -49,7 +49,7 @@ export @extern @value class BunSocketContextOptions {
     static fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: [*]cstr?!, n: u32) {
         let flag: [1]u8 = .{(if (arr != null) 1 else 0)};
         hp.update(&flag);
-        hp.update(bun.mem.asBytes(&n));
+        hp.update(std.mem.asBytes(&n));
         if (arr != null) {
             let a = arr.?;
             for (s of a[0..n]) {
@@ -86,7 +86,7 @@ export @extern @value class BunSocketContextOptions {
                     .err => {},
                 }
             }
-            hp.update(bun.mem.asBytes(&meta));
+            hp.update(std.mem.asBytes(&meta));
         }
         const z: u8 = 0;
         let term: [1]u8 = [z];
@@ -101,15 +101,15 @@ export @extern @value class BunSocketContextOptions {
         feedPath(&h, _.dh_params_file_name);
         feedPath(&h, _.ca_file_name);
         feedZ(&h, _.ssl_ciphers);
-        h.update(bun.mem.asBytes(&_.ssl_prefer_low_memory_usage));
+        h.update(std.mem.asBytes(&_.ssl_prefer_low_memory_usage));
         feedArr(&h, _.key, _.key_count);
         feedArr(&h, _.cert, _.cert_count);
         feedArr(&h, _.ca, _.ca_count);
-        h.update(bun.mem.asBytes(&_.secure_options));
-        h.update(bun.mem.asBytes(&_.reject_unauthorized));
-        h.update(bun.mem.asBytes(&_.request_cert));
-        h.update(bun.mem.asBytes(&_.client_renegotiation_limit));
-        h.update(bun.mem.asBytes(&_.client_renegotiation_window));
+        h.update(std.mem.asBytes(&_.secure_options));
+        h.update(std.mem.asBytes(&_.reject_unauthorized));
+        h.update(std.mem.asBytes(&_.request_cert));
+        h.update(std.mem.asBytes(&_.client_renegotiation_limit));
+        h.update(std.mem.asBytes(&_.client_renegotiation_window));
         let out: [32]u8 = undefined;
         h.final(&out);
         return out;

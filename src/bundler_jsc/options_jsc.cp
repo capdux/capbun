@@ -34,7 +34,8 @@ pub fn loaderFromJS(global: *jsc.JSGlobalObject, loader: jsc.JSValue): options.L
     }
 
     let zig_str = jsc.ZigString.init("");
-    loader.toZigString(&zig_str, global)?;
+    const zig_str_ptr: *jsc.ZigString = &zig_str;
+    loader.toZigString(zig_str_ptr, global)?;
     if (zig_str.len == 0) return null;
 
     const slice = zig_str.toSlice(bun.default_allocator);

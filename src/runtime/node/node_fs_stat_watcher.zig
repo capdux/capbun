@@ -191,7 +191,7 @@ pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
                 _ = log("reinsert watcher {x}", .{ @intFromPtr(watcher) });
             }
             if (contain_watchers) {
-                _ = scheduler.setInterval(@min(min_interval, @as(i32, @truncate(closest_next_check))));
+                _ = scheduler.setInterval(@min(min_interval, @as(i32, @intCast(closest_next_check))));
             } else {
                 _ = scheduler.setInterval(0);
             }
@@ -227,8 +227,18 @@ pub fn fromJS(global: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSErr
             if (arguments.nextEat()) |options_or_callable| {
                 _ = &options_or_callable;
                 if (options_or_callable.isObject()) {
-                    if (persistent == null) { persistent = true; }
-                    if (bigint == null) { bigint = false; }
+                    if (try options_or_callable.getBooleanStrict(global, "persistent")) |p| {
+                        _ = &p;
+                        persistent = p;
+                    } else {
+                        persistent = true;
+                    }
+                    if (try options_or_callable.getBooleanStrict(global, "bigint")) |b| {
+                        _ = &b;
+                        bigint = b;
+                    } else {
+                        bigint = false;
+                    }
                     if (try options_or_callable.get(global, "interval")) |interval_| {
                         _ = &interval_;
                         if (((!interval_.isNumber()) and (!interval_.isAnyInt()))) {

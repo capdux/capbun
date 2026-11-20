@@ -46,27 +46,27 @@ pub struct LifecycleScriptSubprocess {
 
     pub const min_milliseconds_to_log = 500;
 
-    pub let alive_count: std.atomic.Value(usize) = .init(0);
+    static let alive_count: std.atomic.Value(usize) = .init(0);
 
     const uv = bun.windows.libuv;
 
     pub const OutputReader = bun.io.BufferedReader;
 
-    fn loop(): *bun.Async.Loop {
+    static fn loop(sub: *const LifecycleScriptSubprocess): *bun.Async.Loop {
         if (comptime bun.Environment.isWindows) {
-            return _.manager.event_loop.loop().uv_loop;
+            return sub.manager.event_loop.loop().uv_loop;
         } else {
-            return _.manager.event_loop.loop();
+            return sub.manager.event_loop.loop();
         }
     }
 
-    fn eventLoop(): *jsc.AnyEventLoop {
-        return &_.manager.event_loop;
+    static fn eventLoop(sub: *const LifecycleScriptSubprocess): *jsc.AnyEventLoop {
+        return &sub.manager.event_loop;
     }
 
-    fn scriptName(): []const u8 {
-        bun.assert(_.current_script_index < Lockfile.Scripts.names.len);
-        return Lockfile.Scripts.names[_.current_script_index];
+    static fn scriptName(sub: *const LifecycleScriptSubprocess): []const u8 {
+        bun.assert(sub.current_script_index < Lockfile.Scripts.names.len);
+        return Lockfile.Scripts.names[sub.current_script_index];
     }
 
     fn onReaderDone(*_) {
@@ -315,14 +315,12 @@ pub struct LifecycleScriptSubprocess {
             Output.flush();
 
             if (stdout_buf.items.len > 0) {
-                const out_args = .{ stdout_buf.items };
-                Output.errorWriter().print("{s}\n", out_args) catch {};
+                Output.errorWriter().print("{s}\n", .{ stdout_buf.items }) catch {};
                 stdout_buf.clearAndFree();
             }
 
             if (stderr_buf.items.len > 0) {
-                const err_args = .{ stderr_buf.items };
-                Output.errorWriter().print("{s}\n", err_args) catch {};
+                Output.errorWriter().print("{s}\n", .{ stderr_buf.items }) catch {};
                 stderr_buf.clearAndFree();
             }
 
@@ -331,8 +329,7 @@ pub struct LifecycleScriptSubprocess {
     }
 
     fn handleExit(*_, status: bun.spawn.Status) {
-        const fin_args = .{ _.package_name, _.scriptName(), status };
-        log("{s} - {s} finished {f}", fin_args);
+        log("{s} - {s} finished {f}", .{ _.package_name, _.scriptName(), status });
 
         if (_.has_incremented_alive_count) {
             _.has_incremented_alive_count = false;

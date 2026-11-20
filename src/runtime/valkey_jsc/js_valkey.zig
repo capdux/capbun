@@ -410,7 +410,7 @@ else => brk: {
             return JSValkeyClient.new(.{ .ref_count = .init(), ._subscription_ctx = undefined, .client = .{ .vm = vm, .address = (switch (uri) {
 .standalone_unix, .standalone_tls_unix => .{ .unix = hostname },
 else => .{ .host = .{ .host = hostname, .port = port } },
-}), .protocol = uri, .username = username, .password = password, .in_flight = .init(this_allocator), .queue = .init(this_allocator), .status = .disconnected, .connection_strings = connection_strings, .socket = .{ .SocketTCP = .{ .socket = .{ .detached = .{} } } }, .tls = (if ((options.tls != .none)) options.tls else (if (uri.isTLS()) .enabled else .none)), .database = database, .allocator = this_allocator, .flags = .{ .enable_auto_reconnect = options.enable_auto_reconnect, .enable_offline_queue = options.enable_offline_queue, .enable_auto_pipelining = options.enable_auto_pipelining }, .max_retries = options.max_retries, .connection_timeout_ms = options.connection_timeout_ms, .idle_timeout_interval_ms = options.idle_timeout_ms }, .globalObject = globalObject });
+}), .protocol = uri, .username = username, .password = password, .in_flight = .init(this_allocator), .queue = .init(this_allocator), .status = .disconnected, .connection_strings = connection_strings, .socket = .{ .SocketTCP = .{ .socket = .detached } }, .tls = (if ((options.tls != .none)) options.tls else (if (uri.isTLS()) .enabled else .none)), .database = database, .allocator = this_allocator, .flags = .{ .enable_auto_reconnect = options.enable_auto_reconnect, .enable_offline_queue = options.enable_offline_queue, .enable_auto_pipelining = options.enable_auto_pipelining }, .max_retries = options.max_retries, .connection_timeout_ms = options.connection_timeout_ms, .idle_timeout_interval_ms = options.idle_timeout_ms }, .globalObject = globalObject });
     }
 
 pub fn create(globalObject: *jsc.JSGlobalObject, arguments: []const JSValue, js_this: JSValue) bun.JSError!*JSValkeyClient {
@@ -435,7 +435,7 @@ pub fn cloneWithoutConnecting(self: *JSValkeyClient, globalObject: *jsc.JSGlobal
             return JSValkeyClient.new(.{ .ref_count = .init(), ._subscription_ctx = undefined, .client = .{ .vm = vm, .address = (switch (self.client.protocol) {
 .standalone_unix, .standalone_tls_unix => .{ .unix = hostname },
 else => .{ .host = .{ .host = hostname, .port = self.client.address.host.port } },
-}), .protocol = self.client.protocol, .username = username, .password = password, .in_flight = .init(new_alloc), .queue = .init(new_alloc), .status = .disconnected, .connection_strings = connection_strings_copy, .socket = .{ .SocketTCP = .{ .socket = .{ .detached = .{} } } }, .tls = tls, .database = self.client.database, .allocator = new_alloc, .flags = .{ .is_authenticated = false, .is_manually_closed = self.client.flags.is_manually_closed, .enable_offline_queue = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_offline_queue else self.client.flags.enable_offline_queue), .needs_to_open_socket = true, .enable_auto_reconnect = self.client.flags.enable_auto_reconnect, .is_reconnecting = false, .enable_auto_pipelining = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_auto_pipelining else self.client.flags.enable_auto_pipelining), .finalized = self.client.flags.finalized }, .max_retries = self.client.max_retries, .connection_timeout_ms = self.client.connection_timeout_ms, .idle_timeout_interval_ms = self.client.idle_timeout_interval_ms }, .globalObject = globalObject });
+}), .protocol = self.client.protocol, .username = username, .password = password, .in_flight = .init(new_alloc), .queue = .init(new_alloc), .status = .disconnected, .connection_strings = connection_strings_copy, .socket = .{ .SocketTCP = .{ .socket = .detached } }, .tls = tls, .database = self.client.database, .allocator = new_alloc, .flags = .{ .is_authenticated = false, .is_manually_closed = self.client.flags.is_manually_closed, .enable_offline_queue = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_offline_queue else self.client.flags.enable_offline_queue), .needs_to_open_socket = true, .enable_auto_reconnect = self.client.flags.enable_auto_reconnect, .is_reconnecting = false, .enable_auto_pipelining = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_auto_pipelining else self.client.flags.enable_auto_pipelining), .finalized = self.client.flags.finalized }, .max_retries = self.client.max_retries, .connection_timeout_ms = self.client.connection_timeout_ms, .idle_timeout_interval_ms = self.client.idle_timeout_interval_ms }, .globalObject = globalObject });
     }
 
 pub fn addSubscription(self: *JSValkeyClient) void {
@@ -850,7 +850,7 @@ pub fn closeSocketNextTick(self: *JSValkeyClient) void {
             var holder = bun.handleOom(bun.default_allocator.create(Holder));
             _ = &holder;
             holder.* = Holder{ .ctx = self, .task = undefined };
-            holder.task = jsc.AnyTask.AnyTask.New(Holder, Holder.run).init(holder);
+            holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
             _ = self.client.vm.enqueueTask(jsc.Task.init((&holder.task)));
     }
 

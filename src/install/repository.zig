@@ -401,7 +401,7 @@ pub fn eql(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, 
     }
 
 pub fn formatAs(self: Repository, label: []const u8, buf: []const u8, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            const formatter = TopFormatter{ .label = label, .repository = self, .buf = buf };
+            const formatter = TopFormatter{ .label = label, .repository = (&self), .buf = buf };
             return try formatter.format(writer);
     }
 

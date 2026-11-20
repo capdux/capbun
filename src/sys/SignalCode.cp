@@ -1,11 +1,37 @@
 import bun from "bun";
-import std from "std";
+import signal_code_jsc from "../sys_jsc/signal_code_jsc.zig";
 
 const ComptimeEnumMap = bun.ComptimeEnumMap;
 const Output = bun.Output;
 const asByteSlice = bun.asByteSlice;
 
-export enum SignalCode: u8 {
+// This wrapper struct is lame, what if bun's color formatter was more versatile
+pub struct Fmt {
+    signal: SignalCode,
+    enable_ansi_colors: bool,
+
+    fn format(writer: *std.Io.Writer)! {
+        const signal = _.signal;
+        if (_.enable_ansi_colors) {
+            if (str := SignalCode.name(signal)) {
+                if (desc := SignalCode.description(signal)) {
+                    writer.print(Output.prettyFmt("{s} <d>({s})<r>", true), .{ str, desc })?;
+                    return;
+                }
+            }
+        } else {
+            if (str := SignalCode.name(signal)) {
+                if (desc := SignalCode.description(signal)) {
+                    writer.print(Output.prettyFmt("{s} <d>({s})<r>", false), .{ str, desc })?;
+                    return;
+                }
+            }
+        }
+        writer.print("code {d}", .{@intFromEnum(signal)})?;
+    }
+};
+
+pub enum SignalCode: u8 {
     SIGHUP = 1,
     SIGINT = 2,
     SIGQUIT = 3,
@@ -44,7 +70,7 @@ export enum SignalCode: u8 {
     pub const default = SignalCode.SIGTERM;
     pub const Map = ComptimeEnumMap(SignalCode);
 
-    pub fn name(value: SignalCode): ?[]const u8 {
+    static fn name(value: SignalCode): ([]const u8)? {
         if (@intFromEnum(value) <= @intFromEnum(SignalCode.SIGSYS)) {
             return asByteSlice(@tagName(value));
         }
@@ -52,20 +78,20 @@ export enum SignalCode: u8 {
         return null;
     }
 
-    pub fn valid(value: SignalCode): bool {
-        return @intFromEnum(value) <= @intFromEnum(SignalCode.SIGSYS) and @intFromEnum(value) >= @intFromEnum(SignalCode.SIGHUP);
+    static fn valid(value: SignalCode): bool {
+        return @intFromEnum(value) <= @intFromEnum(SignalCode.SIGSYS) && @intFromEnum(value) >= @intFromEnum(SignalCode.SIGHUP);
     }
 
     /// Shell scripts use exit codes 128 + signal number
     /// https://tldp.org/LDP/abs/html/exitcodes.html
-    pub fn toExitCode(value: SignalCode): ?u8 {
+    static fn toExitCode(value: SignalCode): u8? {
         return switch (@intFromEnum(value)) {
-            1...31 => 128 +% @intFromEnum(value),
+            1..31 => 128 +% @intFromEnum(value),
             else => null,
         };
     }
 
-    pub fn description(signal: SignalCode): []const u8? {
+    static fn description(signal: SignalCode): ([]const u8)? {
         // Description names copied from fish
         // https://github.com/fish-shell/fish-shell/blob/00ffc397b493f67e28f18640d3de808af29b1434/fish-rust/src/signal.rs#L420
         return switch (signal) {
@@ -103,31 +129,13 @@ export enum SignalCode: u8 {
         };
     }
 
-    pub fn from(value: anytype): SignalCode {
+    static fn from(value: auto): SignalCode {
         return @enumFromInt(std.mem.asBytes(&value)[0]);
     }
 
-    // This wrapper struct is lame, what if bun's color formatter was more versatile
-    pub const Fmt = struct {
-        signal: SignalCode,
-        enable_ansi_colors: bool,
-        pub fn format(this: Fmt, writer: *std.Io.Writer) !void {
-            const signal = this.signal;
-            switch (this.enable_ansi_colors) {
-                inline else => |enable_ansi_colors| {
-                    if (signal.name()) |str| if (signal.description()) |desc| {
-                        try writer.print(Output.prettyFmt("{s} <d>({s})<r>", enable_ansi_colors), .{ str, desc });
-                        return;
-                    };
-                    try writer.print("code {d}", .{@intFromEnum(signal)});
-                },
-            }
-        }
-    };
-
-    pub fn fmt(signal: SignalCode, enable_ansi_colors: bool): Fmt {
-        return .{ .signal = signal, .enable_ansi_colors = enable_ansi_colors };
+    static fn fmt(signal: SignalCode, enable_ansi_colors: bool): Fmt {
+        return Fmt{ signal: signal, enable_ansi_colors: enable_ansi_colors };
     }
 
-    pub const fromJS = @import("../sys_jsc/signal_code_jsc.zig").fromJS;
+    pub const fromJS = signal_code_jsc.fromJS;
 }

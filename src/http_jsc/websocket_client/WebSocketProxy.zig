@@ -51,4 +51,4 @@ pub fn deinit(self: *WebSocketProxy) void {
             _ = tunnel.deref();
         }
 }
-const empty_u8: [0]u8 = &.{};
+const empty_u8: [0]u8 = std.mem.zeroes([0]u8);

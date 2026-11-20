@@ -108,7 +108,7 @@ pub fn assert(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: En
             if ((!value.isString())) {
                 return Encoding.throwEncodingError(globalObject, value);
             }
-            return ((try Encoding.fromJSWithDefaultOnEmpty(value, globalObject, default)) orelse (try Encoding.throwEncodingError(globalObject, value)));
+            return ((try Encoding.fromJSWithDefaultOnEmpty(value, globalObject, default)) orelse (Encoding.throwEncodingError(globalObject, value)));
     }
 
 pub fn fromJSWithDefaultOnEmpty(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding) bun.JSError!?Encoding {
@@ -1195,7 +1195,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!?Mod
                 }
                 return ctx.throwValue(ctx.ERR(.INVALID_ARG_VALUE, "The argument 'mode' must be a 32-bit unsigned integer or an octal string. Received {f}", .{ value.toFmt((&formatter)) }).toJS());
             }
-            mode_int = parsed.?;
+            mode_int = @intCast(parsed.?);
         }
         return @truncate((mode_int & 511));
 }

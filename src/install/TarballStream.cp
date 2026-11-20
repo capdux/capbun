@@ -386,20 +386,20 @@ fn step(client: *TarballStream)! {
 }
 
 fn openArchive(client: *TarballStream)! {
-    const archive = lib.Archive.readNew();
+    const ar = lib.Archive.readNew();
     errdefer {
-        * = archive.readClose();
-        * = archive.readFree();
+        * = ar.readClose();
+        * = ar.readFree();
     }
     // Bypass bidding entirely: the stream is always gzip → tar, and
     // bidding would try to read-ahead before any bytes have arrived.
     // ARCHIVE_FILTER_GZIP = 1, ARCHIVE_FORMAT_TAR = 0x30000.
-    if (lib.archive_read_append_filter(@ptrCast(archive), 1) != 0) return error.Fail;
-    if (lib.archive_read_set_format(@ptrCast(archive), 0x30000) != 0) return error.Fail;
-    * = archive.readSetOptions("read_concatenated_archives");
+    if (lib.archive_read_append_filter(@ptrCast(ar), 1) != 0) return error.Fail;
+    if (lib.archive_read_set_format(@ptrCast(ar), 0x30000) != 0) return error.Fail;
+    * = ar.readSetOptions("read_concatenated_archives");
 
     switch (@as(lib.Archive.Result, @enumFromInt(lib.archive_read_open(
-        @ptrCast(archive),
+        @ptrCast(ar),
         client,
         null,
         archiveReadCallback,
@@ -409,16 +409,16 @@ fn openArchive(client: *TarballStream)! {
         .retry => {
             // open() runs the filter bidder which we bypassed, but the
             // client open path may still probe; treat as transient.
-            client.archive = archive;
+            client.archive = ar;
             return;
         },
         else => {
-            const err_args = .{ archive.errorString() };
+            const err_args = .{ ar.errorString() };
             log("archive_read_open: {s}", err_args);
             return error.Fail;
         },
     }
-    client.archive = archive;
+    client.archive = ar;
 }
 
 fn openDestination(client: *TarballStream)! {

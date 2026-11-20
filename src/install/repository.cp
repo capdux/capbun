@@ -335,7 +335,7 @@ pub struct TopFormatter {
     }
 
     pub fn formatAs(label: string, buf: []const u8, writer: *std.Io.Writer): std.Io.Writer.Error!void {
-        const formatter = TopFormatter{ label: label, repository: _, buf: buf };
+        const formatter = TopFormatter{ label: label, repository: &_, buf: buf };
         return formatter.format(writer)?;
     }
 

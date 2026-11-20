@@ -1,7 +1,7 @@
 import bun from "bun";
 import WebSocketProxyTunnel from "./WebSocketProxyTunnel.zig";
 
-const empty_u8: [0]u8 = [];
+const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
 
 @root struct WebSocketProxy {
     #target_host: []const u8,

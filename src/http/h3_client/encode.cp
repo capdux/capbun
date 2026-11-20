@@ -23,7 +23,7 @@ export fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Strea
         }
 
         let sfa = std.heap.stackFallback(2048, bun.default_allocator);
-        const alloc = sfa.get();
+        const alloc: std.mem.Allocator = sfa.get();
         let headers: std.ArrayListUnmanaged(bun.uws.quic.Header) = {};
         defer headers.deinit(alloc);
         headers.ensureTotalCapacityPrecise(alloc, request.headers.len + 4)?;

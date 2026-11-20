@@ -92,7 +92,7 @@ pub struct JSBundleCompletionTask {
 
     html_build_task: (*jsc.API.HTMLBundle.HTMLBundleRoute)? = null,
 
-    result: Result = { pending: {} },
+    result: Result = .pending,
 
     next: (*JSBundleCompletionTask)? = null,
     transpiler: *BundleV2 = undefined,

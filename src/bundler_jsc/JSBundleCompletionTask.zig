@@ -86,7 +86,7 @@ pub const JSBundleCompletionTask = struct {
     log: Logger.Log,
     cancelled: bool = false,
     html_build_task: ?*jsc.API.HTMLBundle.HTMLBundleRoute = null,
-    result: Result = .{ .pending = .{} },
+    result: Result = .pending,
     next: ?*JSBundleCompletionTask = null,
     transpiler: *BundleV2 = undefined,
     plugins: ?*bun.jsc.API.JSBundler.Plugin = null,
@@ -467,5 +467,5 @@ pub fn generateFromJavaScript(config: bun.jsc.API.JSBundler.Config, plugins: ?*b
         var completion = try createAndScheduleCompletionTask(config, plugins, globalThis, event_loop, alloc);
         _ = &completion;
         completion.promise = jsc.JSPromise.Strong.init(globalThis);
-        return (if (@typeInfo(@TypeOf(completion.promise)) == .@"enum") @intFromEnum(completion.promise) else completion.promise.value)();
+        return completion.promise.value();
 }

@@ -81,11 +81,11 @@ pub const Readable = union(enum) {
     pub fn close(this: *Readable) void {
         switch (this.*) {
             .memfd => |fd| {
-                this.* = .{ .closed = {} };
+                this.* = .closed;
                 fd.close();
             },
             .fd => |_| {
-                this.* = .{ .closed = {} };
+                this.* = .closed;
             },
             .pipe => {
                 this.pipe.close();
@@ -97,15 +97,15 @@ pub const Readable = union(enum) {
     pub fn finalize(this: *Readable) void {
         switch (this.*) {
             .memfd => |fd| {
-                this.* = .{ .closed = {} };
+                this.* = .closed;
                 fd.close();
             },
             .fd => {
-                this.* = .{ .closed = {} };
+                this.* = .closed;
             },
             .pipe => |pipe| {
                 defer pipe.detach();
-                this.* = .{ .closed = {} };
+                this.* = .closed;
             },
             .buffer => |*buf| {
                 buf.deinit(bun.default_allocator);
@@ -125,11 +125,11 @@ pub const Readable = union(enum) {
             },
             .pipe => |pipe| {
                 defer pipe.detach();
-                this.* = .{ .closed = {} };
+                this.* = .closed;
                 return pipe.toJS(globalThis);
             },
             .buffer => |*buffer| {
-                defer this.* = .{ .closed = {} };
+                defer this.* = .closed;
 
                 if (buffer.length() == 0) {
                     return jsc.WebCore.ReadableStream.empty(globalThis);
@@ -153,16 +153,16 @@ pub const Readable = union(enum) {
                 if (comptime !Environment.isPosix) {
                     Output.panic("memfd is only supported on Linux", {});
                 }
-                this.* = .{ .closed = {} };
+                this.* = .closed;
                 return jsc.ArrayBuffer.toJSBufferFromMemfd(fd, globalThis);
             },
             .pipe => |pipe| {
                 defer pipe.detach();
-                this.* = .{ .closed = {} };
+                this.* = .closed;
                 return pipe.toBuffer(globalThis);
             },
             .buffer => |*buf| {
-                defer this.* = .{ .closed = {} };
+                defer this.* = .closed;
                 const owned_slice = buf.takeSlice(bun.default_allocator) catch {
                     return globalThis.throwOutOfMemory();
                 };

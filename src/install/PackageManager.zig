@@ -287,13 +287,15 @@ pub const WakeHandler = struct {
     onDependencyError: *const anyopaque = undefined,
     context: ?*anyopaque = null,
 
-pub inline fn getHandler(self: WakeHandler) *const fn (*anyopaque, *PackageManager) void {
-            return bun.cast(*const *const fn(ctx: *anyopaque, pm: *PackageManager) void, self.handler);
+pub inline fn getHandler(self: WakeHandler) HandlerFn {
+            return bun.cast(HandlerFn, self.handler);
     }
 
-pub inline fn getonDependencyError(self: WakeHandler) *const fn (*anyopaque, Dependency, DependencyID, anyerror) void {
-            return bun.cast(*const *const fn(ctx: *anyopaque, Dependency, DependencyID, anyerror) void, self.handler);
+pub inline fn getonDependencyError(self: WakeHandler) OnDepErrFn {
+            return bun.cast(OnDepErrFn, self.handler);
     }
+    const HandlerFn = *const fn(*anyopaque, *PackageManager) void;
+    const OnDepErrFn = *const fn(*anyopaque, Dependency, DependencyID, anyerror) void;
 };
 
 pub const Holder = struct {

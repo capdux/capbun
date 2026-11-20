@@ -193,7 +193,7 @@ export class ReadFile {
         WorkPool.schedule(&this.task);
     }
 
-    @c static fn onRequestReadable(request: *io.Request): io.Action {
+    static fn onRequestReadable(request: *io.Request): io.Action {
         bloblog("ReadFile.onRequestReadable", .{});
         request.scheduled = false;
         let self_rf: *ReadFile = @alignCast(@fieldParentPtr("io_request", request));

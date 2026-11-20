@@ -62,6 +62,7 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
+pub const signal_code_jsc = @import("../sys_jsc/signal_code_jsc.zig");
 pub const SignalCode = enum(u8) {
     SIGHUP = 1,
     SIGINT = 2,
@@ -99,29 +100,25 @@ pub const SignalCode = enum(u8) {
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
 
-pub fn name(self: SignalCode, value: SignalCode) ?[]const u8 {
-        _ = self;
+pub fn name(value: SignalCode) ?[]const u8 {
             if ((@intFromEnum(value) <= @intFromEnum(SignalCode.SIGSYS))) {
                 return asByteSlice(@tagName(value));
             }
             return null;
     }
 
-pub fn valid(self: SignalCode, value: SignalCode) bool {
-        _ = self;
+pub fn valid(value: SignalCode) bool {
             return ((@intFromEnum(value) <= @intFromEnum(SignalCode.SIGSYS)) and (@intFromEnum(value) >= @intFromEnum(SignalCode.SIGHUP)));
     }
 
-pub fn toExitCode(self: SignalCode, value: SignalCode) ?u8 {
-        _ = self;
+pub fn toExitCode(value: SignalCode) ?u8 {
             return (switch (@intFromEnum(value)) {
-1...31 => (128 +% @intFromEnum(value)),
+1...30 => (128 +% @intFromEnum(value)),
 else => null,
 });
     }
 
-pub fn description(self: SignalCode, signal: SignalCode) []const ?u8 {
-        _ = self;
+pub fn description(signal: SignalCode) ?[]const u8 {
             return (switch (signal) {
 .SIGHUP => "Terminal hung up",
 .SIGINT => "Quit request",
@@ -157,42 +154,48 @@ else => null,
 });
     }
 
-pub fn from(self: SignalCode, value: anytype) SignalCode {
-        _ = self;
+pub fn from(value: anytype) SignalCode {
             return @enumFromInt(std.mem.asBytes((&value))[0]);
     }
 
-pub fn fmt(self: SignalCode, signal: SignalCode, enable_ansi_colors: bool) Fmt {
-        _ = self;
-            return .{ .signal = signal, .enable_ansi_colors = enable_ansi_colors };
+pub fn fmt(signal: SignalCode, enable_ansi_colors: bool) Fmt {
+            return Fmt{ .signal = signal, .enable_ansi_colors = enable_ansi_colors };
     }
     
     pub const default = SignalCode.SIGTERM;
     
     pub const Map = ComptimeEnumMap(SignalCode);
     
-    pub const Fmt = struct {
-        signal: SignalCode,
-        enable_ansi_colors: bool,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                const signal = self.signal;
-                switch (self.enable_ansi_colors) {
-    inline else => |enable_ansi_colors| {
-    if (@tagName(signal)()) |str| {
+    pub const fromJS = signal_code_jsc.fromJS;
+};
+
+pub const Fmt = struct {
+    signal: SignalCode,
+    enable_ansi_colors: bool,
+
+pub fn format(self: Fmt, writer: *std.Io.Writer) !void {
+            const signal = self.signal;
+            if (self.enable_ansi_colors) {
+                if (SignalCode.name(signal)) |str| {
                     _ = &str;
-                    if (signal.description()) |desc| {
+                    if (SignalCode.description(signal)) |desc| {
                         _ = &desc;
-                        _ = try writer.print(Output.prettyFmt("{s} <d>({s})<r>", enable_ansi_colors), .{ str, desc });
+                        _ = try writer.print(Output.prettyFmt("{s} <d>({s})<r>", true), .{ str, desc });
                         return;
                     }
                 }
-    },
+            } else {
+                if (SignalCode.name(signal)) |str| {
+                    _ = &str;
+                    if (SignalCode.description(signal)) |desc| {
+                        _ = &desc;
+                        _ = try writer.print(Output.prettyFmt("{s} <d>({s})<r>", false), .{ str, desc });
+                        return;
+                    }
+                }
+            }
+            _ = try writer.print("code {d}", .{ @intFromEnum(signal) });
     }
-        }
-    };
-    
-    pub const fromJS = @import("../sys_jsc/signal_code_jsc.zig").fromJS;
 };
 
 const ComptimeEnumMap = bun.ComptimeEnumMap;

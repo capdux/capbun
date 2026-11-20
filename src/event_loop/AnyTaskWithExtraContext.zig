@@ -6,70 +6,63 @@ const string = []const u8;
 
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const bun = @import("bun");
-pub const AnyTaskWithExtraContext = struct {
-    ctx: ?*anyopaque = null,
-    callback: *const fn (*anyopaque, *anyopaque) void = undefined,
-    next: ?*AnyTaskWithExtraContext = null,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ctx = null; self_ptr.callback = undefined; self_ptr.next = null; return self_ptr; }
+pub const AnyTaskWithExtraContext = @This();
 
-pub fn init(self: *AnyTaskWithExtraContext, ctx: ?*anyopaque, callback: *const fn (*anyopaque, *anyopaque) void, next: ?*AnyTaskWithExtraContext) void {
-            self.ctx = ctx;
-            self.callback = callback;
-            self.next = next;
-    }
+ctx: ?*anyopaque = undefined,
+callback: CallbackFn = undefined,
+next: ?*AnyTaskWithExtraContext = null,
 
 pub fn fromCallbackAutoDeinit(ptr: anytype, comptime fieldName: [:0]const u8) *AnyTaskWithExtraContext {
-            const Ptr = std.meta.Child(@TypeOf(ptr));
-            const Wrapper = struct {
+        const Ptr = std.meta.Child(@TypeOf(ptr));
+        const Wrapper = struct {
     any_task: AnyTaskWithExtraContext,
     wrapped: *Ptr,
 
-pub fn function(self: *@This(), extra: *anyopaque) void {
-            const that: *@This() = @ptrCast(@alignCast(self));
-            defer {
-            _ = bun.default_allocator.destroy(that);
+pub fn function(raw: *anyopaque, extra: *anyopaque) void {
+            {
+                const that: *@This() = @ptrCast(@alignCast(raw));
+                defer {
+                _ = bun.default_allocator.destroy(that);
+                }
+                const ctx = that.wrapped;
+                _ = @field(Ptr, fieldName)(ctx, extra);
             }
-            const ctx = that.wrapped;
-            _ = @field(Ptr, fieldName)(ctx, extra);
     }
 };
-            var task = bun.handleOom(bun.default_allocator.create(Wrapper));
-            _ = &task;
-            task.* = Wrapper{ .any_task = AnyTaskWithExtraContext{ .callback = (&Wrapper.function), .ctx = task }, .wrapped = ptr };
-            {
-                return (&task.any_task);
-            }
-    }
+        const task = bun.handleOom(bun.default_allocator.create(Wrapper));
+        task.* = Wrapper{ .any_task = AnyTaskWithExtraContext{ .callback = (&Wrapper.function), .ctx = task }, .wrapped = ptr };
+        {
+            return (&task.any_task);
+        }
+}
 
 pub fn from(self: *AnyTaskWithExtraContext, any_val: anytype, comptime field: []const u8) *AnyTaskWithExtraContext {
-            const TheTask = AnyTaskWithExtraContext.New(std.meta.Child(@TypeOf(any_val)), void, @field(std.meta.Child(@TypeOf(any_val)), field));
-            self.* = TheTask.init(any_val);
-            return self;
-    }
+        const TheTask = AnyTaskWithExtraContext.New(std.meta.Child(@TypeOf(any_val)), void, @field(std.meta.Child(@TypeOf(any_val)), field));
+        self.* = TheTask.init(any_val);
+        return self;
+}
 
 pub fn run(self: *AnyTaskWithExtraContext, extra: *anyopaque) void {
-            _ = @setRuntimeSafety(false);
-            const cb = self.callback;
-            const context = self.ctx;
-            _ = cb(context.?, extra);
-    }
+        _ = @setRuntimeSafety(false);
+        const cb = self.callback;
+        const context = self.ctx;
+        _ = cb(context.?, extra);
+}
 
 pub fn New(comptime Type: type, comptime ContextType: type, comptime Callback: anytype) type {
-            return struct {
+        return struct {
 
 pub fn init(ctx: *Type) AnyTaskWithExtraContext {
             return AnyTaskWithExtraContext{ .callback = wrap, .ctx = ctx };
     }
 
-pub fn wrap(ptr: ?*anyopaque, extra: ?*anyopaque) void {
+pub fn wrap(raw: ?*anyopaque, extra: ?*anyopaque) void {
             {
-                _ = @call(bun.callmod_inline, Callback, .{ @as(*Type, @ptrCast(@alignCast(ptr.?))), @as(*ContextType, @ptrCast(@alignCast(extra.?))) });
+                _ = @call(bun.callmod_inline, Callback, .{ @as(*Type, @ptrCast(@alignCast(raw.?))), @as(*ContextType, @ptrCast(@alignCast(extra.?))) });
             }
     }
 };
-    }
-};
-
+}
+const CallbackFn = *const fn (*anyopaque, *anyopaque) void;
 const jsc = bun.jsc;
 const Task = jsc.Task;

@@ -477,35 +477,35 @@ const db_err: struct { *anyopaque } = .{ archive.errorString() };
 }
 
 pub fn openArchive(client: *TarballStream) !void {
-        const archive = lib.Archive.readNew();
+        const ar = lib.Archive.readNew();
         errdefer {
         {
-            _ = (archive).?.readClose();
-            _ = (archive).?.readFree();
+            _ = ar.readClose();
+            _ = ar.readFree();
         }
         }
-        if ((lib.archive_read_append_filter(@ptrCast(archive), 1) != 0)) {
+        if ((lib.archive_read_append_filter(@ptrCast(ar), 1) != 0)) {
             return error.Fail;
         }
-        if ((lib.archive_read_set_format(@ptrCast(archive), 196608) != 0)) {
+        if ((lib.archive_read_set_format(@ptrCast(ar), 196608) != 0)) {
             return error.Fail;
         }
-        _ = (archive).?.readSetOptions("read_concatenated_archives");
-        switch (@as(lib.Archive.Result, @enumFromInt(lib.archive_read_open(@ptrCast(archive), client, null, archiveReadCallback, null)))) {
+        _ = ar.readSetOptions("read_concatenated_archives");
+        switch (@as(lib.Archive.Result, @enumFromInt(lib.archive_read_open(@ptrCast(ar), client, null, archiveReadCallback, null)))) {
 .ok, .warn => {
 
 },
 .retry => {
-client.archive = archive;
+client.archive = ar;
         return;
 },
 else => {
-const err_args: struct { *anyopaque } = .{ (archive).?.errorString() };
+const err_args: struct { *anyopaque } = .{ ar.errorString() };
         _ = log("archive_read_open: {s}", err_args);
         return error.Fail;
 },
 }
-        client.archive = archive;
+        client.archive = ar;
 }
 
 pub fn openDestination(client: *TarballStream) !void {

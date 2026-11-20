@@ -476,7 +476,7 @@ pub fn cronRegister(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             }
             const job = bun.handleOom(bun.default_allocator.create(CronRegisterJob));
             job.* = .{ .global = globalObject, .bun_exe = bun_exe, .abs_path = abs_path, .schedule = bun.handleOom(bun.default_allocator.dupeZ(u8, normalized_schedule)), .title = bun.handleOom(bun.default_allocator.dupeZ(u8, title_slice.slice())), .parsed_cron = parsed, .promise = jsc.JSPromise.Strong.init(globalObject) };
-            const promise_value = (if (@typeInfo(@TypeOf(job.promise)) == .@"enum") @intFromEnum(job.promise) else job.promise.value)();
+            const promise_value = job.promise.value();
             _ = job.poll.ref(jsc.VirtualMachine.get());
             if (comptime bun.Environment.isMac) {
                 _ = job.startMac();
@@ -767,7 +767,7 @@ pub fn cronRemove(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
             }
             const job = bun.handleOom(bun.default_allocator.create(CronRemoveJob));
             job.* = .{ .global = globalObject, .title = bun.handleOom(bun.default_allocator.dupeZ(u8, title_slice.slice())), .promise = jsc.JSPromise.Strong.init(globalObject) };
-            const promise_value = (if (@typeInfo(@TypeOf(job.promise)) == .@"enum") @intFromEnum(job.promise) else job.promise.value)();
+            const promise_value = job.promise.value();
             _ = job.poll.ref(jsc.VirtualMachine.get());
             if (comptime bun.Environment.isMac) {
                 _ = job.startMac();
@@ -1112,11 +1112,10 @@ const Process = bun.spawn.Process;
 const EventLoopTimer = bun.api.Timer.EventLoopTimer;
 
 pub fn CronJobBase(comptime Self: type) type {
-        _ = &Self;
         return struct {
 
-pub fn loop(self: *const @This()) *bun.Async.Loop {
-        _ = self;
+pub fn loop(job: *const Self) *bun.Async.Loop {
+            _ = &job;
             if (comptime bun.Environment.isWindows) {
                 return jsc.VirtualMachine.get().uvLoop();
             } else {
@@ -1124,30 +1123,30 @@ pub fn loop(self: *const @This()) *bun.Async.Loop {
             }
     }
 
-pub fn eventLoop(self: *const @This()) *jsc.EventLoop {
-        _ = self;
+pub fn eventLoop(job: *const Self) *jsc.EventLoop {
+            _ = &job;
             return jsc.VirtualMachine.get().eventLoop();
     }
 
-pub fn onReaderDone(self: *@This()) void {
-            _ = bun.assert((self.remaining_fds > 0));
-            self.remaining_fds = (self.remaining_fds - 1);
-            _ = self.maybeFinished();
+pub fn onReaderDone(job: *Self) void {
+            _ = bun.assert((job.remaining_fds > 0));
+            job.remaining_fds = (job.remaining_fds - 1);
+            _ = job.maybeFinished();
     }
 
-pub fn onReaderError(self: *@This(), e: bun.sys.Error) void {
-            _ = bun.assert((self.remaining_fds > 0));
-            self.remaining_fds = (self.remaining_fds - 1);
-            if ((self.err_msg == null)) {
-                self.err_msg = (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(bun.default_allocator, "Failed to read process output: {s}", .{ @tagName(e.getErrno()) })) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
+pub fn onReaderError(job: *Self, e: bun.sys.Error) void {
+            _ = bun.assert((job.remaining_fds > 0));
+            job.remaining_fds = (job.remaining_fds - 1);
+            if ((job.err_msg == null)) {
+                job.err_msg = (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(bun.default_allocator, "Failed to read process output: {s}", .{ @tagName(e.getErrno()) })) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
             }
-            _ = self.maybeFinished();
+            _ = job.maybeFinished();
     }
 
-pub fn onProcessExit(self: *@This(), _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) void {
-            self.has_called_process_exit = true;
-            self.exit_status = status;
-            _ = self.maybeFinished();
+pub fn onProcessExit(job: *Self, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) void {
+            job.has_called_process_exit = true;
+            job.exit_status = status;
+            _ = job.maybeFinished();
     }
 };
 }

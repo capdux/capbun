@@ -60,33 +60,16 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 pub const FlushPendingTask = struct {
     has: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.has = false; return self_ptr; }
 
-pub fn init(self: *FlushPendingTask, has: bool) void {
-            self.has = has;
-    }
-
-pub fn runFromJSThread(self: *FlushPendingTask, flush_pending: *FlushPendingTask) void {
-        _ = self;
-            var had = flush_pending.has;
-            _ = &had;
+pub fn runFromJSThread(flush_pending: *FlushPendingTask) void {
+            const had = flush_pending.has;
             flush_pending.has = false;
-            var this_sink: *FileSink = @fieldParentPtr("run_pending_later", flush_pending);
-            _ = &this_sink;
+            const this_sink: *FileSink = @fieldParentPtr("run_pending_later", flush_pending);
             defer {
             _ = this_sink.deref();
             }
@@ -102,656 +85,604 @@ pub const Options = struct {
     truncate: bool = true,
     close: bool = false,
     mode: Mode = 436,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.chunk_size = 1024; self_ptr.truncate = true; self_ptr.close = false; self_ptr.mode = 436; return self_ptr; }
 
-pub fn init(self: *Options, chunk_size: Blob.SizeType, input_path: PathOrFileDescriptor, truncate: bool, close: bool, mode: Mode) void {
-        var __chunk_size_moved = false; _ = &__chunk_size_moved;
-        defer if (!__chunk_size_moved) { const __T = @TypeOf(chunk_size); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = chunk_size.release() catch {}; } else { chunk_size.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = chunk_size; _drop_val.release(); } };
-        var __input_path_moved = false; _ = &__input_path_moved;
-        defer if (!__input_path_moved) { const __T = @TypeOf(input_path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = input_path.release() catch {}; } else { input_path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = input_path; _drop_val.release(); } };
-        var __mode_moved = false; _ = &__mode_moved;
-        defer if (!__mode_moved) { const __T = @TypeOf(mode); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mode.release() catch {}; } else { mode.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mode; _drop_val.release(); } };
-            self.chunk_size = chunk_size;
-            self.input_path = input_path;
-            self.truncate = truncate;
-            self.close = close;
-            self.mode = mode;
-    }
-
-pub fn flags(self: *const Options) i32 {
-        _ = self;
+pub fn flags(opt: *const Options) i32 {
+            _ = &opt;
             return (((O.NONBLOCK | O.CLOEXEC) | O.CREAT) | O.WRONLY);
     }
 };
 
 pub const TestingAPIs = struct {
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn fileSinkLiveCount(self: *TestingAPIs, _: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self;
+pub fn fileSinkLiveCount(_: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
             return JSValue.jsNumber(live_count.load(.monotonic));
     }
 };
 
-pub const FileSink = struct {
-    ref_count: RefCount,
-    writer: IOWriter = .{},
-    event_loop_handle: EventLoopHandle,
-    written: usize = 0,
-    pending: streams.Result.Writable.Pending = .{ .result = .{ .done = .{} } },
-    signal: streams.Signal = .{},
-    done: bool = false,
-    started: bool = false,
-    must_be_kept_alive_until_eof: bool = false,
-    pollable: bool = false,
-    nonblocking: bool = false,
-    force_sync: bool = false,
-    is_socket: bool = false,
-    fd: FD = FD.invalid,
-    auto_flusher: AutoFlusher = .{},
-    run_pending_later: *FlushPendingTask = .{},
-    readable_stream: WebCore.ReadableStream.Strong = .{},
-    js_sink_ref: Strong.Optional = .empty,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.writer = .{}; self_ptr.written = 0; self_ptr.pending = .{ .result = .{ .done = .{} } }; self_ptr.signal = .{}; self_ptr.done = false; self_ptr.started = false; self_ptr.must_be_kept_alive_until_eof = false; self_ptr.pollable = false; self_ptr.nonblocking = false; self_ptr.force_sync = false; self_ptr.is_socket = false; self_ptr.fd = FD.invalid; self_ptr.auto_flusher = .{}; self_ptr.run_pending_later = .{}; self_ptr.readable_stream = .{}; self_ptr.js_sink_ref = .empty; return self_ptr; }
+pub const FileSink = @This();
 
-pub fn memoryCost(self: *const FileSink) usize {
-            return self.writer.memoryCost();
-    }
+ref_count: RefCount = .init(),
+writer: IOWriter = .{},
+event_loop_handle: EventLoopHandle,
+written: usize = 0,
+pending: streams.Result.Writable.Pending = .{ .result = .{ .done = .{} } },
+signal: streams.Signal = .{},
+done: bool = false,
+started: bool = false,
+must_be_kept_alive_until_eof: bool = false,
+pollable: bool = false,
+nonblocking: bool = false,
+force_sync: bool = false,
+is_socket: bool = false,
+fd: FD = FD.invalid,
+auto_flusher: AutoFlusher = .{},
+run_pending_later: FlushPendingTask = .{},
+readable_stream: WebCore.ReadableStream.Strong = .{},
+js_sink_ref: Strong.Optional = .empty,
+
+pub fn memoryCost(self_sink: *const FileSink) usize {
+        return self_sink.writer.memoryCost();
+}
 
 pub fn onAttachedProcessExit(self: *FileSink, status: *const spawn.Status) void {
-            _ = log("onAttachedProcessExit()", .{});
-            _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
-            self.done = true;
-            var readable_stream = self.readable_stream;
-            _ = &readable_stream;
-            self.readable_stream = .{};
-            if (readable_stream.has()) {
-                if (self.event_loop_handle.globalObject()) |global| {
-                    _ = &global;
-                    if (readable_stream.get(global)) |*stream| {
-                        _ = &stream;
-                        if ((!status.isOK())) {
-                            var event_loop = global.bunVM().eventLoop();
-                            _ = &event_loop;
-                            _ = event_loop.enter();
-                            defer {
-                            _ = event_loop.exit();
-                            }
-                            _ = (stream.*).cancel(global);
-                        } else {
-                            _ = (stream.*).done(global);
+        _ = log("onAttachedProcessExit()", .{});
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
+        self.done = true;
+        var readable_stream = self.readable_stream;
+        _ = &readable_stream;
+        self.readable_stream = .{};
+        if (readable_stream.has()) {
+            if (self.event_loop_handle.globalObject()) |global| {
+                _ = &global;
+                if (readable_stream.get(global)) |*stream| {
+                    _ = &stream;
+                    if ((!status.isOK())) {
+                        var event_loop = global.bunVM().eventLoop();
+                        _ = &event_loop;
+                        _ = event_loop.enter();
+                        defer {
+                        _ = event_loop.exit();
                         }
+                        _ = (stream.*).cancel(global);
+                    } else {
+                        _ = (stream.*).done(global);
                     }
                 }
-                _ = readable_stream.deinit();
             }
-            _ = self.writer.close();
-            self.pending.result = .{ .err = sys.Error.fromCode(.PIPE, .write) };
-            _ = self.runPending();
-            _ = self.clearKeepAliveRef();
-    }
+            _ = readable_stream.deinit();
+        }
+        _ = self.writer.close();
+        self.pending.result = .{ .err = sys.Error.fromCode(.PIPE, .write) };
+        _ = self.runPending();
+        _ = self.clearKeepAliveRef();
+}
 
 pub fn runPending(self: *FileSink) void {
-            _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
-            self.run_pending_later.has = false;
-            var l = self.eventLoop();
-            _ = &l;
-            _ = l.enter();
-            defer {
-            _ = l.exit();
-            }
-            _ = self.pending.run();
-            _ = self.js_sink_ref.deinit();
-    }
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
+        self.run_pending_later.has = false;
+        var l = self.eventLoop();
+        _ = &l;
+        _ = l.enter();
+        defer {
+        _ = l.exit();
+        }
+        _ = self.pending.run();
+        _ = self.js_sink_ref.deinit();
+}
 
 pub fn onWrite(self: *FileSink, amount: usize, status: io.WriteStatus) void {
-            _ = log("onWrite({d}, {any})", .{ amount, status });
-            _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
-            self.written = (self.written + amount);
-            var has_pending_data = self.writer.hasPendingData();
-            _ = &has_pending_data;
-            _ = self.writer.updateRef(self.eventLoop(), has_pending_data);
-            if (has_pending_data) {
-                if (self.event_loop_handle.bunVM()) |vm| {
-                    _ = &vm;
-                    if ((!vm.is_inside_deferred_task_queue)) {
-                        _ = AutoFlusher.registerDeferredMicrotaskWithType(FileSink, self, vm);
-                    }
+        _ = log("onWrite({d}, {any})", .{ amount, status });
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
+        self.written = (self.written + amount);
+        const has_pending_data = self.writer.hasPendingData();
+        _ = self.writer.updateRef(self.eventLoop(), has_pending_data);
+        if (has_pending_data) {
+            if (self.event_loop_handle.bunVM()) |vm| {
+                _ = &vm;
+                if ((!vm.is_inside_deferred_task_queue)) {
+                    _ = AutoFlusher.registerDeferredMicrotaskWithType(FileSink, self, vm);
                 }
             }
-            if (((status == .pending) and has_pending_data)) {
-                if ((self.pending.state == .pending)) {
-                    self.pending.consumed = @truncate(amount);
-                }
-                return;
-            }
+        }
+        if (((status == .pending) and has_pending_data)) {
             if ((self.pending.state == .pending)) {
                 self.pending.consumed = @truncate(amount);
-                if ((self.done or (status == .end_of_file))) {
-                    self.pending.result = .{ .owned_and_done = self.pending.consumed };
-                } else {
-                    self.pending.result = .{ .owned = self.pending.consumed };
-                }
-                _ = self.runPending();
-                var ended_and_done = (self.done and (status == .end_of_file));
-                _ = &ended_and_done;
-                if ((self.done and (status == .drained))) {
-                    _ = self.writer.end();
-                } else {
-                    if ((ended_and_done and (!has_pending_data))) {
-                        _ = self.writer.close();
-                    }
-                }
             }
-            if ((status == .end_of_file)) {
-                _ = self.signal.close(null);
-                _ = self.clearKeepAliveRef();
+            return;
+        }
+        if ((self.pending.state == .pending)) {
+            self.pending.consumed = @truncate(amount);
+            if ((self.done or (status == .end_of_file))) {
+                self.pending.result = .{ .owned_and_done = self.pending.consumed };
+            } else {
+                self.pending.result = .{ .owned = self.pending.consumed };
             }
-    }
-
-pub fn onError(self: *FileSink, err: sys.Error) void {
-            _ = log("onError({f})", .{ err });
-            if ((self.pending.state == .pending)) {
-                self.pending.result = .{ .err = err };
-                if (self.eventLoop().bunVM()) |vm| {
-                    _ = &vm;
-                    if (vm.is_inside_deferred_task_queue) {
-                        _ = self.runPendingLater();
-                        if (Environment.isWindows) {
-                            _ = self.clearKeepAliveRef();
-                        }
-                        return;
-                    }
-                }
-                _ = self.runPending();
-            }
-            if (Environment.isWindows) {
-                _ = self.clearKeepAliveRef();
-            }
-    }
-
-pub fn onReady(self: *FileSink) void {
-            _ = log("onReady()", .{});
-            _ = self.signal.ready(null, null);
-    }
-
-pub fn onClose(self: *FileSink) void {
-            _ = log("onClose()", .{});
-            if (self.readable_stream.has()) {
-                if (self.event_loop_handle.globalObject()) |global| {
-                    _ = &global;
-                    if (self.readable_stream.get(global)) |stream| {
-                        _ = &stream;
-                        _ = stream.done(global);
-                    }
+            _ = self.runPending();
+            const ended_and_done = (self.done and (status == .end_of_file));
+            if ((self.done and (status == .drained))) {
+                _ = self.writer.end();
+            } else {
+                if ((ended_and_done and (!has_pending_data))) {
+                    _ = self.writer.close();
                 }
             }
+        }
+        if ((status == .end_of_file)) {
             _ = self.signal.close(null);
             _ = self.clearKeepAliveRef();
-    }
+        }
+}
+
+pub fn onError(self: *FileSink, e: sys.Error) void {
+        _ = log("onError({f})", .{ e });
+        if ((self.pending.state == .pending)) {
+            self.pending.result = .{ .err = e };
+            if (self.eventLoop().bunVM()) |vm| {
+                _ = &vm;
+                if (vm.is_inside_deferred_task_queue) {
+                    _ = self.runPendingLater();
+                    if (Environment.isWindows) {
+                        _ = self.clearKeepAliveRef();
+                    }
+                    return;
+                }
+            }
+            _ = self.runPending();
+        }
+        if (Environment.isWindows) {
+            _ = self.clearKeepAliveRef();
+        }
+}
+
+pub fn onReady(self: *FileSink) void {
+        _ = log("onReady()", .{});
+        _ = self.signal.ready(null, null);
+}
+
+pub fn onClose(self: *FileSink) void {
+        _ = log("onClose()", .{});
+        if (self.readable_stream.has()) {
+            if (self.event_loop_handle.globalObject()) |global| {
+                _ = &global;
+                if (self.readable_stream.get(global)) |stream| {
+                    _ = &stream;
+                    _ = stream.done(global);
+                }
+            }
+        }
+        _ = self.signal.close(null);
+        _ = self.clearKeepAliveRef();
+}
 
 pub fn clearKeepAliveRef(self: *FileSink) void {
-            if (self.must_be_kept_alive_until_eof) {
-                self.must_be_kept_alive_until_eof = false;
-                _ = self.deref();
-            }
-    }
+        if (self.must_be_kept_alive_until_eof) {
+            self.must_be_kept_alive_until_eof = false;
+            _ = self.deref();
+        }
+}
 
-pub fn createWithPipe(self: *const FileSink, event_loop_: anytype, pipe: *uv.Pipe) *FileSink {
-        _ = self;
-            if (Environment.isPosix) {
-                _ = @compileError("FileSink.createWithPipe is only available on Windows");
-            }
-            var evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
-            _ = &evtloop;
-            var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = pipe.fd() });
-            _ = &this_sink;
-            _ = live_count.fetchAdd(1, .monotonic);
-            _ = this_sink.writer.setPipe(pipe);
-            _ = this_sink.writer.setParent(this_sink);
-            return this_sink;
-    }
+pub fn createWithPipe(event_loop_: anytype, pipe: *uv.Pipe) *FileSink {
+        if (Environment.isPosix) {
+            _ = @compileError("FileSink.createWithPipe is only available on Windows");
+        }
+        const evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
+        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = pipe.fd() });
+        _ = &this_sink;
+        _ = live_count.fetchAdd(1, .monotonic);
+        _ = this_sink.writer.setPipe(pipe);
+        _ = this_sink.writer.setParent(this_sink);
+        return this_sink;
+}
 
 pub fn create(event_loop_: anytype, fd: FD) *FileSink {
-            var evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
-            _ = &evtloop;
-            var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = fd });
-            _ = &this_sink;
-            _ = live_count.fetchAdd(1, .monotonic);
-            _ = this_sink.writer.setParent(this_sink);
-            return this_sink;
-    }
+        const evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
+        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = fd });
+        _ = &this_sink;
+        _ = live_count.fetchAdd(1, .monotonic);
+        _ = this_sink.writer.setParent(this_sink);
+        return this_sink;
+}
 
 pub fn setup(self: *FileSink, options: *const Options) sys.Maybe(void) {
-            if (self.readable_stream.has()) {
+        if (self.readable_stream.has()) {
+            return .success;
+        }
+        const result = io.openForWriting(FD.cwd(), options.input_path, options.flags(), options.mode, (&self.pollable), (&self.is_socket), self.force_sync, (&self.nonblocking), *FileSink, self, onForceSyncOrIsaTTY, sys.isPollable);
+        if ((result == .err)) {
+            return .{ .err = result.err };
+        }
+        const fd = result.result;
+        if (Environment.isWindows) {
+            if (self.force_sync) {
+                const sync_res = self.writer.startSync(fd, self.pollable);
+                if ((sync_res == .err)) {
+                    _ = fd.close();
+                    return .{ .err = sync_res.err };
+                }
+                _ = self.writer.updateRef(self.eventLoop(), false);
                 return .success;
             }
-            var result = io.openForWriting(FD.cwd(), options.input_path, options.flags(), options.mode, (&self.pollable), (&self.is_socket), self.force_sync, (&self.nonblocking), *FileSink, self, onForceSyncOrIsaTTY, sys.isPollable);
-            _ = &result;
-            var fd = (switch (result) {
-.err => |e| {
-return .{ .err = e };
-},
-.result => |val| val,
-});
-            _ = &fd;
-            if (Environment.isWindows) {
-                if (self.force_sync) {
-                    switch (self.writer.startSync(fd, self.pollable)) {
-.err => |e| {
-_ = fd.close();
-                    return .{ .err = e };
-},
-.result => {
-_ = self.writer.updateRef(self.eventLoop(), false);
-},
+        }
+        const start_res = self.writer.start(fd, self.pollable);
+        if ((start_res == .err)) {
+            _ = fd.close();
+            return .{ .err = start_res.err };
+        }
+        _ = self.writer.updateRef(self.eventLoop(), false);
+        if (Environment.isPosix) {
+            if (self.nonblocking) {
+                _ = (self.writer.getPoll()).?.flags.insert(.nonblocking);
+            }
+            if (self.is_socket) {
+                _ = (self.writer.getPoll()).?.flags.insert(.socket);
+            } else {
+                if (self.pollable) {
+                    _ = (self.writer.getPoll()).?.flags.insert(.fifo);
+                }
+            }
+        }
+        return .success;
 }
+
+pub fn onForceSyncOrIsaTTY(fs: *FileSink) void {
+        if (Environment.isPosix) {
+            fs.force_sync = true;
+            fs.writer.force_sync = true;
+        }
+}
+
+pub fn loop(self: *FileSink) *sys.Async.Loop {
+        if (Environment.isWindows) {
+            return self.event_loop_handle.loop().uv_loop;
+        } else {
+            return self.event_loop_handle.loop();
+        }
+}
+
+pub fn eventLoop(self: *FileSink) EventLoopHandle {
+        return self.event_loop_handle;
+}
+
+pub fn connect(self: *FileSink, signal: streams.Signal) void {
+        self.signal = signal;
+}
+
+pub fn start(self: *FileSink, stream_start: streams.Start) sys.Maybe(void) {
+        if ((stream_start == .FileSink)) {
+            const file = stream_start.FileSink;
+            const setup_res = self.setup((&file));
+            if ((setup_res == .err)) {
+                return .{ .err = setup_res.err };
+            }
+        }
+        self.done = false;
+        self.started = true;
+        _ = self.signal.start();
+        return .success;
+}
+
+pub fn runPendingLater(self: *FileSink) void {
+        if (self.run_pending_later.has) {
+            return;
+        }
+        self.run_pending_later.has = true;
+        const event_loop = self.eventLoop();
+        if ((event_loop == .js)) {
+            _ = self.ref();
+            _ = event_loop.js.enqueueTask(Task.init((&self.run_pending_later)));
+        }
+}
+
+pub fn onAutoFlush(self: *FileSink) bool {
+        if ((self.done or (!self.writer.hasPendingData()))) {
+            _ = self.updateRef(false);
+            self.auto_flusher.registered = false;
+            return false;
+        }
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
+        const amount_buffered = self.writer.outgoing.size();
+        const flush_res = self.writer.flush();
+        if (((flush_res == .err) or (flush_res == .done))) {
+            _ = self.updateRef(false);
+            _ = self.runPendingLater();
+        } else {
+            if ((flush_res == .wrote)) {
+                if ((flush_res.wrote == amount_buffered)) {
+                    _ = self.updateRef(false);
+                    _ = self.runPendingLater();
+                }
+            } else {
+                return true;
+            }
+        }
+        const is_registered = (!self.writer.hasPendingData());
+        self.auto_flusher.registered = is_registered;
+        return is_registered;
+}
+
+pub fn flush(self_sink: *FileSink) sys.Maybe(void) {
+        _ = &self_sink;
+        return .success;
+}
+
+pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys.Maybe(JSValue) {
+        _ = &wait;
+        if ((self.pending.state == .pending)) {
+            return .{ .result = self.pending.future.promise.strong.value() };
+        }
+        if (self.done) {
+            return .initResult(JSValue.js_undefined);
+        }
+        const rc = self.writer.flush();
+        if ((rc == .done)) {
+            self.written = (self.written + @as(usize, @truncate(rc.done)));
+        } else {
+            if ((rc == .pending)) {
+                self.written = (self.written + @as(usize, @truncate(rc.pending)));
+            } else {
+                if ((rc == .wrote)) {
+                    self.written = (self.written + @as(usize, @truncate(rc.wrote)));
+                } else {
+                    return .{ .err = rc.err };
+                }
+            }
+        }
+        const to_res = self.toResult(rc);
+        if ((to_res == .err)) {
+            _ = unreachable;
+        }
+        return .initResult(to_res.toJS(globalThis));
+}
+
+pub fn finalize(self: *FileSink) void {
+        _ = self.readable_stream.deinit();
+        _ = self.pending.deinit();
+        _ = self.js_sink_ref.deinit();
+        _ = self.deref();
+}
+
+pub fn protectJSWrapper(self: *FileSink, globalThis: *JSGlobalObject, js_wrapper: JSValue) void {
+        _ = self.js_sink_ref.set(globalThis, js_wrapper);
+}
+
+pub fn init(fd: FD, event_loop_handle: anytype) *FileSink {
+        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .writer = .{}, .fd = fd, .event_loop_handle = EventLoopHandle.init(event_loop_handle) });
+        _ = &this_sink;
+        _ = live_count.fetchAdd(1, .monotonic);
+        _ = this_sink.writer.setParent(this_sink);
+        return this_sink;
+}
+
+pub fn construct(self: *FileSink, alloc: sys.Allocator) void {
+        _ = &alloc;
+        self.* = FileSink{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(VirtualMachine.get().eventLoop()) };
+        _ = live_count.fetchAdd(1, .monotonic);
+}
+
+pub fn write(self: *FileSink, data: streams.Result) streams.Result.Writable {
+        if (self.done) {
+            return .{ .done = .{} };
+        }
+        return self.toResult(self.writer.write(data.slice()));
+}
+
+pub fn writeLatin1(self: *FileSink, data: streams.Result) streams.Result.Writable {
+        if (self.done) {
+            return .{ .done = .{} };
+        }
+        return self.toResult(self.writer.writeLatin1(data.slice()));
+}
+
+pub fn writeUTF16(self: *FileSink, data: streams.Result) streams.Result.Writable {
+        if (self.done) {
+            return .{ .done = .{} };
+        }
+        return self.toResult(self.writer.writeUTF16(data.slice16()));
+}
+
+pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
+        if (self.done) {
+            return .success;
+        }
+        const flush_res = self.writer.flush();
+        if ((flush_res == .done)) {
+            self.written = (self.written + @as(usize, @truncate(flush_res.done)));
+            _ = self.writer.end();
+            return .success;
+        } else {
+            if ((flush_res == .err)) {
+                _ = self.writer.close();
+                return .{ .err = flush_res.err };
+            } else {
+                if ((flush_res == .pending)) {
+                    self.written = (self.written + @as(usize, @truncate(flush_res.pending)));
+                    if ((!self.must_be_kept_alive_until_eof)) {
+                        self.must_be_kept_alive_until_eof = true;
+                        _ = self.ref();
+                    }
+                    self.done = true;
+                    return .success;
+                } else {
+                    self.written = (self.written + @as(usize, @truncate(flush_res.wrote)));
+                    _ = self.writer.end();
                     return .success;
                 }
             }
-            switch (self.writer.start(fd, self.pollable)) {
-.err => |e| {
-_ = fd.close();
-            return .{ .err = e };
-},
-.result => {
-_ = self.writer.updateRef(self.eventLoop(), false);
-            if (Environment.isPosix) {
-                if (self.nonblocking) {
-                    _ = (self.writer.getPoll()).?.flags.insert(.nonblocking);
-                }
-                if (self.is_socket) {
-                    _ = (self.writer.getPoll()).?.flags.insert(.socket);
-                } else {
-                    if (self.pollable) {
-                        _ = (self.writer.getPoll()).?.flags.insert(.fifo);
-                    }
-                }
-            }
-},
+        }
 }
-            return .success;
-    }
-
-pub fn onForceSyncOrIsaTTY(self: *FileSink, fs: *FileSink) void {
-        _ = self;
-            if (Environment.isPosix) {
-                fs.force_sync = true;
-                fs.writer.force_sync = true;
-            }
-    }
-
-pub fn loop(self: *FileSink) *sys.Async.Loop {
-            if (Environment.isWindows) {
-                return self.event_loop_handle.loop().uv_loop;
-            } else {
-                return self.event_loop_handle.loop();
-            }
-    }
-
-pub fn eventLoop(self: *FileSink) EventLoopHandle {
-            return self.event_loop_handle;
-    }
-
-pub fn connect(self: *FileSink, signal: streams.Signal) void {
-            self.signal = signal;
-    }
-
-pub fn start(self: *FileSink, stream_start: streams.Start) sys.Maybe(void) {
-            switch (stream_start) {
-.FileSink => |file| {
-switch (self.setup((&file))) {
-.err => |e| {
-return .{ .err = e };
-},
-.result => {
-
-},
-}
-},
-else => {
-
-},
-}
-            self.done = false;
-            self.started = true;
-            _ = self.signal.start();
-            return .success;
-    }
-
-pub fn runPendingLater(self: *FileSink) void {
-            if (self.run_pending_later.has) {
-                return;
-            }
-            self.run_pending_later.has = true;
-            var event_loop = self.eventLoop();
-            _ = &event_loop;
-            if ((event_loop == .js)) {
-                _ = self.ref();
-                _ = event_loop.js.enqueueTask(Task.init(self.run_pending_later));
-            }
-    }
-
-pub fn onAutoFlush(self: *FileSink) bool {
-            if ((self.done or (!self.writer.hasPendingData()))) {
-                _ = self.updateRef(false);
-                self.auto_flusher.registered = false;
-                return false;
-            }
-            _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
-            var amount_buffered = self.writer.outgoing.size();
-            _ = &amount_buffered;
-            switch (self.writer.flush()) {
-.err, .done => {
-_ = self.updateRef(false);
-            _ = self.runPendingLater();
-},
-.wrote => |amount_drained| {
-if ((amount_drained == amount_buffered)) {
-                _ = self.updateRef(false);
-                _ = self.runPendingLater();
-            }
-},
-else => {
-return true;
-},
-}
-            var is_registered = (!self.writer.hasPendingData());
-            _ = &is_registered;
-            self.auto_flusher.registered = is_registered;
-            return is_registered;
-    }
-
-pub fn flush(self: *FileSink) sys.Maybe(void) {
-        _ = self;
-            return .success;
-    }
-
-pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys.Maybe(JSValue) {
-            _ = &wait;
-            if ((self.pending.state == .pending)) {
-                return .{ .result = (if (@typeInfo(@TypeOf(self.pending.future.promise.strong)) == .@"enum") @intFromEnum(self.pending.future.promise.strong) else self.pending.future.promise.strong.value)() };
-            }
-            if (self.done) {
-                return .initResult(JSValue.js_undefined);
-            }
-            var rc = self.writer.flush();
-            _ = &rc;
-            switch (rc) {
-.done => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-},
-.pending => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-},
-.wrote => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-},
-.err => |e| {
-return .{ .err = e };
-},
-}
-            var to_res = self.toResult(rc);
-            _ = &to_res;
-            if ((to_res == .err)) {
-                _ = unreachable;
-            }
-            return .{ .initResult = to_res.toJS(globalThis) };
-    }
-
-pub fn finalize(self: *FileSink) void {
-            _ = self.readable_stream.deinit();
-            _ = self.pending.deinit();
-            _ = self.js_sink_ref.deinit();
-            _ = self.deref();
-    }
-
-pub fn protectJSWrapper(self: *FileSink, globalThis: *JSGlobalObject, js_wrapper: JSValue) void {
-            _ = self.js_sink_ref.set(globalThis, js_wrapper);
-    }
-
-pub fn init(fd: FD, event_loop_handle: anytype) *FileSink {
-            var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .writer = .{}, .fd = fd, .event_loop_handle = EventLoopHandle.init(event_loop_handle) });
-            _ = &this_sink;
-            _ = live_count.fetchAdd(1, .monotonic);
-            _ = this_sink.writer.setParent(this_sink);
-            return this_sink;
-    }
-
-pub fn construct(self: *FileSink, _: sys.Allocator) void {
-            self.* = FileSink{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(VirtualMachine.get().eventLoop()) };
-            _ = live_count.fetchAdd(1, .monotonic);
-    }
-
-pub fn write(self: *FileSink, data: streams.Result) streams.Result.Writable {
-            if (self.done) {
-                return .{ .done = .{} };
-            }
-            return self.toResult(self.writer.write(data.slice()));
-    }
-
-pub fn writeLatin1(self: *FileSink, data: streams.Result) streams.Result.Writable {
-            if (self.done) {
-                return .{ .done = .{} };
-            }
-            return self.toResult(self.writer.writeLatin1(data.slice()));
-    }
-
-pub fn writeUTF16(self: *FileSink, data: streams.Result) streams.Result.Writable {
-            if (self.done) {
-                return .{ .done = .{} };
-            }
-            return self.toResult(self.writer.writeUTF16(data.slice16()));
-    }
-
-pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
-            if (self.done) {
-                return .success;
-            }
-            switch (self.writer.flush()) {
-.done => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-            _ = self.writer.end();
-            return .success;
-},
-.err => |e| {
-_ = self.writer.close();
-            return .{ .err = e };
-},
-.pending => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-            if ((!self.must_be_kept_alive_until_eof)) {
-                self.must_be_kept_alive_until_eof = true;
-                _ = self.ref();
-            }
-            self.done = true;
-            return .success;
-},
-.wrote => |w| {
-self.written = (self.written + @as(usize, @truncate(w)));
-            _ = self.writer.end();
-            return .success;
-},
-}
-    }
 
 pub fn deinit(self: *FileSink) void {
-            _ = live_count.fetchSub(1, .monotonic);
-            _ = self.pending.deinit();
-            _ = self.writer.deinit();
-            _ = self.readable_stream.deinit();
-            _ = self.js_sink_ref.deinit();
-            if (self.event_loop_handle.globalObject()) |global| {
-                _ = &global;
-                _ = AutoFlusher.unregisterDeferredMicrotaskWithType(FileSink, self, global.bunVM());
-            }
-            _ = sys.destroy(self);
-    }
+        _ = live_count.fetchSub(1, .monotonic);
+        _ = self.pending.deinit();
+        _ = self.writer.deinit();
+        _ = self.readable_stream.deinit();
+        _ = self.js_sink_ref.deinit();
+        if (self.event_loop_handle.globalObject()) |global| {
+            _ = &global;
+            _ = AutoFlusher.unregisterDeferredMicrotaskWithType(FileSink, self, global.bunVM());
+        }
+        _ = sys.destroy(self);
+}
 
 pub fn toJS(self: *FileSink, globalThis: *JSGlobalObject) JSValue {
-            return JSSink.createObject(globalThis, self, 0);
-    }
+        return JSSink.createObject(globalThis, self, 0);
+}
 
 pub fn toJSWithDestructor(self: *FileSink, globalThis: *JSGlobalObject, destructor: ?Sink.DestructorPtr) JSValue {
-            var dest_ptr: usize = (if ((destructor != null)) @intFromPtr(destructor.?.ptr()) else 0);
-            _ = &dest_ptr;
-            return JSSink.createObject(globalThis, self, dest_ptr);
-    }
+        const dest_ptr: usize = (if ((destructor != null)) @intFromPtr(destructor.?.ptr()) else 0);
+        return JSSink.createObject(globalThis, self, dest_ptr);
+}
 
 pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue) {
-            if (self.done) {
-                if ((self.pending.state == .pending)) {
-                    return .{ .result = (if (@typeInfo(@TypeOf(self.pending.future.promise.strong)) == .@"enum") @intFromEnum(self.pending.future.promise.strong) else self.pending.future.promise.strong.value)() };
-                }
-                return .{ .result = JSValue.jsNumber(self.written) };
+        if (self.done) {
+            if ((self.pending.state == .pending)) {
+                return .{ .result = self.pending.future.promise.strong.value() };
             }
-            var flush_result = self.writer.flush();
-            _ = &flush_result;
-            switch (flush_result) {
-.done => |w| {
-_ = self.updateRef(false);
+            return .{ .result = JSValue.jsNumber(self.written) };
+        }
+        const flush_result = self.writer.flush();
+        if ((flush_result == .done)) {
+            _ = self.updateRef(false);
             _ = self.writer.end();
-            return .{ .result = JSValue.jsNumber(w) };
-},
-.err => |e| {
-_ = self.writer.close();
-            return .{ .err = e };
-},
-.pending => |pending_written| {
-self.written = (self.written + @as(usize, @truncate(pending_written)));
-            if ((!self.must_be_kept_alive_until_eof)) {
-                self.must_be_kept_alive_until_eof = true;
-                _ = self.ref();
+            return .{ .result = JSValue.jsNumber(flush_result.done) };
+        } else {
+            if ((flush_result == .err)) {
+                _ = self.writer.close();
+                return .{ .err = flush_result.err };
+            } else {
+                if ((flush_result == .pending)) {
+                    const pending_written = flush_result.pending;
+                    self.written = (self.written + @as(usize, @truncate(pending_written)));
+                    if ((!self.must_be_kept_alive_until_eof)) {
+                        self.must_be_kept_alive_until_eof = true;
+                        _ = self.ref();
+                    }
+                    self.done = true;
+                    self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+                    const promise_result = self.pending.promise(globalThis);
+                    return .{ .result = promise_result.toJS() };
+                } else {
+                    _ = self.writer.end();
+                    return .{ .result = JSValue.jsNumber(flush_result.wrote) };
+                }
             }
-            self.done = true;
-            self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
-            var promise_result = self.pending.promise(globalThis);
-            _ = &promise_result;
-            return .{ .result = promise_result.toJS() };
-},
-.wrote => |w| {
-_ = self.writer.end();
-            return .{ .result = JSValue.jsNumber(w) };
-},
+        }
 }
-    }
 
 pub fn sink(self: *FileSink) Sink {
-            return Sink.init(self);
-    }
+        return Sink.init(self);
+}
 
 pub fn updateRef(self: *FileSink, value: bool) void {
-            if (value) {
-                _ = self.writer.enableKeepingProcessAlive(self.event_loop_handle);
-            } else {
-                _ = self.writer.disableKeepingProcessAlive(self.event_loop_handle);
-            }
-    }
+        if (value) {
+            _ = self.writer.enableKeepingProcessAlive(self.event_loop_handle);
+        } else {
+            _ = self.writer.disableKeepingProcessAlive(self.event_loop_handle);
+        }
+}
 
-pub fn getFd(self: *const FileSink) i32 {
-            if (Environment.isWindows) {
-                return (switch (self.fd.decodeWindows()) {
-.windows => -1,
-.uv => |num| num,
-});
+pub fn getFd(self_sink: *const FileSink) i32 {
+        if (Environment.isWindows) {
+            const decoded = self_sink.fd.decodeWindows();
+            if ((decoded == .windows)) {
+                return -1;
             }
-            return self.fd.cast();
-    }
+            return decoded.uv;
+        }
+        return self_sink.fd.cast();
+}
 
 pub fn toResult(self: *FileSink, write_result: io.WriteResult) streams.Result.Writable {
-            switch (write_result) {
-.done => |amt| {
-if ((amt > 0)) {
+        if ((write_result == .done)) {
+            const amt = write_result.done;
+            if ((amt > 0)) {
                 return .{ .owned_and_done = @as(Blob.SizeType, @truncate(amt)) };
             }
             return .{ .done = .{} };
-},
-.wrote => |amt| {
-if ((amt > 0)) {
-                return .{ .owned = @as(Blob.SizeType, @truncate(amt)) };
+        } else {
+            if ((write_result == .wrote)) {
+                const amt = write_result.wrote;
+                if ((amt > 0)) {
+                    return .{ .owned = @as(Blob.SizeType, @truncate(amt)) };
+                }
+                return .{ .temporary = @as(Blob.SizeType, @truncate(amt)) };
+            } else {
+                if ((write_result == .err)) {
+                    return .{ .err = write_result.err };
+                } else {
+                    const pending_written = write_result.pending;
+                    if ((!self.must_be_kept_alive_until_eof)) {
+                        self.must_be_kept_alive_until_eof = true;
+                        _ = self.ref();
+                    }
+                    self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(pending_written)));
+                    self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+                    return .{ .pending = (&self.pending) };
+                }
             }
-            return .{ .temporary = @as(Blob.SizeType, @truncate(amt)) };
-},
-.err => |e| {
-return .{ .err = e };
-},
-.pending => |pending_written| {
-if ((!self.must_be_kept_alive_until_eof)) {
-                self.must_be_kept_alive_until_eof = true;
-                _ = self.ref();
-            }
-            self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(pending_written)));
-            self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
-            return .{ .pending = (&self.pending) };
-},
+        }
 }
-    }
 
 pub fn handleResolveStream(self: *FileSink, globalThis: *JSGlobalObject) void {
-            if (self.readable_stream.get(globalThis)) |*stream| {
-                _ = &stream;
-                _ = (stream.*).done(globalThis);
-            }
-            if ((!self.done)) {
-                _ = self.writer.close();
-            }
-    }
+        if (self.readable_stream.get(globalThis)) |*stream| {
+            _ = &stream;
+            _ = (stream.*).done(globalThis);
+        }
+        if ((!self.done)) {
+            _ = self.writer.close();
+        }
+}
 
 pub fn handleRejectStream(self: *FileSink, globalThis: *JSGlobalObject, _: JSValue) void {
-            if (self.readable_stream.get(globalThis)) |*stream| {
-                _ = &stream;
-                _ = (stream.*).abort(globalThis);
-                _ = self.readable_stream.deinit();
-            }
-            if ((!self.done)) {
-                _ = self.writer.close();
-            }
-    }
+        if (self.readable_stream.get(globalThis)) |*stream| {
+            _ = &stream;
+            _ = (stream.*).abort(globalThis);
+            _ = self.readable_stream.deinit();
+        }
+        if ((!self.done)) {
+            _ = self.writer.close();
+        }
+}
 
 pub fn assignToStream(self: *FileSink, stream: *WebCore.ReadableStream, globalThis: *JSGlobalObject) JSValue {
-            self.signal = JSSink.SinkSignal.init(JSValue.zero);
-            _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
-            _ = self.signal.clear();
-            self.readable_stream = .init(stream.*, globalThis);
-            var sig_ptr = (blk: {
-            break :blk @as(*anyopaque, @ptrCast(@alignCast(&(self.signal.ptr))));
+        self.signal = JSSink.SinkSignal.init(JSValue.zero);
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
+        _ = self.signal.clear();
+        self.readable_stream = .init(stream.*, globalThis);
+        const sig_ptr = (blk: {
+        break :blk @as(*anyopaque, @ptrCast(@alignCast(&(self.signal.ptr))));
 
 });
-            _ = &sig_ptr;
-            var promise_result = JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), self, sig_ptr);
-            _ = &promise_result;
-            if (promise_result.toError()) |err| {
-                _ = &err;
-                _ = self.readable_stream.deinit();
-                self.readable_stream = .{};
-                return err;
-            }
-            if ((!promise_result.isEmptyOrUndefinedOrNull())) {
-                if (promise_result.asAnyPromise()) |promise| {
-                    _ = &promise;
-                    switch (promise.status()) {
+        const promise_result = JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), self, sig_ptr);
+        if (promise_result.toError()) |e| {
+            _ = &e;
+            _ = self.readable_stream.deinit();
+            self.readable_stream = .{};
+            return e;
+        }
+        if ((!promise_result.isEmptyOrUndefinedOrNull())) {
+            if (promise_result.asAnyPromise()) |promise| {
+                _ = &promise;
+                switch (promise.status()) {
 .pending => {
 _ = self.writer.enableKeepingProcessAlive(self.event_loop_handle);
-                    _ = self.ref();
-                    _ = (blk_catch_0: { break :blk_catch_0 ((promise_result.then(globalThis, self, onResolveStream, onRejectStream)) catch |__ce_0| { _ = &__ce_0;  }); });
+                _ = self.ref();
+                _ = (blk_catch_0: { break :blk_catch_0 ((promise_result.then(globalThis, self, onResolveStream, onRejectStream)) catch |__ce_0| { _ = &__ce_0;  }); });
 },
 .fulfilled => {
 _ = self.handleResolveStream(globalThis);
@@ -760,24 +691,22 @@ _ = self.handleResolveStream(globalThis);
 _ = self.handleRejectStream(globalThis, promise.result(globalThis.vm()));
 },
 }
-                }
             }
-            return promise_result;
-    }
-    pub const RefCount = bun.ptr.RefCount(FileSink, "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
-    pub const IOWriter = io.StreamingWriter(FileSink, opaque {
-            pub const onClose = FileSink.onClose;
-            pub const onWritable = FileSink.onReady;
-            pub const onError = FileSink.onError;
-            pub const onWrite = FileSink.onWrite;
-        });
-    pub const Poll = IOWriter;
-    pub const JSSink = Sink.JSSink(FileSink, "FileSink");
-    pub const writeBytes = write;
-};
-
+        }
+        return promise_result;
+}
+pub const RefCount = bun.ptr.RefCount(FileSink, "ref_count", deinit, .{});
+pub const ref = RefCount.ref;
+pub const deref = RefCount.deref;
+pub const IOWriter = io.StreamingWriter(FileSink, opaque {
+        pub const onClose = FileSink.onClose;
+        pub const onWritable = FileSink.onReady;
+        pub const onError = FileSink.onError;
+        pub const onWrite = FileSink.onWrite;
+    });
+pub const Poll = IOWriter;
+pub const JSSink = Sink.JSSink(FileSink, "FileSink");
+pub const writeBytes = write;
 const Output = bun.Output;
 const Environment = bun.Environment;
 const sys = bun.sys;
@@ -805,11 +734,9 @@ const PathOrFileDescriptor = webcore.PathOrFileDescriptor;
 const uv = bun.windows.libuv;
 const log = Output.scoped(.FileSink, .visible);
 pub var live_count = std.atomic.Value(i32).init(0);
-pub const Poll = FileSink.Poll;
 
 pub fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) callconv(.c) void {
-        var this_sink: *FileSink = ((FileSink.JSSink.fromJS(jsvalue)) orelse { return; });
-        _ = &this_sink;
+        const this_sink: *FileSink = ((FileSink.JSSink.fromJS(jsvalue)) orelse { return; });
         if ((!Environment.isWindows)) {
             this_sink.force_sync = true;
             this_sink.writer.force_sync = true;
@@ -819,21 +746,17 @@ pub fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject
         } else {
             if (this_sink.writer.source) |*source| {
                 _ = &source;
-                switch ((source.*).*) {
-.pipe => |pipe| {
-if ((uv.uv_stream_set_blocking(@as(*uv.uv_stream_t, @ptrCast(@alignCast(&(pipe)))), 1) == .zero)) {
-                    return;
+                if (((source.*).* == .pipe)) {
+                    if ((uv.uv_stream_set_blocking(@as(*uv.uv_stream_t, @ptrCast(@alignCast(&((source.*).pipe)))), 1) == .zero)) {
+                        return;
+                    }
+                } else {
+                    if (((source.*).* == .tty)) {
+                        if ((uv.uv_stream_set_blocking(@as(*uv.uv_stream_t, @ptrCast(@alignCast(&((source.*).tty)))), 1) == .zero)) {
+                            return;
+                        }
+                    }
                 }
-},
-.tty => |tty| {
-if ((uv.uv_stream_set_blocking(@as(*uv.uv_stream_t, @ptrCast(@alignCast(&(tty)))), 1) == .zero)) {
-                    return;
-                }
-},
-else => {
-
-},
-}
             }
             this_sink.force_sync = true;
         }
@@ -841,10 +764,8 @@ else => {
 
 pub fn onResolveStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         _ = log("onResolveStream", .{});
-        var args = callframe.arguments();
-        _ = &args;
-        var this_sink: *FileSink = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileSink);
-        _ = &this_sink;
+        const args = callframe.arguments();
+        const this_sink: *FileSink = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileSink);
         defer {
         _ = this_sink.deref();
         }
@@ -854,15 +775,12 @@ pub fn onResolveStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSErr
 
 pub fn onRejectStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         _ = log("onRejectStream", .{});
-        var args = callframe.arguments();
-        _ = &args;
-        var this_sink: *FileSink = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileSink);
-        _ = &this_sink;
-        var err = args[0];
-        _ = &err;
+        const args = callframe.arguments();
+        const this_sink: *FileSink = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileSink);
+        const e = args[0];
         defer {
         _ = this_sink.deref();
         }
-        _ = this_sink.handleRejectStream(globalThis, err);
+        _ = this_sink.handleRejectStream(globalThis, e);
         return JSValue.js_undefined;
 }

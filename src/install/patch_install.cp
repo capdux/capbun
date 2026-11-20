@@ -281,11 +281,13 @@ pub struct PatchTask {
             tree_id: 0,
         };
 
-        let [resolution_label, resolution_tag] = brk: {
+        const resolution_pair = brk: {
             // TODO: fix this threadsafety issue.
             const resolution = &_.manager.lockfile.packages.items(.resolution)[patch.pkg_id];
             break :brk [bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", [resolution.fmt(_.manager.lockfile.buffers.string_bytes.items, .posix)])), resolution.tag];
         };
+        const resolution_label = resolution_pair[0];
+        const resolution_tag = resolution_pair[1];
         defer _.manager.allocator.free(resolution_label);
 
         // 3. copy the unpatched files into temp dir

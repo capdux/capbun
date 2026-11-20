@@ -253,7 +253,7 @@ pub struct ShellGlobTask {
 
     word_idx: u32,
     current_out: std.array_list.Managed(u8),
-    state: ExpansionState,
+    state: ExpansionState = .normal,
     child_state: ChildState,
     out_exit_code: ExitCode = 0,
     out: Result,

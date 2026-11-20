@@ -600,9 +600,7 @@ pub fn rollbackMultiPartRequest(self: *MultiPartUpload) JSTerminatedError!void {
             _ = &params_buffer;
             var search_params = ((bufPrint((&params_buffer), "?uploadId={s}", .{ self.upload_id })) catch unreachable);
             _ = &search_params;
-            const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_search_params__anyopaque_request_payer_bool = .{ .path = self.path, .method = bun.http.Method.DELETE, .proxy_url = self.proxyUrl(), .body = "", .search_params = search_params, .request_payer = self.request_payer };
-            const cb: __CpObj_upload__anyopaque = .{ .upload = @ptrCast((&onRollbackMultiPartRequest)) };
-            _ = try executeSimpleS3Request(self.credentials, req_opts, cb, self);
+            _ = try executeSimpleS3Request(self.credentials, .{ .path = self.path, .method = bun.http.Method.DELETE, .proxy_url = self.proxyUrl(), .body = "", .search_params = search_params, .request_payer = self.request_payer }, .{ .upload = @ptrCast((&onRollbackMultiPartRequest)) }, self);
     }
 
 pub fn enqueuePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: usize, needs_clone: bool) JSTerminatedError!bool {
@@ -611,9 +609,7 @@ pub fn enqueuePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: us
             if ((self.state == .not_started)) {
                 self.state = .multipart_started;
                 _ = self.ref();
-                const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_search_params___const_u8_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = self.path, .method = bun.http.Method.POST, .proxy_url = self.proxyUrl(), .body = "", .search_params = "?uploads=", .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer };
-                const cb: __CpObj_download__anyopaque = .{ .download = @ptrCast((&startMultiPartRequestResult)) };
-                _ = try executeSimpleS3Request(self.credentials, req_opts, cb, self);
+                _ = try executeSimpleS3Request(self.credentials, .{ .path = self.path, .method = bun.http.Method.POST, .proxy_url = self.proxyUrl(), .body = "", .search_params = "?uploads=", .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer }, .{ .download = @ptrCast((&startMultiPartRequestResult)) }, self);
             } else {
                 if ((self.state == .multipart_completed)) {
                     _ = try part.start();
@@ -708,7 +704,7 @@ pub fn isQueueEmpty(self: *const MultiPartUpload) bool {
 
 pub fn write(self: *MultiPartUpload, chunk: []const u8, is_last: bool, comptime encoding: WriteEncoding) OOMError!ResumableSinkBackpressure {
             if (self.ended) {
-                return error.done;
+                return ResumableSinkBackpressure.done;
             }
             _ = self.ref();
             defer {
@@ -806,10 +802,7 @@ const JSTerminatedError = bun.JSTerminated;
 const OOMError = bun.OOM;
 const log = Output.scoped(.S3MultiPartUpload, .hidden);
 pub const __CpObj_commit__anyopaque = struct { commit: *anyopaque };
-pub const __CpObj_download__anyopaque = struct { download: *anyopaque };
 pub const __CpObj_part__anyopaque = struct { part: *anyopaque };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_search_params___const_u8_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: []const u8, search_params: []const u8, content_type: ?[]const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_search_params__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: []const u8, search_params: *anyopaque, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: *anyopaque, content_type: ?[]const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_search_params__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: *anyopaque, search_params: *anyopaque, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_proxy_url__anyopaque_body___const_u8_search_params__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: *anyopaque, body: []const u8, search_params: *anyopaque, request_payer: bool };

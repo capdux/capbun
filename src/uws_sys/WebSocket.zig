@@ -176,6 +176,20 @@ pub fn publish(self: AnyWebSocket, topic: []const u8, message: []const u8, opcod
 });
     }
 
+pub fn publishWithOptions(ssl: bool, app: *anyopaque, topic: []const u8, message: []const u8, opcode: bun.uws.Opcode, compress: bool) bool {
+            if (ssl) {
+                return (blk: {
+                break :blk bun.uws.NewApp(true).publishWithOptions(@ptrCast(app), topic, message, opcode, compress);
+
+});
+            } else {
+                return (blk: {
+                break :blk bun.uws.NewApp(false).publishWithOptions(@ptrCast(app), topic, message, opcode, compress);
+
+});
+            }
+    }
+
 pub fn getBufferedAmount(self: AnyWebSocket) usize {
             return (switch (self) {
 .ssl => |w| @intCast(w.getBufferedAmount()),

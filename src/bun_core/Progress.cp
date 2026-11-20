@@ -213,10 +213,10 @@ export @root struct Progress {
 
     /// Updates the terminal if enough time has passed since last update. Thread-safe.
     pub fn maybeRefresh(*_) {
-        if (*timer := _.timer) {
+        if (_.timer != null) {
             if (!_.update_mutex.tryLock()) return;
             defer _.update_mutex.unlock();
-            _.maybeRefreshWithHeldLock(timer);
+            _.maybeRefreshWithHeldLock(&_.timer.?);
         }
     }
 

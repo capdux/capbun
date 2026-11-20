@@ -367,12 +367,15 @@ pub struct WakeHandler {
     onDependencyError: *const ! = undefined,
     context: *!? = null,
 
-    inline fn getHandler(): *const fn (ctx: *!, pm: *PackageManager) void {
-        return bun.cast(*const fn (ctx: *!, pm: *PackageManager) void, _.handler);
+    const HandlerFn = fn (*!, *PackageManager) void;
+    const OnDepErrFn = fn (*!, Dependency, DependencyID, anyerror) void;
+
+    inline fn getHandler(): HandlerFn {
+        return bun.cast(HandlerFn, _.handler);
     }
 
-    inline fn getonDependencyError(): *const fn (ctx: *!, Dependency, DependencyID, anyerror) void {
-        return bun.cast(*const fn (ctx: *!, Dependency, DependencyID, anyerror) void, _.handler);
+    inline fn getonDependencyError(): OnDepErrFn {
+        return bun.cast(OnDepErrFn, _.handler);
     }
 }
 

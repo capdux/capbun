@@ -231,6 +231,14 @@ export enum AnyWebSocket {
         };
     }
 
+    static fn publishWithOptions(ssl: bool, app: *!, topic: []const u8, message: []const u8, opcode: bun.uws.Opcode, compress: bool): bool {
+        if (ssl) {
+            return unsafe { bun.uws.NewApp(true).publishWithOptions(@ptrCast(app), topic, message, opcode, compress) };
+        } else {
+            return unsafe { bun.uws.NewApp(false).publishWithOptions(@ptrCast(app), topic, message, opcode, compress) };
+        }
+    }
+
     pub fn getBufferedAmount(): usize {
         return switch (this) {
             .ssl(w) => @intCast(w.getBufferedAmount()),

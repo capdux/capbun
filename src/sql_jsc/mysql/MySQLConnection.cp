@@ -167,7 +167,7 @@ export struct Reader {
 }
 
 @root struct MySQLConnection {
-    @"#socket": Socket = Socket{ SocketTCP: { socket: { detached: {} } } },
+    @"#socket": Socket = Socket{ SocketTCP: { socket: .detached } },
     status: ConnectionState = .disconnected,
 
     @"#write_buffer": OffsetByteList = OffsetByteList{},
@@ -784,7 +784,7 @@ export struct Reader {
             username: Data{ temporary: this.@"#user" },
             database: Data{ temporary: this.@"#database" },
             auth_plugin_name: Data{ temporary: plugin_name },
-            auth_response: Data{ empty: {} },
+            auth_response: Data.empty,
             sequence_id: this.@"#sequence_id",
         };
         defer response.deinit();

@@ -4380,7 +4380,7 @@ _ = heap.deinit(bun.default_allocator);
     }
 
 pub inline fn len(self: @This()) usize {
-            return (switch (self.*) {
+            return (switch (self) {
 .inlined => self.inlined.len,
 .heap => self.heap.len,
 });

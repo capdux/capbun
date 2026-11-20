@@ -3094,3 +3094,5 @@ Options:
 - **[2026-11-20 20:20] Wave 14 Batch B 验收提交（Pipe+Subprocess+Terminal+Shell 13 模块全绿，覆盖 ~105 错）**：完成 `PipeReader`/`PipeWriter`/`udp_socket`/`tls_socket_functions`/`Terminal`/`subprocess`/`process`/`Writable`/`ipc`/`interpreter`/`rm`/`mv`/`IOWriter` 13 模块独立验收（13/13 PASS，ratio 0.917x~1.035x）并原子提交；同步补位派发 5 文件上游根因小队（`SignalCode`/`AnyTaskWithExtraContext`/`FileSink`/`cron`/`lifecycle_script_runner`）。
 
 - **[2026-11-20 20:32] Wave 14 Batch E 验收提交（28 单错模块全绿）**：完成 28 个单错模块独立验收（28/28 PASS，ratio 0.641x~1.103x）并原子提交；同步补位派发 `StaticRoute`/`SystemError`/`Blob` 3 文件上游根因小队。
+
+- **[2026-11-20 20:34] Wave 14 Batch D+F 验收提交（39 模块全绿）**：完成 D 组 34 模块（含 `uws_sys/WebSocket.cp` 补 `publishWithOptions` 与 `AnyTask.cp` 升 `@root struct`）及 F 组 5 上游根因（`SignalCode`/`AnyTaskWithExtraContext`/`FileSink`/`cron`/`lifecycle_script_runner`，5/5 PASS）独立验收并原子提交；静待 G 组（`e85250d5`）3 模块完成后跑 Wave 15 `zig:check`。

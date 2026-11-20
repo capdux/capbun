@@ -525,16 +525,14 @@ export class MultiPartUpload {
             this.upload_id,
         }) catch unreachable;
 
-        const req_opts = .{
+        executeSimpleS3Request(this.credentials, .{
             .path = this.path,
             .method = bun.http.Method.DELETE,
             .proxy_url = this.proxyUrl(),
             .body = "",
             .search_params = search_params,
             .request_payer = this.request_payer,
-        };
-        const cb = .{ .upload = @ptrCast(&onRollbackMultiPartRequest) };
-        executeSimpleS3Request(this.credentials, req_opts, cb, this)?;
+        }, .{ .upload = @ptrCast(&onRollbackMultiPartRequest) }, this)?;
     }
 
     fn enqueuePart(*_, chunk: string, allocated_size: usize, needs_clone: bool): JSTerminatedError!bool {
@@ -543,7 +541,7 @@ export class MultiPartUpload {
         if (this.state == .not_started) {
             this.state = .multipart_started;
             this.ref();
-            const req_opts = .{
+            executeSimpleS3Request(this.credentials, .{
                 .path = this.path,
                 .method = bun.http.Method.POST,
                 .proxy_url = this.proxyUrl(),
@@ -555,9 +553,7 @@ export class MultiPartUpload {
                 .acl = this.acl,
                 .storage_class = this.storage_class,
                 .request_payer = this.request_payer,
-            };
-            const cb = .{ .download = @ptrCast(&startMultiPartRequestResult) };
-            executeSimpleS3Request(this.credentials, req_opts, cb, this)?;
+            }, .{ .download = @ptrCast(&startMultiPartRequestResult) }, this)?;
         } else if (this.state == .multipart_completed) {
             part.start()?;
         }
@@ -656,7 +652,7 @@ export class MultiPartUpload {
     }
 
     fn write(*_, chunk: string, is_last: bool, comptime encoding: WriteEncoding): OOMError!ResumableSinkBackpressure {
-        if (this.ended) return .done;
+        if (this.ended) return ResumableSinkBackpressure.done;
         this.ref();
         defer this.deref();
         if (this.state == .wait_stream_check and chunk.len == 0 and is_last) {

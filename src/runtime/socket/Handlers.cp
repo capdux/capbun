@@ -74,9 +74,11 @@ pub struct HandlersScope {
             return;
         }
 
-        const promise = _.promise.trySwap() orelse return;
-        const anyPromise = promise.asAnyPromise() orelse return;
-        anyPromise.resolve(_.globalObject, value)?;
+        if (promise := _.promise.trySwap()) {
+            if (anyPromise := promise.asAnyPromise()) {
+                anyPromise.resolve(_.globalObject, value)?;
+            }
+        }
     }
 
     pub fn rejectPromise(_: *Handlers, value: JSValue): bool!bun.JSTerminated {
@@ -85,10 +87,13 @@ pub struct HandlersScope {
             return true;
         }
 
-        const promise = _.promise.trySwap() orelse return false;
-        const anyPromise = promise.asAnyPromise() orelse return false;
-        anyPromise.reject(_.globalObject, value)?;
-        return true;
+        if (promise := _.promise.trySwap()) {
+            if (anyPromise := promise.asAnyPromise()) {
+                anyPromise.reject(_.globalObject, value)?;
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn markInactive(_: *Handlers): bool {

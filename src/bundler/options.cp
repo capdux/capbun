@@ -856,7 +856,7 @@ pub enum Loader: u8 {
         };
     }
 
-    pub fn fromAPI(loader: api.Loader): Loader {
+    static fn fromAPI(loader: api.Loader): Loader {
         return switch (loader) {
             ._none => .file,
             .jsx => .jsx,

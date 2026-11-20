@@ -162,7 +162,7 @@ pub struct StatWatcherScheduler {
 
         if (contain_watchers) {
             // choose the smallest interval or the closest time to the next check
-            scheduler.setInterval(@min(min_interval, @as(i32, @truncate(closest_next_check))));
+            scheduler.setInterval(@min(min_interval, @as(i32, @intCast(closest_next_check))));
         } else {
             // we do not have watchers, we can stop the timer
             scheduler.setInterval(0);
@@ -196,10 +196,18 @@ pub struct StatWatcherArguments {
             // options
             if (options_or_callable.isObject()) {
                 // default true
-                persistent = (options_or_callable.getBooleanStrict(global, "persistent")?) ?? true;
+                if (p := options_or_callable.getBooleanStrict(global, "persistent")?) {
+                    persistent = p;
+                } else {
+                    persistent = true;
+                }
 
                 // default false
-                bigint = (options_or_callable.getBooleanStrict(global, "bigint")?) ?? false;
+                if (b := options_or_callable.getBooleanStrict(global, "bigint")?) {
+                    bigint = b;
+                } else {
+                    bigint = false;
+                }
 
                 if (interval_ := options_or_callable.get(global, "interval")?) {
                     if (!interval_.isNumber() && !interval_.isAnyInt()) {

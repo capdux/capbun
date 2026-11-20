@@ -96,28 +96,28 @@ pub const LifecycleScriptSubprocess = struct {
     started_at: u64 = 0,
     ctx: ?InstallCtx,
     heap: bun.io.heap.IntrusiveField(LifecycleScriptSubprocess) = .{},
-    alive_count: std.atomic.Value(usize) = .init(0),
+    pub var alive_count: std.atomic.Value(usize) = .init(0);
 
 pub fn sortByStartedAt(self: *LifecycleScriptSubprocess, _: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess) bool {
         _ = self;
             return (a.started_at < b.started_at);
     }
 
-pub fn loop(self: LifecycleScriptSubprocess) *bun.Async.Loop {
+pub fn loop(sub: *const LifecycleScriptSubprocess) *bun.Async.Loop {
             if (comptime bun.Environment.isWindows) {
-                return self.manager.event_loop.loop().uv_loop;
+                return sub.manager.event_loop.loop().uv_loop;
             } else {
-                return self.manager.event_loop.loop();
+                return sub.manager.event_loop.loop();
             }
     }
 
-pub fn eventLoop(self: LifecycleScriptSubprocess) *jsc.AnyEventLoop {
-            return (&self.manager.event_loop);
+pub fn eventLoop(sub: *const LifecycleScriptSubprocess) *jsc.AnyEventLoop {
+            return (&sub.manager.event_loop);
     }
 
-pub fn scriptName(self: LifecycleScriptSubprocess) []const u8 {
-            _ = bun.assert((self.current_script_index < Lockfile.Scripts.names.len));
-            return Lockfile.Scripts.names[@as(usize, @intCast(self.current_script_index))];
+pub fn scriptName(sub: *const LifecycleScriptSubprocess) []const u8 {
+            _ = bun.assert((sub.current_script_index < Lockfile.Scripts.names.len));
+            return Lockfile.Scripts.names[@as(usize, @intCast(sub.current_script_index))];
     }
 
 pub fn onReaderDone(self: *LifecycleScriptSubprocess) void {
@@ -310,13 +310,11 @@ pub fn printOutput(self: *LifecycleScriptSubprocess) void {
                 _ = Output.disableBuffering();
                 _ = Output.flush();
                 if ((stdout_buf.items.len > 0)) {
-                    const out_args: struct { *anyopaque } = .{ stdout_buf.items };
-                    _ = (blk_catch_2: { break :blk_catch_2 ((Output.errorWriter().print("{s}\n", out_args)) catch |__ce_2| { _ = &__ce_2;  }); });
+                    _ = (blk_catch_2: { break :blk_catch_2 ((Output.errorWriter().print("{s}\n", .{ stdout_buf.items })) catch |__ce_2| { _ = &__ce_2;  }); });
                     _ = stdout_buf.clearAndFree();
                 }
                 if ((stderr_buf.items.len > 0)) {
-                    const err_args: struct { *anyopaque } = .{ stderr_buf.items };
-                    _ = (blk_catch_3: { break :blk_catch_3 ((Output.errorWriter().print("{s}\n", err_args)) catch |__ce_3| { _ = &__ce_3;  }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((Output.errorWriter().print("{s}\n", .{ stderr_buf.items })) catch |__ce_3| { _ = &__ce_3;  }); });
                     _ = stderr_buf.clearAndFree();
                 }
                 _ = Output.enableBuffering();
@@ -324,8 +322,7 @@ pub fn printOutput(self: *LifecycleScriptSubprocess) void {
     }
 
 pub fn handleExit(self: *LifecycleScriptSubprocess, status: bun.spawn.Status) void {
-            const fin_args: struct { []const u8, []const u8, bun.spawn.Status } = .{ self.package_name, self.scriptName(), status };
-            _ = log("{s} - {s} finished {f}", fin_args);
+            _ = log("{s} - {s} finished {f}", .{ self.package_name, self.scriptName(), status });
             if (self.has_incremented_alive_count) {
                 self.has_incremented_alive_count = false;
                 _ = self.alive_count.fetchSub(1, .monotonic);

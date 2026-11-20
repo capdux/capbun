@@ -319,7 +319,7 @@ else => std.debug.panic("Internal error: unexpected resolution tag: {}", .{ self
         }
 
 pub fn fmt(self: @This(), string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep) Formatter {
-                return Formatter{ .resolution = self, .buf = string_bytes, .path_sep = path_sep };
+                return Formatter{ .resolution = (&self), .buf = string_bytes, .path_sep = path_sep };
         }
 
 pub fn fmtStorePath(self: @This(), string_buf: []const u8) StorePathFormatter {

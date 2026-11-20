@@ -120,7 +120,7 @@ pub fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: ?[*][*:0]u8, n: u32) void {
             var flag: [1]u8 = .{ (if ((arr != null)) 1 else 0) };
             _ = &flag;
             _ = hp.update((&flag));
-            _ = hp.update(bun.mem.asBytes((&n)));
+            _ = hp.update(std.mem.asBytes((&n)));
             if ((arr != null)) {
                 var a = arr.?;
                 _ = &a;
@@ -170,7 +170,7 @@ var mt = st.mtime();
 },
 }
                 }
-                _ = hp.update(bun.mem.asBytes((&meta)));
+                _ = hp.update(std.mem.asBytes((&meta)));
             }
             const z: u8 = 0;
             var term: [1]u8 = .{ z };
@@ -187,15 +187,15 @@ pub fn digest(self: BunSocketContextOptions) [32]u8 {
             _ = BunSocketContextOptions.feedPath((&h), self.dh_params_file_name);
             _ = BunSocketContextOptions.feedPath((&h), self.ca_file_name);
             _ = BunSocketContextOptions.feedZ((&h), self.ssl_ciphers);
-            _ = h.update(bun.mem.asBytes((&self.ssl_prefer_low_memory_usage)));
+            _ = h.update(std.mem.asBytes((&self.ssl_prefer_low_memory_usage)));
             _ = BunSocketContextOptions.feedArr((&h), self.key, self.key_count);
             _ = BunSocketContextOptions.feedArr((&h), self.cert, self.cert_count);
             _ = BunSocketContextOptions.feedArr((&h), self.ca, self.ca_count);
-            _ = h.update(bun.mem.asBytes((&self.secure_options)));
-            _ = h.update(bun.mem.asBytes((&self.reject_unauthorized)));
-            _ = h.update(bun.mem.asBytes((&self.request_cert)));
-            _ = h.update(bun.mem.asBytes((&self.client_renegotiation_limit)));
-            _ = h.update(bun.mem.asBytes((&self.client_renegotiation_window)));
+            _ = h.update(std.mem.asBytes((&self.secure_options)));
+            _ = h.update(std.mem.asBytes((&self.reject_unauthorized)));
+            _ = h.update(std.mem.asBytes((&self.request_cert)));
+            _ = h.update(std.mem.asBytes((&self.client_renegotiation_limit)));
+            _ = h.update(std.mem.asBytes((&self.client_renegotiation_window)));
             var out: [32]u8 = undefined;
             _ = &out;
             _ = h.final((&out));
