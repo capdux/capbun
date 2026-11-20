@@ -58,15 +58,15 @@ pub const Readable = union(enum) {
         }
 
         return switch (stdio) {
-            .inherit => Readable{ .inherit = {} },
-            .ignore, .ipc, .path => Readable{ .ignore = {} },
+            .inherit => Readable{ .inherit = undefined },
+            .ignore, .ipc, .path => Readable{ .ignore = undefined },
             .fd => |fd| if (Environment.isPosix) Readable{ .fd = result.? } else Readable{ .fd = fd },
-            .memfd => if (Environment.isPosix) Readable{ .memfd = stdio.memfd } else Readable{ .ignore = {} },
+            .memfd => if (Environment.isPosix) Readable{ .memfd = stdio.memfd } else Readable{ .ignore = undefined },
             .dup2 => |dup2| if (Environment.isPosix) Output.panic("TODO: implement dup2 support in Stdio readable", {}) else Readable{ .fd = dup2.out.toFd() },
             .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, max_size) },
             .array_buffer, .blob => Output.panic("TODO: implement ArrayBuffer & Blob support in Stdio readable", {}),
             .capture => Output.panic("TODO: implement capture support in Stdio readable", {}),
-            .readable_stream => Readable{ .ignore = {} }, // ReadableStream is handled separately
+            .readable_stream => Readable{ .ignore = undefined }, // ReadableStream is handled separately
         };
     }
 

@@ -151,9 +151,11 @@ const empty_stmts: [0]Stmt = undefined;
                                 // access while bundling
                                 let has_any = false;
 
-                                if (entry := p.import_items_for_namespace.get(st.namespace_ref)) {
-                                    if (entry.count() > 0) {
-                                        has_any = true;
+                                if (comptime @hasField(P, "import_items_for_namespace")) {
+                                    if (entry := p.import_items_for_namespace.get(st.namespace_ref)) {
+                                        if (entry.count() > 0) {
+                                            has_any = true;
+                                        }
                                     }
                                 }
 
@@ -231,7 +233,9 @@ const empty_stmts: [0]Stmt = undefined;
 
                     record.flags.contains_default_alias = record.flags.contains_default_alias || st.default_name != null;
 
-                    const existing_items: ImportItemForNamespaceMap = p.import_items_for_namespace.get(namespace_ref) ??
+                    const existing_items: ImportItemForNamespaceMap = if (comptime @hasField(P, "import_items_for_namespace"))
+                        p.import_items_for_namespace.get(namespace_ref) ?? ImportItemForNamespaceMap.init(allocator)
+                    else
                         ImportItemForNamespaceMap.init(allocator);
 
                     if (p.options.bundle) {

@@ -6249,7 +6249,7 @@ pub fn @"print"(
     renamer: bun.renamer.Renamer,
     comptime generate_source_maps: bool,
 ): PrintResult {
-    const trace = bun.perf.trace("JSPrinter.print");
+    let trace = bun.perf.trace("JSPrinter.print");
     defer trace.end();
 
     const buffer_writer = BufferWriter.init(allocator);

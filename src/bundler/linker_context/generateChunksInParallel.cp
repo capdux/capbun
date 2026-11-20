@@ -235,7 +235,7 @@ pub fn generateChunksInParallel(
         while (index < chunks.len) : (index += 1) {
             const chunk = &chunks[index];
             let hash: ContentHasher = {};
-            c.appendIsolatedHashesForImportedChunks(&hash, chunks, @as(i32, @intCast(index)), &chunk_visit_map);
+            c.appendIsolatedHashesForImportedChunks(&hash, chunks, @as(u32, @intCast(index)), &chunk_visit_map);
             chunk_visit_map.setAll(false);
             chunk.template.placeholder.hash = hash.digest();
 

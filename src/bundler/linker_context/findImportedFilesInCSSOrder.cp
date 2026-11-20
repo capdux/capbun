@@ -439,7 +439,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
 
                         // Non-layer entries still need to be present because they have
                         // other side effects beside inserting things in the layer order
-                        bun.handleOom(wip_order.append(temp_allocator, entry));
+                        bun.handleOom(wip_order.append(temp_allocator, entry.*));
                     }
 
                     // Don't add this to the duplicate list below because it's redundant
@@ -451,7 +451,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                 temp_allocator,
                 @intCast(wip_order.len),
             ) catch |e| bun.handleOom(e);
-            bun.handleOom(wip_order.append(temp_allocator, entry));
+            bun.handleOom(wip_order.append(temp_allocator, entry.*));
         }
 
         debugCssOrder(c, &wip_order, .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);

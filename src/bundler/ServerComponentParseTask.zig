@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -116,7 +117,24 @@ pub fn generateClientEntryWrapper(self: *ServerComponentParseTask, data: Data.Cl
 pub fn generateClientReferenceProxy(self: *ServerComponentParseTask, data: Data.ReferenceProxy, b: *AstBuilder) !void {
         const server_components = ((self.ctx.framework.?.server_components) orelse (unreachable));
         const client_named_exports = data.named_exports;
-        const register_client_reference = try b.addImportStmt(server_components.server_runtime_import, (&.{ server_components.server_register_client_reference }))[0];
+        const register_client_reference = blk: {
+        const imp_record = try b.addImportRecord(server_components.server_runtime_import, .stmt);
+        var path_name = bun.fs.PathName.init(server_components.server_runtime_import);
+        _ = &path_name;
+        const imp_name = try strings.append(b.allocator, "import_", try path_name.nonUniqueNameString(b.allocator));
+        const ns_ref = try b.newSymbol(.other, imp_name);
+        const import_id = server_components.server_register_client_reference;
+        var clauses = try b.allocator.alloc(js_ast.ClauseItem, 1);
+        _ = &clauses;
+        const sym_ref = try b.newSymbol(.@"import", import_id);
+        if (b.hot_reloading) {
+            b.getSymbol(sym_ref).namespace_alias = .{ .namespace_ref = ns_ref, .alias = import_id, .import_record_index = imp_record };
+        }
+        const out_expr = b.newExpr(E.ImportIdentifier{ .@"ref" = sym_ref });
+        clauses[cp_cast_int(usize, 0)] = .{ .name = .{ .loc = Logger.Loc.Empty, .@"ref" = sym_ref }, .original_name = import_id, .alias = import_id };
+        _ = try b.appendStmt(S.Import{ .namespace_ref = ns_ref, .import_record_index = imp_record, .items = clauses, .is_single_line = false });
+        break :blk out_expr;
+};
         const module_path = b.newExpr(E.String{ .data = (if ((self.ctx.transpiler.options.dev_server != null)) data.other_source.path.pretty else try std.fmt.allocPrint(b.allocator, "{f}S{d:0>8}", .{ bun.fmt.hexIntLower(self.ctx.unique_key), data.other_source.index.get() })) });
         for (cp_iter_slice(client_named_exports.keys())) |key| {
             _ = &key;

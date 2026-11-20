@@ -30,3 +30,4 @@
 - **[2026-11-21 01:37] Wave 35 D 组验收提交（3 CSS 根因全绿，Wave 35 清仓）**：完成 `easing`（`EasingFunction.eql` `static fn`）、`keyframes`、`font_palette_values`（提升嵌套解析器+`static fn`）独立验收（3/3 PASS，4 项门禁全绿，ratio 1.01x~1.018x）并原子提交；随即运行 Wave 36 全仓 `bun run zig:check`。
 - **[2026-11-21 02:51] Wave 36 B 组验收提交（20 修改模块+3 联动/待核对模块全绿）**：完成 Bundler/`linker_context`/`DirectoryWatchStore`/Install/`lowerDecorators`/`Writable`/`subproc` 20 模块独立验收（20/20 PASS，4 项门禁全绿，ratio 0.901x~1.111x）并原子提交；补派 C 组修复 `js_printer.cp:6241` `pub fn print`。
 - **[2026-11-21 02:54] Wave 36 A 组 + C 组验收提交（35 模块全绿，Wave 36 清仓）**：完成全部 CSS 34 模块及 `js_printer`（导出顶层 `pub fn print`/`printJSON`）独立验收（35/35 PASS，4 项门禁全绿，ratio 0.946x~1.14x）并原子提交；随即运行 Wave 37 全仓 `bun run zig:check`。
+- **[2026-11-21 03:02] Wave 37 B 组验收提交（20 非 CSS 模块全绿）**：完成 JSParser/Bundler/`linker_context`/Install/`js_printer`/Runtime/Shell 20 模块独立验收（20/20 PASS，4 项门禁全绿，ratio 0.807x~1.057x）并原子提交；静待 A 组（`c14780e3`）完成即跑 Wave 38 `zig:check`。

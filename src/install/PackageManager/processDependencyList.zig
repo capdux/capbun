@@ -299,7 +299,7 @@ pub fn processDependencyList(manager: *PackageManager, dep_list: TaskCallbackLis
                 _ = try manager.processDependencyListItem(item, (&any_root), install_peer);
             }
             if (comptime (@TypeOf(callbacks) != void)) {
-                if (comptime (@TypeOf(callbacks.onResolve) != void)) {
+                if (comptime (@typeInfo(@TypeOf(callbacks.onResolve)) == .@"fn")) {
                     if (any_root) {
                         _ = callbacks.onResolve(ctx);
                     }

@@ -5690,7 +5690,8 @@ pub fn printJSON(comptime Writer: type, _writer: Writer, expr: Expr, source: *co
 }
 
 pub fn @"print"(allocator: std.mem.Allocator, target: options.Target, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) PrintResult {
-        const trace = bun.perf.trace("JSPrinter.print");
+        var trace = bun.perf.trace("JSPrinter.print");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

@@ -777,7 +777,8 @@ _ = fd.close();
         if (((promise_for_stream != .zero) and (!globalThis.hasException()))) {
             if (promise_for_stream.toError()) |e| {
                 _ = &e;
-                _ = (blk_catch_6: { break :blk_catch_6 ((globalThis.throwValue(e)) catch |__ce_6| { _ = &__ce_6;  }); });
+                if ((globalThis.throwValue(e) == error.JSError)) {
+                }
             }
         }
         if (globalThis.hasException()) {
@@ -877,7 +878,7 @@ send_exit_notification = true;
             if (subprocess.stdin.buffer.start().asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_8: { break :blk_catch_8 ((globalThis.throwValue((blk_catch_7: { break :blk_catch_7 ((e.toJS(globalThis)) catch |__ce_7| { _ = &__ce_7; return error.JSError; }); }))) catch |__ce_8| { _ = &__ce_8;  }); });
+                _ = (blk_catch_7: { break :blk_catch_7 ((globalThis.throwValue((blk_catch_6: { break :blk_catch_6 ((e.toJS(globalThis)) catch |__ce_6| { _ = &__ce_6; return error.JSError; }); }))) catch |__ce_7| { _ = &__ce_7;  }); });
                 return error.JSError;
             }
         }
@@ -885,7 +886,7 @@ send_exit_notification = true;
             if (subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_10: { break :blk_catch_10 ((globalThis.throwValue((blk_catch_9: { break :blk_catch_9 ((e.toJS(globalThis)) catch |__ce_9| { _ = &__ce_9; return error.JSError; }); }))) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = (blk_catch_9: { break :blk_catch_9 ((globalThis.throwValue((blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return error.JSError; }); }))) catch |__ce_9| { _ = &__ce_9;  }); });
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stdout == .pipe))) {
@@ -896,7 +897,7 @@ send_exit_notification = true;
             if (subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_12: { break :blk_catch_12 ((globalThis.throwValue((blk_catch_11: { break :blk_catch_11 ((e.toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return error.JSError; }); }))) catch |__ce_12| { _ = &__ce_12;  }); });
+                _ = (blk_catch_11: { break :blk_catch_11 ((globalThis.throwValue((blk_catch_10: { break :blk_catch_10 ((e.toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return error.JSError; }); }))) catch |__ce_11| { _ = &__ce_11;  }); });
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stderr == .pipe))) {

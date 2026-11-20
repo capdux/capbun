@@ -1525,7 +1525,7 @@ pub struct BundleV2 {
 
         _.graph.pool.worker_pool.schedule(ThreadPoolLib.Batch.from(&task.task));
 
-        return i32(source_index);
+        return @as(Index.Int, @intCast(source_index));
     }
 
     pub const DependenciesScanner = struct {
@@ -2517,15 +2517,16 @@ pub struct BundleV2 {
                         // This means the file can become an error after
                         // resolution, which is not usually the case.
                         css_total_files.appendAssumeCapacity(Index.init(index));
-                        let log = Logger.Log.init(_.allocator());
-                        defer log.deinit();
+                        let parse_log = Logger.Log.init(_.allocator());
+                        defer parse_log.deinit();
+                        const parse_log_ptr = unsafe { &parse_log };
                         if (_.linker.scanCSSImports(
                             @as(u32, @intCast(index)),
                             import_records.slice(),
                             css_asts,
                             sources,
                             loaders,
-                            unsafe { &log },
+                            parse_log_ptr,
                         ) == .errors) {
                             // TODO: it could be possible for a plugin to change
                             // the type of loader from whatever it was into a
@@ -2534,7 +2535,7 @@ pub struct BundleV2 {
                                 error.InvalidCssImport,
                                 .client,
                                 sources[index].path.text,
-                                &log,
+                                parse_log_ptr,
                                 _,
                             );
                             // Since there is an error, do not treat it as a
@@ -3141,12 +3142,13 @@ pub struct BundleV2 {
             let had_busted_dir_cache = false;
             let had_resolve_error = false;
             let resolve_result: _resolver.Result = undefined;
+            const dummy_resolve_result: _resolver.Result = undefined;
             inner: while (true) {
                 resolve_result = transpiler.resolver.resolveWithFramework(
                     source_dir,
                     import_record.path.text,
                     import_record.kind,
-                ) catch |e| {
+                ) catch |e| blk_res: {
                 const log = _.logForResolutionFailures(source.path.text, bake_graph);
 
                 // Only perform directory busting when hot-reloading is enabled
@@ -3278,6 +3280,7 @@ pub struct BundleV2 {
                     },
                 }
                 had_resolve_error = true;
+                break :blk_res dummy_resolve_result;
             };
             if (had_resolve_error) continue :outer;
             break :inner;

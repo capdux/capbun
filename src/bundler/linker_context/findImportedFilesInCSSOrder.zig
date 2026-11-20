@@ -359,13 +359,13 @@ var layers = (&entry.kind.layers);
                             if (((is_adjacent and (wip_order.at(duplicate_index).kind == .layers)) and importConditionsAreEqual(entry.conditions.sliceConst(), wip_order.at(duplicate_index).conditions.sliceConst()))) {
                                 _ = wip_order.pop();
                             }
-                            _ = bun.handleOom(wip_order.append(temp_allocator, entry));
+                            _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
                         }
                         continue :next_forward;
                     }
                 }
                 _ = (blk_catch_5: { break :blk_catch_5 ((layer_duplicates.mut(index).indices.append(temp_allocator, @intCast(wip_order.len))) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
-                _ = bun.handleOom(wip_order.append(temp_allocator, entry));
+                _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
             }
             _ = debugCssOrder(c, (&wip_order), .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);
             order.len = wip_order.len;

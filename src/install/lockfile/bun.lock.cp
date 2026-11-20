@@ -1797,7 +1797,7 @@ pub fn parseIntoBinaryLockfile(
                         pkg_path,
                         &bundled_pkgs,
                         false,
-                        {},
+                        undefined,
                     );
 
                     pkg.dependencies = { off: off, len: len };

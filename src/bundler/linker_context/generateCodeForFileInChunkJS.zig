@@ -316,7 +316,7 @@ _ = ((stmts.inside_wrapper_prefix.appendNonDependencySlice(stmts.inside_wrapper_
                 single_stmts_list[cp_cast_int(usize, 0)] = Stmt.allocate(temp_allocator, S.ExportDefault, .{ .default_name = default_export.default_name, .value = .{ .expr = default_expr } }, stmt.loc);
                 part_stmts = single_stmts_list[0..];
             }
-            _ = (blk_catch_10: { break :blk_catch_10 ((c.convertStmtsForChunk(part_range.source_index.get(), stmts, part_stmts, chunk, temp_allocator, flags.wrap, (&ast))) catch |e| { _ = &e; return .{ .e = e }; }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((c.convertStmtsForChunk(part_range.source_index.get(), stmts, part_stmts, chunk, temp_allocator, flags.wrap, (&ast))) catch |e| { _ = &e; return .{ .err = e }; }); });
         }
         _ = ((stmts.all_stmts.ensureUnusedCapacity(stmts.allocator, (stmts.inside_wrapper_prefix.stmts.items.len + stmts.inside_wrapper_suffix.items.len))) catch unreachable);
         _ = stmts.all_stmts.appendSliceAssumeCapacity(stmts.inside_wrapper_prefix.stmts.items);

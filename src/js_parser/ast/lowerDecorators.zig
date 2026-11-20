@@ -354,20 +354,17 @@ const items = e.items.slice();
 .e_object => |e| {
 for (cp_mut_slice(&e.properties.slice())) |*prop| {
                 _ = &prop;
-                if ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value)) |*v| {
-                    _ = &v;
-                    _ = rewriteExpr(p, (v.*), kind);
+                if (((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value) != null)) {
+                    _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).?), kind);
                 }
-                if ((prop.*).initializer) |*ini| {
-                    _ = &ini;
-                    _ = rewriteExpr(p, (ini.*), kind);
+                if (((prop.*).initializer != null)) {
+                    _ = rewriteExpr(p, (&(prop.*).initializer.?), kind);
                 }
             }
 },
 .e_template => |e| {
-if (e.tag) |*t| {
-                _ = &t;
-                _ = rewriteExpr(p, (t.*), kind);
+if ((e.tag != null)) {
+                _ = rewriteExpr(p, (&e.tag.?), kind);
             }
             for (cp_mut_slice(&e.parts)) |*part| {
                 _ = &part;
@@ -599,9 +596,13 @@ if ((e.target.data == .e_index)) {
                 }
             }
             _ = rewritePrivateAccessesInExpr(p, (&e.target), map);
-            for (cp_mut_slice(&e.args.slice())) |*arg| {
-                _ = &arg;
-                _ = rewritePrivateAccessesInExpr(p, (arg.*), map);
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_8 = e.args.len;
+                while (idx < __end_8) : (idx += 1) {
+                    _ = rewritePrivateAccessesInExpr(p, (&e.args.slice()[@as(usize, @intCast(idx))]), map);
+                }
             }
 },
 .e_unary => |e| {
@@ -622,41 +623,45 @@ _ = rewritePrivateAccessesInExpr(p, (&e.test_), map);
 _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), map);
 },
 .e_yield => |e| {
-if ((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)) |*v| {
-                _ = &v;
-                _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+if (((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value) != null)) {
+                _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).?), map);
             }
 },
 .e_new => |e| {
 _ = rewritePrivateAccessesInExpr(p, (&e.target), map);
-            for (cp_mut_slice(&e.args.slice())) |*arg| {
-                _ = &arg;
-                _ = rewritePrivateAccessesInExpr(p, (arg.*), map);
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_9 = e.args.len;
+                while (idx < __end_9) : (idx += 1) {
+                    _ = rewritePrivateAccessesInExpr(p, (&e.args.slice()[@as(usize, @intCast(idx))]), map);
+                }
             }
 },
 .e_array => |e| {
-for (cp_mut_slice(&e.items.slice())) |*item| {
-                _ = &item;
-                _ = rewritePrivateAccessesInExpr(p, (item.*), map);
+{
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_10 = e.items.len;
+                while (idx < __end_10) : (idx += 1) {
+                    _ = rewritePrivateAccessesInExpr(p, (&e.items.slice()[@as(usize, @intCast(idx))]), map);
+                }
             }
 },
 .e_object => |e| {
 for (cp_mut_slice(&e.properties.slice())) |*prop| {
                 _ = &prop;
-                if ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value)) |*v| {
-                    _ = &v;
-                    _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                if (((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value) != null)) {
+                    _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).?), map);
                 }
-                if ((prop.*).initializer) |*ini| {
-                    _ = &ini;
-                    _ = rewritePrivateAccessesInExpr(p, (ini.*), map);
+                if (((prop.*).initializer != null)) {
+                    _ = rewritePrivateAccessesInExpr(p, (&(prop.*).initializer.?), map);
                 }
             }
 },
 .e_template => |e| {
-if (e.tag) |*t| {
-                _ = &t;
-                _ = rewritePrivateAccessesInExpr(p, (t.*), map);
+if ((e.tag != null)) {
+                _ = rewritePrivateAccessesInExpr(p, (&e.tag.?), map);
             }
             for (cp_mut_slice(&e.parts)) |*part| {
                 _ = &part;
@@ -683,9 +688,8 @@ pub fn rewritePrivateAccessesInStmts(p: *P, stmts: []Stmt, map: *const PrivateLo
 _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
 },
 .s_return => |data| {
-if ((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)) |*v| {
-                    _ = &v;
-                    _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+if (((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) != null)) {
+                    _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value).?), map);
                 }
 },
 .s_throw => |data| {
@@ -694,9 +698,8 @@ _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum")
 .s_local => |data| {
 for (cp_mut_slice(&data.decls.slice())) |*decl| {
                     _ = &decl;
-                    if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
-                        _ = &v;
-                        _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                    if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                        _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?), map);
                     }
                 }
 },
@@ -1368,21 +1371,37 @@ else => 5,
                     _ = &sb;
                     _ = rewritePrivateAccessesInStmts(p, sb.stmts.slice(), (&private_lowered_map));
                 }
-                for (static_non_field_elements.items) |*elem| {
-                    _ = &elem;
-                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_23 = static_non_field_elements.items.len;
+                    while (idx < __end_23) : (idx += 1) {
+                        _ = rewritePrivateAccessesInExpr(p, (&static_non_field_elements.items[@as(usize, @intCast(idx))]), (&private_lowered_map));
+                    }
                 }
-                for (instance_non_field_elements.items) |*elem| {
-                    _ = &elem;
-                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_24 = instance_non_field_elements.items.len;
+                    while (idx < __end_24) : (idx += 1) {
+                        _ = rewritePrivateAccessesInExpr(p, (&instance_non_field_elements.items[@as(usize, @intCast(idx))]), (&private_lowered_map));
+                    }
                 }
-                for (static_field_decorate.items) |*elem| {
-                    _ = &elem;
-                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_25 = static_field_decorate.items.len;
+                    while (idx < __end_25) : (idx += 1) {
+                        _ = rewritePrivateAccessesInExpr(p, (&static_field_decorate.items[@as(usize, @intCast(idx))]), (&private_lowered_map));
+                    }
                 }
-                for (instance_field_decorate.items) |*elem| {
-                    _ = &elem;
-                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_26 = instance_field_decorate.items.len;
+                    while (idx < __end_26) : (idx += 1) {
+                        _ = rewritePrivateAccessesInExpr(p, (&instance_field_decorate.items[@as(usize, @intCast(idx))]), (&private_lowered_map));
+                    }
                 }
                 _ = rewritePrivateAccessesInStmts(p, pre_eval_stmts.items, (&private_lowered_map));
                 _ = rewritePrivateAccessesInStmts(p, prefix_stmts.items, (&private_lowered_map));

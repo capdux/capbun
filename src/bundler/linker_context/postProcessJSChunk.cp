@@ -79,7 +79,7 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
             false,
         );
         const suffix_parts: [1]Part = [Part{ stmts: chunk.content.javascript.cross_chunk_suffix_stmts.slice() }];
-        let empty_records: [0]ImportRecord = [];
+        let empty_records: [0]ImportRecord = undefined;
         cross_chunk_suffix = js_printer.print(
             worker.allocator,
             c.resolver.opts.target,

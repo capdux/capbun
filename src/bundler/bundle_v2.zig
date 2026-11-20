@@ -991,7 +991,7 @@ pub fn enqueueServerComponentGeneratedFile(self: *BundleV2, data: ServerComponen
             const task = bun.new(ServerComponentParseTask, .{ .data = data, .ctx = self, .source = new_source });
             _ = self.incrementScanCounter();
             _ = self.graph.pool.worker_pool.schedule(ThreadPoolLib.Batch.from((&task.task)));
-            return (if (comptime @typeInfo(@TypeOf(source_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(source_index)) else cp_cast_int(i32, source_index));
+            return @as(Index.Int, @intCast(source_index));
     }
 
 pub fn getAllDependencies(self: *BundleV2, reachable_files: []const Index, fetcher: *const DependenciesScanner) !void {
@@ -1559,16 +1559,17 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
                 if ((part_list.len != 0)) {
                     if ((maybe_css != null)) {
                         _ = css_total_files.appendAssumeCapacity(Index.init(index));
-                        var log = Logger.Log.init(self.allocator());
-                        _ = &log;
+                        var parse_log = Logger.Log.init(self.allocator());
+                        _ = &parse_log;
                         defer {
-                        _ = log.deinit();
+                        _ = parse_log.deinit();
                         }
-                        if ((self.linker.scanCSSImports(@as(u32, @intCast(index)), import_records.slice(), css_asts, sources, loaders, (blk: {
-                        break :blk *const log;
+                        const parse_log_ptr = (blk: {
+                        break :blk (&parse_log);
 
-})) == .errors)) {
-                            _ = dev_server.handleParseTaskFailure(error.InvalidCssImport, .client, sources[@as(usize, @intCast(index))].path.text, *const log, self);
+});
+                        if ((self.linker.scanCSSImports(@as(u32, @intCast(index)), import_records.slice(), css_asts, sources, loaders, parse_log_ptr) == .errors)) {
+                            _ = dev_server.handleParseTaskFailure(error.InvalidCssImport, .client, sources[@as(usize, @intCast(index))].path.text, parse_log_ptr, self);
                             _ = start.css_entry_points.swapRemove(Index.init(index));
                         }
                     } else {
@@ -1956,8 +1957,10 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &had_resolve_error;
                 var resolve_result: _resolver.Result = undefined;
                 _ = &resolve_result;
+                const dummy_resolve_result: _resolver.Result = undefined;
                 inner: while (true) {
-                    resolve_result = (blk_catch_55: { break :blk_catch_55 ((transpiler.resolver.resolveWithFramework(source_dir, import_record.path.text, import_record.kind)) catch |e| { _ = &e; const log = self.logForResolutionFailures(source.path.text, bake_graph);
+                    resolve_result = (blk_catch_55: { break :blk_catch_55 ((transpiler.resolver.resolveWithFramework(source_dir, import_record.path.text, import_record.kind)) catch |e| { _ = &e; break :blk_catch_55 blk_res: {
+                    const log = self.logForResolutionFailures(source.path.text, bake_graph);
                     if ((e == error.ModuleNotFound)) {
                         if ((self.bun_watcher != null)) {
                             if ((!had_busted_dir_cache)) {
@@ -2007,7 +2010,8 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                         }
                     } break :__sw_blk_28; } } {  last_error = e; break :__sw_blk_28; }  }
                     had_resolve_error = true;
-                    break :blk_catch_55 {}; }); });
+                    break :blk_res dummy_resolve_result;
+}; }); });
                     if (had_resolve_error) {
                         continue :outer;
                     }

@@ -71,8 +71,14 @@ pub const empty_watch_dep: WatchDep = WatchDep{
             const dev = _.owner();
             dev.graph_safety_lock.lock();
             owned_file_path = switch (renderer) {
-                .client => (dev.client_graph.insertEmpty(import_source, .unknown)?).key,
-                .server, .ssr => (dev.server_graph.insertEmpty(import_source, .unknown)?).key,
+                .client => blk: {
+                    const entry = dev.client_graph.insertEmpty(import_source, .unknown)?;
+                    break :blk entry.key;
+                },
+                .server, .ssr => blk: {
+                    const entry = dev.server_graph.insertEmpty(import_source, .unknown)?;
+                    break :blk entry.key;
+                },
             };
         }
         defer _.owner().graph_safety_lock.unlock();

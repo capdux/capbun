@@ -664,8 +664,9 @@ pub fn assignToStream(self: *FileSink, stream: *WebCore.ReadableStream, globalTh
         }
         _ = self.signal.clear();
         self.readable_stream = .init(stream.*, globalThis);
+        const VoidPtr = *void;
         const sig_ptr = (blk: {
-        break :blk @as(*anyopaque, @ptrCast(@alignCast(&(self.signal.ptr))));
+        break :blk @as(*VoidPtr, @ptrCast(@alignCast(&(self.signal.ptr))));
 
 });
         const promise_result = JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), self, sig_ptr);

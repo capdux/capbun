@@ -122,10 +122,12 @@ var st = import_ptr.*;
                     if ((symbol.use_count_estimate == 0)) {
                         var has_any = false;
                         _ = &has_any;
-                        if (p.import_items_for_namespace.get(st.namespace_ref)) |entry| {
-                            _ = &entry;
-                            if ((entry.count() > 0)) {
-                                has_any = true;
+                        if (comptime @hasField(P, "import_items_for_namespace")) {
+                            if (p.import_items_for_namespace.get(st.namespace_ref)) |entry| {
+                                _ = &entry;
+                                if ((entry.count() > 0)) {
+                                    has_any = true;
+                                }
                             }
                         }
                         if ((!has_any)) {
@@ -165,7 +167,7 @@ var st = import_ptr.*;
                 st.star_name_loc = null;
             }
             record.flags.contains_default_alias = (record.flags.contains_default_alias or (st.default_name != null));
-            const existing_items: ImportItemForNamespaceMap = ((p.import_items_for_namespace.get(namespace_ref)) orelse (ImportItemForNamespaceMap.init(allocator)));
+            const existing_items: ImportItemForNamespaceMap = (if (comptime @hasField(P, "import_items_for_namespace")) ((p.import_items_for_namespace.get(namespace_ref)) orelse (ImportItemForNamespaceMap.init(allocator))) else ImportItemForNamespaceMap.init(allocator));
             if (p.options.bundle) {
                 if (((st.star_name_loc != null) and (existing_items.count() > 0))) {
                     var sorted = try allocator.alloc(string, existing_items.count());

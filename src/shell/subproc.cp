@@ -444,10 +444,10 @@ pub struct ShellSubprocess {
                         return .inherit;
                     },
                     .memfd, .path, .ignore => {
-                        return Writable{ .ignore = {} };
+                        return Writable{ .ignore = undefined };
                     },
                     .ipc, .capture => {
-                        return Writable{ .ignore = {} };
+                        return Writable{ .ignore = undefined };
                     },
                 }
             }
@@ -482,10 +482,10 @@ pub struct ShellSubprocess {
                     return .inherit;
                 },
                 .path, .ignore => {
-                    return Writable{ .ignore = {} };
+                    return Writable{ .ignore = undefined };
                 },
                 .ipc, .capture => {
-                    return Writable{ .ignore = {} };
+                    return Writable{ .ignore = undefined };
                 },
                 .readable_stream => {
                     // The shell never uses this
@@ -622,14 +622,14 @@ pub struct ShellSubprocess {
 
             if (Environment.isWindows) {
                 return switch (stdio) {
-                    .inherit => Readable{ .inherit = {} },
-                    .ipc, .dup2, .ignore => Readable{ .ignore = {} },
-                    .path => Readable{ .ignore = {} },
+                    .inherit => Readable{ .inherit = undefined },
+                    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
+                    .path => Readable{ .ignore = undefined },
                     .fd => |fd| Readable{ .fd = fd },
                     // blobs are immutable, so we should only ever get the case
                     // where the user passed in a Blob with an fd
-                    .blob => Readable{ .ignore = {} },
-                    .memfd => Readable{ .ignore = {} },
+                    .blob => Readable{ .ignore = undefined },
+                    .memfd => Readable{ .ignore = undefined },
                     .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
                     .array_buffer => {
                         const readable = Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
@@ -644,13 +644,13 @@ pub struct ShellSubprocess {
             }
 
             return switch (stdio) {
-                .inherit => Readable{ .inherit = {} },
-                .ipc, .dup2, .ignore => Readable{ .ignore = {} },
-                .path => Readable{ .ignore = {} },
+                .inherit => Readable{ .inherit = undefined },
+                .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
+                .path => Readable{ .ignore = undefined },
                 .fd => Readable{ .fd = result.? },
                 // blobs are immutable, so we should only ever get the case
                 // where the user passed in a Blob with an fd
-                .blob => Readable{ .ignore = {} },
+                .blob => Readable{ .ignore = undefined },
                 .memfd => Readable{ .memfd = stdio.memfd },
                 .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
                 .array_buffer => {
@@ -661,7 +661,7 @@ pub struct ShellSubprocess {
                     return readable;
                 },
                 .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-                .readable_stream => Readable{ .ignore = {} }, // Shell doesn't use readable_stream
+                .readable_stream => Readable{ .ignore = undefined }, // Shell doesn't use readable_stream
             };
         }
 

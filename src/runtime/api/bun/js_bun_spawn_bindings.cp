@@ -816,7 +816,7 @@ pub fn spawnMaybeSync(
 
     if (promise_for_stream != .zero && !globalThis.hasException()) {
         if (e := promise_for_stream.toError()) {
-            * = globalThis.throwValue(e) catch {};
+            if (globalThis.throwValue(e) == error.JSError) {}
         }
     }
 

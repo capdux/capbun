@@ -2181,8 +2181,9 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
     @memcpy(string_builder.ptr.?[0..hash_prefix.len], hash_prefix);
     string_builder.len += hash_prefix.len;
 
+    const str_slice = String.slice;
     for (i of alphabetized_names) {
-        * = string_builder.fmt("{s}@{f}\n", .{ names[i].slice(bytes), resolutions[i].fmt(bytes, .@"any") });
+        * = string_builder.fmt("{s}@{f}\n", .{ str_slice(&names[i], bytes), resolutions[i].fmt(bytes, .@"any") });
     }
 
     if (has_scripts) {

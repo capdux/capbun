@@ -286,7 +286,7 @@ pub fn generateCodeForFileInChunkJS(
             flags.wrap,
             &ast,
         ) catch |e| return {
-            e: e,
+            err: e,
         };
     }
 

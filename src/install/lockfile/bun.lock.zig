@@ -1415,7 +1415,7 @@ _ = workspace_and_not_v0: {
                     _ = try log.addError(source, deps_os_cpu_libc_bin_bundle_obj.loc, "Expected an object");
                     return error.InvalidPackageInfo;
                 }
-                const _tmp_v30 = try parseAppendDependencies(lockfile, allocator, deps_os_cpu_libc_bin_bundle_obj, (&string_buf), log, source, (&optional_peers_buf), true, pkg_path, (&bundled_pkgs), false, .{});
+                const _tmp_v30 = try parseAppendDependencies(lockfile, allocator, deps_os_cpu_libc_bin_bundle_obj, (&string_buf), log, source, (&optional_peers_buf), true, pkg_path, (&bundled_pkgs), false, undefined);
                 var off = cp_unpack_elem(_tmp_v30, 0);
                 _ = &off;
                 var len = cp_unpack_elem(_tmp_v30, 1);

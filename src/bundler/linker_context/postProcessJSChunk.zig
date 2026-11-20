@@ -152,7 +152,7 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
             const prefix_parts: [1]Part = .{ Part{ .stmts = chunk.content.javascript.cross_chunk_prefix_stmts.slice() } };
             cross_chunk_prefix = js_printer.print(worker.allocator, c.resolver.opts.target, ast.toAST(), c.getSource(chunk.entry_point.source_index), print_options, cross_chunk_import_records.slice(), (&prefix_parts), chunk.renamer, false);
             const suffix_parts: [1]Part = .{ Part{ .stmts = chunk.content.javascript.cross_chunk_suffix_stmts.slice() } };
-            var empty_records: [0]ImportRecord = &.{};
+            var empty_records: [0]ImportRecord = undefined;
             _ = &empty_records;
             cross_chunk_suffix = js_printer.print(worker.allocator, c.resolver.opts.target, ast.toAST(), c.getSource(chunk.entry_point.source_index), print_options, empty_records[0..0], (&suffix_parts), chunk.renamer, false);
         }

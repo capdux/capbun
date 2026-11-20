@@ -128,8 +128,14 @@ _ = bun.debugAssert(false);
             const dev = self.owner();
             _ = dev.graph_safety_lock.lock();
             owned_file_path = (switch (renderer) {
-.client => try dev.client_graph.insertEmpty(import_source, .unknown).key,
-.server, .ssr => try dev.server_graph.insertEmpty(import_source, .unknown).key,
+.client => blk: {
+            const entry = try dev.client_graph.insertEmpty(import_source, .unknown);
+            break :blk entry.key;
+},
+.server, .ssr => blk: {
+            const entry = try dev.server_graph.insertEmpty(import_source, .unknown);
+            break :blk entry.key;
+},
 });
         }
         defer {

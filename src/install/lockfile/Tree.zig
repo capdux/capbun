@@ -507,6 +507,7 @@ pub fn next(self: *@This(), completed_trees: if ((path_style == true)) ?*Bitset 
 }
 
 pub fn Builder(comptime method: BuilderMethod) type {
+        const is_filter = (method == .filter);
         return struct {
     allocator: Allocator,
     list: bun.MultiArrayList(Entry) = .{},
@@ -517,12 +518,12 @@ pub fn Builder(comptime method: BuilderMethod) type {
     log: *logger.Log,
     lockfile: *const Lockfile,
     pending_optional_peers: std.AutoArrayHashMap(PackageNameHash,std.AutoArrayHashMap(DependencyID,void)),
-    manager: if ((method == true)) *const PackageManager else void,
+    manager: if (is_filter) *const PackageManager else void,
     sort_buf: std.ArrayListUnmanaged(DependencyID) = .{},
-    workspace_filters: if ((method == true)) []const WorkspaceFilter else void = (if ((method == .filter)) &.{} else ({
+    workspace_filters: if (is_filter) []const WorkspaceFilter else void = (if (is_filter) &.{} else ({
 })),
-    install_root_dependencies: if ((method == true)) bool else void,
-    packages_to_install: if ((method == true)) ?[]const PackageID else void,
+    install_root_dependencies: if (is_filter) bool else void,
+    packages_to_install: if (is_filter) ?[]const PackageID else void,
 
 pub fn maybeReportError(self: *@This(), comptime fmt: []const u8, args: anytype) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((self.log.addErrorFmt(null, logger.Loc.Empty, self.allocator, fmt, args)) catch |__ce_0| { _ = &__ce_0; _ = 0; }); });

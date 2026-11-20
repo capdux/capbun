@@ -789,10 +789,10 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     return .inherit;
     },
     .memfd, .path, .ignore => {
-    return Writable{ .ignore = .{} };
+    return Writable{ .ignore = undefined };
     },
     .ipc, .capture => {
-    return Writable{ .ignore = .{} };
+    return Writable{ .ignore = undefined };
     },
     }
                 }
@@ -820,10 +820,10 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     return .inherit;
     },
     .path, .ignore => {
-    return Writable{ .ignore = .{} };
+    return Writable{ .ignore = undefined };
     },
     .ipc, .capture => {
-    return Writable{ .ignore = .{} };
+    return Writable{ .ignore = undefined };
     },
     .readable_stream => {
     _ = @panic("Unimplemented stdin readable_stream");
@@ -977,12 +977,12 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
                 _ = assertStdioResult(result);
                 if (Environment.isWindows) {
                     return (switch (stdio) {
-    .inherit => Readable{ .inherit = .{} },
-    .ipc, .dup2, .ignore => Readable{ .ignore = .{} },
-    .path => Readable{ .ignore = .{} },
+    .inherit => Readable{ .inherit = undefined },
+    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
+    .path => Readable{ .ignore = undefined },
     .fd => |fd| Readable{ .fd = fd },
-    .blob => Readable{ .ignore = .{} },
-    .memfd => Readable{ .ignore = .{} },
+    .blob => Readable{ .ignore = undefined },
+    .memfd => Readable{ .ignore = undefined },
     .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
     .array_buffer => {
     {
@@ -996,11 +996,11 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     });
                 }
                 return (switch (stdio) {
-    .inherit => Readable{ .inherit = .{} },
-    .ipc, .dup2, .ignore => Readable{ .ignore = .{} },
-    .path => Readable{ .ignore = .{} },
+    .inherit => Readable{ .inherit = undefined },
+    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
+    .path => Readable{ .ignore = undefined },
     .fd => Readable{ .fd = result.? },
-    .blob => Readable{ .ignore = .{} },
+    .blob => Readable{ .ignore = undefined },
     .memfd => Readable{ .memfd = stdio.memfd },
     .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
     .array_buffer => {
@@ -1011,7 +1011,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
                 }
     },
     .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-    .readable_stream => Readable{ .ignore = .{} },
+    .readable_stream => Readable{ .ignore = undefined },
     });
         }
     

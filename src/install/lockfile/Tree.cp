@@ -242,6 +242,7 @@ pub struct FillItem {
 pub type TreeFiller = bun.LinearFifo(FillItem, .Dynamic);
 
 pub fn Builder(comptime method: BuilderMethod): type {
+    const is_filter = method == .filter;
     return struct {
         allocator: Allocator,
         list: bun.MultiArrayList(Entry) = {},
@@ -256,11 +257,11 @@ pub fn Builder(comptime method: BuilderMethod): type {
         // can be multiple instances of the same package in the tree, so the same unresolved dependency ID
         // could be visited multiple times before it's resolved.
         pending_optional_peers: std.AutoArrayHashMap(PackageNameHash, std.AutoArrayHashMap(DependencyID, void)),
-        manager: if (method == .filter) *const PackageManager else void,
+        manager: if (is_filter) *const PackageManager else void,
         sort_buf: std.ArrayListUnmanaged(DependencyID) = {},
-        workspace_filters: if (method == .filter) []const WorkspaceFilter else void = if (method == .filter) [] else {},
-        install_root_dependencies: if (method == .filter) bool else void,
-        packages_to_install: if (method == .filter) ([]const PackageID)? else void,
+        workspace_filters: if (is_filter) []const WorkspaceFilter else void = if (is_filter) [] else {},
+        install_root_dependencies: if (is_filter) bool else void,
+        packages_to_install: if (is_filter) ([]const PackageID)? else void,
 
         pub fn maybeReportError(*_, comptime fmt: string, args: auto) {
             _.log.addErrorFmt(null, logger.Loc.Empty, _.allocator, fmt, args) catch { * = 0; };

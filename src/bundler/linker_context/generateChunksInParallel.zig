@@ -329,7 +329,7 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                 const chunk = (&chunks[@as(usize, @intCast(index))]);
                 var hash: ContentHasher = .{};
                 _ = &hash;
-                _ = c.appendIsolatedHashesForImportedChunks((&hash), chunks, @as(i32, @intCast(index)), (&chunk_visit_map));
+                _ = c.appendIsolatedHashesForImportedChunks((&hash), chunks, @as(u32, @intCast(index)), (&chunk_visit_map));
                 _ = chunk_visit_map.setAll(false);
                 chunk.template.placeholder.hash = hash.digest();
                 const rel_path = bun.handleOom(std.fmt.allocPrint(c.allocator(), "{f}", .{ chunk.template }));

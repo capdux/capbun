@@ -1742,9 +1742,10 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
         _ = ((string_builder.allocate(client.allocator)) catch unreachable);
         _ = @memcpy(string_builder.ptr.?[0..hash_prefix.len], hash_prefix);
         string_builder.len = (string_builder.len + hash_prefix.len);
+        const str_slice = String.slice;
         for (cp_iter_slice(alphabetized_names)) |i| {
             _ = &i;
-            _ = string_builder.fmt("{s}@{f}\n", .{ cp_iter_slice(names[@as(usize, @intCast(i))])[@intCast(bytes)..], resolutions[@as(usize, @intCast(i))].fmt(bytes, .@"any") });
+            _ = string_builder.fmt("{s}@{f}\n", .{ str_slice((&names[@as(usize, @intCast(i))]), bytes), resolutions[@as(usize, @intCast(i))].fmt(bytes, .@"any") });
         }
         if (has_scripts) {
             _ = string_builder.append(scripts_begin);

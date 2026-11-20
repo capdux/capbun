@@ -623,7 +623,8 @@ pub struct TestingAPIs {
 
         _.signal.clear();
         _.readable_stream = .init(stream.*, globalThis);
-        const sig_ptr = unsafe { @as(*!, &_.signal.ptr) };
+        const VoidPtr = *void;
+        const sig_ptr = unsafe { @as(*VoidPtr, &_.signal.ptr) };
         const promise_result = JSSink.assignToStream(globalThis, stream.value, _, sig_ptr);
 
         if (e := promise_result.toError()) {

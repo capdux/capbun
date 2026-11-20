@@ -315,7 +315,7 @@ pub fn processDependencyList(
         }
 
         if (comptime @TypeOf(callbacks) != void) {
-            if (comptime @TypeOf(callbacks.onResolve) != void) {
+            if (comptime @typeInfo(@TypeOf(callbacks.onResolve)) == .@"fn") {
                 if (any_root) {
                     callbacks.onResolve(ctx);
                 }

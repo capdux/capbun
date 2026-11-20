@@ -430,8 +430,7 @@ if (self.optional) {
                 _ = self.deinitAndDeletePackage();
                 return;
             }
-            const run_err_args: struct { []const u8, []const u8, *anyopaque } = .{ self.scriptName(), self.package_name, e };
-            _ = Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> script from \"<b>{s}<r>\" due to\n{f}", run_err_args);
+            _ = Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> script from \"<b>{s}<r>\" due to\n{f}", .{ self.scriptName(), self.package_name, e });
             _ = self.deinit();
             _ = Output.flush();
             _ = Global.exit(1);

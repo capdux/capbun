@@ -141,10 +141,35 @@ fn taskCallbackWrap(thread_pool_task: *ThreadPoolLib.Task) {
 
         const client_named_exports = data.named_exports;
 
-        const register_client_reference = (b.addImportStmt(
-            server_components.server_runtime_import,
-            &[server_components.server_register_client_reference],
-        )?)[0];
+        const register_client_reference = blk: {
+            const imp_record = b.addImportRecord(server_components.server_runtime_import, .stmt)?;
+            let path_name = bun.fs.PathName.init(server_components.server_runtime_import);
+            const imp_name = strings.append(b.allocator, "import_", path_name.nonUniqueNameString(b.allocator)?)?;
+            const ns_ref = b.newSymbol(.other, imp_name)?;
+            const import_id = server_components.server_register_client_reference;
+            let clauses = b.allocator.alloc(js_ast.ClauseItem, 1)?;
+            const sym_ref = b.newSymbol(.@"import", import_id)?;
+            if (b.hot_reloading) {
+                b.getSymbol(sym_ref).namespace_alias = {
+                    namespace_ref: ns_ref,
+                    alias: import_id,
+                    import_record_index: imp_record,
+                };
+            }
+            const out_expr = b.newExpr(E.ImportIdentifier{ @"ref": sym_ref });
+            clauses[0] = {
+                name: { loc: Logger.Loc.Empty, @"ref": sym_ref },
+                original_name: import_id,
+                alias: import_id,
+            };
+            b.appendStmt(S.Import{
+                namespace_ref: ns_ref,
+                import_record_index: imp_record,
+                items: clauses,
+                is_single_line: false,
+            })?;
+            break :blk out_expr;
+        };
 
         const module_path = b.newExpr(E.String{
             // In development, the path loaded is the source file: Easy!

@@ -247,12 +247,12 @@ pub fn LowerDecorators(
                 },
                 .e_object => |e| {
                     for (*prop of e.properties.slice()) {
-                        if (*v := prop.value) rewriteExpr(p, v, kind);
-                        if (*ini := prop.initializer) rewriteExpr(p, ini, kind);
+                        if (prop.value != null) rewriteExpr(p, &prop.value.?, kind);
+                        if (prop.initializer != null) rewriteExpr(p, &prop.initializer.?, kind);
                     }
                 },
                 .e_template => |e| {
-                    if (*t := e.tag) rewriteExpr(p, t, kind);
+                    if (e.tag != null) rewriteExpr(p, &e.tag.?, kind);
                     for (*part of e.parts) rewriteExpr(p, &part.value, kind);
                 },
                 .e_arrow => |e| rewriteStmts(p, e.body.stmts, kind),
@@ -437,7 +437,7 @@ pub fn LowerDecorators(
                         }
                     }
                     rewritePrivateAccessesInExpr(p, &e.target, map);
-                    for (*arg of e.args.slice()) rewritePrivateAccessesInExpr(p, arg, map);
+                    for (idx of 0..e.args.len) rewritePrivateAccessesInExpr(p, &e.args.slice()[idx], map);
                 },
                 .e_unary => |e| rewritePrivateAccessesInExpr(p, &e.value, map),
                 .e_dot => |e| rewritePrivateAccessesInExpr(p, &e.target, map),
@@ -449,23 +449,23 @@ pub fn LowerDecorators(
                 },
                 .e_await => |e| rewritePrivateAccessesInExpr(p, &e.value, map),
                 .e_yield => |e| {
-                    if (*v := e.value) rewritePrivateAccessesInExpr(p, v, map);
+                    if (e.value != null) rewritePrivateAccessesInExpr(p, &e.value.?, map);
                 },
                 .e_new => |e| {
                     rewritePrivateAccessesInExpr(p, &e.target, map);
-                    for (*arg of e.args.slice()) rewritePrivateAccessesInExpr(p, arg, map);
+                    for (idx of 0..e.args.len) rewritePrivateAccessesInExpr(p, &e.args.slice()[idx], map);
                 },
                 .e_array => |e| {
-                    for (*item of e.items.slice()) rewritePrivateAccessesInExpr(p, item, map);
+                    for (idx of 0..e.items.len) rewritePrivateAccessesInExpr(p, &e.items.slice()[idx], map);
                 },
                 .e_object => |e| {
                     for (*prop of e.properties.slice()) {
-                        if (*v := prop.value) rewritePrivateAccessesInExpr(p, v, map);
-                        if (*ini := prop.initializer) rewritePrivateAccessesInExpr(p, ini, map);
+                        if (prop.value != null) rewritePrivateAccessesInExpr(p, &prop.value.?, map);
+                        if (prop.initializer != null) rewritePrivateAccessesInExpr(p, &prop.initializer.?, map);
                     }
                 },
                 .e_template => |e| {
-                    if (*t := e.tag) rewritePrivateAccessesInExpr(p, t, map);
+                    if (e.tag != null) rewritePrivateAccessesInExpr(p, &e.tag.?, map);
                     for (*part of e.parts) rewritePrivateAccessesInExpr(p, &part.value, map);
                 },
                 .e_function => |e| rewritePrivateAccessesInStmts(p, e.func.body.stmts, map),
@@ -479,12 +479,12 @@ pub fn LowerDecorators(
                 switch (stmt_item.data) {
                     .s_expr => |data| rewritePrivateAccessesInExpr(p, &data.value, map),
                     .s_return => |data| {
-                        if (*v := data.value) rewritePrivateAccessesInExpr(p, v, map);
+                        if (data.value != null) rewritePrivateAccessesInExpr(p, &data.value.?, map);
                     },
                     .s_throw => |data| rewritePrivateAccessesInExpr(p, &data.value, map),
                     .s_local => |data| {
                         for (*decl of data.decls.slice()) {
-                            if (*v := decl.value) rewritePrivateAccessesInExpr(p, v, map);
+                            if (decl.value != null) rewritePrivateAccessesInExpr(p, &decl.value.?, map);
                         }
                     },
                     .s_if => |data| {
@@ -1133,10 +1133,10 @@ pub fn LowerDecorators(
                 }
                 for (sb of extracted_static_blocks.items)
                     rewritePrivateAccessesInStmts(p, sb.stmts.slice(), &private_lowered_map);
-                for (*elem of static_non_field_elements.items) rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (*elem of instance_non_field_elements.items) rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (*elem of static_field_decorate.items) rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (*elem of instance_field_decorate.items) rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
+                for (idx of 0..static_non_field_elements.items.len) rewritePrivateAccessesInExpr(p, &static_non_field_elements.items[idx], &private_lowered_map);
+                for (idx of 0..instance_non_field_elements.items.len) rewritePrivateAccessesInExpr(p, &instance_non_field_elements.items[idx], &private_lowered_map);
+                for (idx of 0..static_field_decorate.items.len) rewritePrivateAccessesInExpr(p, &static_field_decorate.items[idx], &private_lowered_map);
+                for (idx of 0..instance_field_decorate.items.len) rewritePrivateAccessesInExpr(p, &instance_field_decorate.items[idx], &private_lowered_map);
                 rewritePrivateAccessesInStmts(p, pre_eval_stmts.items, &private_lowered_map);
                 rewritePrivateAccessesInStmts(p, prefix_stmts.items, &private_lowered_map);
             }

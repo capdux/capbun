@@ -464,12 +464,11 @@ pub struct LifecycleScriptSubprocess {
                     return;
                 }
 
-                const run_err_args = .{
+                Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> script from \"<b>{s}<r>\" due to\n{f}", .{
                     _.scriptName(),
                     _.package_name,
                     e,
-                };
-                Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> script from \"<b>{s}<r>\" due to\n{f}", run_err_args);
+                });
                 _.deinit();
                 Output.flush();
                 Global.exit(1);
