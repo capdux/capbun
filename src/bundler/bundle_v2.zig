@@ -1651,7 +1651,8 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             for (chunks[1..][0..start.css_entry_points.count()], start.css_entry_points.keys()) |*chunk, entry_point| {
                 _ = &chunk;
                 _ = &entry_point;
-                const order = self.linker.findImportedFilesInCSSOrder(self.allocator(), .{ entry_point });
+                const eps: [1]Index = .{ entry_point };
+                const order = self.linker.findImportedFilesInCSSOrder(self.allocator(), (&eps));
                 chunk.* = .{ .entry_point = .{ .entry_point_id = (if (comptime @typeInfo(@TypeOf(entry_point.get())) == .@"enum") cp_cast_int(i32, @intFromEnum(entry_point.get())) else cp_cast_int(i32, entry_point.get())), .source_index = entry_point.get(), .is_entry_point = false }, .content = .{ .css = .{ .imports_in_chunk_in_order = order, .asts = try self.allocator().alloc(bun.css.BundlerStyleSheet, order.len) } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             }
             for (html_files.keys(), chunks[1 + start.css_entry_points.count() ..]) |source_index, *chunk| {
@@ -2795,10 +2796,12 @@ pub fn sortedCrossChunkImports(list: *List, chunks: []Chunk, imports_from_other_
                     (item.*).export_alias = (exports_to_other_chunks.get((item.*).ref)).?;
                     _ = bun.assert(((item.*).export_alias.len > 0));
                 }
-                _ = std.sort.pdq(CrossChunkImport.Item, import_items.slice(), .{}, CrossChunkImport.Item.lessThan);
+                const sort_ctx: void = undefined;
+                _ = std.sort.pdq(CrossChunkImport.Item, import_items.slice(), sort_ctx, CrossChunkImport.Item.lessThan);
                 _ = ((result.append(CrossChunkImport{ .chunk_index = chunk_index, .sorted_import_items = import_items })) catch unreachable);
             }
-            _ = std.sort.pdq(CrossChunkImport, result.items, .{}, CrossChunkImport.lessThan);
+            const sort_ctx: void = undefined;
+            _ = std.sort.pdq(CrossChunkImport, result.items, sort_ctx, CrossChunkImport.lessThan);
     }
     pub const Item = struct {
         export_alias: []const u8 = "",

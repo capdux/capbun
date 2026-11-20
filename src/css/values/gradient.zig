@@ -137,9 +137,9 @@ _ = unreachable;
 .color_stop => |*cs| {
 var pos: ?LengthPercentage = null;
                         _ = &pos;
-                        if (cs.position) |*p| {
-                            _ = &p;
-                            pos = (switch ((p.*).*) {
+                        if ((cs.position != null)) {
+                            const p = (&cs.position.?);
+                            pos = (switch (p.*) {
 .percentage => |perc| LengthPercentage{ .percentage = Percentage{ .v = (1.0 - perc.v) } },
 else => unreachable,
 });
@@ -1671,7 +1671,7 @@ pub fn serializeItems(comptime D: type, items: *const ArrayList(GradientItem(D))
             if (last) |prev| {
                 _ = &prev;
                 if ((!dest.targets.shouldCompile(.double_position_gradients, .{ .double_position_gradients = true }))) {
-                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and ((item.*).* == .color_stop)) and ((item.*).color_stop.position != null)) and prev.color_stop.color.eql((&(item.*).color_stop.color)))) {
+                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and ((item.*) == .color_stop)) and ((item.*).color_stop.position != null)) and prev.color_stop.color.eql((&(item.*).color_stop.color)))) {
                         _ = try dest.writeChar(32);
                         _ = try (item.*).color_stop.position.?.toCss(dest);
                         last = null;

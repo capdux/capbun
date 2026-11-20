@@ -2670,7 +2670,8 @@ pub struct BundleV2 {
 
         // Then all the distinct CSS bundles (these are JS->CSS, not CSS->CSS)
         for (chunks[1..][0..start.css_entry_points.count()], start.css_entry_points.keys()) |*chunk, entry_point| {
-            const order = _.linker.findImportedFilesInCSSOrder(_.allocator(), [entry_point]);
+            const eps: [1]Index = [entry_point];
+            const order = _.linker.findImportedFilesInCSSOrder(_.allocator(), &eps);
             chunk.* = {
                 entry_point: {
                     entry_point_id: i32(entry_point.get()),
@@ -4214,7 +4215,8 @@ pub struct CrossChunkImport {
                 item.export_alias = exports_to_other_chunks.get(item.ref).?;
                 bun.assert(item.export_alias.len > 0);
             }
-            std.sort.pdq(CrossChunkImport.Item, import_items.slice(), {}, CrossChunkImport.Item.lessThan);
+            const sort_ctx: void = undefined;
+            std.sort.pdq(CrossChunkImport.Item, import_items.slice(), sort_ctx, CrossChunkImport.Item.lessThan);
 
             result.append(CrossChunkImport{
                 chunk_index: chunk_index,
@@ -4222,7 +4224,8 @@ pub struct CrossChunkImport {
             }) catch unreachable;
         }
 
-        std.sort.pdq(CrossChunkImport, result.items, {}, CrossChunkImport.lessThan);
+        const sort_ctx: void = undefined;
+        std.sort.pdq(CrossChunkImport, result.items, sort_ctx, CrossChunkImport.lessThan);
     }
 }
 

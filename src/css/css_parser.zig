@@ -353,7 +353,7 @@ pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) 
                                     }
                                 }
                             }
-                            _ = @compileError("ParserError tag requires payload");
+                            _ = unreachable;
                         } else {
                             _ = @compileError(("TODO implement this for: " ++ @typeName(@TypeOf(e))));
                         }

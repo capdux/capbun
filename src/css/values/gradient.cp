@@ -414,7 +414,8 @@ pub struct LinearGradient {
                     },
                     .color_stop => |*cs| {
                         let pos: LengthPercentage? = null;
-                        if (*p := cs.position) {
+                        if (cs.position != null) {
+                            const p = &cs.position.?;
                             pos = switch (p.*) {
                                 .percentage => |perc| LengthPercentage{ .percentage = Percentage{ .v = 1.0 - perc.v } },
                                 else => unreachable,
@@ -1608,7 +1609,7 @@ pub fn serializeItems(
         if (prev := last) {
             if (!dest.targets.shouldCompile(.double_position_gradients, { double_position_gradients: true })) {
                 if (prev.* == .color_stop && prev.color_stop.position != null &&
-                    item.* == .color_stop && item.color_stop.position != null &&
+                    item == .color_stop && item.color_stop.position != null &&
                     prev.color_stop.color.eql(&item.color_stop.color))
                 {
                     dest.writeChar(' ')?;

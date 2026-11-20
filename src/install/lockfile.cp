@@ -817,18 +817,17 @@ pub fn loadFromDir(
         };
 
         TextLockfile.parseIntoBinaryLockfile(_, allocator, json, source, log, manager) catch |e| {
-            switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-                else => {
-                    return {
-                        e: {
-                            step: .parse_file,
-                            value: e,
-                            lockfile_path: "bun.lock",
-                            format: lockfile_format,
-                        },
-                    };
-                },
+            if (e == error.OutOfMemory) {
+                bun.outOfMemory();
+            } else {
+                return {
+                    @"err": {
+                        step: .parse_file,
+                        value: e,
+                        lockfile_path: "bun.lock",
+                        format: lockfile_format,
+                    },
+                };
             }
         };
 
@@ -895,7 +894,7 @@ pub fn loadFromBytes(client: *Lockfile, pm: (*PackageManager)?, buf: []u8, alloc
     client.patched_dependencies = {};
 
     const load_result = Lockfile.Serializer.load(client, &stream, allocator, log, pm) catch |e| {
-        return LoadResult{ err: { step: .parse_file, value: e, lockfile_path: "bun.lockb", format: .binary } };
+        return LoadResult{ @"err": { step: .parse_file, value: e, lockfile_path: "bun.lockb", format: .binary } };
     };
 
     if (Environment.allow_assert) {

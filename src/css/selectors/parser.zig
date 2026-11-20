@@ -2627,7 +2627,7 @@ const e = SelectorParseErrorKind{ .pseudo_element_expected_ident = t };
                 const Closure = struct {
     parser: *SelectorParser,
 
-pub fn parsefn(self: *const @This(), input2: *css.Parser) Result([]Impl.SelectorImpl.Identifier) {
+pub fn parsefn(self: *const @This(), input2: *css.Parser) Result(Slice) {
             var result = ((ArrayList(Impl.SelectorImpl.Identifier).initCapacity(self.parser.allocator, 1)) catch unreachable);
             _ = &result;
             _ = ((result.append(self.parser.allocator, (switch (input2.expectIdent()) {
@@ -2646,12 +2646,11 @@ return .{ .err = e };
             }
             return .{ .result = result.items };
     }
+    pub const Slice = []Impl.SelectorImpl.Identifier;
 };
                 var closure = Closure{ .parser = parser };
                 _ = &closure;
-                const IdentSlice = &.{};
-                _ = Impl.SelectorImpl.Identifier;
-                const names = (switch (input.parseNestedBlock(IdentSlice, (&closure), Closure.parsefn)) {
+                const names = (switch (input.parseNestedBlock(Closure.Slice, (&closure), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },

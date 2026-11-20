@@ -699,7 +699,7 @@ pub fn processDeps(deps: StringMap, dep_type: DependencyType, yarn_lock_: *YarnL
                     const alias_info = YarnLockEntry.parseNpmAlias(dep_version);
                     parsed_version = alias_info.version;
                 }
-                const parsed_dep_ver = ((Dependency.parse(yarn_lock_.allocator, dep_name_str, dep_name_hash, parsed_version, (&Semver.SlicedString.init(parsed_version, parsed_version)), log, manager)) orelse (Dependency.Version));
+                const parsed_dep_ver = ((Dependency.parse(yarn_lock_.allocator, dep_name_str, dep_name_hash, parsed_version, (&Semver.SlicedString.init(parsed_version, parsed_version)), log, manager)) orelse (Dependency.Version.zeroed));
                 deps_buf[cp_cast_int(usize, count)] = Dependency{ .name = dep_name_str, .name_hash = dep_name_hash, .version = parsed_dep_ver, .behavior = .{ .prod = (dep_type == .production), .optional = (dep_type == .optional), .dev = (dep_type == .development), .peer = (dep_type == .peer), .workspace = dep_entry.workspace } };
                 var found_package_id: ?Install.PackageID = null;
                 _ = &found_package_id;
@@ -1203,7 +1203,7 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
                     const name_hash = stringHash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name));
                     const dep_name_string = try string_buf.appendWithHash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name), name_hash);
                     const version_string = try string_buf.append(dep.version);
-                    const parsed_dep_ver = ((Dependency.parse(allocator, dep_name_string, name_hash, version_string.slice(lockfile.buffers.string_bytes.items), (&version_string.sliced(lockfile.buffers.string_bytes.items)), log, manager)) orelse (Dependency.Version));
+                    const parsed_dep_ver = ((Dependency.parse(allocator, dep_name_string, name_hash, version_string.slice(lockfile.buffers.string_bytes.items), (&version_string.sliced(lockfile.buffers.string_bytes.items)), log, manager)) orelse (Dependency.Version.zeroed));
                     dependencies_buf[cp_cast_int(usize, actual_root_dep_count)] = Dependency{ .name = dep_name_string, .name_hash = name_hash, .version = parsed_dep_ver, .behavior = .{ .prod = (dep.dep_type == .production), .dev = (dep.dep_type == .development), .optional = (dep.dep_type == .optional), .peer = (dep.dep_type == .peer), .workspace = false } };
                     resolutions_buf[cp_cast_int(usize, actual_root_dep_count)] = yarn_entry_to_package_id[@as(usize, @intCast(idx))];
                     actual_root_dep_count = (actual_root_dep_count + 1);
@@ -1612,7 +1612,7 @@ for (ids.items) |id| {
                 const dep_name_string = try string_buf.appendWithHash((if (@typeInfo(@TypeOf(root_dep)) == .@"enum" or @typeInfo(@TypeOf(root_dep)) == .@"union") @tagName(root_dep) else root_dep.name), name_hash);
                 const dep_version_string = try string_buf.append(root_dep.version);
                 const sliced_string = Semver.SlicedString.init(dep_version_string.slice(lockfile.buffers.string_bytes.items), dep_version_string.slice(lockfile.buffers.string_bytes.items));
-                var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version));
+                var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version.zeroed));
                 _ = &parsed_version;
                 parsed_version.literal = dep_version_string;
                 const dep = Dependency{ .name_hash = name_hash, .name = dep_name_string, .version = parsed_version, .behavior = .{ .prod = (root_dep.dep_type == .production), .dev = (root_dep.dep_type == .development), .optional = (root_dep.dep_type == .optional), .peer = (root_dep.dep_type == .peer), .workspace = false } };
@@ -1654,7 +1654,7 @@ for (ids.items) |id| {
                     const dep_name_string = try string_buf.appendWithHash(dep_name, name_hash);
                     const dep_version_string = try string_buf.append(dep_version_literal);
                     const sliced_string = Semver.SlicedString.init(dep_version_string.slice(lockfile.buffers.string_bytes.items), dep_version_string.slice(lockfile.buffers.string_bytes.items));
-                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version));
+                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version.zeroed));
                     _ = &parsed_version;
                     parsed_version.literal = dep_version_string;
                     _ = try lockfile.buffers.dependencies.append(allocator, Dependency{ .name = dep_name_string, .name_hash = name_hash, .version = parsed_version, .behavior = .{ .prod = true } });
@@ -1682,7 +1682,7 @@ for (ids.items) |id| {
                     const dep_name_string = try string_buf.appendWithHash(dep_name, name_hash);
                     const dep_version_string = try string_buf.append(dep_version_literal);
                     const sliced_string = Semver.SlicedString.init(dep_version_string.slice(lockfile.buffers.string_bytes.items), dep_version_string.slice(lockfile.buffers.string_bytes.items));
-                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version));
+                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version.zeroed));
                     _ = &parsed_version;
                     parsed_version.literal = dep_version_string;
                     _ = try lockfile.buffers.dependencies.append(allocator, Dependency{ .name = dep_name_string, .name_hash = name_hash, .version = parsed_version, .behavior = .{ .optional = true } });
@@ -1710,7 +1710,7 @@ for (ids.items) |id| {
                     const dep_name_string = try string_buf.appendWithHash(dep_name, name_hash);
                     const dep_version_string = try string_buf.append(dep_version_literal);
                     const sliced_string = Semver.SlicedString.init(dep_version_string.slice(lockfile.buffers.string_bytes.items), dep_version_string.slice(lockfile.buffers.string_bytes.items));
-                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version));
+                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version.zeroed));
                     _ = &parsed_version;
                     parsed_version.literal = dep_version_string;
                     _ = try lockfile.buffers.dependencies.append(allocator, Dependency{ .name = dep_name_string, .name_hash = name_hash, .version = parsed_version, .behavior = .{ .peer = true } });
@@ -1738,7 +1738,7 @@ for (ids.items) |id| {
                     const dep_name_string = try string_buf.appendWithHash(dep_name, name_hash);
                     const dep_version_string = try string_buf.append(dep_version_literal);
                     const sliced_string = Semver.SlicedString.init(dep_version_string.slice(lockfile.buffers.string_bytes.items), dep_version_string.slice(lockfile.buffers.string_bytes.items));
-                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version));
+                    var parsed_version = ((Dependency.parse(allocator, dep_name_string, name_hash, dep_version_string.slice(lockfile.buffers.string_bytes.items), (&sliced_string), log, manager)) orelse (Dependency.Version.zeroed));
                     _ = &parsed_version;
                     parsed_version.literal = dep_version_string;
                     _ = try lockfile.buffers.dependencies.append(allocator, Dependency{ .name = dep_name_string, .name_hash = name_hash, .version = parsed_version, .behavior = .{ .dev = true } });

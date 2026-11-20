@@ -80,7 +80,7 @@ pub enum SyntaxString {
     }
 
     /// Parses a syntax string.
-    pub fn parseString(allocator: std.mem.Allocator, input: []const u8): css.Maybe(SyntaxString, void) {
+    pub static fn parseString(allocator: std.mem.Allocator, input: []const u8): css.Maybe(SyntaxString, void) {
         // https://drafts.css-houdini.org/css-properties-values-api/#parsing-syntax
         let trimmed_input = std.mem.trimLeft(u8, input, SPACE_CHARACTERS);
         if (trimmed_input.len == 0) {

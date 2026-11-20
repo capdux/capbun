@@ -149,7 +149,7 @@ pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: 
             var display_size: usize = 0;
             _ = &display_size;
             const public_path = (if (chunk.flags.is_browser_chunk_from_server_build) bv2.transpilerForTarget(.browser).options.public_path else c.resolver.opts.public_path);
-            var code_result: Chunk.IntermediateOutput.Result = undefined;
+            var code_result: Chunk.CodeResult = undefined;
             _ = &code_result;
             if (standalone_chunk_contents) |scc| {
                 _ = &scc;

@@ -2786,8 +2786,9 @@ pub fn parse_one_simple_selector(
 
                         const Closure = struct {
                             parser: *SelectorParser,
+                            pub const Slice = []Impl.SelectorImpl.Identifier;
 
-                            pub fn parsefn(self: *const @This(), input2: *css.Parser) Result([]Impl.SelectorImpl.Identifier) {
+                            pub fn parsefn(self: *const @This(), input2: *css.Parser) Result(Slice) {
                                 // todo_stuff.think_about_mem_mgmt
                                 let result = ArrayList(Impl.SelectorImpl.Identifier).initCapacity(
                                     self.parser.allocator,
@@ -2820,8 +2821,7 @@ pub fn parse_one_simple_selector(
                         };
 
                         let closure = Closure{ .parser = parser };
-                        const IdentSlice = []Impl.SelectorImpl.Identifier;
-                        const names = switch (input.parseNestedBlock(IdentSlice, &closure, Closure.parsefn)) {
+                        const names = switch (input.parseNestedBlock(Closure.Slice, &closure, Closure.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };

@@ -295,7 +295,7 @@ pub struct SourceLocation {
                     }
                 }
             }
-            @compileError("ParserError tag requires payload");
+            unreachable;
         } else {
             @compileError("TODO implement this for: " ++ @typeName(@TypeOf(e)));
         }

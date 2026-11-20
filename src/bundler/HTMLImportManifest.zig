@@ -175,13 +175,13 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
 }, (((ch.*).template.placeholder.hash) orelse ((ch.*).isolated_hash)), (ch.*).content.loader(), (if ((ch.*).entry_point.is_entry_point) .@"entry-point" else .chunk));
             }
         }
-        const additional_output_files = linker_graph.additional_output_files.items;
+        const additional_output_files = graph.additional_output_files.items;
         var already_visited_output_file = ((std.DynamicBitSetUnmanaged.initEmpty(bun.default_allocator, additional_output_files.len)) catch unreachable);
         _ = &already_visited_output_file;
         defer {
         _ = already_visited_output_file.deinit(bun.default_allocator);
         }
-        const file_entry_bits = linker_graph.entry_bits.items;
+        const file_entry_bits: []const AutoBitSet = linker_graph.files.items(.entry_bits);
         var i: usize = 0;
         _ = &i;
         while ((i < additional_output_files.len)) : (i = (i + 1)) {

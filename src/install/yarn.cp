@@ -589,7 +589,7 @@ fn processDeps(
                 &Semver.SlicedString.init(parsed_version, parsed_version),
                 log,
                 manager,
-            ) ?? Dependency.Version{};
+            ) ?? Dependency.Version.zeroed;
 
             deps_buf[count] = Dependency{
                 .name = dep_name_str,
@@ -1132,7 +1132,7 @@ pub fn migrateYarnLockfile(
                     &version_string.sliced(lockfile.buffers.string_bytes.items),
                     log,
                     manager,
-                ) ?? Dependency.Version{};
+                ) ?? Dependency.Version.zeroed;
 
                 dependencies_buf[actual_root_dep_count] = Dependency{
                     .name = dep_name_string,
@@ -1545,7 +1545,7 @@ pub fn migrateYarnLockfile(
                 &sliced_string,
                 log,
                 manager,
-            ) ?? Dependency.Version{};
+            ) ?? Dependency.Version.zeroed;
 
             parsed_version.literal = dep_version_string;
 
@@ -1613,7 +1613,7 @@ pub fn migrateYarnLockfile(
                     &sliced_string,
                     log,
                     manager,
-                ) ?? Dependency.Version{};
+                ) ?? Dependency.Version.zeroed;
 
                 parsed_version.literal = dep_version_string;
 
@@ -1657,7 +1657,7 @@ pub fn migrateYarnLockfile(
                     &sliced_string,
                     log,
                     manager,
-                ) ?? Dependency.Version{};
+                ) ?? Dependency.Version.zeroed;
 
                 parsed_version.literal = dep_version_string;
 
@@ -1701,7 +1701,7 @@ pub fn migrateYarnLockfile(
                     &sliced_string,
                     log,
                     manager,
-                ) ?? Dependency.Version{};
+                ) ?? Dependency.Version.zeroed;
 
                 parsed_version.literal = dep_version_string;
 
@@ -1745,7 +1745,7 @@ pub fn migrateYarnLockfile(
                     &sliced_string,
                     log,
                     manager,
-                ) ?? Dependency.Version{};
+                ) ?? Dependency.Version.zeroed;
 
                 parsed_version.literal = dep_version_string;
 

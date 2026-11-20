@@ -151,7 +151,7 @@ pub fn walk(deps: *CrossChunkDependencies, chunk: *Chunk, chunk_index: usize) vo
                         if (comptime Environment.allow_assert) {
                             _ = debug("Cross-chunk import: {s} {f}", .{ (deps.symbols.get(ref_to_use)).?.original_name, ref_to_use });
                         }
-                        _ = ((imports.put(ref_to_use, .{})) catch unreachable);
+                        _ = ((imports.put(ref_to_use, undefined)) catch unreachable);
                     }
                 }
             }

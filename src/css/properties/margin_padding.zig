@@ -549,14 +549,14 @@ pub fn flush(self: *@This(), dest: *css.DeclarationList, context: *css.PropertyH
     }
 
 pub inline fn logicalPropHelper(val: *OptProperty, comptime logical: css.PropertyIdTag, comptime ltr: css.PropertyIdTag, comptime rtl: css.PropertyIdTag, context: *css.PropertyHandlerContext) void {
-            if (val.*) |*_v| {
-                _ = &_v;
-                if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt((_v.*).*)) else @as(css.PropertyIdTag, (_v.*).*)) == logical)) {
-                    const v = (&@field((_v.*), @tagName(logical)));
+            if ((val.* != null)) {
+                const _v = (&val.*.?);
+                if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt(_v.*)) else @as(css.PropertyIdTag, _v.*)) == logical)) {
+                    const v = (&@field(_v, @tagName(logical)));
                     _ = context.addLogicalRule(context.allocator, @unionInit(Property, @tagName(ltr), v.deepClone(context.allocator)), @unionInit(Property, @tagName(rtl), v.deepClone(context.allocator)));
                 } else {
-                    if (((_v.*).* == .unparsed)) {
-                        const v = (&(_v.*).unparsed);
+                    if ((_v.* == .unparsed)) {
+                        const v = (&_v.unparsed);
                         _ = context.addLogicalRule(context.allocator, Property{ .unparsed = v.withPropertyId(context.allocator, ltr) }, Property{ .unparsed = v.withPropertyId(context.allocator, rtl) });
                     }
                 }

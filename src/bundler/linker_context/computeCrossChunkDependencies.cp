@@ -145,7 +145,7 @@ pub struct CrossChunkDependencies {
                     // be moved to a separate chunk than the use of a symbol even if
                     // the definition and use of that symbol are originally from the
                     // same source file.
-                    imports.put(ref_to_use, {}) catch unreachable;
+                    imports.put(ref_to_use, undefined) catch unreachable;
                 }
             }
         }

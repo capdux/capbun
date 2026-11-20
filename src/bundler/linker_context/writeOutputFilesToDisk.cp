@@ -118,7 +118,7 @@ pub fn writeOutputFilesToDisk(
         else
             c.resolver.opts.public_path;
 
-        let code_result: Chunk.IntermediateOutput.Result = undefined;
+        let code_result: Chunk.CodeResult = undefined;
         if (scc := standalone_chunk_contents) {
             code_result = chunk.intermediate_output.codeStandalone(
                 code_allocator,

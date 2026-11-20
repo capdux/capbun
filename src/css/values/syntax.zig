@@ -111,8 +111,7 @@ return .{ .err = e };
             return .{ .result = result.result };
     }
 
-pub fn parseString(self: SyntaxString, allocator: std.mem.Allocator, input: []const u8) css.Maybe(SyntaxString,void) {
-        _ = self;
+pub fn parseString(allocator: std.mem.Allocator, input: []const u8) css.Maybe(SyntaxString,void) {
             var trimmed_input = std.mem.trimLeft(u8, input, SPACE_CHARACTERS);
             _ = &trimmed_input;
             if ((trimmed_input.len == 0)) {

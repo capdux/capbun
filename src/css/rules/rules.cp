@@ -102,7 +102,10 @@ pub fn CssRule(comptime Rule: type): type {
                 .counter_style => |x| x.toCss(dest),
                 .namespace => |x| x.toCss(dest),
                 .moz_document => |x| x.toCss(dest),
-                .nesting => |x| x.toCss(dest),
+                .nesting => |x| {
+                    let n = x;
+                    return n.toCss(dest);
+                },
                 .viewport => |x| x.toCss(dest),
                 .custom_media => |x| x.toCss(dest),
                 .layer_statement => |x| x.toCss(dest),
