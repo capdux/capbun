@@ -1491,3 +1491,6 @@
 
 ### 2026-11-20 03:35:07 UTC - src/cli/ 100% 目录闭环（repl, update_interactive_command, test_command 入库）
 - 完成：`repl.cp` (1.022x), `update_interactive_command.cp` (1.009x), `test_command.cp` (1.025x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:36:27 UTC - src/install/ 3 核心引擎模块迁移入库
+- 完成：`PackageManager.cp` (0.971x), `PackageInstaller.cp` (1.010x), `isolated_install.cp` (1.006x)，4 项硬门禁全 PASS。

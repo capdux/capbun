@@ -99,3 +99,5 @@
 - **`struct` 命名空间级静态可变变量**：写 `static let x: T = ...;`（无 `static` 会成为实例字段）。
 
 - **带显式类型标注的 `@intFromFloat`/`@bitCast` 被丢弃**：`const x: T = @intFromFloat(...)` / `@bitCast(...)` 会被 `cpc` 静默丢弃；改写为 `const x = @as(T, @intFromFloat(...))`。
+
+- **类型位置中的匿名结构体参数**：如 `bun.AbsPath({ sep: .auto })` 需先在模块顶层定义为常量别名再引用，否则 codegen 原样输出 `{sep:.auto}` 导致 `ast-check` 报错。
