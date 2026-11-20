@@ -166,7 +166,7 @@ pub const LoadResult = union(enum) {
     @"err": LoadResultErr,
     ok: LoadResultOk,
 
-pub fn loadedFromTextLockfile(self: *const LoadResult) bool {
+pub fn loadedFromTextLockfile(self: LoadResult) bool {
             return (switch (self) {
 .not_found => false,
 .@"err" => |e| (e.format == .text),
@@ -174,7 +174,7 @@ pub fn loadedFromTextLockfile(self: *const LoadResult) bool {
 });
     }
 
-pub fn loadedFromBinaryLockfile(self: *const LoadResult) bool {
+pub fn loadedFromBinaryLockfile(self: LoadResult) bool {
             return (switch (self) {
 .not_found => false,
 .@"err" => |e| (e.format == .binary),
@@ -182,14 +182,14 @@ pub fn loadedFromBinaryLockfile(self: *const LoadResult) bool {
 });
     }
 
-pub fn migratedFromNpm(self: *const LoadResult) bool {
+pub fn migratedFromNpm(self: LoadResult) bool {
             return (switch (self) {
 .ok => |ok| (ok.migrated == .npm),
 else => false,
 });
     }
 
-pub fn saveFormat(self: *const LoadResult, options: *const PackageManager.Options) LoadResultFormat {
+pub fn saveFormat(self: LoadResult, options: *const PackageManager.Options) LoadResultFormat {
             switch (self) {
 .not_found => {
 const save_text_lockfile = ((options.save_text_lockfile) orelse (true));
@@ -222,7 +222,7 @@ if (options.save_text_lockfile) |save_text_lockfile| {
 }
     }
 
-pub fn chooseConfigVersion(self: *const LoadResult) ConfigVersionTuple {
+pub fn chooseConfigVersion(self: LoadResult) ConfigVersionTuple {
             return (switch (self) {
 .not_found, .@"err" => .{ .current, true },
 .ok => |ok| (switch (ok.migrated) {
@@ -661,11 +661,11 @@ pub fn isEmpty(client: *const Lockfile) bool {
         return ((client.packages.len == 0) or ((client.packages.len == 1) and (client.packages.get(0).resolutions.len == 0)));
 }
 
-pub fn loadFromCwd(self: *Lockfile, manager: ?*PackageManager, allocator: Allocator, log: *logger.Log, comptime attempt_loading_from_other_lockfile: bool) *LoadResult {
+pub fn loadFromCwd(self: *Lockfile, manager: ?*PackageManager, allocator: Allocator, log: *logger.Log, comptime attempt_loading_from_other_lockfile: bool) LoadResult {
         return self.loadFromDir(bun.FD.cwd(), manager, allocator, log, attempt_loading_from_other_lockfile);
 }
 
-pub fn loadFromDir(self: *Lockfile, dir: bun.FD, manager: ?*PackageManager, allocator: Allocator, log: *logger.Log, comptime attempt_loading_from_other_lockfile: bool) *LoadResult {
+pub fn loadFromDir(self: *Lockfile, dir: bun.FD, manager: ?*PackageManager, allocator: Allocator, log: *logger.Log, comptime attempt_loading_from_other_lockfile: bool) LoadResult {
         if (comptime Environment.allow_assert) {
             _ = assert(FileSystem.instance_loaded);
         }
@@ -710,7 +710,7 @@ if ((bun.env_var.BUN_DEBUG_TEST_TEXT_LOCKFILE.get() and (manager != null))) {
             _ = writer_allocating.deinit();
             }
             const writer = (&writer_allocating.writer);
-            _ = (blk_catch_7: { break :blk_catch_7 ((TextLockfile.Stringifier.saveFromBinary(allocator, result.ok.lockfile, result, (&manager.?.options), writer)) catch |e| { _ = &e; break :blk_catch_7 Output.panic("failed to convert binary lockfile to text lockfile: {s}", .{ @errorName(e) }); }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((TextLockfile.Stringifier.saveFromBinary(allocator, result.ok.lockfile, (&result), (&manager.?.options), writer)) catch |e| { _ = &e; break :blk_catch_7 Output.panic("failed to convert binary lockfile to text lockfile: {s}", .{ @errorName(e) }); }); });
             const text_lockfile_bytes = bun.handleOom(writer_allocating.toOwnedSlice());
             const source = (&logger.Source.initPathString("bun.lock", text_lockfile_bytes));
             _ = initializeStore();
@@ -726,7 +726,7 @@ else => {
         return result;
 }
 
-pub fn loadFromBytes(client: *Lockfile, pm: ?*PackageManager, buf: []u8, allocator: Allocator, log: *logger.Log) *LoadResult {
+pub fn loadFromBytes(client: *Lockfile, pm: ?*PackageManager, buf: []u8, allocator: Allocator, log: *logger.Log) LoadResult {
         var stream = Stream{ .buffer = buf, .pos = 0 };
         _ = &stream;
         client.format = FormatVersion.current;

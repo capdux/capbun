@@ -13,7 +13,7 @@ const heap = std.heap;
 const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
-const empty_aliases: [string; 0] = [];
+const empty_aliases: [0]string = undefined;
 
 /// The names a ::Param can have.
 pub struct Names {

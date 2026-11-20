@@ -431,14 +431,10 @@ pub struct Registry {
 
             const hashed = HTTPClient.hashHeaderName(header.name);
 
-            switch (hashed) {
-                HTTPClient.hashHeaderConst("last-modified") => {
-                    newly_last_modified = header.value;
-                },
-                HTTPClient.hashHeaderConst("etag") => {
-                    new_etag = header.value;
-                },
-                else => {},
+            if (hashed == HTTPClient.hashHeaderConst("last-modified")) {
+                newly_last_modified = header.value;
+            } else if (hashed == HTTPClient.hashHeaderConst("etag")) {
+                new_etag = header.value;
             }
         }
 

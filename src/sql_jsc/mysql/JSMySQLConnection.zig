@@ -777,7 +777,17 @@ if (self.#js_value.tryGet()) |value| {
             _ = &value;
             cached_structure = statement.structure(value, self.#globalObject);
         }
-        if (structure == null) { structure = .js_undefined; }
+        if (cached_structure) |cs| {
+            _ = &cs;
+            if (cs.jsValue()) |v| {
+                _ = &v;
+                structure = v;
+            } else {
+                structure = .js_undefined;
+            }
+        } else {
+            structure = .js_undefined;
+        }
 },
 .raw, .values => {
 

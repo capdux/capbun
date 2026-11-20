@@ -149,9 +149,9 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         _ = &top_frame_position;
         var region_of_interest_line: u32 = 0;
         _ = &region_of_interest_line;
-        for (frames.items) |frame| {
+        for (frames.items) |*frame| {
             _ = &frame;
-            const source_url = (if (@typeInfo(@TypeOf(frame.source_url)) == .@"enum") @intFromEnum(frame.source_url) else frame.source_url.value).ZigString.slice();
+            const source_url = (if (@typeInfo(@TypeOf((frame.*).source_url)) == .@"enum") @intFromEnum((frame.*).source_url) else (frame.*).source_url.value).ZigString.slice();
             const id = ((parseId(source_url, browser_url_origin)) orelse continue);
             var gop = try parsed_source_maps.getOrPut(temp_alloc, id);
             _ = &gop;
@@ -173,52 +173,52 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
             }
             const result = (&result_opt.?);
             const generated_mappings = result.mappings.generated();
-            if (((generated_mappings.len <= 1) or (frame.position.line.zeroBased() < generated_mappings[1].lines.zeroBased()))) {
-                frame.source_url = .init(runtime_name);
-                frame.position = .invalid;
+            if (((generated_mappings.len <= 1) or ((frame.*).position.line.zeroBased() < generated_mappings[1].lines.zeroBased()))) {
+                (frame.*).source_url = .init(runtime_name);
+                (frame.*).position = .invalid;
                 continue;
             }
-            if (result.mappings.find(frame.position.line, frame.position.column)) |remapped_position| {
+            if (result.mappings.find((frame.*).position.line, (frame.*).position.column)) |remapped_position| {
                 _ = &remapped_position;
-                frame.position = jsc.ZigStackFramePosition{ .line = .fromZeroBased(remapped_position.originalLine()), .column = .fromZeroBased(remapped_position.originalColumn()), .line_start_byte = 0 };
+                (frame.*).position = jsc.ZigStackFramePosition{ .line = .fromZeroBased(remapped_position.originalLine()), .column = .fromZeroBased(remapped_position.originalColumn()), .line_start_byte = 0 };
                 const index = remapped_position.source_index;
                 if (((index >= 1) and ((index - 1) < result.file_paths.len))) {
                     const abs_path = result.file_paths[@as(usize, @intCast((index - 1)))];
-                    frame.source_url = .init(abs_path);
+                    (frame.*).source_url = .init(abs_path);
                     const relative_path_buf = bun.path_buffer_pool.get();
                     defer {
                     _ = bun.path_buffer_pool.put(relative_path_buf);
                     }
                     const rel_path = ctx.dev.relativePath(relative_path_buf, abs_path);
-                    if (bun.strings.eql((if (@typeInfo(@TypeOf(frame.function_name)) == .@"enum") @intFromEnum(frame.function_name) else frame.function_name.value).ZigString.slice(), rel_path)) {
-                        frame.function_name = .empty;
+                    if (bun.strings.eql((if (@typeInfo(@TypeOf((frame.*).function_name)) == .@"enum") @intFromEnum((frame.*).function_name) else (frame.*).function_name.value).ZigString.slice(), rel_path)) {
+                        (frame.*).function_name = .empty;
                     }
-                    frame.remapped = true;
+                    (frame.*).remapped = true;
                     if ((runtime_lines == null)) {
                         const file = result.entry_files.get(@intCast((index - 1)));
                         if (file.get()) |source_map| {
                             _ = &source_map;
                             const json_encoded_source_code = source_map.quotedContents();
-                            const target_line = @as(usize, @intCast(frame.position.line.zeroBased()));
+                            const target_line = @as(usize, @intCast((frame.*).position.line.zeroBased()));
                             first_line_of_interest = (if ((target_line >= 2)) (target_line - 2) else 0);
                             region_of_interest_line = @intCast((target_line - first_line_of_interest));
                             runtime_lines = try extractJsonEncodedSourceCode(json_encoded_source_code, @intCast(first_line_of_interest), arena_alloc.allocator());
-                            top_frame_position = frame.position;
+                            top_frame_position = (frame.*).position;
                         }
                     }
                 } else {
                     if ((index == 0)) {
-                        frame.source_url = .init(runtime_name);
-                        frame.position = .invalid;
+                        (frame.*).source_url = .init(runtime_name);
+                        (frame.*).position = .invalid;
                     }
                 }
             }
         }
         var has_non_runtime: bool = false;
         _ = &has_non_runtime;
-        for (frames.items) |frame| {
+        for (frames.items) |*frame| {
             _ = &frame;
-            if (((!frame.position.isInvalid()) or ((if (@typeInfo(@TypeOf(frame.source_url)) == .@"enum") @intFromEnum(frame.source_url) else frame.source_url.value).ZigString.slice().ptr != runtime_name.ptr))) {
+            if (((!(frame.*).position.isInvalid()) or ((if (@typeInfo(@TypeOf((frame.*).source_url)) == .@"enum") @intFromEnum((frame.*).source_url) else (frame.*).source_url.value).ZigString.slice().ptr != runtime_name.ptr))) {
                 has_non_runtime = true;
                 break;
             }
@@ -226,12 +226,12 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         if (has_non_runtime) {
             var i: usize = 0;
             _ = &i;
-            for (frames.items) |frame| {
+            for (frames.items) |*frame| {
                 _ = &frame;
-                if ((frame.position.isInvalid() and ((if (@typeInfo(@TypeOf(frame.source_url)) == .@"enum") @intFromEnum(frame.source_url) else frame.source_url.value).ZigString.slice().ptr == runtime_name.ptr))) {
+                if (((frame.*).position.isInvalid() and ((if (@typeInfo(@TypeOf((frame.*).source_url)) == .@"enum") @intFromEnum((frame.*).source_url) else (frame.*).source_url.value).ZigString.slice().ptr == runtime_name.ptr))) {
                     continue;
                 }
-                frames.items[cp_cast_int(usize, i)] = frame;
+                frames.items[cp_cast_int(usize, i)] = (frame.*);
                 i = (i + 1);
             }
             frames.items.len = i;

@@ -148,7 +148,11 @@ pub fn start(self: *ProcessHandle) !void {
             _ = bun.handleOom(self.state.env.map.put("PATH", original_path));
             }
             const envp = try self.state.env.map.createNullDelimitedEnvMap(arena_.allocator());
-            break :brk try try bun.spawn.spawnProcess((&self.options), argv[0..], envp).unwrap();
+            const argv_ptr: ?[*:null][*:0]u8 = (blk: {
+            break :blk @ptrCast((&argv));
+
+});
+            break :brk try try bun.spawn.spawnProcess((&self.options), argv_ptr, envp).unwrap();
 };
             _ = &spawned;
             var process = spawned.toProcess(self.state.event_loop, false);

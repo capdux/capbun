@@ -597,7 +597,7 @@ export class HTTPContext<const ssl: bool> {
     pub fn initWithThreadOpts(*_, init_opts: *const bun.http.HTTPThread.InitOpts): bun.http.InitError!void {
         if (!ssl) @compileError("ssl only");
         let opts: bun.uws.SocketContext.BunSocketContextOptions = .{
-            .ca = if (init_opts.ca.len > 0) @ptrCast(init_opts.ca) else null,
+            .ca = if (init_opts.ca.len > 0) @ptrCast(@constCast(init_opts.ca)) else null,
             .ca_count = @intCast(init_opts.ca.len),
             .ca_file_name = if (init_opts.abs_ca_file_name.len > 0) init_opts.abs_ca_file_name else null,
             .request_cert = 1,

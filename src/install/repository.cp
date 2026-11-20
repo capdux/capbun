@@ -189,7 +189,8 @@ pub struct TopFormatter {
 
         if (!_.repository.resolved.isEmpty()) {
             writer.writeAll("#")?;
-            let resolved = _.repository.resolved.slice(_.buf);
+            const resolvedSliceFn = @TypeOf(_.repository.resolved).slice;
+            let resolved = resolvedSliceFn(_.repository.resolved, _.buf);
             if (i := strings.lastIndexOfChar(resolved, '-')) {
                 resolved = resolved[i + 1 ..];
             }

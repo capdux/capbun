@@ -528,7 +528,7 @@ pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, pat
             entry.key_ptr.* = path.text;
             entry.value_ptr.* = source_index.get();
             _ = bun.handleOom(self.graph.ast.append(self.allocator(), JSAst.empty));
-            _ = self.graph.input_files.append(self.allocator(), .{ .source = .{ .path = path, .contents = "", .index = source_index }, .loader = loader, .side_effects = result.primary_side_effects_data });
+            _ = try self.graph.input_files.append(self.allocator(), .{ .source = .{ .path = path, .contents = "", .index = source_index }, .loader = loader, .side_effects = result.primary_side_effects_data });
             var task = try self.allocator().create(ParseTask);
             _ = &task;
             task.* = ParseTask.init((&result), source_index, self);
@@ -577,7 +577,7 @@ pub fn enqueueEntryItem(self: *BundleV2, resolve: _resolver.Result, is_entry_poi
             entry.key_ptr.* = path.text;
             entry.value_ptr.* = source_index.get();
             _ = bun.handleOom(self.graph.ast.append(self.allocator(), JSAst.empty));
-            _ = self.graph.input_files.append(self.allocator(), .{ .source = .{ .path = path.*, .contents = "", .index = source_index }, .loader = loader, .side_effects = resolve.primary_side_effects_data });
+            _ = try self.graph.input_files.append(self.allocator(), .{ .source = .{ .path = path.*, .contents = "", .index = source_index }, .loader = loader, .side_effects = resolve.primary_side_effects_data });
             var task = try self.allocator().create(ParseTask);
             _ = &task;
             task.* = ParseTask.init((&result), source_index, self);

@@ -90,7 +90,8 @@ pub struct ProcessHandle {
             bun.handleOom(_.state.env.map.put("PATH", _.config.PATH));
             defer bun.handleOom(_.state.env.map.put("PATH", original_path));
             const envp = _.state.env.map.createNullDelimitedEnvMap(arena_.allocator())?;
-            break :brk (bun.spawn.spawnProcess(&_.options, argv[0..], envp)?).unwrap()?;
+            const argv_ptr: [*:null]cstr? = unsafe { @ptrCast(&argv) };
+            break :brk (bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?).unwrap()?;
         };
         let process = spawned.toProcess(_.state.event_loop, false);
 

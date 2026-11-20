@@ -99,11 +99,11 @@ pub struct ModuleInfoDeserialized {
         const res = gpa.create(ModuleInfoDeserialized)?;
         errdefer gpa.destroy(res);
 
-        const record_kinds_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(unsafe { &rem }, record_kinds_len * @sizeOf(RecordKind))?);
-        * = eat(unsafe { &rem }, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
+        const record_kinds_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(&rem, record_kinds_len * @sizeOf(RecordKind))?);
+        * = eat(&rem, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
 
-        const buffer_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
+        const buffer_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
         const buffer = std.mem.bytesAsSlice(StringID, eat(&rem, buffer_len * @sizeOf(StringID))?);
 
         const requested_modules_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);

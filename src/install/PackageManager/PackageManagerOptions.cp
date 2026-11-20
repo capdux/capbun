@@ -451,7 +451,9 @@ pub const Enable = packed struct(u16) {
                 _.hoist_pattern = hoist_pattern;
             }
 
-            _.explicit_global_directory = config.global_dir ?? _.explicit_global_directory;
+            if (gd := config.global_dir) {
+                _.explicit_global_directory = gd;
+            }
         }
 
         if (val := env.get("BUN_INSTALL_GLOBAL_STORE")) {

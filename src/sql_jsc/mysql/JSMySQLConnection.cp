@@ -707,7 +707,15 @@ fn hasNullByte(s: []const u8): bool {
                 if (value := this.#js_value.tryGet()) {
                     cached_structure = statement.structure(value, this.#globalObject);
                 }
-                structure = cached_structure.?.jsValue() orelse .js_undefined;
+                if (cs := cached_structure) {
+                    if (v := cs.jsValue()) {
+                        structure = v;
+                    } else {
+                        structure = .js_undefined;
+                    }
+                } else {
+                    structure = .js_undefined;
+                }
             },
             .raw, .values => {},
         }

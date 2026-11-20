@@ -141,7 +141,7 @@ if ((msg.len != 9)) {
         _ = (blk_catch_0: { break :blk_catch_0 ((std.fmt.hexToBytes(std.mem.asBytes((&generation)), msg[1..])) catch |__ce_0| { _ = &__ce_0; return ws.close(); }); });
         const source_map_id = SourceMapStore.Key.init(cp_shl((if (comptime @typeInfo(@TypeOf(generation)) == .@"enum") cp_cast_int(u64, @intFromEnum(generation)) else cp_cast_int(u64, generation)), 32));
         if (s.dev.source_maps.removeOrUpgradeWeakRef(source_map_id, .upgrade)) {
-            _ = (blk_catch_1: { break :blk_catch_1 ((s.referenced_source_maps.put(s.dev.allocator(), source_map_id, .{})) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 bun.outOfMemory(); }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((s.referenced_source_maps.put(s.dev.allocator(), source_map_id, undefined)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 bun.outOfMemory(); }); });
         }
 },
 .subscribe => {

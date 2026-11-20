@@ -207,7 +207,7 @@ pub fn init(allocator: std.mem.Allocator, input: []const u8, cwd: []const u8, pa
             return .{ .name = pattern };
     }
 
-pub fn deinit(self: *const WorkspaceFilter, allocator: std.mem.Allocator) void {
+pub fn deinit(self: WorkspaceFilter, allocator: std.mem.Allocator) void {
             switch (self) {
 .name, .path => |pattern| {
 _ = allocator.free(pattern);
@@ -420,8 +420,8 @@ pub var configureEnvForScriptsOnce = bun.once(ConfigureEnvForScriptsOnce_.run);
 const cached_package_folder_name_bufs = bun.ThreadlocalBuffers(struct {
     buf: bun.PathBuffer = undefined,
 });
-pub const SuccessFn = *const *const fn(*PackageManager, DependencyID, PackageID) void;
-pub const FailFn = *const *const fn(*PackageManager, *const Dependency, PackageID, anyerror) void;
+pub const SuccessFn = *const fn(*PackageManager, DependencyID, PackageID) void;
+pub const FailFn = *const fn(*PackageManager, *const Dependency, PackageID, anyerror) void;
 pub const debug = Output.scoped(.PackageManager, .hidden);
 var ensureTempNodeGypScriptOnce = bun.once(EnsureTempNodeGypScriptOnce_.run);
 pub const InitResult_ = struct { *PackageManager, string };

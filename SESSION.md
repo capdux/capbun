@@ -3156,3 +3156,5 @@ Options:
 - **[2026-11-20 22:49] Wave 21 F 组验收提交（28 模块全绿）**：完成 `EventLoopDelayMonitor`/`Path` 2 个外部根因 + 最后 26 个 1 错长尾模块（`toHaveReturnedWith` 随 G 组同提）独立验收（28/28 PASS，ratio 0.859x~1.153x）并原子提交；静待 G 组（`3adcd579`）完成即执行 Wave 22 `zig:check`。
 
 - **[2026-11-20 22:50] Wave 21 G 组验收提交（13 模块全绿）+ Wave 22 `zig:check`**：完成 `RefString`/`path_watcher` 2 根因 + 11 个机械排雷模块独立验收（13/13 编译 PASS，`CodeCoverageOptions` 原无备份除外）并原子提交；Wave 21 全部 158 个模块已清仓。
+
+- **[2026-11-20 22:55] Wave 22 C 组验收提交（25 模块全绿）**：完成 25 个 1~2 错模块独立验收（25/25 PASS，ratio 0.844x~1.118x）并原子提交；已将 C 组精准定位的 11 个外部根因与 `C_REST` 1 错长尾流水线派发给 D 组接力。

@@ -130,7 +130,7 @@ pub struct LifecycleScriptSubprocess {
             _.has_incremented_alive_count = true;
             // .monotonic is okay because because this value is only used by hoisted installs, which
             // only use this type on the main thread.
-            * = alive_count.fetchAdd(1, .monotonic);
+            * = LifecycleScriptSubprocess.alive_count.fetchAdd(1, .monotonic);
         }
 
         errdefer {

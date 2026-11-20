@@ -421,7 +421,7 @@ const empty_stmts: [0]Stmt = undefined;
                         let value = decl.value;
                         if (decl.value != null) {
                             while (true) {
-                                if (@as(Expr.Tag, value.?.data) == .e_dot) {
+                                if (std.meta.activeTag(value.?.data) == .e_dot) {
                                     value = value.?.data.e_dot.target;
                                 } else {
                                     break;

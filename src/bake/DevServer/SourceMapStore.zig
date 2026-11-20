@@ -264,9 +264,6 @@ if (bun.Environment.enable_logs) {
                         _ = mapLog("Skipping source map entry with missing line count at index {d}", .{ i });
                     }
 },
-else => {
-
-},
 }
                 }
             }

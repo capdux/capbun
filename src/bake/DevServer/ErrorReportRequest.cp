@@ -106,7 +106,7 @@
         let first_line_of_interest: usize = 0;
         let top_frame_position: jsc.ZigStackFramePosition = undefined;
         let region_of_interest_line: u32 = 0;
-        for (frame of frames.items) {
+        for (*frame of frames.items) {
             const source_url = frame.source_url.value.ZigString.slice();
             // The browser code strips "http://localhost:3000" when the string
             // has /_bun/client. It's done because JS can refer to `location`
@@ -188,7 +188,7 @@
 
         // Stack traces can often end with random runtime frames that are not relevant.
         let has_non_runtime: bool = false;
-        for (frame of frames.items) {
+        for (*frame of frames.items) {
             if (!frame.position.isInvalid() || frame.source_url.value.ZigString.slice().ptr != runtime_name.ptr) {
                 has_non_runtime = true;
                 break;
@@ -197,7 +197,7 @@
 
         if (has_non_runtime) {
             let i: usize = 0;
-            for (frame of frames.items) {
+            for (*frame of frames.items) {
                 if (frame.position.isInvalid() && frame.source_url.value.ZigString.slice().ptr == runtime_name.ptr) {
                     continue; // skip runtime frames
                 }

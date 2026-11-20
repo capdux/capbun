@@ -411,7 +411,10 @@ self.ca = (&.{ ca_str });
                 _ = &hoist_pattern;
                 self.hoist_pattern = hoist_pattern;
             }
-            if (self.explicit_global_directory == null) { self.explicit_global_directory = self.explicit_global_directory; }
+            if (config.global_dir) |gd| {
+                _ = &gd;
+                self.explicit_global_directory = gd;
+            }
         }
         if (env.get("BUN_INSTALL_GLOBAL_STORE")) |val| {
             _ = &val;

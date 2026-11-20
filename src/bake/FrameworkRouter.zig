@@ -400,7 +400,7 @@ pub fn toJS(self: MatchedParams, global: *jsc.JSGlobalObject) JSValue {
 };
 
 pub const InsertionContext = struct {
-    opaque_ctx: *anyopaque,
+    opaque_ctx: *void,
     vtable: *const VTable,
 
 pub fn wrap(comptime T: type, ctx: *T) InsertionContext {

@@ -1497,16 +1497,16 @@ pub fn definesFromTransformOptions(
         * = user_defines.getOrPutValue(
             "process.env.NODE_ENV",
             quoted_node_env,
-        );
+        )?;
         * = user_defines.getOrPutValue(
             "process.env.BUN_ENV",
             quoted_node_env,
-        );
+        )?;
 
         // Automatically set `process.browser` to `true` for browsers and false for node+js
         // This enables some extra dead code elimination
         if (value := target.processBrowserDefineValue()) {
-            * = user_defines.getOrPutValue(DefaultUserDefines.ProcessBrowserDefine.Key, value);
+            * = user_defines.getOrPutValue(DefaultUserDefines.ProcessBrowserDefine.Key, value)?;
         }
     }
 
@@ -1516,7 +1516,7 @@ pub fn definesFromTransformOptions(
                 valueless: true,
                 original_name: "window",
                 value: { e_undefined: {} },
-            }));
+            }))?;
         }
     }
 

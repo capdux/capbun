@@ -257,7 +257,8 @@ pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!vo
             _ = try writer.writeAll(repo);
             if ((!self.repository.resolved.isEmpty())) {
                 _ = try writer.writeAll("#");
-                var resolved = cp_iter_slice(self.repository.resolved)[@intCast(self.buf)..];
+                const resolvedSliceFn = @TypeOf(self.repository.resolved).slice;
+                var resolved = resolvedSliceFn(self.repository.resolved, self.buf);
                 _ = &resolved;
                 if (strings.lastIndexOfChar(resolved, 45)) |i| {
                     _ = &i;

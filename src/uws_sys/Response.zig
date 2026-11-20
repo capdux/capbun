@@ -124,16 +124,16 @@ pub const AnyResponse = union(enum) {
 pub fn assertSSL(self: AnyResponse) *ResponseTLS {
             return (switch (self) {
 .SSL => |resp| resp,
-.TCP => bun.Output.panic("Expected SSL response, got TCP response"),
-.H3 => bun.Output.panic("Expected SSL response, got H3 response"),
+.TCP => bun.Output.panic("Expected SSL response, got TCP response", .{}),
+.H3 => bun.Output.panic("Expected SSL response, got H3 response", .{}),
 });
     }
 
 pub fn assertNoSSL(self: AnyResponse) *ResponseTCP {
             return (switch (self) {
-.SSL => bun.Output.panic("Expected TCP response, got SSL response"),
+.SSL => bun.Output.panic("Expected TCP response, got SSL response", .{}),
 .TCP => |resp| resp,
-.H3 => bun.Output.panic("Expected TCP response, got H3 response"),
+.H3 => bun.Output.panic("Expected TCP response, got H3 response", .{}),
 });
     }
 

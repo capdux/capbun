@@ -12,16 +12,16 @@ pub fn sourceMapModeFromJS(global: *bun.jsc.JSGlobalObject, value: bun.jsc.JSVal
         defer str.deinit();
         const utf8 = str.slice();
         if (bun.strings.eqlComptime(utf8, "none")) {
-            return .none;
+            return SourceMapMode.none;
         }
         if (bun.strings.eqlComptime(utf8, "inline")) {
-            return .@"inline";
+            return SourceMapMode.@"inline";
         }
         if (bun.strings.eqlComptime(utf8, "external")) {
-            return .external;
+            return SourceMapMode.external;
         }
         if (bun.strings.eqlComptime(utf8, "linked")) {
-            return .linked;
+            return SourceMapMode.linked;
         }
     }
     return null;

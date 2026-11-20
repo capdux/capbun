@@ -720,7 +720,7 @@ pub struct MatchedParams {
 
 
 pub struct InsertionContext {
-    opaque_ctx: *!,
+    opaque_ctx: *void,
     vtable: *const VTable,
     const VTable = struct {
         getFileIdForRouter: *const fn (*void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind) bun.OOM!OpaqueFileId,

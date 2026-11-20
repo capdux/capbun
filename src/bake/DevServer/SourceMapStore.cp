@@ -207,7 +207,6 @@ pub struct StoreEntry {
                     mapLog("Skipping source map entry with missing line count at index {d}", [i]);
                 }
             },
-            else => {},
         };
     }
 

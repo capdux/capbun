@@ -154,7 +154,7 @@ const heap = std.heap;
 const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
-const empty_aliases: [0][]const u8 = &.{};
+const empty_aliases: [0][]const u8 = undefined;
 
 pub fn Param(comptime Id: type) type {
         return struct {

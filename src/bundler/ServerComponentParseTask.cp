@@ -96,7 +96,7 @@ fn taskCallbackWrap(thread_pool_task: *ThreadPoolLib.Task) {
     ): bun.OOM!ParseTask.Result.Success {
         let ab = AstBuilder.init(allocator, &_.source, _.ctx.transpiler.options.hot_module_reloading)?;
 
-        switch (_.data) {
+        switch (_.data.*) {
             .client_reference_proxy => |data| _.generateClientReferenceProxy(data, &ab)?,
             .client_entry_wrapper => |data| _.generateClientEntryWrapper(data, &ab)?,
         }

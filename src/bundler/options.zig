@@ -1972,16 +1972,16 @@ pub fn definesFromTransformOptions(allocator: std.mem.Allocator, log: *logger.Lo
             }
             break :brk "\"development\"";
 };
-            _ = user_defines.getOrPutValue("process.env.NODE_ENV", quoted_node_env);
-            _ = user_defines.getOrPutValue("process.env.BUN_ENV", quoted_node_env);
+            _ = try user_defines.getOrPutValue("process.env.NODE_ENV", quoted_node_env);
+            _ = try user_defines.getOrPutValue("process.env.BUN_ENV", quoted_node_env);
             if (target.processBrowserDefineValue()) |value| {
                 _ = &value;
-                _ = user_defines.getOrPutValue(DefaultUserDefines.ProcessBrowserDefine.Key, value);
+                _ = try user_defines.getOrPutValue(DefaultUserDefines.ProcessBrowserDefine.Key, value);
             }
         }
         if (target.isBun()) {
             if ((!user_defines.contains("window"))) {
-                _ = environment_defines.getOrPutValue("window", .init(.{ .valueless = true, .original_name = "window", .value = .{ .e_undefined = .{} } }));
+                _ = try environment_defines.getOrPutValue("window", .init(.{ .valueless = true, .original_name = "window", .value = .{ .e_undefined = .{} } }));
             }
         }
         const resolved_defines = try defines.DefineData.fromInput(user_defines, drop, log, allocator);

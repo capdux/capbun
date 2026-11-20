@@ -165,7 +165,7 @@ pub fn spawnNextScript(self: *LifecycleScriptSubprocess, next_script_index: u8) 
             bun.analytics.Features.lifecycle_scripts = (bun.analytics.Features.lifecycle_scripts + 1);
             if ((!self.has_incremented_alive_count)) {
                 self.has_incremented_alive_count = true;
-                _ = self.alive_count.fetchAdd(1, .monotonic);
+                _ = LifecycleScriptSubprocess.alive_count.fetchAdd(1, .monotonic);
             }
             errdefer {
             {

@@ -361,16 +361,16 @@ export enum AnyResponse {
     pub fn assertSSL(): *ResponseTLS {
         return switch (this) {
             .SSL(resp) => resp,
-            .TCP => bun.Output.panic("Expected SSL response, got TCP response"),
-            .H3 => bun.Output.panic("Expected SSL response, got H3 response"),
+            .TCP => bun.Output.panic("Expected SSL response, got TCP response", .{}),
+            .H3 => bun.Output.panic("Expected SSL response, got H3 response", .{}),
         };
     }
 
     pub fn assertNoSSL(): *ResponseTCP {
         return switch (this) {
-            .SSL => bun.Output.panic("Expected TCP response, got SSL response"),
+            .SSL => bun.Output.panic("Expected TCP response, got SSL response", .{}),
             .TCP(resp) => resp,
-            .H3 => bun.Output.panic("Expected TCP response, got H3 response"),
+            .H3 => bun.Output.panic("Expected TCP response, got H3 response", .{}),
         };
     }
 

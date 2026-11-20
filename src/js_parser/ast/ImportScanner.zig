@@ -273,7 +273,7 @@ if (st.is_export) {
                 _ = &value;
                 if (((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) != null)) {
                     while (true) {
-                        if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(value.?.data)) else @as(Expr.Tag, value.?.data)) == .e_dot)) {
+                        if ((std.meta.activeTag(value.?.data) == .e_dot)) {
                             value = value.?.data.e_dot.target;
                         } else {
                             break;

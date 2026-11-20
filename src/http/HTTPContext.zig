@@ -373,7 +373,7 @@ pub fn initWithThreadOpts(self: *@This(), init_opts: *const bun.http.HTTPThread.
                 if ((!ssl)) {
                     _ = @compileError("ssl only");
                 }
-                var opts: bun.uws.SocketContext.BunSocketContextOptions = .{ .ca = (if ((init_opts.ca.len > 0)) @ptrCast(init_opts.ca) else null), .ca_count = @intCast(init_opts.ca.len), .ca_file_name = (if ((init_opts.abs_ca_file_name.len > 0)) init_opts.abs_ca_file_name else null), .request_cert = 1 };
+                var opts: bun.uws.SocketContext.BunSocketContextOptions = .{ .ca = (if ((init_opts.ca.len > 0)) @ptrCast(@constCast(init_opts.ca)) else null), .ca_count = @intCast(init_opts.ca.len), .ca_file_name = (if ((init_opts.abs_ca_file_name.len > 0)) init_opts.abs_ca_file_name else null), .request_cert = 1 };
                 _ = &opts;
                 _ = (blk_catch_1: { break :blk_catch_1 ((self.initWithOpts((&opts))) catch |e| { _ = &e; return e; }); });
         }

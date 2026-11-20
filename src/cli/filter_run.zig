@@ -134,7 +134,11 @@ pub fn start(self: *ProcessHandle) !void {
             _ = arena_allocator.deinit();
             }
             const envp = try getEnvp(self.state.env, self.config.PATH, arena_allocator.allocator());
-            break :brk try try bun.spawn.spawnProcess((&self.options), argv[0..], envp).unwrap();
+            const argv_ptr: ?[*:null][*:0]u8 = (blk: {
+            break :blk @ptrCast((&argv));
+
+});
+            break :brk try try bun.spawn.spawnProcess((&self.options), argv_ptr, envp).unwrap();
 };
             _ = &spawned;
             var process = spawned.toProcess(self.state.event_loop, false);

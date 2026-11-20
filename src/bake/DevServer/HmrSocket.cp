@@ -59,7 +59,7 @@
                     return ws.close();
                 const source_map_id = SourceMapStore.Key.init(@as(u64, generation) << 32);
                 if (s.dev.source_maps.removeOrUpgradeWeakRef(source_map_id, .upgrade)) {
-                    s.referenced_source_maps.put(s.dev.allocator(), source_map_id, {}) catch
+                    s.referenced_source_maps.put(s.dev.allocator(), source_map_id, undefined) catch
                         bun.outOfMemory();
                 }
             },

@@ -831,7 +831,7 @@ pub struct BundleV2 {
             },
             loader: loader,
             side_effects: result.primary_side_effects_data,
-        });
+        })?;
         let task = _.allocator().create(ParseTask)?;
         task.* = ParseTask.init(&result, source_index, _);
         task.loader = loader;
@@ -894,7 +894,7 @@ pub struct BundleV2 {
             },
             loader: loader,
             side_effects: resolve.primary_side_effects_data,
-        });
+        })?;
         let task = _.allocator().create(ParseTask)?;
         task.* = ParseTask.init(&result, source_index, _);
         task.loader = loader;
