@@ -15,43 +15,43 @@ const HTTPResponse = bun.uws.AnyResponse;
 //! This object is a description of an HTML bundle. It is created by importing an
 //! HTML file, and can be passed to the `static` option in `Bun.serve`. The build
 //! is done lazily (state held in HTMLBundle.Route or DevServer.RouteBundle.HTML).
-pub const HTMLBundle = struct {
-pub const js = jsc.Codegen.JSHTMLBundle;
-pub const toJS = js.toJS;
-pub const fromJS = js.fromJS;
-pub const fromJSDirect = js.fromJSDirect;
+@root struct HTMLBundle {
+    pub const js = jsc.Codegen.JSHTMLBundle;
+    pub const toJS = js.toJS;
+    pub const fromJS = js.fromJS;
+    pub const fromJSDirect = js.fromJSDirect;
 
-/// HTMLBundle can be owned by JavaScript as well as any number of Server instances.
-const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-pub const ref = RefCount.ref;
-pub const deref = RefCount.deref;
+    /// HTMLBundle can be owned by JavaScript as well as any number of Server instances.
+    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
+    pub const ref = RefCount.ref;
+    pub const deref = RefCount.deref;
 
-ref_count: RefCount,
-global: *JSGlobalObject,
-path: []const u8,
+    ref_count: RefCount,
+    global: *JSGlobalObject,
+    path: []const u8,
 
-/// Initialize an HTMLBundle given a path.
-pub fn init(global: *JSGlobalObject, path: []const u8) !*HTMLBundle {
-    return bun.new(HTMLBundle, .{
-        .ref_count = .init(),
-        .global = global,
-        .path = try bun.default_allocator.dupe(u8, path),
-    });
+    /// Initialize an HTMLBundle given a path.
+    static fn init(global: *JSGlobalObject, path: []const u8): (*HTMLBundle)! {
+        return bun.new(HTMLBundle, .{
+            .ref_count = .init(),
+            .global = global,
+            .path = bun.default_allocator.dupe(u8, path)?,
+        });
+    }
+
+    fn finalize(*_) {
+        _.deref();
+    }
+
+    fn deinit(*_) {
+        bun.default_allocator.free(_.path);
+        bun.destroy(_);
+    }
+
+    fn getIndex(*_, globalObject: *JSGlobalObject): JSValue ! bun.JSError {
+        return bun.String.createUTF8ForJS(globalObject, _.path);
+    }
 }
-
-pub fn finalize(this: *HTMLBundle) void {
-    this.deref();
-}
-
-fn deinit(this: *HTMLBundle) void {
-    bun.default_allocator.free(this.path);
-    bun.destroy(this);
-}
-
-pub fn getIndex(this: *HTMLBundle, globalObject: *JSGlobalObject) bun.JSError!JSValue {
-    return bun.String.createUTF8ForJS(globalObject, this.path);
-}
-};
 
 /// Deprecated: use Route instead.
 pub const HTMLBundleRoute = Route;

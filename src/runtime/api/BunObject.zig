@@ -274,7 +274,7 @@ pub fn exportAll() void {
     pub const main = Bun.getMain;
     pub const setMain = Bun.setMain;
     const toJSCallback = jsc.toJSHostFn;
-    const LazyPropertyCallback = *const *const fn(*jsc.JSGlobalObject, *jsc.JSObject) callconv(jsc.conv) JSValue;
+    const LazyPropertyCallback = *const fn(*jsc.JSGlobalObject, *jsc.JSObject) callconv(jsc.conv) JSValue;
 };
 
 pub const EnvironmentVariables = struct {

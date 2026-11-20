@@ -3125,10 +3125,16 @@ pub fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 if ((!triple.isArray())) {
                     return globalThis.throwInvalidArgumentType("setServers", "triple", "array");
                 }
-                const family = try try triple.getIndex(globalThis, 0).coerceToInt32(globalThis);
+                const family_val = try triple.getIndex(globalThis, 0);
+                var __family_val_moved = false; _ = &__family_val_moved;
+                defer if (!__family_val_moved) { const __T = @TypeOf(family_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = family_val.release() catch {}; } else { family_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = family_val; _drop_val.release(); } };
+                const family = try family_val.coerceToInt32(globalThis);
                 var __family_moved = false; _ = &__family_moved;
                 defer if (!__family_moved) { const __T = @TypeOf(family); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = family.release() catch {}; } else { family.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = family; _drop_val.release(); } };
-                const port = try try triple.getIndex(globalThis, 2).coerceToInt32(globalThis);
+                const port_val = try triple.getIndex(globalThis, 2);
+                var __port_val_moved = false; _ = &__port_val_moved;
+                defer if (!__port_val_moved) { const __T = @TypeOf(port_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = port_val.release() catch {}; } else { port_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = port_val; _drop_val.release(); } };
+                const port = try port_val.coerceToInt32(globalThis);
                 var __port_moved = false; _ = &__port_moved;
                 defer if (!__port_moved) { const __T = @TypeOf(port); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = port.release() catch {}; } else { port.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = port; _drop_val.release(); } };
                 if (((family != 4) and (family != 6))) {

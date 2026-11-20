@@ -25,24 +25,24 @@ const max_16_ascii: Vector16 = @splat(@as(u16, 127));
 type OutputList = ArrayListUnmanaged(u16);
 pub const DecodeUTF16Result = struct { OutputList, bool };
 
-export class Buffered {
-    buf: [3]u8 = .{ 0, 0, 0 };
-    len: u2 = 0;
+pub struct Buffered {
+    buf: [3]u8 = .{ 0, 0, 0 },
+    len: u2 = 0,
 
-    pub fn slice(_: &Buffered): []const u8 {
-        return this.buf[0..this.len];
+    fn slice(): []const u8 {
+        return _.buf[0.._.len];
     }
 }
 
-export class TextDecoder {
-    buffered: Buffered = .{};
+@root struct TextDecoder {
+    buffered: Buffered = .{},
 
-    lead_byte: u8? = null;
-    lead_surrogate: u16? = null;
+    lead_byte: u8? = null,
+    lead_surrogate: u16? = null,
 
-    ignore_bom: bool = false;
-    fatal: bool = false;
-    encoding: EncodingLabel = EncodingLabel.@"UTF-8";
+    ignore_bom: bool = false,
+    fatal: bool = false,
+    encoding: EncodingLabel = EncodingLabel.@"UTF-8",
 
     pub const js = jsc.Codegen.JSTextDecoder;
     pub const toJS = js.toJS;
@@ -51,25 +51,27 @@ export class TextDecoder {
 
     pub const @"new" = TrivialNew(TextDecoder);
 
-    pub fn finalize(*_) {
+    fn finalize(*_) {
         destroy(_);
     }
 
-    pub fn getIgnoreBOM(
+    fn getIgnoreBOM(
         *_,
-        _: *JSGlobalObject,
+        globalThis: *JSGlobalObject,
     ): JSValue {
+        * = globalThis;
         return JSValue.jsBoolean(_.ignore_bom);
     }
 
-    pub fn getFatal(
+    fn getFatal(
         *_,
-        _: *JSGlobalObject,
+        globalThis: *JSGlobalObject,
     ): JSValue {
+        * = globalThis;
         return JSValue.jsBoolean(_.fatal);
     }
 
-    pub fn getEncoding(
+    fn getEncoding(
         *_,
         globalThis: *JSGlobalObject,
     ): JSValue {
@@ -81,7 +83,7 @@ export class TextDecoder {
         output: *ArrayListUnmanaged(u16),
         saw_error: *bool,
         code_unit: u16,
-    ): !void {
+    )! {
         if (lead_surrogate := _.lead_surrogate) {
             _.lead_surrogate = null;
 
@@ -111,7 +113,7 @@ export class TextDecoder {
         return;
     }
 
-    pub fn codeUnitFromBytesUTF16(
+    static fn codeUnitFromBytesUTF16(
         first: u16,
         second: u16,
         comptime big_endian: bool,
@@ -122,12 +124,12 @@ export class TextDecoder {
             first | (second << 8);
     }
 
-    pub fn decodeUTF16(
+    fn decodeUTF16(
         *_,
         bytes: []const u8,
         comptime big_endian: bool,
         comptime flush: bool,
-    ): !DecodeUTF16Result {
+    ): DecodeUTF16Result! {
         let output: ArrayListUnmanaged(u16) = .{};
         output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2))?;
 
@@ -158,14 +160,14 @@ export class TextDecoder {
             i += 2;
         }
 
-        if (remain.len != 0 and i == remain.len - 1) {
+        if (remain.len != 0 && i == remain.len - 1) {
             _.lead_byte = remain[i];
         } else {
             assertWithLocation(i == remain.len, @src());
         }
 
         if (flush) {
-            if (_.lead_byte != null or _.lead_surrogate != null) {
+            if (_.lead_byte != null || _.lead_surrogate != null) {
                 _.lead_byte = null;
                 _.lead_surrogate = null;
                 output.append(default_allocator, strings.unicode_replacement)?;
@@ -177,30 +179,24 @@ export class TextDecoder {
         return .{ output, saw_error };
     }
 
-    pub fn decode(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    fn decode(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! JSError {
         let arguments = callframe.arguments_old(2).slice();
 
-        let stream = (blk: {
-            if (arguments.len > 1 and arguments[1].isObject()) {
-                if (stream_value := arguments[1].fastGet(globalThis, .stream)?) {
-                    break :blk stream_value.toBoolean();
-                }
+        let stream = false;
+        if (arguments.len > 1 && arguments[1].isObject()) {
+            if (stream_value := arguments[1].fastGet(globalThis, .stream)?) {
+                stream = stream_value.toBoolean();
             }
+        }
 
-            break :blk false;
-        });
-
-        let input_slice = (blk: {
-            if (arguments.len == 0 or arguments[0].isUndefined()) {
-                break :blk "";
-            }
-
+        let input_slice: []const u8 = "";
+        if (arguments.len > 0 && !arguments[0].isUndefined()) {
             if (array_buffer := arguments[0].asArrayBuffer(globalThis)) {
-                break :blk array_buffer.slice();
+                input_slice = array_buffer.slice();
+            } else {
+                return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
             }
-
-            return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
-        });
+        }
 
         if (!stream) {
             return _.decodeSlice(globalThis, input_slice, true);
@@ -209,11 +205,11 @@ export class TextDecoder {
         }
     }
 
-    pub fn decodeWithoutTypeChecks(*_, globalThis: *JSGlobalObject, uint8array: *jsc.JSUint8Array): JSError!JSValue {
+    fn decodeWithoutTypeChecks(*_, globalThis: *JSGlobalObject, uint8array: *jsc.JSUint8Array): JSValue ! JSError {
         return _.decodeSlice(globalThis, uint8array.slice(), false);
     }
 
-    fn decodeSlice(*_, globalThis: *JSGlobalObject, buffer_slice: []const u8, comptime flush: bool): JSError!JSValue {
+    fn decodeSlice(*_, globalThis: *JSGlobalObject, buffer_slice: []const u8, comptime flush: bool): JSValue ! JSError {
         switch (_.encoding) {
             EncodingLabel.latin1 => {
                 if (strings.isAllASCII(buffer_slice)) {
@@ -227,23 +223,21 @@ export class TextDecoder {
                 return ZigString.toExternalU16(bytes.ptr, out.written, globalThis);
             },
             EncodingLabel.@"UTF-8" => {
-                const pair = (blk: {
-                    let maybe_without_bom = if (!_.ignore_bom and strings.hasPrefixComptime(buffer_slice, "\xef\xbb\xbf"))
-                        buffer_slice[3..]
-                    else
-                        buffer_slice;
+                let maybe_without_bom = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, "\xef\xbb\xbf"))
+                    buffer_slice[3..]
+                else
+                    buffer_slice;
 
-                    if (_.buffered.len > 0) {
-                        defer _.buffered.len = 0;
-                        let joined = default_allocator.alloc(u8, maybe_without_bom.len + _.buffered.len)?;
-                        @memcpy(joined[0.._.buffered.len], _.buffered.slice());
-                        @memcpy(joined[_.buffered.len..][0..maybe_without_bom.len], maybe_without_bom);
-                        break :blk [joined, true];
-                    }
-
-                    break :blk [maybe_without_bom, false];
-                });
-                const [input, deinit_input] = pair;
+                let input = maybe_without_bom;
+                let deinit_input = false;
+                if (_.buffered.len > 0) {
+                    defer _.buffered.len = 0;
+                    let joined = default_allocator.alloc(u8, maybe_without_bom.len + _.buffered.len)?;
+                    @memcpy(joined[0.._.buffered.len], _.buffered.slice());
+                    @memcpy(joined[_.buffered.len..][0..maybe_without_bom.len], maybe_without_bom);
+                    input = joined;
+                    deinit_input = true;
+                }
 
                 let maybe_decode_result = if (_.fatal) {
                     strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush) catch |e| {
@@ -276,20 +270,20 @@ export class TextDecoder {
                     return ZigString.toExternalU16(decoded.ptr, decoded.len, globalThis);
                 }
 
-                debugAssert(input.len == 0 or !deinit_input);
+                debugAssert(input.len == 0 || !deinit_input);
                 return ZigString.init(input).toJS(globalThis);
             },
 
             .@"UTF-16LE" => {
                 let bom = "\xff\xfe";
-                let input = if (!_.ignore_bom and strings.hasPrefixComptime(buffer_slice, bom))
+                let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
                     buffer_slice[2..]
                 else
                     buffer_slice;
 
                 const [decoded, saw_error] = _.decodeUTF16(input, false, flush)?;
 
-                if (saw_error and _.fatal) {
+                if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16LE data", .{}).throw();
                 }
@@ -303,14 +297,14 @@ export class TextDecoder {
             },
             .@"UTF-16BE" => {
                 let bom = "\xfe\xff";
-                let input = if (!_.ignore_bom and strings.hasPrefixComptime(buffer_slice, bom))
+                let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
                     buffer_slice[2..]
                 else
                     buffer_slice;
 
                 const [decoded, saw_error] = _.decodeUTF16(input, true, flush)?;
 
-                if (saw_error and _.fatal) {
+                if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16BE data", .{}).throw();
                 }
@@ -338,7 +332,7 @@ export class TextDecoder {
                 let result = codec.decode(buffer_slice, flush, _.fatal);
                 defer result.result.deref();
 
-                if (result.sawError and _.fatal) {
+                if (result.sawError && _.fatal) {
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid {s} data", .{encoding_name}).throw();
                 }
 
@@ -347,7 +341,7 @@ export class TextDecoder {
         }
     }
 
-    pub static fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*TextDecoder {
+    static fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): (*TextDecoder) ! JSError {
         const args = callframe.argumentsAsArray(2);
         const encoding_value = args[0];
         const options_value = args[1];

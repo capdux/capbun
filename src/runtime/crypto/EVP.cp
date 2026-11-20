@@ -31,25 +31,25 @@ pub enum Algorithm {
     shake256,
 
     fn md(): (*const BoringSSL.EVP_MD)? {
-        return switch (_) {
-            .blake2b256 => BoringSSL.EVP_blake2b256(),
-            .blake2b512 => BoringSSL.EVP_blake2b512(),
-            .md4 => BoringSSL.EVP_md4(),
-            .md5 => BoringSSL.EVP_md5(),
-            .ripemd160 => BoringSSL.EVP_ripemd160(),
-            .sha1 => BoringSSL.EVP_sha1(),
-            .sha224 => BoringSSL.EVP_sha224(),
-            .sha256 => BoringSSL.EVP_sha256(),
-            .sha384 => BoringSSL.EVP_sha384(),
-            .sha512 => BoringSSL.EVP_sha512(),
-            .@"sha512-224" => BoringSSL.EVP_sha512_224(),
-            .@"sha512-256" => BoringSSL.EVP_sha512_256(),
-            .@"sha3-224" => BoringSSL.EVP_sha3_224(),
-            .@"sha3-256" => BoringSSL.EVP_sha3_256(),
-            .@"sha3-384" => BoringSSL.EVP_sha3_384(),
-            .@"sha3-512" => BoringSSL.EVP_sha3_512(),
-            else => null,
-        };
+        switch (_) {
+            .blake2b256 => { const f = BoringSSL.EVP_blake2b256; return f(); },
+            .blake2b512 => { const f = BoringSSL.EVP_blake2b512; return f(); },
+            .md4 => { const f = BoringSSL.EVP_md4; return f(); },
+            .md5 => { const f = BoringSSL.EVP_md5; return f(); },
+            .ripemd160 => { const f = BoringSSL.EVP_ripemd160; return f(); },
+            .sha1 => { const f = BoringSSL.EVP_sha1; return f(); },
+            .sha224 => { const f = BoringSSL.EVP_sha224; return f(); },
+            .sha256 => { const f = BoringSSL.EVP_sha256; return f(); },
+            .sha384 => { const f = BoringSSL.EVP_sha384; return f(); },
+            .sha512 => { const f = BoringSSL.EVP_sha512; return f(); },
+            .@"sha512-224" => { const f = BoringSSL.EVP_sha512_224; return f(); },
+            .@"sha512-256" => { const f = BoringSSL.EVP_sha512_256; return f(); },
+            .@"sha3-224" => { const f = BoringSSL.EVP_sha3_224; return f(); },
+            .@"sha3-256" => { const f = BoringSSL.EVP_sha3_256; return f(); },
+            .@"sha3-384" => { const f = BoringSSL.EVP_sha3_384; return f(); },
+            .@"sha3-512" => { const f = BoringSSL.EVP_sha3_512; return f(); },
+            else => { return null; },
+        }
     }
 
     static fn getNames(): std.EnumArray(Algorithm, bun.String) {

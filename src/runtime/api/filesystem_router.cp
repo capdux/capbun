@@ -515,7 +515,7 @@ pub struct MatchedRoute {
             prefix.deref();
         }
 
-        _.params_list_holder.deinit();
+        _.params_list_holder.deinit(bun.default_allocator);
     }
 
     fn getQueryString(*_, globalThis: *jsc.JSGlobalObject): JSValue {

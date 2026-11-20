@@ -65,178 +65,154 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const Listener = struct {
-    handlers: Handlers,
-    listener: ListenerType = .none,
-    poll_ref: Async.KeepAlive = Async.KeepAlive.init(),
-    connection: UnixOrHost,
-    group: uws.SocketGroup = .{},
-    secure_ctx: ?*BoringSSL.SSL_CTX = null,
-    ssl: bool = false,
-    protos: ?[]const u8 = null,
-    strong_data: jsc.Strong.Optional = .empty,
-    strong_self: jsc.Strong.Optional = .empty,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.listener = .none; self_ptr.poll_ref = Async.KeepAlive.init(); self_ptr.group = .{}; self_ptr.secure_ctx = null; self_ptr.ssl = false; self_ptr.protos = null; self_ptr.strong_data = .empty; self_ptr.strong_self = .empty; return self_ptr; }
+pub const Listener = @This();
 
-pub fn init(self: *Listener, handlers: Handlers, listener: ListenerType, poll_ref: Async.KeepAlive, connection: UnixOrHost, group: uws.SocketGroup, secure_ctx: ?*BoringSSL.SSL_CTX, ssl: bool, protos: ?[]const u8, strong_data: jsc.Strong.Optional, strong_self: jsc.Strong.Optional) void {
-        var __handlers_moved = false; _ = &__handlers_moved;
-        defer if (!__handlers_moved) { const __T = @TypeOf(handlers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = handlers.release() catch {}; } else { handlers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = handlers; _drop_val.release(); } };
-        var __listener_moved = false; _ = &__listener_moved;
-        defer if (!__listener_moved) { const __T = @TypeOf(listener); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = listener.release() catch {}; } else { listener.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = listener; _drop_val.release(); } };
-        var __poll_ref_moved = false; _ = &__poll_ref_moved;
-        defer if (!__poll_ref_moved) { const __T = @TypeOf(poll_ref); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = poll_ref.release() catch {}; } else { poll_ref.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = poll_ref; _drop_val.release(); } };
-        var __connection_moved = false; _ = &__connection_moved;
-        defer if (!__connection_moved) { const __T = @TypeOf(connection); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connection.release() catch {}; } else { connection.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connection; _drop_val.release(); } };
-        var __group_moved = false; _ = &__group_moved;
-        defer if (!__group_moved) { const __T = @TypeOf(group); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = group.release() catch {}; } else { group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = group; _drop_val.release(); } };
-        var __strong_data_moved = false; _ = &__strong_data_moved;
-        defer if (!__strong_data_moved) { const __T = @TypeOf(strong_data); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = strong_data.release() catch {}; } else { strong_data.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = strong_data; _drop_val.release(); } };
-        var __strong_self_moved = false; _ = &__strong_self_moved;
-        defer if (!__strong_self_moved) { const __T = @TypeOf(strong_self); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = strong_self.release() catch {}; } else { strong_self.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = strong_self; _drop_val.release(); } };
-            self.handlers = handlers;
-            self.listener = listener;
-            self.poll_ref = poll_ref;
-            self.connection = connection;
-            self.group = group;
-            self.secure_ctx = secure_ctx;
-            self.ssl = ssl;
-            self.protos = protos;
-            self.strong_data = strong_data;
-            self.strong_self = strong_self;
-    }
+handlers: Handlers,
+listener: ListenerType = .none,
+poll_ref: Async.KeepAlive = Async.KeepAlive.init(),
+connection: UnixOrHost,
+group: uws.SocketGroup = .{},
+secure_ctx: ?*BoringSSL.SSL_CTX = null,
+ssl: bool = false,
+protos: ?[]const u8 = null,
+strong_data: jsc.Strong.Optional = .empty,
+strong_self: jsc.Strong.Optional = .empty,
 
-pub fn getData(self: *Listener, _: *jsc.JSGlobalObject) JSValue {
-            _ = log("getData()", .{});
-            return ((self.strong_data.get()) orelse (.js_undefined));
-    }
+pub fn getData(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
+        _ = &globalObject;
+        _ = log("getData()", .{});
+        return ((self.strong_data.get()) orelse (.js_undefined));
+}
 
 pub fn setData(self: *Listener, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-            _ = log("setData()", .{});
-            _ = self.strong_data.set(globalObject, value);
-    }
+        _ = log("setData()", .{});
+        _ = self.strong_data.set(globalObject, value);
+}
 
 pub fn reload(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const args = callframe.arguments_old(1);
-            var __args_moved = false; _ = &__args_moved;
-            defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
-            if (((args.len < 1) or ((self.listener == .none) and (self.handlers.active_connections == 0)))) {
-                return globalObject.throw("Expected 1 argument", .{});
-            }
-            const opts = args.ptr[0];
-            if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
-                return globalObject.throwValue(globalObject.toInvalidArguments("Expected options object", .{}));
-            }
-            const socket_obj = try ((opts.get(globalObject, "socket")) orelse {
-            return globalObject.throw("Expected \"socket\" object", .{});
+        const args = callframe.arguments_old(1);
+        var __args_moved = false; _ = &__args_moved;
+        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
+        if (((args.len < 1) or ((self.listener == .none) and (self.handlers.active_connections == 0)))) {
+            return globalObject.throw("Expected 1 argument", .{});
+        }
+        const opts = args.ptr[0];
+        if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
+            return globalObject.throwValue(globalObject.toInvalidArguments("Expected options object", .{}));
+        }
+        const socket_obj = ((try opts.get(globalObject, "socket")) orelse {
+        return globalObject.throw("Expected \"socket\" object", .{});
 });
-            var __socket_obj_moved = false; _ = &__socket_obj_moved;
-            defer if (!__socket_obj_moved) { const __T = @TypeOf(socket_obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket_obj.release() catch {}; } else { socket_obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket_obj; _drop_val.release(); } };
-            const handlers = try Handlers.fromJS(globalObject, socket_obj, (self.handlers.mode == .server));
-            var __handlers_moved = false; _ = &__handlers_moved;
-            defer if (!__handlers_moved) { const __T = @TypeOf(handlers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = handlers.release() catch {}; } else { handlers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = handlers; _drop_val.release(); } };
-            const active_connections = self.handlers.active_connections;
-            var __active_connections_moved = false; _ = &__active_connections_moved;
-            defer if (!__active_connections_moved) { const __T = @TypeOf(active_connections); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = active_connections.release() catch {}; } else { active_connections.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = active_connections; _drop_val.release(); } };
-            _ = self.handlers.deinit();
-            self.handlers = handlers;
-            self.handlers.active_connections = active_connections;
-            return error.js_undefined;
-    }
+        var __socket_obj_moved = false; _ = &__socket_obj_moved;
+        defer if (!__socket_obj_moved) { const __T = @TypeOf(socket_obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket_obj.release() catch {}; } else { socket_obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket_obj; _drop_val.release(); } };
+        const handlers = try Handlers.fromJS(globalObject, socket_obj, (self.handlers.mode == .server));
+        var __handlers_moved = false; _ = &__handlers_moved;
+        defer if (!__handlers_moved) { const __T = @TypeOf(handlers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = handlers.release() catch {}; } else { handlers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = handlers; _drop_val.release(); } };
+        const active_connections = self.handlers.active_connections;
+        var __active_connections_moved = false; _ = &__active_connections_moved;
+        defer if (!__active_connections_moved) { const __T = @TypeOf(active_connections); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = active_connections.release() catch {}; } else { active_connections.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = active_connections; _drop_val.release(); } };
+        _ = self.handlers.deinit();
+        self.handlers = handlers;
+        self.handlers.active_connections = active_connections;
+        return error.js_undefined;
+}
 
 pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSValue, tls: JSValue) bun.JSError!JSValue {
-            if ((!self.ssl)) {
-                return global.throwInvalidArguments("addServerName requires SSL support", .{});
-            }
-            if ((!hostname.isString())) {
-                return global.throwInvalidArguments("hostname pattern expects a string", .{});
-            }
-            const host_str = try hostname.toSlice(global, bun.default_allocator);
-            var __host_str_moved = false; _ = &__host_str_moved;
-            defer if (!__host_str_moved) { const __T = @TypeOf(host_str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = host_str.release() catch {}; } else { host_str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = host_str; _drop_val.release(); } };
-            defer {
-            _ = host_str.deinit();
-            }
-            const server_name = bun.handleOom(bun.default_allocator.dupeZ(u8, host_str.slice()));
-            var __server_name_moved = false; _ = &__server_name_moved;
-            defer if (!__server_name_moved) { const __T = @TypeOf(server_name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = server_name.release() catch {}; } else { server_name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = server_name; _drop_val.release(); } };
-            defer {
-            _ = bun.default_allocator.free(server_name);
-            }
-            if ((server_name.len == 0)) {
-                return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
-            }
-            if ((self.listener != .uws)) {
+        if ((!self.ssl)) {
+            return global.throwInvalidArguments("addServerName requires SSL support", .{});
+        }
+        if ((!hostname.isString())) {
+            return global.throwInvalidArguments("hostname pattern expects a string", .{});
+        }
+        const host_str = try hostname.toSlice(global, bun.default_allocator);
+        var __host_str_moved = false; _ = &__host_str_moved;
+        defer if (!__host_str_moved) { const __T = @TypeOf(host_str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = host_str.release() catch {}; } else { host_str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = host_str; _drop_val.release(); } };
+        defer {
+        _ = host_str.deinit();
+        }
+        const server_name = bun.handleOom(bun.default_allocator.dupeZ(u8, host_str.slice()));
+        var __server_name_moved = false; _ = &__server_name_moved;
+        defer if (!__server_name_moved) { const __T = @TypeOf(server_name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = server_name.release() catch {}; } else { server_name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = server_name; _drop_val.release(); } };
+        defer {
+        _ = bun.default_allocator.free(server_name);
+        }
+        if ((server_name.len == 0)) {
+            return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
+        }
+        if ((self.listener != .uws)) {
+            return error.js_undefined;
+        }
+        const ls = self.listener.uws;
+        var __ls_moved = false; _ = &__ls_moved;
+        defer if (!__ls_moved) { const __T = @TypeOf(ls); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ls.release() catch {}; } else { ls.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ls; _drop_val.release(); } };
+        var sni_ctx: ?*BoringSSL.SSL_CTX = null;
+        _ = &sni_ctx;
+        if (SecureContext.fromJS(tls)) |sc| {
+            _ = &sc;
+            sni_ctx = sc.borrow();
+        } else {
+            if (try SSLConfig.fromJS(jsc.VirtualMachine.get(), global, tls)) |ssl_config| {
+                _ = &ssl_config;
+                var cfg = ssl_config;
+                _ = &cfg;
+                defer {
+                _ = cfg.deinit();
+                }
+                var create_err: uws.create_bun_socket_error_t = .none;
+                _ = &create_err;
+                const cached_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate((&cfg), (&create_err));
+                var __cached_ctx_moved = false; _ = &__cached_ctx_moved;
+                defer if (!__cached_ctx_moved) { const __T = @TypeOf(cached_ctx); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cached_ctx.release() catch {}; } else { cached_ctx.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cached_ctx; _drop_val.release(); } };
+                if ((cached_ctx == null)) {
+                    if ((create_err != .none)) {
+                        return global.throwValue(create_err.toJS(global));
+                    }
+                    return global.throwValue(bun.BoringSSL.ERR_toJS(global, BoringSSL.ERR_get_error));
+                }
+                sni_ctx = cached_ctx;
+            } else {
                 return error.js_undefined;
             }
-            const ls = self.listener.uws;
-            var __ls_moved = false; _ = &__ls_moved;
-            defer if (!__ls_moved) { const __T = @TypeOf(ls); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ls.release() catch {}; } else { ls.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ls; _drop_val.release(); } };
-            var sni_ctx: ?*BoringSSL.SSL_CTX = null;
-            _ = &sni_ctx;
-            if (SecureContext.fromJS(tls)) |sc| {
-                _ = &sc;
-                sni_ctx = sc.borrow();
-            } else {
-                if (try SSLConfig.fromJS(jsc.VirtualMachine.get(), global, tls)) |ssl_config| {
-                    _ = &ssl_config;
-                    var cfg = ssl_config;
-                    _ = &cfg;
-                    defer {
-                    _ = cfg.deinit();
-                    }
-                    var create_err: uws.create_bun_socket_error_t = .none;
-                    _ = &create_err;
-                    const cached_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate((&cfg), (&create_err));
-                    var __cached_ctx_moved = false; _ = &__cached_ctx_moved;
-                    defer if (!__cached_ctx_moved) { const __T = @TypeOf(cached_ctx); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cached_ctx.release() catch {}; } else { cached_ctx.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cached_ctx; _drop_val.release(); } };
-                    if ((cached_ctx == null)) {
-                        if ((create_err != .none)) {
-                            return global.throwValue(create_err.toJS(global));
-                        }
-                        return global.throwValue(bun.BoringSSL.ERR_toJS(global, BoringSSL.ERR_get_error));
-                    }
-                    sni_ctx = cached_ctx;
-                } else {
-                    return error.js_undefined;
-                }
-            }
-            const final_sni_ctx = ((sni_ctx) orelse { return .{ .ok = .js_undefined }; });
-            _ = ls.removeServerName(server_name);
-            const ok = ls.addServerName(server_name, final_sni_ctx, null);
-            var __ok_moved = false; _ = &__ok_moved;
-            defer if (!__ok_moved) { const __T = @TypeOf(ok); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ok.release() catch {}; } else { ok.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ok; _drop_val.release(); } };
-            _ = BoringSSL.SSL_CTX_free(final_sni_ctx);
-            if ((!ok)) {
-                return global.throwValue(global.ERR(.BORINGSSL, "Failed to register SNI for '{s}'", .{ server_name }).toJS());
-            }
-            return error.js_undefined;
-    }
+        }
+        const final_sni_ctx = ((sni_ctx) orelse { return .{ .ok = .js_undefined }; });
+        _ = ls.removeServerName(server_name);
+        const ok = ls.addServerName(server_name, final_sni_ctx, null);
+        var __ok_moved = false; _ = &__ok_moved;
+        defer if (!__ok_moved) { const __T = @TypeOf(ok); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ok.release() catch {}; } else { ok.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ok; _drop_val.release(); } };
+        _ = BoringSSL.SSL_CTX_free(final_sni_ctx);
+        if ((!ok)) {
+            return global.throwValue(global.ERR(.BORINGSSL, "Failed to register SNI for '{s}'", .{ server_name }).toJS());
+        }
+        return error.js_undefined;
+}
 
-pub fn dispose(self: *Listener, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = self.doStop(true);
-            return error.js_undefined;
-    }
+pub fn dispose(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = &globalObject;
+        _ = &callframe;
+        _ = self.doStop(true);
+        return error.js_undefined;
+}
 
-pub fn stop(self: *Listener, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const arguments = callframe.arguments_old(1);
-            var __arguments_moved = false; _ = &__arguments_moved;
-            defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
-            _ = log("close", .{});
-            _ = self.doStop((if (((arguments.len > 0) and arguments.ptr[0].isBoolean())) arguments.ptr[0].toBoolean() else false));
-            return error.js_undefined;
-    }
+pub fn stop(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = &globalObject;
+        const arguments = callframe.arguments_old(1);
+        var __arguments_moved = false; _ = &__arguments_moved;
+        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
+        _ = log("close", .{});
+        _ = self.doStop((if (((arguments.len > 0) and arguments.ptr[0].isBoolean())) arguments.ptr[0].toBoolean() else false));
+        return error.js_undefined;
+}
 
 pub fn doStop(self: *Listener, force_close: bool) void {
-            if ((self.listener == .none)) {
-                return;
-            }
-            const listener = self.listener;
-            if ((listener == .uws)) {
-                _ = self.unlinkUnixSocketPath();
-            }
-            defer {
-            switch (listener) {
+        if ((self.listener == .none)) {
+            return;
+        }
+        const listener = self.listener;
+        if ((listener == .uws)) {
+            _ = self.unlinkUnixSocketPath();
+        }
+        defer {
+        switch (listener) {
 .uws => |socket| {
 _ = socket.close();
 },
@@ -247,27 +223,27 @@ _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
 
 },
 }
+        }
+        self.listener = .none;
+        if ((self.handlers.active_connections == 0)) {
+            _ = self.poll_ref.unref(self.handlers.vm);
+            _ = self.strong_self.clearWithoutDeallocation();
+            _ = self.strong_data.clearWithoutDeallocation();
+        } else {
+            if (force_close) {
+                _ = self.group.closeAll();
             }
-            self.listener = .none;
-            if ((self.handlers.active_connections == 0)) {
-                _ = self.poll_ref.unref(self.handlers.vm);
-                _ = self.strong_self.clearWithoutDeallocation();
-                _ = self.strong_data.clearWithoutDeallocation();
-            } else {
-                if (force_close) {
-                    _ = self.group.closeAll();
-                }
-            }
-    }
+        }
+}
 
 pub fn finalize(self: *Listener) void {
-            _ = log("finalize", .{});
-            const listener = self.listener;
-            self.listener = .none;
-            switch (listener) {
+        _ = log("finalize", .{});
+        const listener = self.listener;
+        self.listener = .none;
+        switch (listener) {
 .uws => |socket| {
 _ = self.unlinkUnixSocketPath();
-            _ = socket.close();
+        _ = socket.close();
 },
 .namedPipe => |namedPipe| {
 _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
@@ -276,87 +252,90 @@ _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
 
 },
 }
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-    }
+        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+}
 
-pub fn unlinkUnixSocketPath(self: *Listener) void {
-            if ((self.connection != .unix)) {
-                return;
-            }
-            const path = self.connection.unix;
-            var __path_moved = false; _ = &__path_moved;
-            defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
-            if (((path.len == 0) or (path[0] == 0))) {
-                return;
-            }
-            const buf = bun.path_buffer_pool.get();
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
-            defer {
-            _ = bun.path_buffer_pool.put(buf);
-            }
-            _ = bun.sys.unlink(bun.path.z(path, buf));
-    }
+pub fn unlinkUnixSocketPath(self: Listener) void {
+        if ((self.connection != .unix)) {
+            return;
+        }
+        const path = self.connection.unix;
+        var __path_moved = false; _ = &__path_moved;
+        defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
+        if (((path.len == 0) or (path[0] == 0))) {
+            return;
+        }
+        const buf = bun.path_buffer_pool.get();
+        var __buf_moved = false; _ = &__buf_moved;
+        defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
+        defer {
+        _ = bun.path_buffer_pool.put(buf);
+        }
+        _ = bun.sys.unlink(bun.path.z(path, buf));
+}
 
 pub fn release(self: *Listener) void {
-            _ = log("deinit", .{});
-            _ = self.strong_self.deinit();
-            _ = self.strong_data.deinit();
-            const vm = self.handlers.vm;
-            var __vm_moved = false; _ = &__vm_moved;
-            defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
-            _ = self.poll_ref.unref(vm);
-            _ = bun.assert((self.listener == .none));
-            if ((self.handlers.active_connections > 0)) {
-                _ = self.group.closeAll();
-            }
-            _ = bun.asan.unregisterRootRegion((&self.group), @sizeOf(uws.SocketGroup));
-            _ = self.group.deinit();
-            if (self.secure_ctx) |ctx| {
-                _ = &ctx;
-                _ = BoringSSL.SSL_CTX_free(ctx);
-            }
-            _ = self.connection.deinit();
-            if (self.protos) |protos| {
-                _ = &protos;
-                self.protos = null;
-                _ = bun.default_allocator.free(protos);
-            }
-            _ = self.handlers.deinit();
-            _ = vm.allocator.destroy(self);
-    }
+        _ = log("deinit", .{});
+        _ = self.strong_self.deinit();
+        _ = self.strong_data.deinit();
+        const vm = self.handlers.vm;
+        var __vm_moved = false; _ = &__vm_moved;
+        defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
+        _ = self.poll_ref.unref(vm);
+        _ = bun.assert((self.listener == .none));
+        if ((self.handlers.active_connections > 0)) {
+            _ = self.group.closeAll();
+        }
+        _ = bun.asan.unregisterRootRegion((&self.group), @sizeOf(uws.SocketGroup));
+        _ = self.group.deinit();
+        if (self.secure_ctx) |ctx| {
+            _ = &ctx;
+            _ = BoringSSL.SSL_CTX_free(ctx);
+        }
+        _ = self.connection.deinit();
+        if (self.protos) |protos| {
+            _ = &protos;
+            self.protos = null;
+            _ = bun.default_allocator.free(protos);
+        }
+        _ = self.handlers.deinit();
+        _ = vm.allocator.destroy(self);
+}
 
 pub fn deinit(self: *Listener) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-    }
+        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+}
 
-pub fn getConnectionsCount(self: *Listener, _: *jsc.JSGlobalObject) JSValue {
-            return JSValue.jsNumber(self.handlers.active_connections);
-    }
+pub fn getConnectionsCount(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
+        _ = &globalObject;
+        return JSValue.jsNumber(self.handlers.active_connections);
+}
 
 pub fn getUnix(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
-            if ((self.connection != .unix)) {
-                return .js_undefined;
-            }
-            return ZigString.init(self.connection.unix).withEncoding().toJS(globalObject);
-    }
+        if ((self.connection != .unix)) {
+            return .js_undefined;
+        }
+        return ZigString.init(self.connection.unix).withEncoding().toJS(globalObject);
+}
 
 pub fn getHostname(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
-            if ((self.connection != .host)) {
-                return .js_undefined;
-            }
-            return ZigString.init(self.connection.host.host).withEncoding().toJS(globalObject);
-    }
+        if ((self.connection != .host)) {
+            return .js_undefined;
+        }
+        return ZigString.init(self.connection.host.host).withEncoding().toJS(globalObject);
+}
 
-pub fn getPort(self: *Listener, _: *jsc.JSGlobalObject) JSValue {
-            if ((self.connection != .host)) {
-                return .js_undefined;
-            }
-            return JSValue.jsNumber(self.connection.host.port);
-    }
+pub fn getPort(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
+        _ = &globalObject;
+        if ((self.connection != .host)) {
+            return .js_undefined;
+        }
+        return JSValue.jsNumber(self.connection.host.port);
+}
 
-pub fn getFD(self: *Listener, _: *jsc.JSGlobalObject) JSValue {
-            switch (self.listener) {
+pub fn getFD(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
+        _ = &globalObject;
+        switch (self.listener) {
 .uws => |uws_listener| {
 return uws_listener.socket(false).fd().toJSWithoutMakingLibUVOwned();
 },
@@ -364,75 +343,74 @@ else => {
 return JSValue.jsNumber(-1);
 },
 }
-    }
+}
 
 pub fn ref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const this_value = callframe.this();
-            var __this_value_moved = false; _ = &__this_value_moved;
-            defer if (!__this_value_moved) { const __T = @TypeOf(this_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_value.release() catch {}; } else { this_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_value; _drop_val.release(); } };
-            if ((self.listener == .none)) {
-                return error.js_undefined;
-            }
-            _ = self.poll_ref.ref(globalObject.bunVM());
-            _ = self.strong_self.set(globalObject, this_value);
+        const this_value = callframe.this();
+        var __this_value_moved = false; _ = &__this_value_moved;
+        defer if (!__this_value_moved) { const __T = @TypeOf(this_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_value.release() catch {}; } else { this_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_value; _drop_val.release(); } };
+        if ((self.listener == .none)) {
             return error.js_undefined;
-    }
+        }
+        _ = self.poll_ref.ref(globalObject.bunVM());
+        _ = self.strong_self.set(globalObject, this_value);
+        return error.js_undefined;
+}
 
-pub fn unref(self: *Listener, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            _ = self.poll_ref.unref(globalObject.bunVM());
-            if ((self.handlers.active_connections == 0)) {
-                _ = self.strong_self.clearWithoutDeallocation();
-            }
-            return error.js_undefined;
-    }
+pub fn unref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = &callframe;
+        _ = self.poll_ref.unref(globalObject.bunVM());
+        if ((self.handlers.active_connections == 0)) {
+            _ = self.strong_self.clearWithoutDeallocation();
+        }
+        return error.js_undefined;
+}
 
 pub fn getsockname(self: *Listener, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            if ((self.listener != .uws)) {
-                return error.js_undefined;
-            }
-            const out = callFrame.argumentsAsArray(1)[0];
-            if ((!out.isObject())) {
-                return globalThis.throwInvalidArguments("Expected object", .{});
-            }
-            const socket = self.listener.uws;
-            var __socket_moved = false; _ = &__socket_moved;
-            defer if (!__socket_moved) { const __T = @TypeOf(socket); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket.release() catch {}; } else { socket.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket; _drop_val.release(); } };
-            var buf: [64]u8 = undefined;
-            _ = &buf;
-            var text_buf: [512]u8 = undefined;
-            _ = &text_buf;
-            const address_bytes: []const u8 = (blk_catch_0: { break :blk_catch_0 ((socket.getLocalAddress((&buf))) catch |__ce_0| { _ = &__ce_0; return error.js_undefined; }); });
-            const address_zig: std.net.Address = (switch (address_bytes.len) {
+        if ((self.listener != .uws)) {
+            return error.js_undefined;
+        }
+        const out = callFrame.argumentsAsArray(1)[0];
+        if ((!out.isObject())) {
+            return globalThis.throwInvalidArguments("Expected object", .{});
+        }
+        const socket = self.listener.uws;
+        var __socket_moved = false; _ = &__socket_moved;
+        defer if (!__socket_moved) { const __T = @TypeOf(socket); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket.release() catch {}; } else { socket.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket; _drop_val.release(); } };
+        var buf: [64]u8 = undefined;
+        _ = &buf;
+        var text_buf: [512]u8 = undefined;
+        _ = &text_buf;
+        const address_bytes: []const u8 = (blk_catch_0: { break :blk_catch_0 ((socket.getLocalAddress((&buf))) catch |__ce_0| { _ = &__ce_0; return error.js_undefined; }); });
+        const address_zig: std.net.Address = (switch (address_bytes.len) {
 4 => std.net.Address.initIp4((address_bytes[0..4]).*, 0),
 16 => std.net.Address.initIp6((address_bytes[0..16]).*, 0, 0, 0),
 else => {
 return error.js_undefined;
 },
 });
-            const family_js = (switch (address_bytes.len) {
+        const family_js = (switch (address_bytes.len) {
 4 => globalThis.commonStrings().IPv4(),
 16 => globalThis.commonStrings().IPv6(),
 else => {
 return error.js_undefined;
 },
 });
-            var __family_js_moved = false; _ = &__family_js_moved;
-            defer if (!__family_js_moved) { const __T = @TypeOf(family_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = family_js.release() catch {}; } else { family_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = family_js; _drop_val.release(); } };
-            const address_js = ZigString.init(((bun.fmt.formatIp(address_zig, (&text_buf))) catch unreachable)).toJS(globalThis);
-            var __address_js_moved = false; _ = &__address_js_moved;
-            defer if (!__address_js_moved) { const __T = @TypeOf(address_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = address_js.release() catch {}; } else { address_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = address_js; _drop_val.release(); } };
-            const port_js: JSValue = .jsNumber(socket.getLocalPort());
-            _ = out.put(globalThis, bun.String.static("family"), family_js);
-            _ = out.put(globalThis, bun.String.static("address"), address_js);
-            _ = out.put(globalThis, bun.String.static("port"), port_js);
-            return error.js_undefined;
-    }
-    pub const js = jsc.Codegen.JSListener;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const fromJSDirect = js.fromJSDirect;
-};
-
+        var __family_js_moved = false; _ = &__family_js_moved;
+        defer if (!__family_js_moved) { const __T = @TypeOf(family_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = family_js.release() catch {}; } else { family_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = family_js; _drop_val.release(); } };
+        const address_js = ZigString.init(((bun.fmt.formatIp(address_zig, (&text_buf))) catch unreachable)).toJS(globalThis);
+        var __address_js_moved = false; _ = &__address_js_moved;
+        defer if (!__address_js_moved) { const __T = @TypeOf(address_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = address_js.release() catch {}; } else { address_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = address_js; _drop_val.release(); } };
+        const port_js: JSValue = .jsNumber(socket.getLocalPort());
+        _ = out.put(globalThis, bun.String.static("family"), family_js);
+        _ = out.put(globalThis, bun.String.static("address"), address_js);
+        _ = out.put(globalThis, bun.String.static("port"), port_js);
+        return error.js_undefined;
+}
+pub const js = jsc.Codegen.JSListener;
+pub const toJS = js.toJS;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
 const OpaquePtrPtr = **anyopaque;
 const Async = bun.Async;
 const Environment = bun.Environment;
@@ -651,7 +629,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
             if (normalizePipeName(hostname_or_unix.slice(), buf[0..])) |pipe_name| {
                 _ = &pipe_name;
                 const connection: Listener.UnixOrHost = .{ .unix = bun.handleOom(hostname_or_unix.intoOwnedSlice(bun.default_allocator)) };
-                var socket: *Listener = .{ .handlers = handlers.*, .connection = connection, .ssl = ssl_enabled, .listener = .none, .protos = (if ((ssl != null)) ssl.?.takeProtos() else null) };
+                var socket: Listener = .{ .handlers = handlers.*, .connection = connection, .ssl = ssl_enabled, .listener = .none, .protos = (if ((ssl != null)) ssl.?.takeProtos() else null) };
                 var __socket_moved = false; _ = &__socket_moved;
                 defer if (!__socket_moved) { const __T = @TypeOf(socket); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket.release() catch {}; } else { socket.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket; _drop_val.release(); } };
                 _ = vm.eventLoop().ensureWaker();

@@ -53,9 +53,12 @@ export fn load() {
     boring.OpenSSL_add_all_algorithms();
 
     if (!builtin.is_test) {
-        std.mem.doNotOptimizeAway(&OPENSSL_memory_alloc);
-        std.mem.doNotOptimizeAway(&OPENSSL_memory_get_size);
-        std.mem.doNotOptimizeAway(&OPENSSL_memory_free);
+        const alloc_fn = OPENSSL_memory_alloc;
+        const get_size_fn = OPENSSL_memory_get_size;
+        const free_fn = OPENSSL_memory_free;
+        std.mem.doNotOptimizeAway(&alloc_fn);
+        std.mem.doNotOptimizeAway(&get_size_fn);
+        std.mem.doNotOptimizeAway(&free_fn);
     }
 }
 

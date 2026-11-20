@@ -10,7 +10,7 @@ import { StorageClass } from "../../../s3_signing/storage_class";
 import * as S3SimpleRequest from "./simple_request";
 import { default_allocator, handleOom, destroy, ByteList, MutableString, Output, strings } from "bun";
 import { JSGlobalObject, VirtualMachine, WebCore } from "bun:jsc";
-import { IntegerBitSet } from "bun:bit_set";
+const IntegerBitSet = bun.bit_set.IntegerBitSet;
 import { StreamBuffer } from "bun:io";
 import { KeepAlive } from "bun:Async";
 import { bufPrint } from "std:fmt";

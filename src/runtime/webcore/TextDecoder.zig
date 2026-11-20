@@ -105,359 +105,328 @@ const TextCodec = @import("../../jsc/TextCodec").TextCodec;
 pub const Buffered = struct {
     buf: [3]u8 = .{ 0, 0, 0 },
     len: u2 = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.buf = .{ 0, 0, 0 }; self_ptr.len = 0; return self_ptr; }
 
-pub fn init(self: *Buffered, buf: [3]u8, len: u2) void {
-        var __len_moved = false; _ = &__len_moved;
-        defer if (!__len_moved) { const __T = @TypeOf(len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = len.release() catch {}; } else { len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = len; _drop_val.release(); } };
-            self.buf = buf;
-            self.len = len;
-    }
-
-pub fn slice(self: *const Buffered) []const u8 {
+pub fn slice(self: Buffered) []const u8 {
             return self.buf[0..self.len];
     }
 };
 
-pub const TextDecoder = struct {
-    buffered: *Buffered = .{},
-    lead_byte: ?u8 = null,
-    lead_surrogate: ?u16 = null,
-    ignore_bom: bool = false,
-    fatal: bool = false,
-    encoding: EncodingLabel = EncodingLabel.@"UTF-8",
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.buffered = .{}; self_ptr.lead_byte = null; self_ptr.lead_surrogate = null; self_ptr.ignore_bom = false; self_ptr.fatal = false; self_ptr.encoding = EncodingLabel.@"UTF-8"; return self_ptr; }
+pub const TextDecoder = @This();
 
-pub fn init(self: *TextDecoder, buffered: *Buffered, lead_byte: ?u8, lead_surrogate: ?u16, ignore_bom: bool, fatal: bool, encoding: EncodingLabel) void {
-        var __buffered_moved = false; _ = &__buffered_moved;
-        defer if (!__buffered_moved) { const __T = @TypeOf(buffered); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffered.release() catch {}; } else { buffered.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffered; _drop_val.release(); } };
-        var __encoding_moved = false; _ = &__encoding_moved;
-        defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
-            self.buffered = buffered;
-            __buffered_moved = true;
-            self.lead_byte = lead_byte;
-            self.lead_surrogate = lead_surrogate;
-            self.ignore_bom = ignore_bom;
-            self.fatal = fatal;
-            self.encoding = encoding;
-    }
+buffered: Buffered = .{},
+lead_byte: ?u8 = null,
+lead_surrogate: ?u16 = null,
+ignore_bom: bool = false,
+fatal: bool = false,
+encoding: EncodingLabel = EncodingLabel.@"UTF-8",
 
 pub fn finalize(self: *TextDecoder) void {
-            _ = destroy(self);
-    }
+        _ = destroy(self);
+}
 
-pub fn getIgnoreBOM(self: *TextDecoder, _: *JSGlobalObject) JSValue {
-            return JSValue.jsBoolean(self.ignore_bom);
-    }
+pub fn getIgnoreBOM(self: *TextDecoder, globalThis: *JSGlobalObject) JSValue {
+        _ = &globalThis;
+        return JSValue.jsBoolean(self.ignore_bom);
+}
 
-pub fn getFatal(self: *TextDecoder, _: *JSGlobalObject) JSValue {
-            return JSValue.jsBoolean(self.fatal);
-    }
+pub fn getFatal(self: *TextDecoder, globalThis: *JSGlobalObject) JSValue {
+        _ = &globalThis;
+        return JSValue.jsBoolean(self.fatal);
+}
 
 pub fn getEncoding(self: *TextDecoder, globalThis: *JSGlobalObject) JSValue {
-            return ZigString.init(EncodingLabel.getLabel(self.encoding)).toJS(globalThis);
-    }
+        return ZigString.init(EncodingLabel.getLabel(self.encoding)).toJS(globalThis);
+}
 
 pub fn processCodeUnitUTF16(self: *TextDecoder, output: *ArrayListUnmanaged(u16), saw_error: *bool, code_unit: u16) !void {
-            if (self.lead_surrogate) |lead_surrogate| {
-                _ = &lead_surrogate;
-                self.lead_surrogate = null;
-                if (strings.u16IsTrail(code_unit)) {
-                    _ = try output.appendSlice(default_allocator, (&.{ lead_surrogate, code_unit }));
-                    return;
-                }
-                _ = try output.append(default_allocator, strings.unicode_replacement);
-                saw_error.* = true;
-            }
-            if (strings.u16IsLead(code_unit)) {
-                self.lead_surrogate = code_unit;
-                return;
-            }
+        if (self.lead_surrogate) |lead_surrogate| {
+            _ = &lead_surrogate;
+            self.lead_surrogate = null;
             if (strings.u16IsTrail(code_unit)) {
-                _ = try output.append(default_allocator, strings.unicode_replacement);
-                saw_error.* = true;
+                _ = try output.appendSlice(default_allocator, (&.{ lead_surrogate, code_unit }));
                 return;
             }
-            _ = try output.append(default_allocator, code_unit);
+            _ = try output.append(default_allocator, strings.unicode_replacement);
+            saw_error.* = true;
+        }
+        if (strings.u16IsLead(code_unit)) {
+            self.lead_surrogate = code_unit;
             return;
-    }
+        }
+        if (strings.u16IsTrail(code_unit)) {
+            _ = try output.append(default_allocator, strings.unicode_replacement);
+            saw_error.* = true;
+            return;
+        }
+        _ = try output.append(default_allocator, code_unit);
+        return;
+}
 
-pub fn codeUnitFromBytesUTF16(self: *const TextDecoder, first: u16, second: u16, comptime big_endian: bool) u16 {
-        _ = self;
-            return (if (big_endian) (cp_shl(first, 8) | second) else (first | cp_shl(second, 8)));
-    }
+pub fn codeUnitFromBytesUTF16(first: u16, second: u16, comptime big_endian: bool) u16 {
+        return (if (big_endian) (cp_shl(first, 8) | second) else (first | cp_shl(second, 8)));
+}
 
 pub fn decodeUTF16(self: *TextDecoder, bytes: []const u8, comptime big_endian: bool, comptime flush: bool) !DecodeUTF16Result {
-            var output: ArrayListUnmanaged(u16) = .{};
-            _ = &output;
-            _ = try output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2));
-            var remain = bytes;
-            _ = &remain;
-            var saw_error = false;
-            _ = &saw_error;
-            if (self.lead_byte) |lead_byte| {
-                _ = &lead_byte;
-                if ((remain.len > 0)) {
-                    self.lead_byte = null;
-                    _ = try self.processCodeUnitUTF16((&output), (&saw_error), TextDecoder.codeUnitFromBytesUTF16(@intCast(lead_byte), @intCast(remain[0]), big_endian));
-                    remain = remain[1..];
-                }
+        var output: ArrayListUnmanaged(u16) = .{};
+        _ = &output;
+        _ = try output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2));
+        var remain = bytes;
+        _ = &remain;
+        var saw_error = false;
+        _ = &saw_error;
+        if (self.lead_byte) |lead_byte| {
+            _ = &lead_byte;
+            if ((remain.len > 0)) {
+                self.lead_byte = null;
+                _ = try self.processCodeUnitUTF16((&output), (&saw_error), TextDecoder.codeUnitFromBytesUTF16(@intCast(lead_byte), @intCast(remain[0]), big_endian));
+                remain = remain[1..];
             }
-            var i: usize = 0;
-            _ = &i;
-            while (((i + 1) < remain.len)) {
-                _ = try self.processCodeUnitUTF16((&output), (&saw_error), TextDecoder.codeUnitFromBytesUTF16(@intCast(remain[@as(usize, @intCast(i))]), @intCast(remain[@as(usize, @intCast((i + 1)))]), big_endian));
-                i = (i + 2);
+        }
+        var i: usize = 0;
+        _ = &i;
+        while (((i + 1) < remain.len)) {
+            _ = try self.processCodeUnitUTF16((&output), (&saw_error), TextDecoder.codeUnitFromBytesUTF16(@intCast(remain[@as(usize, @intCast(i))]), @intCast(remain[@as(usize, @intCast((i + 1)))]), big_endian));
+            i = (i + 2);
+        }
+        if (((remain.len != 0) and (i == (remain.len - 1)))) {
+            self.lead_byte = remain[@as(usize, @intCast(i))];
+        } else {
+            _ = assertWithLocation((i == remain.len), @src());
+        }
+        if (flush) {
+            if (((self.lead_byte != null) or (self.lead_surrogate != null))) {
+                self.lead_byte = null;
+                self.lead_surrogate = null;
+                _ = try output.append(default_allocator, strings.unicode_replacement);
+                saw_error = true;
+                return .{ output, saw_error };
             }
-            if (((remain.len != 0) and (i == (remain.len - 1)))) {
-                self.lead_byte = remain[@as(usize, @intCast(i))];
-            } else {
-                _ = assertWithLocation((i == remain.len), @src());
-            }
-            if (flush) {
-                if (((self.lead_byte != null) or (self.lead_surrogate != null))) {
-                    self.lead_byte = null;
-                    self.lead_surrogate = null;
-                    _ = try output.append(default_allocator, strings.unicode_replacement);
-                    saw_error = true;
-                    return .{ output, saw_error };
-                }
-            }
-            return .{ output, saw_error };
-    }
+        }
+        return .{ output, saw_error };
+}
 
 pub fn decode(self: *TextDecoder, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
-            var arguments = callframe.arguments_old(2).slice();
-            _ = &arguments;
-            var stream = blk: {
-            if (((arguments.len > 1) and arguments[1].isObject())) {
-                if (try arguments[1].fastGet(globalThis, .stream)) |stream_value| {
-                    _ = &stream_value;
-                    break :blk stream_value.toBoolean();
-                }
+        var arguments = callframe.arguments_old(2).slice();
+        _ = &arguments;
+        var stream = false;
+        _ = &stream;
+        if (((arguments.len > 1) and arguments[1].isObject())) {
+            if (try arguments[1].fastGet(globalThis, .stream)) |stream_value| {
+                _ = &stream_value;
+                stream = stream_value.toBoolean();
             }
-            break :blk false;
-};
-            _ = &stream;
-            var input_slice = blk: {
-            if (((arguments.len == 0) or arguments[0].isUndefined())) {
-                break :blk "";
-            }
+        }
+        var input_slice: []const u8 = "";
+        _ = &input_slice;
+        if (((arguments.len > 0) and (!arguments[0].isUndefined()))) {
             if (arguments[0].asArrayBuffer(globalThis)) |array_buffer| {
                 _ = &array_buffer;
-                break :blk array_buffer.slice();
-            }
-            return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
-};
-            _ = &input_slice;
-            if ((!stream)) {
-                return self.decodeSlice(globalThis, input_slice, true);
+                input_slice = array_buffer.slice();
             } else {
-                return self.decodeSlice(globalThis, input_slice, false);
+                return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
             }
-    }
+        }
+        if ((!stream)) {
+            return self.decodeSlice(globalThis, input_slice, true);
+        } else {
+            return self.decodeSlice(globalThis, input_slice, false);
+        }
+}
 
 pub fn decodeWithoutTypeChecks(self: *TextDecoder, globalThis: *JSGlobalObject, uint8array: *jsc.JSUint8Array) JSError!JSValue {
-            return self.decodeSlice(globalThis, uint8array.slice(), false);
-    }
+        return self.decodeSlice(globalThis, uint8array.slice(), false);
+}
 
 pub fn decodeSlice(self: *TextDecoder, globalThis: *JSGlobalObject, buffer_slice: []const u8, comptime flush: bool) JSError!JSValue {
-            switch (self.encoding) {
+        switch (self.encoding) {
 EncodingLabel.latin1 => {
 if (strings.isAllASCII(buffer_slice)) {
-                return ZigString.init(buffer_slice).toJS(globalThis);
-            }
-            var out_length = strings.elementLengthCP1252IntoUTF16(buffer_slice);
-            _ = &out_length;
-            var bytes = try default_allocator.alloc(u16, out_length);
-            _ = &bytes;
-            var out = strings.copyCP1252IntoUTF16(bytes, buffer_slice);
-            _ = &out;
-            return ZigString.toExternalU16(bytes.ptr, out.written, globalThis);
+            return ZigString.init(buffer_slice).toJS(globalThis);
+        }
+        var out_length = strings.elementLengthCP1252IntoUTF16(buffer_slice);
+        _ = &out_length;
+        var bytes = try default_allocator.alloc(u16, out_length);
+        _ = &bytes;
+        var out = strings.copyCP1252IntoUTF16(bytes, buffer_slice);
+        _ = &out;
+        return ZigString.toExternalU16(bytes.ptr, out.written, globalThis);
 },
 EncodingLabel.@"UTF-8" => {
-const pair = blk: {
-            var maybe_without_bom = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, "\xef\xbb\xbf"))) buffer_slice[3..] else buffer_slice);
-            _ = &maybe_without_bom;
-            if ((self.buffered.len > 0)) {
-                defer {
-                self.buffered.len = 0;
-                }
-                var joined = try default_allocator.alloc(u8, (maybe_without_bom.len + self.buffered.len));
-                _ = &joined;
-                _ = @memcpy(joined[0..self.buffered.len], self.buffered.slice());
-                _ = @memcpy(joined[self.buffered.len..][0..maybe_without_bom.len], maybe_without_bom);
-                break :blk .{ joined, true };
+var maybe_without_bom = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, "\xef\xbb\xbf"))) buffer_slice[3..] else buffer_slice);
+        _ = &maybe_without_bom;
+        var input = maybe_without_bom;
+        _ = &input;
+        var deinit_input = false;
+        _ = &deinit_input;
+        if ((self.buffered.len > 0)) {
+            defer {
+            self.buffered.len = 0;
             }
-            break :blk .{ maybe_without_bom, false };
-};
-            const _tmp_v0 = pair;
-            const input = cp_unpack_elem(_tmp_v0, 0);
-            _ = &input;
-            const deinit_input = cp_unpack_elem(_tmp_v0, 1);
-            _ = &deinit_input;
-            var maybe_decode_result = (if (self.fatal) blk: {
-            break :blk (blk_catch_0: { break :blk_catch_0 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush)) catch |e| { _ = &e; if (deinit_input) {
-                _ = default_allocator.free(input);
-            }
-            if ((e == error.InvalidByteSequence)) {
-                return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "Invalid byte sequence", .{}).throw();
-            }
-            _ = assert((e == error.OutOfMemory));
-            return globalThis.throwOutOfMemory(); }); });
+            var joined = try default_allocator.alloc(u8, (maybe_without_bom.len + self.buffered.len));
+            _ = &joined;
+            _ = @memcpy(joined[0..self.buffered.len], self.buffered.slice());
+            _ = @memcpy(joined[self.buffered.len..][0..maybe_without_bom.len], maybe_without_bom);
+            input = joined;
+            deinit_input = true;
+        }
+        var maybe_decode_result = (if (self.fatal) blk: {
+        break :blk (blk_catch_0: { break :blk_catch_0 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush)) catch |e| { _ = &e; if (deinit_input) {
+            _ = default_allocator.free(input);
+        }
+        if ((e == error.InvalidByteSequence)) {
+            return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "Invalid byte sequence", .{}).throw();
+        }
+        _ = assert((e == error.OutOfMemory));
+        return globalThis.throwOutOfMemory(); }); });
 
 } else blk: {
-            break :blk (blk_catch_1: { break :blk_catch_1 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush)) catch |e| { _ = &e; if (deinit_input) {
-                _ = default_allocator.free(input);
-            }
-            _ = assert((e == error.OutOfMemory));
-            return globalThis.throwOutOfMemory(); }); });
+        break :blk (blk_catch_1: { break :blk_catch_1 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush)) catch |e| { _ = &e; if (deinit_input) {
+            _ = default_allocator.free(input);
+        }
+        _ = assert((e == error.OutOfMemory));
+        return globalThis.throwOutOfMemory(); }); });
 
 });
-            _ = &maybe_decode_result;
-            if (maybe_decode_result) |decode_result| {
-                _ = &decode_result;
-                if (deinit_input) {
-                    _ = default_allocator.free(input);
-                }
-                const _tmp_v1 = decode_result;
-                const decoded = cp_unpack_elem(_tmp_v1, 0);
-                _ = &decoded;
-                const leftover = cp_unpack_elem(_tmp_v1, 1);
-                _ = &leftover;
-                const leftover_len = cp_unpack_elem(_tmp_v1, 2);
-                _ = &leftover_len;
-                _ = assert((self.buffered.len == 0));
-                if ((!flush)) {
-                    if ((leftover_len != 0)) {
-                        self.buffered.buf = leftover;
-                        self.buffered.len = leftover_len;
-                    }
-                }
-                return ZigString.toExternalU16(decoded.ptr, decoded.len, globalThis);
+        _ = &maybe_decode_result;
+        if (maybe_decode_result) |decode_result| {
+            _ = &decode_result;
+            if (deinit_input) {
+                _ = default_allocator.free(input);
             }
-            _ = debugAssert(((input.len == 0) or (!deinit_input)));
-            return ZigString.init(input).toJS(globalThis);
+            const _tmp_v0 = decode_result;
+            const decoded = cp_unpack_elem(_tmp_v0, 0);
+            _ = &decoded;
+            const leftover = cp_unpack_elem(_tmp_v0, 1);
+            _ = &leftover;
+            const leftover_len = cp_unpack_elem(_tmp_v0, 2);
+            _ = &leftover_len;
+            _ = assert((self.buffered.len == 0));
+            if ((!flush)) {
+                if ((leftover_len != 0)) {
+                    self.buffered.buf = leftover;
+                    self.buffered.len = leftover_len;
+                }
+            }
+            return ZigString.toExternalU16(decoded.ptr, decoded.len, globalThis);
+        }
+        _ = debugAssert(((input.len == 0) or (!deinit_input)));
+        return ZigString.init(input).toJS(globalThis);
 },
 .@"UTF-16LE" => {
 var bom: []const u8 = "\xff\xfe";
-            _ = &bom;
-            var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
-            _ = &input;
-            const _tmp_v2 = try self.decodeUTF16(input, false, flush);
-            const decoded = cp_unpack_elem(_tmp_v2, 0);
-            _ = &decoded;
-            const saw_error = cp_unpack_elem(_tmp_v2, 1);
-            _ = &saw_error;
-            if ((saw_error and self.fatal)) {
-                _ = decoded.deinit(default_allocator);
-                return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16LE data", .{}).throw();
-            }
-            if ((decoded.items.len == 0)) {
-                _ = decoded.deinit(default_allocator);
-                return ZigString.Empty.toJS(globalThis);
-            }
-            return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
+        _ = &bom;
+        var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
+        _ = &input;
+        const _tmp_v1 = try self.decodeUTF16(input, false, flush);
+        const decoded = cp_unpack_elem(_tmp_v1, 0);
+        _ = &decoded;
+        const saw_error = cp_unpack_elem(_tmp_v1, 1);
+        _ = &saw_error;
+        if ((saw_error and self.fatal)) {
+            _ = decoded.deinit(default_allocator);
+            return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16LE data", .{}).throw();
+        }
+        if ((decoded.items.len == 0)) {
+            _ = decoded.deinit(default_allocator);
+            return ZigString.Empty.toJS(globalThis);
+        }
+        return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
 },
 .@"UTF-16BE" => {
 var bom: []const u8 = "\xfe\xff";
-            _ = &bom;
-            var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
-            _ = &input;
-            const _tmp_v3 = try self.decodeUTF16(input, true, flush);
-            const decoded = cp_unpack_elem(_tmp_v3, 0);
-            _ = &decoded;
-            const saw_error = cp_unpack_elem(_tmp_v3, 1);
-            _ = &saw_error;
-            if ((saw_error and self.fatal)) {
-                _ = decoded.deinit(default_allocator);
-                return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16BE data", .{}).throw();
-            }
-            if ((decoded.items.len == 0)) {
-                _ = decoded.deinit(default_allocator);
-                return ZigString.Empty.toJS(globalThis);
-            }
-            return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
+        _ = &bom;
+        var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
+        _ = &input;
+        const _tmp_v2 = try self.decodeUTF16(input, true, flush);
+        const decoded = cp_unpack_elem(_tmp_v2, 0);
+        _ = &decoded;
+        const saw_error = cp_unpack_elem(_tmp_v2, 1);
+        _ = &saw_error;
+        if ((saw_error and self.fatal)) {
+            _ = decoded.deinit(default_allocator);
+            return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16BE data", .{}).throw();
+        }
+        if ((decoded.items.len == 0)) {
+            _ = decoded.deinit(default_allocator);
+            return ZigString.Empty.toJS(globalThis);
+        }
+        return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
 },
 else => {
 var encoding_name = EncodingLabel.getLabel(self.encoding);
-            _ = &encoding_name;
-            var codec = ((TextCodec.create(encoding_name)) orelse (({
-            return ZigString.init("").toJS(globalThis);
-})));
-            _ = &codec;
-            defer {
-            _ = codec.deinit();
-            }
-            if ((!self.ignore_bom)) {
-                _ = codec.stripBOM();
-            }
-            var result = codec.decode(buffer_slice, flush, self.fatal);
-            _ = &result;
-            defer {
-            _ = result.result.deref();
-            }
-            if ((result.sawError and self.fatal)) {
-                return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid {s} data", .{ encoding_name }).throw();
-            }
-            return result.result.toJS(globalThis);
+        _ = &encoding_name;
+        var codec = ((TextCodec.create(encoding_name)) orelse {
+        return ZigString.init("").toJS(globalThis);
+});
+        _ = &codec;
+        defer {
+        _ = codec.deinit();
+        }
+        if ((!self.ignore_bom)) {
+            _ = codec.stripBOM();
+        }
+        var result = codec.decode(buffer_slice, flush, self.fatal);
+        _ = &result;
+        defer {
+        _ = result.result.deref();
+        }
+        if ((result.sawError and self.fatal)) {
+            return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid {s} data", .{ encoding_name }).throw();
+        }
+        return result.result.toJS(globalThis);
 },
 }
-    }
+}
 
 pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!*TextDecoder {
-            const args = callframe.argumentsAsArray(2);
-            const encoding_value = args[0];
-            const options_value = args[1];
-            var decoder = TextDecoder{  };
-            _ = &decoder;
-            if (encoding_value.isString()) {
-                var str = try encoding_value.toSlice(globalThis, default_allocator);
-                _ = &str;
-                defer {
-                _ = str.deinit();
-                }
-                if (EncodingLabel.which(str.slice())) |label| {
-                    _ = &label;
-                    decoder.encoding = label;
-                } else {
-                    return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{ str.slice() }).throw();
-                }
+        const args = callframe.argumentsAsArray(2);
+        const encoding_value = args[0];
+        const options_value = args[1];
+        var decoder = TextDecoder{  };
+        _ = &decoder;
+        if (encoding_value.isString()) {
+            var str = try encoding_value.toSlice(globalThis, default_allocator);
+            _ = &str;
+            defer {
+            _ = str.deinit();
+            }
+            if (EncodingLabel.which(str.slice())) |label| {
+                _ = &label;
+                decoder.encoding = label;
             } else {
-                if (encoding_value.isUndefined()) {
-                    decoder.encoding = EncodingLabel.@"UTF-8";
+                return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{ str.slice() }).throw();
+            }
+        } else {
+            if (encoding_value.isUndefined()) {
+                decoder.encoding = EncodingLabel.@"UTF-8";
+            } else {
+                return globalThis.throwInvalidArguments("TextDecoder(encoding) label is invalid", .{});
+            }
+        }
+        if ((!options_value.isUndefined())) {
+            if ((!options_value.isObject())) {
+                return globalThis.throwInvalidArguments("TextDecoder(options) is invalid", .{});
+            }
+            if (try options_value.get(globalThis, "fatal")) |fatal| {
+                _ = &fatal;
+                decoder.fatal = fatal.toBoolean();
+            }
+            if (try options_value.get(globalThis, "ignoreBOM")) |ignoreBOM| {
+                _ = &ignoreBOM;
+                if (ignoreBOM.isBoolean()) {
+                    decoder.ignore_bom = ignoreBOM.asBoolean();
                 } else {
-                    return globalThis.throwInvalidArguments("TextDecoder(encoding) label is invalid", .{});
+                    return globalThis.throwInvalidArguments("TextDecoder(options) ignoreBOM is invalid. Expected boolean value", .{});
                 }
             }
-            if ((!options_value.isUndefined())) {
-                if ((!options_value.isObject())) {
-                    return globalThis.throwInvalidArguments("TextDecoder(options) is invalid", .{});
-                }
-                if (try options_value.get(globalThis, "fatal")) |fatal| {
-                    _ = &fatal;
-                    decoder.fatal = fatal.toBoolean();
-                }
-                if (try options_value.get(globalThis, "ignoreBOM")) |ignoreBOM| {
-                    _ = &ignoreBOM;
-                    if (ignoreBOM.isBoolean()) {
-                        decoder.ignore_bom = ignoreBOM.asBoolean();
-                    } else {
-                        return globalThis.throwInvalidArguments("TextDecoder(options) ignoreBOM is invalid. Expected boolean value", .{});
-                    }
-                }
-            }
-            return TextDecoder.@"new"(decoder);
-    }
-    pub const js = jsc.Codegen.JSTextDecoder;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const fromJSDirect = js.fromJSDirect;
-    pub const @"new" = TrivialNew(TextDecoder);
-};
-
+        }
+        return TextDecoder.@"new"(decoder);
+}
+pub const js = jsc.Codegen.JSTextDecoder;
+pub const toJS = js.toJS;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
+pub const @"new" = TrivialNew(TextDecoder);
 const OutputList = ArrayListUnmanaged(u16);
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;

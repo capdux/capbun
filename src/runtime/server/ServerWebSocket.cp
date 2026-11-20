@@ -1,5 +1,5 @@
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
+
 const Output = bun.Output;
 const uws = bun.uws;
 const WebSocketServer = bun.api.server.WebSocketServerContext;
@@ -7,36 +7,52 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
-
-pub const ServerWebSocket = struct {
-
-#handler: *WebSocketServer.Handler,
-#this_value: jsc.JSRef = .empty(),
-#flags: Flags = .{},
-#signal: ?*bun.webcore.AbortSignal = null,
+const log = Output.scoped(.WebSocketServer, .visible);
 
 // We pack the per-socket data into this struct below
-const Flags = packed struct(u64) {
+@packed(u64) struct Flags {
     ssl: bool = false,
     closed: bool = false,
     opened: bool = false,
     binary_type: jsc.ArrayBuffer.BinaryType = .Buffer,
     packed_websocket_ptr: u57 = 0,
 
-    inline fn websocket(this: Flags) uws.AnyWebSocket {
-        // Ensure those other bits are zeroed out
-        const that = Flags{ .packed_websocket_ptr = this.packed_websocket_ptr };
-
-        return if (this.ssl) .{
-            .ssl = @ptrFromInt(@as(usize, that.packed_websocket_ptr)),
-        } else .{
-            .tcp = @ptrFromInt(@as(usize, that.packed_websocket_ptr)),
-        };
+    inline fn websocket(): uws.AnyWebSocket {
+        const that = Flags{ packed_websocket_ptr: _.packed_websocket_ptr };
+        if (_.ssl) {
+            return .{ .ssl = @ptrFromInt(@as(usize, that.packed_websocket_ptr)) };
+        }
+        return .{ .tcp = @ptrFromInt(@as(usize, that.packed_websocket_ptr)) };
     }
-};
+}
 
-inline fn websocket(this: *const ServerWebSocket) uws.AnyWebSocket {
-    return this.#flags.websocket();
+struct Corker {
+    args: []const JSValue = [],
+    globalObject: *jsc.JSGlobalObject,
+    this_value: jsc.JSValue = .zero,
+    callback: jsc.JSValue,
+    result: JSValue = .zero,
+
+    fn run(*_) {
+        const this_value = _.this_value;
+        _.result = _.callback.call(
+            _.globalObject,
+            if (this_value == .zero) .js_undefined else this_value,
+            _.args,
+        ) catch |e| _.globalObject.takeException(e);
+    }
+}
+
+@root struct ServerWebSocket {
+
+#handler: *WebSocketServer.Handler,
+#this_value: jsc.JSRef = .empty(),
+#flags: Flags = .{},
+#signal: (*bun.webcore.AbortSignal)? = null,
+
+
+inline fn websocket(): uws.AnyWebSocket {
+    return _.#flags.websocket();
 }
 
 pub const js = jsc.Codegen.JSServerWebSocket;
@@ -44,42 +60,41 @@ pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 
-const new = bun.TrivialNew(ServerWebSocket);
+const @"new" = bun.TrivialNew(ServerWebSocket);
 
 /// Initialize a ServerWebSocket with the given handler, data value, and signal.
 /// The signal will not be ref'd inside the ServerWebSocket init function, but will unref itself when the ServerWebSocket is destroyed.
-pub fn init(handler: *WebSocketServer.Handler, data_value: jsc.JSValue, signal: ?*bun.webcore.AbortSignal) *ServerWebSocket {
+static fn init(handler: *WebSocketServer.Handler, data_value: jsc.JSValue, signal: (*bun.webcore.AbortSignal)?): *ServerWebSocket {
     const globalObject = handler.globalObject;
-    const this = ServerWebSocket.new(.{
+    const ws_obj = ServerWebSocket.@"new"(.{
         .#handler = handler,
         .#signal = signal,
     });
     // Get a strong ref and downgrade when terminating/close and GC will be able to collect the newly created value
-    const this_value = this.toJS(globalObject);
-    this.#this_value = .initStrong(this_value, globalObject);
+    const this_value = ws_obj.toJS(globalObject);
+    ws_obj.#this_value = .initStrong(this_value, globalObject);
     js.dataSetCached(this_value, globalObject, data_value);
-    return this;
+    return ws_obj;
 }
 
-pub fn memoryCost(this: *const ServerWebSocket) usize {
-    if (this.#flags.closed) {
+fn memoryCost(): usize {
+    if (_.#flags.closed) {
         return @sizeOf(ServerWebSocket);
     }
-    return this.websocket().memoryCost() + @sizeOf(ServerWebSocket);
+    return _.websocket().memoryCost() + @sizeOf(ServerWebSocket);
 }
 
-const log = Output.scoped(.WebSocketServer, .visible);
 
-pub fn onOpen(this: *ServerWebSocket, ws: uws.AnyWebSocket) void {
+fn onOpen(*_, ws: uws.AnyWebSocket) {
     log("OnOpen", .{});
 
-    this.#flags.packed_websocket_ptr = @truncate(@intFromPtr(ws.raw()));
-    this.#flags.closed = false;
-    this.#flags.ssl = ws == .ssl;
+    _.#flags.packed_websocket_ptr = @truncate(@intFromPtr(ws.raw()));
+    _.#flags.closed = false;
+    _.#flags.ssl = ws == .ssl;
 
-    let handler = this.#handler;
-    const vm = this.#handler.vm;
-    handler.active_connections +|= 1;
+    let handler = _.#handler;
+    const vm = _.#handler.vm;
+    handler.active_connections = handler.active_connections +| 1;
     const globalObject = handler.globalObject;
     const onOpenHandler = handler.onOpen;
     if (vm.isShuttingDown()) {
@@ -88,37 +103,37 @@ pub fn onOpen(this: *ServerWebSocket, ws: uws.AnyWebSocket) void {
         return;
     }
 
-    this.#flags.opened = false;
+    _.#flags.opened = false;
 
     if (onOpenHandler.isEmptyOrUndefinedOrNull()) {
         return;
     }
 
-    const this_value = this.#this_value.tryGet() orelse .js_undefined;
-    let args = [_]JSValue{this_value};
+    const this_value = _.#this_value.tryGet() ?? .js_undefined;
+    let args: [1]JSValue = [this_value];
 
     const loop = vm.eventLoop();
     loop.enter();
     defer loop.exit();
 
     let corker = Corker{
-        .args = &args,
-        .globalObject = globalObject,
-        .callback = onOpenHandler,
+        args: &args,
+        globalObject: globalObject,
+        callback: onOpenHandler,
     };
     ws.cork(&corker, Corker.run);
     const result = corker.result;
-    this.#flags.opened = true;
-    if (result.toError()) |err_value| {
+    _.#flags.opened = true;
+    if (err_value := result.toError()) {
         log("onOpen exception", .{});
 
-        if (!this.#flags.closed) {
-            this.#flags.closed = true;
+        if (!_.#flags.closed) {
+            _.#flags.closed = true;
             // we un-gracefully close the connection if there was an exception
             // we don't want any event handlers to fire after this for anything other than error()
             // https://github.com/oven-sh/bun/issues/1480
-            this.websocket().close();
-            handler.active_connections -|= 1;
+            _.websocket().close();
+            handler.active_connections = handler.active_connections -| 1;
             this_value.unprotect();
         }
 
@@ -126,21 +141,21 @@ pub fn onOpen(this: *ServerWebSocket, ws: uws.AnyWebSocket) void {
     }
 }
 
-pub fn onMessage(
-    this: *ServerWebSocket,
+fn onMessage(
+    *_,
     ws: uws.AnyWebSocket,
     message: []const u8,
     opcode: uws.Opcode,
-) void {
+) {
     log("onMessage({d}): {s}", .{
         @intFromEnum(opcode),
         message,
     });
-    const onMessageHandler = this.#handler.onMessage;
+    const onMessageHandler = _.#handler.onMessage;
     if (onMessageHandler.isEmptyOrUndefinedOrNull()) return;
-    let globalObject = this.#handler.globalObject;
+    let globalObject = _.#handler.globalObject;
     // This is the start of a task.
-    const vm = this.#handler.vm;
+    const vm = _.#handler.vm;
     if (vm.isShuttingDown()) {
         log("onMessage called after script execution", .{});
         ws.close();
@@ -151,19 +166,19 @@ pub fn onMessage(
     loop.enter();
     defer loop.exit();
 
-    const arguments = [_]JSValue{
-        this.#this_value.tryGet() orelse .js_undefined,
+    const arguments: [2]JSValue = [
+        _.#this_value.tryGet() ?? .js_undefined,
         switch (opcode) {
             .text => bun.String.createUTF8ForJS(globalObject, message) catch .zero, // TODO: properly propagate exception upwards
-            .binary => this.binaryToJS(globalObject, message) catch .zero, // TODO: properly propagate exception upwards
+            .binary => _.binaryToJS(globalObject, message) catch .zero, // TODO: properly propagate exception upwards
             else => unreachable,
         },
-    };
+    ];
 
     let corker = Corker{
-        .args = &arguments,
-        .globalObject = globalObject,
-        .callback = onMessageHandler,
+        args: &arguments,
+        globalObject: globalObject,
+        callback: onMessageHandler,
     };
 
     ws.cork(&corker, Corker.run);
@@ -171,15 +186,15 @@ pub fn onMessage(
 
     if (result.isEmptyOrUndefinedOrNull()) return;
 
-    if (result.toError()) |err_value| {
-        this.#handler.runErrorCallback(vm, globalObject, err_value);
+    if (err_value := result.toError()) {
+        _.#handler.runErrorCallback(vm, globalObject, err_value);
         return;
     }
 
-    if (result.asAnyPromise()) |promise| {
+    if (promise := result.asAnyPromise()) {
         switch (promise.status()) {
             .rejected => {
-                _ = promise.result(globalObject.vm());
+                * = promise.result(globalObject.vm());
                 return;
             },
 
@@ -188,40 +203,42 @@ pub fn onMessage(
     }
 }
 
-pub inline fn isClosed(this: *const ServerWebSocket) bool {
-    return this.#flags.closed;
+inline fn isClosed(): bool {
+    return _.#flags.closed;
 }
 
-pub fn onDrain(this: *ServerWebSocket, _: uws.AnyWebSocket) void {
+fn onDrain(*_, _ws: uws.AnyWebSocket) {
+    * = _ws;
     log("onDrain", .{});
 
-    const handler = this.#handler;
+    const handler = _.#handler;
     const vm = handler.vm;
-    if (this.isClosed() or vm.isShuttingDown())
+    if (_.isClosed() || vm.isShuttingDown())
         return;
 
     if (handler.onDrain != .zero) {
         const globalObject = handler.globalObject;
 
+        const drain_args: [1]jsc.JSValue = [_.#this_value.tryGet() ?? .js_undefined];
         let corker = Corker{
-            .args = &[_]jsc.JSValue{this.#this_value.tryGet() orelse .js_undefined},
-            .globalObject = globalObject,
-            .callback = handler.onDrain,
+            args: &drain_args,
+            globalObject: globalObject,
+            callback: handler.onDrain,
         };
         const loop = vm.eventLoop();
         loop.enter();
         defer loop.exit();
-        this.websocket().cork(&corker, Corker.run);
+        _.websocket().cork(&corker, Corker.run);
         const result = corker.result;
 
-        if (result.toError()) |err_value| {
+        if (err_value := result.toError()) {
             handler.runErrorCallback(vm, globalObject, err_value);
         }
     }
 }
 
-fn binaryToJS(this: *const ServerWebSocket, globalThis: *jsc.JSGlobalObject, data: []const u8) bun.JSError!jsc.JSValue {
-    return switch (this.#flags.binary_type) {
+fn binaryToJS(globalThis: *jsc.JSGlobalObject, data: []const u8): jsc.JSValue ! bun.JSError {
+    return switch (_.#flags.binary_type) {
         .Buffer => jsc.ArrayBuffer.createBuffer(
             globalThis,
             data,
@@ -239,13 +256,14 @@ fn binaryToJS(this: *const ServerWebSocket, globalThis: *jsc.JSGlobalObject, dat
     };
 }
 
-pub fn onPing(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) void {
+fn onPing(*_, _ws: uws.AnyWebSocket, data: []const u8) {
+    * = _ws;
     log("onPing: {s}", .{data});
 
-    const handler = this.#handler;
+    const handler = _.#handler;
     let cb = handler.onPing;
     const vm = handler.vm;
-    if (cb.isEmptyOrUndefinedOrNull() or vm.isShuttingDown()) return;
+    if (cb.isEmptyOrUndefinedOrNull() || vm.isShuttingDown()) return;
     const globalThis = handler.globalObject;
 
     // This is the start of a task.
@@ -253,21 +271,23 @@ pub fn onPing(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) voi
     loop.enter();
     defer loop.exit();
 
-    _ = cb.call(
+    const ping_args: [2]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, _.binaryToJS(globalThis, data) catch .zero ];
+    * = cb.call(
         globalThis,
         .js_undefined,
-        &[_]jsc.JSValue{ this.#this_value.tryGet() orelse .js_undefined, this.binaryToJS(globalThis, data) catch .zero }, // TODO: properly propagate exception upwards
+        &ping_args, // TODO: properly propagate exception upwards
     ) catch |e| {
-        const err = globalThis.takeException(e);
+        const err_val = globalThis.takeException(e);
         log("onPing error", .{});
-        handler.runErrorCallback(vm, globalThis, err);
+        handler.runErrorCallback(vm, globalThis, err_val);
     };
 }
 
-pub fn onPong(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) void {
+fn onPong(*_, _ws: uws.AnyWebSocket, data: []const u8) {
+    * = _ws;
     log("onPong: {s}", .{data});
 
-    const handler = this.#handler;
+    const handler = _.#handler;
     let cb = handler.onPong;
     if (cb.isEmptyOrUndefinedOrNull()) return;
 
@@ -281,39 +301,41 @@ pub fn onPong(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) voi
     loop.enter();
     defer loop.exit();
 
-    _ = cb.call(
+    const pong_args: [2]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, _.binaryToJS(globalThis, data) catch .zero ];
+    * = cb.call(
         globalThis,
         .js_undefined,
-        &[_]jsc.JSValue{ this.#this_value.tryGet() orelse .js_undefined, this.binaryToJS(globalThis, data) catch .zero }, // TODO: properly propagate exception upwards
+        &pong_args, // TODO: properly propagate exception upwards
     ) catch |e| {
-        const err = globalThis.takeException(e);
+        const err_val = globalThis.takeException(e);
         log("onPong error", .{});
-        handler.runErrorCallback(vm, globalThis, err);
+        handler.runErrorCallback(vm, globalThis, err_val);
     };
 }
 
-pub fn onClose(this: *ServerWebSocket, _: uws.AnyWebSocket, code: i32, message: []const u8) void {
+fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
+    * = _ws;
     log("onClose", .{});
     // TODO: Can this called inside finalize?
-    let handler = this.#handler;
-    const was_closed = this.isClosed();
-    this.#flags.closed = true;
+    let handler = _.#handler;
+    const was_closed = _.isClosed();
+    _.#flags.closed = true;
     defer {
         if (!was_closed) {
-            handler.active_connections -|= 1;
+            handler.active_connections = handler.active_connections -| 1;
         }
     }
-    const signal = this.#signal;
-    this.#signal = null;
+    const signal = _.#signal;
+    _.#signal = null;
 
     defer {
-        if (signal) |sig| {
+        if (sig := signal) {
             sig.pendingActivityUnref();
             sig.unref();
         }
 
-        if (this.#this_value.isNotEmpty()) {
-            this.#this_value.downgrade();
+        if (_.#this_value.isNotEmpty()) {
+            _.#this_value.downgrade();
         }
     }
 
@@ -329,26 +351,27 @@ pub fn onClose(this: *ServerWebSocket, _: uws.AnyWebSocket, code: i32, message: 
         loop.enter();
         defer loop.exit();
 
-        if (signal) |sig| {
+        if (sig := signal) {
             if (!sig.aborted()) {
                 sig.signal(handler.globalObject, .ConnectionClosed);
             }
         }
 
         const message_js = bun.String.createUTF8ForJS(globalObject, message) catch |e| {
-            const err = globalObject.takeException(e);
-            log("onClose error (message) {}", .{this.#this_value.isNotEmpty()});
-            handler.runErrorCallback(vm, globalObject, err);
+            const err_val = globalObject.takeException(e);
+            log("onClose error (message) {}", .{_.#this_value.isNotEmpty()});
+            handler.runErrorCallback(vm, globalObject, err_val);
             return;
         };
 
-        _ = handler.onClose.call(globalObject, .js_undefined, &[_]jsc.JSValue{ this.#this_value.tryGet() orelse .js_undefined, JSValue.jsNumber(code), message_js }) catch |e| {
-            const err = globalObject.takeException(e);
-            log("onClose error {}", .{this.#this_value.isNotEmpty()});
-            handler.runErrorCallback(vm, globalObject, err);
+        const close_args: [3]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, JSValue.jsNumber(code), message_js ];
+        * = handler.onClose.call(globalObject, .js_undefined, &close_args) catch |e| {
+            const err_val = globalObject.takeException(e);
+            log("onClose error {}", .{_.#this_value.isNotEmpty()});
+            handler.runErrorCallback(vm, globalObject, err_val);
             return;
         };
-    } else if (signal) |sig| {
+    } else if (sig := signal) {
         const loop = vm.eventLoop();
 
         loop.enter();
@@ -360,30 +383,31 @@ pub fn onClose(this: *ServerWebSocket, _: uws.AnyWebSocket, code: i32, message: 
     }
 }
 
-pub fn behavior(comptime ServerType: type, comptime ssl: bool, opts: uws.WebSocketBehavior) uws.WebSocketBehavior {
+static fn behavior(comptime ServerType: type, comptime ssl: bool, opts: uws.WebSocketBehavior): uws.WebSocketBehavior {
     return uws.WebSocketBehavior.Wrap(ServerType, @This(), ssl).apply(opts);
 }
 
-pub fn constructor(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*ServerWebSocket {
+static fn constructor(globalObject: *jsc.JSGlobalObject, _cf: *jsc.CallFrame): (*ServerWebSocket) ! bun.JSError {
+    * = _cf;
     return globalObject.throw("Cannot construct ServerWebSocket", .{});
 }
 
-pub fn finalize(this: *ServerWebSocket) void {
+fn finalize(*_) {
     log("finalize", .{});
-    this.#this_value.finalize();
-    if (this.#signal) |signal| {
-        this.#signal = null;
+    _.#this_value.finalize();
+    if (signal := _.#signal) {
+        _.#signal = null;
         signal.pendingActivityUnref();
         signal.unref();
     }
-    bun.destroy(this);
+    bun.destroy(_);
 }
 
-pub fn publish(
-    this: *ServerWebSocket,
+fn publish(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(4);
     if (args.len < 1) {
         log("publish()", .{});
@@ -391,11 +415,11 @@ pub fn publish(
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
 
-    const app = this.#handler.app orelse {
+    const app = _.#handler.app orelse {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
     };
-    const flags = this.#handler.flags;
+    const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
@@ -403,45 +427,45 @@ pub fn publish(
     const message_value = args.ptr[1];
     const compress_value = args.ptr[2];
 
-    if (topic_value.isEmptyOrUndefinedOrNull() or !topic_value.isString()) {
+    if (topic_value.isEmptyOrUndefinedOrNull() || !topic_value.isString()) {
         log("publish() topic invalid", .{});
 
         return globalThis.throw("publish requires a topic string", .{});
     }
 
-    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publish requires a non-empty topic", .{});
     }
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("publish expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
     if (message_value.isEmptyOrUndefinedOrNull()) {
         return globalThis.throw("publish requires a non-empty message", .{});
     }
 
-    if (message_value.asArrayBuffer(globalThis)) |array_buffer| {
+    if (array_buffer := message_value.asArrayBuffer(globalThis)) {
         const buffer = array_buffer.slice();
 
-        const result = if (!publish_to_self and !this.isClosed())
-            this.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
+        const result = if (!publish_to_self && !_.isClosed())
+            _.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
         else
             uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .binary, compress);
 
         return JSValue.jsNumber(
             // if 0, return 0
             // else return number of bytes sent
-            if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+            if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
         );
     }
 
     {
-        let js_string = try message_value.toJSString(globalThis);
+        let js_string = message_value.toJSString(globalThis)?;
         const view = js_string.view(globalThis);
         const slice = view.toSlice(bun.default_allocator);
         defer slice.deinit();
@@ -450,24 +474,24 @@ pub fn publish(
 
         const buffer = slice.slice();
 
-        const result = if (!publish_to_self and !this.isClosed())
-            this.websocket().publish(topic_slice.slice(), buffer, .text, compress)
+        const result = if (!publish_to_self && !_.isClosed())
+            _.websocket().publish(topic_slice.slice(), buffer, .text, compress)
         else
             uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .text, compress);
 
         return JSValue.jsNumber(
             // if 0, return 0
             // else return number of bytes sent
-            if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+            if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
         );
     }
 }
 
-pub fn publishText(
-    this: *ServerWebSocket,
+fn publishText(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(4);
 
     if (args.len < 1) {
@@ -475,11 +499,11 @@ pub fn publishText(
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
 
-    const app = this.#handler.app orelse {
+    const app = _.#handler.app orelse {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
     };
-    const flags = this.#handler.flags;
+    const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
@@ -487,25 +511,25 @@ pub fn publishText(
     const message_value = args.ptr[1];
     const compress_value = args.ptr[2];
 
-    if (topic_value.isEmptyOrUndefinedOrNull() or !topic_value.isString()) {
+    if (topic_value.isEmptyOrUndefinedOrNull() || !topic_value.isString()) {
         log("publish() topic invalid", .{});
         return globalThis.throw("publishText requires a topic string", .{});
     }
 
-    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
     defer topic_slice.deinit();
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("publishText expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
-    if (message_value.isEmptyOrUndefinedOrNull() or !message_value.isString()) {
+    if (message_value.isEmptyOrUndefinedOrNull() || !message_value.isString()) {
         return globalThis.throw("publishText requires a non-empty message", .{});
     }
 
-    let js_string = try message_value.toJSString(globalThis);
+    let js_string = message_value.toJSString(globalThis)?;
     const view = js_string.view(globalThis);
     const slice = view.toSlice(bun.default_allocator);
     defer slice.deinit();
@@ -514,23 +538,23 @@ pub fn publishText(
 
     const buffer = slice.slice();
 
-    const result = if (!publish_to_self and !this.isClosed())
-        this.websocket().publish(topic_slice.slice(), buffer, .text, compress)
+    const result = if (!publish_to_self && !_.isClosed())
+        _.websocket().publish(topic_slice.slice(), buffer, .text, compress)
     else
         uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .text, compress);
 
     return JSValue.jsNumber(
         // if 0, return 0
         // else return number of bytes sent
-        if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+        if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
     );
 }
 
-pub fn publishBinary(
-    this: *ServerWebSocket,
+fn publishBinary(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(4);
 
     if (args.len < 1) {
@@ -538,33 +562,33 @@ pub fn publishBinary(
         return globalThis.throw("publishBinary requires at least 1 argument", .{});
     }
 
-    const app = this.#handler.app orelse {
+    const app = _.#handler.app orelse {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
     };
-    const flags = this.#handler.flags;
+    const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
     const topic_value = args.ptr[0];
     const message_value = args.ptr[1];
     const compress_value = args.ptr[2];
 
-    if (topic_value.isEmptyOrUndefinedOrNull() or !topic_value.isString()) {
+    if (topic_value.isEmptyOrUndefinedOrNull() || !topic_value.isString()) {
         log("publishBinary() topic invalid", .{});
         return globalThis.throw("publishBinary requires a topic string", .{});
     }
 
-    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
     }
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("publishBinary expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
     if (message_value.isEmptyOrUndefinedOrNull()) {
         return globalThis.throw("publishBinary requires a non-empty message", .{});
@@ -575,29 +599,29 @@ pub fn publishBinary(
     };
     const buffer = array_buffer.slice();
 
-    const result = if (!publish_to_self and !this.isClosed())
-        this.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
+    const result = if (!publish_to_self && !_.isClosed())
+        _.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
     else
         uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .binary, compress);
 
     return JSValue.jsNumber(
         // if 0, return 0
         // else return number of bytes sent
-        if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+        if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
     );
 }
 
-pub fn publishBinaryWithoutTypeChecks(
-    this: *ServerWebSocket,
+fn publishBinaryWithoutTypeChecks(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     topic_str: *jsc.JSString,
     array: *jsc.JSUint8Array,
-) bun.JSError!jsc.JSValue {
-    const app = this.#handler.app orelse {
+): jsc.JSValue ! bun.JSError {
+    const app = _.#handler.app orelse {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
     };
-    const flags = this.#handler.flags;
+    const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
@@ -614,29 +638,29 @@ pub fn publishBinaryWithoutTypeChecks(
         return jsc.JSValue.jsNumber(0);
     }
 
-    const result = if (!publish_to_self and !this.isClosed())
-        this.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
+    const result = if (!publish_to_self && !_.isClosed())
+        _.websocket().publish(topic_slice.slice(), buffer, .binary, compress)
     else
         uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .binary, compress);
 
     return JSValue.jsNumber(
         // if 0, return 0
         // else return number of bytes sent
-        if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+        if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
     );
 }
 
-pub fn publishTextWithoutTypeChecks(
-    this: *ServerWebSocket,
+fn publishTextWithoutTypeChecks(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     topic_str: *jsc.JSString,
     str: *jsc.JSString,
-) bun.JSError!jsc.JSValue {
-    const app = this.#handler.app orelse {
+): jsc.JSValue ! bun.JSError {
+    const app = _.#handler.app orelse {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
     };
-    const flags = this.#handler.flags;
+    const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
@@ -656,24 +680,24 @@ pub fn publishTextWithoutTypeChecks(
         return jsc.JSValue.jsNumber(0);
     }
 
-    const result = if (!publish_to_self and !this.isClosed())
-        this.websocket().publish(topic_slice.slice(), buffer, .text, compress)
+    const result = if (!publish_to_self && !_.isClosed())
+        _.websocket().publish(topic_slice.slice(), buffer, .text, compress)
     else
         uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .text, compress);
 
     return JSValue.jsNumber(
         // if 0, return 0
         // else return number of bytes sent
-        if (result) @as(i32, @intCast(@as(u31, @truncate(buffer.len)))) else @as(i32, 0),
+        if (result) @as(i32, @as(i32, @as(u31, @truncate(buffer.len)))) else @as(i32, 0),
     );
 }
 
-pub fn cork(
-    this: *ServerWebSocket,
+fn cork(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
     this_value: jsc.JSValue,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(1);
 
     if (args.len < 1) {
@@ -681,20 +705,20 @@ pub fn cork(
     }
 
     const callback = args.ptr[0];
-    if (callback.isEmptyOrUndefinedOrNull() or !callback.isCallable()) {
+    if (callback.isEmptyOrUndefinedOrNull() || !callback.isCallable()) {
         return globalThis.throwInvalidArgumentTypeValue("cork", "callback", callback);
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .js_undefined;
     }
 
     let corker = Corker{
-        .globalObject = globalThis,
-        .this_value = this_value,
-        .callback = callback,
+        globalObject: globalThis,
+        this_value: this_value,
+        callback: callback,
     };
-    this.websocket().cork(&corker, Corker.run);
+    _.websocket().cork(&corker, Corker.run);
 
     const result = corker.result;
 
@@ -705,11 +729,11 @@ pub fn cork(
     return result;
 }
 
-pub fn send(
-    this: *ServerWebSocket,
+fn send(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(2);
 
     if (args.len < 1) {
@@ -717,7 +741,7 @@ pub fn send(
         return globalThis.throw("send requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         log("send() closed", .{});
         return JSValue.jsNumber(0);
     }
@@ -725,18 +749,18 @@ pub fn send(
     const message_value = args.ptr[0];
     const compress_value = args.ptr[1];
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("send expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
     if (message_value.isEmptyOrUndefinedOrNull()) {
         return globalThis.throw("send requires a non-empty message", .{});
     }
 
-    if (message_value.asArrayBuffer(globalThis)) |buffer| {
-        switch (this.websocket().send(buffer.slice(), .binary, compress, true)) {
+    if (buffer := message_value.asArrayBuffer(globalThis)) {
+        switch (_.websocket().send(buffer.slice(), .binary, compress, true)) {
             .backpressure => {
                 log("send() backpressure ({d} bytes)", .{buffer.len});
                 return JSValue.jsNumber(-1);
@@ -753,7 +777,7 @@ pub fn send(
     }
 
     {
-        let js_string = try message_value.toJSString(globalThis);
+        let js_string = message_value.toJSString(globalThis)?;
         const view = js_string.view(globalThis);
         const slice = view.toSlice(bun.default_allocator);
         defer slice.deinit();
@@ -761,7 +785,7 @@ pub fn send(
         defer js_string.ensureStillAlive();
 
         const buffer = slice.slice();
-        switch (this.websocket().send(buffer, .text, compress, true)) {
+        switch (_.websocket().send(buffer, .text, compress, true)) {
             .backpressure => {
                 log("send() backpressure ({d} bytes string)", .{buffer.len});
                 return JSValue.jsNumber(-1);
@@ -778,11 +802,11 @@ pub fn send(
     }
 }
 
-pub fn sendText(
-    this: *ServerWebSocket,
+fn sendText(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(2);
 
     if (args.len < 1) {
@@ -790,7 +814,7 @@ pub fn sendText(
         return globalThis.throw("sendText requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         log("sendText() closed", .{});
         return JSValue.jsNumber(0);
     }
@@ -798,17 +822,16 @@ pub fn sendText(
     const message_value = args.ptr[0];
     const compress_value = args.ptr[1];
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("sendText expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
-    if (message_value.isEmptyOrUndefinedOrNull() or !message_value.isString()) {
+    if (message_value.isEmptyOrUndefinedOrNull() || !message_value.isString()) {
         return globalThis.throw("sendText expects a string", .{});
     }
-
-    let js_string = try message_value.toJSString(globalThis);
+    let js_string = message_value.toJSString(globalThis)?;
     const view = js_string.view(globalThis);
     const slice = view.toSlice(bun.default_allocator);
     defer slice.deinit();
@@ -816,7 +839,7 @@ pub fn sendText(
     defer js_string.ensureStillAlive();
 
     const buffer = slice.slice();
-    switch (this.websocket().send(buffer, .text, compress, true)) {
+    switch (_.websocket().send(buffer, .text, compress, true)) {
         .backpressure => {
             log("sendText() backpressure ({d} bytes string)", .{buffer.len});
             return JSValue.jsNumber(-1);
@@ -832,13 +855,13 @@ pub fn sendText(
     }
 }
 
-pub fn sendTextWithoutTypeChecks(
-    this: *ServerWebSocket,
+fn sendTextWithoutTypeChecks(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     message_str: *jsc.JSString,
     compress: bool,
-) JSValue {
-    if (this.isClosed()) {
+): JSValue {
+    if (_.isClosed()) {
         log("sendText() closed", .{});
         return JSValue.jsNumber(0);
     }
@@ -847,7 +870,7 @@ pub fn sendTextWithoutTypeChecks(
     defer string_slice.deinit();
 
     const buffer = string_slice.slice();
-    switch (this.websocket().send(buffer, .text, compress, true)) {
+    switch (_.websocket().send(buffer, .text, compress, true)) {
         .backpressure => {
             log("sendText() backpressure ({d} bytes string)", .{buffer.len});
             return JSValue.jsNumber(-1);
@@ -863,11 +886,11 @@ pub fn sendTextWithoutTypeChecks(
     }
 }
 
-pub fn sendBinary(
-    this: *ServerWebSocket,
+fn sendBinary(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(2);
 
     if (args.len < 1) {
@@ -875,7 +898,7 @@ pub fn sendBinary(
         return globalThis.throw("sendBinary requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         log("sendBinary() closed", .{});
         return JSValue.jsNumber(0);
     }
@@ -883,17 +906,17 @@ pub fn sendBinary(
     const message_value = args.ptr[0];
     const compress_value = args.ptr[1];
 
-    if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
+    if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("sendBinary expects compress to be a boolean", .{});
     }
 
-    const compress = args.len > 1 and compress_value.toBoolean();
+    const compress = args.len > 1 && compress_value.toBoolean();
 
     const buffer = message_value.asArrayBuffer(globalThis) orelse {
         return globalThis.throw("sendBinary requires an ArrayBufferView", .{});
     };
 
-    switch (this.websocket().send(buffer.slice(), .binary, compress, true)) {
+    switch (_.websocket().send(buffer.slice(), .binary, compress, true)) {
         .backpressure => {
             log("sendBinary() backpressure ({d} bytes)", .{buffer.len});
             return JSValue.jsNumber(-1);
@@ -909,20 +932,20 @@ pub fn sendBinary(
     }
 }
 
-pub fn sendBinaryWithoutTypeChecks(
-    this: *ServerWebSocket,
+fn sendBinaryWithoutTypeChecks(
+    *_,
     _: *jsc.JSGlobalObject,
     array_buffer: *jsc.JSUint8Array,
     compress: bool,
-) JSValue {
-    if (this.isClosed()) {
+): JSValue {
+    if (_.isClosed()) {
         log("sendBinary() closed", .{});
         return JSValue.jsNumber(0);
     }
 
     const buffer = array_buffer.slice();
 
-    switch (this.websocket().send(buffer, .binary, compress, true)) {
+    switch (_.websocket().send(buffer, .binary, compress, true)) {
         .backpressure => {
             log("sendBinary() backpressure ({d} bytes)", .{buffer.len});
             return JSValue.jsNumber(-1);
@@ -938,42 +961,42 @@ pub fn sendBinaryWithoutTypeChecks(
     }
 }
 
-pub fn ping(
-    this: *ServerWebSocket,
+fn ping(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     return sendPing(this, globalThis, callframe, "ping", .ping);
 }
 
-pub fn pong(
-    this: *ServerWebSocket,
+fn pong(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     return sendPing(this, globalThis, callframe, "pong", .pong);
 }
 
 inline fn sendPing(
-    this: *ServerWebSocket,
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
     comptime name: string,
     comptime opcode: uws.Opcode,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(2);
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return JSValue.jsNumber(0);
     }
 
     if (args.len > 0) {
         let value = args.ptr[0];
         if (!value.isEmptyOrUndefinedOrNull()) {
-            if (value.asArrayBuffer(globalThis)) |data| {
+            if (data := value.asArrayBuffer(globalThis)) {
                 const buffer = data.slice();
 
-                switch (this.websocket().send(buffer, opcode, false, true)) {
+                switch (_.websocket().send(buffer, opcode, false, true)) {
                     .backpressure => {
                         log("{s}() backpressure ({d} bytes)", .{ name, buffer.len });
                         return JSValue.jsNumber(-1);
@@ -992,7 +1015,7 @@ inline fn sendPing(
                 defer string_value.deinit();
                 const buffer = string_value.slice();
 
-                switch (this.websocket().send(buffer, opcode, false, true)) {
+                switch (_.websocket().send(buffer, opcode, false, true)) {
                     .backpressure => {
                         log("{s}() backpressure ({d} bytes)", .{ name, buffer.len });
                         return JSValue.jsNumber(-1);
@@ -1012,7 +1035,7 @@ inline fn sendPing(
         }
     }
 
-    switch (this.websocket().send(&.{}, opcode, false, true)) {
+    switch (_.websocket().send([], opcode, false, true)) {
         .backpressure => {
             log("{s}() backpressure ({d} bytes)", .{ name, 0 });
             return JSValue.jsNumber(-1);
@@ -1028,57 +1051,57 @@ inline fn sendPing(
     }
 }
 
-pub fn getData(
-    this: *ServerWebSocket,
+fn getData(
+    *_,
     _: *jsc.JSGlobalObject,
-) JSValue {
+): JSValue {
     log("getData()", .{});
-    if (this.#this_value.tryGet()) |this_value| {
-        return js.dataGetCached(this_value) orelse .js_undefined;
+    if (this_value := _.#this_value.tryGet()) {
+        return js.dataGetCached(this_value) ?? .js_undefined;
     }
     return .js_undefined;
 }
 
-pub fn setData(
-    this: *ServerWebSocket,
+fn setData(
+    *_,
     globalObject: *jsc.JSGlobalObject,
     value: jsc.JSValue,
-) void {
+) {
     log("setData()", .{});
-    if (this.#this_value.tryGet()) |this_value| {
+    if (this_value := _.#this_value.tryGet()) {
         js.dataSetCached(this_value, globalObject, value);
     }
 }
 
-pub fn getReadyState(
-    this: *ServerWebSocket,
+fn getReadyState(
+    *_,
     _: *jsc.JSGlobalObject,
-) JSValue {
+): JSValue {
     log("getReadyState()", .{});
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return JSValue.jsNumber(3);
     }
 
     return JSValue.jsNumber(1);
 }
 
-pub fn close(
-    this: *ServerWebSocket,
+fn close(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
     // Since close() can lead to the close() callback being called, let's always ensure the `this` value is up to date.
     _: jsc.JSValue,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(2);
     log("close()", .{});
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .js_undefined;
     }
 
     const code = brk: {
-        if (args.ptr[0] == .zero or args.ptr[0].isUndefined()) {
+        if (args.ptr[0] == .zero || args.ptr[0].isUndefined()) {
             // default exception code
             break :brk 1000;
         }
@@ -1091,42 +1114,42 @@ pub fn close(
     };
 
     let message_value: ZigString.Slice = brk: {
-        if (args.ptr[1] == .zero or args.ptr[1].isUndefined()) break :brk ZigString.Slice.empty;
+        if (args.ptr[1] == .zero || args.ptr[1].isUndefined()) break :brk ZigString.Slice.empty;
         break :brk try args.ptr[1].toSliceOrNull(globalThis);
     };
 
     defer message_value.deinit();
 
-    this.#flags.closed = true;
-    this.websocket().end(code, message_value.slice());
+    _.#flags.closed = true;
+    _.websocket().end(code, message_value.slice());
     return .js_undefined;
 }
 
-pub fn terminate(
-    this: *ServerWebSocket,
+fn terminate(
+    *_,
     _: *jsc.JSGlobalObject,
     _: *jsc.CallFrame,
     _: jsc.JSValue,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     log("terminate()", .{});
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .js_undefined;
     }
 
-    this.#flags.closed = true;
-    this.websocket().close();
+    _.#flags.closed = true;
+    _.websocket().close();
 
     return .js_undefined;
 }
 
-pub fn getBinaryType(
-    this: *ServerWebSocket,
+fn getBinaryType(
+    *_,
     globalThis: *jsc.JSGlobalObject,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     log("getBinaryType()", .{});
 
-    return switch (this.#flags.binary_type) {
+    return switch (_.#flags.binary_type) {
         .Uint8Array => globalThis.commonStrings().uint8array(),
         .Buffer => globalThis.commonStrings().nodebuffer(),
         .ArrayBuffer => globalThis.commonStrings().arraybuffer(),
@@ -1134,15 +1157,15 @@ pub fn getBinaryType(
     };
 }
 
-pub fn setBinaryType(this: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
+fn setBinaryType(*_, globalThis: *jsc.JSGlobalObject, value: jsc.JSValue) ! bun.JSError {
     log("setBinaryType()", .{});
 
-    const btype = try jsc.ArrayBuffer.BinaryType.fromJSValue(globalThis, value);
-    switch (btype orelse
+    const btype = jsc.ArrayBuffer.BinaryType.fromJSValue(globalThis, value)?;
+    switch (btype ??
         // some other value which we don't support
         .Float64Array) {
         .ArrayBuffer, .Buffer, .Uint8Array => |val| {
-            this.#flags.binary_type = val;
+            _.#flags.binary_type = val;
             return;
         },
         else => {
@@ -1151,30 +1174,30 @@ pub fn setBinaryType(this: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, va
     }
 }
 
-pub fn getBufferedAmount(
-    this: *ServerWebSocket,
+fn getBufferedAmount(
+    *_,
     _: *jsc.JSGlobalObject,
     _: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     log("getBufferedAmount()", .{});
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return JSValue.jsNumber(0);
     }
 
-    return JSValue.jsNumber(this.websocket().getBufferedAmount());
+    return JSValue.jsNumber(_.websocket().getBufferedAmount());
 }
-pub fn subscribe(
-    this: *ServerWebSocket,
+fn subscribe(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(1);
     if (args.len < 1) {
         return globalThis.throw("subscribe requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .true;
     }
 
@@ -1182,22 +1205,22 @@ pub fn subscribe(
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
     defer topic.deinit();
 
     if (topic.len == 0) {
         return globalThis.throw("subscribe requires a non-empty topic name", .{});
     }
 
-    return JSValue.jsBoolean(this.websocket().subscribe(topic.slice()));
+    return JSValue.jsBoolean(_.websocket().subscribe(topic.slice()));
 }
-pub fn unsubscribe(this: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+fn unsubscribe(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
     const args = callframe.arguments_old(1);
     if (args.len < 1) {
         return globalThis.throw("unsubscribe requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .true;
     }
 
@@ -1205,26 +1228,26 @@ pub fn unsubscribe(this: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, call
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
     defer topic.deinit();
 
     if (topic.len == 0) {
         return globalThis.throw("unsubscribe requires a non-empty topic name", .{});
     }
 
-    return JSValue.jsBoolean(this.websocket().unsubscribe(topic.slice()));
+    return JSValue.jsBoolean(_.websocket().unsubscribe(topic.slice()));
 }
-pub fn isSubscribed(
-    this: *ServerWebSocket,
+fn isSubscribed(
+    *_,
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
-) bun.JSError!JSValue {
+): JSValue ! bun.JSError {
     const args = callframe.arguments_old(1);
     if (args.len < 1) {
         return globalThis.throw("isSubscribed requires at least 1 argument", .{});
     }
 
-    if (this.isClosed()) {
+    if (_.isClosed()) {
         return .false;
     }
 
@@ -1232,40 +1255,40 @@ pub fn isSubscribed(
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
     defer topic.deinit();
 
     if (topic.len == 0) {
         return globalThis.throw("isSubscribed requires a non-empty topic name", .{});
     }
 
-    return JSValue.jsBoolean(this.websocket().isSubscribed(topic.slice()));
+    return JSValue.jsBoolean(_.websocket().isSubscribed(topic.slice()));
 }
 
-pub fn getSubscriptions(
-    this: *ServerWebSocket,
+fn getSubscriptions(
+    *_,
     globalThis: *jsc.JSGlobalObject,
-) bun.JSError!JSValue {
-    if (this.isClosed()) {
-        return try JSValue.createEmptyArray(globalThis, 0);
+): JSValue ! bun.JSError {
+    if (_.isClosed()) {
+        return JSValue.createEmptyArray(globalThis, 0)?;
     }
 
     // Get the JSValue directly from C++
-    return this.websocket().getTopicsAsJSArray(globalThis);
+    return _.websocket().getTopicsAsJSArray(globalThis);
 }
 
-pub fn getRemoteAddress(
-    this: *ServerWebSocket,
+fn getRemoteAddress(
+    *_,
     globalThis: *jsc.JSGlobalObject,
-) bun.JSError!JSValue {
-    if (this.isClosed()) {
+): JSValue ! bun.JSError {
+    if (_.isClosed()) {
         return .js_undefined;
     }
 
-    let buf: [64]u8 = [_]u8{0} ** 64;
+    let buf: [64]u8 = std.mem.zeroes([64]u8);
     let text_buf: [512]u8 = undefined;
 
-    const address_bytes = this.websocket().getRemoteAddress(&buf);
+    const address_bytes = _.websocket().getRemoteAddress(&buf);
     const address: std.net.Address = switch (address_bytes.len) {
         4 => std.net.Address.initIp4(address_bytes[0..4].*, 0),
         16 => std.net.Address.initIp6(address_bytes[0..16].*, 0, 0, 0),
@@ -1276,24 +1299,4 @@ pub fn getRemoteAddress(
     return bun.String.createUTF8ForJS(globalThis, text);
 }
 
-const Corker = struct {
-    args: []const JSValue = &.{},
-    globalObject: *jsc.JSGlobalObject,
-    this_value: jsc.JSValue = .zero,
-    callback: jsc.JSValue,
-    result: JSValue = .zero,
-
-    pub fn run(this: *Corker) void {
-        const this_value = this.this_value;
-        this.result = this.callback.call(
-            this.globalObject,
-            if (this_value == .zero) .js_undefined else this_value,
-            this.args,
-        ) catch |err| this.globalObject.takeException(err);
-    }
-};
-
-
-
-
-};
+}

@@ -48,7 +48,7 @@ pub const State = union(enum) {
 pub struct Opts {
     access_time_only: bool = false,
     no_create: bool = false,
-    date: []const u8? = null,
+    date: ([]const u8)? = null,
     no_dereference: bool = false,
     modification_time_only: bool = false,
     reference: []const u8? = null,

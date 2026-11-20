@@ -36,7 +36,7 @@ pub const ListenerType = union(enum) {
     none: void,
 };
 
-export class Listener {
+@root struct Listener {
     handlers: Handlers,
     listener: ListenerType = .none,
 
@@ -55,50 +55,50 @@ export class Listener {
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
 
-
-    pub fn getData(*_, _: *jsc.JSGlobalObject): JSValue {
+    fn getData(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        * = globalObject;
         log("getData()", .{});
-        return this.strong_data.get() orelse .js_undefined;
+        return _.strong_data.get() orelse .js_undefined;
     }
 
-    pub fn setData(*_, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
+    fn setData(*_, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
         log("setData()", .{});
-        this.strong_data.set(globalObject, value);
+        _.strong_data.set(globalObject, value);
     }
 
-    pub fn reload(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    fn reload(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
         const args = callframe.arguments_old(1);
 
-        if (args.len < 1 or (this.listener == .none and this.handlers.active_connections == 0)) {
+        if (args.len < 1 || (_.listener == .none && _.handlers.active_connections == 0)) {
             return globalObject.throw("Expected 1 argument", .{});
         }
 
         const opts = args.ptr[0];
-        if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+        if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
             return globalObject.throwValue(globalObject.toInvalidArguments("Expected options object", .{}));
         }
 
-        const socket_obj = try opts.get(globalObject, "socket") orelse {
+        const socket_obj = (opts.get(globalObject, "socket")?) orelse {
             return globalObject.throw("Expected \"socket\" object", .{});
         };
 
-        const handlers = try Handlers.fromJS(globalObject, socket_obj, this.handlers.mode == .server);
-        const active_connections = this.handlers.active_connections;
-        this.handlers.deinit();
-        this.handlers = handlers;
-        this.handlers.active_connections = active_connections;
+        const handlers = Handlers.fromJS(globalObject, socket_obj, _.handlers.mode == .server)?;
+        const active_connections = _.handlers.active_connections;
+        _.handlers.deinit();
+        _.handlers = handlers;
+        _.handlers.active_connections = active_connections;
 
         return .js_undefined;
     }
 
-    pub fn addServerName(*_, global: *jsc.JSGlobalObject, hostname: JSValue, tls: JSValue): bun.JSError!JSValue {
-        if (!this.ssl) {
+    fn addServerName(*_, global: *jsc.JSGlobalObject, hostname: JSValue, tls: JSValue): JSValue ! bun.JSError {
+        if (!_.ssl) {
             return global.throwInvalidArguments("addServerName requires SSL support", .{});
         }
         if (!hostname.isString()) {
             return global.throwInvalidArguments("hostname pattern expects a string", .{});
         }
-        const host_str = try hostname.toSlice(global, bun.default_allocator);
+        const host_str = hostname.toSlice(global, bun.default_allocator)?;
         defer host_str.deinit();
         const server_name = bun.handleOom(bun.default_allocator.dupeZ(u8, host_str.slice()));
         defer bun.default_allocator.free(server_name);
@@ -106,13 +106,13 @@ export class Listener {
             return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
         }
 
-        if (this.listener != .uws) return .js_undefined;
-        const ls = this.listener.uws;
+        if (_.listener != .uws) return .js_undefined;
+        const ls = _.listener.uws;
 
         let sni_ctx: (*BoringSSL.SSL_CTX)? = null;
         if (sc := SecureContext.fromJS(tls)) {
             sni_ctx = sc.borrow();
-        } else if (ssl_config := try SSLConfig.fromJS(jsc.VirtualMachine.get(), global, tls)) {
+        } else if (ssl_config := SSLConfig.fromJS(jsc.VirtualMachine.get(), global, tls)?) {
             let cfg = ssl_config;
             defer cfg.deinit();
             let create_err: uws.create_bun_socket_error_t = .none;
@@ -137,122 +137,128 @@ export class Listener {
         return .js_undefined;
     }
 
-    pub fn dispose(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        this.doStop(true);
+    fn dispose(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        * = globalObject;
+        * = callframe;
+        _.doStop(true);
         return .js_undefined;
     }
 
-    pub fn stop(*_, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    fn stop(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        * = globalObject;
         const arguments = callframe.arguments_old(1);
         log("close", .{});
 
-        this.doStop(if (arguments.len > 0 and arguments.ptr[0].isBoolean()) arguments.ptr[0].toBoolean() else false);
+        _.doStop(if (arguments.len > 0 && arguments.ptr[0].isBoolean()) arguments.ptr[0].toBoolean() else false);
 
         return .js_undefined;
     }
 
     fn doStop(*_, force_close: bool) {
-        if (this.listener == .none) return;
-        const listener = this.listener;
+        if (_.listener == .none) return;
+        const listener = _.listener;
 
-        if (listener == .uws) this.unlinkUnixSocketPath();
+        if (listener == .uws) _.unlinkUnixSocketPath();
 
         defer switch (listener) {
             .uws => |socket| socket.close(),
             .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
             .none => {},
         };
-        this.listener = .none;
+        _.listener = .none;
 
-        if (this.handlers.active_connections == 0) {
-            this.poll_ref.unref(this.handlers.vm);
-            this.strong_self.clearWithoutDeallocation();
-            this.strong_data.clearWithoutDeallocation();
+        if (_.handlers.active_connections == 0) {
+            _.poll_ref.unref(_.handlers.vm);
+            _.strong_self.clearWithoutDeallocation();
+            _.strong_data.clearWithoutDeallocation();
         } else if (force_close) {
-            this.group.closeAll();
+            _.group.closeAll();
         }
     }
 
-    pub fn finalize(*_) {
+    fn finalize(*_) {
         log("finalize", .{});
-        const listener = this.listener;
-        this.listener = .none;
+        const listener = _.listener;
+        _.listener = .none;
         switch (listener) {
             .uws => |socket| {
-                this.unlinkUnixSocketPath();
+                _.unlinkUnixSocketPath();
                 socket.close();
             },
             .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
             .none => {},
         }
-        this.release();
+        _.release();
     }
 
-    fn unlinkUnixSocketPath(*_: *const Listener) {
-        if (this.connection != .unix) return;
-        const path = this.connection.unix;
-        if (path.len == 0 or path[0] == 0) return;
+    fn unlinkUnixSocketPath() {
+        if (_.connection != .unix) return;
+        const path = _.connection.unix;
+        if (path.len == 0 || path[0] == 0) return;
         const buf = bun.path_buffer_pool.get();
         defer bun.path_buffer_pool.put(buf);
         * = bun.sys.unlink(bun.path.z(path, buf));
     }
 
-    pub fn release(*_) {
+    fn release(*_) {
         log("deinit", .{});
-        this.strong_self.deinit();
-        this.strong_data.deinit();
-        const vm = this.handlers.vm;
-        this.poll_ref.unref(vm);
-        bun.assert(this.listener == .none);
+        _.strong_self.deinit();
+        _.strong_data.deinit();
+        const vm = _.handlers.vm;
+        _.poll_ref.unref(vm);
+        bun.assert(_.listener == .none);
 
-        if (this.handlers.active_connections > 0) {
-            this.group.closeAll();
+        if (_.handlers.active_connections > 0) {
+            _.group.closeAll();
         }
-        bun.asan.unregisterRootRegion(&this.group, @sizeOf(uws.SocketGroup));
-        this.group.deinit();
-        if (ctx := this.secure_ctx) BoringSSL.SSL_CTX_free(ctx);
+        bun.asan.unregisterRootRegion(&_.group, @sizeOf(uws.SocketGroup));
+        _.group.deinit();
+        if (ctx := _.secure_ctx) BoringSSL.SSL_CTX_free(ctx);
 
-        this.connection.deinit();
-        if (protos := this.protos) {
-            this.protos = null;
+        _.connection.deinit();
+        if (protos := _.protos) {
+            _.protos = null;
             bun.default_allocator.free(protos);
         }
-        this.handlers.deinit();
-        vm.allocator.destroy(this);
+        _.handlers.deinit();
+        vm.allocator.destroy(_);
     }
 
-    pub fn deinit(*_) {
-        this.release();
+    fn deinit(*_) {
+        _.release();
     }
 
-    pub fn getConnectionsCount(*_, _: *jsc.JSGlobalObject): JSValue {
-        return JSValue.jsNumber(this.handlers.active_connections);
+    fn getConnectionsCount(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        * = globalObject;
+        return JSValue.jsNumber(_.handlers.active_connections);
     }
 
-    pub fn getUnix(*_, globalObject: *jsc.JSGlobalObject): JSValue {
-        if (this.connection != .unix) {
+    fn getUnix(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        if (_.connection != .unix) {
             return .js_undefined;
         }
 
-        return ZigString.init(this.connection.unix).withEncoding().toJS(globalObject);
+        return ZigString.init(_.connection.unix).withEncoding().toJS(globalObject);
     }
 
-    pub fn getHostname(*_, globalObject: *jsc.JSGlobalObject): JSValue {
-        if (this.connection != .host) {
+    fn getHostname(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        if (_.connection != .host) {
             return .js_undefined;
         }
-        return ZigString.init(this.connection.host.host).withEncoding().toJS(globalObject);
+        return ZigString.init(_.connection.host.host).withEncoding().toJS(globalObject);
     }
 
-    pub fn getPort(*_, _: *jsc.JSGlobalObject): JSValue {
-        if (this.connection != .host) {
+    fn getPort(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        * = globalObject;
+        if (_.connection != .host) {
             return .js_undefined;
         }
-        return JSValue.jsNumber(this.connection.host.port);
+        return JSValue.jsNumber(_.connection.host.port);
     }
 
-    pub fn getFD(*_, _: *jsc.JSGlobalObject): JSValue {
-        switch (this.listener) {
+    fn getFD(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        * = globalObject;
+        switch (_.listener) {
             .uws => |uws_listener| {
                 return uws_listener.socket(false).fd().toJSWithoutMakingLibUVOwned();
             },
@@ -260,24 +266,25 @@ export class Listener {
         }
     }
 
-    pub fn ref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    fn ref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
         const this_value = callframe.this();
-        if (this.listener == .none) return .js_undefined;
-        this.poll_ref.ref(globalObject.bunVM());
-        this.strong_self.set(globalObject, this_value);
+        if (_.listener == .none) return .js_undefined;
+        _.poll_ref.ref(globalObject.bunVM());
+        _.strong_self.set(globalObject, this_value);
         return .js_undefined;
     }
 
-    pub fn unref(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        this.poll_ref.unref(globalObject.bunVM());
-        if (this.handlers.active_connections == 0) {
-            this.strong_self.clearWithoutDeallocation();
+    fn unref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        * = callframe;
+        _.poll_ref.unref(globalObject.bunVM());
+        if (_.handlers.active_connections == 0) {
+            _.strong_self.clearWithoutDeallocation();
         }
         return .js_undefined;
     }
 
-    pub fn getsockname(*_, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
-        if (this.listener != .uws) {
+    fn getsockname(*_, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): JSValue ! bun.JSError {
+        if (_.listener != .uws) {
             return .js_undefined;
         }
 
@@ -285,7 +292,7 @@ export class Listener {
         if (!out.isObject()) {
             return globalThis.throwInvalidArguments("Expected object", .{});
         }
-        const socket = this.listener.uws;
+        const socket = _.listener.uws;
 
         let buf: [64]u8 = undefined;
         let text_buf: [512]u8 = undefined;

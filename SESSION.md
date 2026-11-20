@@ -3042,3 +3042,5 @@ Options:
 - [2026-11-20 06:39:17 UTC] 验收并提交 4 处高影响外部根因修复：`crypto/EVP.cp` (0.905x), `node/types.cp` (1.031x), `webcore/Body.cp` (1.011x), `webcore/ReadableStream.cp` (1.007x)，4/4 全 PASS。
 
 - [2026-11-20 06:45:45 UTC] 验收并提交第 5 轮 `zig:check` JSC+Test+Core 簇 12 模块修复（12/12 全 PASS，一举根治 `throwOutOfMemoryValue()`、`ConsoleObject` 27 处 `writer.print` 与 `JSValue` 双重 `*const fn`）。
+
+- **[2026-11-20 17:50] Wave 5 Batch 2+3 验收提交（21 模块全绿）**：完成 Crypto/WebCore/Shell 13 模块（`sha`/`EVP`/`Crypto`/`boringssl`/`Image`/`codecs`/`streams`/`multipart`/`BunObject`/`filesystem_router`/`dns`/`ls`/`touch`）与 `ZigGeneratedClasses` 8 个 `@root struct` 核心类（`ServerWebSocket`/`TimeoutObject`/`Listener`/`SocketAddress`/`ImmediateObject`/`TextDecoder`/`TextEncoderStreamEncoder`/`HTMLBundle`，消除 87 处生成类错误）的独立验收（21/21 PASS，ratio 0.728x~1.069x）并原子提交；已派发新子智能体收尾剩余 5 外部根因 + 4 Node 单错模块。

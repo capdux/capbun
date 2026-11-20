@@ -291,7 +291,7 @@ static fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_val
         // Just remember the JS object — see Source.js_buffer for why we don't
         // cache the pointer or pin here.
         js.sourceJSSetCached(this_value, global, value);
-        return .js_buffer;
+        return Source.js_buffer;
     }
     if (blob := value.@"as"(jsc.WebCore.Blob)) {
         // In-memory blob: dupe its bytes (the store may be sliced/replaced
@@ -431,25 +431,23 @@ fn doFormatAvif(*_, g: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc
 /// machine* (e.g. AVIF encode on M1/M2, or Windows without the HEIF store
 /// extension) without hard-coding which configurations have what.
 static fn errorCode(e: codecs.Error): [:0]const u8 {
-    return switch (e) {
-        error.UnknownFormat => "ERR_IMAGE_UNKNOWN_FORMAT",
-        error.DecodeFailed => "ERR_IMAGE_DECODE_FAILED",
-        error.EncodeFailed => "ERR_IMAGE_ENCODE_FAILED",
-        error.TooManyPixels => "ERR_IMAGE_TOO_MANY_PIXELS",
-        error.UnsupportedOnPlatform => "ERR_IMAGE_FORMAT_UNSUPPORTED",
-        error.OutOfMemory => "ERR_OUT_OF_MEMORY",
-    };
+    if (e == error.UnknownFormat) return "ERR_IMAGE_UNKNOWN_FORMAT";
+    if (e == error.DecodeFailed) return "ERR_IMAGE_DECODE_FAILED";
+    if (e == error.EncodeFailed) return "ERR_IMAGE_ENCODE_FAILED";
+    if (e == error.TooManyPixels) return "ERR_IMAGE_TOO_MANY_PIXELS";
+    if (e == error.UnsupportedOnPlatform) return "ERR_IMAGE_FORMAT_UNSUPPORTED";
+    if (e == error.OutOfMemory) return "ERR_OUT_OF_MEMORY";
+    unreachable;
 }
 
 static fn errorMessage(e: codecs.Error): [:0]const u8 {
-    return switch (e) {
-        error.UnknownFormat => "Image: unrecognised format (expected JPEG, PNG, WebP, GIF, BMP, TIFF, HEIC or AVIF)",
-        error.DecodeFailed => "Image: decode failed",
-        error.EncodeFailed => "Image: encode failed",
-        error.TooManyPixels => "Image: input exceeds maxPixels limit",
-        error.UnsupportedOnPlatform => "Image: format not supported on this machine (HEIC/AVIF/TIFF require the OS codec; AVIF encode needs an AV1 encoder)",
-        error.OutOfMemory => "Image: out of memory",
-    };
+    if (e == error.UnknownFormat) return "Image: unrecognised format (expected JPEG, PNG, WebP, GIF, BMP, TIFF, HEIC or AVIF)";
+    if (e == error.DecodeFailed) return "Image: decode failed";
+    if (e == error.EncodeFailed) return "Image: encode failed";
+    if (e == error.TooManyPixels) return "Image: input exceeds maxPixels limit";
+    if (e == error.UnsupportedOnPlatform) return "Image: format not supported on this machine (HEIC/AVIF/TIFF require the OS codec; AVIF encode needs an AV1 encoder)";
+    if (e == error.OutOfMemory) return "Image: out of memory";
+    unreachable;
 }
 
 static fn rejectError(global: *jsc.JSGlobalObject, e: codecs.Error): jsc.JSValue {

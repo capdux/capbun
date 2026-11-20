@@ -87,7 +87,6 @@ const strings = @import("bun").strings;
 const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
 const VirtualMachine = @import("bun:jsc").VirtualMachine;
 const WebCore = @import("bun:jsc").WebCore;
-const IntegerBitSet = @import("bun:bit_set").IntegerBitSet;
 const StreamBuffer = @import("bun:io").StreamBuffer;
 const KeepAlive = @import("bun:Async").KeepAlive;
 const bufPrint = @import("std:fmt").bufPrint;
@@ -800,6 +799,7 @@ pub fn writeBytes(self: *MultiPartUpload, chunk: []const u8, is_last: bool) OOME
 const OnWritableFn = *const fn (*MultiPartUpload, *anyopaque, u64) void;
 const sort = std.sort;
 const bun = @import("bun");
+const IntegerBitSet = bun.bit_set.IntegerBitSet;
 const executeSimpleS3Request = S3SimpleRequest.executeSimpleS3Request;
 const ResumableSinkBackpressure = WebCore.ResumableSinkBackpressure;
 const JSTerminatedError = bun.JSTerminated;

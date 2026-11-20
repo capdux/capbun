@@ -65,7 +65,7 @@ pub struct Opts {
     ignore_backups: bool = false,
     use_ctime: bool = false,
     list_by_columns: bool = false,
-    color: []const u8? = null,
+    color: ([]const u8)? = null,
     list_directories: bool = false,
     dired_mode: bool = false,
     unsorted: bool = false,

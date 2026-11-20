@@ -19,11 +19,13 @@ const VirtualMachine = jsc.VirtualMachine;
 const CommonAbortReason = jsc.CommonAbortReason;
 
 const webcore = bun.webcore;
+const WebCore = jsc.WebCore;
 const AutoFlusher = webcore.AutoFlusher;
 const FileSink = webcore.FileSink;
 const Response = webcore.Response;
 const Sink = webcore.Sink;
 const Blob = webcore.Blob;
+const AnyBlob = Blob.Any;
 
 pub const ArrayBufferSinkOptions = struct {
     chunk_size: Blob.SizeType,
@@ -118,7 +120,7 @@ pub const ResultTag = enum {
 
 export class ResultIntoArray {
     value: JSValue = JSValue.zero;
-    len: Blob.SizeType = sys.maxInt(Blob.SizeType);
+    len: Blob.SizeType = std.math.maxInt(Blob.SizeType);
 }
 
 pub const PendingState = enum {
@@ -129,9 +131,9 @@ pub const PendingState = enum {
 
 pub const WritableHandlerFn = *const fn (*!?, ResultWritable) void;
 
-export class WritablePendingHandler {
-    ctx: *!? = null;
-    handler: WritableHandlerFn? = null;
+pub struct WritablePendingHandler {
+    ctx: *!? = null,
+    handler: WritableHandlerFn? = null,
 }
 
 pub const WritablePromiseInfo = struct {
@@ -139,60 +141,60 @@ pub const WritablePromiseInfo = struct {
     global: *JSGlobalObject,
 };
 
-export union(enum) WritablePendingFuture {
+pub const WritablePendingFuture = union(enum) {
     none: void,
     promise: WritablePromiseInfo,
     handler: WritablePendingHandler,
 
-    pub fn deinit(*_) {
+    pub fn deinit(this: *@This()) void {
         if (this.* == .promise) {
             this.promise.strong.deinit();
-            this.* = .{ .none = {} };
+            this.* = .none;
         }
     }
-}
+};
 
-export class WritablePending {
-    future: WritablePendingFuture = .{ .none = {} };
-    result: ResultWritable = .{ .done = {} };
-    consumed: Blob.SizeType = 0;
-    state: PendingState = .none;
+pub struct WritablePending {
+    future: WritablePendingFuture = .none,
+    result: ResultWritable = .done,
+    consumed: Blob.SizeType = 0,
+    state: PendingState = .none,
 
     pub const Future = WritablePendingFuture;
     pub const Handler = WritablePendingHandler;
 
-    pub fn deinit(*_) {
-        this.future.deinit();
+    fn deinit(*_) {
+        _.future.deinit();
     }
 
-    pub fn promise(*_: *WritablePending, globalThis: *JSGlobalObject): *JSPromise {
-        this.state = .pending;
-        switch (this.future) {
+    fn promise(*_, globalThis: *JSGlobalObject): *JSPromise {
+        _.state = .pending;
+        switch (_.future) {
             .promise => |p| return p.strong.get(),
             else => {
-                this.future = .{
+                _.future = .{
                     .promise = .{
                         .strong = JSPromise.Strong.init(globalThis),
                         .global = globalThis,
                     },
                 };
-                return this.future.promise.strong.get();
+                return _.future.promise.strong.get();
             },
         }
     }
 
-    pub fn run(*_: *WritablePending) {
-        if (this.state != .pending) return;
-        this.state = .used;
-        switch (this.future) {
+    fn run(*_) {
+        if (_.state != .pending) return;
+        _.state = .used;
+        switch (_.future) {
             .promise => {
-                let p = this.future.promise;
-                this.future = .none;
-                ResultWritable.fulfillPromise(this.result, p.strong.swap(), p.global);
+                let p = _.future.promise;
+                _.future = .none;
+                ResultWritable.fulfillPromise(_.result, p.strong.swap(), p.global);
             },
             .handler => |h| {
                 if (handler_fn := h.handler) {
-                    handler_fn(h.ctx, this.result);
+                    handler_fn(h.ctx, _.result);
                 }
             },
             .none => {},
@@ -252,9 +254,9 @@ export union(enum) ResultWritable {
 
 pub const ResultHandlerFn = *const fn (*!?, Result) void;
 
-export class ResultPendingHandler {
-    ctx: *!? = null;
-    handler: ResultHandlerFn? = null;
+pub struct ResultPendingHandler {
+    ctx: *!? = null,
+    handler: ResultHandlerFn? = null,
 }
 
 pub const ResultPromiseInfo = struct {
@@ -262,42 +264,42 @@ pub const ResultPromiseInfo = struct {
     globalThis: *JSGlobalObject,
 };
 
-export union(enum) ResultPendingFuture {
+pub const ResultPendingFuture = union(enum) {
     promise: ResultPromiseInfo,
     handler: ResultPendingHandler,
-}
+};
 
-export class ResultPending {
-    future: ResultPendingFuture = undefined;
-    result: Result = .{ .done = {} };
-    state: PendingState = .none;
+pub struct ResultPending {
+    future: ResultPendingFuture = undefined,
+    result: Result = .done,
+    state: PendingState = .none,
 
     pub const Future = ResultPendingFuture;
     pub const Handler = ResultPendingHandler;
     pub const State = PendingState;
 
-    pub fn promise(*_: *ResultPending, globalObject: *JSGlobalObject): *JSPromise {
+    fn promise(*_, globalObject: *JSGlobalObject): *JSPromise {
         let prom = JSPromise.create(globalObject);
-        this.future = .{
+        _.future = .{
             .promise = .{
                 .promise = prom,
                 .globalThis = globalObject,
             },
         };
-        this.state = .pending;
+        _.state = .pending;
         return prom;
     }
 
-    pub fn run(*_: *ResultPending) {
-        if (this.state != .pending) return;
-        this.state = .used;
-        switch (this.future) {
+    fn run(*_) {
+        if (_.state != .pending) return;
+        _.state = .used;
+        switch (_.future) {
             .promise => |p| {
-                Result.fulfillPromise(&this.result, p.promise, p.globalThis);
+                Result.fulfillPromise(&_.result, p.promise, p.globalThis);
             },
             .handler => |h| {
                 if (handler_fn := h.handler) {
-                    handler_fn(h.ctx, this.result);
+                    handler_fn(h.ctx, _.result);
                 }
             },
         }
@@ -659,5 +661,549 @@ export class NetworkSink {
             return task.buffered.memoryCost();
         }
         return 0;
+    }
+}
+
+pub type OnFirstWriteFn = *const fn (*!?) void;
+
+pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
+    return struct {
+        const UWSResponse = if (http3) uws.H3.Response else uws.NewApp(ssl).Response;
+        res: (*UWSResponse)?,
+        buffer: bun.ByteList,
+        pooled_buffer: (*WebCore.ByteListPool.Node)? = null,
+        offset: Blob.SizeType = 0,
+        is_listening_for_abort: bool = false,
+        wrote: Blob.SizeType = 0,
+        allocator: std.mem.Allocator,
+        done: bool = false,
+        signal: Signal = .{},
+        pending_flush: (*jsc.JSPromise)? = null,
+        wrote_at_start_of_flush: Blob.SizeType = 0,
+        globalThis: *JSGlobalObject = undefined,
+        highWaterMark: Blob.SizeType = 2048,
+        requested_end: bool = false,
+        has_backpressure: bool = false,
+        end_len: usize = 0,
+        aborted: bool = false,
+        onFirstWrite: OnFirstWriteFn? = null,
+        ctx: *!? = null,
+        auto_flusher: WebCore.AutoFlusher = .{},
+
+        const log = Output.scoped(.HTTPServerWritable, .visible);
+
+        pub fn connect(this: *@This(), signal: Signal) void {
+            this.signal = signal;
+        }
+
+        pub fn memoryCost(this: *@This()) usize {
+            return this.buffer.cap;
+        }
+
+        fn handleWrote(this: *@This(), amount1: usize) void {
+            defer log("handleWrote: {d} offset: {d}, {d}", .{ amount1, this.offset, this.buffer.len });
+            const amount = @as(Blob.SizeType, @truncate(amount1));
+            this.offset += amount;
+            this.wrote += amount;
+            if (this.offset >= this.buffer.len) {
+                this.offset = 0;
+                this.buffer.len = 0;
+            }
+        }
+
+        fn handleFirstWriteIfNecessary(this: *@This()) void {
+            if (this.onFirstWrite) |onFirstWrite| {
+                const ctx = this.ctx;
+                this.ctx = null;
+                this.onFirstWrite = null;
+                onFirstWrite(ctx);
+            }
+        }
+
+        fn hasBackpressure(this: *const @This()) bool {
+            return this.has_backpressure;
+        }
+
+        fn hasBackpressureAndIsTryEnd(this: *const @This()) bool {
+            return this.has_backpressure && this.end_len > 0;
+        }
+
+        fn sendWithoutAutoFlusher(this: *@This(), buf: []const u8) bool {
+            bun.assert(!this.done);
+            defer log("send: {d} bytes (backpressure: {})", .{ buf.len, this.has_backpressure });
+            const res = this.res orelse { return false; };
+            if (this.requested_end && !res.state().isHttpWriteCalled()) {
+                this.handleFirstWriteIfNecessary();
+                const success = res.tryEnd(buf, this.end_len, false);
+                if (success) {
+                    this.has_backpressure = false;
+                    this.handleWrote(this.end_len);
+                } else if (this.res != null) {
+                    this.has_backpressure = true;
+                    res.onWritable(*@This(), onWritable, this);
+                }
+                return success;
+            }
+            this.end_len = 0;
+            res.clearOnWritable();
+            this.handleFirstWriteIfNecessary();
+            if (this.requested_end) {
+                res.end(buf, false);
+                this.has_backpressure = false;
+            } else {
+                this.has_backpressure = res.write(buf) == .backpressure;
+            }
+            this.handleWrote(buf.len);
+            return true;
+        }
+
+        fn send(this: *@This(), buf: []const u8) bool {
+            this.unregisterAutoFlusher();
+            return this.sendWithoutAutoFlusher(buf);
+        }
+
+        fn readableSlice(this: *@This()) []const u8 {
+            return this.buffer.ptr[this.offset..this.buffer.len];
+        }
+
+        pub fn onWritable(this: *@This(), write_offset: u64, _: *UWSResponse) bool {
+            log("onWritable ({d})", .{write_offset});
+            this.has_backpressure = false;
+            if (this.aborted) {
+                this.signal.close(null);
+                this.flushPromise() catch {};
+                this.finalize();
+                return false;
+            }
+            let total_written: u64 = 0;
+            const to_write = @min(@as(Blob.SizeType, @truncate(write_offset)), @as(Blob.SizeType, this.buffer.len - 1));
+            const chunk = this.readableSlice()[to_write..];
+            if (chunk.len == 0) {
+                if (this.done) {
+                    this.signal.close(null);
+                    this.flushPromise() catch {};
+                    this.finalize();
+                    return true;
+                }
+            } else {
+                if (!this.send(chunk)) { return false; }
+                total_written = chunk.len;
+                if (this.requested_end) {
+                    if (this.res) |res| { res.clearOnWritable(); }
+                    this.signal.close(null);
+                    this.flushPromise() catch {};
+                    this.finalize();
+                    return true;
+                }
+            }
+            this.flushPromise() catch {};
+            if (!this.done && !this.requested_end && !this.hasBackpressure()) {
+                if (total_written > 0 && this.readableSlice().len == 0) {
+                    this.signal.ready(@as(Blob.SizeType, @truncate(total_written)), null);
+                }
+            }
+            return true;
+        }
+
+        pub fn start(this: *@This(), stream_start: Start) bun.sys.Maybe(void) {
+            if (this.aborted || this.res == null || this.res.?.hasResponded()) {
+                this.markDone();
+                this.signal.close(null);
+                return .success;
+            }
+            this.wrote = 0;
+            this.wrote_at_start_of_flush = 0;
+            this.flushPromise() catch {};
+            if (this.buffer.cap == 0) {
+                bun.assert(this.pooled_buffer == null);
+                if (comptime FeatureFlags.http_buffer_pooling) {
+                    if (WebCore.ByteListPool.getIfExists()) |pooled_node| {
+                        this.pooled_buffer = pooled_node;
+                        this.buffer = this.pooled_buffer.?.data;
+                    }
+                }
+            }
+            this.buffer.len = 0;
+            switch (stream_start) {
+                .chunk_size => |chunk_size| {
+                    if (chunk_size > 0) { this.highWaterMark = chunk_size; }
+                },
+                else => {},
+            }
+            this.buffer.clearRetainingCapacity();
+            this.buffer.ensureTotalCapacityPrecise(this.allocator, this.highWaterMark) catch
+                return .{ .err = sys.Error.oom };
+            this.done = false;
+            this.signal.start();
+            log("start({d})", .{this.highWaterMark});
+            return .success;
+        }
+
+        fn flushFromJSNoWait(this: *@This()) bun.sys.Maybe(JSValue) {
+            log("flushFromJSNoWait", .{});
+            return .{ .result = JSValue.jsNumber(this.flushNoWait()) };
+        }
+
+        pub fn flushNoWait(this: *@This()) usize {
+            if (this.hasBackpressureAndIsTryEnd() || this.done) { return 0; }
+            const slice = this.readableSlice();
+            if (slice.len == 0) { return 0; }
+            if (this.send(slice)) { return slice.len; }
+            return 0;
+        }
+
+        pub fn flushFromJS(this: *@This(), globalThis: *JSGlobalObject, wait: bool) bun.sys.Maybe(JSValue) {
+            log("flushFromJS({})", .{wait});
+            this.unregisterAutoFlusher();
+            if (!wait) { return this.flushFromJSNoWait(); }
+            if (this.pending_flush) |prom| { return .{ .result = prom.toJS() }; }
+            if (this.buffer.len == 0 || this.done) {
+                return .{ .result = jsc.JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumberFromInt32(0)) };
+            }
+            if (!this.hasBackpressureAndIsTryEnd()) {
+                const slice = this.readableSlice();
+                assert(slice.len > 0);
+                if (this.send(slice)) {
+                    return .{ .result = jsc.JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(slice.len)) };
+                }
+            }
+            this.wrote_at_start_of_flush = this.wrote;
+            this.pending_flush = jsc.JSPromise.create(globalThis);
+            this.globalThis = globalThis;
+            let promise_value = this.pending_flush.?.toJS();
+            promise_value.protect();
+            return .{ .result = promise_value };
+        }
+
+        pub fn flush(this: *@This()) bun.sys.Maybe(void) {
+            log("flush()", .{});
+            this.unregisterAutoFlusher();
+            if (!this.hasBackpressure() || this.done) { return .success; }
+            if (this.res == null || this.res.?.hasResponded()) {
+                this.markDone();
+                this.signal.close(null);
+            }
+            return .success;
+        }
+
+        pub fn write(this: *@This(), data: Result) Result.Writable {
+            if (this.done || this.requested_end) { return .{ .owned = 0 }; }
+            const bytes = data.slice();
+            const len = @as(Blob.SizeType, @truncate(bytes.len));
+            log("write({d})", .{bytes.len});
+            if (this.buffer.len == 0 && len >= this.highWaterMark) {
+                if (this.send(bytes)) { return .{ .owned = len }; }
+                _ = this.buffer.write(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+            } else if (this.buffer.len + len >= this.highWaterMark) {
+                _ = this.buffer.write(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+                if (this.send(this.readableSlice())) { return .{ .owned = len }; }
+            } else {
+                _ = this.buffer.write(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+            }
+            this.registerAutoFlusher();
+            return .{ .owned = len };
+        }
+
+        pub const writeBytes = write;
+
+        pub fn writeLatin1(this: *@This(), data: Result) Result.Writable {
+            if (this.done || this.requested_end) { return .{ .owned = 0 }; }
+            if (this.res == null || this.res.?.hasResponded()) {
+                this.signal.close(null);
+                this.markDone();
+                return .{ .done = {} };
+            }
+            const bytes = data.slice();
+            const len = @as(Blob.SizeType, @truncate(bytes.len));
+            log("writeLatin1({d})", .{bytes.len});
+            if (this.buffer.len == 0 && len >= this.highWaterMark) {
+                let do_send = true;
+                if (strings.isAllASCII(bytes)) {
+                    if (this.send(bytes)) { return .{ .owned = len }; }
+                    do_send = false;
+                }
+                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+                if (do_send) {
+                    if (this.send(this.readableSlice())) { return .{ .owned = len }; }
+                }
+            } else if (this.buffer.len + len >= this.highWaterMark) {
+                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+                if (this.send(this.readableSlice())) { return .{ .owned = len }; }
+            } else {
+                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                    return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+                };
+            }
+            this.registerAutoFlusher();
+            return .{ .owned = len };
+        }
+
+        pub fn writeUTF16(this: *@This(), data: Result) Result.Writable {
+            if (this.done || this.requested_end) { return .{ .owned = 0 }; }
+            if (this.res == null || this.res.?.hasResponded()) {
+                this.signal.close(null);
+                this.markDone();
+                return .{ .done = {} };
+            }
+            const bytes = data.slice();
+            log("writeUTF16({d})", .{bytes.len});
+            const written = this.buffer.writeUTF16(this.allocator, @alignCast(std.mem.bytesAsSlice(u16, bytes))) catch {
+                return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
+            };
+            const readable = this.readableSlice();
+            if (readable.len >= this.highWaterMark || this.hasBackpressure()) {
+                if (this.send(readable)) {
+                    return .{ .owned = @as(Blob.SizeType, @intCast(written)) };
+                }
+            }
+            this.registerAutoFlusher();
+            return .{ .owned = @as(Blob.SizeType, @intCast(written)) };
+        }
+
+        pub fn markDone(this: *@This()) void {
+            this.done = true;
+            this.unregisterAutoFlusher();
+        }
+
+        pub fn end(this: *@This(), err: sys.Error?) bun.sys.Maybe(void) {
+            log("end({?f})", .{err});
+            if (this.requested_end) { return .success; }
+            if (this.done || this.res == null || this.res.?.hasResponded()) {
+                this.signal.close(err);
+                this.markDone();
+                this.finalize();
+                return .success;
+            }
+            this.requested_end = true;
+            const readable = this.readableSlice();
+            this.end_len = readable.len;
+            if (readable.len == 0) {
+                this.signal.close(err);
+                this.markDone();
+                this.finalize();
+                return .success;
+            }
+            return .success;
+        }
+
+        pub fn endFromJS(this: *@This(), globalThis: *JSGlobalObject) bun.sys.Maybe(JSValue) {
+            log("endFromJS()", .{});
+            if (this.requested_end) { return .{ .result = jsc.JSValue.jsNumber(0) }; }
+            if (this.done || this.res == null || this.res.?.hasResponded()) {
+                this.requested_end = true;
+                this.signal.close(null);
+                this.markDone();
+                this.finalize();
+                return .{ .result = jsc.JSValue.jsNumber(0) };
+            }
+            this.requested_end = true;
+            const readable = this.readableSlice();
+            this.end_len = readable.len;
+            if (readable.len > 0) {
+                if (!this.send(readable)) {
+                    this.pending_flush = jsc.JSPromise.create(globalThis);
+                    this.globalThis = globalThis;
+                    const value = this.pending_flush.?.toJS();
+                    value.protect();
+                    return .{ .result = value };
+                }
+            } else {
+                if (this.res) |res| { res.end("", false); }
+            }
+            this.markDone();
+            this.flushPromise() catch {};
+            this.signal.close(null);
+            this.finalize();
+            return .{ .result = jsc.JSValue.jsNumber(this.wrote) };
+        }
+
+        pub fn sink(this: *@This()) Sink {
+            return Sink.init(this);
+        }
+
+        pub fn abort(this: *@This()) void {
+            log("onAborted()", .{});
+            this.done = true;
+            this.res = null;
+            this.unregisterAutoFlusher();
+            this.aborted = true;
+            this.signal.close(null);
+            this.flushPromise() catch {};
+            this.finalize();
+        }
+
+        fn unregisterAutoFlusher(this: *@This()) void {
+            if (this.auto_flusher.registered)
+                AutoFlusher.unregisterDeferredMicrotaskWithTypeUnchecked(@This(), this, this.globalThis.bunVM());
+        }
+
+        fn registerAutoFlusher(this: *@This()) void {
+            const res = this.res orelse return;
+            res.resetTimeout();
+            if (!this.auto_flusher.registered)
+                AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), this, this.globalThis.bunVM());
+        }
+
+        pub fn onAutoFlush(this: *@This()) bool {
+            log("onAutoFlush()", .{});
+            if (this.done) {
+                this.auto_flusher.registered = false;
+                return false;
+            }
+            const readable = this.readableSlice();
+            if ((this.hasBackpressureAndIsTryEnd()) || readable.len == 0) {
+                this.auto_flusher.registered = false;
+                return false;
+            }
+            if (!this.sendWithoutAutoFlusher(readable)) {
+                this.auto_flusher.registered = true;
+                return true;
+            }
+            this.auto_flusher.registered = false;
+            return false;
+        }
+
+        pub fn destroy(this: *@This()) void {
+            log("destroy()", .{});
+            if (this.pending_flush) |prom| {
+                prom.toJS().unprotect();
+                this.pending_flush = null;
+            }
+            this.buffer.deinit(this.allocator);
+            this.unregisterAutoFlusher();
+            this.allocator.destroy(this);
+        }
+
+        pub fn finalize(this: *@This()) void {
+            log("finalize()", .{});
+            if (!this.done) {
+                this.unregisterAutoFlusher();
+                if (this.res) |res| { res.clearOnWritable(); }
+                _ = this.flushNoWait();
+                this.done = true;
+                if (this.res) |res| { res.endStream(false); }
+            }
+            if (comptime !FeatureFlags.http_buffer_pooling) {
+                assert(this.pooled_buffer == null);
+            }
+            if (this.pooled_buffer) |pooled| {
+                this.buffer.len = 0;
+                if (this.buffer.cap > 64 * 1024) {
+                    this.buffer.clearAndFree(bun.default_allocator);
+                }
+                pooled.data = this.buffer;
+                this.buffer = bun.ByteList.empty;
+                this.pooled_buffer = null;
+                pooled.release();
+            } else if (this.buffer.cap == 0) {
+            } else if (FeatureFlags.http_buffer_pooling && !WebCore.ByteListPool.full()) {
+                const buffer = this.buffer;
+                this.buffer = bun.ByteList.empty;
+                WebCore.ByteListPool.push(this.allocator, buffer);
+            } else {
+                this.buffer.len = 0;
+            }
+        }
+
+        pub fn flushPromise(this: *@This()) bun.JSTerminated!void {
+            if (this.pending_flush) |prom| {
+                log("flushPromise()", .{});
+                this.pending_flush = null;
+                const globalThis = this.globalThis;
+                prom.toJS().unprotect();
+                defer this.wrote_at_start_of_flush = this.wrote;
+                try prom.resolve(globalThis, jsc.JSValue.jsNumber(this.wrote -| this.wrote_at_start_of_flush));
+            }
+        }
+
+        pub const name = if (http3) "H3ResponseSink" else if (ssl) "HTTPSResponseSink" else "HTTPResponseSink";
+        pub const JSSink = Sink.JSSink(@This(), name);
+    };
+}
+
+pub const HTTPSResponseSink = HTTPServerWritable(true, false);
+pub const HTTPResponseSink = HTTPServerWritable(false, false);
+pub const H3ResponseSink = HTTPServerWritable(true, true);
+
+pub union(enum) BufferAction {
+    text: jsc.JSPromise.Strong,
+    arrayBuffer: jsc.JSPromise.Strong,
+    blob: jsc.JSPromise.Strong,
+    bytes: jsc.JSPromise.Strong,
+    json: jsc.JSPromise.Strong,
+
+    const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
+
+    fn fulfill(*_, global: *JSGlobalObject, blob: *AnyBlob): bun.JSTerminated!void {
+        return blob.wrap(.{ .normal = _.swap() }, global, _.*);
+    }
+
+    fn reject(*_, global: *JSGlobalObject, e: Result.StreamError): bun.JSTerminated!void {
+        return _.swap().reject(global, e.toJSWeak(global)[0]);
+    }
+
+    fn resolve(*_, global: *JSGlobalObject, result: JSValue): bun.JSTerminated!void {
+        return _.swap().resolve(global, result);
+    }
+
+    fn value(*_): JSValue {
+        return switch (_.*) {
+            inline else => |promise| promise.value(),
+        };
+    }
+
+    fn get(*_): *JSPromise {
+        return switch (_.*) {
+            inline else => |promise| promise.get(),
+        };
+    }
+
+    fn swap(*_): *JSPromise {
+        return switch (_.*) {
+            inline else => |*promise| promise.swap(),
+        };
+    }
+
+    fn deinit(*_) {
+        switch (_.*) {
+            inline else => |*promise| promise.deinit(),
+        }
+    }
+}
+
+pub union(enum) ReadResult {
+    pending: void,
+    err: sys.Error,
+    done: void,
+    read: []u8,
+
+    fn toStream(pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool): Result {
+        return _.toStreamWithIsDone(pending, buf, view, close_on_empty, false);
+    }
+
+    fn toStreamWithIsDone(pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool, is_done: bool): Result {
+        switch (_) {
+            .pending => return .{ .pending = pending },
+            .err => return .{ .err = .{ .Error = _.err } },
+            .done => return .done,
+            .read => |slice| {
+                const owned = slice.ptr != buf.ptr;
+                const done = is_done || (close_on_empty && slice.len == 0);
+                if (owned && done) return Result{ .owned_and_done = bun.ByteList.fromOwnedSlice(slice) };
+                if (owned) return Result{ .owned = bun.ByteList.fromOwnedSlice(slice) };
+                if (done) return Result{ .into_array_and_done = .{ .len = @as(Blob.SizeType, @truncate(slice.len)), .value = view } };
+                return Result{ .into_array = .{ .len = @as(Blob.SizeType, @truncate(slice.len)), .value = view } };
+            },
+        }
     }
 }

@@ -78,10 +78,9 @@ pub fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8) t
 pub fn init() @This() {
             _ = bun.BoringSSL.load();
             const md = @field(BoringSSL, MDName)();
-            var res = @This();
+            var res: @This() = .{ .ctx = undefined };
             _ = &res;
-            {
-            }
+            _ = BoringSSL.EVP_MD_CTX_init((&res.ctx));
             _ = bun.assert((BoringSSL.EVP_DigestInit((&res.ctx), md) == 1));
             return res;
     }

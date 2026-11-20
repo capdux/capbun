@@ -32,7 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -86,157 +85,153 @@ pub fn fromSequence(seq: [4]u8, length: u8) TextEncoderStreamEncoderPrepend {
     pub const replacement: TextEncoderStreamEncoderPrepend = .{ .bytes = .{ 239, 191, 189, 0 }, .len = 3 };
 };
 
-pub const TextEncoderStreamEncoder = struct {
-    pending_lead_surrogate: ?u16 = null,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.pending_lead_surrogate = null; return self_ptr; }
+pub const TextEncoderStreamEncoder = @This();
 
-pub fn init(self: *TextEncoderStreamEncoder, pending_lead_surrogate: ?u16) void {
-            self.pending_lead_surrogate = pending_lead_surrogate;
-    }
+pending_lead_surrogate: ?u16 = null,
 
 pub fn finalize(self: *TextEncoderStreamEncoder) void {
-            _ = destroy(self);
-    }
+        _ = destroy(self);
+}
 
-pub fn constructor(self: *TextEncoderStreamEncoder, _: *JSGlobalObject, _: *jsc.CallFrame) JSError!*TextEncoderStreamEncoder {
-        _ = self;
-            return TextEncoderStreamEncoder.new(.{});
-    }
+pub fn constructor(globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!*TextEncoderStreamEncoder {
+        _ = &globalObject;
+        _ = &callFrame;
+        return TextEncoderStreamEncoder.@"new"(.{});
+}
 
 pub fn encode(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
-            const arguments = callFrame.arguments_old(1).slice();
-            if ((arguments.len == 0)) {
-                return globalObject.throwNotEnoughArguments("TextEncoderStreamEncoder.encode", 1, arguments.len);
-            }
-            const str = try arguments[0].getZigString(globalObject);
-            if (str.is16Bit()) {
-                return self.encodeUTF16(globalObject, str.utf16SliceAligned());
-            }
-            return self.encodeLatin1(globalObject, str.slice());
-    }
+        const arguments = callFrame.arguments_old(1).slice();
+        if ((arguments.len == 0)) {
+            return globalObject.throwNotEnoughArguments("TextEncoderStreamEncoder.encode", 1, arguments.len);
+        }
+        const str = try arguments[0].getZigString(globalObject);
+        if (str.is16Bit()) {
+            return self.encodeUTF16(globalObject, str.utf16SliceAligned());
+        }
+        return self.encodeLatin1(globalObject, str.slice());
+}
 
 pub fn encodeWithoutTypeChecks(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: *jsc.JSString) JSValue {
-            const str = input.getZigString(globalObject);
-            if (str.is16Bit()) {
-                return self.encodeUTF16(globalObject, str.utf16SliceAligned());
-            }
-            return self.encodeLatin1(globalObject, str.slice());
-    }
+        const str = input.getZigString(globalObject);
+        if (str.is16Bit()) {
+            return self.encodeUTF16(globalObject, str.utf16SliceAligned());
+        }
+        return self.encodeLatin1(globalObject, str.slice());
+}
 
 pub fn encodeLatin1(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u8) JSValue {
-            _ = log("encodeLatin1: \"{s}\"", .{ input });
-            if ((input.len == 0)) {
-                return JSUint8Array.createEmpty(globalObject);
-            }
-            const prepend_replacement_len: usize = prepend_replacement: {
-            if ((self.pending_lead_surrogate != null)) {
-                self.pending_lead_surrogate = null;
-                break :prepend_replacement (if (comptime @typeInfo(@TypeOf(3)) == .@"enum") cp_cast_int(usize, @intFromEnum(3)) else cp_cast_int(usize, 3));
-            }
-            break :prepend_replacement (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0));
-};
-            var buffer = (blk_catch_0: { break :blk_catch_0 ((ManagedList(u8).initCapacity(default_allocator, (input.len + prepend_replacement_len))) catch |__ce_0| { _ = &__ce_0; return globalObject.throwOutOfMemoryValue(); }); });
-            _ = &buffer;
-            if ((prepend_replacement_len > 0)) {
-                _ = buffer.appendSliceAssumeCapacity((&.{ 239, 191, 189 }));
-            }
-            var remain = input;
-            _ = &remain;
-            while ((remain.len > 0)) {
-                const result = strings.copyLatin1IntoUTF8(buffer.unusedCapacitySlice(), remain);
-                buffer.items.len = (buffer.items.len + result.written);
-                remain = remain[result.read..];
-                if (((result.written == 0) and (result.read == 0))) {
-                    _ = (blk_catch_1: { break :blk_catch_1 ((buffer.ensureUnusedCapacity(2)) catch |__ce_1| { _ = &__ce_1; _ = buffer.deinit();
+        _ = log("encodeLatin1: \"{s}\"", .{ input });
+        if ((input.len == 0)) {
+            return JSUint8Array.createEmpty(globalObject);
+        }
+        var prepend_replacement_len: usize = 0;
+        _ = &prepend_replacement_len;
+        if ((self.pending_lead_surrogate != null)) {
+            self.pending_lead_surrogate = null;
+            prepend_replacement_len = 3;
+        }
+        var buffer = (blk_catch_0: { break :blk_catch_0 ((ManagedList(u8).initCapacity(default_allocator, (input.len + prepend_replacement_len))) catch |__ce_0| { _ = &__ce_0; return globalObject.throwOutOfMemoryValue(); }); });
+        _ = &buffer;
+        if ((prepend_replacement_len > 0)) {
+            _ = buffer.appendSliceAssumeCapacity((&.{ 239, 191, 189 }));
+        }
+        var remain = input;
+        _ = &remain;
+        while ((remain.len > 0)) {
+            const result = strings.copyLatin1IntoUTF8(buffer.unusedCapacitySlice(), remain);
+            buffer.items.len = (buffer.items.len + result.written);
+            remain = remain[result.read..];
+            if (((result.written == 0) and (result.read == 0))) {
+                _ = (blk_catch_1: { break :blk_catch_1 ((buffer.ensureUnusedCapacity(2)) catch |__ce_1| { _ = &__ce_1; _ = buffer.deinit();
+                return globalObject.throwOutOfMemoryValue(); }); });
+            } else {
+                if (((buffer.items.len == buffer.capacity) and (remain.len > 0))) {
+                    _ = (blk_catch_2: { break :blk_catch_2 ((buffer.ensureTotalCapacity(((buffer.items.len + remain.len) + 1))) catch |__ce_2| { _ = &__ce_2; _ = buffer.deinit();
                     return globalObject.throwOutOfMemoryValue(); }); });
-                } else {
-                    if (((buffer.items.len == buffer.capacity) and (remain.len > 0))) {
-                        _ = (blk_catch_2: { break :blk_catch_2 ((buffer.ensureTotalCapacity(((buffer.items.len + remain.len) + 1))) catch |__ce_2| { _ = &__ce_2; _ = buffer.deinit();
-                        return globalObject.throwOutOfMemoryValue(); }); });
-                    }
                 }
             }
-            if (Environment.isDebug) {
-                _ = debugAssert((buffer.items.len == (simdutf.length.utf8.from.latin1(input) + prepend_replacement_len)));
-            }
-            return JSUint8Array.fromBytes(globalObject, buffer.items);
-    }
+        }
+        if (Environment.isDebug) {
+            _ = debugAssert((buffer.items.len == (simdutf.length.utf8.from.latin1(input) + prepend_replacement_len)));
+        }
+        return JSUint8Array.fromBytes(globalObject, buffer.items);
+}
 
 pub fn encodeUTF16(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u16) JSValue {
-            _ = log("encodeUTF16: \"{f}\"", .{ fmt.utf16(input) });
-            if ((input.len == 0)) {
-                return JSUint8Array.createEmpty(globalObject);
-            }
-            var remain = input;
-            _ = &remain;
-            const prepend: ?TextEncoderStreamEncoderPrepend = prepend: {
-            if (self.pending_lead_surrogate) |lead| {
-                _ = &lead;
-                self.pending_lead_surrogate = null;
-                const maybe_trail = remain[0];
-                if (strings.u16IsTrail(maybe_trail)) {
-                    const converted = strings.utf16CodepointWithFFFD((&.{ lead, maybe_trail }));
-                    _ = debugAssert((!converted.fail));
-                    const sequence = strings.wtf8Sequence(converted.code_point);
-                    remain = remain[1..];
-                    if ((remain.len == 0)) {
-                        return JSUint8Array.fromBytesCopy(globalObject, sequence[0..converted.utf8Width()]);
-                    }
-                    break :prepend TextEncoderStreamEncoderPrepend.fromSequence(sequence, converted.utf8Width());
+        _ = log("encodeUTF16: \"{f}\"", .{ fmt.utf16(input) });
+        if ((input.len == 0)) {
+            return JSUint8Array.createEmpty(globalObject);
+        }
+        var remain = input;
+        _ = &remain;
+        var prepend: ?TextEncoderStreamEncoderPrepend = null;
+        _ = &prepend;
+        if (self.pending_lead_surrogate) |lead| {
+            _ = &lead;
+            self.pending_lead_surrogate = null;
+            const maybe_trail = remain[0];
+            if (strings.u16IsTrail(maybe_trail)) {
+                const converted = strings.utf16CodepointWithFFFD((&.{ lead, maybe_trail }));
+                _ = debugAssert((!converted.fail));
+                const sequence = strings.wtf8Sequence(converted.code_point);
+                remain = remain[1..];
+                if ((remain.len == 0)) {
+                    return JSUint8Array.fromBytesCopy(globalObject, sequence[0..converted.utf8Width()]);
                 }
-                break :prepend TextEncoderStreamEncoderPrepend.replacement;
+                prepend = TextEncoderStreamEncoderPrepend.fromSequence(sequence, converted.utf8Width());
+            } else {
+                prepend = TextEncoderStreamEncoderPrepend.replacement;
             }
-            break :prepend null;
-};
-            const length = simdutf.length.utf8.from.utf16.le(remain);
-            var prepend_len: usize = (if ((prepend != null)) prepend.?.len else 0);
-            _ = &prepend_len;
-            var buf = (blk_catch_3: { break :blk_catch_3 ((ManagedList(u8).initCapacity(default_allocator, (length + prepend_len))) catch |__ce_3| { _ = &__ce_3; return globalObject.throwOutOfMemoryValue(); }); });
-            _ = &buf;
-            if (prepend) |*pre| {
-                _ = &pre;
-                _ = buf.appendSliceAssumeCapacity((pre.*).bytes[0..(pre.*).len]);
-            }
-            const result = simdutf.convert.utf16.to.utf8.with_errors.le(remain, buf.unusedCapacitySlice());
-            switch (result.status) {
+        }
+        const length = simdutf.length.utf8.from.utf16.le(remain);
+        const prepend_len: usize = (if ((prepend != null)) prepend.?.len else 0);
+        var buf = (blk_catch_3: { break :blk_catch_3 ((ManagedList(u8).initCapacity(default_allocator, (length + prepend_len))) catch |__ce_3| { _ = &__ce_3; return globalObject.throwOutOfMemoryValue(); }); });
+        _ = &buf;
+        if (prepend) |*pre| {
+            _ = &pre;
+            _ = buf.appendSliceAssumeCapacity((pre.*).bytes[0..(pre.*).len]);
+        }
+        const result = simdutf.convert.utf16.to.utf8.with_errors.le(remain, buf.unusedCapacitySlice());
+        switch (result.status) {
 else => {
 const lead_surrogate = (blk_catch_4: { break :blk_catch_4 ((strings.toUTF8ListWithTypeBun((&buf), remain, true)) catch |__ce_4| { _ = &__ce_4; _ = buf.deinit();
-            return globalObject.throwOutOfMemoryValue(); }); });
-            if (lead_surrogate) |pending_lead| {
-                _ = &pending_lead;
-                self.pending_lead_surrogate = pending_lead;
-                if ((buf.items.len == 0)) {
-                    return JSUint8Array.createEmpty(globalObject);
-                }
+        return globalObject.throwOutOfMemoryValue(); }); });
+        if (lead_surrogate) |pending_lead| {
+            _ = &pending_lead;
+            self.pending_lead_surrogate = pending_lead;
+            if ((buf.items.len == 0)) {
+                return JSUint8Array.createEmpty(globalObject);
             }
-            return JSUint8Array.fromBytes(globalObject, buf.items);
+        }
+        return JSUint8Array.fromBytes(globalObject, buf.items);
 },
 .success => {
 buf.items.len = (buf.items.len + result.count);
-            return JSUint8Array.fromBytes(globalObject, buf.items);
+        return JSUint8Array.fromBytes(globalObject, buf.items);
 },
 }
-    }
+}
 
-pub fn flush(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
-            return self.flushBody(globalObject);
-    }
+pub fn flush(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
+        _ = &callFrame;
+        return self.flushBody(globalObject);
+}
 
 pub fn flushWithoutTypeChecks(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject) JSValue {
-            return self.flushBody(globalObject);
-    }
+        return self.flushBody(globalObject);
+}
 
 pub fn flushBody(self: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject) JSValue {
-            return (if ((self.pending_lead_surrogate == null)) JSUint8Array.createEmpty(globalObject) else JSUint8Array.fromBytesCopy(globalObject, (&.{ 239, 191, 189 })));
-    }
-    pub const js = jsc.Codegen.JSTextEncoderStreamEncoder;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const fromJSDirect = js.fromJSDirect;
-    pub const new = TrivialNew(TextEncoderStreamEncoder);
-};
-
+        if ((self.pending_lead_surrogate == null)) {
+            return JSUint8Array.createEmpty(globalObject);
+        }
+        return JSUint8Array.fromBytesCopy(globalObject, (&.{ 239, 191, 189 }));
+}
+pub const js = jsc.Codegen.JSTextEncoderStreamEncoder;
+pub const toJS = js.toJS;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
+pub const @"new" = TrivialNew(TextEncoderStreamEncoder);
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSUint8Array = jsc.JSUint8Array;
 const JSValue = jsc.JSValue;

@@ -34,20 +34,20 @@ fn randomData(
     }
 }
 
-export class Crypto {
+@root struct Crypto {
     pub const js = jsc.Codegen.JSCrypto;
     pub const toJS = js.toJS;
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
 
-    garbage: i32 = 0;
+    garbage: i32 = 0,
 
-    pub fn timingSafeEqual(*_: *Crypto, global: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    fn timingSafeEqual(*_, global: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return jsc.Node.crypto.timingSafeEqual(global, callframe);
     }
 
-    pub fn timingSafeEqualWithoutTypeChecks(
-        *_: *Crypto,
+    fn timingSafeEqualWithoutTypeChecks(
+        *_,
         globalThis: *JSGlobalObject,
         array_a: *jsc.JSUint8Array,
         array_b: *jsc.JSUint8Array,
@@ -63,8 +63,8 @@ export class Crypto {
         return jsc.jsBoolean(BoringSSL.CRYPTO_memcmp(a.ptr, b.ptr, len) == 0);
     }
 
-    pub fn getRandomValues(
-        *_: *Crypto,
+    fn getRandomValues(
+        *_,
         globalThis: *JSGlobalObject,
         callframe: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -83,8 +83,8 @@ export class Crypto {
         return arguments[0];
     }
 
-    pub fn getRandomValuesWithoutTypeChecks(
-        *_: *Crypto,
+    fn getRandomValuesWithoutTypeChecks(
+        *_,
         globalThis: *JSGlobalObject,
         array: *jsc.JSUint8Array,
     ): JSValue {
@@ -93,8 +93,8 @@ export class Crypto {
         return @as(JSValue, @enumFromInt(@as(i64, @bitCast(@intFromPtr(array)))));
     }
 
-    pub fn randomUUID(
-        *_: *Crypto,
+    fn randomUUID(
+        *_,
         globalThis: *JSGlobalObject,
         _: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -106,8 +106,8 @@ export class Crypto {
         return str.transferToJS(globalThis);
     }
 
-    pub fn randomUUIDWithoutTypeChecks(
-        *_: *Crypto,
+    fn randomUUIDWithoutTypeChecks(
+        *_,
         globalThis: *JSGlobalObject,
     ): JSValue {
         const [str, bytes] = BunString.createUninitialized(.latin1, 36);
@@ -119,7 +119,7 @@ export class Crypto {
         return str.toJS(globalThis);
     }
 
-    pub fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame): JSError!*Crypto {
+    static fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame): JSError!*Crypto {
         return jsc.Error.ILLEGAL_CONSTRUCTOR.throw(globalThis, "Crypto is not constructable", .{});
     }
 }

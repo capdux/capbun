@@ -48,7 +48,9 @@ fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8): type
             bun.BoringSSL.load();
 
             const md = @field(BoringSSL, MDName)();
-            let res = @This(){};
+            let res: @This() = .{
+                .ctx = undefined,
+            };
 
             BoringSSL.EVP_MD_CTX_init(&res.ctx);
 

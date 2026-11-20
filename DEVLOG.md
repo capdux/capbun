@@ -1377,3 +1377,5 @@
 
 ### 2026-11-20 06:45:45 UTC - zig:check 第 5 轮 JSC+Test+Core 修复经验
 - `throwOutOfMemoryValue()` 根治裸错误集丢弃；`writer.print(..., .{})` 消除 23 处 `std/Io/Writer.zig` 报错；回调签名去掉多余 `*const` 消除 `*const *const fn`。
+
+- **[2026-11-20] Wave 5 `@root struct` 批量升级经验**：将 `ServerWebSocket`/`TimeoutObject`/`Listener`/`SocketAddress`/`ImmediateObject`/`TextDecoder`/`TextEncoderStreamEncoder`/`HTMLBundle` 及 `Crypto` 从旧式 `export class`/`pub const X = struct` 升级为 `@root struct X`（辅助类型提顶层、静态构造与工厂函数标 `static fn`、实例方法区分 `*_` 与只读省略接收者），集中打通 `codegen/ZigGeneratedClasses.zig` 87 处绑定导出。

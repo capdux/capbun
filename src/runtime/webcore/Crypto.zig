@@ -68,90 +68,82 @@ const time = @import("std").time;
 const UUID = @import("../../jsc/uuid").UUID;
 const UUID5 = @import("../../jsc/uuid").UUID5;
 const UUID7 = @import("../../jsc/uuid").UUID7;
-pub const Crypto = struct {
-    garbage: i32 = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.garbage = 0; return self_ptr; }
+pub const Crypto = @This();
 
-pub fn init(self: *Crypto, garbage: i32) void {
-            self.garbage = garbage;
-    }
+garbage: i32 = 0,
 
 pub fn timingSafeEqual(self: *Crypto, global: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
-        _ = self;
-            return jsc.Node.crypto.timingSafeEqual(global, callframe);
-    }
+    _ = self;
+        return jsc.Node.crypto.timingSafeEqual(global, callframe);
+}
 
 pub fn timingSafeEqualWithoutTypeChecks(self: *Crypto, globalThis: *JSGlobalObject, array_a: *jsc.JSUint8Array, array_b: *jsc.JSUint8Array) JSValue {
-        _ = self;
-            const a = array_a.slice();
-            const b = array_b.slice();
-            const len = a.len;
-            if ((b.len != len)) {
-                return globalThis.ERR(.CRYPTO_TIMING_SAFE_EQUAL_LENGTH, "Input buffers must have the same byte length", .{}).throw();
-            }
-            return jsc.jsBoolean((BoringSSL.CRYPTO_memcmp(a.ptr, b.ptr, len) == 0));
-    }
+    _ = self;
+        const a = array_a.slice();
+        const b = array_b.slice();
+        const len = a.len;
+        if ((b.len != len)) {
+            return globalThis.ERR(.CRYPTO_TIMING_SAFE_EQUAL_LENGTH, "Input buffers must have the same byte length", .{}).throw();
+        }
+        return jsc.jsBoolean((BoringSSL.CRYPTO_memcmp(a.ptr, b.ptr, len) == 0));
+}
 
 pub fn getRandomValues(self: *Crypto, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
-        _ = self;
-            const arguments = callframe.arguments();
-            if ((arguments.len == 0)) {
-                return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
-            }
-            var array_buffer = ((arguments[0].asArrayBuffer(globalThis)) orelse (({
+    _ = self;
+        const arguments = callframe.arguments();
+        if ((arguments.len == 0)) {
             return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
-})));
-            _ = &array_buffer;
-            const slice = array_buffer.byteSlice();
-            _ = randomData(globalThis, slice.ptr, slice.len);
-            return arguments[0];
-    }
+        }
+        var array_buffer = ((arguments[0].asArrayBuffer(globalThis)) orelse {
+        return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
+});
+        _ = &array_buffer;
+        const slice = array_buffer.byteSlice();
+        _ = randomData(globalThis, slice.ptr, slice.len);
+        return arguments[0];
+}
 
 pub fn getRandomValuesWithoutTypeChecks(self: *Crypto, globalThis: *JSGlobalObject, array: *jsc.JSUint8Array) JSValue {
-        _ = self;
-            const slice = array.slice();
-            _ = randomData(globalThis, slice.ptr, slice.len);
-            return @as(JSValue, @enumFromInt(@as(i64, @bitCast(@intFromPtr(array)))));
-    }
+    _ = self;
+        const slice = array.slice();
+        _ = randomData(globalThis, slice.ptr, slice.len);
+        return @as(JSValue, @enumFromInt(@as(i64, @bitCast(@intFromPtr(array)))));
+}
 
 pub fn randomUUID(self: *Crypto, globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
-        _ = self;
-            const _tmp_v0 = BunString.createUninitialized(.latin1, 36);
-            const str = cp_unpack_elem(_tmp_v0, 0);
-            _ = &str;
-            const bytes = cp_unpack_elem(_tmp_v0, 1);
-            _ = &bytes;
-            const uuid = globalThis.bunVM().rareData().nextUUID();
-            _ = uuid.print(bytes[0..36]);
-            return str.transferToJS(globalThis);
-    }
+    _ = self;
+        const _tmp_v0 = BunString.createUninitialized(.latin1, 36);
+        const str = cp_unpack_elem(_tmp_v0, 0);
+        _ = &str;
+        const bytes = cp_unpack_elem(_tmp_v0, 1);
+        _ = &bytes;
+        const uuid = globalThis.bunVM().rareData().nextUUID();
+        _ = uuid.print(bytes[0..36]);
+        return str.transferToJS(globalThis);
+}
 
 pub fn randomUUIDWithoutTypeChecks(self: *Crypto, globalThis: *JSGlobalObject) JSValue {
-        _ = self;
-            const _tmp_v1 = BunString.createUninitialized(.latin1, 36);
-            const str = cp_unpack_elem(_tmp_v1, 0);
-            _ = &str;
-            const bytes = cp_unpack_elem(_tmp_v1, 1);
-            _ = &bytes;
-            defer {
-            _ = str.deref();
-            }
-            const uuid = globalThis.bunVM().rare_data.?.nextUUID();
-            _ = uuid.print(bytes[0..36]);
-            return str.toJS(globalThis);
-    }
+    _ = self;
+        const _tmp_v1 = BunString.createUninitialized(.latin1, 36);
+        const str = cp_unpack_elem(_tmp_v1, 0);
+        _ = &str;
+        const bytes = cp_unpack_elem(_tmp_v1, 1);
+        _ = &bytes;
+        defer {
+        _ = str.deref();
+        }
+        const uuid = globalThis.bunVM().rare_data.?.nextUUID();
+        _ = uuid.print(bytes[0..36]);
+        return str.toJS(globalThis);
+}
 
-pub fn constructor(self: *Crypto, globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!*Crypto {
-        _ = self;
-            return jsc.Error.ILLEGAL_CONSTRUCTOR.throw(globalThis, "Crypto is not constructable", .{});
-    }
-    pub const js = jsc.Codegen.JSCrypto;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const fromJSDirect = js.fromJSDirect;
-};
-
+pub fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!*Crypto {
+        return jsc.Error.ILLEGAL_CONSTRUCTOR.throw(globalThis, "Crypto is not constructable", .{});
+}
+pub const js = jsc.Codegen.JSCrypto;
+pub const toJS = js.toJS;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
@@ -182,9 +174,9 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             if ((!arguments[0].isUndefined())) {
                 if (arguments[0].isString()) {
                     encoding_value = arguments[0];
-                    break :brk try ((jsc.Node.Encoding.fromJS(encoding_value, globalThis)) orelse (({
+                    break :brk try ((jsc.Node.Encoding.fromJS(encoding_value, globalThis)) orelse {
                     return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
-})));
+});
                 }
             }
         }
@@ -226,9 +218,9 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         const encoding: jsc.Node.Encoding = brk: {
         if (((arguments.len > 2) and (!arguments[2].isUndefined()))) {
             if (arguments[2].isString()) {
-                break :brk try ((jsc.Node.Encoding.fromJS(arguments[2], globalThis)) orelse (({
+                break :brk try ((jsc.Node.Encoding.fromJS(arguments[2], globalThis)) orelse {
                 return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
-})));
+});
             }
         }
         break :brk jsc.Node.Encoding.hex;

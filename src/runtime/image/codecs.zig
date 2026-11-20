@@ -139,7 +139,11 @@ pub fn sniff(bytes: []const u8) ?Format {
     }
 
 pub fn fromExtension(path: []const u8) ?Format {
-            const dot = ((std.mem.lastIndexOfScalar(u8, path, 46)) orelse { return null; });
+            const dot_opt = std.mem.lastIndexOfScalar(u8, path, 46);
+            if ((dot_opt == null)) {
+                return null;
+            }
+            const dot = dot_opt.?;
             var buf: [5]u8 = undefined;
             _ = &buf;
             const ext = std.ascii.lowerString((&buf), path[(dot + 1)..][0..@min(((path.len - dot) - 1), buf.len)]);
@@ -270,7 +274,11 @@ pub inline fn useSystem() bool {
 }
 
 pub fn decode(bytes: []const u8, max_pixels: u64, hint: DecodeHint) Err!Decoded {
-        const fmt = ((Format.sniff(bytes)) orelse { return .{ .ok = error.UnknownFormat }; });
+        const fmt_opt = Format.sniff(bytes);
+        if ((fmt_opt == null)) {
+            return error.UnknownFormat;
+        }
+        const fmt = fmt_opt.?;
         return (switch (fmt) {
 .jpeg => jpeg.decode(bytes, max_pixels, hint),
 .png => png.decode(bytes, max_pixels),
@@ -307,7 +315,11 @@ pub inline fn guard(w: u32, h: u32, max_pixels: u64) Err!void {
 }
 
 pub fn probe(bytes: []const u8, max_pixels: u64) Err!ProbeResult {
-        const fmt = ((Format.sniff(bytes)) orelse { return .{ .ok = error.UnknownFormat }; });
+        const fmt_opt = Format.sniff(bytes);
+        if ((fmt_opt == null)) {
+            return error.UnknownFormat;
+        }
+        const fmt = fmt_opt.?;
         var w: u32 = 0;
         _ = &w;
         var h: u32 = 0;
@@ -321,7 +333,11 @@ if ((bytes.len < 24)) {
         h = std.mem.readInt(u32, bytes[20..24], .big);
 },
 .jpeg => {
-const handle = ((jpeg.tj3Init(1)) orelse { return .{ .ok = error.OutOfMemory }; });
+const handle_opt = jpeg.tj3Init(1);
+        if ((handle_opt == null)) {
+            return error.OutOfMemory;
+        }
+        const handle = handle_opt.?;
         defer {
         _ = jpeg.tj3Destroy(handle);
         }

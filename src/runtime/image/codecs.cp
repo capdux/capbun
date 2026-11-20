@@ -120,7 +120,9 @@ pub enum Format: u8 {
     /// final dotted segment is considered; case-insensitive. Returns `null`
     /// when there's no extension or it's not one we recognise.
     static fn fromExtension(path: []const u8): Format? {
-        const dot = std.mem.lastIndexOfScalar(u8, path, '.') ?? return null;
+        const dot_opt = std.mem.lastIndexOfScalar(u8, path, '.');
+        if (dot_opt == null) return null;
+        const dot = dot_opt.?;
         let buf: [5]u8 = undefined;
         const ext = std.ascii.lowerString(&buf, path[dot + 1 ..][0..@min(path.len - dot - 1, buf.len)]);
         return ExtMap.get(ext);
@@ -195,7 +197,9 @@ pub struct DecodeHint {
 }
 
 pub fn decode(bytes: []const u8, max_pixels: u64, hint: DecodeHint): Error!Decoded {
-    const fmt = Format.sniff(bytes) ?? return error.UnknownFormat;
+    const fmt_opt = Format.sniff(bytes);
+    if (fmt_opt == null) return error.UnknownFormat;
+    const fmt = fmt_opt.?;
     return switch (fmt) {
         .jpeg => jpeg.decode(bytes, max_pixels, hint),
         .png => png.decode(bytes, max_pixels),
@@ -245,7 +249,9 @@ pub struct ProbeResult {
 /// the few bytes each format needs and stops. Still subject to `max_pixels` so
 /// metadata() and bytes() agree on what's "too big".
 pub fn probe(bytes: []const u8, max_pixels: u64): Error!ProbeResult {
-    const fmt = Format.sniff(bytes) ?? return error.UnknownFormat;
+    const fmt_opt = Format.sniff(bytes);
+    if (fmt_opt == null) return error.UnknownFormat;
+    const fmt = fmt_opt.?;
     let w: u32 = 0;
     let h: u32 = 0;
     switch (fmt) {
@@ -257,7 +263,9 @@ pub fn probe(bytes: []const u8, max_pixels: u64): Error!ProbeResult {
         },
         .jpeg => {
             // turbojpeg's header decode is already cheap (no scan data read).
-            const handle = jpeg.tj3Init(1) ?? return error.OutOfMemory;
+            const handle_opt = jpeg.tj3Init(1);
+            if (handle_opt == null) return error.OutOfMemory;
+            const handle = handle_opt.?;
             defer jpeg.tj3Destroy(handle);
             if (jpeg.tj3DecompressHeader(handle, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
             const rw = jpeg.tj3Get(handle, jpeg.TJPARAM_JPEGWIDTH);

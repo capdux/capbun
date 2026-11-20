@@ -297,7 +297,7 @@ pub fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value:
                 return global.throwInvalidArguments("Image(): resizable / shared ArrayBuffer is not supported; pass a fixed-length view (e.g. buf.slice())", .{});
             }
             _ = js.sourceJSSetCached(this_value, global, value);
-            return error.js_buffer;
+            return Source.js_buffer;
         }
         if (value.@"as"(jsc.WebCore.Blob)) |blob| {
             _ = &blob;
@@ -468,11 +468,47 @@ pub fn doFormatAvif(self: *Image, g: *jsc.JSGlobalObject, cf: *jsc.CallFrame) bu
 }
 
 pub fn errorCode(e: codecs.Error) [:0]const u8 {
-        return (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnknownFormat)) {  break :__sw_blk_0 cp_val("ERR_IMAGE_UNKNOWN_FORMAT"); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .DecodeFailed)) {  break :__sw_blk_0 cp_val("ERR_IMAGE_DECODE_FAILED"); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .EncodeFailed)) {  break :__sw_blk_0 cp_val("ERR_IMAGE_ENCODE_FAILED"); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .TooManyPixels)) {  break :__sw_blk_0 cp_val("ERR_IMAGE_TOO_MANY_PIXELS"); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnsupportedOnPlatform)) {  break :__sw_blk_0 cp_val("ERR_IMAGE_FORMAT_UNSUPPORTED"); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  break :__sw_blk_0 cp_val("ERR_OUT_OF_MEMORY"); } }  unreachable; });
+        if ((e == error.UnknownFormat)) {
+            return "ERR_IMAGE_UNKNOWN_FORMAT";
+        }
+        if ((e == error.DecodeFailed)) {
+            return "ERR_IMAGE_DECODE_FAILED";
+        }
+        if ((e == error.EncodeFailed)) {
+            return "ERR_IMAGE_ENCODE_FAILED";
+        }
+        if ((e == error.TooManyPixels)) {
+            return "ERR_IMAGE_TOO_MANY_PIXELS";
+        }
+        if ((e == error.UnsupportedOnPlatform)) {
+            return "ERR_IMAGE_FORMAT_UNSUPPORTED";
+        }
+        if ((e == error.OutOfMemory)) {
+            return "ERR_OUT_OF_MEMORY";
+        }
+        _ = unreachable;
 }
 
 pub fn errorMessage(e: codecs.Error) [:0]const u8 {
-        return (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnknownFormat)) {  break :__sw_blk_1 cp_val("Image: unrecognised format (expected JPEG, PNG, WebP, GIF, BMP, TIFF, HEIC or AVIF)"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .DecodeFailed)) {  break :__sw_blk_1 cp_val("Image: decode failed"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .EncodeFailed)) {  break :__sw_blk_1 cp_val("Image: encode failed"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .TooManyPixels)) {  break :__sw_blk_1 cp_val("Image: input exceeds maxPixels limit"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnsupportedOnPlatform)) {  break :__sw_blk_1 cp_val("Image: format not supported on this machine (HEIC/AVIF/TIFF require the OS codec; AVIF encode needs an AV1 encoder)"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val("Image: out of memory"); } }  unreachable; });
+        if ((e == error.UnknownFormat)) {
+            return "Image: unrecognised format (expected JPEG, PNG, WebP, GIF, BMP, TIFF, HEIC or AVIF)";
+        }
+        if ((e == error.DecodeFailed)) {
+            return "Image: decode failed";
+        }
+        if ((e == error.EncodeFailed)) {
+            return "Image: encode failed";
+        }
+        if ((e == error.TooManyPixels)) {
+            return "Image: input exceeds maxPixels limit";
+        }
+        if ((e == error.UnsupportedOnPlatform)) {
+            return "Image: format not supported on this machine (HEIC/AVIF/TIFF require the OS codec; AVIF encode needs an AV1 encoder)";
+        }
+        if ((e == error.OutOfMemory)) {
+            return "Image: out of memory";
+        }
+        _ = unreachable;
 }
 
 pub fn rejectError(global: *jsc.JSGlobalObject, e: codecs.Error) jsc.JSValue {
@@ -633,7 +669,7 @@ pub fn doMetadata(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
                 _ = obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(p.format)).toJS(global));
                 return jsc.JSPromise.resolvedPromiseValue(global, obj);
             } else {
-                const probe_err = (blk_catch_3: { break :blk_catch_3 ((codecs.probe(buf, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnsupportedOnPlatform)) {  break :__sw_blk_2 cp_val(null); } } {  return jsc.JSPromise.rejectedPromise(global, Image.rejectError(global, e)).asValue(global); }  unreachable; }); }); });
+                const probe_err = (blk_catch_3: { break :blk_catch_3 ((codecs.probe(buf, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnsupportedOnPlatform)) {  break :__sw_blk_0 cp_val(null); } } {  return jsc.JSPromise.rejectedPromise(global, Image.rejectError(global, e)).asValue(global); }  unreachable; }); }); });
                 var __probe_err_moved = false; _ = &__probe_err_moved;
                 defer if (!__probe_err_moved) { const __T = @TypeOf(probe_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = probe_err.release() catch {}; } else { probe_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = probe_err; _drop_val.release(); } };
                 _ = &probe_err;
@@ -1009,7 +1045,7 @@ pub fn run(self: *PipelineTask) void {
                     self.result = PipelineResult{ .@"meta" = MetaResult{ .w = w, .h = h, .format = p.format } };
                     return;
                 } else {
-                    const probe_err = (blk_catch_12: { break :blk_catch_12 ((codecs.probe(input, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_12 (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .UnsupportedOnPlatform)) {  break :__sw_blk_3 cp_val(null); } } {  self.result = PipelineResult{ .@"err" = e };
+                    const probe_err = (blk_catch_12: { break :blk_catch_12 ((codecs.probe(input, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_12 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnsupportedOnPlatform)) {  break :__sw_blk_1 cp_val(null); } } {  self.result = PipelineResult{ .@"err" = e };
                     return; }  unreachable; }); }); });
                     var __probe_err_moved = false; _ = &__probe_err_moved;
                     defer if (!__probe_err_moved) { const __T = @TypeOf(probe_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = probe_err.release() catch {}; } else { probe_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = probe_err; _drop_val.release(); } };

@@ -3225,8 +3225,10 @@ pub struct Resolver {
                 return globalThis.throwInvalidArgumentType("setServers", "triple", "array");
             }
 
-            const family = try (try triple.getIndex(globalThis, 0)).coerceToInt32(globalThis);
-            const port = try (try triple.getIndex(globalThis, 2)).coerceToInt32(globalThis);
+            const family_val = triple.getIndex(globalThis, 0)?;
+            const family = family_val.coerceToInt32(globalThis)?;
+            const port_val = triple.getIndex(globalThis, 2)?;
+            const port = port_val.coerceToInt32(globalThis)?;
 
             if (family != 4 and family != 6) {
                 return globalThis.throwInvalidArguments("Invalid address family", .{});

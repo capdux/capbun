@@ -189,7 +189,7 @@ pub struct BunObject {
 
     const toJSCallback = jsc.toJSHostFn;
 
-    const LazyPropertyCallback = *const fn (*jsc.JSGlobalObject, *jsc.JSObject) callconv(jsc.conv) JSValue;
+    const LazyPropertyCallback = fn (*jsc.JSGlobalObject, *jsc.JSObject) callconv(jsc.conv) JSValue;
 
     static fn toJSLazyPropertyCallback(comptime wrapped: auto): LazyPropertyCallback {
         return struct {

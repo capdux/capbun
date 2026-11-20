@@ -110,9 +110,12 @@ pub fn load() void {
         _ = boring.ERR_load_BIO_strings();
         _ = boring.OpenSSL_add_all_algorithms();
         if ((!builtin.is_test)) {
-            _ = std.mem.doNotOptimizeAway(*const OPENSSL_memory_alloc);
-            _ = std.mem.doNotOptimizeAway(*const OPENSSL_memory_get_size);
-            _ = std.mem.doNotOptimizeAway(*const OPENSSL_memory_free);
+            const alloc_fn = OPENSSL_memory_alloc;
+            const get_size_fn = OPENSSL_memory_get_size;
+            const free_fn = OPENSSL_memory_free;
+            _ = std.mem.doNotOptimizeAway((&alloc_fn));
+            _ = std.mem.doNotOptimizeAway((&get_size_fn));
+            _ = std.mem.doNotOptimizeAway((&free_fn));
         }
 }
 

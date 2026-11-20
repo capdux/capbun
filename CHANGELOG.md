@@ -1648,3 +1648,5 @@
 
 ### 2026-11-20 06:45:45 UTC - zig:check 第 5 轮 JSC+Test+Core 簇 12 模块语义修复入库
 - 完成：`GeneratedBindings`/`ConsoleObject`/`expect`/`ConcurrentPromiseTask`/`DecodedJSValue`/`JSPromise`/`JSValue`/`ZigString`/`host_fn`/`Ast`/`owned`/`dir_info` 12/12 全 PASS。
+
+- **[2026-11-20] Wave 5 Batch 2+3 (`zig:check` 跨模块修复 21 模块)**：更新 `src/sha_hmac/sha.{cp,zig}`, `src/runtime/crypto/EVP.{cp,zig}`, `src/runtime/webcore/Crypto.{cp,zig}`, `src/boringssl/boringssl.{cp,zig}`, `src/runtime/image/{Image,codecs}.{cp,zig}`, `src/runtime/webcore/{streams,TextDecoder,TextEncoderStreamEncoder}.{cp,zig}`, `src/runtime/webcore/s3/multipart.{cp,zig}`, `src/runtime/api/{BunObject,filesystem_router}.{cp,zig}`, `src/runtime/dns_jsc/dns.{cp,zig}`, `src/shell/builtin/{ls,touch}.{cp,zig}`, `src/runtime/server/{ServerWebSocket,HTMLBundle}.{cp,zig}`, `src/runtime/timer/{TimeoutObject,ImmediateObject}.{cp,zig}`, `src/runtime/socket/{Listener,SocketAddress}.{cp,zig}`（21/21 门禁全绿）。
