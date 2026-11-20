@@ -101,3 +101,7 @@
 - **带显式类型标注的 `@intFromFloat`/`@bitCast` 被丢弃**：`const x: T = @intFromFloat(...)` / `@bitCast(...)` 会被 `cpc` 静默丢弃；改写为 `const x = @as(T, @intFromFloat(...))`。
 
 - **类型位置中的匿名结构体参数**：如 `bun.AbsPath({ sep: .auto })` 需先在模块顶层定义为常量别名再引用，否则 codegen 原样输出 `{sep:.auto}` 导致 `ast-check` 报错。
+
+- **多参 `.release(...)` 被截断**：`cpc` 会将 `obj.release(a, b)` 误按无参 RC `release()` 截断；改用 `const release_fn = Type.release; release_fn(obj, a, b)`。
+- **顶层可选函数指针类型别名**：拆为 `pub const FnType = *const fn (...) callconv(.c) Ret; pub type T = FnType?;` 避免 `?` 误 lower 为 `try` 或丢失 `callconv(.c)` 返回类型。
+- **表达式位裸指针泛参**：如 `bun.LinearFifo(*!?, .Dynamic)` 先声明 `type OpaquePtr = *!?;` 再传入。

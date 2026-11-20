@@ -2936,3 +2936,5 @@ Options:
 - [2026-11-20 03:45:51 UTC] 验收并提交 `src/runtime/api/bun/process.cp` (2953行, 1.006x)；接力派发 `src/js_parser/ast/Expr.zig` (3247行)。
 
 - [2026-11-20 03:49:00 UTC] 验收并提交 `src/js_parser/lexer.cp` (3423行, 1.006x)——`src/js_parser/` 顶层 100% 目录闭环；接力派发 `src/install/npm.zig` (2775行)。
+
+- [2026-11-20 03:50:41 UTC] 验收并提交 `src/napi/napi.cp` (1.058x，闭合 `src/napi/`) 与 `src/install/lockfile.cp` (1.053x)；接力派发 `src/bun.zig` (3824行)。

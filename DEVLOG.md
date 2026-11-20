@@ -1230,3 +1230,6 @@
 
 ### 2026-11-20 03:49:00 UTC - JS Lexer 核心模块迁移经验
 - 提升 `NewLexer_` 内 6 个嵌套类型至顶层避免 raw passthrough；用 `inline fn splatAscii` 规避 `@as(Vec, @splat(...))` lowering 报错，膨胀率 1.006x。
+
+### 2026-11-20 03:50:41 UTC - NAPI 与 Lockfile 迁移经验
+- 沉淀多参 `.release(...)` 截断、顶层可选函数指针别名及表达式位 `*!?` 泛参 3 条经验至 `CP_PITFALLS.md`。
