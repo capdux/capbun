@@ -103,7 +103,8 @@ pub struct BoxShadow {
             }
         }
 
-        if (!_.color.eql(&CssColor{ .current_color = {} })) {
+        const cc: CssColor = .current_color;
+        if (!_.color.eql(&cc)) {
             dest.writeChar(' ')?;
             _.color.toCss(dest)?;
         }
@@ -257,7 +258,11 @@ pub struct BoxShadowHandler {
                 while (i < src_slice.len) : (i += 1) {
                     const input = &src_slice[i];
                     let output = &dst_slice[i];
-                    output.color = input.color.toLAB(context.allocator) ?? input.color.deepClone(context.allocator);
+                    if (c := input.color.toLAB(context.allocator)) {
+                        output.color = c;
+                    } else {
+                        output.color = input.color.deepClone(context.allocator);
+                    }
                     const fields = std.@"meta".fields(BoxShadow);
                     inline for (field of fields) {
                         if (comptime std.mem.eql(u8, field.name, "color")) continue;

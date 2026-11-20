@@ -230,7 +230,11 @@ pub fn hasConditions(self: ImportRule) bool {
     }
 
 pub fn toCss(self: ImportRule, dest: *Printer) PrintErr!void {
-            const dep = (if ((dest.dependencies != null)) dependencies.ImportDependency.new(dest.allocator, self, dest.filename(), dest.local_names, dest.symbols) else null);
+            const s = self;
+            const dep = (if ((dest.dependencies != null)) dependencies.ImportDependency.new(dest.allocator, (blk: {
+            break :blk (&s);
+
+}), dest.filename(), dest.local_names, dest.symbols) else null);
             _ = try dest.writeStr("@import ");
             if (dep) |d| {
                 _ = &d;

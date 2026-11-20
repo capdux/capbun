@@ -58,7 +58,8 @@ const Url = css.css_values.url.Url;
     }
 
     pub fn toCss(dest: *Printer): css.PrintErr!void {
-        if (_.* == ColorScheme{}) {
+        const empty = ColorScheme{};
+        if (std.meta.eql(_, empty)) {
             return dest.writeStr("normal");
         }
 
@@ -79,7 +80,8 @@ const Url = css.css_values.url.Url;
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 

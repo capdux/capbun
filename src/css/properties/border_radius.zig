@@ -104,7 +104,8 @@ pub fn toCss(self: BorderRadius, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: BorderRadius, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

@@ -243,8 +243,8 @@ pub struct UnicodeRange {
 
         if (question_marks > 0) {
             if (text.len == 0) return { result: UnicodeRange{
-                start: first_hex_value << @intCast(question_marks * 4),
-                end: ((first_hex_value + 1) << @intCast(question_marks * 4)) - 1,
+                start: first_hex_value << @as(u5, @intCast(question_marks * 4)),
+                end: ((first_hex_value + 1) << @as(u5, @intCast(question_marks * 4))) - 1,
             } };
         } else if (text.len == 0) {
             return { result: UnicodeRange{
@@ -440,7 +440,7 @@ pub union(enum) FontFormat {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -490,7 +490,7 @@ pub union(enum) Source {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 

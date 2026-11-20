@@ -378,7 +378,13 @@ pub inline fn toCss(comptime T: type, this: *const T, dest: *Printer): PrintErr!
         CustomIdent => CustomIdentFns.toCss(this, dest),
         DashedIdent => DashedIdentFns.toCss(this, dest),
         Ident => IdentFns.toCss(this, dest),
-        else => T.toCss(this, dest),
+        else => {
+            const info = @typeInfo(@TypeOf(T.toCss)).@"fn";
+            if (comptime info.params.len > 0 && info.params[0].@"type" == T) {
+                return T.toCss(this.*, dest);
+            }
+            return T.toCss(this, dest);
+        },
     };
 }
 

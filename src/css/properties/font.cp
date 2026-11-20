@@ -193,14 +193,14 @@ pub const FontStretch = union(enum) {
             return percentage.toCss(dest);
         }
 
-        return switch (_.*) {
+        return switch (_) {
             .percentage => |*val| val.toCss(dest),
             .keyword => |*kw| kw.toCss(dest),
         };
     }
 
     pub fn intoPercentage(): Percentage {
-        return switch (_.*) {
+        return switch (_) {
             .percentage => |*val| val.*,
             .keyword => |*kw| kw.intoPercentage(),
         };
@@ -760,7 +760,8 @@ pub struct Font {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 

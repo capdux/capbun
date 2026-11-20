@@ -212,7 +212,8 @@ pub struct TextShadow {
             }
         }
 
-        if (!_.color.eql(&CssColor{ .current_color = {} })) {
+        const cc: CssColor = .current_color;
+        if (!_.color.eql(&cc)) {
             dest.writeChar(' ')?;
             _.color.toCss(dest)?;
         }

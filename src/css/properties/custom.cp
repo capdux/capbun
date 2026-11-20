@@ -65,10 +65,13 @@ pub struct TokenList {
                     has_whitespace = false;
                 },
                 .url => |url| {
-                    if (dest.dependencies != null && is_custom_property && !url.isAbsolute((dest.getImportRecords()?).slice())) {
-                        return dest.newError(css.PrinterErrorKind{
-                            ambiguous_url_in_custom_property: { url: (dest.getImportRecords()?).at(url.import_record_idx).path.pretty },
-                        }, url.loc);
+                    if (dest.dependencies != null && is_custom_property) {
+                        const recs = dest.getImportRecords()?;
+                        if (!url.isAbsolute(recs.slice())) {
+                            return dest.newError(css.PrinterErrorKind{
+                                ambiguous_url_in_custom_property: { url: recs.at(url.import_record_idx).path.pretty },
+                            }, url.loc);
+                        }
                     }
                     url.toCss(dest)?;
                     has_whitespace = false;
@@ -1536,7 +1539,8 @@ pub const CustomPropertyName = union(enum) {
     }
 
     pub fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 
     pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

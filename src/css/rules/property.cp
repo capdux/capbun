@@ -201,11 +201,11 @@ pub struct PropertyRuleDeclarationParser {
     };
 
     pub const RuleBodyItemParser = struct {
-        fn parseQualified(*_): bool {
+        static fn parseQualified(_: *PropertyRuleDeclarationParser): bool {
             return false;
         }
 
-        fn parseDeclarations(*_): bool {
+        static fn parseDeclarations(_: *PropertyRuleDeclarationParser): bool {
             return true;
         }
     };
@@ -214,15 +214,15 @@ pub struct PropertyRuleDeclarationParser {
         pub const Prelude = void;
         pub const AtRule = void;
 
-        fn parsePrelude(*_, name: []const u8, input: *css.Parser): Result(Prelude) {
+        static fn parsePrelude(_: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser): Result(Prelude) {
             return { err: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
 
-        fn parseBlock(*_, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRuleParser.AtRule) {
+        static fn parseBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRuleParser.AtRule) {
             return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
         }
 
-        fn ruleWithoutBlock(*_, _: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
+        static fn ruleWithoutBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
             return { err: {} };
         }
     };

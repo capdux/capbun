@@ -306,7 +306,7 @@ pub union(enum) SupportsCondition {
         switch (_) {
             .not => |condition| {
                 dest.writeStr(" not ")?;
-                condition.toCssWithParensIfNeeded(dest, condition.needsParens(&self_val))?;
+                condition.toCssWithParensIfNeeded(dest, condition.needsParens(unsafe { &self_val }))?;
             },
             .@"and" => |conditions| {
                 let first = true;

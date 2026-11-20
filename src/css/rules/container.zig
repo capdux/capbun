@@ -274,8 +274,7 @@ pub inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFl
             return css.media_query.parseQueryCondition(StyleQuery, i, flags);
     }
 
-pub fn parseNestedBlockFn(self: @This(), _: @TypeOf({}), i: *css.Parser) Result(ContainerCondition) {
-        _ = self;
+pub fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser) Result(ContainerCondition) {
             if (i.tryParse(@This().adaptedParseQueryCondition, .{ QueryConditionFlags{ .allow_or = true } }).asValue()) |res| {
                 _ = &res;
                 return .{ .result = .{ .style = res } };

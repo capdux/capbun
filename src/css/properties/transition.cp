@@ -406,8 +406,8 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
         const result = getLogicalProperties(properties.at(i));
         if (result == .block && context.shouldCompileLogical(result.block[0])) {
             replace(context.allocator, properties, result.block[1], i);
-            if (*rtl := rtl_properties) {
-                replace(context.allocator, rtl, result.block[1], i);
+            if (rtl_properties != null) {
+                replace(context.allocator, &rtl_properties.?, result.block[1], i);
             }
             i += 1;
         } else if (result == .@"inline" && context.shouldCompileLogical(result.@"inline"[0])) {
@@ -419,8 +419,8 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
             }
 
             replace(context.allocator, properties, ltr, i);
-            if (*rtl_props := rtl_properties) {
-                replace(context.allocator, rtl_props, rtl, i);
+            if (rtl_properties != null) {
+                replace(context.allocator, &rtl_properties.?, rtl, i);
             }
 
             i += @as(u32, @intCast(ltr.len));
@@ -436,7 +436,8 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
                 }
             }
 
-            if (*rtl_props := rtl_properties) {
+            if (rtl_properties != null) {
+                let rtl_props = &rtl_properties.?;
                 rtl_props.mut(i).setPrefixesForTargets(context.targets);
 
                 if (property_id := css.css_properties.masking.getWebkitMaskProperty(rtl_props.at(i))) {

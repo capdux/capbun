@@ -111,7 +111,8 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
                 _.style.toCss(dest)?;
                 needs_space = true;
             }
-            if (!_.color.eql(&CssColor{ .current_color = {} })) {
+            const cc: CssColor = .current_color;
+            if (!_.color.eql(&cc)) {
                 if (needs_space) {
                     dest.writeStr(" ")?;
                 }
@@ -493,33 +494,33 @@ pub fn ImplFallbacks(comptime T: type): type {
     return struct {
         const fields = std.@"meta".fields(T);
 
-        pub fn getFallbacks(*_, allocator: std.mem.Allocator, targets: css.Targets): css.SmallList(T, 2) {
+        static fn getFallbacks(this_val: *T, allocator: std.mem.Allocator, targets: css.Targets): css.SmallList(T, 2) {
             const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
             let fallbacks = ColorFallbackKind{};
-            inline for (fields) |field| {
-                bun.bits.insert(ColorFallbackKind, &fallbacks, @field(_, field.name).getNecessaryFallbacks(targets));
+            inline for (field of fields) {
+                bun.bits.insert(ColorFallbackKind, &fallbacks, @field(this_val, field.name).getNecessaryFallbacks(targets));
             }
 
             let res = css.SmallList(T, 2){};
             if (fallbacks.rgb) {
                 let out: T = undefined;
-                inline for (fields) |field| {
-                    @field(out, field.name) = @field(_, field.name).getFallback(allocator, ColorFallbackKind{ .rgb = true });
+                inline for (field of fields) {
+                    @field(out, field.name) = @field(this_val, field.name).getFallback(allocator, ColorFallbackKind{ .rgb = true });
                 }
                 res.append(allocator, out);
             }
 
             if (fallbacks.p3) {
                 let out: T = undefined;
-                inline for (fields) |field| {
-                    @field(out, field.name) = @field(_, field.name).getFallback(allocator, ColorFallbackKind{ .p3 = true });
+                inline for (field of fields) {
+                    @field(out, field.name) = @field(this_val, field.name).getFallback(allocator, ColorFallbackKind{ .p3 = true });
                 }
                 res.append(allocator, out);
             }
 
             if (fallbacks.lab) {
-                inline for (fields) |field| {
-                    @field(_, field.name) = @field(_, field.name).getFallback(allocator, ColorFallbackKind{ .lab = true });
+                inline for (field of fields) {
+                    @field(this_val, field.name) = @field(this_val, field.name).getFallback(allocator, ColorFallbackKind{ .lab = true });
                 }
             }
 
@@ -865,7 +866,17 @@ pub struct BorderHandler {
                 css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
             else
                 css.generic.deepClone(@TypeOf(val), &val, f.ctx.allocator);
-            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, cloned), @unionInit(css.Property, rtl, cloned));
+            const LtrType = @FieldType(css.Property, ltr);
+            const RtlType = @FieldType(css.Property, rtl);
+            const ltr_val: LtrType = if (comptime LtrType == @TypeOf(cloned))
+                cloned
+            else
+                LtrType{ width: cloned.width, style: cloned.style, color: cloned.color };
+            const rtl_val: RtlType = if (comptime RtlType == @TypeOf(cloned))
+                cloned
+            else
+                RtlType{ width: cloned.width, style: cloned.style, color: cloned.color };
+            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, ltr_val), @unionInit(css.Property, rtl, rtl_val));
         }
 
         inline fn push(f: *FlushContext, comptime p: []const u8, val: auto) {

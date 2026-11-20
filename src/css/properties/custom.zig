@@ -124,8 +124,11 @@ _ = try color.toCss(dest, is_custom_property);
                 has_whitespace = false;
 },
 .url => |url| {
-if ((((dest.dependencies != null) and is_custom_property) and (!url.isAbsolute(try dest.getImportRecords().slice())))) {
-                    return dest.newError(css.PrinterErrorKind{ .ambiguous_url_in_custom_property = .{ .url = try dest.getImportRecords().at(url.import_record_idx).path.pretty } }, url.loc);
+if (((dest.dependencies != null) and is_custom_property)) {
+                    const recs = try dest.getImportRecords();
+                    if ((!url.isAbsolute(recs.slice()))) {
+                        return dest.newError(css.PrinterErrorKind{ .ambiguous_url_in_custom_property = .{ .url = recs.at(url.import_record_idx).path.pretty } }, url.loc);
+                    }
                 }
                 _ = try url.toCss(dest);
                 has_whitespace = false;
@@ -1445,7 +1448,11 @@ return unknown.v;
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

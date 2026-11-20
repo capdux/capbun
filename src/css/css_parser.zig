@@ -483,13 +483,11 @@ pub const BundlerAtRuleParser = struct {
                 return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
     
-    pub fn parseBlock(self: *@This(), _: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
-            _ = self;
+    pub fn parseBlock(_: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
                 return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(self: *@This(), _: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
-            _ = self;
+    pub fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
                 if (comptime ENABLE_TAILWIND_PARSING) {
                     return (switch (prelude) {
     .tailwind => |v| {
@@ -2840,7 +2838,10 @@ pub fn eql(lhs: *const Token, rhs: *const Token) bool {
 
 pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
             const _self = self;
-            return implementHash(@This(), _self, hasher);
+            return implementHash(@This(), (blk: {
+            break :blk _self;
+
+}), hasher);
     }
 
 pub fn isParseError(self: Token) bool {
@@ -3612,6 +3613,7 @@ pub fn integer() Notation {
     }
 };
 
+pub const MediaFeatureType = media_query.MediaFeatureType;
 pub const OptionalBundlerTailwindState = ?*BundlerTailwindState;
 pub const SrcIndex = bun.bundle_v2.Index;
 pub const SymbolList = bun.ast.Symbol.List;
@@ -3638,7 +3640,6 @@ pub const SupportsRule = css_rules.supports.SupportsRule;
 pub const TailwindAtRule = css_rules.tailwind.TailwindAtRule;
 pub const MinifyContext = css_rules.MinifyContext;
 pub const MediaList = media_query.MediaList;
-pub var MediaFeatureType = media_query.MediaFeatureType;
 pub const DashedIdent = css_values.ident.DashedIdent;
 pub const DashedIdentFns = css_values.ident.DashedIdentFns;
 pub const CssColor = css_values.color.CssColor;
@@ -4426,11 +4427,11 @@ pub fn hash(self: *const T, hasher: *std.hash.Wyhash) void {
 }
 
 pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
-        const field_values: []const MediaFeatureType = field_values: {
+        const field_values: []const media_query.MediaFeatureType = field_values: {
         const fields = std.@"meta".fields(T);
         var mapping: struct { fields.len } = undefined;
         _ = &mapping;
-        MediaFeatureType = undefined;
+        media_query.MediaFeatureType = undefined;
         for (fields, 0..) |field, i| {
             _ = &field;
             _ = &i;
@@ -4441,7 +4442,7 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
 };
         return struct {
 
-pub fn valueType(self: @This()) MediaFeatureType {
+pub fn valueType(self: @This()) media_query.MediaFeatureType {
             inline for (std.@"meta".fields(T), 0..) |field, i| {
                 _ = &field;
                 _ = &i;
@@ -4561,7 +4562,7 @@ return .{ .result = .{ .custom = prelude } };
 .err => |e| {
 if (((e.kind == .basic) and (e.kind.basic == .at_rule_invalid))) {
         } else {
-            return .{ .e = input.newCustomError(ParserError{ .at_rule_prelude_invalid = .{} }) };
+            return .{ .err = input.newCustomError(ParserError{ .at_rule_prelude_invalid = .{} }) };
         }
 },
 }

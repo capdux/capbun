@@ -103,7 +103,7 @@ pub enum BaselinePosition {
     }
 
     fn toCss(dest: *css.Printer): css.PrintErr!void {
-        return switch (_.*) {
+        return switch (_) {
             .first => try dest.writeStr("baseline"),
             .last => try dest.writeStr("last baseline"),
         };
@@ -114,7 +114,8 @@ pub enum BaselinePosition {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -711,7 +712,8 @@ pub enum LegacyJustify {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -772,7 +774,8 @@ pub struct Gap {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -818,7 +821,7 @@ pub struct PlaceItems {
     fn toCss(dest: *css.Printer): css.PrintErr!void {
         _.@"align".toCss(dest)?;
         const is_equal = switch (_.justify) {
-            .normal => _.@"align".eql(&AlignItems{ .normal = {} }),
+            .normal => _.@"align".eql(&AlignItems.normal),
             .stretch => _.@"align".eql(&AlignItems{ .stretch = {} }),
             .baseline_position => |*p| brk: {
                 if (_.@"align" == .baseline_position) break :brk p.eql(&_.@"align".baseline_position);
@@ -842,7 +845,8 @@ pub struct PlaceItems {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -914,7 +918,8 @@ pub struct PlaceSelf {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -1013,7 +1018,8 @@ pub struct PlaceContent {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -1456,13 +1462,13 @@ pub struct AlignHandler {
                     if (comptime @TypeOf(justify_prop) != @TypeOf(null)) {
                         const justify_actual = &__v2.*[0];
                         let justify_prefix = &__v2.*[1];
-                        justify_prefix.* = flushPrefixesHelper(context, justify_prop.?.feature);
+                        justify_prefix.* = flushPrefixesHelper(context, justify_prop.feature);
                         justify_prefix.none = false;
 
                         if (!justify_prefix.isEmpty()) {
                             dest.append(
                                 context.allocator,
-                                @unionInit(Property, justify_prop.?.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }),
+                                @unionInit(Property, justify_prop.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }),
                             ) catch |e| bun.handleOom(e);
                         }
 

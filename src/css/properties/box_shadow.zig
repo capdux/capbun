@@ -147,7 +147,8 @@ pub fn toCss(self: BoxShadow, dest: *css.Printer) css.PrintErr!void {
                     _ = try self.spread.toCss(dest);
                 }
             }
-            if ((!self.color.eql((&CssColor{ .current_color = .{} })))) {
+            const cc: CssColor = .current_color;
+            if ((!self.color.eql((&cc)))) {
                 _ = try dest.writeChar(32);
                 _ = try self.color.toCss(dest);
             }
@@ -306,7 +307,12 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
                         const input = (&src_slice[@as(usize, @intCast(i))]);
                         var output = (&dst_slice[@as(usize, @intCast(i))]);
                         _ = &output;
-                        if (output.color == null) { output.color = input.color.deepClone(context.allocator); }
+                        if (input.color.toLAB(context.allocator)) |c| {
+                            _ = &c;
+                            output.color = c;
+                        } else {
+                            output.color = input.color.deepClone(context.allocator);
+                        }
                         const fields = std.@"meta".fields(BoxShadow);
                         inline for (fields) |field| {
                             if (comptime std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "color")) {

@@ -478,8 +478,7 @@ pub fn checkType(self: MediaFeatureValue, expected_type: MediaFeatureType) bool 
     }
 
 pub fn parse(input: *css.Parser, expected_type: MediaFeatureType) Result(MediaFeatureValue) {
-            const parse_known_fn = MediaFeatureValue{ .parseKnown = {} };
-            if (input.tryParse(parse_known_fn, .{ expected_type }).asValue()) |value| {
+            if (input.tryParse(MediaFeatureValue{ .parseKnown = {} }, .{ expected_type }).asValue()) |value| {
                 _ = &value;
                 return .{ .result = value };
             }

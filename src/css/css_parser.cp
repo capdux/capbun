@@ -37,7 +37,7 @@ pub const MinifyContext = css_rules.MinifyContext;
 
 import media_query from "./media_query.zig";
 pub const MediaList = media_query.MediaList;
-pub let MediaFeatureType = media_query.MediaFeatureType;
+pub type MediaFeatureType = media_query.MediaFeatureType;
 
 import css_values from "./values/values.zig";
 pub const DashedIdent = css_values.ident.DashedIdent;
@@ -944,9 +944,9 @@ pub fn DefineEnumProperty(comptime T: type): type {
 }
 
 pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
-    const field_values: []const MediaFeatureType = field_values: {
+    const field_values: []const media_query.MediaFeatureType = field_values: {
         const fields = std.@"meta".fields(T);
-        let mapping: [fields.len]MediaFeatureType = undefined;
+        let mapping: [fields.len]media_query.MediaFeatureType = undefined;
         for (fields, 0..) |field, i| {
             // Check that it exists in the type map
             mapping[i] = @field(ValueTypeMap, field.name);
@@ -956,7 +956,7 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
     };
 
     return struct {
-        pub fn valueType(): MediaFeatureType {
+        pub fn valueType(): media_query.MediaFeatureType {
             inline for (std.@"meta".fields(T), 0..) |field, i| {
                 if (field.value == @intFromEnum(_.*)) {
                     return field_values[i];
@@ -1075,7 +1075,7 @@ fn parse_custom_at_rule_prelude(name: []const u8, input: *Parser, options: *cons
             if (e.kind == .basic && e.kind.basic == .at_rule_invalid) {
                 // do nothing
             } else return {
-                e: input.newCustomError(
+                err: input.newCustomError(
                     ParserError{ .at_rule_prelude_invalid = {} },
                 ),
             };
@@ -1380,7 +1380,7 @@ pub struct BundlerAtRuleParser {
         } else void;
         pub const AtRule = if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule;
 
-        fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
+        static fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
             if (comptime ENABLE_TAILWIND_PARSING) {
                 const PreludeNames = enum {
                     tailwind,
@@ -1410,11 +1410,11 @@ pub struct BundlerAtRuleParser {
             return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
 
-        fn parseBlock(_: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
+        static fn parseBlock(_: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
             return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
 
-        fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
+        static fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
             if (comptime ENABLE_TAILWIND_PARSING) {
                 return switch (prelude) {
                     .tailwind => |v| return { result: v },
@@ -6204,7 +6204,7 @@ pub union(TokenKind) Token {
 
     fn hash(hasher: *std.hash.Wyhash) {
         const _self = _;
-        return implementHash(@This(), &_self, hasher);
+        return implementHash(@This(), unsafe { &_self }, hasher);
     }
 
     /// Return whether this token represents a parse error.

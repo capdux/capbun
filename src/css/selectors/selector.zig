@@ -512,7 +512,7 @@ _ = try dest.writeStr(":volume-locked");
 },
 .fullscreen => |prefix| {
 _ = try dest.writeChar(58);
-            const vp = (if ((!dest.vendor_prefix.isEmpty())) bits.@"&&"(css.VendorPrefix, dest.vendor_prefix, prefix).orNone() else prefix);
+            const vp = (if ((!dest.vendor_prefix.isEmpty())) bits.@"and"(css.VendorPrefix, dest.vendor_prefix, prefix).orNone() else prefix);
             _ = try vp.toCss(dest);
             if ((vp.webkit or vp.moz)) {
                 _ = try dest.writeStr("full-screen");

@@ -298,7 +298,7 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             }
             if ((question_marks > 0)) {
                 if ((text.len == 0)) {
-                    return .{ .result = UnicodeRange{ .start = cp_shl(first_hex_value, @intCast((question_marks * 4))), .end = (cp_shl((first_hex_value + 1), @intCast((question_marks * 4))) - 1) } };
+                    return .{ .result = UnicodeRange{ .start = cp_shl(first_hex_value, @as(u5, @intCast((question_marks * 4)))), .end = (cp_shl((first_hex_value + 1), @as(u5, @intCast((question_marks * 4)))) - 1) } };
                 }
             } else {
                 if ((text.len == 0)) {
@@ -502,7 +502,10 @@ _ = try dest.writeStr(self.string);
 
 pub fn deepClone(self: FontFormat, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), s, allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk s;
+
+}), allocator);
     }
 };
 
@@ -555,7 +558,10 @@ _ = try dest.writeStr("local(");
 
 pub fn deepClone(self: Source, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), (&s), allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 };
 

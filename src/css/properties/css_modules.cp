@@ -54,7 +54,7 @@ pub struct Composes {
             } else {
                 dest.writeChar(' ')?;
             }
-            CustomIdentFns.toCss(&name, dest)?;
+            CustomIdentFns.toCss(name, dest)?;
         }
 
         if (*@"from" := this.@"from") {
@@ -75,7 +75,7 @@ pub struct Composes {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {

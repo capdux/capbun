@@ -113,7 +113,7 @@ if (input.expectIdentMatching("baseline").asErr()) |e| {
     }
 
 pub fn toCss(self: *BaselinePosition, dest: *css.Printer) css.PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .first => try dest.writeStr("baseline"),
 .last => try dest.writeStr("last baseline"),
 });
@@ -124,7 +124,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: BaselinePosition, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 };
 
@@ -222,7 +226,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: LegacyJustify, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 };
 
@@ -351,7 +359,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: Gap, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     pub const PropertyFieldMap = .{ .row = "row-gap", .column = "column-gap" };
 };
@@ -382,7 +394,7 @@ return .{ .err = e };
 pub fn toCss(self: PlaceItems, dest: *css.Printer) css.PrintErr!void {
             _ = try self.@"align".toCss(dest);
             const is_equal = (switch (self.justify) {
-.normal => self.@"align".eql((&AlignItems{ .normal = .{} })),
+.normal => self.@"align".eql((&AlignItems.normal)),
 .stretch => self.@"align".eql((&AlignItems{ .stretch = .{} })),
 .baseline_position => |*p| brk: {
             if ((self.@"align" == .baseline_position)) {
@@ -409,7 +421,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: PlaceItems, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     pub const PropertyFieldMap = .{ .@"align" = "align-items", .justify = "justify-items" };
     pub const VendorPrefixMap = .{ .@"align" = true };
@@ -468,7 +484,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: PlaceSelf, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     pub const PropertyFieldMap = .{ .@"align" = "align-self", .justify = "justify-self" };
     pub const VendorPrefixMap = .{ .@"align" = true };
@@ -531,7 +551,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: PlaceContent, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     pub const PropertyFieldMap = .{ .@"align" = css.PropertyIdTag.@"align-content", .justify = css.PropertyIdTag.@"justify-content" };
     pub const VendorPrefixMap = .{ .@"align" = true, .justify = true };
@@ -875,10 +899,10 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
                             const justify_actual = (&__v2.*[0]);
                             var justify_prefix = (&__v2.*[1]);
                             _ = &justify_prefix;
-                            justify_prefix.* = flushPrefixesHelper(context, justify_prop.?.feature);
+                            justify_prefix.* = flushPrefixesHelper(context, justify_prop.feature);
                             justify_prefix.none = false;
                             if ((!justify_prefix.isEmpty())) {
-                                _ = (blk_catch_4: { break :blk_catch_4 ((dest.append(context.allocator, @unionInit(Property, justify_prop.?.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }))) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                                _ = (blk_catch_4: { break :blk_catch_4 ((dest.append(context.allocator, @unionInit(Property, justify_prop.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }))) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
                             }
                             const PropTy = prop.ty;
                             _ = &PropTy;

@@ -89,7 +89,8 @@ pub struct BorderRadius {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {

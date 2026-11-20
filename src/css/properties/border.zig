@@ -659,7 +659,11 @@ var up = unparsed.deepClone(context.allocator);
     
     pub inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
                 const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
-                _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, cloned), @unionInit(css.Property, rtl, cloned));
+                const LtrType = @FieldType(css.Property, ltr);
+                const RtlType = @FieldType(css.Property, rtl);
+                const ltr_val: LtrType = (if (comptime (LtrType == @TypeOf(cloned))) cloned else LtrType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
+                const rtl_val: RtlType = (if (comptime (RtlType == @TypeOf(cloned))) cloned else RtlType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
+                _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, ltr_val), @unionInit(css.Property, rtl, rtl_val));
         }
     
     pub inline fn push(f: *FlushContext, comptime p: []const u8, val: anytype) void {
@@ -1301,7 +1305,8 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
                 _ = try self.style.toCss(dest);
                 needs_space = true;
             }
-            if ((!self.color.eql((&CssColor{ .current_color = .{} })))) {
+            const cc: CssColor = .current_color;
+            if ((!self.color.eql((&cc)))) {
                 if (needs_space) {
                     _ = try dest.writeStr(" ");
                 }
@@ -1350,13 +1355,12 @@ pub inline fn default() This {
 pub fn ImplFallbacks(comptime T: type) type {
         return struct {
 
-pub fn getFallbacks(self: *@This(), allocator: std.mem.Allocator, targets: css.Targets) css.SmallList(T,2) {
+pub fn getFallbacks(this_val: *T, allocator: std.mem.Allocator, targets: css.Targets) css.SmallList(T,2) {
             const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
             var fallbacks = ColorFallbackKind{  };
             _ = &fallbacks;
             inline for (fields) |field| {
-                _ = &field;
-                _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getNecessaryFallbacks(targets));
+                _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getNecessaryFallbacks(targets));
             }
             var res = css.SmallList(T, 2);
             _ = &res;
@@ -1366,8 +1370,7 @@ pub fn getFallbacks(self: *@This(), allocator: std.mem.Allocator, targets: css.T
                 var out: T = undefined;
                 _ = &out;
                 inline for (fields) |field| {
-                    _ = &field;
-                    @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .rgb = true });
+                    @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .rgb = true });
                 }
                 _ = res.append(allocator, out);
             }
@@ -1375,15 +1378,13 @@ pub fn getFallbacks(self: *@This(), allocator: std.mem.Allocator, targets: css.T
                 var out: T = undefined;
                 _ = &out;
                 inline for (fields) |field| {
-                    _ = &field;
-                    @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .p3 = true });
+                    @field(out, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .p3 = true });
                 }
                 _ = res.append(allocator, out);
             }
             if (fallbacks.lab) {
                 inline for (fields) |field| {
-                    _ = &field;
-                    @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .lab = true });
+                    @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) = @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getFallback(allocator, ColorFallbackKind{ .lab = true });
                 }
             }
             return res;

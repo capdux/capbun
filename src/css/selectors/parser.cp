@@ -79,7 +79,7 @@ pub const attrs = struct {
                         try dest.writeStr("*|");
                     },
                 };
-                try css.IdentFns.toCss(&this.local_name, dest);
+                try css.IdentFns.toCss(this.local_name, dest);
                 switch (this.operation) {
                     .exists => {},
                     .with_value => |v| {
@@ -2819,9 +2819,8 @@ pub fn parse_one_simple_selector(
                             }
                         };
 
-                        const IdentSlice = []Impl.SelectorImpl.Identifier;
                         let closure = Closure{ .parser = parser };
-                        const names = switch (input.parseNestedBlock(IdentSlice, &closure, Closure.parsefn)) {
+                        const names = switch (input.parseNestedBlock([]Impl.SelectorImpl.Identifier, &closure, Closure.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };

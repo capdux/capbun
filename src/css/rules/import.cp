@@ -196,9 +196,10 @@ pub struct ImportRule {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
+        const s = _;
         const dep = if (dest.dependencies != null) dependencies.ImportDependency.new(
             dest.allocator,
-            _,
+            unsafe { &s },
             dest.filename(),
             dest.local_names,
             dest.symbols,

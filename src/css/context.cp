@@ -261,15 +261,19 @@ pub struct PropertyHandlerContext {
         _.dark.clearRetainingCapacity();
     }
 
+    const SupportsEntryPtr = *SupportsEntry;
+
     fn addConditionalProperty(*_, condition: css.SupportsCondition, property: css.Property) {
         if (_.context != DeclarationContext.style_rule) return;
 
-        if (*entry := brk: {
-            for (*supp of _.supports.items) {
-                if (condition.eql(&supp.condition)) break :brk supp;
+        let found: SupportsEntryPtr? = null;
+        for (*supp of _.supports.items) {
+            if (condition.eql(&supp.condition)) {
+                found = supp;
+                break;
             }
-            break :brk null;
-        }) {
+        }
+        if (entry := found) {
             if (_.is_important) {
                 bun.handleOom(entry.important_declarations.append(_.allocator, property));
             } else {

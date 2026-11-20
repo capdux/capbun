@@ -1278,8 +1278,7 @@ pub enum MediaFeatureValue {
     /// Parses a single media query feature value, with an expected type.
     /// If the type is unknown, pass MediaFeatureType::Unknown instead.
     static fn parse(input: *css.Parser, expected_type: MediaFeatureType): Result(MediaFeatureValue) {
-        const parse_known_fn = MediaFeatureValue.parseKnown;
-        if (value := input.tryParse(parse_known_fn, .{expected_type}).asValue()) {
+        if (value := input.tryParse(MediaFeatureValue.parseKnown, .{expected_type}).asValue()) {
             return { result: value };
         }
 

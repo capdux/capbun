@@ -207,20 +207,21 @@ pub fn addConditionalProperty(self: *PropertyHandlerContext, condition: css.Supp
             if ((self.context != DeclarationContext.style_rule)) {
                 return;
             }
-            if (brk: {
+            var found: ?SupportsEntryPtr = null;
+            _ = &found;
             for (self.supports.items) |*supp| {
                 _ = &supp;
                 if (condition.eql((&(supp.*).condition))) {
-                    break :brk (supp.*);
+                    found = (supp.*);
+                    break;
                 }
             }
-            break :brk null;
-}) |*entry| {
+            if (found) |entry| {
                 _ = &entry;
                 if (self.is_important) {
-                    _ = bun.handleOom((entry.*).important_declarations.append(self.allocator, property));
+                    _ = bun.handleOom(entry.important_declarations.append(self.allocator, property));
                 } else {
-                    _ = bun.handleOom((entry.*).declarations.append(self.allocator, property));
+                    _ = bun.handleOom(entry.declarations.append(self.allocator, property));
                 }
             } else {
                 const PropList = ArrayList(css.Property);
@@ -248,6 +249,7 @@ pub fn addUnparsedFallbacks(self: *PropertyHandlerContext, unparsed: *UnparsedPr
                 _ = self.addConditionalProperty(condition_and_fallback[0], css.Property{ .unparsed = UnparsedProperty{ .property_id = unparsed.property_id.deepClone(self.allocator), .value = condition_and_fallback[1] } });
             }
     }
+    const SupportsEntryPtr = *SupportsEntry;
 };
 
 const MediaRule = css.css_rules.media.MediaRule;

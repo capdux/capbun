@@ -56,7 +56,8 @@ pub const Inset = struct {
     left: LengthPercentageOrAuto,
 
 pub fn deepClone(self: Inset, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -73,7 +74,8 @@ pub const InsetBlock = struct {
     block_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: InsetBlock, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -90,7 +92,8 @@ pub const InsetInline = struct {
     inline_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: InsetInline, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -107,7 +110,8 @@ pub const MarginBlock = struct {
     block_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: MarginBlock, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -124,7 +128,8 @@ pub const MarginInline = struct {
     inline_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: MarginInline, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -143,7 +148,8 @@ pub const Margin = struct {
     left: LengthPercentageOrAuto,
 
 pub fn deepClone(self: Margin, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -160,7 +166,8 @@ pub const PaddingBlock = struct {
     block_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: PaddingBlock, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -177,7 +184,8 @@ pub const PaddingInline = struct {
     inline_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: PaddingInline, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -196,7 +204,8 @@ pub const Padding = struct {
     left: LengthPercentageOrAuto,
 
 pub fn deepClone(self: Padding, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -213,7 +222,8 @@ pub const ScrollMarginBlock = struct {
     block_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollMarginBlock, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -230,7 +240,8 @@ pub const ScrollMarginInline = struct {
     inline_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollMarginInline, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -249,7 +260,8 @@ pub const ScrollMargin = struct {
     left: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollMargin, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -266,7 +278,8 @@ pub const ScrollPaddingBlock = struct {
     block_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollPaddingBlock, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -283,7 +296,8 @@ pub const ScrollPaddingInline = struct {
     inline_end: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollPaddingInline, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -302,7 +316,8 @@ pub const ScrollPadding = struct {
     left: LengthPercentageOrAuto,
 
 pub fn deepClone(self: ScrollPadding, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -532,7 +547,7 @@ pub fn flush(self: *@This(), dest: *css.DeclarationList, context: *css.PropertyH
             }
     }
 
-pub inline fn logicalPropHelper(val: ?*Property, comptime logical: css.PropertyIdTag, comptime ltr: css.PropertyIdTag, comptime rtl: css.PropertyIdTag, context: *css.PropertyHandlerContext) void {
+pub inline fn logicalPropHelper(val: *OptProperty, comptime logical: css.PropertyIdTag, comptime ltr: css.PropertyIdTag, comptime rtl: css.PropertyIdTag, context: *css.PropertyHandlerContext) void {
             if (val.*) |*_v| {
                 _ = &_v;
                 if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt((_v.*).*)) else @as(css.PropertyIdTag, (_v.*).*)) == logical)) {
@@ -569,7 +584,7 @@ pub inline fn logicalSideHelper(start: *OptProperty, end: *OptProperty, comptime
             }
     }
 
-pub inline fn prop(val: ?*Property, comptime logical: css.PropertyIdTag, comptime physical: css.PropertyIdTag, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
+pub inline fn prop(val: *OptProperty, comptime logical: css.PropertyIdTag, comptime physical: css.PropertyIdTag, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
             if (val.*) |*v| {
                 _ = &v;
                 if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt((v.*).*)) else @as(css.PropertyIdTag, (v.*).*)) == logical)) {

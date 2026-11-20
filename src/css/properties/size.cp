@@ -52,7 +52,7 @@ fn parseSizeKeywordFn(i: *css.Parser): css.Result(Size) {
             .@"-moz-fit-content" => Size{ fit_content: css.VendorPrefix{ .moz = true } },
             .contain => Size.contain,
         } };
-    } else return { err: i.newCustomError(css.ParserError.invalid_value) };
+    } else return { err: i.newCustomError(css.ParserError{ invalid_value: {} }) };
 }
 
 pub enum BoxSizing {

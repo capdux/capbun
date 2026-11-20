@@ -449,7 +449,11 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: Font, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     pub const PropertyFieldMap = .{ .family = css.PropertyIdTag.@"font-family", .size = css.PropertyIdTag.@"font-size", .style = css.PropertyIdTag.@"font-style", .weight = css.PropertyIdTag.@"font-weight", .stretch = css.PropertyIdTag.@"font-stretch", .line_height = css.PropertyIdTag.@"line-height", .variant_caps = css.PropertyIdTag.@"font-variant-caps" };
 };
@@ -773,14 +777,14 @@ pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
                 const percentage: Percentage = self.intoPercentage();
                 return percentage.toCss(dest);
             }
-            return (switch (self.*) {
+            return (switch (self) {
 .percentage => |*val| val.toCss(dest),
 .keyword => |*kw| kw.toCss(dest),
 });
     }
 
 pub fn intoPercentage(self: @This()) Percentage {
-            return (switch (self.*) {
+            return (switch (self) {
 .percentage => |*val| val.*,
 .keyword => |*kw| kw.intoPercentage(),
 });

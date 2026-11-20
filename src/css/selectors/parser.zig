@@ -146,7 +146,7 @@ _ = try dest.writeStr("*|");
 },
 }
             }
-            _ = try css.IdentFns.toCss((&self.local_name), dest);
+            _ = try css.IdentFns.toCss(self.local_name, dest);
             switch (self.operation) {
 .exists => {
 
@@ -2647,11 +2647,9 @@ return .{ .err = e };
             return .{ .result = result.items };
     }
 };
-                const IdentSlice = &.{};
-                _ = Impl.SelectorImpl.Identifier;
                 var closure = Closure{ .parser = parser };
                 _ = &closure;
-                const names = (switch (input.parseNestedBlock(IdentSlice, (&closure), Closure.parsefn)) {
+                const names = (switch (input.parseNestedBlock(&.{}, Impl.SelectorImpl.Identifier, (&closure), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },

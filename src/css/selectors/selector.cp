@@ -981,7 +981,7 @@ pub const serialize = struct {
             .fullscreen prefix => {
                 try dest.writeChar(':');
                 const vp = if (!dest.vendor_prefix.isEmpty())
-                    bits.@"&&"(css.VendorPrefix, dest.vendor_prefix, prefix).orNone()
+                    bits.@"and"(css.VendorPrefix, dest.vendor_prefix, prefix).orNone()
                 else
                     prefix;
                 try vp.toCss(dest);

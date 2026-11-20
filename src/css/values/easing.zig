@@ -260,7 +260,7 @@ pub fn parse(p: *css.Parser) Result(StepPosition) {
     }
 
 pub fn toCss(self: EasingFunction, dest: *css.Printer) css.PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .linear => try dest.writeStr("linear"),
 .ease => try dest.writeStr("ease"),
 .ease_in => try dest.writeStr("ease-in"),
@@ -271,19 +271,19 @@ else => {
                 if (self.isEase()) {
                     return dest.writeStr("ease");
                 } else {
-                    if (((self.* == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.42, .y1 = 0.0, .x2 = 1.0, .y2 = 1.0 })))) {
+                    if (((self == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.42, .y1 = 0.0, .x2 = 1.0, .y2 = 1.0 })))) {
                         return dest.writeStr("ease-in");
                     } else {
-                        if (((self.* == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.0, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0 })))) {
+                        if (((self == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.0, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0 })))) {
                             return dest.writeStr("ease-out");
                         } else {
-                            if (((self.* == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.42, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0 })))) {
+                            if (((self == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.42, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0 })))) {
                                 return dest.writeStr("ease-in-out");
                             }
                         }
                     }
                 }
-                switch (self.*) {
+                switch (self) {
 .cubic_bezier => |cb| {
 _ = try dest.writeStr("cubic-bezier(");
                 _ = try css.generic.toCss(CSSNumber, (&cb.x1), dest);
@@ -321,7 +321,7 @@ pub fn isIdent(s: []const u8) bool {
     }
 
 pub fn isEase(self: EasingFunction) bool {
-            return ((self.* == .ease) or ((self.* == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.25, .y1 = 0.1, .x2 = 0.25, .y2 = 1.0 }))));
+            return ((self == .ease) or ((self == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.25, .y1 = 0.1, .x2 = 0.25, .y2 = 1.0 }))));
     }
     const Map = bun.ComptimeEnumMap(enum {
             linear,

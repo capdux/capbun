@@ -301,7 +301,10 @@ pub fn toCss(self: SupportsCondition, dest: *css.Printer) css.PrintErr!void {
             switch (self) {
 .not => |condition| {
 _ = try dest.writeStr(" not ");
-            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens(self_val));
+            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens((blk: {
+            break :blk self_val;
+
+})));
 },
 .@"and" => |conditions| {
 var first = true;

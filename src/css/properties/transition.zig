@@ -431,9 +431,8 @@ pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1)
             const result = getLogicalProperties(properties.at(i));
             if (((result == .block) and context.shouldCompileLogical(result.block[0]))) {
                 _ = replace(context.allocator, properties, result.block[1], i);
-                if (rtl_properties) |*rtl| {
-                    _ = &rtl;
-                    _ = replace(context.allocator, (rtl.*), result.block[1], i);
+                if ((rtl_properties != null)) {
+                    _ = replace(context.allocator, (&rtl_properties.?), result.block[1], i);
                 }
                 i = (i + 1);
             } else {
@@ -444,9 +443,8 @@ pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1)
                         rtl_properties = properties.deepClone(context.allocator);
                     }
                     _ = replace(context.allocator, properties, ltr, i);
-                    if (rtl_properties) |*rtl_props| {
-                        _ = &rtl_props;
-                        _ = replace(context.allocator, (rtl_props.*), rtl, i);
+                    if ((rtl_properties != null)) {
+                        _ = replace(context.allocator, (&rtl_properties.?), rtl, i);
                     }
                     i = (i + @as(u32, @intCast(ltr.len)));
                 } else {
@@ -458,13 +456,14 @@ pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1)
                             i = (i + 1);
                         }
                     }
-                    if (rtl_properties) |*rtl_props| {
+                    if ((rtl_properties != null)) {
+                        var rtl_props = (&rtl_properties.?);
                         _ = &rtl_props;
-                        _ = (rtl_props.*).mut(i).setPrefixesForTargets(context.targets);
-                        if (css.css_properties.masking.getWebkitMaskProperty((rtl_props.*).at(i))) |property_id| {
+                        _ = rtl_props.mut(i).setPrefixesForTargets(context.targets);
+                        if (css.css_properties.masking.getWebkitMaskProperty(rtl_props.at(i))) |property_id| {
                             _ = &property_id;
                             if (context.targets.prefixes(VendorPrefix.NONE, Feature.mask_border).webkit) {
-                                _ = (rtl_props.*).insert(context.allocator, i, property_id);
+                                _ = rtl_props.insert(context.allocator, i, property_id);
                                 i = (i + 1);
                             }
                         }

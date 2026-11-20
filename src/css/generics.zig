@@ -511,7 +511,15 @@ _ = @compileError("TODO");
 },
 }
         }
-        return (if (T == f32) CSSNumberFns.toCss(self, dest) else if (T == CSSInteger) CSSIntegerFns.toCss(self, dest) else if (T == CustomIdent) CustomIdentFns.toCss(self, dest) else if (T == DashedIdent) DashedIdentFns.toCss(self, dest) else if (T == Ident) IdentFns.toCss(self, dest) else T.toCss(self, dest));
+        return (if (T == f32) CSSNumberFns.toCss(self, dest) else if (T == CSSInteger) CSSIntegerFns.toCss(self, dest) else if (T == CustomIdent) CustomIdentFns.toCss(self, dest) else if (T == DashedIdent) DashedIdentFns.toCss(self, dest) else if (T == Ident) IdentFns.toCss(self, dest) else {
+{
+            const info = @typeInfo(@TypeOf(T.toCss)).@"fn";
+            if (comptime ((info.params.len > 0) and (info.params[0].@"type" == T))) {
+                return T.toCss(self.*, dest);
+            }
+            return T.toCss(self, dest);
+        }
+});
 }
 
 pub fn eqlList(comptime T: type, lhs: *const ArrayList(T), rhs: *const ArrayList(T)) bool {

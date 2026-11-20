@@ -104,7 +104,7 @@ pub fn toCss(self: Composes, dest: *Printer) PrintErr!void {
                 } else {
                     _ = try dest.writeChar(32);
                 }
-                _ = try CustomIdentFns.toCss((&name), dest);
+                _ = try CustomIdentFns.toCss(name, dest);
             }
             if (self.@"from") |*@"from"| {
                 _ = &@"from";
@@ -127,7 +127,7 @@ return .{ .err = e };
     }
 
 pub fn deepClone(self: Composes, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

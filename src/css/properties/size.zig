@@ -489,7 +489,7 @@ pub fn parseSizeKeywordFn(i: *css.Parser) css.Result(Size) {
 .contain => Size.contain,
 }) };
         } else {
-            return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+            return .{ .err = i.newCustomError(css.ParserError{ .invalid_value = .{} }) };
         }
 }
 

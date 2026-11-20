@@ -187,7 +187,10 @@ pub fn CssRule(comptime Rule: type) type {
                     return m.toCss(dest);
                 },
                 .@"import" => |x| x.toCss(dest),
-                .style => |x| x.toCss(dest),
+                .style => |x| {
+                    var s = x;
+                    return s.toCss(dest);
+                },
                 .keyframes => |x| x.toCss(dest),
                 .font_face => |x| x.toCss(dest),
                 .font_palette_values => |x| x.toCss(dest),

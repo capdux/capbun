@@ -147,7 +147,7 @@ pub union(enum) EasingFunction {
     }
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
-        return switch (_.*) {
+        return switch (_) {
             .linear => try dest.writeStr("linear"),
             .ease => try dest.writeStr("ease"),
             .ease_in => try dest.writeStr("ease-in"),
@@ -156,21 +156,21 @@ pub union(enum) EasingFunction {
             else => {
                 if (_.isEase()) {
                     return dest.writeStr("ease");
-                } else if (_.* == .cubic_bezier && _.cubic_bezier.eql(&{
+                } else if (_ == .cubic_bezier && _.cubic_bezier.eql(&{
                     x1: 0.42,
                     y1: 0.0,
                     x2: 1.0,
                     y2: 1.0,
                 })) {
                     return dest.writeStr("ease-in");
-                } else if (_.* == .cubic_bezier && _.cubic_bezier.eql(&{
+                } else if (_ == .cubic_bezier && _.cubic_bezier.eql(&{
                     x1: 0.0,
                     y1: 0.0,
                     x2: 0.58,
                     y2: 1.0,
                 })) {
                     return dest.writeStr("ease-out");
-                } else if (_.* == .cubic_bezier && _.cubic_bezier.eql(&{
+                } else if (_ == .cubic_bezier && _.cubic_bezier.eql(&{
                     x1: 0.42,
                     y1: 0.0,
                     x2: 0.58,
@@ -179,7 +179,7 @@ pub union(enum) EasingFunction {
                     return dest.writeStr("ease-in-out");
                 }
 
-                switch (_.*) {
+                switch (_) {
                     .cubic_bezier => |cb| {
                         dest.writeStr("cubic-bezier(")?;
                         css.generic.toCss(CSSNumber, &cb.x1, dest)?;
@@ -216,8 +216,8 @@ pub union(enum) EasingFunction {
 
     /// Returns whether the easing function is equivalent to the `ease` keyword.
     pub fn isEase(): bool {
-        return _.* == .ease ||
-            (_.* == .cubic_bezier && _.cubic_bezier.eql(&{
+        return _ == .ease ||
+            (_ == .cubic_bezier && _.cubic_bezier.eql(&{
                 x1: 0.25,
                 y1: 0.1,
                 x2: 0.25,
