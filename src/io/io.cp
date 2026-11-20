@@ -336,9 +336,11 @@ inline fn keventCall(
 
 const EventType = if (Environment.isLinux) linux.epoll_event else KEvent;
 
+type RequestCallback = *const fn (*Request) Action;
+
 pub const Request = struct {
     next: ?*Request = null,
-    callback: *const fn (*Request) Action,
+    callback: RequestCallback,
     scheduled: bool = false,
 
     pub const Queue = bun.UnboundedQueue(Request, .next);

@@ -13,6 +13,7 @@ pub const Action = union(enum) {
     pub const CloseAction = ActionCloseAction;
 };
 
+const RequestCallback = *const fn (*Request) Action;
 pub const heap = @import("./heap.zig");
 pub const openForWriting = @import("./openForWriting.zig").openForWriting;
 pub const openForWritingImpl = @import("./openForWriting.zig").openForWritingImpl;
@@ -325,7 +326,7 @@ const KEvent = (if (Environment.isFreeBSD) std.c.Kevent else std.posix.system.ke
 const EventType = (if (Environment.isLinux) linux.epoll_event else KEvent);
 pub const Request = struct {
     next: ?*Request = null,
-    callback: *const fn (*Request) *Action,
+    callback: RequestCallback,
     scheduled: bool = false,
     pub const Queue = bun.UnboundedQueue(Request, .next);
 };

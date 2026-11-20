@@ -3110,3 +3110,5 @@ Options:
 - **[2026-11-20 21:22] Wave 16 C 组阶段汇报**：`s3/error_jsc.cp` 修复（`([]const u8)?`，ratio 1.081）；`io/io.cp` 被 `cpc` 缺陷阻塞——fn 指针类型里具名 union 返回类型被降成 `*Action`，已提交上游工单 `task-bun-20261120-fnptr-ret-union`（repro `/data/dev/cp/temp/repro_fnptr_ret.cp`），影响 `Blob.zig:2460`、`blob/read_file.zig:193`、`blob/write_file.zig:166`；`io.cp` 暂不提交，待上游修复后重编。
 
 - **[2026-11-20 21:24] Wave 16 D 组验收提交（7 模块）+ Wave 17 `zig:check` 体检**：`GarbageCollectionController`/`WTFTimer`/`PosixSignalHandle`/`ObjectURLRegistry` 升级 `@root struct`，`options.cp` 补 `static` 与 `OptSource`，`Store.cp` 的 `StoreFile` 改值类型（7/7 PASS）；`jsc.cp` 的 `OpaqueCallback` 被 `cpc` 缺陷阻塞，工单 `task-bun-20261120-fn-callconv-ptr`。`io.cp` 工单 `task-bun-20261120-fnptr-ret-union`；两单均已入队（`cp_agy` 已唤醒）。Wave 17 `zig:check`：526 错 / 225 文件。
+
+- **[2026-11-20 21:28] 上游结单 `task-bun-20261120-fnptr-ret-union` 验收**：`cp_agy` 已在 `cpc/src/codegen/mod.rs`、`modular.rs`、`types/map_type.rs` 修复（union/union(enum) 按值语义登记，不再加 `*`）。验证：repro 生成 `cb: *const fn (*R) Action`；重编 `src/io/io.cp` 后 `io.zig` 为 `const RequestCallback = *const fn (*Request) Action;`（ratio 0.942，PASS），解封 `Blob.zig:2460`、`blob/read_file.zig:193`、`blob/write_file.zig:166`。
