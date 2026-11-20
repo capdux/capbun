@@ -1200,3 +1200,6 @@
 ### 2026-11-19 19:38:15 UTC - js_parser/ast 转换解析层批量突破 (2,032 行迁移)
 - 成功攻克函数定义、导入导出、REPL 转换以及 TypeScript 语法转换四大核心解析模块。
 - 彻底消除 CP 关键字 ref / class 冲突与 multi-tag switch 隐患，膨胀率均优于 1.06x。
+
+### 2026-11-20 03:13:01 UTC - js_parser/ast 工厂与 SideEffects 迁移经验
+- `return struct` 工厂文件内部函数统一 `static fn`、去 `noalias`、带标签 `switch` 改等价 `while`；`SideEffects` 提顶层辅助类型避免借用冲突。

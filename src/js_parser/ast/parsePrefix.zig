@@ -1,819 +1,84 @@
-pub fn ParsePrefix(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const is_jsx_enabled = P.is_jsx_enabled;
-        const is_typescript_enabled = P.is_typescript_enabled;
-
-        fn t_super(noalias p: *P, level: Level) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const l = @intFromEnum(level);
-            const superRange = p.lexer.range();
-            try p.lexer.next();
-
-            switch (p.lexer.token) {
-                .t_open_paren => {
-                    if (l < @intFromEnum(Level.call) and p.fn_or_arrow_data_parse.allow_super_call) {
-                        return p.newExpr(E.Super{}, loc);
-                    }
-                },
-                .t_dot, .t_open_bracket => {
-                    if (p.fn_or_arrow_data_parse.allow_super_property) {
-                        return p.newExpr(E.Super{}, loc);
-                    }
-                },
-                else => {},
-            }
-
-            p.log.addRangeError(p.source, superRange, "Unexpected \"super\"") catch unreachable;
-            return p.newExpr(E.Super{}, loc);
-        }
-        fn t_open_paren(noalias p: *P, level: Level) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-
-            // Arrow functions aren't allowed in the middle of expressions
-            if (level.gt(.assign)) {
-                // Allow "in" inside parentheses
-                const oldAllowIn = p.allow_in;
-                p.allow_in = true;
-
-                var value = try p.parseExpr(Level.lowest);
-                p.markExprAsParenthesized(&value);
-                try p.lexer.expect(.t_close_paren);
-
-                p.allow_in = oldAllowIn;
-                return value;
-            }
-
-            return p.parseParenExpr(loc, level, ParenExprOpts{});
-        }
-        fn t_false(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.newExpr(E.Boolean{ .value = false }, loc);
-        }
-        fn t_true(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.newExpr(E.Boolean{ .value = true }, loc);
-        }
-        fn t_null(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.newExpr(E.Null{}, loc);
-        }
-        fn t_this(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            if (p.fn_or_arrow_data_parse.is_this_disallowed) {
-                p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"this\" here") catch unreachable;
-            }
-            try p.lexer.next();
-            return Expr{ .data = Prefill.Data.This, .loc = loc };
-        }
-        fn t_private_identifier(noalias p: *P, level: Level) anyerror!Expr {
-            const loc = p.lexer.loc();
-            if (!p.allow_private_identifiers or !p.allow_in or level.gte(.compare)) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            const name = p.lexer.identifier;
-            try p.lexer.next();
-
-            // Check for "#foo in bar"
-            if (p.lexer.token != .t_in) {
-                try p.lexer.expected(.t_in);
-            }
-
-            return p.newExpr(E.PrivateIdentifier{ .ref = try p.storeNameInRef(name) }, loc);
-        }
-        fn t_identifier(noalias p: *P, level: Level) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const name = p.lexer.identifier;
-            const name_range = p.lexer.range();
-            const raw = p.lexer.raw();
-
-            try p.lexer.next();
-
-            // Handle async and await expressions
-            switch (AsyncPrefixExpression.find(name)) {
-                .is_async => {
-                    if ((raw.ptr == name.ptr and raw.len == name.len) or AsyncPrefixExpression.find(raw) == .is_async) {
-                        return try p.parseAsyncPrefixExpr(name_range, level);
-                    }
-                },
-
-                .is_await => {
-                    switch (p.fn_or_arrow_data_parse.allow_await) {
-                        .forbid_all => {
-                            p.log.addRangeError(p.source, name_range, "The keyword \"await\" cannot be used here") catch unreachable;
-                        },
-                        .allow_expr => {
-                            if (AsyncPrefixExpression.find(raw) != .is_await) {
-                                p.log.addRangeError(p.source, name_range, "The keyword \"await\" cannot be escaped") catch unreachable;
-                            } else {
-                                if (p.fn_or_arrow_data_parse.is_top_level) {
-                                    p.top_level_await_keyword = name_range;
-                                }
-
-                                if (p.fn_or_arrow_data_parse.track_arrow_arg_errors) {
-                                    p.fn_or_arrow_data_parse.arrow_arg_errors.invalid_expr_await = name_range;
-                                }
-
-                                const value = try p.parseExpr(.prefix);
-                                if (p.lexer.token == T.t_asterisk_asterisk) {
-                                    try p.lexer.unexpected();
-                                    return error.SyntaxError;
-                                }
-
-                                return p.newExpr(E.Await{ .value = value }, loc);
-                            }
-                        },
-                        .allow_ident => {
-                            p.lexer.prev_token_was_await_keyword = true;
-                            p.lexer.await_keyword_loc = name_range.loc;
-                            p.lexer.fn_or_arrow_start_loc = p.fn_or_arrow_data_parse.needs_async_loc;
-                        },
-                    }
-                },
-
-                .is_yield => {
-                    switch (p.fn_or_arrow_data_parse.allow_yield) {
-                        .forbid_all => {
-                            p.log.addRangeError(p.source, name_range, "The keyword \"yield\" cannot be used here") catch unreachable;
-                        },
-                        .allow_expr => {
-                            if (AsyncPrefixExpression.find(raw) != .is_yield) {
-                                p.log.addRangeError(p.source, name_range, "The keyword \"yield\" cannot be escaped") catch unreachable;
-                            } else {
-                                if (level.gt(.assign)) {
-                                    p.log.addRangeError(p.source, name_range, "Cannot use a \"yield\" here without parentheses") catch unreachable;
-                                }
-
-                                if (p.fn_or_arrow_data_parse.track_arrow_arg_errors) {
-                                    p.fn_or_arrow_data_parse.arrow_arg_errors.invalid_expr_yield = name_range;
-                                }
-
-                                return p.parseYieldExpr(loc);
-                            }
-                        },
-                        // .allow_ident => {
-
-                        // },
-                        else => {
-                            // Try to gracefully recover if "yield" is used in the wrong place
-                            if (!p.lexer.has_newline_before) {
-                                switch (p.lexer.token) {
-                                    .t_null, .t_identifier, .t_false, .t_true, .t_numeric_literal, .t_big_integer_literal, .t_string_literal => {
-                                        p.log.addRangeError(p.source, name_range, "Cannot use \"yield\" outside a generator function") catch unreachable;
-                                    },
-                                    else => {},
-                                }
-                            }
-                        },
-                    }
-                },
-                .none => {},
-            }
-
-            // Handle the start of an arrow expression
-            if (p.lexer.token == .t_equals_greater_than and level.lte(.assign)) {
-                const ref = p.storeNameInRef(name) catch unreachable;
-                var args = p.allocator.alloc(Arg, 1) catch unreachable;
-                args[0] = Arg{ .binding = p.b(B.Identifier{
-                    .ref = ref,
-                }, loc) };
-
-                _ = p.pushScopeForParsePass(.function_args, loc) catch unreachable;
-                defer p.popScope();
-
-                var fn_or_arrow_data = FnOrArrowDataParse{
-                    .needs_async_loc = loc,
-                };
-                return p.newExpr(try p.parseArrowBody(args, &fn_or_arrow_data), loc);
-            }
-
-            const ref = p.storeNameInRef(name) catch unreachable;
-
-            return Expr.initIdentifier(ref, loc);
-        }
-        fn t_template_head(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const head = try p.lexer.toEString();
-
-            const parts = try p.parseTemplateParts(false);
-
-            // Check if TemplateLiteral is unsupported. We don't care for this product.`
-            // if ()
-
-            return p.newExpr(E.Template{
-                .head = .{ .cooked = head },
-                .parts = parts,
-            }, loc);
-        }
-        fn t_numeric_literal(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const value = p.newExpr(E.Number{ .value = p.lexer.number }, loc);
-            // p.checkForLegacyOctalLiteral()
-            try p.lexer.next();
-            return value;
-        }
-        fn t_big_integer_literal(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const value = p.lexer.identifier;
-            // markSyntaxFeature bigInt
-            try p.lexer.next();
-            return p.newExpr(E.BigInt{ .value = value }, loc);
-        }
-        fn t_slash(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.scanRegExp();
-            // always set regex_flags_start to null to make sure we don't accidentally use the wrong value later
-            defer p.lexer.regex_flags_start = null;
-            const value = p.lexer.raw();
-            try p.lexer.next();
-
-            return p.newExpr(E.RegExp{ .value = value, .flags_offset = p.lexer.regex_flags_start }, loc);
-        }
-        fn t_void(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(E.Unary{
-                .op = .un_void,
-                .value = value,
-            }, loc);
-        }
-        fn t_typeof(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(
-                E.Unary{
-                    .op = .un_typeof,
-                    .value = value,
-                    .flags = .{
-                        .was_originally_typeof_identifier = value.data == .e_identifier,
-                    },
-                },
-                loc,
-            );
-        }
-        fn t_delete(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-            if (value.data == .e_index) {
-                if (value.data.e_index.index.data == .e_private_identifier) {
-                    const private = value.data.e_index.index.data.e_private_identifier;
-                    const name = p.loadNameFromRef(private.ref);
-                    const range = logger.Range{ .loc = value.loc, .len = @as(i32, @intCast(name.len)) };
-                    p.log.addRangeErrorFmt(p.source, range, p.allocator, "Deleting the private name \"{s}\" is forbidden", .{name}) catch unreachable;
-                }
-            }
-
-            return p.newExpr(E.Unary{
-                .op = .un_delete,
-                .value = value,
-                .flags = .{
-                    .was_originally_delete_of_identifier_or_property_access = value.data == .e_identifier or
-                        value.isPropertyAccess(),
-                },
-            }, loc);
-        }
-        fn t_plus(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(E.Unary{ .op = .un_pos, .value = value }, loc);
-        }
-        fn t_minus(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(E.Unary{ .op = .un_neg, .value = value }, loc);
-        }
-        fn t_tilde(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(E.Unary{ .op = .un_cpl, .value = value }, loc);
-        }
-        fn t_exclamation(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            const value = try p.parseExpr(.prefix);
-            if (p.lexer.token == .t_asterisk_asterisk) {
-                try p.lexer.unexpected();
-                return error.SyntaxError;
-            }
-
-            return p.newExpr(E.Unary{ .op = .un_not, .value = value }, loc);
-        }
-        fn t_minus_minus(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.newExpr(E.Unary{ .op = .un_pre_dec, .value = try p.parseExpr(.prefix) }, loc);
-        }
-        fn t_plus_plus(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.newExpr(E.Unary{ .op = .un_pre_inc, .value = try p.parseExpr(.prefix) }, loc);
-        }
-        fn t_function(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            return try p.parseFnExpr(loc, false, logger.Range.None);
-        }
-        fn t_class(noalias p: *P) anyerror!Expr {
-            const loc = p.lexer.loc();
-            const classKeyword = p.lexer.range();
-            // markSyntaxFEatuer class
-            try p.lexer.next();
-            var name: ?js_ast.LocRef = null;
-
-            _ = p.pushScopeForParsePass(.class_name, loc) catch unreachable;
-
-            // Parse an optional class name
-            if (p.lexer.token == .t_identifier) {
-                const name_text = p.lexer.identifier;
-                if (!is_typescript_enabled or !strings.eqlComptime(name_text, "implements")) {
-                    if (p.fn_or_arrow_data_parse.allow_await != .allow_ident and strings.eqlComptime(name_text, "await")) {
-                        p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"await\" as an identifier here") catch unreachable;
-                    }
-
-                    name = js_ast.LocRef{
-                        .loc = p.lexer.loc(),
-                        .ref = p.newSymbol(
-                            .other,
-                            name_text,
-                        ) catch unreachable,
-                    };
-                    try p.lexer.next();
-                }
-            }
-
-            // Even anonymous classes can have TypeScript type parameters
-            if (is_typescript_enabled) {
-                _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_const_modifier = true });
-            }
-
-            const class = try p.parseClass(classKeyword, name, ParseClassOptions{
-                .allow_ts_decorators = is_typescript_enabled or p.options.features.standard_decorators,
-            });
-            p.popScope();
-
-            return p.newExpr(class, loc);
-        }
-        fn t_at(noalias p: *P) anyerror!Expr {
-            // Parse decorators before a class expression: @dec class { ... }
-            const ts_decorators = try p.parseTypeScriptDecorators();
-
-            // Expect class keyword after decorators
-            if (p.lexer.token != .t_class) {
-                try p.lexer.expected(.t_class);
-                return error.SyntaxError;
-            }
-
-            const loc = p.lexer.loc();
-            const classKeyword = p.lexer.range();
-            try p.lexer.next();
-            var name: ?js_ast.LocRef = null;
-
-            _ = p.pushScopeForParsePass(.class_name, loc) catch unreachable;
-
-            // Parse an optional class name
-            if (p.lexer.token == .t_identifier) {
-                const name_text = p.lexer.identifier;
-                if (!is_typescript_enabled or !strings.eqlComptime(name_text, "implements")) {
-                    if (p.fn_or_arrow_data_parse.allow_await != .allow_ident and strings.eqlComptime(name_text, "await")) {
-                        p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"await\" as an identifier here") catch unreachable;
-                    }
-
-                    name = js_ast.LocRef{
-                        .loc = p.lexer.loc(),
-                        .ref = p.newSymbol(
-                            .other,
-                            name_text,
-                        ) catch unreachable,
-                    };
-                    try p.lexer.next();
-                }
-            }
-
-            // Even anonymous classes can have TypeScript type parameters
-            if (is_typescript_enabled) {
-                _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_const_modifier = true });
-            }
-
-            const class = try p.parseClass(classKeyword, name, ParseClassOptions{
-                .ts_decorators = ts_decorators,
-                .allow_ts_decorators = true,
-            });
-            p.popScope();
-
-            return p.newExpr(class, loc);
-        }
-        fn t_new(noalias p: *P, flags: Expr.EFlags) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-
-            // Special-case the weird "new.target" expression here
-            if (p.lexer.token == .t_dot) {
-                try p.lexer.next();
-
-                if (p.lexer.token != .t_identifier or !strings.eqlComptime(p.lexer.raw(), "target")) {
-                    try p.lexer.unexpected();
-                    return error.SyntaxError;
-                }
-                const range = logger.Range{ .loc = loc, .len = p.lexer.range().end().start - loc.start };
-
-                try p.lexer.next();
-                return p.newExpr(E.NewTarget{ .range = range }, loc);
-            }
-
-            // This wil become the new expr
-            var new = p.newExpr(E.New{
-                .target = undefined,
-                .args = undefined,
-                .close_parens_loc = undefined,
-            }, loc);
-
-            try p.parseExprWithFlags(.member, flags, &new.data.e_new.target);
-
-            if (comptime is_typescript_enabled) {
-                // Skip over TypeScript type arguments here if there are any
-                if (p.lexer.token == .t_less_than) {
-                    _ = p.trySkipTypeScriptTypeArgumentsWithBacktracking();
-                }
-            }
-
-            if (p.lexer.token == .t_open_paren) {
-                const call_args = try p.parseCallArgs();
-                new.data.e_new.args = call_args.list;
-                new.data.e_new.close_parens_loc = call_args.loc;
-            } else {
-                new.data.e_new.close_parens_loc = .Empty;
-                new.data.e_new.args = .{};
-            }
-
-            return new;
-        }
-        fn t_open_bracket(noalias p: *P, noalias errors: ?*DeferredErrors) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            var is_single_line = !p.lexer.has_newline_before;
-            var items = ListManaged(Expr).init(p.allocator);
-            var self_errors = DeferredErrors{};
-            var comma_after_spread = logger.Loc{};
-
-            // Allow "in" inside arrays
-            const old_allow_in = p.allow_in;
-            p.allow_in = true;
-
-            while (p.lexer.token != .t_close_bracket) {
-                switch (p.lexer.token) {
-                    .t_comma => {
-                        items.append(Expr{ .data = Prefill.Data.EMissing, .loc = p.lexer.loc() }) catch unreachable;
-                    },
-                    .t_dot_dot_dot => {
-                        if (errors != null)
-                            errors.?.array_spread_feature = p.lexer.range();
-
-                        const dots_loc = p.lexer.loc();
-                        try p.lexer.next();
-                        try items.ensureUnusedCapacity(1);
-                        const spread_expr: *Expr = &items.unusedCapacitySlice()[0];
-                        spread_expr.* = p.newExpr(E.Spread{ .value = undefined }, dots_loc);
-                        try p.parseExprOrBindings(.comma, &self_errors, &spread_expr.data.e_spread.value);
-                        items.items.len += 1;
-
-                        // Commas are not allowed here when destructuring
-                        if (p.lexer.token == .t_comma) {
-                            comma_after_spread = p.lexer.loc();
-                        }
-                    },
-                    else => {
-                        try items.ensureUnusedCapacity(1);
-                        const item: *Expr = &items.unusedCapacitySlice()[0];
-                        try p.parseExprOrBindings(.comma, &self_errors, item);
-                        items.items.len += 1;
-                    },
-                }
-
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-
-                try p.lexer.next();
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-            }
-
-            if (p.lexer.has_newline_before) {
-                is_single_line = false;
-            }
-
-            const close_bracket_loc = p.lexer.loc();
-            try p.lexer.expect(.t_close_bracket);
-            p.allow_in = old_allow_in;
-
-            // Is this a binding pattern?
-            if (p.willNeedBindingPattern()) {
-                // noop
-            } else if (errors == null) {
-                // Is this an expression?
-                p.logExprErrors(&self_errors);
-            } else {
-                // In this case, we can't distinguish between the two yet
-                self_errors.mergeInto(errors.?);
-            }
-            return p.newExpr(E.Array{
-                .items = ExprNodeList.moveFromList(&items),
-                .comma_after_spread = comma_after_spread.toNullable(),
-                .is_single_line = is_single_line,
-                .close_bracket_loc = close_bracket_loc,
-            }, loc);
-        }
-        fn t_open_brace(noalias p: *P, noalias errors: ?*DeferredErrors) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            var is_single_line = !p.lexer.has_newline_before;
-            var properties = ListManaged(G.Property).init(p.allocator);
-            var self_errors = DeferredErrors{};
-            var comma_after_spread: logger.Loc = logger.Loc{};
-
-            // Allow "in" inside object literals
-            const old_allow_in = p.allow_in;
-            p.allow_in = true;
-
-            while (p.lexer.token != .t_close_brace) {
-                if (p.lexer.token == .t_dot_dot_dot) {
-                    try p.lexer.next();
-                    try properties.ensureUnusedCapacity(1);
-                    const property: *G.Property = &properties.unusedCapacitySlice()[0];
-                    property.* = .{
-                        .kind = .spread,
-                        .value = Expr.empty,
-                    };
-
-                    try p.parseExprOrBindings(
-                        .comma,
-                        &self_errors,
-                        &(property.value.?),
-                    );
-                    properties.items.len += 1;
-
-                    // Commas are not allowed here when destructuring
-                    if (p.lexer.token == .t_comma) {
-                        comma_after_spread = p.lexer.loc();
-                    }
-                } else {
-                    // This property may turn out to be a type in TypeScript, which should be ignored
-                    var propertyOpts = PropertyOpts{};
-                    if (try p.parseProperty(.normal, &propertyOpts, &self_errors)) |prop| {
-                        if (comptime Environment.allow_assert) {
-                            assert(prop.key != null or prop.value != null);
-                        }
-                        properties.append(prop) catch unreachable;
-                    }
-                }
-
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-
-                try p.lexer.next();
-
-                if (p.lexer.has_newline_before) {
-                    is_single_line = false;
-                }
-            }
-
-            if (p.lexer.has_newline_before) {
-                is_single_line = false;
-            }
-
-            const close_brace_loc = p.lexer.loc();
-            try p.lexer.expect(.t_close_brace);
-            p.allow_in = old_allow_in;
-
-            if (p.willNeedBindingPattern()) {
-                // Is this a binding pattern?
-            } else if (errors == null) {
-                // Is this an expression?
-                p.logExprErrors(&self_errors);
-            } else {
-                // In this case, we can't distinguish between the two yet
-                self_errors.mergeInto(errors.?);
-            }
-
-            return p.newExpr(E.Object{
-                .properties = G.Property.List.moveFromList(&properties),
-                .comma_after_spread = if (comma_after_spread.start > 0)
-                    comma_after_spread
-                else
-                    null,
-                .is_single_line = is_single_line,
-                .close_brace_loc = close_brace_loc,
-            }, loc);
-        }
-        fn t_less_than(noalias p: *P, level: Level, noalias errors: ?*DeferredErrors, flags: Expr.EFlags) anyerror!Expr {
-            const loc = p.lexer.loc();
-            // This is a very complicated and highly ambiguous area of TypeScript
-            // syntax. Many similar-looking things are overloaded.
-            //
-            // TS:
-            //
-            //   A type cast:
-            //     <A>(x)
-            //     <[]>(x)
-            //     <A[]>(x)
-            //
-            //   An arrow function with type parameters:
-            //     <A>(x) => {}
-            //     <A, B>(x) => {}
-            //     <A = B>(x) => {}
-            //     <A extends B>(x) => {}
-            //
-            // TSX:
-            //
-            //   A JSX element:
-            //     <A>(x) => {}</A>
-            //     <A extends>(x) => {}</A>
-            //     <A extends={false}>(x) => {}</A>
-            //
-            //   An arrow function with type parameters:
-            //     <A, B>(x) => {}
-            //     <A extends B>(x) => {}
-            //
-            //   A syntax error:
-            //     <[]>(x)
-            //     <A[]>(x)
-            //     <A>(x) => {}
-            //     <A = B>(x) => {}
-            if (comptime is_typescript_enabled and is_jsx_enabled) {
-                if (try TypeScript.isTSArrowFnJSX(p)) {
-                    _ = try p.skipTypeScriptTypeParameters(TypeParameterFlag{
-                        .allow_const_modifier = true,
-                    });
-                    try p.lexer.expect(.t_open_paren);
-                    return try p.parseParenExpr(loc, level, ParenExprOpts{ .force_arrow_fn = true });
-                }
-            }
-
-            if (is_jsx_enabled) {
-                // Use NextInsideJSXElement() instead of Next() so we parse "<<" as "<"
-                try p.lexer.nextInsideJSXElement();
-                const element = try p.parseJSXElement(loc);
-
-                // The call to parseJSXElement() above doesn't consume the last
-                // TGreaterThan because the caller knows what Next() function to call.
-                // Use Next() instead of NextInsideJSXElement() here since the next
-                // token is an expression.
-                try p.lexer.next();
-                return element;
-            }
-
-            if (is_typescript_enabled) {
-                // This is either an old-style type cast or a generic lambda function
-
-                // "<T>(x)"
-                // "<T>(x) => {}"
-                switch (p.trySkipTypeScriptTypeParametersThenOpenParenWithBacktracking()) {
-                    .did_not_skip_anything => {},
-                    else => |result| {
-                        try p.lexer.expect(.t_open_paren);
-                        return p.parseParenExpr(loc, level, ParenExprOpts{
-                            .force_arrow_fn = result == .definitely_type_parameters,
-                        });
-                    },
-                }
-
-                // "<T>x"
-                try p.lexer.next();
-                try p.skipTypeScriptType(.lowest);
-                try p.lexer.expectGreaterThan(false);
-                return p.parsePrefix(level, errors, flags);
-            }
-
-            try p.lexer.unexpected();
-            return error.SyntaxError;
-        }
-        fn t_import(noalias p: *P, level: Level) anyerror!Expr {
-            const loc = p.lexer.loc();
-            try p.lexer.next();
-            return p.parseImportExpr(loc, level);
-        }
-
-        // Before splitting this up, this used 3 KB of stack space per call.
-        pub fn parsePrefix(noalias p: *P, level: Level, noalias errors: ?*DeferredErrors, flags: Expr.EFlags) anyerror!Expr {
-            return switch (p.lexer.token) {
-                .t_open_bracket => t_open_bracket(p, errors),
-                .t_open_brace => t_open_brace(p, errors),
-                .t_less_than => t_less_than(p, level, errors, flags),
-                .t_import => t_import(p, level),
-                .t_open_paren => t_open_paren(p, level),
-                .t_private_identifier => t_private_identifier(p, level),
-                .t_identifier => t_identifier(p, level),
-                .t_false => t_false(p),
-                .t_true => t_true(p),
-                .t_null => t_null(p),
-                .t_this => t_this(p),
-                .t_template_head => t_template_head(p),
-                .t_numeric_literal => t_numeric_literal(p),
-                .t_big_integer_literal => t_big_integer_literal(p),
-                .t_string_literal, .t_no_substitution_template_literal => p.parseStringLiteral(),
-                .t_slash_equals, .t_slash => t_slash(p),
-                .t_void => t_void(p),
-                .t_typeof => t_typeof(p),
-                .t_delete => t_delete(p),
-                .t_plus => t_plus(p),
-                .t_minus => t_minus(p),
-                .t_tilde => t_tilde(p),
-                .t_exclamation => t_exclamation(p),
-                .t_minus_minus => t_minus_minus(p),
-                .t_plus_plus => t_plus_plus(p),
-                .t_function => t_function(p),
-                .t_class => t_class(p),
-                .t_at => t_at(p),
-                .t_new => t_new(p, flags),
-                .t_super => t_super(p, level),
-                else => {
-                    @branchHint(.cold);
-                    try p.lexer.unexpected();
-                    return error.SyntaxError;
-                },
-            };
-        }
-    };
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+const string = []const u8;
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const bun = @import("bun");
+pub const bun = @import("bun");
 const Environment = bun.Environment;
 const assert = bun.assert;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const E = js_ast.E;
 const Expr = js_ast.Expr;
 const ExprNodeList = js_ast.ExprNodeList;
 const LocRef = js_ast.LocRef;
-
 const G = js_ast.G;
 const Arg = G.Arg;
 const Property = G.Property;
-
 const Op = js_ast.Op;
 const Level = js_ast.Op.Level;
-
 const js_lexer = bun.js_lexer;
 const T = js_lexer.T;
-
 const js_parser = bun.js_parser;
 const AsyncPrefixExpression = js_parser.AsyncPrefixExpression;
 const DeferredErrors = js_parser.DeferredErrors;
@@ -825,7 +90,623 @@ const Prefill = js_parser.Prefill;
 const PropertyOpts = js_parser.PropertyOpts;
 const TypeParameterFlag = js_parser.TypeParameterFlag;
 const TypeScript = js_parser.TypeScript;
-
-const std = @import("std");
 const List = std.ArrayListUnmanaged;
 const ListManaged = std.array_list.Managed;
+
+pub fn ParsePrefix(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn t_super(p: *P, level: Level) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const l = @intFromEnum(level);
+            const superRange = p.lexer.range();
+            _ = try p.lexer.next();
+            switch (p.lexer.token) {
+.t_open_paren => {
+if (((l < @intFromEnum(Level.call)) and p.fn_or_arrow_data_parse.allow_super_call)) {
+                return p.newExpr(E.Super, loc);
+            }
+},
+.t_dot, .t_open_bracket => {
+if (p.fn_or_arrow_data_parse.allow_super_property) {
+                return p.newExpr(E.Super, loc);
+            }
+},
+else => {
+
+},
+}
+            _ = ((p.log.addRangeError(p.source, superRange, "Unexpected \"super\"")) catch unreachable);
+            return p.newExpr(E.Super, loc);
+    }
+
+pub fn t_open_paren(p: *P, level: Level) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            if (level.gt(.assign)) {
+                const oldAllowIn = p.allow_in;
+                p.allow_in = true;
+                var value = try p.parseExpr(Level.lowest);
+                _ = &value;
+                _ = p.markExprAsParenthesized((&value));
+                _ = try p.lexer.expect(.t_close_paren);
+                p.allow_in = oldAllowIn;
+                return value;
+            }
+            return p.parseParenExpr(loc, level, ParenExprOpts{  });
+    }
+
+pub fn t_false(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.newExpr(E.Boolean{ .value = false }, loc);
+    }
+
+pub fn t_true(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.newExpr(E.Boolean{ .value = true }, loc);
+    }
+
+pub fn t_null(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.newExpr(E.Null, loc);
+    }
+
+pub fn t_this(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            if (p.fn_or_arrow_data_parse.is_this_disallowed) {
+                _ = ((p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"this\" here")) catch unreachable);
+            }
+            _ = try p.lexer.next();
+            return Expr{ .data = Prefill.Data.This, .loc = loc };
+    }
+
+pub fn t_private_identifier(p: *P, level: Level) anyerror!Expr {
+            const loc = p.lexer.loc();
+            if ((((!p.allow_private_identifiers) or (!p.allow_in)) or level.gte(.compare))) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            const name = p.lexer.identifier;
+            _ = try p.lexer.next();
+            if ((p.lexer.token != .t_in)) {
+                _ = try p.lexer.expected(.t_in);
+            }
+            return p.newExpr(E.PrivateIdentifier{ .@"ref" = try p.storeNameInRef(name) }, loc);
+    }
+
+pub fn t_identifier(p: *P, level: Level) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const name = p.lexer.identifier;
+            const name_range = p.lexer.range();
+            const raw = p.lexer.raw();
+            _ = try p.lexer.next();
+            switch (AsyncPrefixExpression.find(name)) {
+.is_async => {
+if ((((raw.ptr == name.ptr) and (raw.len == name.len)) or (AsyncPrefixExpression.find(raw) == .is_async))) {
+                return try p.parseAsyncPrefixExpr(name_range, level);
+            }
+},
+.is_await => {
+switch (p.fn_or_arrow_data_parse.allow_await) {
+.forbid_all => {
+_ = ((p.log.addRangeError(p.source, name_range, "The keyword \"await\" cannot be used here")) catch unreachable);
+},
+.allow_expr => {
+if ((AsyncPrefixExpression.find(raw) != .is_await)) {
+                _ = ((p.log.addRangeError(p.source, name_range, "The keyword \"await\" cannot be escaped")) catch unreachable);
+            } else {
+                if (p.fn_or_arrow_data_parse.is_top_level) {
+                    p.top_level_await_keyword = name_range;
+                }
+                if (p.fn_or_arrow_data_parse.track_arrow_arg_errors) {
+                    p.fn_or_arrow_data_parse.arrow_arg_errors.invalid_expr_await = name_range;
+                }
+                const value = try p.parseExpr(.prefix);
+                if ((p.lexer.token == T.t_asterisk_asterisk)) {
+                    _ = try p.lexer.unexpected();
+                    return error.SyntaxError;
+                }
+                return p.newExpr(E.Await{ .value = value }, loc);
+            }
+},
+.allow_ident => {
+p.lexer.prev_token_was_await_keyword = true;
+            p.lexer.await_keyword_loc = name_range.loc;
+            p.lexer.fn_or_arrow_start_loc = p.fn_or_arrow_data_parse.needs_async_loc;
+},
+}
+},
+.is_yield => {
+switch (p.fn_or_arrow_data_parse.allow_yield) {
+.forbid_all => {
+_ = ((p.log.addRangeError(p.source, name_range, "The keyword \"yield\" cannot be used here")) catch unreachable);
+},
+.allow_expr => {
+if ((AsyncPrefixExpression.find(raw) != .is_yield)) {
+                _ = ((p.log.addRangeError(p.source, name_range, "The keyword \"yield\" cannot be escaped")) catch unreachable);
+            } else {
+                if (level.gt(.assign)) {
+                    _ = ((p.log.addRangeError(p.source, name_range, "Cannot use a \"yield\" here without parentheses")) catch unreachable);
+                }
+                if (p.fn_or_arrow_data_parse.track_arrow_arg_errors) {
+                    p.fn_or_arrow_data_parse.arrow_arg_errors.invalid_expr_yield = name_range;
+                }
+                return p.parseYieldExpr(loc);
+            }
+},
+else => {
+if ((!p.lexer.has_newline_before)) {
+                switch (p.lexer.token) {
+.t_null, .t_identifier, .t_false, .t_true, .t_numeric_literal, .t_big_integer_literal, .t_string_literal => {
+_ = ((p.log.addRangeError(p.source, name_range, "Cannot use \"yield\" outside a generator function")) catch unreachable);
+},
+else => {
+
+},
+}
+            }
+},
+}
+},
+.none => {
+
+},
+}
+            if (((p.lexer.token == .t_equals_greater_than) and level.lte(.assign))) {
+                const ref_ = ((p.storeNameInRef(name)) catch unreachable);
+                var args = ((p.allocator.alloc(Arg, 1)) catch unreachable);
+                _ = &args;
+                args[cp_cast_int(usize, 0)] = Arg{ .binding = p.b(B.Identifier{ .@"ref" = ref_ }, loc) };
+                _ = ((p.pushScopeForParsePass(.function_args, loc)) catch unreachable);
+                defer {
+                _ = p.popScope();
+                }
+                var fn_or_arrow_data = FnOrArrowDataParse{ .needs_async_loc = loc };
+                _ = &fn_or_arrow_data;
+                return p.newExpr(try p.parseArrowBody(args, (&fn_or_arrow_data)), loc);
+            }
+            const ref_ = ((p.storeNameInRef(name)) catch unreachable);
+            return Expr.initIdentifier(ref_, loc);
+    }
+
+pub fn t_template_head(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const head = try p.lexer.toEString();
+            const parts = try p.parseTemplateParts(false);
+            return p.newExpr(E.Template{ .head = .{ .cooked = head }, .parts = parts }, loc);
+    }
+
+pub fn t_numeric_literal(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const value = p.newExpr(E.Number{ .value = p.lexer.number }, loc);
+            _ = try p.lexer.next();
+            return value;
+    }
+
+pub fn t_big_integer_literal(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const value = p.lexer.identifier;
+            _ = try p.lexer.next();
+            return p.newExpr(E.BigInt{ .value = value }, loc);
+    }
+
+pub fn t_slash(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.scanRegExp();
+            defer {
+            p.lexer.regex_flags_start = null;
+            }
+            const value = p.lexer.raw();
+            _ = try p.lexer.next();
+            return p.newExpr(E.RegExp{ .value = value, .flags_offset = p.lexer.regex_flags_start }, loc);
+    }
+
+pub fn t_void(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_void, .value = value }, loc);
+    }
+
+pub fn t_typeof(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_typeof, .value = value, .flags = .{ .was_originally_typeof_identifier = (value.data == .e_identifier) } }, loc);
+    }
+
+pub fn t_delete(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            if ((value.data == .e_index)) {
+                if ((value.data.e_index.index.data == .e_private_identifier)) {
+                    const priv_ident = value.data.e_index.index.data.e_private_identifier;
+                    const name = p.loadNameFromRef(priv_ident.@"ref");
+                    const range = logger.Range{ .loc = value.loc, .len = @as(i32, @intCast(name.len)) };
+                    _ = ((p.log.addRangeErrorFmt(p.source, range, p.allocator, "Deleting the private name \"{s}\" is forbidden", .{ name })) catch unreachable);
+                }
+            }
+            return p.newExpr(E.Unary{ .op = .un_delete, .value = value, .flags = .{ .was_originally_delete_of_identifier_or_property_access = ((value.data == .e_identifier) or value.isPropertyAccess()) } }, loc);
+    }
+
+pub fn t_plus(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_pos, .value = value }, loc);
+    }
+
+pub fn t_minus(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_neg, .value = value }, loc);
+    }
+
+pub fn t_tilde(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_cpl, .value = value }, loc);
+    }
+
+pub fn t_exclamation(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            const value = try p.parseExpr(.prefix);
+            if ((p.lexer.token == .t_asterisk_asterisk)) {
+                _ = try p.lexer.unexpected();
+                return error.SyntaxError;
+            }
+            return p.newExpr(E.Unary{ .op = .un_not, .value = value }, loc);
+    }
+
+pub fn t_minus_minus(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.newExpr(E.Unary{ .op = .un_pre_dec, .value = try p.parseExpr(.prefix) }, loc);
+    }
+
+pub fn t_plus_plus(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.newExpr(E.Unary{ .op = .un_pre_inc, .value = try p.parseExpr(.prefix) }, loc);
+    }
+
+pub fn t_function(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            return try p.parseFnExpr(loc, false, logger.Range.None);
+    }
+
+pub fn t_class(p: *P) anyerror!Expr {
+            const loc = p.lexer.loc();
+            const classKeyword = p.lexer.range();
+            _ = try p.lexer.next();
+            var name: ?js_ast.LocRef = null;
+            _ = &name;
+            _ = ((p.pushScopeForParsePass(.class_name, loc)) catch unreachable);
+            if ((p.lexer.token == .t_identifier)) {
+                const name_text = p.lexer.identifier;
+                if (((!is_typescript_enabled) or (!strings.eqlComptime(name_text, "implements")))) {
+                    if (((p.fn_or_arrow_data_parse.allow_await != .allow_ident) and strings.eqlComptime(name_text, "await"))) {
+                        _ = ((p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"await\" as an identifier here")) catch unreachable);
+                    }
+                    name = js_ast.LocRef{ .loc = p.lexer.loc(), .@"ref" = ((p.newSymbol(.other, name_text)) catch unreachable) };
+                    _ = try p.lexer.next();
+                }
+            }
+            if (is_typescript_enabled) {
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_const_modifier = true });
+            }
+            const cls = try p.parseClass(classKeyword, name, ParseClassOptions{ .allow_ts_decorators = (is_typescript_enabled or p.options.features.standard_decorators) });
+            _ = p.popScope();
+            return p.newExpr(cls, loc);
+    }
+
+pub fn t_at(p: *P) anyerror!Expr {
+            const ts_decorators = try p.parseTypeScriptDecorators();
+            if ((p.lexer.token != .t_class)) {
+                _ = try p.lexer.expected(.t_class);
+                return error.SyntaxError;
+            }
+            const loc = p.lexer.loc();
+            const classKeyword = p.lexer.range();
+            _ = try p.lexer.next();
+            var name: ?js_ast.LocRef = null;
+            _ = &name;
+            _ = ((p.pushScopeForParsePass(.class_name, loc)) catch unreachable);
+            if ((p.lexer.token == .t_identifier)) {
+                const name_text = p.lexer.identifier;
+                if (((!is_typescript_enabled) or (!strings.eqlComptime(name_text, "implements")))) {
+                    if (((p.fn_or_arrow_data_parse.allow_await != .allow_ident) and strings.eqlComptime(name_text, "await"))) {
+                        _ = ((p.log.addRangeError(p.source, p.lexer.range(), "Cannot use \"await\" as an identifier here")) catch unreachable);
+                    }
+                    name = js_ast.LocRef{ .loc = p.lexer.loc(), .@"ref" = ((p.newSymbol(.other, name_text)) catch unreachable) };
+                    _ = try p.lexer.next();
+                }
+            }
+            if (is_typescript_enabled) {
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_const_modifier = true });
+            }
+            const cls = try p.parseClass(classKeyword, name, ParseClassOptions{ .ts_decorators = ts_decorators, .allow_ts_decorators = true });
+            _ = p.popScope();
+            return p.newExpr(cls, loc);
+    }
+
+pub fn t_new(p: *P, flags: Expr.EFlags) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            if ((p.lexer.token == .t_dot)) {
+                _ = try p.lexer.next();
+                if (((p.lexer.token != .t_identifier) or (!strings.eqlComptime(p.lexer.raw(), "target")))) {
+                    _ = try p.lexer.unexpected();
+                    return error.SyntaxError;
+                }
+                const range = logger.Range{ .loc = loc, .len = (p.lexer.range().end().start - loc.start) };
+                _ = try p.lexer.next();
+                return p.newExpr(E.NewTarget{ .range = range }, loc);
+            }
+            var new_expr = p.newExpr(E.New{ .target = undefined, .args = undefined, .close_parens_loc = undefined }, loc);
+            _ = &new_expr;
+            _ = try p.parseExprWithFlags(.member, flags, (&new_expr.data.e_new.target));
+            if (comptime is_typescript_enabled) {
+                if ((p.lexer.token == .t_less_than)) {
+                    _ = p.trySkipTypeScriptTypeArgumentsWithBacktracking();
+                }
+            }
+            if ((p.lexer.token == .t_open_paren)) {
+                const call_args = try p.parseCallArgs();
+                new_expr.data.e_new.args = call_args.list;
+                new_expr.data.e_new.close_parens_loc = call_args.loc;
+            } else {
+                new_expr.data.e_new.close_parens_loc = .Empty;
+                new_expr.data.e_new.args = .{};
+            }
+            return new_expr;
+    }
+
+pub fn t_open_bracket(p: *P, errors: ?*DeferredErrors) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            var is_single_line = (!p.lexer.has_newline_before);
+            _ = &is_single_line;
+            var items = ListManaged(Expr).init(p.allocator);
+            _ = &items;
+            var self_errors = DeferredErrors{  };
+            _ = &self_errors;
+            var comma_after_spread = logger.Loc{  };
+            _ = &comma_after_spread;
+            const old_allow_in = p.allow_in;
+            p.allow_in = true;
+            while ((p.lexer.token != .t_close_bracket)) {
+                switch (p.lexer.token) {
+.t_comma => {
+_ = ((items.append(Expr{ .data = Prefill.Data.EMissing, .loc = p.lexer.loc() })) catch unreachable);
+},
+.t_dot_dot_dot => {
+if ((errors != null)) {
+                    errors.?.array_spread_feature = p.lexer.range();
+                }
+                const dots_loc = p.lexer.loc();
+                _ = try p.lexer.next();
+                _ = try items.ensureUnusedCapacity(1);
+                const spread_expr: *Expr = (&items.unusedCapacitySlice()[0]);
+                spread_expr.* = p.newExpr(E.Spread{ .value = undefined }, dots_loc);
+                _ = try p.parseExprOrBindings(.comma, (&self_errors), (&(if (@typeInfo(@TypeOf(spread_expr.data.e_spread)) == .@"enum") @intFromEnum(spread_expr.data.e_spread) else spread_expr.data.e_spread.value)));
+                items.items.len = (items.items.len + 1);
+                if ((p.lexer.token == .t_comma)) {
+                    comma_after_spread = p.lexer.loc();
+                }
+},
+else => {
+_ = try items.ensureUnusedCapacity(1);
+                const item: *Expr = (&items.unusedCapacitySlice()[0]);
+                _ = try p.parseExprOrBindings(.comma, (&self_errors), item);
+                items.items.len = (items.items.len + 1);
+},
+}
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+                _ = try p.lexer.next();
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+            const close_bracket_loc = p.lexer.loc();
+            _ = try p.lexer.expect(.t_close_bracket);
+            p.allow_in = old_allow_in;
+            if (p.willNeedBindingPattern()) {
+            } else {
+                if ((errors == null)) {
+                    _ = p.logExprErrors((&self_errors));
+                } else {
+                    _ = self_errors.mergeInto(errors.?);
+                }
+            }
+            return p.newExpr(E.Array{ .items = ExprNodeList.moveFromList((&items)), .comma_after_spread = comma_after_spread.toNullable(), .is_single_line = is_single_line, .close_bracket_loc = close_bracket_loc }, loc);
+    }
+
+pub fn t_open_brace(p: *P, errors: ?*DeferredErrors) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            var is_single_line = (!p.lexer.has_newline_before);
+            _ = &is_single_line;
+            var properties = ListManaged(G.Property).init(p.allocator);
+            _ = &properties;
+            var self_errors = DeferredErrors{  };
+            _ = &self_errors;
+            var comma_after_spread: logger.Loc = logger.Loc{  };
+            _ = &comma_after_spread;
+            const old_allow_in = p.allow_in;
+            p.allow_in = true;
+            while ((p.lexer.token != .t_close_brace)) {
+                if ((p.lexer.token == .t_dot_dot_dot)) {
+                    _ = try p.lexer.next();
+                    _ = try properties.ensureUnusedCapacity(1);
+                    const property: *G.Property = (&properties.unusedCapacitySlice()[0]);
+                    property.* = .{ .kind = .spread, .value = Expr.empty };
+                    _ = try p.parseExprOrBindings(.comma, (&self_errors), (&(if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).?));
+                    properties.items.len = (properties.items.len + 1);
+                    if ((p.lexer.token == .t_comma)) {
+                        comma_after_spread = p.lexer.loc();
+                    }
+                } else {
+                    var propertyOpts = PropertyOpts{  };
+                    _ = &propertyOpts;
+                    if (try p.parseProperty(.normal, (&propertyOpts), (&self_errors))) |prop| {
+                        _ = &prop;
+                        if (comptime Environment.allow_assert) {
+                            _ = assert(((prop.key != null) or ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) != null)));
+                        }
+                        _ = ((properties.append(prop)) catch unreachable);
+                    }
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+                _ = try p.lexer.next();
+                if (p.lexer.has_newline_before) {
+                    is_single_line = false;
+                }
+            }
+            if (p.lexer.has_newline_before) {
+                is_single_line = false;
+            }
+            const close_brace_loc = p.lexer.loc();
+            _ = try p.lexer.expect(.t_close_brace);
+            p.allow_in = old_allow_in;
+            if (p.willNeedBindingPattern()) {
+            } else {
+                if ((errors == null)) {
+                    _ = p.logExprErrors((&self_errors));
+                } else {
+                    _ = self_errors.mergeInto(errors.?);
+                }
+            }
+            return p.newExpr(E.Object{ .properties = G.Property.List.moveFromList((&properties)), .comma_after_spread = (if ((comma_after_spread.start > 0)) comma_after_spread else null), .is_single_line = is_single_line, .close_brace_loc = close_brace_loc }, loc);
+    }
+
+pub fn t_less_than(p: *P, level: Level, errors: ?*DeferredErrors, flags: Expr.EFlags) anyerror!Expr {
+            const loc = p.lexer.loc();
+            if (comptime (is_typescript_enabled and is_jsx_enabled)) {
+                if (try TypeScript.isTSArrowFnJSX(p)) {
+                    _ = try p.skipTypeScriptTypeParameters(TypeParameterFlag{ .allow_const_modifier = true });
+                    _ = try p.lexer.expect(.t_open_paren);
+                    return try p.parseParenExpr(loc, level, ParenExprOpts{ .force_arrow_fn = true });
+                }
+            }
+            if (is_jsx_enabled) {
+                _ = try p.lexer.nextInsideJSXElement();
+                const element = try p.parseJSXElement(loc);
+                _ = try p.lexer.next();
+                return element;
+            }
+            if (is_typescript_enabled) {
+                switch (p.trySkipTypeScriptTypeParametersThenOpenParenWithBacktracking()) {
+.did_not_skip_anything => {
+
+},
+else => |result| {
+_ = try p.lexer.expect(.t_open_paren);
+                return p.parseParenExpr(loc, level, ParenExprOpts{ .force_arrow_fn = (result == .definitely_type_parameters) });
+},
+}
+                _ = try p.lexer.next();
+                _ = try p.skipTypeScriptType(.lowest);
+                _ = try p.lexer.expectGreaterThan(false);
+                return p.parsePrefix(level, errors, flags);
+            }
+            _ = try p.lexer.unexpected();
+            return error.SyntaxError;
+    }
+
+pub fn t_import(p: *P, level: Level) anyerror!Expr {
+            const loc = p.lexer.loc();
+            _ = try p.lexer.next();
+            return p.parseImportExpr(loc, level);
+    }
+
+pub fn parsePrefix(p: *P, level: Level, errors: ?*DeferredErrors, flags: Expr.EFlags) anyerror!Expr {
+            return (switch (p.lexer.token) {
+.t_open_bracket => t_open_bracket(p, errors),
+.t_open_brace => t_open_brace(p, errors),
+.t_less_than => t_less_than(p, level, errors, flags),
+.t_import => t_import(p, level),
+.t_open_paren => t_open_paren(p, level),
+.t_private_identifier => t_private_identifier(p, level),
+.t_identifier => t_identifier(p, level),
+.t_false => t_false(p),
+.t_true => t_true(p),
+.t_null => t_null(p),
+.t_this => t_this(p),
+.t_template_head => t_template_head(p),
+.t_numeric_literal => t_numeric_literal(p),
+.t_big_integer_literal => t_big_integer_literal(p),
+.t_string_literal, .t_no_substitution_template_literal => p.parseStringLiteral(),
+.t_slash_equals, .t_slash => t_slash(p),
+.t_void => t_void(p),
+.t_typeof => t_typeof(p),
+.t_delete => t_delete(p),
+.t_plus => t_plus(p),
+.t_minus => t_minus(p),
+.t_tilde => t_tilde(p),
+.t_exclamation => t_exclamation(p),
+.t_minus_minus => t_minus_minus(p),
+.t_plus_plus => t_plus_plus(p),
+.t_function => t_function(p),
+.t_class => t_class(p),
+.t_at => t_at(p),
+.t_new => t_new(p, flags),
+.t_super => t_super(p, level),
+else => t_unexpected(p),
+});
+    }
+
+pub fn t_unexpected(p: *P) anyerror!Expr {
+            @branchHint(.cold);
+            _ = try p.lexer.unexpected();
+            return error.SyntaxError;
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const is_jsx_enabled = P.is_jsx_enabled;
+    const is_typescript_enabled = P.is_typescript_enabled;
+};
+}

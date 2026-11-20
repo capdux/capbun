@@ -1470,3 +1470,6 @@
   3. repl_transforms.cp (509行, 0.998x)
   4. parseTypescript.cp (579行, 1.055x)
 - 门禁指标：全部通过 cpc --lib 与 zig ast-check，4 项硬门禁达成率 100%，无残留 *.zig.map。
+
+### 2026-11-20 03:13:01 UTC - src/js_parser/ast/ 5 核心模块迁移入库
+- 完成：`visitBinaryExpression.cp` (0.998x), `maybe.cp` (1.018x), `parsePrefix.cp` (1.000x), `SideEffects.cp` (1.002x), `parseSuffix.cp` (0.994x)，4 项硬门禁全 PASS。
