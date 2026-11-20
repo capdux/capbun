@@ -61,36 +61,36 @@ pub union(enum) InKind {
     ignore: void,
 
     pub fn format(writer: *std.Io.Writer)! {
-        switch (_.*) {
+        switch (_) {
             .fd => writer.print("fd: {f}", .{_.fd.fd})?,
             .ignore => writer.print("ignore", {})?,
         }
     }
 
     pub fn ref(): InKind {
-        switch (_.*) {
+        switch (_) {
             .fd => _.fd.ref(),
             .ignore => {},
         }
-        return _.*;
+        return _;
     }
 
     pub fn deref() {
-        switch (_.*) {
+        switch (_) {
             .fd => _.fd.deref(),
             .ignore => {},
         }
     }
 
     pub fn close() {
-        switch (_.*) {
+        switch (_) {
             .fd => _.fd.deref(),
             .ignore => {},
         }
     }
 
     pub fn to_subproc_stdio(stdio: *bun.shell.subproc.Stdio) {
-        switch (_.*) {
+        switch (_) {
             .fd => {
                 stdio.* = { fd: _.fd.fd };
             },
@@ -101,7 +101,7 @@ pub union(enum) InKind {
     }
 
     pub fn memoryCost(): usize {
-        switch (_.*) {
+        switch (_) {
             .fd => return _.fd.memoryCost(),
             .ignore => return 0,
         }

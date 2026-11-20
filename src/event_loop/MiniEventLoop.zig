@@ -421,8 +421,8 @@ const VirtualMachine = jsc.VirtualMachine;
 const PipeReadBuffer = [256 * 1024]u8;
 const Queue = bun.LinearFifo(*AnyTaskWithExtraContext, .Dynamic);
 const ConcurrentTaskQueueT = UnboundedQueue(AnyTaskWithExtraContext, .next);
-threadlocal var globalInitialized: bool = false;
-threadlocal var global: *MiniEventLoop = undefined;
+pub threadlocal var globalInitialized: bool = false;
+pub threadlocal var global: *MiniEventLoop = undefined;
 
 pub fn AbstractVM(inner: anytype) switch (@TypeOf(inner)) {
     *VirtualMachine => JsVM,

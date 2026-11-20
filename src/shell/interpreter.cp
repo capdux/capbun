@@ -284,6 +284,7 @@ pub enum CleanupState: u8 {
 
 /// This interpreter works by basically turning the AST into a state machine so
 /// that execution can be suspended and resumed to support async.
+type CStr = ([*:0]const u8);
 type OptParser = bun.shell.Parser?;
 type OptLexResult = shell.LexResult?;
 
@@ -2077,13 +2078,13 @@ pub const ParseError = union(enum) {
 pub fn unsupportedFlag(comptime name: []const u8): []const u8 {
     return "unsupported option, please open a GitHub issue -- " ++ name ++ "\n";
 }
-pub type FlagArgs = ([]const [*:0]const u8)?;
+pub type FlagArgs = ([]const CStr)?;
 pub const ParseFlagResult = union(enum) { continue_parsing, done, illegal_option: []const u8, unsupported: []const u8, show_usage };
 pub fn FlagParser(comptime Opts: type): type {
     return struct {
         pub const Result = @import("../bun_core/result.zig").Result;
 
-        pub fn parseFlags(opts: Opts, args: []const [*:0]const u8): Result(FlagArgs, ParseError) {
+        pub fn parseFlags(opts: Opts, args: []const CStr): Result(FlagArgs, ParseError) {
             let idx: usize = 0;
             if (args.len == 0) {
                 return { ok: null };

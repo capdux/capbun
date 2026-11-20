@@ -18,6 +18,7 @@ pub struct HardcodedModuleAlias {
     pub const Cfg = HardcodedModuleAliasCfg;
 
     static fn nodeEntry(comptime path: cstring): [string, HardcodedModuleAlias] {
+        @setEvalBranchQuota(1000000);
         return [
             path,
             HardcodedModuleAlias{
@@ -28,6 +29,7 @@ pub struct HardcodedModuleAlias {
     }
 
     static fn nodeEntryOnlyPrefix(comptime path: cstring): [string, HardcodedModuleAlias] {
+        @setEvalBranchQuota(1000000);
         return [
             path,
             HardcodedModuleAlias{

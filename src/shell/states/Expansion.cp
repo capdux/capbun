@@ -41,6 +41,7 @@ const log = bun.shell.interpret.log;
 const debug = bun.Output.scoped(.ShellGlobTask, .hidden);
 
 pub type ArgStr = ([*:0]const u8)?;
+type ManagedU8Slice = []std.array_list.Managed(u8);
 pub type StringZ = [:0]const u8;
 
 pub const ParentPtr = StatePtrUnion(.{
@@ -78,7 +79,7 @@ pub const Result = union(enum) {
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.ptr))));
+                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.ptr))));
                 return .moved;
             },
             .single => {
@@ -101,7 +102,7 @@ pub const Result = union(enum) {
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.items.ptr))));
+                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.items.ptr))));
                 return .moved;
             },
             .single => {
@@ -385,9 +386,9 @@ pub struct ShellGlobTask {
 
                     const stack_max = comptime 16;
                     comptime {
-                        assert(@sizeOf([]std.array_list.Managed(u8)) * stack_max <= 256);
+                        assert(@sizeOf(ManagedU8Slice) * stack_max <= 256);
                     }
-                    let maybe_stack_alloc = std.heap.stackFallback(@sizeOf([]std.array_list.Managed(u8)) * stack_max, arena_allocator);
+                    let maybe_stack_alloc = std.heap.stackFallback(@sizeOf(ManagedU8Slice) * stack_max, arena_allocator);
                     const stack_alloc = maybe_stack_alloc.get();
                     let expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
 
@@ -830,7 +831,7 @@ pub struct ShellGlobTask {
     }
 
     fn expansionSizeHint(*_, atom: *const ast.Atom, has_unknown: *bool): usize {
-        return switch (@as(ast.Atom.Tag, atom.*)) {
+        return switch (std.meta.activeTag(atom.*)) {
             .simple => _.expansionSizeHintSimple(&atom.simple, has_unknown),
             .compound => {
                 if (atom.compound.brace_expansion_hint) {

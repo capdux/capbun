@@ -19,7 +19,7 @@ const INET6_ADDRSTRLEN = if (bun.Environment.isWindows) 65 else 46;
 extern fn ntohs(nshort: u16): u16;
 extern fn htonl(hlong: u32): u32;
 extern fn htons(hshort: u16): u16;
-type ConstOpaquePtr = (*const void)?;
+type ConstOpaquePtr = *!?;
 type SockaddrInPtr = *std.posix.sockaddr.in;
 type SockaddrIn6Ptr = *std.posix.sockaddr.in6;
 extern fn inet_ntop(af: c_int, src: ConstOpaquePtr, dst: [*c]u8, size: c_int): ([*:0]const u8)?;
@@ -238,9 +238,11 @@ pub struct UDPSocketConfig {
                 return globalThis.throwInvalidArguments("Expected \"connect\" to be an object", .{});
             }
 
-            const connect_host_js = try connect.getTruthy(globalThis, "hostname") orelse {
+            const connect_host_opt = connect.getTruthy(globalThis, "hostname")?;
+            if (connect_host_opt == null) {
                 return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
-            };
+            }
+            const connect_host_js = connect_host_opt.?;
 
             if (!connect_host_js.isString()) {
                 return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});

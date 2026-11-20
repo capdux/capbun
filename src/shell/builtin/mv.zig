@@ -79,7 +79,7 @@ pub const Opts = struct {
 };
 
 pub const Args = struct {
-    sources: []const [:0]const u8 = &.{},
+    sources: []const CStr = &.{},
     target: [:0]const u8 = "",
     target_fd: ?bun.FD = null,
 };
@@ -395,7 +395,8 @@ pub inline fn bltn(self: *Mv) *Builtin {
         return @fieldParentPtr("impl", impl_);
 }
 pub const OptionalFD = ?bun.FD;
-pub const FilepathSlice = []const [:0]const u8;
+const CStr = [*:0]const u8;
+pub const FilepathSlice = []const CStr;
 const Interpreter = interpreter.Interpreter;
 const ParseError = interpreter.ParseError;
 const ShellSyscall = interpreter.ShellSyscall;
@@ -457,7 +458,7 @@ pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
 };
 pub const ShellMvBatchedTask = struct {
     mv: *Mv,
-    sources: []const [:0]const u8,
+    sources: []const CStr,
     target: [:0]const u8,
     target_fd: ?bun.FD,
     cwd: bun.FD,

@@ -64,27 +64,27 @@ pub fn NewWriterWrap(
 
         pub fn int4(this, value: PostgresInt32): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn int8(this, value: PostgresInt64): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn sint4(this, value: i32): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn @"f64"(this, value: f64): void! {
             const swapped = @byteSwap(@as(u64, @bitCast(value)));
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn @"f32"(this, value: f32): void! {
             const swapped = @byteSwap(@as(u32, @bitCast(value)));
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn short(this, value: anytype): void! {
@@ -94,7 +94,7 @@ pub fn NewWriterWrap(
                 else => @compileError("short() requires an integer type"),
             };
             const swapped = @byteSwap(std.math.cast(u16, int_value) orelse return err.TooManyParameters);
-            this.write(std.mem.asBytes(&swapped))?;
+            this.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
         pub fn @"string"(this, value: []const u8): void! {

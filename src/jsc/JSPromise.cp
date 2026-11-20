@@ -196,6 +196,13 @@ pub const JSPromiseStrong = struct {
     }
 };
 
+inline fn wrapFnType(comptime F: auto): type {
+    const T = @TypeOf(F);
+    const info = @typeInfo(T);
+    if (info == .pointer) return info.pointer.child;
+    return T;
+}
+
 pub const JSPromise = opaque {
     pub const Status = JSPromiseStatus;
     pub const Weak = JSPromiseWeak;
@@ -208,9 +215,9 @@ pub const JSPromise = opaque {
     pub fn wrap(
         globalObject: *JSGlobalObject,
         comptime Function: anytype,
-        args: std.@"meta".ArgsTuple(@TypeOf(Function)),
+        args: std.@"meta".ArgsTuple(wrapFnType(Function)),
     ): bun.JSTerminated!JSValue {
-        const Args = std.@"meta".ArgsTuple(@TypeOf(Function));
+        const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
         const Fn = Function;
         const Wrapper = struct {
             args: Args,

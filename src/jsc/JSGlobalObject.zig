@@ -119,6 +119,9 @@ pub const ValidateObjectOptions = struct {
     nullable: bool = false,
 };
 
+pub const EmptyFmtArgs = struct {
+};
+
 pub const JSGlobalObject = opaque {
 
 pub fn allocator(self: *JSGlobalObject) std.mem.Allocator {
@@ -449,7 +452,7 @@ pub fn createRangeError(self: *JSGlobalObject, comptime fmt: [:0]const u8, args:
     }
 
 pub fn createInvalidArgs(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            return jsc.Error.INVALID_ARG_TYPE.fmt(self, fmt, args);
+            return jsc.Error.INVALID_ARG_TYPE.fmt(self, fmt, (if (comptime (@TypeOf(args) == void)) EmptyFmtArgs{  } else (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args)));
     }
 
 pub fn throwSysError(self: *JSGlobalObject, opts: SysErrOptions, comptime message: [:0]const u8, args: anytype) JSError {
@@ -809,8 +812,8 @@ pub inline fn commonStrings(self: *JSGlobalObject) CommonStrings {
             return .{ .globalObject = self };
     }
 
-pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: anytype) ErrorCode.ErrorBuilder(code,fmt,@TypeOf(args)) {
-            return .{ .global = global, .args = args };
+pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: anytype) ErrorCode.ErrorBuilder(code,fmt,NormArgsType(@TypeOf(args))) {
+            return .{ .global = global, .args = (if (comptime (@TypeOf(args) == void)) EmptyFmtArgs{  } else (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args)) };
     }
 
 pub fn create(v: *jsc.VirtualMachine, console: *anyopaque, context_id: i32, mini_mode: bool, eval_mode: bool, worker_ptr: ?*anyopaque) *JSGlobalObject {
@@ -922,7 +925,7 @@ else => body.useAsAnyBlob(),
     }
 
 pub fn createError(self: *JSGlobalObject, comptime fmt: []const u8, args: anytype) jsc.JSValue {
-            if (comptime (std.@"meta".fields(@TypeOf(args)).len == 0)) {
+            if (comptime argsIsEmpty(@TypeOf(args))) {
                 var zig_str = jsc.ZigString.init(fmt);
                 _ = &zig_str;
                 if (comptime (!strings.isAllASCII(fmt))) {
@@ -934,7 +937,8 @@ pub fn createError(self: *JSGlobalObject, comptime fmt: []const u8, args: anytyp
                 _ = &fallback;
                 var alloc = fallback.get();
                 _ = &alloc;
-                const buf = ((std.fmt.allocPrint(alloc, fmt, args)) catch unreachable);
+                const fmt_args = (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args);
+                const buf = ((std.fmt.allocPrint(alloc, fmt, fmt_args)) catch unreachable);
                 var zig_str = jsc.ZigString.init(buf);
                 _ = &zig_str;
                 _ = zig_str.detectEncoding();
@@ -945,12 +949,12 @@ pub fn createError(self: *JSGlobalObject, comptime fmt: []const u8, args: anytyp
     }
 
 pub fn toTypeError(self: *JSGlobalObject, code: jsc.Error, comptime fmt: [:0]const u8, args: anytype) jsc.JSValue {
-            return code.fmt(self, fmt, args);
+            return code.fmt(self, fmt, (if (comptime (@TypeOf(args) == void)) EmptyFmtArgs{  } else (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args)));
     }
 
 pub fn toInvalidArguments(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) jsc.JSValue {
             @branchHint(.cold);
-            return jsc.Error.INVALID_ARG_TYPE.fmt(self, fmt, args);
+            return jsc.Error.INVALID_ARG_TYPE.fmt(self, fmt, (if (comptime (@TypeOf(args) == void)) EmptyFmtArgs{  } else (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args)));
     }
 
 pub fn scriptExecutionContextIdentifier(self: *JSGlobalObject) bun.webcore.ScriptExecutionContext.Identifier {
@@ -1053,3 +1057,28 @@ extern "c" fn Zig__GlobalObject__resetModuleRegistryMap(global: *JSGlobalObject,
 extern "c" fn JSC__Wasm__StreamingCompiler__addBytes(streaming_compiler: *anyopaque, bytes_ptr: [*]const u8, bytes_len: usize) callconv(.c) void;
 
 extern "c" fn ScriptExecutionContextIdentifier__forGlobalObject(global: *JSGlobalObject) callconv(.c) u32;
+
+pub inline fn NormArgsType(comptime T: type) type {
+        if ((T == void)) {
+            return EmptyFmtArgs;
+        }
+        const info = @typeInfo(T);
+        if ((info == .pointer)) {
+            return info.pointer.child;
+        }
+        return T;
+}
+
+pub inline fn argsIsEmpty(comptime T: type) bool {
+        if ((T == void)) {
+            return true;
+        }
+        const info = @typeInfo(T);
+        if ((info == .pointer)) {
+            return argsIsEmpty(info.pointer.child);
+        }
+        if ((info == .@"struct")) {
+            return (info.@"struct".fields.len == 0);
+        }
+        return false;
+}

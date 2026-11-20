@@ -288,10 +288,10 @@ var arena_ = Arena.init(self.base.allocator());
             const expansion_count = Braces.calculateExpandedAmount(lexer_output.tokens.items[0..]);
             const stack_max = (comptime 16);
             comptime {
-            _ = assert(((@sizeOf(&.{}) * stack_max) <= 256));
+            _ = assert(((@sizeOf(ManagedU8Slice) * stack_max) <= 256));
 
 }
-            var maybe_stack_alloc = std.heap.stackFallback((@sizeOf(&.{}) * stack_max), arena_allocator);
+            var maybe_stack_alloc = std.heap.stackFallback((@sizeOf(ManagedU8Slice) * stack_max), arena_allocator);
             _ = &maybe_stack_alloc;
             const stack_alloc = maybe_stack_alloc.get();
             var expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
@@ -732,7 +732,7 @@ pub fn currentWord(self: *Expansion) *const ast.SimpleAtom {
 }
 
 pub fn expansionSizeHint(self: *Expansion, atom: *const ast.Atom, has_unknown: *bool) usize {
-        return (switch ((if (comptime @typeInfo(ast.Atom.Tag) == .@"enum") @as(ast.Atom.Tag, @enumFromInt(atom.*)) else @as(ast.Atom.Tag, atom.*))) {
+        return (switch (std.meta.activeTag(atom.*)) {
 .simple => self.expansionSizeHintSimple((&atom.simple), has_unknown),
 .compound => {
 {
@@ -788,6 +788,7 @@ _ = bun.handleOom(self.out.array_of_slice.ensureUnusedCapacity(additional));
 }
 }
 pub const ArgStr = ?[*:0]const u8;
+const ManagedU8Slice = []std.array_list.Managed(u8);
 pub const StringZ = [:0]const u8;
 const assert = bun.assert;
 const Maybe = bun.sys.Maybe;
@@ -842,7 +843,7 @@ pub const Result = union(enum) {
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.ptr))));
+                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.ptr))));
                 return .moved;
             },
             .single => {
@@ -865,7 +866,7 @@ pub const Result = union(enum) {
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as([*:0]const u8, @ptrCast(buf.items.ptr))));
+                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.items.ptr))));
                 return .moved;
             },
             .single => {

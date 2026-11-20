@@ -111,9 +111,9 @@ pub fn resolvePromise(self: *Handlers, value: JSValue) bun.JSTerminated!void {
         }
         if (self.promise.trySwap()) |promise| {
             _ = &promise;
-            if (promise.asAnyPromise()) |anyPromise| {
+            if (promise.asAnyPromise()) |*anyPromise| {
                 _ = &anyPromise;
-                _ = try anyPromise.resolve(self.globalObject, value);
+                _ = try (anyPromise.*).resolve(self.globalObject, value);
             }
         }
 }
@@ -126,9 +126,9 @@ pub fn rejectPromise(self: *Handlers, value: JSValue) bun.JSTerminated!bool {
         }
         if (self.promise.trySwap()) |promise| {
             _ = &promise;
-            if (promise.asAnyPromise()) |anyPromise| {
+            if (promise.asAnyPromise()) |*anyPromise| {
                 _ = &anyPromise;
-                _ = try anyPromise.reject(self.globalObject, value);
+                _ = try (anyPromise.*).reject(self.globalObject, value);
                 return true;
             }
         }
@@ -314,7 +314,10 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
             var ssl: ?SSLConfig = (switch (generated.tls) {
 .none => null,
 .boolean => |b| (if (b) .zero else null),
-.object => |s| try SSLConfig.fromGenerated(vm, global, s),
+.object => |s| try SSLConfig.fromGenerated(vm, global, (blk: {
+            break :blk (&s);
+
+})),
 });
             _ = &ssl;
             errdefer {

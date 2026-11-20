@@ -220,7 +220,7 @@ return .{ .err = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = .read } 
             i = (i + Event.size(event));
             count = (count + 1);
             if (Environment.enable_logs) {
-                _ = log("{f} read event {} {} {} {f}", .{ self.fd, event.watch_descriptor, event.cookie, event.mask, bun.fmt.quote((if ((event.name_len > 0)) (if (@typeInfo(@TypeOf(Event)) == .@"enum" or @typeInfo(@TypeOf(Event)) == .@"union") @tagName(Event) else Event.name)(event) else "")) });
+                _ = log("{f} read event {} {} {} {f}", .{ self.fd, event.watch_descriptor, event.cookie, event.mask, bun.fmt.quote((if ((event.name_len > 0)) Event.name(event) else "")) });
             }
             if ((count == max_count)) {
                 self.read_ptr = .{ .i = i, .len = @intCast(read_eventlist_bytes.len) };
@@ -303,7 +303,7 @@ return .{ .err = e };
                 }
                 watcher.watch_events[cp_cast_int(usize, event_id)] = watchEventFromInotifyEvent(event, @intCast(matched_idx.?));
                 if (((event.name_len > 0) and (temp_name_off < temp_name_list.len))) {
-                    temp_name_list[cp_cast_int(usize, temp_name_off)] = (if (@typeInfo(@TypeOf(Event)) == .@"enum" or @typeInfo(@TypeOf(Event)) == .@"union") @tagName(Event) else Event.name)(event);
+                    temp_name_list[cp_cast_int(usize, temp_name_off)] = Event.name(event);
                     watcher.watch_events[@as(usize, @intCast(event_id))].name_off = temp_name_off;
                     watcher.watch_events[@as(usize, @intCast(event_id))].name_len = 1;
                     temp_name_off = (temp_name_off + 1);

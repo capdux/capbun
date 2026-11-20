@@ -498,6 +498,9 @@ pub fn format(self: ElapsedFormatter, writer_: *std.Io.Writer) !void {
     }
 };
 
+pub const EmptyArgs = struct {
+};
+
 pub const DebugTimer = struct {
     timer: bun.DebugOnly(std.time.Timer) = undefined,
 
@@ -639,7 +642,8 @@ pub fn disableBuffering() void {
 
 pub fn panic(comptime fmt: []const u8, args: anytype) noreturn {
         @branchHint(.cold);
-        const actual_args = (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args);
+        const PT = @TypeOf(args);
+        const actual_args = (if (comptime (PT == void)) EmptyArgs{  } else (if (comptime (@typeInfo(PT) == .pointer)) args.* else args));
         if (enable_ansi_colors_stderr) {
             _ = std.debug.panic((comptime prettyFmt(fmt, true)), actual_args);
         } else {
@@ -792,6 +796,9 @@ pub noinline fn writeBytes(dest: Destination, bytes: []const u8) void {
 
 pub inline fn hasNoArgs(comptime Args: type) bool {
         const info = @typeInfo(Args);
+        if ((Args == void)) {
+            return true;
+        }
         if ((info == .@"struct")) {
             return (info.@"struct".fields.len == 0);
         }
@@ -938,13 +945,15 @@ pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.V
         defer {
         _ = lock.unlock();
         }
+        const LT = @TypeOf(args);
+        const log_args = (if (comptime (LT == void)) EmptyArgs{  } else (if (comptime (@typeInfo(LT) == .pointer)) args.* else args));
         const w = out.*;
         const prefix_fmt = (comptime std.fmt.comptimePrint("<r><d>[{s}]<r> {s}", .{ tagname, fmt }));
         if (((enable_ansi_colors_stdout and source_set) and (scopedWriter().context.handle == rawWriter().handle))) {
-            _ = (blk_catch_15: { break :blk_catch_15 ((w.print((comptime prettyFmt(prefix_fmt, true)), args)) catch |__ce_15| { _ = &__ce_15; _ = really_disable.store(true, .monotonic);
+            _ = (blk_catch_15: { break :blk_catch_15 ((w.print((comptime prettyFmt(prefix_fmt, true)), log_args)) catch |__ce_15| { _ = &__ce_15; _ = really_disable.store(true, .monotonic);
             return; }); });
         } else {
-            _ = (blk_catch_16: { break :blk_catch_16 ((w.print((comptime prettyFmt(prefix_fmt, false)), args)) catch |__ce_16| { _ = &__ce_16; _ = really_disable.store(true, .monotonic);
+            _ = (blk_catch_16: { break :blk_catch_16 ((w.print((comptime prettyFmt(prefix_fmt, false)), log_args)) catch |__ce_16| { _ = &__ce_16; _ = really_disable.store(true, .monotonic);
             return; }); });
         }
         _ = (blk_catch_17: { break :blk_catch_17 ((w.flush()) catch |__ce_17| { _ = &__ce_17; _ = really_disable.store(true, .monotonic);
@@ -1218,7 +1227,8 @@ pub inline fn concatTuple(a: anytype, b: anytype) TupleCatType(@TypeOf(a),@TypeO
 pub inline fn err(error_name: anytype, comptime fmt: []const u8, args: anytype) void {
         const T = @TypeOf(error_name);
         const info = @typeInfo(T);
-        if (comptime ((T == bun.sys.Error) or ((info == .pointer) and (info.pointer.child == bun.sys.Error)))) {
+        const is_sys_err = (if (comptime (T == bun.sys.Error)) true else (if (comptime (info == .pointer)) (info.pointer.child == bun.sys.Error) else false));
+        if (comptime is_sys_err) {
             const e: bun.sys.Error = error_name;
             if (e.getErrorCodeTagName()) |pair| {
                 _ = &pair;

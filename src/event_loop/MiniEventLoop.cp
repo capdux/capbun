@@ -17,8 +17,8 @@ type DotEnvLoaderPtr = (*bun.DotEnv.Loader)?;
 type PipeReadBufferPtr = (*PipeReadBuffer)?;
 type BlobStorePtr = (*bun.webcore.Blob.Store)?;
 
-@tls let globalInitialized: bool = false;
-@tls let global: *MiniEventLoop = undefined;
+pub @tls let globalInitialized: bool = false;
+pub @tls let global: *MiniEventLoop = undefined;
 
 @root struct MiniEventLoop {
     tasks: Queue,

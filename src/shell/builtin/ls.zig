@@ -745,7 +745,8 @@ pub inline fn bltn(self: *Ls) *Builtin {
         const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("ls", self));
         return @fieldParentPtr("impl", impl_);
 }
-const FilepathArgsSlice = []const [:0]const u8;
+const CStr = [*:0]const u8;
+const FilepathArgsSlice = []const CStr;
 pub const FilepathArgs = ?FilepathArgsSlice;
 const Allocator = std.mem.Allocator;
 const Interpreter = interpreter.Interpreter;

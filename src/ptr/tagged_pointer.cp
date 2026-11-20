@@ -233,6 +233,7 @@ pub fn TaggedPointerUnion(comptime Types: auto): type {
         }
 
         pub inline fn call(this, comptime fn_name: []const u8, args_without_this: auto, comptime Ret: type): Ret {
+            @setEvalBranchQuota(1000000);
             inline for (entry of type_map) {
                 if (this.repr.data == entry.value) {
                     const pointer = this.as(entry.ty);

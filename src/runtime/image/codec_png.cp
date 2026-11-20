@@ -70,7 +70,9 @@ const Trns = extern struct {
 };
 
 pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
-    const ctx = spng_ctx_new(0) ?? return error.OutOfMemory;
+    const ctx_opt = spng_ctx_new(0);
+    if (ctx_opt == null) return error.OutOfMemory;
+    const ctx = ctx_opt.?;
     defer spng_ctx_free(ctx);
     if (spng_set_png_buffer(ctx, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
     let ihdr: Ihdr = undefined;
@@ -127,7 +129,9 @@ fn embedIccp(ctx: *spng_ctx, icc_profile: ([]const u8)?) {
 }
 
 pub fn encode(rgba: []const u8, w: u32, h: u32, level: i8, icc_profile: ([]const u8)?): codecs.Error!codecs.Encoded {
-    const ctx = spng_ctx_new(SPNG_CTX_ENCODER) ?? return error.OutOfMemory;
+    const ctx_opt = spng_ctx_new(SPNG_CTX_ENCODER);
+    if (ctx_opt == null) return error.OutOfMemory;
+    const ctx = ctx_opt.?;
     defer spng_ctx_free(ctx);
     * = spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
     if (level >= 0) * = spng_set_option(ctx, SPNG_IMG_COMPRESSION_LEVEL, @min(level, 9));
@@ -159,7 +163,9 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
     let q = quantize.quantize(rgba, w, h, { max_colors: colors, dither: dither })?;
     defer q.deinit();
 
-    const ctx = spng_ctx_new(SPNG_CTX_ENCODER) ?? return error.OutOfMemory;
+    const ctx_opt = spng_ctx_new(SPNG_CTX_ENCODER);
+    if (ctx_opt == null) return error.OutOfMemory;
+    const ctx = ctx_opt.?;
     defer spng_ctx_free(ctx);
     * = spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
     if (level >= 0) * = spng_set_option(ctx, SPNG_IMG_COMPRESSION_LEVEL, @min(level, 9));

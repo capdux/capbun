@@ -13,7 +13,7 @@
 
     pub fn isInvalid(): bool {
         const inv = invalid;
-        return std.mem.eql(u8, std.mem.asBytes(_), std.mem.asBytes(&inv));
+        return std.mem.eql(u8, std.mem.asBytes(unsafe { &_ }), std.mem.asBytes(unsafe { &inv }));
     }
 
     static fn decode(reader: auto): !@This() {

@@ -42,7 +42,7 @@ pub struct Opts {
 }
 
 pub struct Args {
-    sources: []const [:0]const u8 = [],
+    sources: []const CStr = [],
     target: [:0]const u8 = "",
     target_fd: bun.FD? = null,
 }
@@ -53,7 +53,8 @@ pub const CheckTargetState = union(enum) {
 };
 
 pub type OptionalFD = (bun.FD)?;
-pub type FilepathSlice = []const [:0]const u8;
+type CStr = ([*:0]const u8);
+pub type FilepathSlice = []const CStr;
 
 pub const ShellMvCheckTargetTask = struct {
     mv: *Mv,
@@ -95,7 +96,7 @@ pub const ShellMvBatchedTask = struct {
     pub const BATCH_SIZE = 5;
 
     mv: *Mv,
-    sources: []const [:0]const u8,
+    sources: []const CStr,
     target: [:0]const u8,
     target_fd: bun.FD?,
     cwd: bun.FD,

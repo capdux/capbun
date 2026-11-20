@@ -555,7 +555,8 @@ pub fn disableBuffering() {
 
 pub fn panic(comptime fmt: string, args: auto): noreturn {
     @branchHint(.cold);
-    const actual_args = if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args;
+    const PT = @TypeOf(args);
+    const actual_args = if (comptime PT == void) EmptyArgs{} else if (comptime @typeInfo(PT) == .pointer) args.* else args;
 
     if (enable_ansi_colors_stderr) {
         std.debug.panic(comptime prettyFmt(fmt, true), actual_args);
@@ -747,8 +748,11 @@ noinline fn writeBytes(dest: Destination, bytes: []const u8) {
     destWriter(dest).writeAll(bytes) catch {};
 }
 
+struct EmptyArgs {}
+
 inline fn hasNoArgs(comptime Args: type): bool {
     const info = @typeInfo(Args);
+    if (Args == void) return true;
     if (info == .@"struct") return info.@"struct".fields.len == 0;
     if (info == .pointer && info.pointer.size == .one) {
         const child = @typeInfo(info.pointer.child);
@@ -922,15 +926,17 @@ fn scopedLogImpl(
     lock.lock();
     defer lock.unlock();
 
+    const LT = @TypeOf(args);
+    const log_args = if (comptime LT == void) EmptyArgs{} else if (comptime @typeInfo(LT) == .pointer) args.* else args;
     const w = out.*;
     const prefix_fmt = comptime std.fmt.comptimePrint("<r><d>[{s}]<r> {s}", [tagname, fmt]);
     if (enable_ansi_colors_stdout && source_set && scopedWriter().context.handle == rawWriter().handle) {
-        w.print(comptime prettyFmt(prefix_fmt, true), args) catch {
+        w.print(comptime prettyFmt(prefix_fmt, true), log_args) catch {
             really_disable.store(true, .monotonic);
             return;
         };
     } else {
-        w.print(comptime prettyFmt(prefix_fmt, false), args) catch {
+        w.print(comptime prettyFmt(prefix_fmt, false), log_args) catch {
             really_disable.store(true, .monotonic);
             return;
         };
@@ -1257,7 +1263,8 @@ pub inline fn err(error_name: auto, comptime fmt: []const u8, args: auto) {
     const T = @TypeOf(error_name);
     const info = @typeInfo(T);
 
-    if (comptime T == bun.sys.Error || (info == .pointer && info.pointer.child == bun.sys.Error)) {
+    const is_sys_err = if (comptime T == bun.sys.Error) true else if (comptime info == .pointer) info.pointer.child == bun.sys.Error else false;
+    if (comptime is_sys_err) {
         const e: bun.sys.Error = error_name;
         if (pair := e.getErrorCodeTagName()) {
             const tag_name = pair[0];

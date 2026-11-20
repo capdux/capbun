@@ -146,9 +146,13 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
                 if ((!connect.isObject())) {
                     return globalThis.throwInvalidArguments("Expected \"connect\" to be an object", .{});
                 }
-                const connect_host_js = try ((connect.getTruthy(globalThis, "hostname")) orelse {
-                return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
-});
+                const connect_host_opt = try connect.getTruthy(globalThis, "hostname");
+                var __connect_host_opt_moved = false; _ = &__connect_host_opt_moved;
+                defer if (!__connect_host_opt_moved) { const __T = @TypeOf(connect_host_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connect_host_opt.release() catch {}; } else { connect_host_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connect_host_opt; _drop_val.release(); } };
+                if ((connect_host_opt == null)) {
+                    return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
+                }
+                const connect_host_js = connect_host_opt.?;
                 var __connect_host_js_moved = false; _ = &__connect_host_js_moved;
                 defer if (!__connect_host_js_moved) { const __T = @TypeOf(connect_host_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connect_host_js.release() catch {}; } else { connect_host_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connect_host_js; _drop_val.release(); } };
                 if ((!connect_host_js.isString())) {
@@ -1000,7 +1004,7 @@ pub fn jsDisconnect(self: *UDPSocket, globalObject: *jsc.JSGlobalObject, callFra
     };
 };
 
-const ConstOpaquePtr = ?*const void;
+const ConstOpaquePtr = ?*anyopaque;
 const SockaddrInPtr = *std.posix.sockaddr.in;
 const SockaddrIn6Ptr = *std.posix.sockaddr.in6;
 const Async = bun.Async;

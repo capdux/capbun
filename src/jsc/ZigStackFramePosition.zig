@@ -54,7 +54,13 @@ pub const ZigStackFramePosition = extern struct {
 
 pub fn isInvalid(self: ZigStackFramePosition) bool {
             const inv = invalid;
-            return std.mem.eql(u8, std.mem.asBytes(self), std.mem.asBytes((&inv)));
+            return std.mem.eql(u8, std.mem.asBytes((blk: {
+            break :blk (&self);
+
+})), std.mem.asBytes((blk: {
+            break :blk (&inv);
+
+})));
     }
 
 pub fn decode(reader: anytype) !@This() {

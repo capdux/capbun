@@ -75,7 +75,7 @@ pub struct HandlersScope {
         }
 
         if (promise := _.promise.trySwap()) {
-            if (anyPromise := promise.asAnyPromise()) {
+            if (*anyPromise := promise.asAnyPromise()) {
                 anyPromise.resolve(_.globalObject, value)?;
             }
         }
@@ -88,7 +88,7 @@ pub struct HandlersScope {
         }
 
         if (promise := _.promise.trySwap()) {
-            if (anyPromise := promise.asAnyPromise()) {
+            if (*anyPromise := promise.asAnyPromise()) {
                 anyPromise.reject(_.globalObject, value)?;
                 return true;
             }
@@ -293,7 +293,7 @@ pub struct SocketConfig {
             let ssl: SSLConfig? = switch (generated.tls) {
                 .none => null,
                 .boolean => |b| if (b) .zero else null,
-                .object => |s| SSLConfig.fromGenerated(vm, global, s)?,
+                .object => |s| SSLConfig.fromGenerated(vm, global, unsafe { &s })?,
             };
             errdefer bun.memory.deinit(&ssl);
             let fd_val: bun.FD? = if (generated.fd != null) bun.FD.fromUV(generated.fd.?) else null;

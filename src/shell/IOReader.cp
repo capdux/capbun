@@ -206,17 +206,18 @@ pub fn removeReader(client: *IOReader, reader_: auto) {
 }
 
 pub fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool {
-    let this: *IOReader = @ptrCast(@alignCast(ptr));
-    log("IOReader(0x{x}, fd={f}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(this), this.fd, chunk.len, @tagName(has_more) });
-    this.setReading(false);
+    let client: *IOReader = @ptrCast(@alignCast(ptr));
+    log("IOReader(0x{x}, fd={f}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(client), client.fd, chunk.len, @tagName(has_more) });
+    client.setReading(false);
 
     let i: usize = 0;
-    while (i < this.readers.len()) {
-        let r = this.readers.get(i);
+    while (i < client.readers.len()) {
+        let r = client.readers.get(i);
         let remove = false;
-        r.onReadChunk(chunk, &remove).run();
+        let chunk_y = r.onReadChunk(chunk, &remove);
+        chunk_y.run();
         if (remove) {
-            this.readers.swapRemove(i);
+            client.readers.swapRemove(i);
         } else {
             i += 1;
         }
@@ -224,13 +225,13 @@ pub fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool
 
     const should_continue = has_more != .eof;
     if (should_continue) {
-        if (this.readers.len() > 0) {
-            this.setReading(true);
+        if (client.readers.len() > 0) {
+            client.setReading(true);
             if (bun.Environment.isPosix)
-                this.reader.registerPoll()
-            else switch (this.reader.startWithCurrentPipe()) {
+                client.reader.registerPoll()
+            else switch (client.reader.startWithCurrentPipe()) {
                 .err e => {
-                    this.onReaderError(e);
+                    client.onReaderError(e);
                     return false;
                 },
                 else => {},
@@ -247,11 +248,13 @@ pub fn onReaderError(client: *IOReader, e: bun.sys.Error) {
     client.e = e.toShellSystemError();
     for (r of client.readers.slice()) {
         let err_copy: jsc.SystemError? = null;
-        if (*err_val := client.e) {
-            err_val.ref();
-            err_copy = err_val.*;
+        if (client.e != null) {
+            let ev = client.e.?;
+            ev.ref();
+            err_copy = ev;
         }
-        r.onReaderDone(err_copy).run();
+        let done_y = r.onReaderDone(err_copy);
+        done_y.run();
     }
 }
 
@@ -260,11 +263,13 @@ pub fn onReaderDone(client: *IOReader) {
     client.setReading(false);
     for (r of client.readers.slice()) {
         let err_copy: jsc.SystemError? = null;
-        if (*err_val := client.e) {
-            err_val.ref();
-            err_copy = err_val.*;
+        if (client.e != null) {
+            let ev = client.e.?;
+            ev.ref();
+            err_copy = ev;
         }
-        r.onReaderDone(err_copy).run();
+        let done_y = r.onReaderDone(err_copy);
+        done_y.run();
     }
 }
 

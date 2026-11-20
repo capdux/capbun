@@ -1378,11 +1378,12 @@ pub fn dup(fd: bun.FD) Maybe(bun.FD) {
 };
 
 pub const StringZ = [:0]const u8;
+const CStr = [*:0]const u8;
 const OptParser = ?bun.shell.Parser;
 const OptLexResult = ?shell.LexResult;
 const OutputTaskErrBuf = ?[]const u8;
 const OutputTaskSysErr = ?jsc.SystemError;
-pub const FlagArgs = ?[]const [*:0]u8;
+pub const FlagArgs = ?[]const CStr;
 pub const Arena = std.heap.ArenaAllocator;
 pub const Syscall = bun.sys;
 pub const WorkPoolTask = jsc.WorkPoolTask;
@@ -1785,13 +1786,13 @@ pub fn unsupportedFlag(comptime name: []const u8) []const u8 {
 pub fn FlagParser(comptime Opts: type) type {
         return struct {
 
-pub fn parseFlags(opts: Opts, args: []const [*:0]u8) Result(FlagArgs,ParseError) {
+pub fn parseFlags(opts: Opts, args: []const CStr) Result(FlagArgs,ParseError) {
             var idx: usize = 0;
             _ = &idx;
-            if ((std.mem.span(args).len == 0)) {
+            if ((args.len == 0)) {
                 return .{ .ok = null };
             }
-            while ((idx < std.mem.span(args).len)) : (idx = (idx + 1)) {
+            while ((idx < args.len)) : (idx = (idx + 1)) {
                 const flag = args[@as(usize, @intCast(idx))];
                 switch (parseFlag(opts, flag[0..std.mem.len(flag)])) {
 .done => {

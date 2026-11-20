@@ -1191,7 +1191,7 @@ pub const FilePoll = struct {
 pub const LinuxWaker = struct {
     fd: bun.FD,
 
-pub fn init() LinuxWaker!void {
+pub fn init() !LinuxWaker {
             return initWithFileDescriptor(.fromNative(try std.posix.eventfd(0, 0)));
     }
 

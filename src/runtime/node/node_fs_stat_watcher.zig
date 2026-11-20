@@ -123,7 +123,7 @@ pub fn setIntervalOnMainThread(self: *StatWatcherScheduler) void {
             const interval = self.getInterval();
             if ((interval == 0)) {
                 if ((self.event_loop_timer.state == .ACTIVE)) {
-                    _ = self.vm.timer.unregister((&self.event_loop_timer));
+                    _ = self.vm.timer.remove((&self.event_loop_timer));
                 }
                 return;
             }
@@ -441,7 +441,11 @@ pub fn initialStatErrorOnMainThread(self: *StatWatcher) void {
             const globalThis = self.globalThis;
             const jsvalue = (blk_catch_2: { break :blk_catch_2 ((statToJSStats(globalThis, (&self.getLastStat()), self.bigint)) catch |e| { _ = &e; return globalThis.reportActiveExceptionAsUnhandled(e); }); });
             _ = js.gc.prevStat.set(js_this, globalThis, jsvalue);
-            _ = (blk_catch_3: { break :blk_catch_3 (((js.listenerGetCached(js_this)).?.call(globalThis, .js_undefined, (&[2]jsc.JSValue), .{ .jsvalue = jsvalue })) catch |e| { _ = &e; break :blk_catch_3 globalThis.reportActiveExceptionAsUnhandled(e); }); });
+            const cb_args: [2]jsc.JSValue = .{ jsvalue, jsvalue };
+            _ = (blk_catch_3: { break :blk_catch_3 (((js.listenerGetCached(js_this)).?.call(globalThis, .js_undefined, (blk: {
+            break :blk (&cb_args);
+
+}))) catch |e| { _ = &e; break :blk_catch_3 globalThis.reportActiveExceptionAsUnhandled(e); }); });
             if (self.closed) {
                 return;
             }
@@ -484,16 +488,13 @@ pub fn swapAndCallListenerOnMainThread(self: *StatWatcher) void {
             }
             const globalThis = self.globalThis;
             const prev_jsvalue = ((js.gc.prevStat.get(js_this)) orelse (.js_undefined));
-            var current_jsvalue: jsc.JSValue = .zero;
-            _ = &current_jsvalue;
-            if ((blk_catch_4: { break :blk_catch_4 ((statToJSStats(globalThis, (&self.getLastStat()), self.bigint)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 @as(jsc.JSValue, null); }); })) |cv| {
-                _ = &cv;
-                current_jsvalue = cv;
-            } else {
-                return;
-            }
+            const current_jsvalue = (blk_catch_4: { break :blk_catch_4 ((statToJSStats(globalThis, (&self.getLastStat()), self.bigint)) catch |__ce_4| { _ = &__ce_4; return; }); });
             _ = js.gc.prevStat.set(js_this, globalThis, current_jsvalue);
-            _ = (blk_catch_5: { break :blk_catch_5 (((js.listenerGetCached(js_this)).?.call(globalThis, .js_undefined, (&[2]jsc.JSValue), .{ .current_jsvalue = current_jsvalue, .prev_jsvalue = prev_jsvalue })) catch |e| { _ = &e; break :blk_catch_5 globalThis.reportActiveExceptionAsUnhandled(e); }); });
+            const cb_args: [2]jsc.JSValue = .{ current_jsvalue, prev_jsvalue };
+            _ = (blk_catch_5: { break :blk_catch_5 (((js.listenerGetCached(js_this)).?.call(globalThis, .js_undefined, (blk: {
+            break :blk (&cb_args);
+
+}))) catch |e| { _ = &e; break :blk_catch_5 globalThis.reportActiveExceptionAsUnhandled(e); }); });
     }
 
 pub fn init(args: Arguments) !*StatWatcher {

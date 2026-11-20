@@ -123,8 +123,8 @@ pub const InKind = union(enum) {
     fd: *Interpreter.IOReader,
     ignore: void,
 
-pub fn format(self: *InKind, writer: *std.Io.Writer) !void {
-            switch (self.*) {
+pub fn format(self: InKind, writer: *std.Io.Writer) !void {
+            switch (self) {
 .fd => {
 _ = try writer.print("fd: {f}", .{ self.fd.fd });
 },
@@ -134,8 +134,8 @@ _ = try writer.print("ignore", .{});
 }
     }
 
-pub fn ref(self: *const InKind) InKind {
-            switch (self.*) {
+pub fn ref(self: InKind) InKind {
+            switch (self) {
 .fd => {
 _ = self.fd.ref();
 },
@@ -143,11 +143,11 @@ _ = self.fd.ref();
 
 },
 }
-            return self.*;
+            return self;
     }
 
-pub fn deref(self: *const InKind) void {
-            switch (self.*) {
+pub fn deref(self: InKind) void {
+            switch (self) {
 .fd => {
 _ = self.fd.deref();
 },
@@ -157,8 +157,8 @@ _ = self.fd.deref();
 }
     }
 
-pub fn close(self: *const InKind) void {
-            switch (self.*) {
+pub fn close(self: InKind) void {
+            switch (self) {
 .fd => {
 _ = self.fd.deref();
 },
@@ -168,8 +168,8 @@ _ = self.fd.deref();
 }
     }
 
-pub fn to_subproc_stdio(self: *InKind, stdio: *bun.shell.subproc.Stdio) void {
-            switch (self.*) {
+pub fn to_subproc_stdio(self: InKind, stdio: *bun.shell.subproc.Stdio) void {
+            switch (self) {
 .fd => {
 stdio.* = .{ .fd = self.fd.fd };
 },
@@ -179,8 +179,8 @@ stdio.* = .ignore;
 }
     }
 
-pub fn memoryCost(self: *const InKind) usize {
-            switch (self.*) {
+pub fn memoryCost(self: InKind) usize {
+            switch (self) {
 .fd => {
 return self.fd.memoryCost();
 },

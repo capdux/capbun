@@ -99,6 +99,23 @@ pub struct ValidateObjectOptions {
     fn ScriptExecutionContextIdentifier__forGlobalObject(global: *JSGlobalObject): u32;
 }
 
+struct EmptyFmtArgs {}
+
+inline fn NormArgsType(comptime T: type): type {
+    if (T == void) return EmptyFmtArgs;
+    const info = @typeInfo(T);
+    if (info == .pointer) return info.pointer.child;
+    return T;
+}
+
+inline fn argsIsEmpty(comptime T: type): bool {
+    if (T == void) return true;
+    const info = @typeInfo(T);
+    if (info == .pointer) return argsIsEmpty(info.pointer.child);
+    if (info == .@"struct") return info.@"struct".fields.len == 0;
+    return false;
+}
+
 @opaque pub struct JSGlobalObject {
     pub const GregorianDateTime = _GregorianDateTime;
     pub const BunPluginTarget = _BunPluginTarget;
@@ -473,7 +490,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createInvalidArgs(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        return jsc.Error.INVALID_ARG_TYPE.fmt(_, fmt, args);
+        return jsc.Error.INVALID_ARG_TYPE.fmt(_, fmt, (if (comptime @TypeOf(args) == void) EmptyFmtArgs{} else if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args));
     }
 
     pub fn throwSysError(
@@ -887,8 +904,8 @@ pub struct ValidateObjectOptions {
     /// Throw an error from within the Bun runtime.
     ///
     /// The set of errors accepted by `ERR()` is defined in `ErrorCode.ts`.
-    pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: auto): ErrorCode.ErrorBuilder(code, fmt, @TypeOf(args)) {
-        return .{ global: global, args: args };
+    pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: auto): ErrorCode.ErrorBuilder(code, fmt, NormArgsType(@TypeOf(args))) {
+        return .{ global: global, args: (if (comptime @TypeOf(args) == void) EmptyFmtArgs{} else if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args) };
     }
 
     pub static fn create(
@@ -1034,7 +1051,7 @@ pub struct ValidateObjectOptions {
         comptime fmt: string,
         args: auto,
     ): jsc.JSValue {
-        if (comptime std.@"meta".fields(@TypeOf(args)).len == 0) {
+        if (comptime argsIsEmpty(@TypeOf(args))) {
             let zig_str = jsc.ZigString.init(fmt);
             if (comptime !strings.isAllASCII(fmt)) {
                 zig_str.markUTF16();
@@ -1045,7 +1062,8 @@ pub struct ValidateObjectOptions {
             let fallback = std.heap.stackFallback(256, bun.default_allocator);
             let alloc = fallback.get();
 
-            const buf = std.fmt.allocPrint(alloc, fmt, args) catch unreachable;
+            const fmt_args = if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args;
+            const buf = std.fmt.allocPrint(alloc, fmt, fmt_args) catch unreachable;
             let zig_str = jsc.ZigString.init(buf);
             zig_str.detectEncoding();
             // it always clones
@@ -1061,7 +1079,7 @@ pub struct ValidateObjectOptions {
         comptime fmt: [:0]const u8,
         args: auto,
     ): jsc.JSValue {
-        return code.fmt(_, fmt, args);
+        return code.fmt(_, fmt, (if (comptime @TypeOf(args) == void) EmptyFmtArgs{} else if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args));
     }
 
     pub fn toInvalidArguments(
@@ -1070,7 +1088,7 @@ pub struct ValidateObjectOptions {
         args: auto,
     ): jsc.JSValue {
         @branchHint(.cold);
-        return jsc.Error.INVALID_ARG_TYPE.fmt(_, fmt, args);
+        return jsc.Error.INVALID_ARG_TYPE.fmt(_, fmt, (if (comptime @TypeOf(args) == void) EmptyFmtArgs{} else if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args));
     }
 
     pub fn scriptExecutionContextIdentifier(*_): bun.webcore.ScriptExecutionContext.Identifier {

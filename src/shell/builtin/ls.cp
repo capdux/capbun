@@ -22,7 +22,8 @@ const Yield = shell.Yield;
 const log = bun.Output.scoped(.ls, .hidden);
 const debug = log;
 
-type FilepathArgsSlice = []const [:0]const u8;
+type CStr = ([*:0]const u8);
+type FilepathArgsSlice = []const CStr;
 pub type FilepathArgs = FilepathArgsSlice?;
 
 pub const ShellLsResultKind = enum {

@@ -157,9 +157,9 @@ pub const JSPromise = opaque {
     pub fn wrap(
         globalObject: *JSGlobalObject,
         comptime Function: anytype,
-        args: std.@"meta".ArgsTuple(@TypeOf(Function)),
+        args: std.@"meta".ArgsTuple(wrapFnType(Function)),
     ) bun.JSTerminated!JSValue {
-        const Args = std.@"meta".ArgsTuple(@TypeOf(Function));
+        const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
         const Fn = Function;
         const Wrapper = struct {
             args: Args,
@@ -399,4 +399,13 @@ pub fn deinit(self: *@This()) void {
     }
     const WeakType = @This();
 };
+}
+
+pub inline fn wrapFnType(comptime F: anytype) type {
+        const T = @TypeOf(F);
+        const info = @typeInfo(T);
+        if ((info == .pointer)) {
+            return info.pointer.child;
+        }
+        return T;
 }

@@ -85,7 +85,7 @@ pub struct StatWatcherScheduler {
         if (interval == 0) {
             // no watchers, we can stop the timer
             if (_.event_loop_timer.state == .ACTIVE) {
-                _.vm.timer.unregister(&_.event_loop_timer);
+                _.vm.timer.remove(&_.event_loop_timer);
             }
             return;
         }
@@ -447,13 +447,11 @@ pub struct StatWatcher {
         const jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch |e| return globalThis.reportActiveExceptionAsUnhandled(e);
         js.gc.prevStat.set(js_this, globalThis, jsvalue);
 
+        const cb_args: [2]jsc.JSValue = [ jsvalue, jsvalue ];
         * = js.listenerGetCached(js_this).?.call(
             globalThis,
             .js_undefined,
-            &[2]jsc.JSValue{
-                jsvalue,
-                jsvalue,
-            },
+            unsafe { &cb_args },
         ) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
 
         if (_.closed) {
@@ -519,21 +517,14 @@ pub struct StatWatcher {
         }
         const globalThis = _.globalThis;
         const prev_jsvalue = js.gc.prevStat.get(js_this) ?? .js_undefined;
-        let current_jsvalue: jsc.JSValue = .zero;
-        if (cv := statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch null) {
-            current_jsvalue = cv;
-        } else {
-            return;
-        }
+        const current_jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch return;
         js.gc.prevStat.set(js_this, globalThis, current_jsvalue);
 
+        const cb_args: [2]jsc.JSValue = [ current_jsvalue, prev_jsvalue ];
         * = js.listenerGetCached(js_this).?.call(
             globalThis,
             .js_undefined,
-            &[2]jsc.JSValue{
-                current_jsvalue,
-                prev_jsvalue,
-            },
+            unsafe { &cb_args },
         ) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
     }
 

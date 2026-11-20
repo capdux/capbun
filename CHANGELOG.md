@@ -1722,3 +1722,5 @@
 - **[2026-11-20] Wave 18 A 组 (15 模块)**：更新 `src/runtime/{webcore/Blob,webcore,server/{server,RequestContext,ServerConfig,AnyRequestContext}}`, `src/uws_sys/{App,h3,Response,WebSocket}`, `src/bake/DevServer{,/HotReloadEvent,/IncrementalGraph,/WatcherAtomics,/memory_cost}`（.cp/.zig）。
 
 - **[2026-11-20] Wave 18 C 组 (10 模块)**：更新 `src/jsc/VirtualMachine`, `src/runtime/server/{RequestContext,FileRoute,ServerConfig}`, `src/bake/DevServer{,/HotReloadEvent,/WatcherAtomics,/memory_cost,/PackedMap,/SourceMapStore}`（.cp/.zig）。
+
+- **[2026-11-20] Wave 18 B 组 (24 模块)**：更新 `src/bun_core/output`, `src/jsc/{JSPromise,JSGlobalObject,ZigStackFramePosition}`, `src/runtime/valkey_jsc/valkey`, `src/shell/{interpreter,IO,IOReader,builtin/mv,builtin/ls,states/Expansion,states/Pipeline}`, `src/ptr/tagged_pointer`, `src/resolve_builtins/HardcodedModule`, `src/sql/postgres/protocol/NewWriter`, `src/collections/baby_list`, `src/aio/posix_event_loop`, `src/io/PipeReader`, `src/runtime/image/codec_png`, `src/runtime/node/node_fs_stat_watcher`, `src/runtime/socket/{Handlers,udp_socket}`, `src/event_loop/MiniEventLoop`, `src/watcher/INotifyWatcher`（.cp/.zig）。
