@@ -321,7 +321,8 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
         }
         if ((css_chunks.count() > 0)) {
             const sorted_css_keys = try temp_allocator.dupe(u64, css_chunks.keys());
-            _ = std.sort.pdq(u64, sorted_css_keys, .{}, std.sort.asc(u64));
+            const void_ctx: void = undefined;
+            _ = std.sort.pdq(u64, sorted_css_keys, void_ctx, std.sort.asc(u64));
             var remapped_css_indexes = try temp_allocator.alloc(u32, css_chunks.count());
             _ = &remapped_css_indexes;
             const css_chunk_values = css_chunks.values();

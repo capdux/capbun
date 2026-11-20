@@ -221,11 +221,13 @@ pub fn LowerDecorators(
                 },
                 .e_call => |e| {
                     rewriteExpr(p, &e.target, kind);
-                    for (*a of e.args.slice()) rewriteExpr(p, a, kind);
+                    const call_args = e.args.slice();
+                    for (idx of 0..call_args.len) rewriteExpr(p, &call_args[@as(usize, @intCast(idx))], kind);
                 },
                 .e_new => |e| {
                     rewriteExpr(p, &e.target, kind);
-                    for (*a of e.args.slice()) rewriteExpr(p, a, kind);
+                    const new_args = e.args.slice();
+                    for (idx of 0..new_args.len) rewriteExpr(p, &new_args[@as(usize, @intCast(idx))], kind);
                 },
                 .e_index => |e| {
                     rewriteExpr(p, &e.target, kind);
@@ -807,7 +809,8 @@ pub fn LowerDecorators(
 
                             // __privateAdd (once per name)
                             if (!emitted_private_adds.contains(npriv_inner)) {
-                                emitted_private_adds.put(p.allocator, npriv_inner, {}) catch unreachable;
+                                const void_val: void = undefined;
+                                emitted_private_adds.put(p.allocator, npriv_inner, void_val) catch unreachable;
                                 emitPrivateAdd(p, prop.flags.contains(.is_static), ws_ref, null, loc, &constructor_inject_stmts, &static_private_add_blocks);
                             }
                             continue;
@@ -1090,7 +1093,8 @@ pub fn LowerDecorators(
                     // Private method/getter/setter — remove from class body
                     const priv_inner2 = key_expr.data.e_private_identifier.ref.innerIndex();
                     if (!emitted_private_adds.contains(priv_inner2)) {
-                        emitted_private_adds.put(p.allocator, priv_inner2, {}) catch unreachable;
+                        const void_val2: void = undefined;
+                        emitted_private_adds.put(p.allocator, priv_inner2, void_val2) catch unreachable;
                         emitPrivateAdd(p, prop.flags.contains(.is_static), private_storage_ref.?, null, loc, &constructor_inject_stmts, &static_private_add_blocks);
                     }
                     if (prop.flags.contains(.is_static)) {

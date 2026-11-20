@@ -437,7 +437,7 @@ pub fn createExportsForFile(
 
     // No need to generate a part if it'll be empty
     if (all_export_stmts.len > 0) {
-        const empty_stmts: [0]js_ast.Stmt = [];
+        let empty_stmts: [0]js_ast.Stmt = undefined;
         c.graph.ast.items(.parts)[id].slice()[js_ast.namespace_export_part_index] = .{
             stmts: if (c.options.output_format != .internal_bake_dev) all_export_stmts else empty_stmts[0..0],
             symbol_uses: ns_export_symbol_uses,

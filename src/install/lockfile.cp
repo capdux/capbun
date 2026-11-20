@@ -1403,10 +1403,10 @@ pub fn hoist(
     lockfile: *Lockfile,
     log: *logger.Log,
     comptime method: Tree.BuilderMethod,
-    manager: if (method == .filter) *PackageManager else void,
-    install_root_dependencies: if (method == .filter) bool else void,
-    workspace_filters: if (method == .filter) []const WorkspaceFilter else void,
-    packages_to_install: if (method == .filter) ([]const PackageID)? else void,
+    manager: if (method == Tree.BuilderMethod.filter) *PackageManager else void,
+    install_root_dependencies: if (method == Tree.BuilderMethod.filter) bool else void,
+    workspace_filters: if (method == Tree.BuilderMethod.filter) []const WorkspaceFilter else void,
+    packages_to_install: if (method == Tree.BuilderMethod.filter) ([]const PackageID)? else void,
 ): Tree.SubtreeError!void {
     const allocator = lockfile.allocator;
     let slice = lockfile.packages.slice();
@@ -2130,18 +2130,20 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
         let i: usize = 1;
 
         while (i + 16 < packages_len) : (i += 16) {
+            const str_slice = String.slice;
             comptime let j: usize = 0;
             inline while (j < 16) : (j += 1) {
                 alphabetized_names[(i + j) - 1] = @as(PackageID, @truncate((i + j)));
                 // posix path separators because we only use posix in the lockfile
-                string_builder.fmtCount("{s}@{f}\n", .{ names[i + j].slice(bytes), resolutions[i + j].fmt(bytes, .posix) });
+                string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[i + j], bytes), resolutions[i + j].fmt(bytes, .posix) });
             }
         }
 
         while (i < packages_len) : (i += 1) {
+            const str_slice = String.slice;
             alphabetized_names[i - 1] = @as(PackageID, @truncate(i));
             // posix path separators because we only use posix in the lockfile
-            string_builder.fmtCount("{s}@{f}\n", .{ names[i].slice(bytes), resolutions[i].fmt(bytes, .posix) });
+            string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[i], bytes), resolutions[i].fmt(bytes, .posix) });
         }
     }
 

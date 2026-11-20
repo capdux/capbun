@@ -332,7 +332,8 @@ pub fn createExportsForFile(c: *LinkerContext, allocator: std.mem.Allocator, id:
             remaining_stmts = remaining_stmts[1..];
         }
         if ((all_export_stmts.len > 0)) {
-            const empty_stmts: [0]js_ast.Stmt = &.{};
+            var empty_stmts: [0]js_ast.Stmt = undefined;
+            _ = &empty_stmts;
             c.graph.ast.items(.parts)[@as(usize, @intCast(id))].slice()[cp_cast_int(usize, js_ast.namespace_export_part_index)] = .{ .stmts = (if ((c.options.output_format != .internal_bake_dev)) all_export_stmts else empty_stmts[0..0]), .symbol_uses = ns_export_symbol_uses, .dependencies = js_ast.Dependency.List.moveFromList((&ns_export_dependencies)), .declared_symbols = declared_symbols, .can_be_removed_if_unused = true, .force_tree_shaking = true };
             if (export_ref.isValid()) {
                 c.graph.meta.items(.flags)[@as(usize, @intCast(id))].needs_export_symbol_from_runtime = true;

@@ -17,8 +17,8 @@ pub struct ImportLayer {
         return lhs.v.?.eql(&rhs.v.?);
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -65,7 +65,8 @@ pub struct ImportConditions {
             }
         }
 
-        if (*sup := _.supports) {
+        if (_.supports != null) {
+            const sup = &_.supports.?;
             dest.writeStr(" supports")?;
             if (sup.* == .declaration) {
                 sup.toCss(dest)?;
@@ -226,7 +227,8 @@ pub struct ImportRule {
             }
         }
 
-        if (*sup := _.supports) {
+        if (_.supports != null) {
+            const sup = &_.supports.?;
             dest.writeStr(" supports")?;
             if (sup.* == .declaration) {
                 sup.toCss(dest)?;

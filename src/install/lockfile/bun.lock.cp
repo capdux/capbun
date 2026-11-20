@@ -1654,9 +1654,9 @@ pub fn parseIntoBinaryLockfile(
                 return error.InvalidPackageResolution;
             };
 
-            let [name_str, res_str] = name_and_res: {
+            const name_and_res_pair = name_and_res: {
                 if (strings.hasPrefixComptime(res_info_str, "@root:")) {
-                    break :name_and_res ["", res_info_str[1..]];
+                    break :name_and_res .{ "", res_info_str[1..] };
                 }
 
                 break :name_and_res Dependency.splitNameAndVersion(res_info_str) catch {
@@ -1664,6 +1664,8 @@ pub fn parseIntoBinaryLockfile(
                     return error.InvalidPackageResolution;
                 };
             };
+            const name_str = name_and_res_pair[0];
+            const res_str = name_and_res_pair[1];
 
             const name_hash = String.Builder.stringHash(name_str);
             const name = string_buf.append(name_str)?;

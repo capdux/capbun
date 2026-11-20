@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -130,11 +131,11 @@ pub fn visit(self: *Visitor, source_index: Index, wrapping_conditions: *BabyList
                     if ((!record.flags.is_internal)) {
                         var all_conditions = wrapping_conditions.deepCloneInfallible(self.allocator);
                         _ = &all_conditions;
-                        var all_import_records = bun.handleOom(wrapping_import_records.clone(self.allocator));
-                        _ = &all_import_records;
+                        var ext_import_records = bun.handleOom(wrapping_import_records.clone(self.allocator));
+                        _ = &ext_import_records;
                         if ((rule.*).@"import".hasConditions()) {
-                            _ = bun.handleOom(all_conditions.append(self.allocator, (rule.*).@"import".conditionsWithImportRecords(self.allocator, self.all_import_records)));
-                            _ = (blk_catch_1: { break :blk_catch_1 ((self.order.append(self.allocator, Chunk.CssImportOrder{ .kind = .{ .external_path = record.path }, .conditions = all_conditions, .condition_import_records = self.all_import_records })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                            _ = bun.handleOom(all_conditions.append(self.allocator, (rule.*).@"import".conditionsWithImportRecords(self.allocator, (&ext_import_records))));
+                            _ = (blk_catch_1: { break :blk_catch_1 ((self.order.append(self.allocator, Chunk.CssImportOrder{ .kind = .{ .external_path = record.path }, .conditions = all_conditions, .condition_import_records = ext_import_records })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
                         } else {
                             _ = (blk_catch_2: { break :blk_catch_2 ((self.order.append(self.allocator, Chunk.CssImportOrder{ .kind = .{ .external_path = record.path }, .conditions = wrapping_conditions.*, .condition_import_records = wrapping_import_records.* })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
                         }
@@ -211,7 +212,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
             for (cp_mut_slice(&order.slice())) |*entry| {
                 _ = &entry;
                 if (((((entry.*).kind == .layers) and is_at_layer_prefix) or ((entry.*).kind == .external_path))) {
-                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*)));
+                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*).*));
                 }
                 if (((entry.*).kind != .layers)) {
                     is_at_layer_prefix = false;
@@ -221,7 +222,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
             for (cp_mut_slice(&order.slice())) |*entry| {
                 _ = &entry;
                 if (((((entry.*).kind != .layers) or (!is_at_layer_prefix)) and ((entry.*).kind != .external_path))) {
-                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*)));
+                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*).*));
                 }
                 if (((entry.*).kind != .layers)) {
                     is_at_layer_prefix = false;
@@ -358,13 +359,13 @@ var layers = (&entry.kind.layers);
                             if (((is_adjacent and (wip_order.at(duplicate_index).kind == .layers)) and importConditionsAreEqual(entry.conditions.sliceConst(), wip_order.at(duplicate_index).conditions.sliceConst()))) {
                                 _ = wip_order.pop();
                             }
-                            _ = bun.handleOom(wip_order.append(temp_allocator, entry));
+                            _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
                         }
                         continue :next_forward;
                     }
                 }
                 _ = (blk_catch_5: { break :blk_catch_5 ((layer_duplicates.mut(index).indices.append(temp_allocator, @intCast(wip_order.len))) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
-                _ = bun.handleOom(wip_order.append(temp_allocator, entry));
+                _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
             }
             _ = debugCssOrder(c, (&wip_order), .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);
             order.len = wip_order.len;
@@ -421,8 +422,8 @@ pub fn isConditionalImportRedundant(earlier: *const BabyList(bun.css.ImportCondi
             _ = &i;
             const __end_12 = later.len;
             while (i < __end_12) : (i += 1) {
-                const a = earlier.at(i);
-                const b = later.at(i);
+                const a = earlier.at(@as(usize, @intCast(i)));
+                const b = later.at(@as(usize, @intCast(i)));
                 if (a.layersEql(b)) {
                     const same_supports = a.supportsEql(b);
                     const same_media = a.media.eql((&b.media));

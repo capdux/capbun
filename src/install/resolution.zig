@@ -338,8 +338,8 @@ pub fn fmtURL(self: @This(), string_bytes: []const u8) URLFormatter {
                 return URLFormatter{ .resolution = self, .buf = string_bytes };
         }
 
-pub fn fmtForDebug(self: @This(), string_bytes: []const u8) DebugFormatter {
-                return DebugFormatter{ .resolution = self, .buf = string_bytes };
+pub fn fmtForDebug(this_ptr: *const This, string_bytes: []const u8) DebugFormatter {
+                return DebugFormatter{ .resolution = this_ptr, .buf = string_bytes };
         }
 
 pub fn eql(lhs: *const This, rhs: *const This, lhs_string_buf: []const u8, rhs_string_buf: []const u8) bool {

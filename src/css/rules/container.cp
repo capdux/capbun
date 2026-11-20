@@ -33,8 +33,8 @@ pub struct ContainerName {
         return CustomIdentFns.toCss(&_.v, dest)?;
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -88,8 +88,8 @@ pub struct StyleQueryOperation {
     operator: css.media_query.Operator,
     conditions: ArrayList(StyleQuery),
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -183,8 +183,8 @@ pub struct ContainerConditionOperation {
     operator: css.media_query.Operator,
     conditions: ArrayList(ContainerCondition),
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 

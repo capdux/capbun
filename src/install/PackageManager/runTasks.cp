@@ -847,7 +847,8 @@ pub fn runTasks(
                     const dependency_list = dependency_list_entry.value_ptr.*;
                     dependency_list_entry.value_ptr.* = {};
 
-                    manager.processDependencyList(dependency_list, void, {}, {}, install_peer)?;
+                    const void_val: void = undefined;
+                    manager.processDependencyList(dependency_list, void, void_val, void_val, install_peer)?;
                 }
 
                 manager.setPreinstallState(package_id, manager.lockfile, .done);

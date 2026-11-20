@@ -42,8 +42,10 @@ const SeenDeclContext = struct {
     }
 };
 
+type OptI32 = i32?;
+
 const SupportsParseClosure = struct {
-    expected_type: *i32?,
+    expected_type: *OptI32,
     static fn tryParseFn(i: *css.Parser, closure_self: *@This()): Result(SupportsCondition) {
         const location = i.currentSourceLocation();
         const s = switch (i.expectIdent()) {
@@ -109,24 +111,24 @@ pub union(enum) SupportsCondition {
         }
     }
 
-    pub fn cloneWithImportRecords(
-        *_,
+    pub static fn cloneWithImportRecords(
+        this_ptr: *const @This(),
         allocator: std.mem.Allocator,
         _: *bun.BabyList(bun.ImportRecord),
     ): @This() {
-        return _.deepClone(allocator);
+        return this_ptr.deepClone(allocator);
     }
 
     pub fn hash(*_, hasher: auto) {
         return css.implementHash(@This(), _, hasher);
     }
 
-    pub fn eql(other: *const SupportsCondition): bool {
-        return css.implementEql(SupportsCondition, &_, other);
+    pub static fn eql(this_ptr: *const SupportsCondition, other: *const SupportsCondition): bool {
+        return css.implementEql(SupportsCondition, this_ptr, other);
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): SupportsCondition {
-        return css.implementDeepClone(SupportsCondition, &_, allocator);
+    pub static fn deepClone(this_ptr: *const SupportsCondition, allocator: std.mem.Allocator): SupportsCondition {
+        return css.implementDeepClone(SupportsCondition, this_ptr, allocator);
     }
 
     fn needsParens(parent: *const SupportsCondition): bool {
@@ -256,12 +258,14 @@ pub union(enum) SupportsCondition {
             .result => |vv| vv,
             .err => |e| return { err: e },
         };
+        const void_val: void = undefined;
         switch (tok.*) {
             .function => |f| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("selector", f)) {
                     const Fn = struct {
                         static fn tryParseFn(i: *css.Parser): Result(SupportsCondition) {
-                            return i.parseNestedBlock(SupportsCondition, {}, @This().parseNestedBlockFn);
+                            const vv: void = undefined;
+                            return i.parseNestedBlock(SupportsCondition, vv, @This().parseNestedBlockFn);
                         }
                         static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(SupportsCondition) {
                             const p = i.position();
@@ -276,7 +280,8 @@ pub union(enum) SupportsCondition {
             .open_paren => {
                 const res = input.tryParse(struct {
                     pub fn parseFn(i: *css.Parser): Result(SupportsCondition) {
-                        return i.parseNestedBlock(SupportsCondition, {}, css.voidWrap(SupportsCondition, parse));
+                        const vv: void = undefined;
+                        return i.parseNestedBlock(SupportsCondition, vv, css.voidWrap(SupportsCondition, parse));
                     }
                 }.parseFn, {});
                 if (res.isOk()) return res;
@@ -284,7 +289,7 @@ pub union(enum) SupportsCondition {
             else => return { err: location.newUnexpectedTokenError(tok.*) },
         }
 
-        if (e := input.parseNestedBlock(void, {}, SupportsNestedBlockParser.parseFn).asErr()) {
+        if (e := input.parseNestedBlock(void, void_val, SupportsNestedBlockParser.parseFn).asErr()) {
             return { err: e };
         }
 

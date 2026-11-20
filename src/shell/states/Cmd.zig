@@ -438,7 +438,10 @@ pub fn initSubproc(self: *Cmd) Yield {
         self.exec = .{ .subproc = .{ .child = undefined, .buffered_closed = buffered_closed } };
         var did_exit_immediately = false;
         _ = &did_exit_immediately;
-        const subproc = (switch (Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, self.exec.subproc.child, (&did_exit_immediately))) {
+        const subproc = (switch (Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, (blk: {
+        break :blk (&self.exec.subproc.child);
+
+}), (&did_exit_immediately))) {
 .result => self.exec.subproc.child,
 .err => |*e| {
 {

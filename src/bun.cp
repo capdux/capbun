@@ -3797,7 +3797,8 @@ pub inline fn take(val: auto): @typeInfo(@typeInfo(@TypeOf(val)).pointer.child).
 ///
 /// This function deinitializes the value and sets the optional to null.
 pub inline fn clear(val: auto, allocator: std.mem.Allocator) {
-    if (*v := val.*) {
+    if (val.* != null) {
+        const v = &val.*.?;
         if (@hasDecl(@TypeOf(v.*), "deinit")) {
             v.deinit(allocator);
         }

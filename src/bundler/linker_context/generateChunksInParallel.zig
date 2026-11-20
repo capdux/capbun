@@ -260,7 +260,7 @@ var i: usize = 0;
                         if (Environment.enable_logs) {
                             _ = debugPartRanges("Part Range: {s} {s} ({d}..{d})", .{ c.parse_graph.input_files.items(.source)[@as(usize, @intCast(part_range.source_index.get()))].path.pretty, @tagName(c.parse_graph.ast.items(.target)[@as(usize, @intCast(part_range.source_index.get()))].bakeGraph()), part_range.part_index_begin, part_range.part_index_end });
                         }
-                        remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = part_range, .i = @as(i32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForJSChunk) }, .ctx = chunk_ctx };
+                        remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = part_range, .i = @as(u32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForJSChunk) }, .ctx = chunk_ctx };
                         _ = batch.push(ThreadPoolLib.Batch.from((&remaining_part_ranges[0].task)));
                         remaining_part_ranges = remaining_part_ranges[1..];
                     }
@@ -271,7 +271,7 @@ var i: usize = 0;
                         _ = &i;
                         const __end_3 = chunk.content.css.imports_in_chunk_in_order.len;
                         while (i < __end_3) : (i += 1) {
-                            remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = @as(i32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForCssChunk) }, .ctx = chunk_ctx };
+                            remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = @as(u32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForCssChunk) }, .ctx = chunk_ctx };
                             _ = batch.push(ThreadPoolLib.Batch.from((&remaining_part_ranges[0].task)));
                             remaining_part_ranges = remaining_part_ranges[1..];
                         }

@@ -300,16 +300,26 @@ _ = rewriteExpr(p, (&e.left), kind);
 },
 .e_call => |e| {
 _ = rewriteExpr(p, (&e.target), kind);
-            for (cp_mut_slice(&e.args.slice())) |*a| {
-                _ = &a;
-                _ = rewriteExpr(p, (a.*), kind);
+            const call_args = e.args.slice();
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_0 = call_args.len;
+                while (idx < __end_0) : (idx += 1) {
+                    _ = rewriteExpr(p, (&call_args[@as(usize, @intCast(@as(usize, @intCast(idx))))]), kind);
+                }
             }
 },
 .e_new => |e| {
 _ = rewriteExpr(p, (&e.target), kind);
-            for (cp_mut_slice(&e.args.slice())) |*a| {
-                _ = &a;
-                _ = rewriteExpr(p, (a.*), kind);
+            const new_args = e.args.slice();
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_1 = new_args.len;
+                while (idx < __end_1) : (idx += 1) {
+                    _ = rewriteExpr(p, (&new_args[@as(usize, @intCast(@as(usize, @intCast(idx))))]), kind);
+                }
             }
 },
 .e_index => |e| {
@@ -1051,7 +1061,8 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
                             }
                             _ = ((prefix_stmts.append(p.s(S.SExpr{ .value = assignTo(p, fn_ref, (((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value)) orelse (p.newExpr(E.Undefined, loc))), loc) }, loc))) catch unreachable);
                             if ((!emitted_private_adds.contains(npriv_inner))) {
-                                _ = ((emitted_private_adds.put(p.allocator, npriv_inner, .{})) catch unreachable);
+                                const void_val: void = undefined;
+                                _ = ((emitted_private_adds.put(p.allocator, npriv_inner, void_val)) catch unreachable);
                                 _ = emitPrivateAdd(p, prop.flags.contains(.is_static), ws_ref, null, loc, (&constructor_inject_stmts), (&static_private_add_blocks));
                             }
                             continue;
@@ -1301,7 +1312,8 @@ else => 5,
                     if ((is_private and (private_storage_ref != null))) {
                         const priv_inner2 = key_expr.data.e_private_identifier.ref.innerIndex();
                         if ((!emitted_private_adds.contains(priv_inner2))) {
-                            _ = ((emitted_private_adds.put(p.allocator, priv_inner2, .{})) catch unreachable);
+                            const void_val2: void = undefined;
+                            _ = ((emitted_private_adds.put(p.allocator, priv_inner2, void_val2)) catch unreachable);
                             _ = emitPrivateAdd(p, prop.flags.contains(.is_static), private_storage_ref.?, null, loc, (&constructor_inject_stmts), (&static_private_add_blocks));
                         }
                         if (prop.flags.contains(.is_static)) {

@@ -149,8 +149,8 @@ pub fn toCss(self: FontFaceProperty, dest: *Printer) PrintErr!void {
 });
     }
 
-pub fn deepClone(self: FontFaceProperty, allocator: std.mem.Allocator) This {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) This {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
@@ -711,7 +711,7 @@ pub fn parseValue(_: *FontFaceDeclarationParser, name: []const u8, input: *css.P
                             if (FontStyle.parse(input).asValue()) |c| {
                                 _ = &c;
                                 if (input.expectExhausted().isOk()) {
-                                    return .{ .result = .{ .font_style = bun.create(input.allocator(), FontStyle, c) } };
+                                    return .{ .result = .{ .font_style = c } };
                                 }
                             }
                         } else {

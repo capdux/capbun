@@ -148,7 +148,7 @@ pub fn processExtractedTarballPackage(manager: *PackageManager, package_id: *Pac
 var package = package: {
         var resolver = GitResolver{ .resolved = data.resolved, .resolution = resolution, .dep_id = dep_id };
         _ = &resolver;
-        var pkg = Lockfile.Package;
+        var pkg: Lockfile.Package = .{};
         _ = &pkg;
         if (data.json) |json| {
             _ = &json;
@@ -203,7 +203,7 @@ else => unreachable,
 .local_tarball, .remote_tarball => {
 const json = data.json.?;
         const package_json_source = (&logger.Source.initPathString(json.path, json.buf));
-        var package = Lockfile.Package;
+        var package: Lockfile.Package = .{};
         _ = &package;
         var resolver: TarballResolver = .{ .url = data.url, .resolution = resolution };
         _ = &resolver;

@@ -406,7 +406,7 @@ else => {
                 const previous_step = ctx.installer.store.entries.items(.step)[@as(usize, @intCast(ctx.entry_id.get()))].swap(.done, .release);
                 if (comptime Environment.ci_assert) {
                     _ = bun.assertWithLocation((self.current_script_index != 0), @src());
-                    _ = bun.assertWithLocation((previous_step == .@"run (post)install and (pre/post)prepare"), @src());
+                    _ = bun.assertWithLocation((previous_step == .@"run (post)install && (pre/post)prepare"), @src());
                 }
                 _ = ctx.installer.onTaskComplete(ctx.entry_id, .success);
             }

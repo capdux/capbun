@@ -209,7 +209,7 @@ pub fn toBundledAst(self: *AstBuilder, target: BundlerOptions.Target) !js_ast.Bu
                 _ = &i;
                 const __end_1 = self.symbols.items.len;
                 while (i < __end_1) : (i += 1) {
-                    _ = map.putAssumeCapacity(Ref{ .tag = .symbol, .source_index = self.source_index, .inner_index = @as(Ref.Int, @truncate(i)) }, .{ .count_estimate = 1 });
+                    _ = map.putAssumeCapacity(Ref{ .tag = .symbol, .source_index = self.source_index, .inner_index = @as(Ref.Int, @truncate(@as(usize, @intCast(i)))) }, .{ .count_estimate = 1 });
                 }
             }
             break :uses map;

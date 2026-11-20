@@ -3530,10 +3530,10 @@ pub inline fn take(val: anytype) ?@typeInfo(@typeInfo(@TypeOf(val)).pointer.chil
 }
 
 pub inline fn clear(val: anytype, allocator: std.mem.Allocator) void {
-        if (val.*) |*v| {
-            _ = &v;
-            if (@hasDecl(@TypeOf((v.*).*), "deinit")) {
-                _ = (v.*).deinit(allocator);
+        if ((val.* != null)) {
+            const v = (&val.*.?);
+            if (@hasDecl(@TypeOf(v.*), "deinit")) {
+                _ = v.deinit(allocator);
             }
             val.* = null;
         }

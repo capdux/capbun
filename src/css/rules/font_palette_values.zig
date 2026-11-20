@@ -108,8 +108,8 @@ pub fn toCss(self: FontPaletteValuesRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(125);
     }
 
-pub fn deepClone(self: FontPaletteValuesRule, allocator: std.mem.Allocator) This {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) This {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
@@ -146,8 +146,8 @@ pub fn toCss(self: OverrideColors, dest: *Printer) PrintErr!void {
             _ = try self.color.toCss(dest);
     }
 
-pub fn deepClone(self: OverrideColors, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 };
 
@@ -205,8 +205,8 @@ pub const FontPaletteValuesDeclarationParser = struct {
     const This = @This();
     pub const DeclarationParser = struct {
     
-    pub fn parseValue(self: *@This(), name: []const u8, input: *css.Parser) Result(Declaration) {
-                _ = (&self);
+    pub fn parseValue(this_parser: *This, name: []const u8, input: *css.Parser) Result(Declaration) {
+                _ = this_parser;
                 const state = input.state();
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("font-family", name)) {
                     if (FontFamily.parse(input).asValue()) |font_family| {

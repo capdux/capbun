@@ -65,8 +65,8 @@ pub struct FontPaletteValuesRule {
         dest.writeChar('}')?;
     }
 
-    fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): This {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -154,8 +154,8 @@ pub struct OverrideColors {
         _.color.toCss(dest)?;
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -208,9 +208,8 @@ pub struct FontPaletteValuesDeclarationParser {
     pub const DeclarationParser = struct {
         pub const Declaration = FontPaletteValuesProperty;
 
-        fn parseValue(self: *@This(), name: []const u8, input: *css.Parser): Result(Declaration) {
-        * = &self;
-            * = _; // autofix
+        pub fn parseValue(this_parser: *This, name: []const u8, input: *css.Parser): Result(Declaration) {
+            _ = this_parser;
             const state = input.state();
             // todo_stuff.match_ignore_ascii_case
             if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("font-family", name)) {

@@ -631,7 +631,8 @@ _ = ((dependency_list_entry.value_ptr.append(manager.allocator, dep)) catch unre
                         _ = &dependency_list_entry;
                         const dependency_list = dependency_list_entry.value_ptr.*;
                         dependency_list_entry.value_ptr.* = .{};
-                        _ = try manager.processDependencyList(dependency_list, void, .{}, .{}, install_peer);
+                        const void_val: void = undefined;
+                        _ = try manager.processDependencyList(dependency_list, void, void_val, void_val, install_peer);
                     }
                 }
             }

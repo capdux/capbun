@@ -1126,7 +1126,7 @@ pub fn filter(lockfile: *Lockfile, log: *logger.Log, manager: *PackageManager, i
         return hoist(lockfile, log, .filter, manager, install_root_dependencies, workspace_filters, packages_to_install);
 }
 
-pub fn hoist(lockfile: *Lockfile, log: *logger.Log, comptime method: Tree.BuilderMethod, manager: if ((method == true)) *PackageManager else void, install_root_dependencies: if ((method == true)) bool else void, workspace_filters: if ((method == true)) []const WorkspaceFilter else void, packages_to_install: if ((method == true)) ?[]const PackageID else void) Tree.SubtreeError!void {
+pub fn hoist(lockfile: *Lockfile, log: *logger.Log, comptime method: Tree.BuilderMethod, manager: if ((method == Tree.BuilderMethod.filter)) *PackageManager else void, install_root_dependencies: if ((method == Tree.BuilderMethod.filter)) bool else void, workspace_filters: if ((method == Tree.BuilderMethod.filter)) []const WorkspaceFilter else void, packages_to_install: if ((method == Tree.BuilderMethod.filter)) ?[]const PackageID else void) Tree.SubtreeError!void {
         const allocator = lockfile.allocator;
         var slice = lockfile.packages.slice();
         _ = &slice;
@@ -1706,16 +1706,18 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
             var i: usize = 1;
             _ = &i;
             while (((i + 16) < packages_len)) : (i = (i + 16)) {
+                const str_slice = String.slice;
                 comptime var j: usize = 0;
                 _ = &j;
                 inline while ((j < 16)) : (j = (j + 1)) {
                     alphabetized_names[cp_cast_int(usize, ((i + j) - 1))] = @as(PackageID, @truncate((i + j)));
-                    _ = string_builder.fmtCount("{s}@{f}\n", .{ cp_iter_slice(names[@as(usize, @intCast((i + j)))])[@intCast(bytes)..], resolutions[@as(usize, @intCast((i + j)))].fmt(bytes, .posix) });
+                    _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[@as(usize, @intCast((i + j)))], bytes), resolutions[@as(usize, @intCast((i + j)))].fmt(bytes, .posix) });
                 }
             }
             while ((i < packages_len)) : (i = (i + 1)) {
+                const str_slice = String.slice;
                 alphabetized_names[cp_cast_int(usize, (i - 1))] = @as(PackageID, @truncate(i));
-                _ = string_builder.fmtCount("{s}@{f}\n", .{ cp_iter_slice(names[@as(usize, @intCast(i))])[@intCast(bytes)..], resolutions[@as(usize, @intCast(i))].fmt(bytes, .posix) });
+                _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[@as(usize, @intCast(i))], bytes), resolutions[@as(usize, @intCast(i))].fmt(bytes, .posix) });
             }
         }
         const scripts_begin: []const u8 = "\n-- BEGIN SCRIPTS --\n";

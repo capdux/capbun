@@ -340,8 +340,8 @@ pub @c struct ResolutionType<SemverIntType> {
             return URLFormatter{ resolution: _, buf: string_bytes };
         }
 
-        pub fn fmtForDebug(string_bytes: []const u8): DebugFormatter {
-            return DebugFormatter{ resolution: _, buf: string_bytes };
+        pub static fn fmtForDebug(this_ptr: *const This, string_bytes: []const u8): DebugFormatter {
+            return DebugFormatter{ resolution: this_ptr, buf: string_bytes };
         }
 
         pub fn eql(

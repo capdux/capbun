@@ -553,7 +553,7 @@ pub struct ShellAsyncSubprocessDone {
             .buffered_closed = buffered_closed,
         } };
         let did_exit_immediately = false;
-        const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, _.exec.subproc.child, &did_exit_immediately)) {
+        const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, unsafe { &_.exec.subproc.child }, &did_exit_immediately)) {
             .result => _.exec.subproc.child,
             .err => |*e| {
                 defer e.deinit(bun.default_allocator);

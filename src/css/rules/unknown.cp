@@ -43,8 +43,8 @@ pub struct UnknownAtRule {
         }
     }
 
-    fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): This {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 

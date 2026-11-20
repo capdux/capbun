@@ -253,7 +253,7 @@ pub struct AstBuilder {
                     map.putAssumeCapacity(Ref{
                         .tag = .symbol,
                         .source_index = _.source_index,
-                        .inner_index = @as(Ref.Int, @truncate(i)),
+                        .inner_index = @as(Ref.Int, @truncate(@as(usize, @intCast(i)))),
                     }, .{ .count_estimate = 1 });
                 }
                 break :uses map;

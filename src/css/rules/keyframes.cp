@@ -11,17 +11,17 @@ pub struct KeyframesListParser {
     pub const DeclarationParser = struct {
         pub const Declaration = Keyframe;
 
-        static fn parseValue(name: []const u8, input: *css.Parser): Result(Declaration) {
+        static fn parseValue(_: *This, name: []const u8, input: *css.Parser): Result(Declaration) {
             return { err: input.newError(css.BasicParseErrorKind{ .unexpected_token = { ident: name } }) };
         }
     };
 
     pub const RuleBodyItemParser = struct {
-        static fn parseQualified(): bool {
+        static fn parseQualified(_: *This): bool {
             return true;
         }
 
-        static fn parseDeclarations(): bool {
+        static fn parseDeclarations(_: *This): bool {
             return false;
         }
     };
@@ -30,16 +30,16 @@ pub struct KeyframesListParser {
         pub const Prelude = void;
         pub const AtRule = Keyframe;
 
-        static fn parsePrelude(name: []const u8, input: *css.Parser): Result(Prelude) {
+        static fn parsePrelude(_: *This, name: []const u8, input: *css.Parser): Result(Prelude) {
             return { err: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
 
-        static fn parseBlock(_: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRuleParser.AtRule) {
+        static fn parseBlock(_: *This, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRuleParser.AtRule) {
             return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
         }
 
-        static fn ruleWithoutBlock(_: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
-            return { err: {} };
+        static fn ruleWithoutBlock(_: *This, _: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
+            return { err: undefined };
         }
     };
 
@@ -47,11 +47,11 @@ pub struct KeyframesListParser {
         pub const Prelude = ArrayList(KeyframeSelector);
         pub const QualifiedRule = Keyframe;
 
-        static fn parsePrelude(input: *css.Parser): Result(Prelude) {
+        static fn parsePrelude(_: *This, input: *css.Parser): Result(Prelude) {
             return input.parseCommaSeparated(KeyframeSelector, KeyframeSelector.parse);
         }
 
-        static fn parseBlock(prelude: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
+        static fn parseBlock(_: *This, prelude: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
             // For now there are no options that apply within @keyframes
             const options = css.ParserOptions.default(input.allocator(), null);
             return {
@@ -157,8 +157,8 @@ pub const KeyframesName = union(enum) {
         }
     }
 
-    pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    pub static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -200,8 +200,8 @@ pub union(enum) KeyframeSelector {
         }
     }
 
-    pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    pub static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -229,8 +229,8 @@ pub struct Keyframe {
         _.declarations.toCssBlock(dest)?;
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 

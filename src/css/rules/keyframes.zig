@@ -69,44 +69,44 @@ pub const KeyframesListParser = struct {
     const This = @This();
     pub const DeclarationParser = struct {
     
-    pub fn parseValue(name: []const u8, input: *css.Parser) Result(Declaration) {
+    pub fn parseValue(_: *This, name: []const u8, input: *css.Parser) Result(Declaration) {
                 return .{ .err = input.newError(css.BasicParseErrorKind{ .unexpected_token = .{ .ident = name } }) };
         }
         pub const Declaration = Keyframe;
     };
     pub const RuleBodyItemParser = struct {
     
-    pub fn parseQualified() bool {
+    pub fn parseQualified(_: *This) bool {
                 return true;
         }
     
-    pub fn parseDeclarations() bool {
+    pub fn parseDeclarations(_: *This) bool {
                 return false;
         }
     };
     pub const AtRuleParser = struct {
     
-    pub fn parsePrelude(name: []const u8, input: *css.Parser) Result(Prelude) {
+    pub fn parsePrelude(_: *This, name: []const u8, input: *css.Parser) Result(Prelude) {
                 return .{ .err = input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
     
-    pub fn parseBlock(_: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRuleParser.AtRule) {
+    pub fn parseBlock(_: *This, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRuleParser.AtRule) {
                 return .{ .err = input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(_: AtRuleParser.Prelude, _: *const css.ParserState) css.Maybe(AtRuleParser.AtRule,void) {
-                return .{ .err = .{} };
+    pub fn ruleWithoutBlock(_: *This, _: AtRuleParser.Prelude, _: *const css.ParserState) css.Maybe(AtRuleParser.AtRule,void) {
+                return .{ .err = undefined };
         }
         pub const Prelude = void;
         pub const AtRule = Keyframe;
     };
     pub const QualifiedRuleParser = struct {
     
-    pub fn parsePrelude(input: *css.Parser) Result(Prelude) {
+    pub fn parsePrelude(_: *This, input: *css.Parser) Result(Prelude) {
                 return input.parseCommaSeparated(KeyframeSelector, KeyframeSelector.parse);
         }
     
-    pub fn parseBlock(prelude: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
+    pub fn parseBlock(_: *This, prelude: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
                 const options = css.ParserOptions.default(input.allocator(), null);
                 return .{ .result = Keyframe{ .selectors = prelude, .declarations = (switch (css.DeclarationBlock.parse(input, (&options))) {
     .result => |vv| vv,
@@ -147,8 +147,8 @@ _ = try dest.writeStr("to");
 }
     }
 
-pub fn deepClone(self: *KeyframeSelector, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     pub const parse = css.DeriveParse(@This()).parse;
 };
@@ -171,8 +171,8 @@ pub fn toCss(self: Keyframe, dest: *Printer) PrintErr!void {
             _ = try self.declarations.toCssBlock(dest);
     }
 
-pub fn deepClone(self: Keyframe, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
@@ -315,8 +315,8 @@ if (((((((bun.strings.eqlCaseInsensitiveASCIIICheckLength(s, "none") or bun.stri
 }
     }
 
-pub fn deepClone(self: *@This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };

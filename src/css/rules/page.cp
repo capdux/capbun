@@ -32,8 +32,8 @@ pub enum PagePseudoClass {
         return css.enum_property_util.toCss(@This(), _, dest);
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -150,8 +150,8 @@ pub struct PageSelector {
         }
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -174,8 +174,8 @@ pub struct PageMarginRule {
         _.declarations.toCssBlock(dest)?;
     }
 
-    fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -355,7 +355,7 @@ pub struct PageRuleAtRuleParser {
     }
 
     static fn ruleWithoutBlock(_: *PageRuleParser, _: Prelude, _: *const css.ParserState): css.Maybe(AtRule, void) {
-        return { err: {} };
+        return { err: undefined };
     }
 }
 

@@ -324,7 +324,8 @@ pub noinline fn computeChunks(
 
         if (css_chunks.count() > 0) {
             const sorted_css_keys = temp_allocator.dupe(u64, css_chunks.keys())?;
-            std.sort.pdq(u64, sorted_css_keys, {}, std.sort.asc(u64));
+            const void_ctx: void = undefined;
+            std.sort.pdq(u64, sorted_css_keys, void_ctx, std.sort.asc(u64));
 
             let remapped_css_indexes = temp_allocator.alloc(u32, css_chunks.count())?;
 

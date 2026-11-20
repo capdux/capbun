@@ -173,7 +173,7 @@ struct CacheFolderResolver {
             value: Resolution.Value{
                 npm: .{
                     version: _.version,
-                    url: String.from(""),
+                    url: (String.from)(""),
                 },
             },
         };

@@ -105,14 +105,14 @@ pub struct Visitor {
                 // Record external depednencies
                 if (!record.flags.is_internal) {
                     let all_conditions = wrapping_conditions.deepCloneInfallible(_.allocator);
-                    let all_import_records = bun.handleOom(wrapping_import_records.clone(_.allocator));
+                    let ext_import_records = bun.handleOom(wrapping_import_records.clone(_.allocator));
                     // If this import has conditions, append it to the list of overall
                     // conditions for this external import. Note that an external import
                     // may actually have multiple sets of conditions that can't be
                     // merged. When this happens we need to generate a nested imported
                     // CSS file using a data URL.
                     if (rule.@"import".hasConditions()) {
-                        bun.handleOom(all_conditions.append(_.allocator, rule.@"import".conditionsWithImportRecords(_.allocator, &all_import_records)));
+                        bun.handleOom(all_conditions.append(_.allocator, rule.@"import".conditionsWithImportRecords(_.allocator, &ext_import_records)));
                         _.order.append(
                             _.allocator,
                             Chunk.CssImportOrder{
@@ -120,7 +120,7 @@ pub struct Visitor {
                                     external_path: record.path,
                                 },
                                 conditions: all_conditions,
-                                condition_import_records: all_import_records,
+                                condition_import_records: ext_import_records,
                             },
                         ) catch |e| bun.handleOom(e);
                     } else {
@@ -205,7 +205,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
         let is_at_layer_prefix = true;
         for (*entry of order.slice()) {
             if ((entry.kind == .layers && is_at_layer_prefix) || entry.kind == .external_path) {
-                bun.handleOom(wip_order.append(temp_allocator, entry));
+                bun.handleOom(wip_order.append(temp_allocator, entry.*));
             }
             if (entry.kind != .layers) {
                 is_at_layer_prefix = false;
@@ -216,7 +216,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
         is_at_layer_prefix = true;
         for (*entry of order.slice()) {
             if ((entry.kind != .layers || !is_at_layer_prefix) && entry.kind != .external_path) {
-                bun.handleOom(wip_order.append(temp_allocator, entry));
+                bun.handleOom(wip_order.append(temp_allocator, entry.*));
             }
             if (entry.kind != .layers) {
                 is_at_layer_prefix = false;
@@ -439,7 +439,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
 
                         // Non-layer entries still need to be present because they have
                         // other side effects beside inserting things in the layer order
-                        bun.handleOom(wip_order.append(temp_allocator, entry));
+                        bun.handleOom(wip_order.append(temp_allocator, entry.*));
                     }
 
                     // Don't add this to the duplicate list below because it's redundant
@@ -451,7 +451,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                 temp_allocator,
                 @intCast(wip_order.len),
             ) catch |e| bun.handleOom(e);
-            bun.handleOom(wip_order.append(temp_allocator, entry));
+            bun.handleOom(wip_order.append(temp_allocator, entry.*));
         }
 
         debugCssOrder(c, &wip_order, .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);
@@ -528,8 +528,8 @@ pub fn isConditionalImportRedundant(earlier: *const BabyList(bun.css.ImportCondi
     if (later.len > earlier.len) return false;
 
     for (i of 0..later.len) {
-        const a = earlier.at(i);
-        const b = later.at(i);
+        const a = earlier.at(@as(usize, @intCast(i)));
+        const b = later.at(@as(usize, @intCast(i)));
 
         // Only compare "@supports" and "@media" if "@layers" is equal
         if (a.layersEql(b)) {

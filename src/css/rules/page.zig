@@ -88,8 +88,8 @@ pub fn toCss(self: *PagePseudoClass, dest: *Printer) PrintErr!void {
             return css.enum_property_util.toCss(@This(), self, dest);
     }
 
-pub fn deepClone(self: PagePseudoClass, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 };
 
@@ -178,8 +178,8 @@ pub fn toCss(self: PageSelector, dest: *Printer) PrintErr!void {
             }
     }
 
-pub fn deepClone(self: PageSelector, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
@@ -195,8 +195,8 @@ pub fn toCss(self: PageMarginRule, dest: *Printer) PrintErr!void {
             _ = try self.declarations.toCssBlock(dest);
     }
 
-pub fn deepClone(self: PageMarginRule, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
@@ -345,7 +345,7 @@ return .{ .err = e };
     }
 
 pub fn ruleWithoutBlock(_: *PageRuleParser, _: Prelude, _: *const css.ParserState) css.Maybe(AtRule,void) {
-            return .{ .err = .{} };
+            return .{ .err = undefined };
     }
     pub const Prelude = PageMarginBox;
     pub const AtRule = void;

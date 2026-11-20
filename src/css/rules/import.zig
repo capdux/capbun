@@ -61,8 +61,8 @@ pub fn eql(lhs: *const ImportLayer, rhs: *const ImportLayer) bool {
             return lhs.v.?.eql((&rhs.v.?));
     }
 
-pub fn deepClone(self: ImportLayer, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 };
 
@@ -111,14 +111,14 @@ pub fn toCss(self: ImportConditions, dest: *Printer) PrintErr!void {
                     _ = try dest.writeChar(41);
                 }
             }
-            if (self.supports) |*sup| {
-                _ = &sup;
+            if ((self.supports != null)) {
+                const sup = (&self.supports.?);
                 _ = try dest.writeStr(" supports");
-                if (((sup.*).* == .declaration)) {
-                    _ = try (sup.*).toCss(dest);
+                if ((sup.* == .declaration)) {
+                    _ = try sup.toCss(dest);
                 } else {
                     _ = try dest.writeChar(40);
-                    _ = try (sup.*).toCss(dest);
+                    _ = try sup.toCss(dest);
                     _ = try dest.writeChar(41);
                 }
             }
@@ -252,14 +252,14 @@ pub fn toCss(self: ImportRule, dest: *Printer) PrintErr!void {
                     _ = try dest.writeChar(41);
                 }
             }
-            if (self.supports) |*sup| {
-                _ = &sup;
+            if ((self.supports != null)) {
+                const sup = (&self.supports.?);
                 _ = try dest.writeStr(" supports");
-                if (((sup.*).* == .declaration)) {
-                    _ = try (sup.*).toCss(dest);
+                if ((sup.* == .declaration)) {
+                    _ = try sup.toCss(dest);
                 } else {
                     _ = try dest.writeChar(40);
-                    _ = try (sup.*).toCss(dest);
+                    _ = try sup.toCss(dest);
                     _ = try dest.writeChar(41);
                 }
             }

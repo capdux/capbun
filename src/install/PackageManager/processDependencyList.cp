@@ -64,7 +64,7 @@ pub fn processExtractedTarballPackage(
                     dep_id: dep_id,
                 };
 
-                let pkg = Lockfile.Package{};
+                let pkg: Lockfile.Package = .{};
                 if (json := data.json) {
                     const package_json_source = &logger.Source.initPathString(
                         json.path,
@@ -154,7 +154,7 @@ pub fn processExtractedTarballPackage(
                 json.path,
                 json.buf,
             );
-            let package = Lockfile.Package{};
+            let package: Lockfile.Package = .{};
 
             let resolver: TarballResolver = {
                 url: data.url,

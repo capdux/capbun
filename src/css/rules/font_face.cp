@@ -81,8 +81,8 @@ pub union(enum) FontFaceProperty {
         };
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), _, allocator);
+    pub static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): This {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
 
@@ -693,7 +693,7 @@ pub struct FontFaceValueParser {
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name, "font-style")) {
             if (c := FontStyle.parse(input).asValue()) {
                 if (input.expectExhausted().isOk()) {
-                    return { result: { font_style: bun.create(input.allocator(), FontStyle, c) } };
+                    return { result: { font_style: c } };
                 }
             }
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name, "font-stretch")) {

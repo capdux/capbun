@@ -137,7 +137,7 @@ pub fn generateChunksInParallel(
 
                             remaining_part_ranges[0] = {
                                 part_range: part_range,
-                                i: @as(i32, @intCast(i)),
+                                i: @as(u32, @intCast(i)),
                                 task: {
                                     callback: &generateCompileResultForJSChunk,
                                 },
@@ -152,7 +152,7 @@ pub fn generateChunksInParallel(
                         for (i of 0..chunk.content.css.imports_in_chunk_in_order.len) {
                             remaining_part_ranges[0] = {
                                 part_range: {},
-                                i: @as(i32, @intCast(i)),
+                                i: @as(u32, @intCast(i)),
                                 task: {
                                     callback: &generateCompileResultForCssChunk,
                                 },

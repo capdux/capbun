@@ -432,7 +432,7 @@ pub struct LifecycleScriptSubprocess {
                     const previous_step = ctx.installer.store.entries.items(.step)[ctx.entry_id.get()].swap(.done, .release);
                     if (comptime Environment.ci_assert) {
                         bun.assertWithLocation(_.current_script_index != 0, @src());
-                        bun.assertWithLocation(previous_step == .@"run (post)install and (pre/post)prepare", @src());
+                        bun.assertWithLocation(previous_step == .@"run (post)install && (pre/post)prepare", @src());
                     }
                     ctx.installer.onTaskComplete(ctx.entry_id, .success);
                 }
