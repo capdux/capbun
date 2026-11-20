@@ -694,7 +694,13 @@ else => {
             if (global.hasException()) {
                 return error.JSError;
             }
-            if (try ((arg.getStringish(global, "hostname")) orelse (try arg.getStringish(global, "host")))) |host| {
+            const host_1 = try arg.getStringish(global, "hostname");
+            var __host_1_moved = false; _ = &__host_1_moved;
+            defer if (!__host_1_moved) { const __T = @TypeOf(host_1); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = host_1.release() catch {}; } else { host_1.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = host_1; _drop_val.release(); } };
+            const host_2 = ((host_1) orelse (try arg.getStringish(global, "host")));
+            var __host_2_moved = false; _ = &__host_2_moved;
+            defer if (!__host_2_moved) { const __T = @TypeOf(host_2); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = host_2.release() catch {}; } else { host_2.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = host_2; _drop_val.release(); } };
+            if (host_2) |host| {
                 _ = &host;
                 defer {
                 _ = host.deref();

@@ -90,7 +90,8 @@ pub struct HandlersScope {
         }
 
         if (promise := _.promise.trySwap()) {
-            if (*anyPromise := promise.asAnyPromise()) {
+            if (ap := promise.asAnyPromise()) {
+                let anyPromise = ap;
                 anyPromise.reject(_.globalObject, value)?;
                 return true;
             }

@@ -2047,7 +2047,7 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
             if ((i_i64 >= 0)) {
                 path = paths[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64))))))];
             } else {
-                const max_path_sz = (comptime MAX_PATH_SIZE(T));
+                const max_path_sz: usize = (if ((T == u16)) windows.PATH_MAX_WIDE else bun.MAX_PATH_BYTES);
                 _ = &max_path_sz;
                 var tmpBuf: [max_path_sz]T = undefined;
                 _ = &tmpBuf;
@@ -2393,7 +2393,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
                 break;
             }
             const path = args_ptr[@as(usize, @intCast(i))];
-            _ = try validateString(globalObject, path, "paths[{d}]", .{ .i = i });
+            _ = try validateString(globalObject, path, "paths[{d}]", .{ i });
             const path_str = try path.toBunString(globalObject);
             defer {
             _ = path_str.deref();

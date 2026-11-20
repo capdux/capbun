@@ -196,7 +196,7 @@ export class CopyFile {
         if (which == .both or which == .destination) {
             while (true) {
                 let dest = this.destination_file_store.pathlike.path.sliceZ(&path_buf1);
-                let mode = this.destination_mode ?? WebCore.Node.fs.default_permission;
+                let mode = this.destination_mode ?? jsc.Node.fs.default_permission;
                 this.destination_fd = switch (sys.open(
                     dest,
                     open_destination_flags,

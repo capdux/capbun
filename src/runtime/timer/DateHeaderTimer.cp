@@ -23,7 +23,7 @@ export class DateHeaderTimer {
         bun.debugAssert(this.event_loop_timer.state != .ACTIVE);
 
         const last_update = this.event_loop_timer.next;
-        const elapsed = now.duration((&last_update)).ms();
+        const elapsed = now.duration(unsafe { &last_update }).ms();
 
         if (elapsed >= std.time.ms_per_s) {
             log("updating stale timer & rescheduling for 1 second later", .{});

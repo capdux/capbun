@@ -131,9 +131,11 @@ pub fn rejectPromise(self: *Handlers, value: JSValue) bun.JSTerminated!bool {
         }
         if (self.promise.trySwap()) |promise| {
             _ = &promise;
-            if (promise.asAnyPromise()) |*anyPromise| {
+            if (promise.asAnyPromise()) |ap| {
+                _ = &ap;
+                var anyPromise = ap;
                 _ = &anyPromise;
-                _ = try (anyPromise.*).reject(self.globalObject, value);
+                _ = try anyPromise.reject(self.globalObject, value);
                 return true;
             }
         }

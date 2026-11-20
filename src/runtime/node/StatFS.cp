@@ -103,7 +103,7 @@ pub const StatFS = union(enum) {
     }
 
     pub fn toJSNewlyCreated(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return switch (_.*) {
+        return switch (_) {
             .big => |*big| big.toJS(globalObject),
             .small => |*small| small.toJS(globalObject),
         };

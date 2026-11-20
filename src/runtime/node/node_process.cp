@@ -65,7 +65,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (execArgv := worker.execArgv) {
             const array = jsc.JSValue.createEmptyArray(globalObject, execArgv.len)?;
             for (i of 0..execArgv.len) {
-                try array.putIndex(globalObject, i32(i), try bun.String.init(execArgv[i]).toJS(globalObject));
+                try array.putIndex(globalObject, u32(i), try bun.String.init(execArgv[i]).toJS(globalObject));
             }
             return array;
         }
@@ -98,7 +98,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
 
             const array = jsc.JSValue.createEmptyArray(globalObject, args.items.len)?;
             for (idx of 0..args.items.len) {
-                try array.putIndex(globalObject, i32(idx), try args.items[idx].toJS(globalObject));
+                try array.putIndex(globalObject, u32(idx), try args.items[idx].toJS(globalObject));
             }
             return array;
         }

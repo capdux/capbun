@@ -126,8 +126,7 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
         if (self.origin.get()) |duplex| {
             _ = &duplex;
             const globalThis = self.global.?;
-            const fn_name = (if (msg_more) "write" else "end");
-            const writeOrEnd_opt = (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(globalThis, fn_name)) catch |__ce_0| { _ = &__ce_0; return; }); });
+            const writeOrEnd_opt = (if (msg_more) (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(globalThis, "write")) catch |__ce_0| { _ = &__ce_0; return; }); }) else (blk_catch_1: { break :blk_catch_1 ((duplex.getFunction(globalThis, "end")) catch |__ce_1| { _ = &__ce_1; return; }); }));
             var __writeOrEnd_opt_moved = false; _ = &__writeOrEnd_opt_moved;
             defer if (!__writeOrEnd_opt_moved) { const __T = @TypeOf(writeOrEnd_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd_opt.release() catch {}; } else { writeOrEnd_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd_opt; _drop_val.release(); } };
             const writeOrEnd = ((writeOrEnd_opt) orelse { return; });
@@ -135,14 +134,14 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
             defer if (!__writeOrEnd_moved) { const __T = @TypeOf(writeOrEnd); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd.release() catch {}; } else { writeOrEnd.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd; _drop_val.release(); } };
             if (data) |data_| {
                 _ = &data_;
-                const buffer = (blk_catch_1: { break :blk_catch_1 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e));
+                const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e));
                 return; }); });
                 var __buffer_moved = false; _ = &__buffer_moved;
                 defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
                 _ = buffer.ensureStillAlive();
-                _ = (blk_catch_2: { break :blk_catch_2 ((writeOrEnd.call(globalThis, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_2 self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e)); }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(globalThis, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e)); }); });
             } else {
-                _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(globalThis, duplex, (&.{ jsc.JSValue.js_null }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e)); }); });
+                _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(globalThis, duplex, (&.{ jsc.JSValue.js_null }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e)); }); });
             }
         }
 }
@@ -371,7 +370,7 @@ pub fn encodeAndWrite(self: *UpgradedDuplex, data: []const u8) i32 {
         _ = log("encodeAndWrite (len: {})", .{ data.len });
         if (self.wrapper) |*wrapper| {
             _ = &wrapper;
-            return @as(i32, @intCast((blk_catch_4: { break :blk_catch_4 (((wrapper.*).writeData(data)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); })));
+            return @as(i32, @intCast((blk_catch_5: { break :blk_catch_5 (((wrapper.*).writeData(data)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 0; }); })));
         }
         return 0;
 }

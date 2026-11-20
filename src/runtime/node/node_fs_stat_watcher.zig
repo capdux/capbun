@@ -127,20 +127,11 @@ pub fn setIntervalOnMainThread(self: *StatWatcherScheduler) void {
                 }
                 return;
             }
-            if ((self.event_loop_timer.state != .ACTIVE)) {
-                self.event_loop_timer.next = EventLoopTimer.Epoch.now();
-                self.event_loop_timer.next.val = (self.event_loop_timer.next.val + (@as(u64, @intCast(interval)) * std.time.ns_per_ms));
-                _ = self.vm.timer.register((&self.event_loop_timer));
-                return;
-            }
-            const current_next = self.event_loop_timer.next.val;
-            const now = EventLoopTimer.Epoch.now().val;
-            const remaining: u64 = (if ((current_next > now)) (current_next - now) else 0);
-            const new_interval_ns = (@as(u64, @intCast(interval)) * std.time.ns_per_ms);
-            if ((new_interval_ns < remaining)) {
-                self.event_loop_timer.next.val = (now + new_interval_ns);
-                _ = self.vm.timer.update((&self.event_loop_timer));
-            }
+            const next_ts = bun.timespec.msFromNow(.allow_mocked_time, interval);
+            _ = self.vm.timer.update((&self.event_loop_timer), (blk: {
+            break :blk (&next_ts);
+
+}));
     }
 
 pub fn onEventLoopTimer(timer: *EventLoopTimer) void {

@@ -132,7 +132,9 @@ pub export fn us_socket_buffered_js_write(socket: *uws.us_socket_t, ssl: bool, e
         _ = node_buffer.deinit();
         }
         if (((node_buffer == .blob) and node_buffer.blob.needsToReadFile())) {
-            return (blk_catch_1: { break :blk_catch_1 ((globalObject.throw("File blob not supported yet in this function.", .{})) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+            if ((globalObject.throw("File blob not supported yet in this function.", .{}) == error.JSError)) {
+            }
+            return .zero;
         }
         const data_slice = node_buffer.slice();
         if (stream_buffer.isNotEmpty()) {

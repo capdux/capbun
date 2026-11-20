@@ -51,8 +51,6 @@ const default_allocator = @import("bun").default_allocator;
 const ptr = @import("bun").ptr;
 const strings = @import("bun").strings;
 const String = @import("bun").String;
-const as = @import("bun").as;
-const BunString = @import("bun").BunString;
 const JSError = @import("bun").JSError;
 pub const S3ListObjectsOptions = struct {
     continuation_token: ?[]const u8 = null,
@@ -274,6 +272,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
     }
 };
 
+const BunString = bun.String;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const ZigString = bun.jsc.ZigString;

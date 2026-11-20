@@ -1,14 +1,16 @@
+import bun from "bun";
 import {
     default_allocator,
     destroy,
     TrivialNew,
     Output,
     ptr,
-    String as BunString,
+    String,
     webcore,
     JSError,
     jsc,
 } from "bun";
+const BunString = bun.String;
 import { Allocator } from "std:mem";
 import { math } from "std";
 

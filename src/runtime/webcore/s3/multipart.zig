@@ -671,7 +671,7 @@ pub fn processBuffered(self: *MultiPartUpload, part_size: usize) void {
             if (((self.ended and (self.buffered.size() < self.partSizeInBytes())) and (self.state == .not_started))) {
                 _ = log("processBuffered {s} singlefile_started", .{ self.path });
                 self.state = .singlefile_started;
-                const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = self.path, .method = bun.http.Method.PUT, .proxy_url = self.proxyUrl(), .body = self.buffered.slice(), .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer };
+                const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.path, .method = bun.http.Method.PUT, .proxy_url = self.proxyUrl(), .body = self.buffered.slice(), .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer };
                 const cb: __CpObj_upload__anyopaque = .{ .upload = @ptrCast((&singleSendUploadResponse)) };
                 _ = (blk_catch_4: { break :blk_catch_4 ((executeSimpleS3Request(self.credentials, req_opts, cb, self)) catch |__ce_4| { _ = &__ce_4;  }); });
             } else {

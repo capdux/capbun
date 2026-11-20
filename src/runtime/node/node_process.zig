@@ -93,11 +93,11 @@ var title_mutex = bun.Mutex{  };
 pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 pub const setCwd = jsc.host_fn.wrap2(setCwd_);
 const empty_u16_buf: [1]u16 = .{ 0 };
-pub const Bun__version: [*:0]u8 = ("v" ++ bun.Global.package_json_version).ptr;
-pub const Bun__version_with_sha: [*:0]u8 = ("v" ++ bun.Global.package_json_version_with_sha).ptr;
-pub const Bun__versions_uws: [*:0]u8 = bun.Environment.git_sha.ptr;
-pub const Bun__versions_usockets: [*:0]u8 = bun.Environment.git_sha.ptr;
-pub const Bun__version_sha: [*:0]u8 = bun.Environment.git_sha.ptr;
+pub const Bun__version: [*:0]const u8 = ("v" ++ bun.Global.package_json_version).ptr;
+pub const Bun__version_with_sha: [*:0]const u8 = ("v" ++ bun.Global.package_json_version_with_sha).ptr;
+pub const Bun__versions_uws: [*:0]const u8 = bun.Environment.git_sha.ptr;
+pub const Bun__versions_usockets: [*:0]const u8 = bun.Environment.git_sha.ptr;
+pub const Bun__version_sha: [*:0]const u8 = bun.Environment.git_sha.ptr;
 const Environment = bun.Environment;
 const Syscall = bun.sys;
 const strings = bun.strings;
@@ -157,7 +157,7 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
                     _ = &i;
                     const __end_0 = execArgv.len;
                     while (i < __end_0) : (i += 1) {
-                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)), try bun.String.init(execArgv[@as(usize, @intCast(i))]).toJS(globalObject));
+                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(u32, @intFromEnum(i)) else cp_cast_int(u32, i)), try bun.String.init(execArgv[@as(usize, @intCast(i))]).toJS(globalObject));
                     }
                 }
                 return array;
@@ -198,7 +198,7 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
                     _ = &idx;
                     const __end_2 = args.items.len;
                     while (idx < __end_2) : (idx += 1) {
-                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(idx)) == .@"enum") cp_cast_int(i32, @intFromEnum(idx)) else cp_cast_int(i32, idx)), try args.items[@as(usize, @intCast(idx))].toJS(globalObject));
+                        _ = try array.putIndex(globalObject, (if (comptime @typeInfo(@TypeOf(idx)) == .@"enum") cp_cast_int(u32, @intFromEnum(idx)) else cp_cast_int(u32, idx)), try args.items[@as(usize, @intCast(idx))].toJS(globalObject));
                     }
                 }
                 return array;
@@ -440,7 +440,7 @@ false => b: {
 else => unreachable,
 });
         buf1[cp_cast_int(usize, len1)] = 0;
-        var str2: ?[*:0]u16 = null;
+        var str2: ?[*:0]const u16 = null;
         _ = &str2;
         if ((v.tag != .Dead)) {
             if ((v.tag == .Empty)) {

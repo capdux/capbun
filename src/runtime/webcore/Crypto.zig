@@ -103,7 +103,8 @@ pub fn getRandomValuesWithoutTypeChecks(self: *Crypto, globalThis: *JSGlobalObje
 pub fn randomUUID(self: *Crypto, globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
     _ = self;
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        var str = pair[0];
+        _ = &str;
         const bytes = pair[1];
         const uuid = globalThis.bunVM().rareData().nextUUID();
         _ = uuid.print(bytes[0..36]);
@@ -113,7 +114,8 @@ pub fn randomUUID(self: *Crypto, globalThis: *JSGlobalObject, _: *jsc.CallFrame)
 pub fn randomUUIDWithoutTypeChecks(self: *Crypto, globalThis: *JSGlobalObject) JSValue {
     _ = self;
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        var str = pair[0];
+        _ = &str;
         const bytes = pair[1];
         defer {
         _ = str.deref();
@@ -184,7 +186,8 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         const uuid = UUID7.init(timestamp, (&(entropy[0..8]).*));
         if ((encoding == .hex)) {
             const pair = BunString.createUninitialized(.latin1, 36);
-            const str = pair[0];
+            var str = pair[0];
+            _ = &str;
             const bytes = pair[1];
             _ = uuid.print(bytes[0..36]);
             return str.transferToJS(globalThis);
@@ -266,7 +269,8 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         const uuid = UUID5.init((&namespace), name.slice());
         if ((encoding == .hex)) {
             const pair = BunString.createUninitialized(.latin1, 36);
-            const str = pair[0];
+            var str = pair[0];
+            _ = &str;
             const bytes = pair[1];
             _ = uuid.print(bytes[0..36]);
             return str.transferToJS(globalThis);

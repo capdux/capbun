@@ -269,7 +269,7 @@ pub fn doOpenFile(self: *CopyFile, which: IOWhich) !void {
                 while (true) {
                     var dest = self.destination_file_store.pathlike.path.sliceZ((&path_buf1));
                     _ = &dest;
-                    var mode = ((self.destination_mode) orelse (WebCore.Node.fs.default_permission));
+                    var mode = ((self.destination_mode) orelse (jsc.Node.fs.default_permission));
                     _ = &mode;
                     self.destination_fd = (switch (sys.open(dest, open_destination_flags, mode)) {
 .result => |result| (switch (result.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
@@ -639,7 +639,7 @@ self.system_error = err.toSystemError();
             }
     }
     pub const ResultType = anyerror!SizeType;
-    pub const Callback = *const *const fn(ctx: *anyopaque, len: ResultType) void;
+    pub const Callback = *const fn(ctx: *anyopaque, len: ResultType) void;
     pub const TryWith = enum {
             sendfile,
             copy_file_range,

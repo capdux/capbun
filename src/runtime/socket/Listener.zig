@@ -731,7 +731,7 @@ const pathz = bun.handleOom(bun.default_allocator.dupeZ(u8, u));
         defer {
         _ = bun.default_allocator.free(pathz);
         }
-        maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz.ptr, pathz.len, socket_flags, @sizeOf(usize), (&errno));
+        maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz, socket_flags, @sizeOf(usize), (&errno));
 },
 .fd => |fd| {
 const err: bun.jsc.SystemError = .{ .errno = @intFromEnum(bun.sys.SystemErrno.EINVAL), .code = bun.String.static("EINVAL"), .message = bun.String.static("Bun does not support listening on a file descriptor."), .syscall = bun.String.static("listen"), .fd = fd.uv() };

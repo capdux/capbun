@@ -75,7 +75,8 @@ pub fn anyWebSocketGetTopicsAsJSArray(ws: uws.AnyWebSocket, globalObject: *jsc.J
 
     defer node_buffer.deinit();
     if (node_buffer == .blob and node_buffer.blob.needsToReadFile()) {
-        return globalObject.throw("File blob not supported yet in this function.", .{}) catch .zero;
+        if (globalObject.throw("File blob not supported yet in this function.", .{}) == error.JSError) {}
+        return .zero;
     }
 
     const data_slice = node_buffer.slice();

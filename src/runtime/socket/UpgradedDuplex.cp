@@ -95,8 +95,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         }
         if (duplex := _.origin.get()) {
             const globalThis = _.global.?;
-            const fn_name = if (msg_more) "write" else "end";
-            const writeOrEnd_opt = duplex.getFunction(globalThis, fn_name) catch return;
+            const writeOrEnd_opt = if (msg_more) (duplex.getFunction(globalThis, "write") catch return) else (duplex.getFunction(globalThis, "end") catch return);
             const writeOrEnd = writeOrEnd_opt orelse return;
             if (data_ := data) {
                 const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis) catch |e| {

@@ -334,7 +334,8 @@ pub struct JSValkeyClient {
             }
 
             if (bun.strings.contains(url_byte_slice, "://")) {
-                break :get_url URL.fromString(url_str) orelse {
+                const url_from_str = URL.fromString;
+                break :get_url url_from_str(url_str) orelse {
                     return globalObject.throwInvalidArguments("Invalid URL format", .{});
                 };
             }

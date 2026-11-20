@@ -435,13 +435,15 @@ export class S3HttpSimpleTask {
     }
 }
 
+type OptStr = []const u8;
+
 export struct S3SimpleRequestOptions {
     path: []const u8;
     method: bun.http.Method;
-    search_params: []const u8? = null;
-    content_type: []const u8? = null;
-    content_disposition: []const u8? = null;
-    content_encoding: []const u8? = null;
+    search_params: OptStr? = null;
+    content_type: OptStr? = null;
+    content_disposition: OptStr? = null;
+    content_encoding: OptStr? = null;
     body: []const u8;
     proxy_url: []const u8? = null;
     range: []const u8? = null;

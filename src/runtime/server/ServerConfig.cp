@@ -740,7 +740,9 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (host := try arg.getStringish(global, "hostname") orelse try arg.getStringish(global, "host")) {
+        const host_1 = arg.getStringish(global, "hostname")?;
+        const host_2 = host_1 ?? (arg.getStringish(global, "host")?);
+        if (host := host_2) {
             defer host.deref();
             const host_str = host.toUTF8(bun.default_allocator);
             defer host_str.deinit();

@@ -490,10 +490,10 @@ pub fn httpCallback(self: *S3HttpSimpleTask, async_http: *bun.http.AsyncHTTP, re
 pub const S3SimpleRequestOptions = struct {
     path: []const u8,
     method: bun.http.Method,
-    search_params: []const ?u8 = null,
-    content_type: []const ?u8 = null,
-    content_disposition: []const ?u8 = null,
-    content_encoding: []const ?u8 = null,
+    search_params: ?OptStr = null,
+    content_type: ?OptStr = null,
+    content_disposition: ?OptStr = null,
+    content_encoding: ?OptStr = null,
     body: []const u8,
     proxy_url: []const ?u8 = null,
     range: []const ?u8 = null,
@@ -502,6 +502,7 @@ pub const S3SimpleRequestOptions = struct {
     request_payer: bool = false,
 };
 
+const OptStr = []const u8;
 const ListObjects = @import("./list_objects.zig");
 const ACL = @import("../../../s3_signing/acl.zig").ACL;
 const StorageClass = @import("../../../s3_signing/storage_class.zig").StorageClass;
@@ -516,7 +517,7 @@ const strings = bun.strings;
 const JSTerminatedError = bun.JSTerminated;
 
 pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleRequestOptions, callback: S3HttpSimpleTask.Callback, callback_context: *anyopaque) JSTerminatedError!void {
-        const sign_options: __CpObj_path___const_u8_method_bun_http_Method_search_params___const__u8_content_disposition___const__u8_content_encoding___const__u8_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = options.path, .method = options.method, .search_params = options.search_params, .content_disposition = options.content_disposition, .content_encoding = options.content_encoding, .acl = options.acl, .storage_class = options.storage_class, .request_payer = options.request_payer };
+        const sign_options: __CpObj_path___const_u8_method_bun_http_Method_search_params__OptStr_content_disposition__OptStr_content_encoding__OptStr_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = options.path, .method = options.method, .search_params = options.search_params, .content_disposition = options.content_disposition, .content_encoding = options.content_encoding, .acl = options.acl, .storage_class = options.storage_class, .request_payer = options.request_payer };
         var result = (blk_catch_2: { break :blk_catch_2 ((self.signRequest(sign_options, false, null)) catch |sign_err| { _ = &sign_err; if (options.range) |range_| {
             _ = &range_;
             _ = bun.default_allocator.free(range_);
@@ -568,4 +569,4 @@ pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleReque
         _ = task.http.schedule(bun.default_allocator, (&batch));
         _ = bun.http.http_thread.schedule(batch);
 }
-pub const __CpObj_path___const_u8_method_bun_http_Method_search_params___const__u8_content_disposition___const__u8_content_encoding___const__u8_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: bun.http.Method, search_params: []const ?u8, content_disposition: []const ?u8, content_encoding: []const ?u8, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };
+pub const __CpObj_path___const_u8_method_bun_http_Method_search_params__OptStr_content_disposition__OptStr_content_encoding__OptStr_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: bun.http.Method, search_params: ?OptStr, content_disposition: ?OptStr, content_encoding: ?OptStr, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };

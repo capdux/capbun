@@ -90,26 +90,9 @@ pub struct StatWatcherScheduler {
             return;
         }
 
-        // if the timer is not registered, we can register it
-        if (_.event_loop_timer.state != .ACTIVE) {
-            // This is relative time
-            _.event_loop_timer.next = EventLoopTimer.Epoch.now();
-            _.event_loop_timer.next.val += @as(u64, @intCast(interval)) * std.time.ns_per_ms;
-            _.vm.timer.register(&_.event_loop_timer);
-            return;
-        }
-
-        // if the timer is already registered, we can update the time if the new interval is smaller
-        const current_next = _.event_loop_timer.next.val;
-        const now = EventLoopTimer.Epoch.now().val;
-        const remaining: u64 = if (current_next > now) current_next - now else 0;
-        const new_interval_ns = @as(u64, @intCast(interval)) * std.time.ns_per_ms;
-
-        // we can update the timer if the new interval is smaller than the remaining time
-        if (new_interval_ns < remaining) {
-            _.event_loop_timer.next.val = now + new_interval_ns;
-            _.vm.timer.update(&_.event_loop_timer);
-        }
+        // reschedule the timer
+        const next_ts = bun.timespec.msFromNow(.allow_mocked_time, interval);
+        _.vm.timer.update(&_.event_loop_timer, unsafe { &next_ts });
     }
 
     pub static fn onEventLoopTimer(timer: *EventLoopTimer) {

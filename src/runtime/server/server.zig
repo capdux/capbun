@@ -219,7 +219,10 @@ pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitCon
             _ = index.deinit();
             }
             const files_opt = try argument.getArray(init_ctx.global, "files");
-            const files = ((files_opt) orelse { return .{ .ok = null }; });
+            if ((files_opt == null)) {
+                return null;
+            }
+            const files = files_opt.?;
             var iter = try files.arrayIterator(init_ctx.global);
             _ = &iter;
             var html_route: ?AnyRoute = null;

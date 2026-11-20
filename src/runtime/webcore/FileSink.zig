@@ -275,7 +275,7 @@ pub fn createWithPipe(event_loop_: anytype, pipe: *uv.Pipe) *FileSink {
             _ = @compileError("FileSink.createWithPipe is only available on Windows");
         }
         const evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
-        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = pipe.fd() });
+        var this_sink = bun.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = pipe.fd() });
         _ = &this_sink;
         _ = live_count.fetchAdd(1, .monotonic);
         _ = this_sink.writer.setPipe(pipe);
@@ -285,7 +285,7 @@ pub fn createWithPipe(event_loop_: anytype, pipe: *uv.Pipe) *FileSink {
 
 pub fn create(event_loop_: anytype, fd: FD) *FileSink {
         const evtloop = (if ((@TypeOf(event_loop_) == EventLoopHandle)) event_loop_ else EventLoopHandle.init(event_loop_));
-        var this_sink = sys.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = fd });
+        var this_sink = bun.new(FileSink, .{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(evtloop), .fd = fd });
         _ = &this_sink;
         _ = live_count.fetchAdd(1, .monotonic);
         _ = this_sink.writer.setParent(this_sink);

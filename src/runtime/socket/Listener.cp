@@ -483,7 +483,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
         .unix => |u| {
             const pathz = bun.handleOom(bun.default_allocator.dupeZ(u8, u));
             defer bun.default_allocator.free(pathz);
-            maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz.ptr, pathz.len, socket_flags, @sizeOf(usize), &errno);
+            maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz, socket_flags, @sizeOf(usize), &errno);
         },
         .fd => |fd| {
             const err: bun.jsc.SystemError = .{

@@ -101,7 +101,7 @@ fn randomData(
         _: *jsc.CallFrame,
     ): JSError!JSValue {
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        let str = pair[0];
         const bytes = pair[1];
 
         const uuid = globalThis.bunVM().rareData().nextUUID();
@@ -115,7 +115,7 @@ fn randomData(
         globalThis: *JSGlobalObject,
     ): JSValue {
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        let str = pair[0];
         const bytes = pair[1];
         defer str.deref();
 
@@ -175,7 +175,7 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
 
     if (encoding == .hex) {
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        let str = pair[0];
         const bytes = pair[1];
         uuid.print(bytes[0..36]);
         return str.transferToJS(globalThis);
@@ -259,7 +259,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
 
     if (encoding == .hex) {
         const pair = BunString.createUninitialized(.latin1, 36);
-        const str = pair[0];
+        let str = pair[0];
         const bytes = pair[1];
         uuid.print(bytes[0..36]);
         return str.transferToJS(globalThis);

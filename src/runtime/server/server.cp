@@ -151,7 +151,8 @@ pub const AnyRoute = union(enum) {
         defer index.deinit();
 
         const files_opt = argument.getArray(init_ctx.global, "files")?;
-        const files = files_opt ?? return null;
+        if (files_opt == null) return null;
+        const files = files_opt.?;
         let iter = try files.arrayIterator(init_ctx.global);
         let html_route: ?AnyRoute = null;
         while (try iter.next()) |file_entry| {

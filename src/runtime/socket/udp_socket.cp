@@ -780,7 +780,7 @@ export class UDPSocket {
         const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
         const payload_ptrs: [1][*]const u8 = [payload.ptr];
-        const lens_arr: [1]usize = [payload.len];
+        let lens_arr: [1]usize = [payload.len];
         const addr_ptrs_arr: [1]ConstOpaquePtr = [addr_ptr];
         const res = send_fn(socket, @ptrCast(&payload_ptrs), &lens_arr, &addr_ptrs_arr);
         if (err := getUSError(res, .send, true)) {

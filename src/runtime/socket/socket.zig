@@ -476,7 +476,7 @@ pub fn NewSocket(comptime ssl: bool) type {
                     const pathz = bun.handleOom(alloc.dupeZ(u8, u));
                     defer alloc.free(pathz);
 
-                    const s = group.connectUnix(kind, ssl_ctx, pathz.ptr, pathz.len, flags, @sizeOf(OpaquePtr)) orelse
+                    const s = group.connectUnix(kind, ssl_ctx, pathz, flags, @sizeOf(OpaquePtr)) orelse
                         return error.FailedToOpenSocket;
                     s.ext(*This).* = this;
                     this.socket = Socket.from(s);

@@ -211,7 +211,15 @@ pub fn upgrade(this: *NodeHTTPResponse, data_value: JSValue, sec_websocket_proto
         // Unref the poll_ref since the socket is now upgraded to WebSocket
         // and will have its own lifecycle management
         this.poll_ref.unref(this.server.globalThis().bunVM());
-        _ = raw_response.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+        if (raw_response == .TCP) {
+            const _s = raw_response.TCP.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            bun.assert(@intFromPtr(_s) != 0);
+        } else if (raw_response == .SSL) {
+            const _s = raw_response.SSL.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            bun.assert(@intFromPtr(_s) != 0);
+        } else {
+            unreachable;
+        }
     }
     return true;
 }

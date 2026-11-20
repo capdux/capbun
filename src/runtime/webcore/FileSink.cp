@@ -242,7 +242,7 @@ pub struct TestingAPIs {
             @compileError("FileSink.createWithPipe is only available on Windows");
         }
         const evtloop = if (@TypeOf(event_loop_) == EventLoopHandle) event_loop_ else EventLoopHandle.init(event_loop_);
-        let this_sink = sys.new(FileSink, .{
+        let this_sink = bun.new(FileSink, .{
             .ref_count = .init(),
             .event_loop_handle = EventLoopHandle.init(evtloop),
             .fd = pipe.fd(),
@@ -255,7 +255,7 @@ pub struct TestingAPIs {
 
     static fn create(event_loop_: auto, fd: FD): *FileSink {
         const evtloop = if (@TypeOf(event_loop_) == EventLoopHandle) event_loop_ else EventLoopHandle.init(event_loop_);
-        let this_sink = sys.new(FileSink, .{
+        let this_sink = bun.new(FileSink, .{
             .ref_count = .init(),
             .event_loop_handle = EventLoopHandle.init(evtloop),
             .fd = fd,

@@ -1,5 +1,6 @@
 import bun from "bun";
-import { default_allocator, ptr, strings, String as BunString, JSError } from "bun";
+import { default_allocator, ptr, strings, String, JSError } from "bun";
+const BunString = bun.String;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const ZigString = bun.jsc.ZigString;

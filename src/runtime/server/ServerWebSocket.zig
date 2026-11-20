@@ -201,7 +201,9 @@ else => unreachable,
             _ = self.#handler.runErrorCallback(vm, globalObject, err_value);
             return;
         }
-        if (result.asAnyPromise()) |promise| {
+        if (result.asAnyPromise()) |p| {
+            _ = &p;
+            var promise = p;
             _ = &promise;
             switch (promise.status()) {
 .rejected => {

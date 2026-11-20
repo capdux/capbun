@@ -191,7 +191,8 @@ fn onMessage(
         return;
     }
 
-    if (promise := result.asAnyPromise()) {
+    if (p := result.asAnyPromise()) {
+        let promise = p;
         switch (promise.status()) {
             .rejected => {
                 * = promise.result(globalObject.vm());

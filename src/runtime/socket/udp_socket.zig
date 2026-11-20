@@ -784,7 +784,8 @@ pub fn send(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame
             var __send_fn_moved = false; _ = &__send_fn_moved;
             defer if (!__send_fn_moved) { const __T = @TypeOf(send_fn); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = send_fn.release() catch {}; } else { send_fn.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = send_fn; _drop_val.release(); } };
             const payload_ptrs: [1][*]const u8 = .{ payload.ptr };
-            const lens_arr: [1]usize = .{ payload.len };
+            var lens_arr: [1]usize = .{ payload.len };
+            _ = &lens_arr;
             const addr_ptrs_arr: [1]ConstOpaquePtr = .{ addr_ptr };
             const res = send_fn(socket, @ptrCast((&payload_ptrs)), (&lens_arr), (&addr_ptrs_arr));
             var __res_moved = false; _ = &__res_moved;

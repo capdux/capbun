@@ -293,7 +293,8 @@ pub fn createNoJsNoPubsub(globalObject: *jsc.JSGlobalObject, arguments: []const 
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
             }
             if (bun.strings.contains(url_byte_slice, "://")) {
-                break :get_url ((URL.get(url_str)) orelse {
+                const url_from_str = URL.fromString;
+                break :get_url ((url_from_str(url_str)) orelse {
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
 });
             }

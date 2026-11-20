@@ -2378,8 +2378,8 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
             path = paths[@as(usize, i32(i_i64))];
         } else {
             // cwd is limited to MAX_PATH_BYTES.
-            const max_path_sz = comptime MAX_PATH_SIZE(T);
-    let tmpBuf: [max_path_sz]T = undefined;
+            const max_path_sz: usize = if (T == u16) windows.PATH_MAX_WIDE else bun.MAX_PATH_BYTES;
+            let tmpBuf: [max_path_sz]T = undefined;
             const cwdRes = posixCwdT(T, &tmpBuf);
             if (cwdRes == .err) return .{ err: cwdRes.err };
             path = cwdRes.result;
@@ -2825,7 +2825,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
         }
 
         const path = args_ptr[i];
-        validateString(globalObject, path, "paths[{d}]", { i})?;
+        validateString(globalObject, path, "paths[{d}]", .{ i })?;
         const path_str = path.toBunString(globalObject)?;
         defer path_str.deref();
 

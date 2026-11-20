@@ -610,17 +610,17 @@ export class MultiPartUpload {
         if (this.ended and this.buffered.size() < this.partSizeInBytes() and this.state == .not_started) {
             log("processBuffered {s} singlefile_started", .{ this.path });
             this.state = .singlefile_started;
-            const req_opts = .{
-                .path = this.path,
-                .method = bun.http.Method.PUT,
-                .proxy_url = this.proxyUrl(),
-                .body = this.buffered.slice(),
-                .content_type = this.content_type,
-                .content_disposition = this.content_disposition,
-                .content_encoding = this.content_encoding,
-                .acl = this.acl,
-                .storage_class = this.storage_class,
-                .request_payer = this.request_payer,
+            const req_opts = S3SimpleRequest.S3SimpleRequestOptions{
+                path: this.path,
+                method: bun.http.Method.PUT,
+                proxy_url: this.proxyUrl(),
+                body: this.buffered.slice(),
+                content_type: this.content_type,
+                content_disposition: this.content_disposition,
+                content_encoding: this.content_encoding,
+                acl: this.acl,
+                storage_class: this.storage_class,
+                request_payer: this.request_payer,
             };
             const cb = .{ .upload = @ptrCast(&singleSendUploadResponse) };
             executeSimpleS3Request(this.credentials, req_opts, cb, this) catch {};
