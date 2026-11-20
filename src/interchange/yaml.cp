@@ -629,8 +629,9 @@ pub union(enum) ParserParseResultError {
 pub union(enum) ParserParseResult<const enc: Encoding> {
     type Stream = ParserStream<enc>;
     const ParseError = Parser(enc).ParseError;
+    const ParseErrUnion = ParserParseResultError;
     result: Result,
-    @"err": ParserParseResultError,
+    @"err": ParseErrUnion,
 
     pub type Result = ParserParseResultOk<enc>;
 
@@ -2146,7 +2147,7 @@ pub struct Parser<const enc: Encoding> {
     }
 
     fn inc(*_, n: usize) {
-        _.pos = .@"from"(@min(_.pos.cast() + n, _.input.len));
+        _.pos = Pos.@"from"(@min(_.pos.cast() + n, _.input.len));
     }
 
     fn newline(*_) {
@@ -2202,7 +2203,7 @@ pub struct Parser<const enc: Encoding> {
             // s-l-comments
             _.trySkipToNewLine()?;
 
-            return .yaml;
+            return Directive.yaml;
         }
 
         // tag directive
@@ -2307,7 +2308,7 @@ pub struct Parser<const enc: Encoding> {
             _.scan({})?;
         } else if (directives.items.len > 0) {
             // if there's directives they must end with '---'
-            return unexpectedToken();
+            return error.UnexpectedToken;
         }
 
         const root = _.parseNode({})?;
@@ -2328,11 +2329,11 @@ pub struct Parser<const enc: Encoding> {
                 }
 
                 if (_.token.line == document_end_line) {
-                    return unexpectedToken();
+                    return error.UnexpectedToken;
                 }
             },
             else => {
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
         }
 
@@ -2362,7 +2363,7 @@ pub struct Parser<const enc: Encoding> {
                 }
 
                 if (_.token.data != .collect_entry) {
-                    return unexpectedToken();
+                    return error.UnexpectedToken;
                 }
 
                 _.scan({})?;
@@ -2423,7 +2424,7 @@ pub struct Parser<const enc: Encoding> {
                     },
                     .mapping_value => {},
                     else => {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     },
                 }
 
@@ -2530,7 +2531,7 @@ pub struct Parser<const enc: Encoding> {
                             switch (sw_v_1) {
                             .tag => {
                                 if (has_tag != null) {
-                                    return unexpectedToken();
+                                    return error.UnexpectedToken;
                                 }
                                 has_tag = _.token;
 
@@ -2540,7 +2541,7 @@ pub struct Parser<const enc: Encoding> {
                             .anchor => |anchor| {
                                 * = anchor;
                                 if (has_anchor != null) {
-                                    return unexpectedToken();
+                                    return error.UnexpectedToken;
                                 }
                                 has_anchor = _.token;
 
@@ -2610,7 +2611,7 @@ pub struct Parser<const enc: Encoding> {
                 // it's a !!set entry
                 .mapping_key => value: {
                     if (self.token.line == mapping_line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                 },
@@ -2620,7 +2621,7 @@ pub struct Parser<const enc: Encoding> {
                     switch (self.token.data) {
                         .sequence_entry => {
                             if (self.token.line == mapping_value_line) {
-                                return unexpectedToken();
+                                return error.UnexpectedToken;
                             }
 
                             if (self.token.indent.isLessThan(mapping_indent)) {
@@ -2676,7 +2677,7 @@ pub struct Parser<const enc: Encoding> {
                         });
                         continue;
                     }
-                    return unexpectedToken();
+                    return error.UnexpectedToken;
                 },
                 .mapping_value => {
                     if (key_line != self.token.line) {
@@ -2685,7 +2686,7 @@ pub struct Parser<const enc: Encoding> {
                 },
                 .mapping_key => {},
                 else => {
-                    return unexpectedToken();
+                    return error.UnexpectedToken;
                 },
             }
 
@@ -2696,7 +2697,7 @@ pub struct Parser<const enc: Encoding> {
                 // it's a !!set entry
                 .mapping_key => value: {
                     if (self.token.line == key_line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                 },
@@ -2706,7 +2707,7 @@ pub struct Parser<const enc: Encoding> {
                     switch (self.token.data) {
                         .sequence_entry => {
                             if (self.token.line == key_line) {
-                                return unexpectedToken();
+                                return error.UnexpectedToken;
                             }
 
                             if (self.token.indent.isLessThan(mapping_indent)) {
@@ -2787,12 +2788,12 @@ pub struct Parser<const enc: Encoding> {
 
                 if (anchor := node_props.has_anchor) {
                     if (anchor.line == alias_line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
                 if (tag := node_props.has_tag) {
                     if (tag.line == alias_line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
 
@@ -2886,17 +2887,17 @@ pub struct Parser<const enc: Encoding> {
                 if (node_props.hasAnchorOrTag()) {
                     node = Expr.init(E.Null, {}, _.pos.loc()); break :node_sw;
                 }
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
             .sequence_entry => {
                 if (anchor_line := node_props.anchorLine()) {
                     if (anchor_line == _.token.line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
                 if (tag_line := node_props.tagLine()) {
                     if (tag_line == _.token.line) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
 
@@ -2953,7 +2954,7 @@ pub struct Parser<const enc: Encoding> {
 
                 // if (node_props.anchorLine()) |anchor_line| {
                 //     if (anchor_line == _.token.line) {
-                //         return unexpectedToken();
+                //         return error.UnexpectedToken;
                 //     }
                 // }
 
@@ -3083,10 +3084,10 @@ pub struct Parser<const enc: Encoding> {
                 node = scalar.data.toExpr(scalar_start, _.input); break :node_sw;
             },
             .directive => {
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
             .reserved => {
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
             }
         }
@@ -4435,7 +4436,7 @@ pub struct Parser<const enc: Encoding> {
                             .flow_key
                             => {
                                 _.token.start = start;
-                                return unexpectedToken();
+                                return error.UnexpectedToken;
                             },
                         }
 
@@ -4465,7 +4466,7 @@ pub struct Parser<const enc: Encoding> {
                                     line: _.line,
                                 });
 
-                                return unexpectedToken();
+                                return error.UnexpectedToken;
                             },
                             .block_in,
                             .block_out
@@ -4820,7 +4821,7 @@ pub struct Parser<const enc: Encoding> {
                     => {},
                 }
                 _.token.start = start;
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
             '>' => {
                 const start = _.pos;
@@ -4837,7 +4838,7 @@ pub struct Parser<const enc: Encoding> {
                     => {},
                 }
                 _.token.start = start;
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
             '\'' => {
                 _.inc(1);
@@ -4866,17 +4867,13 @@ pub struct Parser<const enc: Encoding> {
                     indent: _.line_indent,
                     line: _.line,
                 });
-                return unexpectedToken();
+                return error.UnexpectedToken;
             },
 
-            '
-' => { scan_ch = ctx.scanWhitespace('
-')?; continue :scan_sw; },
-            '
-' => { scan_ch = ctx.scanWhitespace('
-')?; continue :scan_sw; },
+            '\n' => { scan_ch = ctx.scanWhitespace('\n')?; continue :scan_sw; },
+            '\r' => { scan_ch = ctx.scanWhitespace('\r')?; continue :scan_sw; },
             ' ' => { scan_ch = ctx.scanWhitespace(' ')?; continue :scan_sw; },
-            '	' => { scan_ch = ctx.scanWhitespace('	')?; continue :scan_sw; },
+            '\t' => { scan_ch = ctx.scanWhitespace('\t')?; continue :scan_sw; },
 
             else => {
                 _.token = _.scanPlainScalar(opts)?; break :scan_sw;
@@ -4893,7 +4890,7 @@ pub struct Parser<const enc: Encoding> {
             => {
                 if (block_indent := _.block_indents.get()) {
                     if (!opts.outside_context && _.token.line != previous_token_line && _.token.indent.isLessThanOrEqual(block_indent)) {
-                        return unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
             },

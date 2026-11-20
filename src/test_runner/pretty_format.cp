@@ -945,7 +945,7 @@ pub struct PrettyFormatter {
                 if (key.eqlComptime("constructor")) return;
 
                 if (ctx_ptr == null) return;
-                let ctx: *@This() = bun.cast(*@This(), ctx_ptr.?);
+                let ctx: *@This() = unsafe { @ptrCast(@alignCast(ctx_ptr.?)) };
                 let fmt_self = ctx.formatter;
                 const writer_ = ctx.writer;
                 if (fmt_self.failed) return;
@@ -1493,7 +1493,7 @@ pub struct PrettyFormatter {
                 writer.writeAll(comptime Output.prettyFmt("<cyan>" ++ fmt ++ "<r>", enable_ansi_colors));
             },
             .Map => {
-                const length_value = value.get(_.globalThis, "size") ?? jsc.JSValue.jsNumberFromInt32(0)?;
+                const length_value = (value.get(_.globalThis, "size")?) ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.toInt32();
 
                 const prev_quote_strings = _.quote_strings;
@@ -1522,7 +1522,7 @@ pub struct PrettyFormatter {
                 writer.writeAll("\n");
             },
             .Set => {
-                const length_value = value.get(_.globalThis, "size") ?? jsc.JSValue.jsNumberFromInt32(0)?;
+                const length_value = (value.get(_.globalThis, "size")?) ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.toInt32();
 
                 const prev_quote_strings = _.quote_strings;
@@ -2140,7 +2140,7 @@ pub struct PrettyFormatter {
         }
     }
 
-    fn format(*_, result: Tag.Result, comptime Writer: type, writer: *std.Io.Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool)! {
+    fn format(*_, result: Tag.Result, comptime Writer: type, writer: *std.Io.Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool): bun.JSError!void {
         const prevGlobalThis = _.globalThis;
         defer _.globalThis = prevGlobalThis;
         _.globalThis = globalThis;

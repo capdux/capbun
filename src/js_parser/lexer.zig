@@ -911,7 +911,7 @@ pub inline fn nextCodepoint(it: *LexerType) CodePoint {
             const code_point = (switch (slice.len) {
 0 => -1,
 1 => (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(slice[0])) else @as(CodePoint, slice[0])),
-else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], (if (comptime @typeInfo(u3) == .@"enum") @as(u3, @enumFromInt((if (comptime @typeInfo(@TypeOf(slice.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice.len)) else cp_cast_int(i32, slice.len)))) else @as(u3, (if (comptime @typeInfo(@TypeOf(slice.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice.len)) else cp_cast_int(i32, slice.len)))), CodePoint, strings.unicode_replacement),
+else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
 });
             it.end = it.current;
             it.current = (it.current + (if ((code_point != strings.unicode_replacement)) cp_len else 1));
@@ -1677,7 +1677,12 @@ const advance = latin1IdentifierContinueLength(lexer.source.contents[lexer.curre
                 if ((lexer.code_point != 92)) {
                     @branchHint(.likely);
                     lexer.identifier = lexer.raw();
-                    if (lexer.token == null) { lexer.token = T.t_identifier; }
+                    if (Keywords.get(lexer.identifier)) |kw| {
+                        _ = &kw;
+                        lexer.token = kw;
+                    } else {
+                        lexer.token = T.t_identifier;
+                    }
                 } else {
                     @branchHint(.unlikely);
                     const scan_result = try lexer.scanIdentifierWithEscapes(.normal);
@@ -2759,7 +2764,8 @@ if (isFirst) {
     const is_json = json_options.is_json;
     const json = json_options;
     const JSONBool = (if (is_json) bool else void);
-    const JSONBoolDefault: JSONBool = (if (is_json) true else null);
+    const JSONBoolDefault: JSONBool = (if (is_json) true else ({
+    }));
     pub const Error = error{
                 UTF8Fail,
                 OutOfMemory,

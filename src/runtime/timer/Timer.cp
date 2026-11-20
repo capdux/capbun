@@ -260,8 +260,8 @@ export class All {
         }
     }
 
-    pub fn getNextID(): i32 {
-        VirtualMachine.get().timer.last_id = VirtualMachine.get().timer.last_id + 1;
+    @c static fn getNextID(): i32 {
+        VirtualMachine.get().timer.last_id = VirtualMachine.get().timer.last_id +% 1;
         return VirtualMachine.get().timer.last_id;
     }
 
@@ -527,7 +527,7 @@ export class All {
         } else return null;
     }
 
-    pub fn clearTimer(timer_id_value: JSValue, globalThis: *JSGlobalObject, kind: Kind): JSError!void {
+    static fn clearTimer(timer_id_value: JSValue, globalThis: *JSGlobalObject, kind: Kind): JSError!void {
         jsc.markBinding(@src());
         const vm = globalThis.bunVM();
 

@@ -749,9 +749,10 @@ pub fn handleData(self: *@This(), socket: Socket, data_: []const u8) void {
                 }
             }
             }
-            var header_bytes: struct { @sizeOf(usize) } = undefined;
+            const header_len = @sizeOf(usize);
+            _ = &header_len;
+            var header_bytes: [header_len]u8 = @splat(0);
             _ = &header_bytes;
-            u8 = @as([@sizeOf(usize)]i32, @splat(@as(i32, 0)));
             while (true) {
                 _ = log("onData ({s})", .{ @tagName(receive_state) });
                 switch (receive_state) {
@@ -1578,15 +1579,15 @@ pub fn memoryCost(self: *@This()) callconv(.c) usize {
 
 pub fn exportAll() void {
             const name = (comptime (if (ssl) "WebSocketClientTLS" else "WebSocketClient"));
-            _ = @export((&cancel), .{ .name = (("Bun__" + name) + "__cancel") });
-            _ = @export((&close), .{ .name = (("Bun__" + name) + "__close") });
-            _ = @export((&finalize), .{ .name = (("Bun__" + name) + "__finalize") });
-            _ = @export((&init), .{ .name = (("Bun__" + name) + "__init") });
-            _ = @export((&initWithTunnel), .{ .name = (("Bun__" + name) + "__initWithTunnel") });
-            _ = @export((&memoryCost), .{ .name = (("Bun__" + name) + "__memoryCost") });
-            _ = @export((&writeBinaryData), .{ .name = (("Bun__" + name) + "__writeBinaryData") });
-            _ = @export((&writeBlob), .{ .name = (("Bun__" + name) + "__writeBlob") });
-            _ = @export((&writeString), .{ .name = (("Bun__" + name) + "__writeString") });
+            _ = @export((&cancel), .{ .name = (("Bun__" ++ name) ++ "__cancel") });
+            _ = @export((&close), .{ .name = (("Bun__" ++ name) ++ "__close") });
+            _ = @export((&finalize), .{ .name = (("Bun__" ++ name) ++ "__finalize") });
+            _ = @export((&init), .{ .name = (("Bun__" ++ name) ++ "__init") });
+            _ = @export((&initWithTunnel), .{ .name = (("Bun__" ++ name) ++ "__initWithTunnel") });
+            _ = @export((&memoryCost), .{ .name = (("Bun__" ++ name) ++ "__memoryCost") });
+            _ = @export((&writeBinaryData), .{ .name = (("Bun__" ++ name) ++ "__writeBinaryData") });
+            _ = @export((&writeBlob), .{ .name = (("Bun__" ++ name) ++ "__writeBlob") });
+            _ = @export((&writeString), .{ .name = (("Bun__" ++ name) ++ "__writeString") });
     }
     pub const Socket = uws.NewSocketHandler(ssl);
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});

@@ -681,7 +681,10 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key_: [*c]ZigS
             if ((ctx_ptr == null)) {
                 return;
             }
-            var ctx: *@This() = bun.cast((&@This()), ctx_ptr.?);
+            var ctx: *@This() = (blk: {
+            break :blk @ptrCast(@alignCast(ctx_ptr.?));
+
+});
             _ = &ctx;
             var fmt_self = ctx.formatter;
             _ = &fmt_self;
@@ -1213,7 +1216,7 @@ const fmt: []const u8 = "[this.globalThis]";
             _ = writer.writeAll((comptime Output.prettyFmt((("<cyan>" ++ fmt) ++ "<r>"), enable_ansi_colors)));
 },
 .Map => {
-const length_value = ((value.get(self.globalThis, "size")) orelse (try jsc.JSValue.jsNumberFromInt32(0)));
+const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSValue.jsNumberFromInt32(0)));
             const length = length_value.toInt32();
             const prev_quote_strings = self.quote_strings;
             self.quote_strings = true;
@@ -1245,7 +1248,7 @@ const length_value = ((value.get(self.globalThis, "size")) orelse (try jsc.JSVal
             _ = writer.writeAll("\n");
 },
 .Set => {
-const length_value = ((value.get(self.globalThis, "size")) orelse (try jsc.JSValue.jsNumberFromInt32(0)));
+const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSValue.jsNumberFromInt32(0)));
             const length = length_value.toInt32();
             const prev_quote_strings = self.quote_strings;
             self.quote_strings = true;
@@ -1914,7 +1917,7 @@ else => {
 }
     }
 
-pub fn format(self: *PrettyFormatter, result: Tag.Result, comptime Writer: type, writer: *std.Io.Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool) !void {
+pub fn format(self: *PrettyFormatter, result: Tag.Result, comptime Writer: type, writer: *std.Io.Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool) bun.JSError!void {
             const prevGlobalThis = self.globalThis;
             defer {
             self.globalThis = prevGlobalThis;

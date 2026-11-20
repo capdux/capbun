@@ -317,9 +317,8 @@ pub fn incrementTimerRef(self: *All, delta: i32) void {
             }
     }
 
-pub fn getNextID(self: *const All) i32 {
-        _ = self;
-            VirtualMachine.get().timer.last_id = (VirtualMachine.get().timer.last_id + 1);
+pub fn getNextID() callconv(.c) i32 {
+            VirtualMachine.get().timer.last_id = (VirtualMachine.get().timer.last_id +% 1);
             return VirtualMachine.get().timer.last_id;
     }
 
@@ -551,8 +550,7 @@ pub fn removeTimerById(self: *All, id: i32) ?*TimeoutObject {
             }
     }
 
-pub fn clearTimer(self: *const All, timer_id_value: JSValue, globalThis: *JSGlobalObject, kind: Kind) JSError!void {
-        _ = self;
+pub fn clearTimer(timer_id_value: JSValue, globalThis: *JSGlobalObject, kind: Kind) JSError!void {
             _ = jsc.markBinding(@src());
             const vm = globalThis.bunVM();
             if (timer_id_value.isInt32()) {

@@ -3086,3 +3086,5 @@ Options:
 - **[2026-11-20 19:59] Wave 13 清零 C 组验收提交（10 模块全绿）**：完成 `pretty_format`/`ScopeFunctions`/`bun_test`/`JSGlobalObject`/`event_loop`/`owned`/`uws_jsc`/`Blob`/`TextDecoder`/`StringBuilder` 10 模块独立验收（10/10 PASS，ratio 0.128x~1.123x）并原子提交；静待 A/B 组完成。
 
 - **[2026-11-20 20:01] Wave 13 清零 A+B 组 + Sink/Timer 验收提交（24 模块全绿）**：完成 CSS/HTTP/quic/picohttp 12 模块、Node/Sys/Shell/YAML/AST/BoringSSL 10 模块及 `Sink.cp`/`Timer.cp` 2 项上游修复的独立验收并原子提交，即将执行全仓 `bun run zig:check` 终极复检。
+
+- **[2026-11-20 20:14] Wave 14 Batch C 验收提交（13 模块全绿）**：完成 `yaml`/`bun`/`Timer`/`FileReader`/`FormData`/`pretty_format`/`HTTPContext`/`http`/`websocket_client`/`lifecycle_script_runner`/`lexer`/`patch`/`bit_set` 13 模块独立验收（13/13 PASS，ratio 0.844x~1.024x）并原子提交；静待 A/B 组完成后跑 Wave 15 `zig:check`。

@@ -664,7 +664,8 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                 }
             }
 
-            let header_bytes: [@sizeOf(usize)]u8 = [0; @sizeOf(usize)];
+            const header_len = @sizeOf(usize);
+            let header_bytes: [header_len]u8 = @splat(0);
 
             while (true) {
                 log("onData ({s})", [@tagName(receive_state)]);
@@ -1525,15 +1526,15 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
         pub static fn exportAll() {
             const name = comptime if (ssl) "WebSocketClientTLS" else "WebSocketClient";
-            @export(&cancel, { name: "Bun__" + name + "__cancel" });
-            @export(&close, { name: "Bun__" + name + "__close" });
-            @export(&finalize, { name: "Bun__" + name + "__finalize" });
-            @export(&init, { name: "Bun__" + name + "__init" });
-            @export(&initWithTunnel, { name: "Bun__" + name + "__initWithTunnel" });
-            @export(&memoryCost, { name: "Bun__" + name + "__memoryCost" });
-            @export(&writeBinaryData, { name: "Bun__" + name + "__writeBinaryData" });
-            @export(&writeBlob, { name: "Bun__" + name + "__writeBlob" });
-            @export(&writeString, { name: "Bun__" + name + "__writeString" });
+            @export(&cancel, { name: "Bun__" ++ name ++ "__cancel" });
+            @export(&close, { name: "Bun__" ++ name ++ "__close" });
+            @export(&finalize, { name: "Bun__" ++ name ++ "__finalize" });
+            @export(&init, { name: "Bun__" ++ name ++ "__init" });
+            @export(&initWithTunnel, { name: "Bun__" ++ name ++ "__initWithTunnel" });
+            @export(&memoryCost, { name: "Bun__" ++ name ++ "__memoryCost" });
+            @export(&writeBinaryData, { name: "Bun__" ++ name ++ "__writeBinaryData" });
+            @export(&writeBlob, { name: "Bun__" ++ name ++ "__writeBlob" });
+            @export(&writeString, { name: "Bun__" ++ name ++ "__writeString" });
         }
     };
 }

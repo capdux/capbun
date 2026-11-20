@@ -771,7 +771,7 @@ pub struct DynamicBitSetUnmanaged {
             if (new_masks == 0) {
                 if (comptime Environment.allow_assert) bun.assert(new_len == 0);
                 allocator.free(old_allocation);
-                this.masks = @as([*]MaskInt, empty_masks_ptr);
+                this.masks = Self.empty.masks;
                 this.bit_length = 0;
                 return;
             }
@@ -1587,7 +1587,7 @@ pub fn BitSetIterator(comptime MaskInt: type, comptime options: IteratorOptions)
             if (masks.len == 0) {
                 return Self{
                     bits_remain: 0,
-                    words_remain: &([] as [0]MaskInt),
+                    words_remain: [],
                     last_word_mask: last_word_mask,
                     bit_offset: 0,
                 };

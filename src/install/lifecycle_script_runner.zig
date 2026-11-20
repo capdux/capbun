@@ -129,8 +129,7 @@ pub fn onReaderDone(self: *LifecycleScriptSubprocess) void {
 pub fn onReaderError(self: *LifecycleScriptSubprocess, e: bun.sys.Error) void {
             _ = bun.assert((self.remaining_fds > 0));
             self.remaining_fds = (self.remaining_fds - 1);
-            const err_args: struct { []const u8, []const u8, *anyopaque, *anyopaque } = .{ self.scriptName(), self.package_name, e.errno, @tagName(e.getErrno()) };
-            _ = Output.prettyErrorln("<r><red>error<r>: Failed to read <b>{s}<r> script output from \"<b>{s}<r>\" due to error <b>{d} {s}<r>", err_args);
+            _ = Output.prettyErrorln("<r><red>error<r>: Failed to read <b>{s}<r> script output from \"<b>{s}<r>\" due to error <b>{d} {s}<r>", .{ self.scriptName(), self.package_name, e.errno, @tagName(e.getErrno()) });
             _ = Output.flush();
             _ = self.maybeFinished();
     }
@@ -297,28 +296,28 @@ if ((!(process).?.hasExited())) {
 
 pub fn printOutput(self: *LifecycleScriptSubprocess) void {
             if ((!self.manager.options.log_level.isVerbose())) {
-                var stdout = self.stdout.finalBuffer();
-                _ = &stdout;
-                if ((((self.stdout.items.len == 0) and (self.stdout.capacity > 0)) and (self.stderr.buffer().capacity == 0))) {
-                    (self.stderr.buffer()).* = self.stdout.*;
-                    self.stdout.* = std.array_list.Managed(u8).init(bun.default_allocator);
+                var stdout_buf = self.stdout.finalBuffer();
+                _ = &stdout_buf;
+                if ((((stdout_buf.items.len == 0) and (stdout_buf.capacity > 0)) and (self.stderr.buffer().capacity == 0))) {
+                    (self.stderr.buffer()).* = stdout_buf.*;
+                    stdout_buf.* = std.array_list.Managed(u8).init(bun.default_allocator);
                 }
-                var stderr = self.stderr.finalBuffer();
-                _ = &stderr;
-                if (((self.stdout.items.len +| self.stderr.items.len) == 0)) {
+                var stderr_buf = self.stderr.finalBuffer();
+                _ = &stderr_buf;
+                if (((stdout_buf.items.len +| stderr_buf.items.len) == 0)) {
                     return;
                 }
                 _ = Output.disableBuffering();
                 _ = Output.flush();
-                if ((self.stdout.items.len > 0)) {
-                    const out_args: struct { *anyopaque } = .{ self.stdout.items };
+                if ((stdout_buf.items.len > 0)) {
+                    const out_args: struct { *anyopaque } = .{ stdout_buf.items };
                     _ = (blk_catch_2: { break :blk_catch_2 ((Output.errorWriter().print("{s}\n", out_args)) catch |__ce_2| { _ = &__ce_2;  }); });
-                    _ = self.stdout.clearAndFree();
+                    _ = stdout_buf.clearAndFree();
                 }
-                if ((self.stderr.items.len > 0)) {
-                    const err_args: struct { *anyopaque } = .{ self.stderr.items };
+                if ((stderr_buf.items.len > 0)) {
+                    const err_args: struct { *anyopaque } = .{ stderr_buf.items };
                     _ = (blk_catch_3: { break :blk_catch_3 ((Output.errorWriter().print("{s}\n", err_args)) catch |__ce_3| { _ = &__ce_3;  }); });
-                    _ = self.stderr.clearAndFree();
+                    _ = stderr_buf.clearAndFree();
                 }
                 _ = Output.enableBuffering();
             }
@@ -352,8 +351,7 @@ var maybe_duration: ?u64 = null;
                     return;
                 }
                 _ = self.printOutput();
-                const exit_args: struct { []const u8, []const u8, *anyopaque } = .{ self.scriptName(), self.package_name, exit.code };
-                _ = Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" exited with {d}<r>", exit_args);
+                _ = Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" exited with {d}<r>", .{ self.scriptName(), self.package_name, exit.code });
                 _ = self.deinit();
                 _ = Output.flush();
                 _ = Global.exit(exit.code);

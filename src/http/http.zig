@@ -1963,7 +1963,7 @@ if (((status_code != 303) and (self.state.original_request_body == .stream))) {
                     }
                 }
                 if (((!is_same_origin) and (self.header_entries.len > 0))) {
-                    const hashes_to_remove: []u64 = .{ authorization_header_hash, proxy_authorization_header_hash, cookie_header_hash };
+                    const hashes_to_remove: [3]u64 = .{ authorization_header_hash, proxy_authorization_header_hash, cookie_header_hash };
                     inline for (hashes_to_remove) |target_hash| {
                         const names = self.header_entries.items(.name);
                         var i: usize = 0;
@@ -2306,8 +2306,9 @@ pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.pic
 }
 
 pub fn printRequest(protocol: Protocol, request: bun.picohttp.Request, url: []const u8, ignore_insecure: bool, body: []const u8, curl: bool) void {
-        var request_ = bun.picohttp.Request{ .method = request.method, .path = url, .headers = request.headers };
+        var request_ = request;
         _ = &request_;
+        request_.path = url;
         if (curl) {
             _ = bun.Output.prettyErrorln("{f}", .{ request_.curl(ignore_insecure, body) });
         }

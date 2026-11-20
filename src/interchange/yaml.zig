@@ -794,7 +794,7 @@ _ = try log.addError(source, e.pos.loc(), "Invalid indentation");
 pub fn ParserParseResult(comptime enc: Encoding) type {
     return union(enum) {
         result: Result,
-        @"err": *ParserParseResultError,
+        @"err": ParseErrUnion,
 
 pub fn success(stream: Stream, parser: *const Parser(enc)) ParserParseResult(enc) {
                 return .{ .result = .{ .stream = stream, .allocator = parser.allocator } };
@@ -867,6 +867,7 @@ pub fn fail(e: ParseError, parser: *const Parser(enc)) ParserParseResult(enc) {
         }
         const Stream = ParserStream(enc);
         const ParseError = Parser(enc).ParseError;
+        const ParseErrUnion = ParserParseResultError;
         pub const Result = ParserParseResultOk(enc);
         pub const Error = ParserParseResultError;
     };
@@ -2100,7 +2101,7 @@ pub fn peek(self: @This(), comptime n: usize) enc.unit() {
         }
 
 pub fn inc(self: *@This(), n: usize) void {
-                self.pos = .{ .@"from" = @min((self.pos.cast() + n), self.input.len) };
+                self.pos = Pos.@"from"(@min((self.pos.cast() + n), self.input.len));
         }
 
 pub fn newline(self: *@This()) void {
@@ -2144,7 +2145,7 @@ pub fn parseDirective(self: *@This()) ParseError!Directive {
                     _ = try self.trySkipChar(46);
                     _ = try self.trySkipNsDecDigits();
                     _ = try self.trySkipToNewLine();
-                    return error.yaml;
+                    return Directive.yaml;
                 }
                 if ((self.remainStartsWith(enc.literal("TAG")) and self.isSWhiteAt(3))) {
                     _ = self.inc(3);
@@ -2230,7 +2231,7 @@ pub fn parseDocument(self: *@This()) ParseError!Document {
                     _ = try self.scan(.{});
                 } else {
                     if ((directives.items.len > 0)) {
-                        return Parser.unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
                 const root = try self.parseNode(.{});
@@ -2248,11 +2249,11 @@ const document_end_line = self.token.line;
                     _ = try self.scan(.{});
                 }
                 if ((self.token.line == document_end_line)) {
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
                 }
 },
 else => {
-return Parser.unexpectedToken();
+return error.UnexpectedToken;
 },
 }
                 return .{ .root = root, .directives = directives };
@@ -2279,7 +2280,7 @@ pub fn parseFlowSequence(self: *@This()) ParseError!Expr {
                             break;
                         }
                         if ((self.token.data != .collect_entry)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                         _ = try self.scan(.{});
                     }
@@ -2336,7 +2337,7 @@ const value: Expr = .init(E.Null, .{}, self.token.start.loc());
 
 },
 else => {
-return Parser.unexpectedToken();
+return error.UnexpectedToken;
 },
 }
                         _ = try self.scan(.{});
@@ -2401,7 +2402,7 @@ pub fn parseBlockSequence(self: *@This()) ParseError!Expr {
                             switch (sw_v_1) {
 .tag => {
 if ((has_tag != null)) {
-                                return Parser.unexpectedToken();
+                                return error.UnexpectedToken;
                             }
                             has_tag = self.token;
                             _ = try self.scan(.{ .additional_parent_indent = entry_indent.add(1), .tag = self.token.data.tag });
@@ -2411,7 +2412,7 @@ if ((has_tag != null)) {
 .anchor => |anchor| {
 _ = &anchor;
                             if ((has_anchor != null)) {
-                                return Parser.unexpectedToken();
+                                return error.UnexpectedToken;
                             }
                             has_anchor = self.token;
                             var tag = .none;
@@ -2469,7 +2470,7 @@ pub fn parseBlockMapping(self: *@This(), first_key: Expr, mapping_start: Pos, ma
                     const value: Expr = (switch (self.token.data) {
 .mapping_key => value: {
                     if ((self.token.line == mapping_line)) {
-                        return Parser.unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
 },
@@ -2479,7 +2480,7 @@ else => value: {
 .sequence_entry => {
 {
                         if ((self.token.line == mapping_value_line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                         if (self.token.indent.isLessThan(mapping_indent)) {
                             break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
@@ -2525,7 +2526,7 @@ if (explicit_key) {
                         _ = try props.append(.{ .key = key, .value = value });
                         continue;
                     }
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 .mapping_value => {
 if ((key_line != self.token.line)) {
@@ -2536,7 +2537,7 @@ if ((key_line != self.token.line)) {
 
 },
 else => {
-return Parser.unexpectedToken();
+return error.UnexpectedToken;
 },
 }
                     const mapping_value_line = self.token.line;
@@ -2544,7 +2545,7 @@ return Parser.unexpectedToken();
                     const value: Expr = (switch (self.token.data) {
 .mapping_key => value: {
                     if ((self.token.line == key_line)) {
-                        return Parser.unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
 },
@@ -2554,7 +2555,7 @@ else => value: {
 .sequence_entry => {
 {
                         if ((self.token.line == key_line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                         if (self.token.indent.isLessThan(mapping_indent)) {
                             break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
@@ -2623,13 +2624,13 @@ const alias_start = self.token.start;
                     if (node_props.has_anchor) |anchor| {
                         _ = &anchor;
                         if ((anchor.line == alias_line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                     }
                     if (node_props.has_tag) |tag| {
                         _ = &tag;
                         if ((tag.line == alias_line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                     }
                     var copy: Expr = undefined;
@@ -2701,19 +2702,19 @@ if (node_props.hasAnchorOrTag()) {
                         node = Expr.init(E.Null, .{}, self.pos.loc());
                         break :node_sw;
                     }
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 .sequence_entry => {
 if (node_props.anchorLine()) |anchor_line| {
                         _ = &anchor_line;
                         if ((anchor_line == self.token.line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                     }
                     if (node_props.tagLine()) |tag_line| {
                         _ = &tag_line;
                         if ((tag_line == self.token.line)) {
-                            return Parser.unexpectedToken();
+                            return error.UnexpectedToken;
                         }
                     }
                     node = try self.parseBlockSequence();
@@ -2829,10 +2830,10 @@ if (((scalar_line != self.token.line) and (!opts.explicit_mapping_key))) {
                     break :node_sw;
 },
 .directive => {
-return Parser.unexpectedToken();
+return error.UnexpectedToken;
 },
 .reserved => {
-return Parser.unexpectedToken();
+return error.UnexpectedToken;
 },
 }
                 }
@@ -4008,7 +4009,7 @@ _ = self.inc(1);
 },
 .flow_in, .flow_key => {
 self.token.start = start;
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 }
                     self.token = Token(enc).sequenceEntry(.{ .start = start, .indent = self.line_indent, .line = self.line });
@@ -4019,7 +4020,7 @@ switch (self.context.get()) {
 .flow_in, .flow_key => {
 _ = self.inc(1);
                     self.token = Token(enc).sequenceEntry(.{ .start = start, .indent = self.line_indent, .line = self.line });
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 .block_in, .block_out => {
 
@@ -4238,7 +4239,7 @@ _ = self.inc(1);
 },
 }
                     self.token.start = start;
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 '>' => {
 const start = self.pos;
@@ -4253,7 +4254,7 @@ _ = self.inc(1);
 },
 }
                     self.token.start = start;
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 '\'' => {
 _ = self.inc(1);
@@ -4275,14 +4276,14 @@ const start = self.pos;
 const start = self.pos;
                     _ = self.inc(1);
                     self.token = Token(enc).reserved(.{ .start = start, .indent = self.line_indent, .line = self.line });
-                    return Parser.unexpectedToken();
+                    return error.UnexpectedToken;
 },
 10 => {
 scan_ch = try ctx.scanWhitespace(10);
                     continue :scan_sw;
 },
-10 => {
-scan_ch = try ctx.scanWhitespace(10);
+13 => {
+scan_ch = try ctx.scanWhitespace(13);
                     continue :scan_sw;
 },
 ' ' => {
@@ -4307,7 +4308,7 @@ self.token = try self.scanPlainScalar(opts);
 if (self.block_indents.get()) |block_indent| {
                     _ = &block_indent;
                     if ((((!opts.outside_context) and (self.token.line != previous_token_line)) and self.token.indent.isLessThanOrEqual(block_indent))) {
-                        return Parser.unexpectedToken();
+                        return error.UnexpectedToken;
                     }
                 }
 },

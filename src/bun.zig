@@ -466,7 +466,7 @@ pub const U32HashMapContext = struct {
 
 pub fn hash(self: U32HashMapContext, value: u32) u64 {
         _ = self;
-            return (if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(i32, @intFromEnum(value)) else cp_cast_int(i32, value));
+            return (if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(u64, @intFromEnum(value)) else cp_cast_int(u64, value));
     }
 
 pub fn eql(self: U32HashMapContext, a: u32, b: u32) bool {
@@ -1168,7 +1168,7 @@ pub fn sinceNow(start: *const timespec, comptime mock_mode: MockMode) u64 {
 pub fn addMs(self: timespec, interval: i64) timespec {
             const sec_inc = @divTrunc(interval, std.time.ms_per_s);
             const nsec_inc = (@rem(interval, std.time.ms_per_s) * std.time.ns_per_ms);
-            var new_timespec = self.*;
+            var new_timespec = self;
             _ = &new_timespec;
             new_timespec.sec = (new_timespec.sec +% sec_inc);
             new_timespec.nsec = (new_timespec.nsec +% nsec_inc);
@@ -1181,7 +1181,7 @@ pub fn addMs(self: timespec, interval: i64) timespec {
 
 pub fn addMsFloat(self: timespec, interval_ms: f64) timespec {
             const ns_per_ms_f = @as(f64, @floatFromInt(std.time.ns_per_ms));
-            var new_timespec = self.*;
+            var new_timespec = self;
             _ = &new_timespec;
             const ms_whole_f = @floor(interval_ms);
             const ms_inc: i64 = std.math.lossyCast(i64, ms_whole_f);
@@ -1816,7 +1816,7 @@ pub fn isReadable(fd: FD) PollFlag {
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
         const result = ((blk_catch_9: { break :blk_catch_9 ((std.posix.poll((&polls), 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); }) != 0);
-        const rc = (if ((result and (polls[0].revents & ((std.posix.POLL.HUP | std.posix.POLL.ERR) != 0)))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
+        const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .readable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if ((polls[0].revents & (std.posix.POLL.ERR != 0))) " ERR " else "") });
         return rc;
 }
@@ -1847,7 +1847,7 @@ pub fn isWritable(fd: FD) PollFlag {
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.OUT | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
         const result = ((blk_catch_10: { break :blk_catch_10 ((std.posix.poll((&polls), 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) != 0);
-        const rc = (if ((result and (polls[0].revents & ((std.posix.POLL.HUP | std.posix.POLL.ERR) != 0)))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
+        const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .writable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if ((polls[0].revents & (std.posix.POLL.ERR != 0))) " ERR " else "") });
         return rc;
 }
@@ -2830,7 +2830,7 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8) !void {
                 path_buf2[cp_cast_int(usize, component.path.len)] = 0;
                 const path_to_use = path_buf2[0..component.path.len :0];
                 const result = try sys.lstat(path_to_use).unwrap();
-                const is_dir = S.ISDIR((if (comptime @typeInfo(@TypeOf(result.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(result.mode)) else cp_cast_int(i32, result.mode)));
+                const is_dir = S.ISDIR(@intCast(result.mode));
                 if ((!is_dir)) {
                     _ = (blk_catch_26: { break :blk_catch_26 ((dir.deleteTree(component.path)) catch |__ce_26| { _ = &__ce_26;  }); });
                     continue;

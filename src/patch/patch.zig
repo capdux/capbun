@@ -292,9 +292,9 @@ return e.withoutPath();
                 defer {
                 _ = newfile_fd.close();
                 }
-                const hunk = ((part.file_creation.hunk) orelse (({
+                const hunk = ((part.file_creation.hunk) orelse {
                 continue;
-})));
+});
                 const last_line = (hunk.parts.items[0].lines.items.len -| 1);
                 const no_newline_at_end_of_file = hunk.parts.items[0].no_newline_at_end_of_file;
                 const count = count: {
@@ -705,7 +705,10 @@ pub fn fromInner(inner: std.mem.SplitIterator(u8,.scalar)) LookbackIterator {
     }
 
 pub fn next(self: *LookbackIterator) ?[]const u8 {
-            if (self.prev_index == null) { self.prev_index = self.prev_index; }
+            if (self.inner.index) |idx| {
+                _ = &idx;
+                self.prev_index = idx;
+            }
             return self.inner.next();
     }
 
@@ -793,9 +796,9 @@ if (bun.strings.hasPrefix(line, "@@")) {
                         if ((self.current_file_patch.diff_line_from_path != null)) {
                             _ = self.commitFilePatch();
                         }
-                        const matched = ((PatchLinesParser.parseDiffLinePaths(line)) orelse (({
+                        const matched = ((PatchLinesParser.parseDiffLinePaths(line)) orelse {
                         return error.bad_diff_line;
-})));
+});
                         self.current_file_patch.diff_line_from_path = matched[0];
                         self.current_file_patch.diff_line_to_path = matched[1];
                     } else {
@@ -859,12 +862,12 @@ if ((opts.support_legacy_diffs and bun.strings.hasPrefix(line, "--- a/"))) {
 13 => .context,
 else => null,
 });
-                break :brk ((opt_type) orelse (({
+                break :brk ((opt_type) orelse {
                 self.state = .parsing_header;
                 _ = self.commitFilePatch();
                 _ = lines.back();
                 continue;
-})));
+});
 };
                 switch (hunk_line_type) {
 .header => {
@@ -917,7 +920,7 @@ pub fn commitHunk(self: *PatchLinesParser) void {
                     _ = (((hunk.*).parts.append(bun.default_allocator, mutation_part)) catch unreachable);
                     self.current_hunk_mutation_part = null;
                 }
-                _ = ((self.current_file_patch.hunks.append(bun.default_allocator, (hunk.*).*)) catch unreachable);
+                _ = ((self.current_file_patch.hunks.append(bun.default_allocator, (hunk.*))) catch unreachable);
                 self.current_hunk = null;
             }
     }
@@ -940,7 +943,7 @@ pub fn parseHunkHeaderLineImpl(text_: []const u8) ParseErr!HunkHeaderPart {
                 _ = &c;
                 const __end_15 = (57 + 1);
                 while (c < __end_15) : (c += 1) {
-                    _ = set.set(c);
+                    _ = set.set(@as(usize, @intCast(c)));
                 }
             }
             break :brk set;
@@ -1040,7 +1043,7 @@ pub fn parseDiffHashes(line: []const u8) ?[2][]const u8 {
                 _ = &c;
                 const __end_16 = (57 + 1);
                 while (c < __end_16) : (c += 1) {
-                    _ = bitset.set(c);
+                    _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
             {
@@ -1048,7 +1051,7 @@ pub fn parseDiffHashes(line: []const u8) ?[2][]const u8 {
                 _ = &c;
                 const __end_17 = (122 + 1);
                 while (c < __end_17) : (c += 1) {
-                    _ = bitset.set(c);
+                    _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
             {
@@ -1056,7 +1059,7 @@ pub fn parseDiffHashes(line: []const u8) ?[2][]const u8 {
                 _ = &c;
                 const __end_18 = (90 + 1);
                 while (c < __end_18) : (c += 1) {
-                    _ = bitset.set(c);
+                    _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
             _ = bitset.set(95);
@@ -1176,39 +1179,39 @@ if ((((file.*).rename_from == null) or ((file.*).rename_to == null))) {
             destination_file_path = (file.*).rename_to;
 },
 .file_deletion => {
-const path = (((file.*).diff_line_from_path) orelse ((((file.*).from_path) orelse (({
+const path = (((file.*).diff_line_from_path) orelse ((((file.*).from_path) orelse {
             return error.no_path_given_for_file_deletion;
-})))));
+})));
             _ = ((result.parts.append(bun.default_allocator, .{ .file_deletion = bun.new(FileDeletion, FileDeletion{ .hunk = (if (((file.*).hunks.items.len > 0)) brk: {
             const value = (file.*).hunks.items[0];
             (file.*).hunks.items[cp_cast_int(usize, 0)] = .{ .header = Hunk.Header.empty };
             break :brk bun.new(Hunk, value);
-} else null), .path = path, .mode = ((parseFileMode((file.*).deleted_file_mode.?)) orelse (({
+} else null), .path = path, .mode = ((parseFileMode((file.*).deleted_file_mode.?)) orelse {
             return error.bad_file_mode;
-}))), .hash = (file.*).before_hash }) })) catch unreachable);
+}), .hash = (file.*).before_hash }) })) catch unreachable);
 },
 .file_creation => {
-const path = (((file.*).diff_line_to_path) orelse ((((file.*).to_path) orelse (({
+const path = (((file.*).diff_line_to_path) orelse ((((file.*).to_path) orelse {
             return error.no_path_given_for_file_creation;
-})))));
+})));
             _ = ((result.parts.append(bun.default_allocator, .{ .file_creation = bun.new(FileCreation, FileCreation{ .hunk = (if (((file.*).hunks.items.len > 0)) brk: {
             const value = (file.*).hunks.items[0];
             (file.*).hunks.items[cp_cast_int(usize, 0)] = .{ .header = Hunk.Header.empty };
             break :brk bun.new(Hunk, value);
-} else null), .path = path, .mode = ((parseFileMode((file.*).new_file_mode.?)) orelse (({
+} else null), .path = path, .mode = ((parseFileMode((file.*).new_file_mode.?)) orelse {
             return error.bad_file_mode;
-}))), .hash = (file.*).after_hash }) })) catch unreachable);
+}), .hash = (file.*).after_hash }) })) catch unreachable);
 },
 .file_patch, .file_mode_change => {
 if (destination_file_path == null) { destination_file_path = (file.*).diff_line_to_path; }
 },
 }
             if (((((destination_file_path != null) and ((file.*).old_mode != null)) and ((file.*).new_mode != null)) and (!std.mem.eql(u8, (file.*).old_mode.?, (file.*).new_mode.?)))) {
-                _ = ((result.parts.append(bun.default_allocator, .{ .file_mode_change = bun.new(FileModeChange, FileModeChange{ .path = destination_file_path.?, .old_mode = ((parseFileMode((file.*).old_mode.?)) orelse (({
+                _ = ((result.parts.append(bun.default_allocator, .{ .file_mode_change = bun.new(FileModeChange, FileModeChange{ .path = destination_file_path.?, .old_mode = ((parseFileMode((file.*).old_mode.?)) orelse {
                 return error.bad_file_mode;
-}))), .new_mode = ((parseFileMode((file.*).new_mode.?)) orelse (({
+}), .new_mode = ((parseFileMode((file.*).new_mode.?)) orelse {
                 return error.bad_file_mode;
-}))) }) })) catch unreachable);
+}) }) })) catch unreachable);
             }
             if (((destination_file_path != null) and ((file.*).hunks.items.len > 0))) {
                 _ = ((result.parts.append(bun.default_allocator, .{ .file_patch = bun.new(FilePatch, FilePatch{ .path = destination_file_path.?, .hunks = (file.*).takeHunks(), .before_hash = (file.*).before_hash, .after_hash = (file.*).after_hash }) })) catch unreachable);

@@ -143,7 +143,7 @@ fn NewLexer_(
         const is_json = json_options.is_json;
         const json = json_options;
         const JSONBool = if (is_json) bool else void;
-        const JSONBoolDefault: JSONBool = if (is_json) true;
+        const JSONBoolDefault: JSONBool = if (is_json) true else {};
 
         pub const Error = error{
             UTF8Fail,
@@ -844,7 +844,7 @@ fn NewLexer_(
             const code_point = switch (slice.len) {
                 0 => -1,
                 1 => @as(CodePoint, slice[0]),
-                else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, i32(slice.len)), CodePoint, strings.unicode_replacement),
+                else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
             };
 
             it.end = it.current;
@@ -1752,7 +1752,11 @@ fn NewLexer_(
                             // this code is so hot that if you save lexer.raw() into a temporary variable
                             // it shows up in profiling
                             lexer.identifier = lexer.raw();
-                            lexer.token = Keywords.get(lexer.identifier) ?? T.t_identifier;
+                            if (kw := Keywords.get(lexer.identifier)) {
+                                lexer.token = kw;
+                            } else {
+                                lexer.token = T.t_identifier;
+                            }
                         } else {
                             @branchHint(.unlikely);
                             const scan_result = lexer.scanIdentifierWithEscapes(.normal)?;

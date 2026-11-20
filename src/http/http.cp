@@ -249,11 +249,8 @@ pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.pic
 }
 
 fn printRequest(protocol: Protocol, request: bun.picohttp.Request, url: string, ignore_insecure: bool, body: string, curl: bool) {
-    let request_ = bun.picohttp.Request{
-        .method = request.method,
-        .path = url,
-        .headers = request.headers,
-    };
+    let request_ = request;
+    request_.path = url;
 
     if (curl) {
         bun.Output.prettyErrorln("{f}", [request_.curl(ignore_insecure, body)]);
@@ -2715,7 +2712,7 @@ export @root @value struct HTTPClient {
                             // non-wildcard request-header name, delete headerName from
                             // request’s header list.
                             if (!is_same_origin and this.header_entries.len > 0) {
-                                const hashes_to_remove = [
+                                const hashes_to_remove: [3]u64 = [
                                     authorization_header_hash,
                                     proxy_authorization_header_hash,
                                     cookie_header_hash,

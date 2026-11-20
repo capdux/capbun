@@ -404,7 +404,7 @@ pub fn deinit(self: *@This()) void {
                             _ = session.deref();
                         }
                         pooled.h2_session = null;
-                        _ = HTTPContext.markSocketAsDead(pooled.http_socket);
+                        _ = @This().markSocketAsDead(pooled.http_socket);
                         _ = pooled.http_socket.close(.failure);
                     }
                 }
@@ -486,7 +486,7 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
                     _ = &s;
                     _ = s.deref();
                 }
-                _ = HTTPContext.closeSocket(socket);
+                _ = @This().closeSocket(socket);
         }
         pub const is_ssl: bool = ssl;
         pub const HTTPSocket = SocketHandler(ssl);

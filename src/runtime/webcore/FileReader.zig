@@ -83,7 +83,7 @@ pub fn onStart(self: *FileReader) streams.Start {
                     self.lazy = .none;
                 }
                 }
-                const opened_res = openFileBlobImpl((&self.lazy.blob.data.file));
+                const opened_res = openFileBlobImpl(self.lazy.blob.data.file);
                 if ((opened_res == .err)) {
                     self.fd = bun.invalid_fd;
                     return .{ .err = opened_res.err };
@@ -283,7 +283,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                             self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
                         }
                     } else {
-                        self.pending.result = .{ .done = .{} };
+                        self.pending.result = .done;
                     }
                     return false;
                 }
@@ -376,7 +376,7 @@ pub fn onPull(self: *FileReader, buffer: []u8, array: jsc.JSValue) streams.Resul
             }
         }
         if (self.reader.isDone()) {
-            return .{ .done = .{} };
+            return .done;
         }
         if ((!self.reader.hasPendingRead())) {
             if ((!self.flowing)) {
@@ -401,7 +401,7 @@ pub fn onPull(self: *FileReader, buffer: []u8, array: jsc.JSValue) streams.Resul
                     return .{ .into_array = .{ .value = array, .len = @truncate(amount_read) } };
                 }
                 if (self.reader.isDone()) {
-                    return .{ .done = .{} };
+                    return .done;
                 }
             } else {
                 if ((self.read_inside_on_pull == .temporary)) {
@@ -423,7 +423,7 @@ pub fn onPull(self: *FileReader, buffer: []u8, array: jsc.JSValue) streams.Resul
             }
             if (self.reader.isDone()) {
                 _ = log("onPull({d}) = done", .{ buffer.len });
-                return .{ .done = .{} };
+                return .done;
             }
         }
         _ = self.pending_value.set(self.parent().globalThis, array);
@@ -467,7 +467,7 @@ pub fn onReaderDone(self: *FileReader) void {
                 if ((self.buffered.items.len > 0)) {
                     self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
                 } else {
-                    self.pending.result = .{ .done = .{} };
+                    self.pending.result = .done;
                 }
                 self.buffered = .{};
                 _ = self.pending.run();
@@ -522,7 +522,7 @@ pub const IOReader = bun.io.BufferedReader;
 pub const Poll = IOReader;
 pub const tag = ReadableStream.Tag.File;
 pub const Source = ReadableStream.NewSource(FileReader, "File", onStart, onPull, onCancel, deinit, setRefOrUnref, drain, memoryCost, null);
-var empty_u8_slice: [0]u8 = &.{};
+var empty_u8_slice: [0]u8 = undefined;
 const webcore = bun.webcore;
 const Blob = webcore.Blob;
 const ReadableStream = webcore.ReadableStream;

@@ -80,13 +80,12 @@ pub struct LifecycleScriptSubprocess {
         bun.assert(_.remaining_fds > 0);
         _.remaining_fds -= 1;
 
-        const err_args = .{
+        Output.prettyErrorln("<r><red>error<r>: Failed to read <b>{s}<r> script output from \"<b>{s}<r>\" due to error <b>{d} {s}<r>", .{
             _.scriptName(),
             _.package_name,
             e.errno,
             @tagName(e.getErrno()),
-        };
-        Output.prettyErrorln("<r><red>error<r>: Failed to read <b>{s}<r> script output from \"<b>{s}<r>\" due to error <b>{d} {s}<r>", err_args);
+        });
         Output.flush();
         _.maybeFinished();
     }
@@ -298,33 +297,33 @@ pub struct LifecycleScriptSubprocess {
 
     fn printOutput(*_) {
         if (!_.manager.options.log_level.isVerbose()) {
-            let stdout = _.stdout.finalBuffer();
+            let stdout_buf = _.stdout.finalBuffer();
 
             // Reuse the memory
-            if (stdout.items.len == 0 && stdout.capacity > 0 && _.stderr.buffer().capacity == 0) {
-                _.stderr.buffer().* = stdout.*;
-                stdout.* = std.array_list.Managed(u8).init(bun.default_allocator);
+            if (stdout_buf.items.len == 0 && stdout_buf.capacity > 0 && _.stderr.buffer().capacity == 0) {
+                _.stderr.buffer().* = stdout_buf.*;
+                stdout_buf.* = std.array_list.Managed(u8).init(bun.default_allocator);
             }
 
-            let stderr = _.stderr.finalBuffer();
+            let stderr_buf = _.stderr.finalBuffer();
 
-            if (stdout.items.len +| stderr.items.len == 0) {
+            if (stdout_buf.items.len +| stderr_buf.items.len == 0) {
                 return;
             }
 
             Output.disableBuffering();
             Output.flush();
 
-            if (stdout.items.len > 0) {
-                const out_args = .{ stdout.items };
+            if (stdout_buf.items.len > 0) {
+                const out_args = .{ stdout_buf.items };
                 Output.errorWriter().print("{s}\n", out_args) catch {};
-                stdout.clearAndFree();
+                stdout_buf.clearAndFree();
             }
 
-            if (stderr.items.len > 0) {
-                const err_args = .{ stderr.items };
+            if (stderr_buf.items.len > 0) {
+                const err_args = .{ stderr_buf.items };
                 Output.errorWriter().print("{s}\n", err_args) catch {};
-                stderr.clearAndFree();
+                stderr_buf.clearAndFree();
             }
 
             Output.enableBuffering();
@@ -362,12 +361,11 @@ pub struct LifecycleScriptSubprocess {
                         return;
                     }
                     _.printOutput();
-                    const exit_args = .{
+                    Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" exited with {d}<r>", .{
                         _.scriptName(),
                         _.package_name,
                         exit.code,
-                    };
-                    Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" exited with {d}<r>", exit_args);
+                    });
                     _.deinit();
                     Output.flush();
                     Global.exit(exit.code);

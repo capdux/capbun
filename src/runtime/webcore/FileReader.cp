@@ -1,4 +1,4 @@
-let empty_u8_slice: [0]u8 = [];
+let empty_u8_slice: [0]u8 = undefined;
 
 import bun from "bun";
 import { Environment, Output, jsc } from "bun";
@@ -197,7 +197,7 @@ pub union(enum) Lazy {
                     _.lazy.blob.deref();
                     _.lazy = .none;
                 }
-                const opened_res = openFileBlobImpl(&_.lazy.blob.data.file);
+                const opened_res = openFileBlobImpl(_.lazy.blob.data.file);
                 if (opened_res == .err) {
                     _.fd = bun.invalid_fd;
                     return .{ .err = opened_res.err };
@@ -382,7 +382,7 @@ pub union(enum) Lazy {
                         _.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
                     }
                 } else {
-                    _.pending.result = .{ .done = {} };
+                    _.pending.result = .done;
                 }
                 return false;
             }
@@ -487,7 +487,7 @@ pub union(enum) Lazy {
         }
 
         if (_.reader.isDone()) {
-            return .{ .done = {} };
+            return .done;
         }
 
         if (!_.reader.hasPendingRead()) {
@@ -517,7 +517,7 @@ pub union(enum) Lazy {
                 }
 
                 if (_.reader.isDone()) {
-                    return .{ .done = {} };
+                    return .done;
                 }
             } else if (_.read_inside_on_pull == .temporary) {
                 const buf = _.read_inside_on_pull.temporary;
@@ -538,7 +538,7 @@ pub union(enum) Lazy {
             if (_.reader.isDone()) {
                 log("onPull({d}) = done", .{buffer.len});
 
-                return .{ .done = {} };
+                return .done;
             }
         }
 
@@ -585,7 +585,7 @@ pub union(enum) Lazy {
                 if (_.buffered.items.len > 0) {
                     _.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(&_.buffered) };
                 } else {
-                    _.pending.result = .{ .done = {} };
+                    _.pending.result = .done;
                 }
                 _.buffered = .{};
                 _.pending.run();

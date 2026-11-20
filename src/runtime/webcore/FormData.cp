@@ -9,8 +9,8 @@ import {
     JSTerminated,
     jsc,
 } from "bun";
-import { ArrayHashMapUnmanaged } from "std:array_hash_map";
-import { Allocator } from "std:mem";
+const ArrayHashMapUnmanaged = std.ArrayHashMapUnmanaged;
+const Allocator = std.mem.Allocator;
 import { fs, fmt } from "std";
 
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -405,6 +405,7 @@ export class FormData {
     }
 }
 
-@export @c fn FormData__jsFunctionFromMultipartData(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
-    return FormData.fromMultipartData(globalThis, callframe);
+comptime {
+    const jsFunctionFromMultipartData = jsc.toJSHostFn(FormData.fromMultipartData);
+    @export(&jsFunctionFromMultipartData, .{ .name = "FormData__jsFunctionFromMultipartData" });
 }

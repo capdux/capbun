@@ -624,7 +624,7 @@ export class HTTPContext<const ssl: bool> {
                     session.deref();
                 }
                 pooled.h2_session = null;
-                markSocketAsDead(pooled.http_socket);
+                @This().markSocketAsDead(pooled.http_socket);
                 pooled.http_socket.close(.failure);
             }
         }
@@ -719,7 +719,7 @@ export class HTTPContext<const ssl: bool> {
             tunnel.?.detachAndDeref();
         }
         if (s := h2_session) s.deref();
-        closeSocket(socket);
+        @This().closeSocket(socket);
     }
 
     ref_count: RefCount,

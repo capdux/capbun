@@ -720,7 +720,7 @@ pub fn isReadable(fd: FD): PollFlag {
     ];
 
     const result = (std.posix.poll(&polls, 0) catch 0) != 0;
-    const rc = if (result && polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR) != 0)
+    const rc = if (result && (polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0)
         PollFlag.hup
     else if (result)
         PollFlag.ready
@@ -770,7 +770,7 @@ pub fn isWritable(fd: FD): PollFlag {
     ];
 
     const result = (std.posix.poll(&polls, 0) catch 0) != 0;
-    const rc = if (result && polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR) != 0)
+    const rc = if (result && (polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0)
         PollFlag.hup
     else if (result)
         PollFlag.ready
@@ -1012,7 +1012,7 @@ pub fn getenvTruthy(key: [:0]const u8): bool {
 
 pub struct U32HashMapContext {
     fn hash(_: @This(), value: u32): u64 {
-        return i32(value);
+        return @as(u64, value);
     }
     fn eql(_: @This(), a: u32, b: u32): bool {
         return a == b;
@@ -2363,7 +2363,7 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8)! {
                 path_buf2[component.path.len] = 0;
                 const path_to_use = path_buf2[0..component.path.len :0];
                 const result = sys.lstat(path_to_use).unwrap()?;
-                const is_dir = S.ISDIR(i32(result.mode));
+                const is_dir = S.ISDIR(@intCast(result.mode));
                 // dangling symlink
                 if (!is_dir) {
                     dir.deleteTree(component.path) catch {};
@@ -3437,7 +3437,7 @@ pub enum TimespecMockMode {
         const sec_inc = @divTrunc(interval, std.time.ms_per_s);
         const nsec_inc = @rem(interval, std.time.ms_per_s) * std.time.ns_per_ms;
 
-        let new_timespec = _.*;
+        let new_timespec = _;
 
         new_timespec.sec = new_timespec.sec +% sec_inc;
         new_timespec.nsec = new_timespec.nsec +% nsec_inc;
@@ -3453,7 +3453,7 @@ pub enum TimespecMockMode {
         const ns_per_ms_f = @as(f64, @floatFromInt(std.time.ns_per_ms)); // 1_000_000
 
         // Start from the current time
-        let new_timespec = _.*;
+        let new_timespec = _;
 
         // Split into whole ms and sub-ms remainder (matches sinon/fake-timers logic)
         // Use modulo to extract fractional milliseconds as nanoseconds

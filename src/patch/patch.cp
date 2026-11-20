@@ -697,8 +697,10 @@ struct LookbackIterator {
     }
 
     pub fn next(*_): ([]const u8)? {
-        this.prev_index = this.inner.index orelse this.prev_index;
-        return this.inner.next();
+        if (idx := _.inner.index) {
+            _.prev_index = idx;
+        }
+        return _.inner.next();
     }
 
     pub fn back(*_) {
@@ -895,7 +897,7 @@ struct PatchLinesParser {
                 hunk.parts.append(bun.default_allocator, mutation_part) catch unreachable;
                 this.current_hunk_mutation_part = null;
             }
-            this.current_file_patch.hunks.append(bun.default_allocator, hunk.*) catch unreachable;
+            this.current_file_patch.hunks.append(bun.default_allocator, hunk) catch unreachable;
             this.current_hunk = null;
         }
     }
@@ -911,7 +913,7 @@ struct PatchLinesParser {
         let text = text_;
         const DIGITS = brk: {
             let set = bun.bit_set.IntegerBitSet(256).initEmpty();
-            for (c of '0'..'9' + 1) set.set(c);
+            for (c of '0'..'9' + 1) set.set(@as(usize, @intCast(c)));
             break :brk set;
         };
 
@@ -999,9 +1001,9 @@ struct PatchLinesParser {
 
         const VALID_CHARS: bun.bit_set.IntegerBitSet(256) = @{
             let bitset = bun.bit_set.IntegerBitSet(256).initEmpty();
-            for (c of '0'..'9' + 1) bitset.set(c);
-            for (c of 'a'..'z' + 1) bitset.set(c);
-            for (c of 'A'..'Z' + 1) bitset.set(c);
+            for (c of '0'..'9' + 1) bitset.set(@as(usize, @intCast(c)));
+            for (c of 'a'..'z' + 1) bitset.set(@as(usize, @intCast(c)));
+            for (c of 'A'..'Z' + 1) bitset.set(@as(usize, @intCast(c)));
             bitset.set('_');
             bitset
         };

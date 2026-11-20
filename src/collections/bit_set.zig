@@ -351,7 +351,7 @@ pub fn resize(self: *DynamicBitSetUnmanaged, allocator: Allocator, new_len: usiz
                         _ = bun.assert((new_len == 0));
                     }
                     _ = allocator.free(old_allocation);
-                    self.masks = @as([*]MaskInt, @ptrCast(&(empty_masks_ptr)));
+                    self.masks = Self.empty.masks;
                     self.bit_length = 0;
                     return;
                 }
@@ -1622,7 +1622,7 @@ pub fn BitSetIterator(comptime MaskInt: type, comptime options: IteratorOptions)
 
 pub fn init(masks: []const MaskInt, last_word_mask: MaskInt) Self {
             if ((masks.len == 0)) {
-                return Self{ .bits_remain = 0, .words_remain = (&@as([0]MaskInt, &.{})), .last_word_mask = last_word_mask, .bit_offset = 0 };
+                return Self{ .bits_remain = 0, .words_remain = &.{}, .last_word_mask = last_word_mask, .bit_offset = 0 };
             } else {
                 var result = Self{ .bits_remain = 0, .words_remain = masks, .last_word_mask = last_word_mask, .bit_offset = (if ((direction == .forward)) 0 else ((masks.len - 1) * @bitSizeOf(MaskInt))) };
                 _ = &result;

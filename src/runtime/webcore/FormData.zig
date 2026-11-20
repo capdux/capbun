@@ -33,6 +33,12 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+comptime {
+    const jsFunctionFromMultipartData = jsc.toJSHostFn(FormData.fromMultipartData);
+    _ = &jsFunctionFromMultipartData;
+    _ = @export((&jsFunctionFromMultipartData), .{ .name = "FormData__jsFunctionFromMultipartData" });
+
+}
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -73,8 +79,6 @@ const http = @import("bun").http;
 const JSError = @import("bun").JSError;
 const JSTerminated = @import("bun").JSTerminated;
 const jsc = @import("bun").jsc;
-const ArrayHashMapUnmanaged = @import("std:array_hash_map").ArrayHashMapUnmanaged;
-const Allocator = @import("std:mem").Allocator;
 const fs = @import("std").fs;
 const fmt = @import("std").fmt;
 pub const FormData = struct {
@@ -194,10 +198,10 @@ pub fn fromMultipartData(self: *FormData, globalThis: *JSGlobalObject, callframe
 pub fn toJSFromMultipartData(globalThis: *JSGlobalObject, input: []const u8, boundary: []const u8) !JSValue {
             const form_data_value = jsc.DOMFormData.create(globalThis);
             _ = form_data_value.ensureStillAlive();
-            const form = ((jsc.DOMFormData.fromJS(form_data_value)) orelse (({
+            const form = ((jsc.DOMFormData.fromJS(form_data_value)) orelse {
             _ = log("failed to create DOMFormData.fromJS", .{});
             return error.@"failed to parse multipart data";
-})));
+});
             const Wrapper = struct {
     globalThis: *JSGlobalObject,
     form: *jsc.DOMFormData,
@@ -343,10 +347,10 @@ else => {
                                 value = value[@min((i + 1), value.len)..];
                             }
                             if (strings.eqlCaseInsensitiveASCII(eql_key, "name", true)) {
-                                name = (if (@typeInfo(@TypeOf(subslicer.sub(field_value))) == .@"enum") @intFromEnum(subslicer.sub(field_value)) else subslicer.sub(field_value).value)();
+                                name = subslicer.sub(field_value).value();
                             } else {
                                 if (strings.eqlCaseInsensitiveASCII(eql_key, "filename", true)) {
-                                    filename = (if (@typeInfo(@TypeOf(subslicer.sub(field_value))) == .@"enum") @intFromEnum(subslicer.sub(field_value)) else subslicer.sub(field_value).value)();
+                                    filename = subslicer.sub(field_value).value();
                                     is_file = true;
                                 }
                             }
@@ -362,7 +366,7 @@ else => {
                         }
                     } else {
                         if ((((value.len > 0) and field.content_type.isEmpty()) and strings.eqlCaseInsensitiveASCII(key, "content-type", true))) {
-                            field.content_type = (if (@typeInfo(@TypeOf(subslicer.sub(strings.trim(value, "; \t")))) == .@"enum") @intFromEnum(subslicer.sub(strings.trim(value, "; \t"))) else subslicer.sub(strings.trim(value, "; \t")).value)();
+                            field.content_type = subslicer.sub(strings.trim(value, "; \t")).value();
                         }
                     }
                 }
@@ -446,11 +450,9 @@ else => {
     };
 };
 
+const ArrayHashMapUnmanaged = std.ArrayHashMapUnmanaged;
+const Allocator = std.mem.Allocator;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const AnyPromise = jsc.AnyPromise;
 const log = Output.scoped(.FormData, .visible);
-
-pub export fn FormData__jsFunctionFromMultipartData(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) callconv(.c) JSError!JSValue {
-        return FormData.fromMultipartData(globalThis, callframe);
-}
