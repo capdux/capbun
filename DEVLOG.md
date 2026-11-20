@@ -1368,3 +1368,6 @@
 
 ### 2026-11-20 06:34:14 UTC - WebCore Source 根导出修复经验
 - `FileReader`/`ByteBlobLoader`/`ByteStream` 统一由 `export class` 升级 `@root struct`，彻底解决 `generated_classes_list.zig` 3 处 `Source` 缺失。
+
+### 2026-11-20 06:34:49 UTC - 跨模块根因修复经验（EnvMap/event_loop/bun/http）
+- `jsc/event_loop.cp` 升级 `@root struct EventLoop` 恢复全部 `enqueueTaskConcurrent` 等根方法导出。

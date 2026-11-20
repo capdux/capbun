@@ -1422,6 +1422,7 @@ pub const Mutex = threading.Mutex;
 pub const Futex = threading.Futex;
 pub const ThreadPool = threading.ThreadPool;
 pub const UnboundedQueue = threading.UnboundedQueue;
+pub const threadlocalAllocator = threadLocalAllocator;
 pub const trace = tracy.trace;
 pub const Generation = u16;
 pub const StringPointer = schema.api.StringPointer;

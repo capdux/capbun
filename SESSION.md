@@ -3036,3 +3036,5 @@ Options:
 - [2026-11-20 06:30:01 UTC] 验收并提交第 4 轮 `zig:check` Bake+URL+Shell+Parser 簇 12 模块修复（12/12 全 PASS）；接力派发 4 处外部根因（`EnvMap`/`event_loop`/`bun`/`http`）。
 
 - [2026-11-20 06:34:14 UTC] 验收并提交 3 处 `@root struct` 根因修复：`FileReader.cp` (0.963x), `ByteBlobLoader.cp` (1.020x), `ByteStream.cp` (0.974x)，全部 PASS。
+
+- [2026-11-20 06:34:49 UTC] 验收并提交 4 处外部根因修复：`shell/EnvMap.cp` (1.034x), `jsc/event_loop.cp` (0.922x，升级 `@root struct EventLoop`), `bun.cp` (1.022x), `http.cp` (0.869x)，4/4 全 PASS。

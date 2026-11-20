@@ -1639,3 +1639,6 @@
 
 ### 2026-11-20 06:34:14 UTC - zig:check 外部根因（FileReader/ByteBlobLoader/ByteStream）升级 @root struct 入库
 - 完成：3/3 升级为 `@root struct` 并在文件根导出 `pub const Source`，4 项硬门禁全 PASS。
+
+### 2026-11-20 06:34:49 UTC - zig:check 外部根因（EnvMap/event_loop/bun/http）修复入库
+- 完成：`EnvMap` 补 `static fn init`、`event_loop` 升级 `@root struct EventLoop`、`bun` 导出 `threadlocalAllocator`、`http` 导出 `ProxyTunnel`，4/4 全 PASS。

@@ -65,7 +65,7 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 const HTTPCertError = @import("./HTTPCertError.zig").HTTPCertError;
-const ProxyTunnel = @import("./ProxyTunnel.zig").ProxyTunnel;
+pub const ProxyTunnelMod = @import("./ProxyTunnel.zig");
 pub const Headers = @import("./Headers.zig");
 pub const DecompressorMod = @import("./Decompressor.zig");
 pub const Signals = @import("./Signals.zig");
@@ -2112,6 +2112,7 @@ pub fn isAbort(self: HTTPClientResult) bool {
 };
 
 pub const HttpCallbackCtx = ?*anyopaque;
+pub const ProxyTunnel = ProxyTunnelMod.ProxyTunnel;
 pub const Decompressor = DecompressorMod.Decompressor;
 pub const NewHTTPContext = HTTPContextMod.NewHTTPContext;
 pub const InitError = InitErrorMod.InitError;

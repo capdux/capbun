@@ -23,7 +23,7 @@ const MapType = std.ArrayHashMap(EnvStr, EnvStr, struct {
     }
 }, true);
 
-pub fn init(alloc: Allocator): EnvMap {
+static fn init(alloc: Allocator): EnvMap {
     return { map: MapType.init(alloc) };
 }
 
@@ -41,7 +41,7 @@ pub fn memoryCost(client: *const EnvMap): usize {
     return size;
 }
 
-pub fn initWithCapacity(alloc: Allocator, cap: usize): EnvMap {
+static fn initWithCapacity(alloc: Allocator, cap: usize): EnvMap {
     let map = MapType.init(alloc);
     bun.handleOom(map.ensureTotalCapacity(cap));
     return { map: map };

@@ -2,7 +2,8 @@
 // Core HTTP Client implementation in CP language
 
 import { HTTPCertError } from "./HTTPCertError.cp";
-import { ProxyTunnel } from "./ProxyTunnel.cp";
+import * as ProxyTunnelMod from "./ProxyTunnel.cp";
+pub const ProxyTunnel = ProxyTunnelMod.ProxyTunnel;
 import * as Headers from "./Headers.cp";
 import * as DecompressorMod from "./Decompressor.cp";
 pub const Decompressor = DecompressorMod.Decompressor;

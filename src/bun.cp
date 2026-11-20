@@ -1923,6 +1923,7 @@ pub fn threadLocalAllocator(): std.mem.Allocator {
 
     return default_allocator;
 }
+pub const threadlocalAllocator = threadLocalAllocator;
 
 pub fn HiveRef(comptime T: type, comptime capacity: u16): type {
     return struct {
