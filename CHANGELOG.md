@@ -1823,3 +1823,4 @@
 - **[2026-11-21] Wave 31 B 组 (11 模块)**：更新 `css/{css_parser,error,rules/rules,targets}`, `bake/bake`, `bundler/{LinkerContext,ParseTask,analyze_transpiled_module,bundle_v2,options}`, `standalone_graph/StandaloneModuleGraph`。
 - **[2026-11-21] Wave 31 A 组 (10 模块)**：更新 `js_parser/ast/{Expr,B,ConvertESMExportsForHmr,P,visit,visitExpr,lowerDecorators,maybe,visitBinaryExpression}`, `js_parser_jsc/Macro`。
 - **[2026-11-21] Wave 32 C 组 (9 模块)**：更新 `sql_jsc/postgres/DataCell`, `install/{lockfile/{Package,bun.lock},PackageManager/PackageManagerEnqueue,TarballStream,dependency,migration,repository,resolution}`。
+- **[2026-11-21] Wave 32 A 组 (12 模块)**：更新 `css/{generics,declaration,css_parser,selectors/{parser,builder,selector},media_query,prefixes,rules/rules}`, `exe_format/macho`, `ptr/owned`, `runtime/api/bun/spawn`。

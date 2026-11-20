@@ -294,7 +294,7 @@ pub struct MachoFile {
                     const command = entry.cast(macho.segment_command_64).?;
                     if (strings.eqlComptime(command.segName(), "__BUN")) {
                         if (command.nsects > 0) {
-                            const section_offset = unsafe { (entry.data.ptr as usize) - (this.data.items.ptr as usize) };
+                            const section_offset = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
                             const seg_hdr_sz: usize = @sizeOf(macho.segment_command_64);
                             const sect_sz: usize = @sizeOf(macho.section_64);
                             let s_idx: usize = 0;
@@ -334,11 +334,11 @@ pub struct MachoFile {
                             }
                         }
                     } else if (strings.eqlComptime(command.segName(), SEG_LINKEDIT)) {
-                        linkedit_seg_idx = unsafe { (entry.data.ptr as usize) - (this.data.items.ptr as usize) };
+                        linkedit_seg_idx = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
                     }
                 },
                 .CODE_SIGNATURE => {
-                    code_sign_cmd_idx = unsafe { (entry.data.ptr as usize) - (this.data.items.ptr as usize) };
+                    code_sign_cmd_idx = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
                 },
                 else => {},
             }

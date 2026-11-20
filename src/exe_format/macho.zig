@@ -346,10 +346,7 @@ pub fn writeSection(self: *MachoFile, data: []const u8) !void {
 const command = (entry.cast(macho.segment_command_64)).?;
                 if (strings.eqlComptime(command.segName(), "__BUN")) {
                     if ((command.nsects > 0)) {
-                        const section_offset = (blk: {
-                        break :blk ((if (comptime @typeInfo(@TypeOf(entry.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(entry.data.ptr)) else cp_cast_int(usize, entry.data.ptr)) - (if (comptime @typeInfo(@TypeOf(self.data.items.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.items.ptr)) else cp_cast_int(usize, self.data.items.ptr)));
-
-});
+                        const section_offset = (@intFromPtr(entry.data.ptr) - @intFromPtr(self.data.items.ptr));
                         const seg_hdr_sz: usize = @sizeOf(macho.segment_command_64);
                         const sect_sz: usize = @sizeOf(macho.section_64);
                         var s_idx: usize = 0;
@@ -392,18 +389,12 @@ const command = (entry.cast(macho.segment_command_64)).?;
                     }
                 } else {
                     if (strings.eqlComptime(command.segName(), SEG_LINKEDIT)) {
-                        linkedit_seg_idx = (blk: {
-                        break :blk ((if (comptime @typeInfo(@TypeOf(entry.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(entry.data.ptr)) else cp_cast_int(usize, entry.data.ptr)) - (if (comptime @typeInfo(@TypeOf(self.data.items.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.items.ptr)) else cp_cast_int(usize, self.data.items.ptr)));
-
-});
+                        linkedit_seg_idx = (@intFromPtr(entry.data.ptr) - @intFromPtr(self.data.items.ptr));
                     }
                 }
 },
 .CODE_SIGNATURE => {
-code_sign_cmd_idx = (blk: {
-                break :blk ((if (comptime @typeInfo(@TypeOf(entry.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(entry.data.ptr)) else cp_cast_int(usize, entry.data.ptr)) - (if (comptime @typeInfo(@TypeOf(self.data.items.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.items.ptr)) else cp_cast_int(usize, self.data.items.ptr)));
-
-});
+code_sign_cmd_idx = (@intFromPtr(entry.data.ptr) - @intFromPtr(self.data.items.ptr));
 },
 else => {
 

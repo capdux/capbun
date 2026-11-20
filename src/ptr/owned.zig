@@ -69,7 +69,7 @@ const PointerInfo = ptr_meta.PointerInfo;
 const owned = @This();
 
 pub fn OptionalPtr(comptime P: type) type {
-        return try P;
+        return @Type(.{ .optional = .{ .child = P } });
 }
 
 pub fn Owned(comptime Pointer: type) type {

@@ -162,7 +162,7 @@ pub fn downlevelComponent(allocator: Allocator, component: *Component, targets: 
             // Downlevel :not(.a, .b) -> :not(:is(.a, .b)) if not list is unsupported.
             // We need to use :is() / :-webkit-any() rather than :not(.a):not(.b) to ensure the specificity is equivalent.
             // https://drafts.csswg.org/selectors/#specificity-rules
-            if (selectors.len > 1 && css.targets.Targets.shouldCompileSame(&targets, .not_selector_list)) {
+            if (selectors.len > 1 && targets.shouldCompileSame(.not_selector_list)) {
                 const is: Selector = Selector.fromComponent(allocator, Component{ .is = selectors: {
                     let new_selectors = bun.handleOom(allocator.alloc(Selector, selectors.len));
                     let sel_i: usize = 0;

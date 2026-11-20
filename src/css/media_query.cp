@@ -390,7 +390,7 @@ pub enum MediaCondition {
     const This = @This();
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .feature => |*f| {
                 f.toCss(dest)?;
             },

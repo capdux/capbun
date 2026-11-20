@@ -401,9 +401,9 @@ pub inline fn eql(comptime T: type, lhs: *const T, rhs: *const T): bool {
             const TT = std.@"meta".Child(T);
             return eql(TT, lhs.*, rhs.*);
         } else if (comptime tyinfo.pointer.size == .slice) {
-            if (lhs.len != rhs.len) return false;
-            for (i of 0..lhs.len) {
-                if (!eql(tyinfo.pointer.child, &lhs[i], &rhs[i])) return false;
+            if (lhs.*.len != rhs.*.len) return false;
+            for (i of 0..lhs.*.len) {
+                if (!eql(tyinfo.pointer.child, &lhs.*[i], &rhs.*[i])) return false;
             }
             return true;
         } else {
@@ -438,6 +438,8 @@ pub inline fn eql(comptime T: type, lhs: *const T, rhs: *const T): bool {
         Loc => lhs.eql(rhs.*),
         else => if (@typeInfo(T) == .@"struct" && @typeInfo(T).@"struct".layout == .@"packed")
             lhs.* == rhs.*
+        else if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)
+            T.eql(lhs.*, rhs)
         else
             T.eql(lhs, rhs),
     };

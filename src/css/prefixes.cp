@@ -188,7 +188,7 @@ pub enum Feature {
 
     fn prefixesFor(browsers: Browsers): VendorPrefix {
         let prefixes = VendorPrefix{ .none = true };
-        switch (_.*) {
+        switch (_) {
             .border_radius, .border_top_left_radius, .border_top_right_radius, .border_bottom_right_radius, .border_bottom_left_radius => {
                 if (version := browsers.android) {
                     if (version <= 131328) {

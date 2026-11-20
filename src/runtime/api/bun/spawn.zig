@@ -449,7 +449,7 @@ pub fn spawn(path: [*:0]const u8, req_: PosixBunSpawnRequest, argv: ?[*:null][*:
 
 pub const PosixSpawn = struct {
 
-pub fn spawnZ(path: [*:0]const u8, actions: ?Actions, attr: ?Attr, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) PidMaybe {
+pub fn spawnZ(path: [*:0]const u8, actions: ?Actions, attr: ?Attr, argv: [*:null]OptCStr, envp: [*:null]OptCStr) PidMaybe {
             var pty_slave_fd: i32 = -1;
             _ = &pty_slave_fd;
             var detached = false;
@@ -612,6 +612,7 @@ return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
     pub const Actions = (if (Environment.isPosix) BunSpawn.Actions else PosixActions);
     pub const Attr = (if (Environment.isPosix) BunSpawn.Attr else PosixAttr);
     pub const BunSpawnRequest = PosixBunSpawnRequest;
+    const OptCStr = ?[*:0]const u8;
     pub const process = proc;
     pub const Process = proc.Process;
     pub const SpawnOptions = proc.SpawnOptions;

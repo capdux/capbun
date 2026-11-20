@@ -550,15 +550,15 @@ pub inline fn eql(comptime T: type, lhs: *const T, rhs: *const T) bool {
                 return eql(TT, lhs.*, rhs.*);
             } else {
                 if (comptime (tyinfo.pointer.size == .slice)) {
-                    if ((lhs.len != rhs.len)) {
+                    if ((lhs.*.len != rhs.*.len)) {
                         return false;
                     }
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_6 = lhs.len;
+                        const __end_6 = lhs.*.len;
                         while (i < __end_6) : (i += 1) {
-                            if ((!eql(tyinfo.pointer.child, (&lhs[@as(usize, @intCast(i))]), (&rhs[@as(usize, @intCast(i))])))) {
+                            if ((!eql(tyinfo.pointer.child, (&lhs.*[@as(usize, @intCast(i))]), (&rhs.*[@as(usize, @intCast(i))])))) {
                                 return false;
                             }
                         }
@@ -597,7 +597,7 @@ return lhs.eql(rhs);
         }
         const Loc = bun.logger.Loc;
         _ = &Loc;
-        return (if (T == f32) (lhs.* == rhs.*) else if (T == CSSInteger) (lhs.* == rhs.*) else if ((T == CustomIdent) or (T == DashedIdent) or (T == Ident)) bun.strings.eql(lhs.v, rhs.v) else if (T == bun.string) bun.strings.eql(lhs.*, rhs.*) else if (T == Loc) lhs.eql(rhs.*) else (if (((@typeInfo(T) == .@"struct") and (@typeInfo(T).@"struct".layout == .@"packed"))) (lhs.* == rhs.*) else T.eql(lhs, rhs)));
+        return (if (T == f32) (lhs.* == rhs.*) else if (T == CSSInteger) (lhs.* == rhs.*) else if ((T == CustomIdent) or (T == DashedIdent) or (T == Ident)) bun.strings.eql(lhs.v, rhs.v) else if (T == bun.string) bun.strings.eql(lhs.*, rhs.*) else if (T == Loc) lhs.eql(rhs.*) else (if (((@typeInfo(T) == .@"struct") and (@typeInfo(T).@"struct".layout == .@"packed"))) (lhs.* == rhs.*) else (if (comptime (@typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)) T.eql(lhs.*, rhs) else T.eql(lhs, rhs))));
 }
 
 pub fn canTransitivelyImplementDeepClone(comptime T: type) bool {

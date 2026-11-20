@@ -14,3 +14,4 @@
 - **[2026-11-21 00:34] Wave 31 B 组验收提交（11 模块全绿）**：完成 CSS/Bake/Bundler/StandaloneGraph 11 模块独立验收（11/11 PASS，4 项门禁全绿，ratio 0.935x~1.131x）并原子提交；静待 A 组（`6eb57feb`）完成即跑 Wave 32 `zig:check`。
 - **[2026-11-21 00:37] Wave 31 A 组验收提交（10 模块全绿，Wave 31 清仓）**：完成 `Expr`（`init` `@TypeOf(Expr)` 兜底）、`B`、`ConvertESMExportsForHmr`、`P`、`visit`、`visitExpr`、`lowerDecorators`、`maybe`、`visitBinaryExpression`、`Macro` 10 模块独立验收（10/10 PASS，ratio 1.000x~1.048x）并原子提交；随即运行 Wave 32 全仓 `bun run zig:check`。
 - **[2026-11-21 00:44] Wave 32 C 组验收提交（9 模块全绿）**：完成 Postgres(`DataCell`)/Install(`PackageManagerEnqueue` 消除 `Writer.zig:717` 2 错等) 9 模块独立验收（9/9 PASS，4 项门禁全绿，ratio 0.891x~1.078x）并原子提交；静待 A/B 组完成。
+- **[2026-11-21 00:44] Wave 32 A 组验收提交（12 模块全绿）**：完成 CSS 全家桶(`VendorPrefix.eql` 解封 `properties_generated`)/`macho`/`owned`/`spawn` 12 模块独立验收（12/12 PASS，4 项门禁全绿，ratio 0.886x~1.064x）并原子提交；静待 B 组（`e5fadbc7`）完成即跑 Wave 33 `zig:check`。

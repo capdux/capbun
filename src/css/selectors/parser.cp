@@ -229,7 +229,7 @@ pub const Specificity = struct {
     }
 
     pub fn fromU32(value: u32): Specificity {
-        bun.assert(value <= MAX_10BIT << 20 | MAX_10BIT << 10 | MAX_10BIT);
+        bun.assert(value <= ((MAX_10BIT << 20) | (MAX_10BIT << 10) | MAX_10BIT));
         return Specificity{
             .id_selectors = value >> 20,
             .class_like_selectors = (value >> 10) & MAX_10BIT,
@@ -1638,7 +1638,7 @@ fn selectorDebugFormat(this_val: anytype, writer: *std.Io.Writer): !void {
     css.Printer.in_debug_fmt = true;
     defer css.Printer.in_debug_fmt = false;
 
-    css.selector.tocss_servo.toCss_Selector(this_val.this, &printer) catch |e| return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
+    css.selector.tocss_servo.toCss_Selector(this_val.this, unsafe { &printer }) catch |e| return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
     return writer.writeAll(arraylist.written());
 }
 

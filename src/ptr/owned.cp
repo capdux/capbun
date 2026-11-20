@@ -9,7 +9,7 @@ const PointerInfo = ptr_meta.PointerInfo;
 const owned = @This();
 
 fn OptionalPtr(comptime P: type): type {
-    return P?;
+    return @Type(.{ .optional = .{ .child = P } });
 }
 
 /// An owned pointer or slice that was allocated using the default allocator.

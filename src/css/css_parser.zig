@@ -293,6 +293,10 @@ pub fn asBits(self: VendorPrefix, vp: @This()) u8 {
         _ = self;
             return @bitCast(vp);
     }
+
+pub fn eql(self: VendorPrefix, other: @This()) bool {
+            return (self == other);
+    }
     pub const empty = VendorPrefix{  };
     pub const all = VendorPrefix{ .none = true, .moz = true, .ms = true, .o = true, .webkit = true };
     pub const NONE = VendorPrefix{ .none = true };
@@ -2832,7 +2836,7 @@ pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
     }
 
 pub fn isParseError(self: Token) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .bad_url, .bad_string, .close_paren, .close_square, .close_curly => true,
 else => false,
 });
@@ -5992,10 +5996,8 @@ break;
                 state = parser.state();
             }
             _ = parser.reset((&state));
-            var rules = CssRuleList(AtRule);
+            var rules: CssRuleList(AtRule) = .{};
             _ = &rules;
-            {
-            }
             var rule_parser = TopLevelRuleParser(P).new(allocator, (&options), at_rule_parser, (&rules), (&composes), (&local_properties));
             _ = &rule_parser;
             var rule_list_parser = StyleSheetParser(TopLevelRuleParser(P)).new((&parser), (&rule_parser));

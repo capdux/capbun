@@ -353,13 +353,14 @@ pub struct PosixSpawn {
     pub const Actions = if (Environment.isPosix) BunSpawn.Actions else PosixActions;
     pub const Attr = if (Environment.isPosix) BunSpawn.Attr else PosixAttr;
     pub const BunSpawnRequest = PosixBunSpawnRequest;
+    type OptCStr = ([*:0]const u8)?;
 
     pub static fn spawnZ(
         path: [*:0]const u8,
         actions: Actions?,
         attr: Attr?,
-        argv: [*:null]([*:0]const u8)?,
-        envp: [*:null]([*:0]const u8)?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): PidMaybe {
         let pty_slave_fd: i32 = -1;
         let detached = false;

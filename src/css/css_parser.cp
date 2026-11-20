@@ -224,6 +224,10 @@ pub struct todo_stuff {
     pub fn asBits(vp: @This()): u8 {
         return @bitCast(vp);
     }
+
+    pub fn eql(other: @This()): bool {
+        return _ == other;
+    }
 };
 
 pub struct SourceLocation {
@@ -3321,7 +3325,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             }
             parser.reset(&state);
 
-            let rules = CssRuleList(AtRule){};
+            let rules: CssRuleList(AtRule) = .{};
             let rule_parser = TopLevelRuleParser(P).new(allocator, &options, at_rule_parser, &rules, &composes, &local_properties);
             let rule_list_parser = StyleSheetParser(TopLevelRuleParser(P)).new(&parser, &rule_parser);
 
@@ -6191,7 +6195,7 @@ pub union(TokenKind) Token {
     /// `CloseParenthesis`, `CloseSquareBracket`, and `CloseCurlyBracket` are *unmatched*
     /// and therefore parse errors when returned by one of the `Parser::next*` methods.
     pub fn isParseError(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .bad_url, .bad_string, .close_paren, .close_square, .close_curly => true,
             else => false,
         };

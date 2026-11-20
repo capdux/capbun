@@ -40,7 +40,7 @@ pub struct DeclarationBlock {
     const This = @This();
 
     const DebugFmt = struct {
-        self: *const DeclarationBlock,
+        self: DeclarationBlock,
 
         static fn format(this: @This(), writer: *std.Io.Writer)! {
             let arraylist = std.Io.Writer.Allocating.init(bun.default_allocator);
@@ -49,13 +49,13 @@ pub struct DeclarationBlock {
             let symbols = bun.ast.Symbol.Map{};
             let printer = css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols);
             defer printer.deinit();
-            this.self.toCss(&printer) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
+            this.self.toCss(unsafe { &printer }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
             writer.writeAll(arraylist.written())?;
         }
     };
 
     fn debug(): DebugFmt {
-        return DebugFmt{ .self = &_ };
+        return DebugFmt{ .self = _ };
     }
 
     fn isEmpty(): bool {
@@ -165,7 +165,8 @@ pub struct DeclarationBlock {
                 for (*prop of @field(d, decl_field).items) {
                     ctx.is_important = important;
 
-                    const handled = hndlr.handleProperty(prop, ctx);
+                    const prop_ptr: *const css.Property = prop;
+                    const handled = hndlr.handleProperty(prop_ptr, ctx);
 
                     if (!handled) {
                         bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
@@ -207,7 +208,7 @@ pub struct DeclarationBlock {
     }
 
     fn eql(other: *const This): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), unsafe { &_ }, other);
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {

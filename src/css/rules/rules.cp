@@ -251,7 +251,9 @@ pub fn CssRuleList(comptime AtRule: type): type {
                                 // with the previous rule, so continue trying while we have style rules available.
                                 while (rules.items.len >= 2) {
                                     const len = rules.items.len;
-                                    let [a, b] = bun.splitAtMut(CssRule(AtRule), rules.items, len - 1);
+                                    const split_pair = bun.splitAtMut(CssRule(AtRule), rules.items, len - 1);
+                                    let a = split_pair[0];
+                                    let b = split_pair[1];
                                     if (b[0] == .style && a[len - 2] == .style) {
                                         if (mergeStyleRules(AtRule, &b[0].style, &a[len - 2].style, context)) {
                                             // If we were able to merge the last rule into the previous one, remove the last.
