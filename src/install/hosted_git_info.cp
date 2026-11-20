@@ -730,8 +730,8 @@ pub enum WellDefinedProtocol {
         return strings.get(bun.strings.trimSuffixComptime(protocol_with_colon, ":"));
     }
 
-    fn toStringWithColon(buf: *StringWithColonBuffer): string {
-        const protocol_str = strings.getKey(_).?;
+    static fn toStringWithColon(proto: WellDefinedProtocol, buf: *StringWithColonBuffer): string {
+        const protocol_str = strings.getKey(proto).?;
         @memcpy(buf[0..protocol_str.len], protocol_str);
         buf[protocol_str.len] = ':';
         return buf[0 .. protocol_str.len + 1];
@@ -1046,7 +1046,7 @@ pub struct UrlProtocolPair {
             .unknown => &[ "git+ssh://", _.urlSlice() ],
             .custom proto_str => &[ proto_str, "//", _.urlSlice() ],
             .well_formed proto_tag => &[
-                proto_tag.toStringWithColon(&protocol_buf),
+                WellDefinedProtocol.toStringWithColon(proto_tag, &protocol_buf),
                 proto_tag.protocolResourceIdentifierConcatenationToken(),
                 _.urlSlice(),
             ],

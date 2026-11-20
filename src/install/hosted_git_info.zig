@@ -134,8 +134,8 @@ pub fn fromStringWithColon(protocol_with_colon: []const u8) ?WellDefinedProtocol
             return strings.get(bun.strings.trimSuffixComptime(protocol_with_colon, ":"));
     }
 
-pub fn toStringWithColon(self: *WellDefinedProtocol, buf: *StringWithColonBuffer) []const u8 {
-            const protocol_str = (strings.getKey(self)).?;
+pub fn toStringWithColon(proto: WellDefinedProtocol, buf: *StringWithColonBuffer) []const u8 {
+            const protocol_str = (strings.getKey(proto)).?;
             _ = @memcpy(buf[0..protocol_str.len], protocol_str);
             buf[cp_cast_int(usize, protocol_str.len)] = 58;
             return buf[0..(protocol_str.len + 1)];
@@ -369,7 +369,7 @@ pub const HostProviderConfig = struct {
 };
 
 pub const UrlProtocolPair = struct {
-    url: *UrlPairData,
+    url: UrlPairData,
     protocol: UrlProtocol,
 
 pub fn urlSlice(self: UrlProtocolPair) []const u8 {
@@ -399,7 +399,7 @@ pub fn toUrl(self: UrlProtocolPair, allocator: Allocator) ?*jsc.URL {
             const parts: []const []const u8 = (switch (self.protocol) {
 .unknown => (&.{ "git+ssh://", self.urlSlice() }),
 .custom => |proto_str| (&.{ proto_str, "//", self.urlSlice() }),
-.well_formed => |proto_tag| (&.{ proto_tag.toStringWithColon((&protocol_buf)), proto_tag.protocolResourceIdentifierConcatenationToken(), self.urlSlice() }),
+.well_formed => |proto_tag| (&.{ WellDefinedProtocol.toStringWithColon(proto_tag, (&protocol_buf)), proto_tag.protocolResourceIdentifierConcatenationToken(), self.urlSlice() }),
 });
             return UrlProtocolPair.concatPartsToUrl(alloc.get(), parts);
     }

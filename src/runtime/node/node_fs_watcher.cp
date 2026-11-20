@@ -595,7 +595,9 @@ pub struct FSWatcher {
                 filename = jsc.ZigString.fromUTF8(file_name).toJS(globalObject);
             } else {
                 // convert to desired encoding
-                filename = @as(jsc.JSValue, Encoder.toString(file_name, globalObject, _.encoding) catch return);
+                const s = Encoder.toString(file_name, globalObject, _.encoding) catch return;
+                emitJS(listener, globalObject, s, event_type);
+                return;
             }
         }
 

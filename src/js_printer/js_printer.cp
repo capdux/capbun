@@ -852,7 +852,7 @@ fn NewPrinter(
         binary_expression_stack: std.array_list.Managed(BinaryExpressionVisitorStruct) = undefined,
 
         was_lazy_export: bool = false,
-        module_info: if (!may_have_module_info) void else (*analyze_transpiled_module.ModuleInfo)? = if (!may_have_module_info) {} else null,
+        module_info: if (may_have_module_info) (*analyze_transpiled_module.ModuleInfo)? else void = if (may_have_module_info) null else {},
 
         const Printer = @This();
 
@@ -2114,8 +2114,7 @@ fn NewPrinter(
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
                     p.print("..");
-                    const spread_flags = ExprFlag.None();
-                    p.printExpr(e.value, .comma, spread_flags);
+                    p.printExpr(e.value, .comma, ExprFlag.None());
                 },
                 .e_new_target => {
                     p.printSpaceBeforeIdentifier();

@@ -400,7 +400,7 @@ if (((opts.is_class and is_typescript_enabled) and (((js_lexer.PropertyModifierK
                         }
                     }
                     if ((!has_definite_assignment_assertion_operator)) {
-                        has_type_parameters = (p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true }) != try .did_not_skip_anything);
+                        has_type_parameters = (try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true }) != .did_not_skip_anything);
                     }
                 }
                 if (((((((opts.is_class and ((kind == .normal) or (kind == .auto_accessor))) and (!opts.is_async)) and (!opts.is_generator)) and (p.lexer.token != .t_open_paren)) and (!has_type_parameters)) and ((p.lexer.token != .t_open_paren) or has_definite_assignment_assertion_operator))) {

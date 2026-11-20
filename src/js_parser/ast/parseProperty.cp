@@ -434,7 +434,7 @@ pub fn ParseProperty(
                     // "class X { foo?<T>(): T }"
                     // "const x = { foo<T>(): T {} }"
                     if (!has_definite_assignment_assertion_operator) {
-                        has_type_parameters = p.skipTypeScriptTypeParameters({ allow_const_modifier: true }) != .did_not_skip_anything?;
+                        has_type_parameters = (p.skipTypeScriptTypeParameters({ allow_const_modifier: true })?) != .did_not_skip_anything;
                     }
                 }
 

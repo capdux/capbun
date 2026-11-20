@@ -1770,3 +1770,5 @@
 - **[2026-11-20] Wave 23 D 组 (39 模块)**：更新 `runtime/{timer/Timer,webcore/{Request,Response,S3File,blob/{Store,copy_file},encoding,fetch,s3/{download_stream,simple_request}}}`, `shell/{states/Pipeline,subproc}`, `sourcemap_jsc/{CodeCoverage,source_provider}`, `sql/{mysql/{AuthMethod,protocol/{HandshakeV10,LocalInfileRequest}},postgres/protocol/{FieldMessage,ParameterDescription,Parse,RowDescription,SASLInitialResponse}}`, `sql_jsc/{mysql/{MySQLConnection,MySQLQuery,MySQLValue},postgres/{PostgresRequest,PostgresSQLQuery,types/tag_jsc},shared/ObjectIterator}`, `standalone_graph/StandaloneModuleGraph`, `test_runner/{Collection,Execution,Order,ScopeFunctions,bun_test}`, `uws_sys/{Request,Timer,h3}`, `watcher/INotifyWatcher`。
 
 - **[2026-11-20] Wave 23 E 组 (5 跨模块根因)**：更新 `runtime/node/node_process`, `bun`, `bundler/options`, `http/HTTPThread`, `string/StringBuilder`。
+
+- **[2026-11-20] Wave 24 A 组 (9 模块)**：更新 `runtime/node/{node_fs,node_fs_watcher}`, `js_parser/ast/{P,parse,parseProperty}`, `js_printer/js_printer`, `resolver/package_json`, `install/hosted_git_info`, `bundler_jsc/output_file_jsc`。

@@ -281,7 +281,7 @@ pub struct Async {
                 defer _.deinit();
 
                 const globalObject = _.globalObject;
-                const success = @as(bun.sys.Maybe(ReturnType).Tag, _.result) == .result;
+                const success = std.meta.activeTag(_.result) == .result;
                 let promise_value = _.promise.value();
                 let promise = _.promise.get();
                 const result = switch (_.result) {
@@ -382,7 +382,7 @@ pub struct Async {
                 tracker.willDispatch(globalObject);
                 defer tracker.didDispatch(globalObject);
 
-                const success = @as(bun.sys.Maybe(ReturnType).Tag, _.result) == .result;
+                const success = std.meta.activeTag(_.result) == .result;
                 let promise_value = _.promise.value();
                 let promise = _.promise.get();
                 const result = switch (_.result) {
@@ -1269,7 +1269,8 @@ pub struct AsyncReaddirRecursiveTask {
 
     fn deinit(*_) {
         bun.assert(_.root_fd == bun.invalid_fd); // should already have closed it
-        if (*e := _.pending_err) {
+        if (_.pending_err != null) {
+            let e = &_.pending_err.?;
             e.deinit();
         }
 

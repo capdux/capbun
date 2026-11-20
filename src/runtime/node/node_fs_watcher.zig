@@ -768,7 +768,9 @@ pub fn emit(self: *FSWatcher, file_name: []const u8, comptime event_type: _Event
                     if ((self.encoding == .utf8)) {
                         filename = jsc.ZigString.fromUTF8(file_name).toJS(globalObject);
                     } else {
-                        filename = (if (comptime @typeInfo(jsc.JSValue) == .@"enum") @as(jsc.JSValue, @enumFromInt((blk_catch_6: { break :blk_catch_6 ((Encoder.toString(file_name, globalObject, self.encoding)) catch |__ce_6| { _ = &__ce_6; return; }); }))) else @as(jsc.JSValue, (blk_catch_6: { break :blk_catch_6 ((Encoder.toString(file_name, globalObject, self.encoding)) catch |__ce_6| { _ = &__ce_6; return; }); })));
+                        const s = (blk_catch_6: { break :blk_catch_6 ((Encoder.toString(file_name, globalObject, self.encoding)) catch |__ce_6| { _ = &__ce_6; return; }); });
+                        _ = FSWatcher.emitJS(listener, globalObject, s, event_type);
+                        return;
                     }
                 }
             }

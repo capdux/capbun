@@ -1085,8 +1085,8 @@ pub fn NewPrinter(comptime ascii_only: bool, comptime Writer: type, comptime rew
     temporary_bindings: std.ArrayListUnmanaged(B.Property) = .{},
     binary_expression_stack: std.array_list.Managed(BinaryExpressionVisitorStruct) = undefined,
     was_lazy_export: bool = false,
-    module_info: if (true) void else ?*analyze_transpiled_module.ModuleInfo = (if ((!may_have_module_info)) ({
-}) else null),
+    module_info: if (may_have_module_info) ?*analyze_transpiled_module.ModuleInfo else void = (if (may_have_module_info) null else ({
+})),
 
 pub fn moduleInfo(p: *const Printer) ?*analyze_transpiled_module.ModuleInfo {
             if ((!may_have_module_info)) {
@@ -2085,8 +2085,7 @@ _ = p.printSpaceBeforeIdentifier();
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
             _ = p.print("..");
-            const spread_flags = ExprFlag.None;
-            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, spread_flags);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, ExprFlag.None);
 },
 .e_new_target => {
 _ = p.printSpaceBeforeIdentifier();

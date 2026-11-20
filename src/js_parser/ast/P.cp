@@ -1699,7 +1699,7 @@ pub fn NewParser_(
                 symbol.namespace_alias.?.import_record_index = import_record_i;
             }
 
-            p.is_import_item.put(allocator, p.response_ref, {})?;
+            p.is_import_item.put(allocator, p.response_ref, undefined)?;
             try p.named_imports.put(allocator, p.response_ref, js_ast.NamedImport{
                 alias: "Response",
                 alias_loc: logger.Loc{},
@@ -1788,7 +1788,7 @@ pub fn NewParser_(
                     }
                 }
 
-                p.is_import_item.put(allocator, sym_ref, {})?;
+                p.is_import_item.put(allocator, sym_ref, undefined)?;
                 try p.named_imports.put(allocator, sym_ref, js_ast.NamedImport{
                     alias: alias_name,
                     alias_loc: logger.Loc{},
@@ -1888,7 +1888,7 @@ pub fn NewParser_(
                     }
                     declared_symbols.appendAssumeCapacity({ ref: entry.ref, is_top_level: true });
                     p.module_scope.generated.append(allocator, entry.ref)?;
-                    p.is_import_item.put(allocator, entry.ref, {})?;
+                    p.is_import_item.put(allocator, entry.ref, undefined)?;
                     try p.named_imports.put(allocator, entry.ref, {
                         alias: entry.name,
                         alias_loc: logger.Loc.Empty,
@@ -3049,7 +3049,7 @@ pub fn NewParser_(
                 if (name_loc := stmt.default_name) {
                     const name = p.loadNameFromRef(name_loc.ref.?);
                     const sym_ref = p.declareSymbol(.other, name_loc.loc, name)?;
-                    p.is_import_item.put(p.allocator, sym_ref, {})?;
+                    p.is_import_item.put(p.allocator, sym_ref, undefined)?;
                     try p.@"macro".refs.put(sym_ref, {
                         import_record_id: id,
                         name: "default",
@@ -3066,7 +3066,7 @@ pub fn NewParser_(
                 for (item of stmt.items) {
                     const name = p.loadNameFromRef(item.name.ref.?);
                     const sym_ref = p.declareSymbol(.other, item.name.loc, name)?;
-                    p.is_import_item.put(p.allocator, sym_ref, {})?;
+                    p.is_import_item.put(p.allocator, sym_ref, undefined)?;
                     try p.@"macro".refs.put(sym_ref, {
                         import_record_id: id,
                         name: item.alias,
@@ -3148,7 +3148,7 @@ pub fn NewParser_(
                 const name = p.loadNameFromRef(name_loc.ref.?);
                 const sym_ref = p.declareSymbol(.@"import", name_loc.loc, name)?;
                 name_loc.ref = sym_ref;
-                p.is_import_item.put(p.allocator, sym_ref, {})?;
+                p.is_import_item.put(p.allocator, sym_ref, undefined)?;
 
                 // ensure every e_import_identifier holds the namespace
                 if (p.options.features.hot_module_reloading) {
@@ -3208,7 +3208,7 @@ pub fn NewParser_(
                 const sym_ref = p.declareSymbol(.@"import", item.name.loc, name)?;
                 item.name.ref = sym_ref;
 
-                p.is_import_item.put(p.allocator, sym_ref, {})?;
+                p.is_import_item.put(p.allocator, sym_ref, undefined)?;
                 p.checkForNonBMPCodePoint(item.alias_loc, item.alias);
 
                 // ensure every e_import_identifier holds the namespace
@@ -4063,8 +4063,8 @@ pub fn NewParser_(
                             return false;
                         }
 
-                        if (*default := item.default_value) {
-                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(default)) {
+                        if (item.default_value != null) {
+                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&item.default_value.?)) {
                                 return false;
                             }
                         }
@@ -4080,8 +4080,8 @@ pub fn NewParser_(
                             return false;
                         }
 
-                        if (*default := property.default_value) {
-                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(default)) {
+                        if (property.default_value != null) {
+                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.default_value.?)) {
                                 return false;
                             }
                         }
@@ -4137,12 +4137,12 @@ pub fn NewParser_(
                                 return false;
                             }
 
-                            if (*decl_value := decl.value) {
-                                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(decl_value)) {
+                            if (decl.value != null) {
+                                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&decl.value.?)) {
                                     return false;
                                 } else if (st.kind == .k_using) {
                                     // "using" declarations are only side-effect free if they are initialized to null or undefined
-                                    if (decl_value.data != .e_null && decl_value.data != .e_undefined) {
+                                    if (decl.value.?.data != .e_null && decl.value.?.data != .e_undefined) {
                                         return false;
                                     }
                                 }
@@ -4340,8 +4340,8 @@ pub fn NewParser_(
 
         // This one is never called in places that haven't already checked if DCE is enabled.
         static fn classCanBeRemovedIfUnused(p: *P, cls: *G.Class): bool {
-            if (*extends_expr := cls.extends) {
-                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(extends_expr)) {
+            if (cls.extends != null) {
+                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&cls.extends.?)) {
                     return false;
                 }
             }
@@ -4358,14 +4358,14 @@ pub fn NewParser_(
                     return false;
                 }
 
-                if (*val := property.value) {
-                    if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(val)) {
+                if (property.value != null) {
+                    if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.value.?)) {
                         return false;
                     }
                 }
 
-                if (*val := property.initializer) {
-                    if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(val)) {
+                if (property.initializer != null) {
+                    if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.initializer.?)) {
                         return false;
                     }
                 }
@@ -4477,8 +4477,8 @@ pub fn NewParser_(
                         ));
                 },
                 .e_array => |ex| {
-                    for (*item of ex.items.slice()) {
-                        if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(item)) {
+                    for (item of ex.items.slice()) {
+                        if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&item)) {
                             return false;
                         }
                     }
@@ -4915,7 +4915,7 @@ pub fn NewParser_(
                             };
 
                             bun.handleOom(p.module_scope.generated.append(p.allocator, loc_ref.ref.?));
-                            p.is_import_item.put(p.allocator, loc_ref.ref.?, {}) catch unreachable;
+                            p.is_import_item.put(p.allocator, loc_ref.ref.?, undefined) catch unreachable;
                             @field(p.jsx_imports, @tagName(field)) = loc_ref;
                             break :brk loc_ref.ref.?;
                         }

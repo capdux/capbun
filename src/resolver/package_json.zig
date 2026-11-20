@@ -707,7 +707,7 @@ else => {
                                             _ = &joined;
                                             const pattern = r.fs.join((&joined));
                                             if ((((strings.containsChar(name, 42) or strings.containsChar(name, 63)) or strings.containsChar(name, 91)) or strings.containsChar(name, 123))) {
-                                                const normalized_pattern = (blk_catch_40: { break :blk_catch_40 ((normalizePathForGlob(allocator, pattern)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 @as([]u8, pattern); }); });
+                                                const normalized_pattern = (blk_catch_40: { break :blk_catch_40 ((normalizePathForGlob(allocator, pattern)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 @as([]u8, @constCast(pattern)); }); });
                                                 _ = glob_list.appendAssumeCapacity(normalized_pattern);
                                             } else {
                                                 _ = map.getOrPutAssumeCapacity(bun.StringHashMapUnowned.Key.init(pattern));
@@ -727,7 +727,7 @@ else => {
                                                 var joined = .{ (if (@typeInfo(@TypeOf(json_source.path)) == .@"enum" or @typeInfo(@TypeOf(json_source.path)) == .@"union") @tagName(json_source.path) else json_source.path.name).dirWithTrailingSlash(), name };
                                                 _ = &joined;
                                                 const pattern = r.fs.join((&joined));
-                                                const normalized_pattern = (blk_catch_42: { break :blk_catch_42 ((normalizePathForGlob(allocator, pattern)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 @as([]u8, pattern); }); });
+                                                const normalized_pattern = (blk_catch_42: { break :blk_catch_42 ((normalizePathForGlob(allocator, pattern)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 @as([]u8, @constCast(pattern)); }); });
                                                 _ = glob_list.appendAssumeCapacity(normalized_pattern);
                                             }
                                         }

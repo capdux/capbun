@@ -1022,7 +1022,7 @@ pub fn generateImportStmtForBakeResponse(p: *P, parts: *ListManaged(js_ast.Part)
                 _ = bun.assert((symbol.namespace_alias != null));
                 symbol.namespace_alias.?.import_record_index = import_record_i;
             }
-            _ = try p.is_import_item.put(allocator, p.response_ref, .{});
+            _ = try p.is_import_item.put(allocator, p.response_ref, undefined);
             _ = try p.named_imports.put(allocator, p.response_ref, js_ast.NamedImport{ .alias = "Response", .alias_loc = logger.Loc{  }, .namespace_ref = p.bun_app_namespace_ref, .import_record_index = import_record_i });
             stmts[cp_cast_int(usize, 0)] = p.s(S.Import{ .namespace_ref = p.bun_app_namespace_ref, .items = clause_items, .import_record_index = import_record_i, .is_single_line = true }, logger.Loc{  });
             var import_records = try allocator.alloc(u32, 1);
@@ -1070,7 +1070,7 @@ pub fn generateImportStmt(p: *P, import_path: []const u8, imports: anytype, part
                         symbol.namespace_alias = .{ .namespace_ref = namespace_ref, .alias = alias_name, .import_record_index = import_record_i };
                     }
                 }
-                _ = try p.is_import_item.put(allocator, sym_ref, .{});
+                _ = try p.is_import_item.put(allocator, sym_ref, undefined);
                 _ = try p.named_imports.put(allocator, sym_ref, js_ast.NamedImport{ .alias = alias_name, .alias_loc = logger.Loc{  }, .namespace_ref = namespace_ref, .import_record_index = import_record_i });
             }
             stmts[cp_cast_int(usize, 0)] = p.s(S.Import{ .namespace_ref = namespace_ref, .items = clause_items, .import_record_index = import_record_i, .is_single_line = true }, logger.Loc{  });
@@ -1116,7 +1116,7 @@ pub fn generateReactRefreshImportHmr(p: *P, parts: *ListManaged(js_ast.Part), im
                     }
                     _ = declared_symbols.appendAssumeCapacity(.{ .ref = entry.ref, .is_top_level = true });
                     _ = try p.module_scope.generated.append(allocator, entry.ref);
-                    _ = try p.is_import_item.put(allocator, entry.ref, .{});
+                    _ = try p.is_import_item.put(allocator, entry.ref, undefined);
                     _ = try p.named_imports.put(allocator, entry.ref, .{ .alias = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .alias_loc = logger.Loc.Empty, .namespace_ref = namespace_ref, .import_record_index = import_record_index });
                 }
             }
@@ -2072,7 +2072,7 @@ pub fn processImportStatement(p: *P, stmt_: S.Import, path: ParsedPath, loc: log
                     _ = &name_loc;
                     const name = p.loadNameFromRef(name_loc.ref.?);
                     const sym_ref = try p.declareSymbol(.other, name_loc.loc, name);
-                    _ = try p.is_import_item.put(p.allocator, sym_ref, .{});
+                    _ = try p.is_import_item.put(p.allocator, sym_ref, undefined);
                     _ = try p.@"macro".refs.put(sym_ref, .{ .import_record_id = id, .name = "default" });
                 }
                 if (stmt.star_name_loc) |star| {
@@ -2086,7 +2086,7 @@ pub fn processImportStatement(p: *P, stmt_: S.Import, path: ParsedPath, loc: log
                     _ = &item;
                     const name = p.loadNameFromRef((if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref.?);
                     const sym_ref = try p.declareSymbol(.other, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).loc, name);
-                    _ = try p.is_import_item.put(p.allocator, sym_ref, .{});
+                    _ = try p.is_import_item.put(p.allocator, sym_ref, undefined);
                     _ = try p.@"macro".refs.put(sym_ref, .{ .import_record_id = id, .name = item.alias });
                 }
                 return p.s(S.Empty, loc);
@@ -2140,7 +2140,7 @@ pub fn processImportStatement(p: *P, stmt_: S.Import, path: ParsedPath, loc: log
                 const name = p.loadNameFromRef((name_loc.*).ref.?);
                 const sym_ref = try p.declareSymbol(.@"import", (name_loc.*).loc, name);
                 (name_loc.*).ref = sym_ref;
-                _ = try p.is_import_item.put(p.allocator, sym_ref, .{});
+                _ = try p.is_import_item.put(p.allocator, sym_ref, undefined);
                 if (p.options.features.hot_module_reloading) {
                     const symbol = (&p.symbols.items[@as(usize, @intCast(sym_ref.inner_index))]);
                     if ((symbol.namespace_alias == null)) {
@@ -2181,7 +2181,7 @@ pub fn processImportStatement(p: *P, stmt_: S.Import, path: ParsedPath, loc: log
                 const name = p.loadNameFromRef((((if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref) orelse (unreachable)));
                 const sym_ref = try p.declareSymbol(.@"import", (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).loc, name);
                 (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref = sym_ref;
-                _ = try p.is_import_item.put(p.allocator, sym_ref, .{});
+                _ = try p.is_import_item.put(p.allocator, sym_ref, undefined);
                 _ = p.checkForNonBMPCodePoint(item.alias_loc, item.alias);
                 if (p.options.features.hot_module_reloading) {
                     const symbol = (&p.symbols.items[@as(usize, @intCast(sym_ref.inner_index))]);
@@ -2833,9 +2833,8 @@ for (bi.items) |*item| {
                 if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((item.*).binding))) {
                     return false;
                 }
-                if ((item.*).default_value) |*default| {
-                    _ = &default;
-                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((default.*)))) {
+                if (((item.*).default_value != null)) {
+                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(item.*).default_value.?)))) {
                         return false;
                     }
                 }
@@ -2850,9 +2849,8 @@ for (cp_mut_slice(&bi.properties)) |*property| {
                 if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)))) {
                     return false;
                 }
-                if ((property.*).default_value) |*default| {
-                    _ = &default;
-                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((default.*)))) {
+                if (((property.*).default_value != null)) {
+                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(property.*).default_value.?)))) {
                         return false;
                     }
                 }
@@ -2904,13 +2902,12 @@ if ((st.kind == .k_await_using)) {
                     if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((decl.*).binding))) {
                         return false;
                     }
-                    if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*decl_value| {
-                        _ = &decl_value;
-                        if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((decl_value.*)))) {
+                    if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                        if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?)))) {
                             return false;
                         } else {
                             if ((st.kind == .k_using)) {
-                                if ((((decl_value.*).data != .e_null) and ((decl_value.*).data != .e_undefined))) {
+                                if ((((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data != .e_null) and ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data != .e_undefined))) {
                                     return false;
                                 }
                             }
@@ -3054,9 +3051,8 @@ pub fn isSimpleParameterList(args: []G.Arg, has_rest_arg: bool) bool {
     }
 
 pub fn classCanBeRemovedIfUnused(p: *P, cls: *G.Class) bool {
-            if (cls.extends) |*extends_expr| {
-                _ = &extends_expr;
-                if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((extends_expr.*)))) {
+            if ((cls.extends != null)) {
+                if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&cls.extends.?)))) {
                     return false;
                 }
             }
@@ -3071,15 +3067,13 @@ pub fn classCanBeRemovedIfUnused(p: *P, cls: *G.Class) bool {
                 if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(((property.*).key) orelse (unreachable)))))) {
                     return false;
                 }
-                if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |*val| {
-                    _ = &val;
-                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((val.*)))) {
+                if (((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) {
+                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?)))) {
                         return false;
                     }
                 }
-                if ((property.*).initializer) |*val| {
-                    _ = &val;
-                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((val.*)))) {
+                if (((property.*).initializer != null)) {
+                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(property.*).initializer.?)))) {
                         return false;
                     }
                 }
@@ -3124,9 +3118,9 @@ return true;
 return ((p.exprCanBeRemovedIfUnusedWithoutDCECheck((&ex.test_)) and (p.isSideEffectFreeUnboundIdentifierRef(ex.yes, ex.test_, true) or p.exprCanBeRemovedIfUnusedWithoutDCECheck((&ex.yes)))) and (p.isSideEffectFreeUnboundIdentifierRef(ex.no, ex.test_, false) or p.exprCanBeRemovedIfUnusedWithoutDCECheck((&ex.no))));
 },
 .e_array => |ex| {
-for (cp_mut_slice(&ex.items.slice())) |*item| {
+for (cp_iter_slice(ex.items.slice())) |item| {
                 _ = &item;
-                if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((item.*)))) {
+                if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&item)))) {
                     return false;
                 }
             }
@@ -3304,7 +3298,7 @@ const sym_ref: Ref = brk: {
                 const symbol_name = @tagName(field);
                 const loc_ref = LocRef{ .loc = loc, .ref = ((p.declareGeneratedSymbol(.other, symbol_name)) catch unreachable) };
                 _ = bun.handleOom(p.module_scope.generated.append(p.allocator, loc_ref.ref.?));
-                _ = ((p.is_import_item.put(p.allocator, loc_ref.ref.?, .{})) catch unreachable);
+                _ = ((p.is_import_item.put(p.allocator, loc_ref.ref.?, undefined)) catch unreachable);
                 @field(p.jsx_imports, @tagName(field)) = loc_ref;
                 break :brk loc_ref.ref.?;
             }

@@ -41,8 +41,7 @@ pub fn toJS(
     owned_pathname: ([]const u8)?,
     globalObject: *jsc.JSGlobalObject,
 ): bun.jsc.JSValue {
-    const val = @field(out.*, "value");
-    return switch (val) {
+    return switch (out.value) {
         .move | .pending => @panic("Unexpected pending output file"),
         .noop => .js_undefined,
         .copy => |copy| brk: {
@@ -150,8 +149,7 @@ pub fn toBlob(
     allocator: std.mem.Allocator,
     globalThis: *jsc.JSGlobalObject,
 ): jsc.WebCore.Blob! {
-    const val = @field(out.*, "value");
-    return switch (val) {
+    return switch (out.value) {
         .move | .pending => @panic("Unexpected pending output file"),
         .noop => @panic("Cannot convert noop output file to blob"),
         .copy => |copy| brk: {

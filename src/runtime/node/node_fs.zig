@@ -265,7 +265,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             _ = self.deinit();
             }
             const globalObject = self.globalObject;
-            const success = ((if (comptime @typeInfo(bun.sys.Maybe(ReturnType).Tag) == .@"enum") @as(bun.sys.Maybe(ReturnType).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(ReturnType).Tag, self.result)) == .result);
+            const success = (std.meta.activeTag(self.result) == .result);
             var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
@@ -350,7 +350,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             defer {
             _ = tracker.didDispatch(globalObject);
             }
-            const success = ((if (comptime @typeInfo(bun.sys.Maybe(ReturnType).Tag) == .@"enum") @as(bun.sys.Maybe(ReturnType).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(ReturnType).Tag, self.result)) == .result);
+            const success = (std.meta.activeTag(self.result) == .result);
             var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
@@ -698,9 +698,10 @@ pub fn runFromJSThread(self: *AsyncReaddirRecursiveTask) bun.JSTerminated!void {
 
 pub fn deinit(self: *AsyncReaddirRecursiveTask) void {
             _ = bun.assert((self.root_fd == bun.invalid_fd));
-            if (self.pending_err) |*e| {
+            if ((self.pending_err != null)) {
+                var e = (&self.pending_err.?);
                 _ = &e;
-                _ = (e.*).deinit();
+                _ = e.deinit();
             }
             _ = self.ref.unref(self.globalObject.bunVM());
             _ = self.args.deinit();

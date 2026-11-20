@@ -847,7 +847,7 @@ pub struct PackageJSON {
 
                                 if (strings.containsChar(name, '*') || strings.containsChar(name, '?') || strings.containsChar(name, '[') || strings.containsChar(name, '{')) {
                                     // Normalize pattern to use forward slashes for cross-platform compatibility
-                                    const normalized_pattern = normalizePathForGlob(allocator, pattern) catch pattern;
+                                    const normalized_pattern = normalizePathForGlob(allocator, pattern) catch @constCast(pattern);
                                     glob_list.appendAssumeCapacity(normalized_pattern);
                                 } else {
                                     * = map.getOrPutAssumeCapacity(
@@ -874,7 +874,7 @@ pub struct PackageJSON {
 
                                 const pattern = r.fs.join(&joined);
                                 // Normalize pattern to use forward slashes for cross-platform compatibility
-                                const normalized_pattern = normalizePathForGlob(allocator, pattern) catch pattern;
+                                const normalized_pattern = normalizePathForGlob(allocator, pattern) catch @constCast(pattern);
                                 glob_list.appendAssumeCapacity(normalized_pattern);
                             }
                         }

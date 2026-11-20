@@ -88,8 +88,7 @@ const Output = bun.Output;
 const jsc = bun.jsc;
 
 pub fn toJS(out: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.JSGlobalObject) bun.jsc.JSValue {
-        const val = @field(out.*, "value");
-        return (switch (val) {
+        return (switch ((if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value)) {
 .move, .pending => @panic("Unexpected pending output file"),
 .noop => .js_undefined,
 .copy => |copy| brk: {
@@ -132,8 +131,7 @@ pub fn toJS(out: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.JS
 }
 
 pub fn toBlob(out: *OutputFile, allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject) !jsc.WebCore.Blob {
-        const val = @field(out.*, "value");
-        return (switch (val) {
+        return (switch ((if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value)) {
 .move, .pending => @panic("Unexpected pending output file"),
 .noop => @panic("Cannot convert noop output file to blob"),
 .copy => |copy| brk: {

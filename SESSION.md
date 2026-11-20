@@ -3176,3 +3176,5 @@ Options:
 - **[2026-11-20 23:11] Wave 23 D 组验收提交（39 模块全绿）**：完成最后 39 个 1 错长尾模块独立验收（39/39 PASS，ratio 0.274x~1.182x）并原子提交；至此 Wave 23 已累计落地 112 个模块，静待 E 组（`ff039f6c`）5 根因完成即跑 Wave 24 `zig:check`。
 
 - **[2026-11-20 23:13] Wave 23 E 组验收提交（5 跨模块根因全绿）+ Wave 24 `zig:check`**：完成 `node_process`/`bun`/`bundler/options`/`HTTPThread`/`StringBuilder` 5 根因独立验收（5/5 PASS，ratio 0.862x~1.051x）并原子提交；Wave 23 全部 117 模块清仓。
+
+- **[2026-11-20 23:17] Wave 24 A 组验收提交（9 模块全绿，清零 `node_fs` 42 错）**：完成 `node_fs`/`node_fs_watcher`/`P`/`parse`/`parseProperty`/`js_printer`/`package_json`/`hosted_git_info`/`output_file_jsc` 9 模块独立验收（9/9 PASS，ratio 0.861x~1.095x）并原子提交；已流水线补派 D 组扫荡最后 36 个 1 错长尾 + `parsePrefix`/`parseImportExport`/`toml`（`Expr.init`）。
