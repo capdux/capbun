@@ -1293,3 +1293,6 @@
 
 ### 2026-11-20 05:18:18 UTC - 系统与工具库 65 模块语法升级经验
 - 批量清零 `catch |e|` 内 `err` 残留、提升 `shell/{Builtin,subproc}` 嵌套结构，65/66 PASS；`shell.cp` 派发专项攻坚。
+
+### 2026-11-20 05:23:39 UTC - shell.cp NewLexer 提升收官经验
+- 将 `IfClauseTok` 及 `NewLexer` 内 4 个嵌套类型提至顶层并消除 `else if` 嵌套 `switch`，`shell.cp` 完整 lowering 通过（0.990x）。

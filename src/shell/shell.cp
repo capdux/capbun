@@ -37,9 +37,9 @@ pub const ShellErr = union(enum) {
     invalid_arguments: struct { val: []const u8 = "" },
     todo: []const u8,
 
-    pub fn newSys(e: auto): @This() {
-        return {
-            sys: switch (@TypeOf(e)) {
+    pub fn newSys(e: anytype): @This() {
+        return .{
+            .sys = switch (@TypeOf(e)) {
                 Syscall.Error => e.toShellSystemError(),
                 jsc.SystemError => e,
                 else => @compileError("Invalid `e`: " ++ @typeName(e)),
@@ -47,7 +47,7 @@ pub const ShellErr = union(enum) {
         };
     }
 
-    pub fn format(this: *const ShellErr, writer: *std.Io.Writer)! {
+    pub fn format(this: *const ShellErr, writer: *std.Io.Writer) !void {
         return switch (this.*) {
             .sys => |e| writer.print("bun: {f}: {f}", .{ e.message, e.path }),
             .custom => |msg| writer.print("bun: {s}", .{msg}),
@@ -106,7 +106,7 @@ pub const ShellErr = union(enum) {
         bun.Global.exit(1);
     }
 
-    pub fn deinit(this: *const @This(), allocator: Allocator) {
+    pub fn deinit(this: *const @This(), allocator: Allocator) void {
         switch (this.*) {
             .sys => {
                 this.sys.deref();
@@ -123,9 +123,7 @@ pub fn Result(comptime T: auto): type {
         result: T,
         e: ShellErr,
 
-        pub const success: @This() = @This(){
-            result: std.mem.zeroes(T),
-        };
+        pub const success: @This() = .{ .result = std.mem.zeroes(T) };
 
         pub fn asErr(this: @This()): ShellErr? {
             if (this == .err) return this.err;
@@ -362,8 +360,9 @@ pub struct AST {
             return switch (this.*) {
                 .assign => |assign| brk: {
                     let cost: usize = 0;
-                    for (*expr of assign) {
-                        cost += expr.memoryCost();
+                    let idx: usize = 0;
+                    while (idx < assign.len) : (idx += 1) {
+                        cost += assign[idx].memoryCost();
                     }
                     break :brk cost;
                 },
@@ -377,13 +376,13 @@ pub struct AST {
             };
         }
 
-        fn asPipelineItem(this: *@This()): PipelineItem? {
+        fn asPipelineItem(this: *@This()) ?PipelineItem {
             return switch (this.*) {
-                .assign => { assigns: this.assign },
-                .cmd => { cmd: this.cmd },
-                .subshell => { subshell: this.subshell },
-                .@"if" => { @"if": this.@"if" },
-                .condexpr => { condexpr: this.condexpr },
+                .assign => .{ .assigns = this.assign },
+                .cmd => .{ .cmd = this.cmd },
+                .subshell => .{ .subshell = this.subshell },
+                .@"if" => .{ .@"if" = this.@"if" },
+                .condexpr => .{ .condexpr = this.condexpr },
                 else => null,
             };
         }
@@ -569,8 +568,9 @@ pub struct AST {
             };
 
             fn isSupported(op: Op): bool {
-                inline for (supported_op of SUPPORTED) {
-                    if (supported_op == op) return true;
+                comptime let idx: usize = 0;
+                inline while (idx < SUPPORTED.len) : (idx += 1) {
+                    if (SUPPORTED[idx] == op) return true;
                 }
                 return false;
             }
@@ -579,8 +579,10 @@ pub struct AST {
                 const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
                 const count = count: {
                     let count: usize = 0;
-                    for (f of fields) {
-                        if (f.name[0] == '-' && f.name.len == 2) {
+                    let idx: usize = 0;
+                    while (idx < fields.len) : (idx += 1) {
+                        const f = fields[idx];
+                        if (f.name[0] == '-' and f.name.len == 2) {
                             count += 1;
                         }
                     }
@@ -588,8 +590,10 @@ pub struct AST {
                 };
                 let ret: [count]std.builtin.Type.EnumField = undefined;
                 let len: usize = 0;
-                for (f of fields) {
-                    if (f.name[0] == '-' && f.name.len == 2) {
+                let idx2: usize = 0;
+                while (idx2 < fields.len) : (idx2 += 1) {
+                    const f = fields[idx2];
+                    if (f.name[0] == '-' and f.name.len == 2) {
                         ret[len] = f;
                         len += 1;
                     }
@@ -602,8 +606,10 @@ pub struct AST {
                 const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
                 const count = count: {
                     let count: usize = 0;
-                    for (f of fields) {
-                        if (!(f.name[0] == '-' && f.name.len == 2)) {
+                    let idx: usize = 0;
+                    while (idx < fields.len) : (idx += 1) {
+                        const f = fields[idx];
+                        if (!(f.name[0] == '-' and f.name.len == 2)) {
                             count += 1;
                         }
                     }
@@ -611,8 +617,10 @@ pub struct AST {
                 };
                 let ret: [count]std.builtin.Type.EnumField = undefined;
                 let len: usize = 0;
-                for (f of fields) {
-                    if (!(f.name[0] == '-' && f.name.len == 2)) {
+                let idx2: usize = 0;
+                while (idx2 < fields.len) : (idx2 += 1) {
+                    const f = fields[idx2];
+                    if (!(f.name[0] == '-' and f.name.len == 2)) {
                         ret[len] = f;
                         len += 1;
                     }
@@ -623,10 +631,10 @@ pub struct AST {
         };
 
         fn to_expr(this: @This(), alloc: Allocator): !Expr {
-            const condexpr = alloc.create(CondExpr)?;
+            const condexpr = try alloc.create(CondExpr);
             condexpr.* = this;
-            return {
-                condexpr: condexpr,
+            return .{
+                .condexpr = condexpr,
             };
         }
     };
@@ -663,10 +671,10 @@ pub struct AST {
         else_parts: SmolList(SmolList(Stmt, 1), 1) = SmolList(SmolList(Stmt, 1), 1).zeroes,
 
         fn to_expr(this: @This(), alloc: Allocator): !Expr {
-            const @"if" = alloc.create(If)?;
+            const @"if" = try alloc.create(If);
             @"if".* = this;
-            return {
-                @"if": @"if",
+            return .{
+                .@"if" = @"if",
             };
         }
 
@@ -760,12 +768,12 @@ pub struct AST {
         fn to_expr(this: @This(), alloc: Allocator): !Expr {
             switch (this) {
                 .cmd => |cmd| {
-                    const cmd_ptr = alloc.create(Cmd)?;
+                    const cmd_ptr = try alloc.create(Cmd);
                     cmd_ptr.* = cmd;
-                    return { cmd: cmd_ptr };
+                    return .{ .cmd = cmd_ptr };
                 },
                 .assigns => |assigns| {
-                    return { assign: assigns };
+                    return .{ .assign = assigns };
                 },
             }
         }
@@ -860,11 +868,11 @@ pub struct AST {
         }
 
         pub fn @"2>&1"() RedirectFlags {
-            return { stderr: true, duplicate: true };
+            return .{ .stderr = true, .duplicate = true };
         }
 
         pub fn @"1>&2"() RedirectFlags {
-            return { stdout: true, duplicate: true };
+            return .{ .stdout = true, .duplicate = true };
         }
 
         fn toFlags(this: @This()): i32 {
@@ -875,27 +883,27 @@ pub struct AST {
         }
 
         pub fn @"<"() RedirectFlags {
-            return { stdin: true };
+            return .{ .stdin = true };
         }
 
         pub fn @"<<"() RedirectFlags {
-            return { stdin: true, append: true };
+            return .{ .stdin = true, .append = true };
         }
 
         pub fn @">"() RedirectFlags {
-            return { stdout: true };
+            return .{ .stdout = true };
         }
 
         pub fn @">>"() RedirectFlags {
-            return { append: true, stdout: true };
+            return .{ .append = true, .stdout = true };
         }
 
         pub fn @"&>"() RedirectFlags {
-            return { stdout: true, stderr: true };
+            return .{ .stdout = true, .stderr = true };
         }
 
         pub fn @"&>>"() RedirectFlags {
-            return { append: true, stdout: true, stderr: true };
+            return .{ .append = true, .stdout = true, .stderr = true };
         }
 
         fn merge(a: RedirectFlags, b: RedirectFlags): RedirectFlags {
@@ -1102,21 +1110,21 @@ pub const SubshellKind = enum {
 
 pub const ParserError = struct { msg: []const u8 };
 
-pub const IfClauseTok = enum {
+pub enum IfClauseTok {
     @"if",
     @"else",
     elif,
     then,
     fi,
 
-    fn fromTok(p: anytype, tok: Token): IfClauseTok? {
+    static fn fromTok(p: auto, tok: Token): IfClauseTok? {
         return switch (tok) {
-            .Text => fromText(p.text(tok.Text)),
+            .Text => IfClauseTok.fromText(p.text(tok.Text)),
             else => null,
         };
     }
 
-    fn fromText(txt: []const u8): IfClauseTok? {
+    static fn fromText(txt: []const u8): IfClauseTok? {
         if (bun.strings.eqlComptime(txt, "if")) return .@"if";
         if (bun.strings.eqlComptime(txt, "else")) return .@"else";
         if (bun.strings.eqlComptime(txt, "elif")) return .elif;
@@ -2349,6 +2357,31 @@ const SPECIAL_JS_CHAR = 8;
 pub const LEX_JS_OBJREF_PREFIX: [7]u8 = [ 8, '_', '_', 'b', 'u', 'n', '_' ];
 pub const LEX_JS_STRING_PREFIX: [10]u8 = [ 8, '_', '_', 'b', 'u', 'n', 's', 't', 'r', '_' ];
 
+pub enum NewLexerSubShellKind {
+    /// (echo hi; echo hello)
+    normal,
+    /// `echo hi; echo hello`
+    backtick,
+    /// $(echo hi; echo hello)
+    dollar,
+};
+
+pub enum NewLexerRedirectDirection {
+    out,
+    @"in",
+};
+
+fn NewLexerBacktrackSnapshot(comptime Chars: type): type {
+    return struct {
+        chars: Chars,
+        j: u32,
+        word_start: u32,
+        delimit_quote: bool,
+    };
+}
+
+pub err NewLexerError { OutOfMemory, Utf8CannotEncodeSurrogateHalf, Utf8InvalidStartByte, CodepointTooLarge }
+
 pub fn NewLexer(comptime encoding: StringEncoding): type {
     const Chars = ShellCharIter(encoding);
     return struct {
@@ -2375,21 +2408,10 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
         /// Number of JS object references expected (for bounds validation)
         jsobjs_len: u32 = 0,
 
-        const SubShellKind = enum {
-            /// (echo hi; echo hello)
-            normal,
-            /// `echo hi; echo hello`
-            backtick,
-            /// $(echo hi; echo hello)
-            dollar,
-        };
+        const SubShellKind = NewLexerSubShellKind;
+        const RedirectDirection = NewLexerRedirectDirection;
 
-        const LexerError = error{
-            OutOfMemory,
-            Utf8CannotEncodeSurrogateHalf,
-            Utf8InvalidStartByte,
-            CodepointTooLarge,
-        };
+        const LexerError = NewLexerError;
 
         pub const js_objref_prefix = "$__bun_";
 
@@ -2397,12 +2419,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         const InputChar = Chars.InputChar;
 
-        const BacktrackSnapshot = struct {
-            chars: Chars,
-            j: u32,
-            word_start: u32,
-            delimit_quote: bool,
-        };
+        const BacktrackSnapshot = NewLexerBacktrackSnapshot(Chars);
 
         pub fn new(alloc: Allocator, src: []const u8, strings_to_escape: []bun.String, jsobjs_len: u32): @This() {
             return {
@@ -2481,7 +2498,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             return @as(TokenTag, self.tokens.items[self.tokens.items.len - 1]);
         }
 
-        pub fn lex(self: *@This()): !LexerError {
+        pub fn lex(self: *@This())! {
             while (true) {
                 const input_opt = self.eat();
                 if (input_opt == null) {
@@ -2585,11 +2602,10 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                             comptime assertSpecialChar('#');
 
                             if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            const whitespace_preceding =
-                                if (prev_ch := self.chars.prev)
-                                    Chars.isWhitespace(prev_ch)
-                                else
-                                    true;
+                            let whitespace_preceding = true;
+                            if (prev_ch := self.chars.prev) {
+                                whitespace_preceding = Chars.isWhitespace(prev_ch);
+                            }
                             if (!whitespace_preceding) break :escaped;
                             self.break_word(true)?;
                             self.eatComment();
@@ -2749,8 +2765,11 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                             return;
                         },
 
-                        '0'...'9' => {
-                            comptime for (c of '0'..'9') assertSpecialChar(c);
+                        '0'..='9' => {
+                            comptime {
+                                let c: u8 = '0';
+                                while (c < '9') : (c += 1) assertSpecialChar(c);
+                            }
 
                             if (self.chars.state != .Normal) break :escaped;
                             const snapshot = self.make_snapshot();
@@ -2967,9 +2986,9 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 if (add_delimiter) {
                     self.tokens.append(.Delimit)?;
                 }
-            } else if ((in_normal_space || in_operator) && self.tokens.items.len > 0 &&
+            } else if ((in_normal_space || in_operator) && self.tokens.items.len > 0) {
                 // whether or not to add a delimiter token
-                switch (self.tokens.items[self.tokens.items.len - 1]) {
+                const should_delimit = switch (self.tokens.items[self.tokens.items.len - 1]) {
                     .Var,
                     .VarArgv,
                     .Text,
@@ -2979,8 +2998,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                     .Comma,
                     .BraceEnd,
                     .CmdSubstEnd,
-                    .Asterisk,
-                    => true,
+                    .Asterisk => true,
 
                     .Pipe,
                     .DoublePipe,
@@ -3000,19 +3018,17 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                     .DoubleBracketOpen,
                     .DoubleBracketClose,
                     .Delimit,
-                    .Eof,
-                    => false,
-                })
-            {
-                self.tokens.append(.Delimit)?;
-                self.delimit_quote = false;
+                    .Eof => false,
+                };
+                if (should_delimit) {
+                    self.tokens.append(.Delimit)?;
+                    self.delimit_quote = false;
+                }
             }
             self.word_start = self.j;
         }
 
-        const RedirectDirection = enum { out, @"in" };
-
-        fn eat_simple_redirect(self: *@This(), dir: RedirectDirection): AST.RedirectFlags {
+        fn eat_simple_redirect(self: *@This(), dir: NewLexerRedirectDirection): AST.RedirectFlags {
             const is_double = self.eat_simple_redirect_operator(dir);
 
             if (is_double) {
@@ -3176,7 +3192,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 }
             }
             const end = self.strpool.items.len;
-            self.j += @intCast(end - start);
+            self.j += @as(u32, @intCast(end - start));
         }
 
         fn handleJSStringRef(self: *@This(), bunstr: bun.String)! {
@@ -3232,7 +3248,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             return std.mem.eql(u8, bytes[0..literal.len], literal[0..]);
         }
 
-        fn eatJSSubstitutionIdx(self: *@This(), comptime literal: []const u8, comptime name: []const u8, comptime validate: *const fn (*@This(), usize) bool): usize? {
+        fn eatJSSubstitutionIdx(self: *@This(), comptime literal: []const u8, comptime name: []const u8, comptime validate: *const fn (*@This(), usize): bool): usize? {
             const none: usize? = null;
             if (self.matchesAsciiLiteral(literal[1..literal.len])) {
                 const bytes = self.chars.srcBytesAtCursor();
@@ -3244,10 +3260,10 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
                 while (i < bytes.len) {
                     switch (bytes[i]) {
-                        '0'...'9' => {
+                        '0'..='9' => {
                             if (digit_buf_count >= digit_buf.len) {
                                 const ERROR_STR = "Invalid " ++ name ++ " (number too high): ";
-                                let error_buf: [ERROR_STR.len + digit_buf.len + 1]u8 = undefined;
+                                let error_buf: [128]u8 = undefined;
                                 const error_msg = std.fmt.bufPrint(error_buf[0..], "{s} {s}{c}", .{ ERROR_STR, digit_buf[0..digit_buf_count], bytes[i] }) catch @panic("Should not happen");
                                 self.add_error(error_msg);
                                 return none;
@@ -3310,7 +3326,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 "JS object ref",
                 validateJSObjRefIdx,
             )) {
-                return { JSObjRef: @intCast(idx) };
+                return .{ .JSObjRef = @intCast(idx) };
             }
             const none: Token? = null;
             return none;
@@ -3324,7 +3340,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             return true;
         }
 
-        fn eat_var(self: *@This()): !Token.TextRange {
+        fn eat_var(self: *@This()): Token.TextRange! {
             const start = self.j;
             let i: usize = 0;
             let is_int = false;
@@ -3336,43 +3352,43 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
                 if (i == 0) {
                     switch (char) {
-                        '=' => return { start: start, end: self.j },
-                        '0'...'9' => {
+                        '=' => return .{ .start = start, .end = self.j },
+                        '0'..='9' => {
                             is_int = true;
                             * = self.eat().?;
                             self.appendCharToStrPool(char)?;
                             continue;
                         },
-                        'a'...'z', 'A'...'Z', '_' => {},
-                        else => return { start: start, end: self.j },
+                        'a'..='z', 'A'..='Z', '_' => {},
+                        else => return .{ .start = start, .end = self.j },
                     }
                 }
                 if (is_int) {
-                    return { start: start, end: self.j };
+                    return .{ .start = start, .end = self.j };
                 }
 
                 // if (char
                 switch (char) {
                     '{', '}', ';', '\'', '\"', ' ', '|', '&', '>', ',', '$' => {
-                        return { start: start, end: self.j };
+                        return .{ .start = start, .end = self.j };
                     },
                     else => {
                         if (!escaped &&
                             (self.in_subshell == .dollar && char == ')') || (self.in_subshell == .backtick && char == '`') || (self.in_subshell == .normal && char == ')'))
                         {
-                            return { start: start, end: self.j };
+                            return .{ .start = start, .end = self.j };
                         }
                         switch (char) {
-                            '0'...'9', 'a'...'z', 'A'...'Z', '_' => {
+                            '0'..='9', 'a'..='z', 'A'..='Z', '_' => {
                                 * = self.eat() orelse unreachable;
                                 self.appendCharToStrPool(char)?;
                             },
-                            else => return { start: start, end: self.j },
+                            else => return .{ .start = start, .end = self.j },
                         }
                     },
                 }
             }
-            return { start: start, end: self.j };
+            return .{ .start = start, .end = self.j };
         }
 
         fn eat(self: *@This()): InputChar? {
@@ -3388,7 +3404,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             }
         }
 
-        fn eat_slice(self: *@This(), comptime CodepointType: type, comptime N: usize): ([N]CodepointType)? {
+        fn eat_slice(self: *@This(), comptime CodepointType: type, comptime N: usize): [N]CodepointType? {
             const none: ([N]CodepointType)? = null;
             let slice: [N]CodepointType = undefined;
             @memset(&slice, 0);
@@ -3695,7 +3711,7 @@ pub fn hasEqSign(str: []const u8): u32? {
     return null;
 }
 
-const EnvStrZ = [:0]const u8;
+type EnvStrZ = [:0]const u8;
 
 pub struct CmdEnvIter {
     env: *const bun.StringArrayHashMap(EnvStrZ),
@@ -3795,17 +3811,17 @@ pub struct Test {
 
         fn from_real(the_token: Token, buf: []const u8): TestToken {
             switch (the_token) {
-                .Var => |txt| return { Var: buf[txt.start..txt.end] },
-                .VarArgv => |int| return { VarArgv: int },
-                .Text => |txt| return { Text: buf[txt.start..txt.end] },
-                .SingleQuotedText => |txt| return { SingleQuotedText: buf[txt.start..txt.end] },
-                .DoubleQuotedText => |txt| return { DoubleQuotedText: buf[txt.start..txt.end] },
-                .JSObjRef => |val| return { JSObjRef: val },
+                .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
+                .VarArgv => |int| return .{ .VarArgv = int },
+                .Text => |txt| return .{ .Text = buf[txt.start..txt.end] },
+                .SingleQuotedText => |txt| return .{ .SingleQuotedText = buf[txt.start..txt.end] },
+                .DoubleQuotedText => |txt| return .{ .DoubleQuotedText = buf[txt.start..txt.end] },
+                .JSObjRef => |val| return .{ .JSObjRef = val },
                 .Pipe => return .Pipe,
                 .DoublePipe => return .DoublePipe,
                 .Ampersand => return .Ampersand,
                 .DoubleAmpersand => return .DoubleAmpersand,
-                .Redirect => |r| return { Redirect: r },
+                .Redirect => |r| return .{ .Redirect = r },
                 .Dollar => return .Dollar,
                 .Asterisk => return .Asterisk,
                 .DoubleAsterisk => return .DoubleAsterisk,
@@ -4020,7 +4036,7 @@ pub struct ShellSrcBuilder {
         return _.appendBunStr(bunstr, allow_escape)?;
     }
 
-    static fn appendBunStr(
+    fn appendBunStr(
         *_,
         bunstr: bun.String,
         comptime allow_escape: bool,
