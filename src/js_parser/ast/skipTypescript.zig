@@ -1,1309 +1,75 @@
-pub fn SkipTypescript(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-
-        pub inline fn skipTypescriptReturnType(p: *P) anyerror!void {
-            try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, {});
-        }
-
-        pub inline fn skipTypescriptReturnTypeWithMetadata(p: *P) anyerror!TypeScript.Metadata {
-            var result = TypeScript.Metadata.default;
-            try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), true, &result);
-            return result;
-        }
-
-        pub inline fn skipTypeScriptType(p: *P, level: js_ast.Op.Level) anyerror!void {
-            p.markTypeScriptOnly();
-            try p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, {});
-        }
-
-        pub inline fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level) anyerror!TypeScript.Metadata {
-            p.markTypeScriptOnly();
-            var result = TypeScript.Metadata.default;
-            try p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, true, &result);
-            return result;
-        }
-
-        pub fn skipTypeScriptBinding(p: *P) anyerror!void {
-            p.markTypeScriptOnly();
-            switch (p.lexer.token) {
-                .t_identifier, .t_this => {
-                    try p.lexer.next();
-                },
-                .t_open_bracket => {
-                    try p.lexer.next();
-
-                    // "[, , a]"
-
-                    while (p.lexer.token == .t_comma) {
-                        try p.lexer.next();
-                    }
-                    // "[a, b]"
-                    while (p.lexer.token != .t_close_bracket) {
-                        // "[...a]"
-                        if (p.lexer.token == .t_dot_dot_dot) {
-                            try p.lexer.next();
-                        }
-
-                        try p.skipTypeScriptBinding();
-
-                        if (p.lexer.token != .t_comma) {
-                            break;
-                        }
-                        try p.lexer.next();
-                    }
-
-                    try p.lexer.expect(.t_close_bracket);
-                },
-                .t_open_brace => {
-                    try p.lexer.next();
-
-                    while (p.lexer.token != .t_close_brace) {
-                        var found_identifier = false;
-
-                        switch (p.lexer.token) {
-                            .t_identifier => {
-                                found_identifier = true;
-                                try p.lexer.next();
-                            },
-
-                            // "{...x}"
-                            .t_dot_dot_dot => {
-                                try p.lexer.next();
-
-                                if (p.lexer.token != .t_identifier) {
-                                    try p.lexer.unexpected();
-                                }
-
-                                found_identifier = true;
-                                try p.lexer.next();
-                            },
-
-                            // "{1: y}"
-                            // "{'x': y}"
-                            .t_string_literal, .t_numeric_literal => {
-                                try p.lexer.next();
-                            },
-
-                            else => {
-                                if (p.lexer.isIdentifierOrKeyword()) {
-                                    // "{if: x}"
-                                    try p.lexer.next();
-                                } else {
-                                    try p.lexer.unexpected();
-                                }
-                            },
-                        }
-
-                        if (p.lexer.token == .t_colon or !found_identifier) {
-                            try p.lexer.expect(.t_colon);
-                            try p.skipTypeScriptBinding();
-                        }
-
-                        if (p.lexer.token != .t_comma) {
-                            break;
-                        }
-
-                        try p.lexer.next();
-                    }
-
-                    try p.lexer.expect(.t_close_brace);
-                },
-                else => {
-                    // try p.lexer.unexpected();
-                    return error.Backtrack;
-                },
-            }
-        }
-
-        pub fn skipTypescriptFnArgs(p: *P) anyerror!void {
-            p.markTypeScriptOnly();
-
-            try p.lexer.expect(.t_open_paren);
-
-            while (p.lexer.token != .t_close_paren) {
-                // "(...a)"
-                if (p.lexer.token == .t_dot_dot_dot) {
-                    try p.lexer.next();
-                }
-
-                try p.skipTypeScriptBinding();
-
-                // "(a?)"
-                if (p.lexer.token == .t_question) {
-                    try p.lexer.next();
-                }
-
-                // "(a: any)"
-                if (p.lexer.token == .t_colon) {
-                    try p.lexer.next();
-                    try p.skipTypeScriptType(.lowest);
-                }
-
-                // "(a, b)"
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                try p.lexer.next();
-            }
-
-            try p.lexer.expect(.t_close_paren);
-        }
-
-        /// This is a spot where the TypeScript grammar is highly ambiguous. Here are
-        /// some cases that are valid:
-        ///
-        ///     let x = (y: any): (() => {}) => { };
-        ///     let x = (y: any): () => {} => { };
-        ///     let x = (y: any): (y) => {} => { };
-        ///     let x = (y: any): (y[]) => {};
-        ///     let x = (y: any): (a | b) => {};
-        ///
-        /// Here are some cases that aren't valid:
-        ///
-        ///     let x = (y: any): (y) => {};
-        ///     let x = (y: any): (y) => {return 0};
-        ///     let x = (y: any): asserts y is (y) => {};
-        ///
-        pub fn skipTypeScriptParenOrFnType(
-            p: *P,
-            comptime get_metadata: bool,
-            result: if (get_metadata) *TypeScript.Metadata else void,
-        ) anyerror!void {
-            p.markTypeScriptOnly();
-
-            if (p.trySkipTypeScriptArrowArgsWithBacktracking()) {
-                try p.skipTypescriptReturnType();
-                if (comptime get_metadata)
-                    result.* = .m_function;
-            } else {
-                try p.lexer.expect(.t_open_paren);
-                if (comptime get_metadata) {
-                    result.* = try p.skipTypeScriptTypeWithMetadata(.lowest);
-                } else {
-                    try p.skipTypeScriptType(.lowest);
-                }
-                try p.lexer.expect(.t_close_paren);
-            }
-        }
-
-        pub fn skipTypeScriptTypeWithOpts(
-            p: *P,
-            level: js_ast.Op.Level,
-            opts: TypeScript.SkipTypeOptions.Bitset,
-            comptime get_metadata: bool,
-            result: if (get_metadata) *TypeScript.Metadata else void,
-        ) anyerror!void {
-            p.markTypeScriptOnly();
-
-            while (true) {
-                switch (p.lexer.token) {
-                    .t_numeric_literal => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_number;
-                        }
-                    },
-                    .t_big_integer_literal => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_bigint;
-                        }
-                    },
-                    .t_string_literal, .t_no_substitution_template_literal => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_string;
-                        }
-                    },
-                    .t_true, .t_false => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_boolean;
-                        }
-                    },
-                    .t_null => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_null;
-                        }
-                    },
-                    .t_void => {
-                        try p.lexer.next();
-                        if (comptime get_metadata) {
-                            result.* = .m_void;
-                        }
-                    },
-                    .t_const => {
-                        const r = p.lexer.range();
-                        try p.lexer.next();
-
-                        // ["const: number]"
-                        if (opts.contains(.allow_tuple_labels) and p.lexer.token == .t_colon) {
-                            try p.log.addRangeError(p.source, r, "Unexpected \"const\"");
-                        }
-                    },
-
-                    .t_this => {
-                        try p.lexer.next();
-
-                        // "function check(): this is boolean"
-                        if (p.lexer.isContextualKeyword("is") and !p.lexer.has_newline_before) {
-                            try p.lexer.next();
-                            try p.skipTypeScriptType(.lowest);
-                            return;
-                        }
-
-                        if (comptime get_metadata) {
-                            result.* = .m_object;
-                        }
-                    },
-                    .t_minus => {
-                        // "-123"
-                        // "-123n"
-                        try p.lexer.next();
-
-                        if (p.lexer.token == .t_big_integer_literal) {
-                            try p.lexer.next();
-                            if (comptime get_metadata) {
-                                result.* = .m_bigint;
-                            }
-                        } else {
-                            try p.lexer.expect(.t_numeric_literal);
-                            if (comptime get_metadata) {
-                                result.* = .m_number;
-                            }
-                        }
-                    },
-                    .t_ampersand, .t_bar => {
-                        // Support things like "type Foo = | A | B" and "type Foo = & A & B"
-                        try p.lexer.next();
-                        continue;
-                    },
-                    .t_import => {
-                        // "import('fs')"
-                        try p.lexer.next();
-
-                        // "[import: number]"
-                        if (opts.contains(.allow_tuple_labels) and p.lexer.token == .t_colon) {
-                            return;
-                        }
-
-                        try p.lexer.expect(.t_open_paren);
-                        try p.lexer.expect(.t_string_literal);
-
-                        // "import('./foo.json', { assert: { type: 'json' } })"
-                        // "import('./foo.json', { with: { type: 'json' } })"
-                        if (p.lexer.token == .t_comma) {
-                            try p.lexer.next();
-                            try p.skipTypeScriptObjectType();
-
-                            // "import('./foo.json', { assert: { type: 'json' } }, )"
-                            // "import('./foo.json', { with: { type: 'json' } }, )"
-                            if (p.lexer.token == .t_comma) {
-                                try p.lexer.next();
-                            }
-                        }
-
-                        try p.lexer.expect(.t_close_paren);
-                    },
-                    .t_new => {
-                        // "new () => Foo"
-                        // "new <T>() => Foo<T>"
-                        try p.lexer.next();
-
-                        // "[new: number]"
-                        if (opts.contains(.allow_tuple_labels) and p.lexer.token == .t_colon) {
-                            return;
-                        }
-
-                        _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-                        try p.skipTypeScriptParenOrFnType(get_metadata, result);
-                    },
-                    .t_less_than => {
-                        // "<T>() => Foo<T>"
-                        _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-                        try p.skipTypeScriptParenOrFnType(get_metadata, result);
-                    },
-                    .t_open_paren => {
-                        // "(number | string)"
-                        try p.skipTypeScriptParenOrFnType(get_metadata, result);
-                    },
-                    .t_identifier => {
-                        const kind = TypeScript.Identifier.IMap.get(p.lexer.identifier) orelse .normal;
-
-                        var check_type_parameters = true;
-
-                        switch (kind) {
-                            .prefix_keyof => {
-                                try p.lexer.next();
-
-                                // Valid:
-                                //   "[keyof: string]"
-                                //   "{[keyof: string]: number}"
-                                //   "{[keyof in string]: number}"
-                                //
-                                // Invalid:
-                                //   "A extends B ? keyof : string"
-                                //
-                                if ((p.lexer.token != .t_colon and p.lexer.token != .t_in) or (!opts.contains(.is_index_signature) and !opts.contains(.allow_tuple_labels))) {
-                                    try p.skipTypeScriptType(.prefix);
-                                }
-
-                                if (comptime get_metadata) {
-                                    result.* = .m_object;
-                                }
-
-                                break;
-                            },
-                            .prefix_readonly => {
-                                try p.lexer.next();
-
-                                if ((p.lexer.token != .t_colon and p.lexer.token != .t_in) or (!opts.contains(.is_index_signature) and !opts.contains(.allow_tuple_labels))) {
-                                    try p.skipTypeScriptType(.prefix);
-                                }
-
-                                // assume array or tuple literal
-                                if (comptime get_metadata) {
-                                    result.* = .m_array;
-                                }
-
-                                break;
-                            },
-                            .infer => {
-                                try p.lexer.next();
-
-                                // "type Foo = Bar extends [infer T] ? T : null"
-                                // "type Foo = Bar extends [infer T extends string] ? T : null"
-                                // "type Foo = Bar extends [infer T extends string ? infer T : never] ? T : null"
-                                // "type Foo = { [infer in Bar]: number }"
-                                if ((p.lexer.token != .t_colon and p.lexer.token != .t_in) or (!opts.contains(.is_index_signature) and !opts.contains(.allow_tuple_labels))) {
-                                    try p.lexer.expect(.t_identifier);
-                                    if (p.lexer.token == .t_extends) {
-                                        _ = p.trySkipTypeScriptConstraintOfInferTypeWithBacktracking(opts);
-                                    }
-                                }
-
-                                break;
-                            },
-                            .unique => {
-                                try p.lexer.next();
-
-                                // "let foo: unique symbol"
-                                if (p.lexer.isContextualKeyword("symbol")) {
-                                    try p.lexer.next();
-                                    break;
-                                }
-                            },
-                            .abstract => {
-                                try p.lexer.next();
-
-                                // "let foo: abstract new () => {}" added in TypeScript 4.2
-                                if (p.lexer.token == .t_new) {
-                                    continue;
-                                }
-                            },
-                            .asserts => {
-                                try p.lexer.next();
-
-                                // "function assert(x: boolean): asserts x"
-                                // "function assert(x: boolean): asserts x is boolean"
-                                if (opts.contains(.is_return_type) and !p.lexer.has_newline_before and (p.lexer.token == .t_identifier or p.lexer.token == .t_this)) {
-                                    try p.lexer.next();
-                                }
-                            },
-                            .primitive_any => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_any;
-                                }
-                            },
-                            .primitive_never => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_never;
-                                }
-                            },
-                            .primitive_unknown => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_unknown;
-                                }
-                            },
-                            .primitive_undefined => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_undefined;
-                                }
-                            },
-                            .primitive_object => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_object;
-                                }
-                            },
-                            .primitive_number => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_number;
-                                }
-                            },
-                            .primitive_string => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_string;
-                                }
-                            },
-                            .primitive_boolean => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_boolean;
-                                }
-                            },
-                            .primitive_bigint => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_bigint;
-                                }
-                            },
-                            .primitive_symbol => {
-                                try p.lexer.next();
-                                check_type_parameters = false;
-                                if (comptime get_metadata) {
-                                    result.* = .m_symbol;
-                                }
-                            },
-                            else => {
-                                if (comptime get_metadata) {
-                                    const find_result = p.findSymbol(logger.Loc.Empty, p.lexer.identifier) catch unreachable;
-                                    result.* = .{ .m_identifier = find_result.ref };
-                                }
-
-                                try p.lexer.next();
-                            },
-                        }
-
-                        // "function assert(x: any): x is boolean"
-                        if (p.lexer.isContextualKeyword("is") and !p.lexer.has_newline_before) {
-                            try p.lexer.next();
-                            try p.skipTypeScriptType(.lowest);
-                            return;
-                        }
-
-                        // "let foo: any \n <number>foo" must not become a single type
-                        if (check_type_parameters and !p.lexer.has_newline_before) {
-                            _ = try p.skipTypeScriptTypeArguments(false);
-                        }
-                    },
-                    .t_typeof => {
-                        try p.lexer.next();
-
-                        // "[typeof: number]"
-                        if (opts.contains(.allow_tuple_labels) and p.lexer.token == .t_colon) {
-                            return;
-                        }
-
-                        // always `Object`
-                        if (comptime get_metadata) {
-                            result.* = .m_object;
-                        }
-
-                        if (p.lexer.token == .t_import) {
-                            // "typeof import('fs')"
-                            continue;
-                        } else {
-                            // "typeof x"
-                            if (!p.lexer.isIdentifierOrKeyword()) {
-                                try p.lexer.expected(.t_identifier);
-                            }
-                            try p.lexer.next();
-
-                            // "typeof x.#y"
-                            // "typeof x.y"
-                            while (p.lexer.token == .t_dot) {
-                                try p.lexer.next();
-
-                                if (!p.lexer.isIdentifierOrKeyword() and p.lexer.token != .t_private_identifier) {
-                                    try p.lexer.expected(.t_identifier);
-                                }
-                                try p.lexer.next();
-                            }
-
-                            if (!p.lexer.has_newline_before) {
-                                _ = try p.skipTypeScriptTypeArguments(false);
-                            }
-                        }
-                    },
-                    .t_open_bracket => {
-                        // "[number, string]"
-                        // "[first: number, second: string]"
-                        try p.lexer.next();
-
-                        if (comptime get_metadata) {
-                            result.* = .m_array;
-                        }
-
-                        while (p.lexer.token != .t_close_bracket) {
-                            if (p.lexer.token == .t_dot_dot_dot) {
-                                try p.lexer.next();
-                            }
-                            try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.allow_tuple_labels), false, {});
-                            if (p.lexer.token == .t_question) {
-                                try p.lexer.next();
-                            }
-                            if (p.lexer.token == .t_colon) {
-                                try p.lexer.next();
-                                try p.skipTypeScriptType(.lowest);
-                            }
-                            if (p.lexer.token != .t_comma) {
-                                break;
-                            }
-                            try p.lexer.next();
-                        }
-                        try p.lexer.expect(.t_close_bracket);
-                    },
-                    .t_open_brace => {
-                        try p.skipTypeScriptObjectType();
-                        if (comptime get_metadata) {
-                            result.* = .m_object;
-                        }
-                    },
-                    .t_template_head => {
-                        // "`${'a' | 'b'}-${'c' | 'd'}`"
-                        while (true) {
-                            try p.lexer.next();
-                            try p.skipTypeScriptType(.lowest);
-                            try p.lexer.rescanCloseBraceAsTemplateToken();
-
-                            if (p.lexer.token == .t_template_tail) {
-                                try p.lexer.next();
-                                break;
-                            }
-                        }
-                        if (comptime get_metadata) {
-                            result.* = .m_string;
-                        }
-                    },
-
-                    else => {
-                        // "[function: number]"
-                        if (opts.contains(.allow_tuple_labels) and p.lexer.isIdentifierOrKeyword()) {
-                            if (p.lexer.token != .t_function) {
-                                try p.lexer.unexpected();
-                            }
-                            try p.lexer.next();
-
-                            if (p.lexer.token != .t_colon) {
-                                try p.lexer.expect(.t_colon);
-                            }
-
-                            return;
-                        }
-
-                        try p.lexer.unexpected();
-                    },
-                }
-                break;
-            }
-
-            while (true) {
-                switch (p.lexer.token) {
-                    .t_bar => {
-                        if (level.gte(.bitwise_or)) {
-                            return;
-                        }
-
-                        try p.lexer.next();
-
-                        if (comptime get_metadata) {
-                            var left = result.*;
-                            if (left.finishUnion(p)) |final| {
-                                // finish skipping the rest of the type without collecting type metadata.
-                                result.* = final;
-                                try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, {});
-                            } else {
-                                try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, get_metadata, result);
-                                result.mergeUnion(left);
-                            }
-                        } else {
-                            try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, {});
-                        }
-                    },
-                    .t_ampersand => {
-                        if (level.gte(.bitwise_and)) {
-                            return;
-                        }
-
-                        try p.lexer.next();
-
-                        if (comptime get_metadata) {
-                            var left = result.*;
-                            if (left.finishIntersection(p)) |final| {
-                                // finish skipping the rest of the type without collecting type metadata.
-                                result.* = final;
-                                try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, {});
-                            } else {
-                                try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, get_metadata, result);
-                                result.mergeIntersection(left);
-                            }
-                        } else {
-                            try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, {});
-                        }
-                    },
-                    .t_exclamation => {
-                        // A postfix "!" is allowed in JSDoc types in TypeScript, which are only
-                        // present in comments. While it's not valid in a non-comment position,
-                        // it's still parsed and turned into a soft error by the TypeScript
-                        // compiler. It turns out parsing this is important for correctness for
-                        // "as" casts because the "!" token must still be consumed.
-                        if (p.lexer.has_newline_before) {
-                            return;
-                        }
-
-                        try p.lexer.next();
-                    },
-                    .t_dot => {
-                        try p.lexer.next();
-                        if (!p.lexer.isIdentifierOrKeyword()) {
-                            try p.lexer.expect(.t_identifier);
-                        }
-
-                        if (comptime get_metadata) {
-                            if (result.* == .m_identifier) {
-                                var dot = List(Ref).initCapacity(p.allocator, 2) catch unreachable;
-                                dot.appendAssumeCapacity(result.m_identifier);
-                                const find_result = p.findSymbol(logger.Loc.Empty, p.lexer.identifier) catch unreachable;
-                                dot.appendAssumeCapacity(find_result.ref);
-                                result.* = .{ .m_dot = dot };
-                            } else if (result.* == .m_dot) {
-                                if (p.lexer.isIdentifierOrKeyword()) {
-                                    const find_result = p.findSymbol(logger.Loc.Empty, p.lexer.identifier) catch unreachable;
-                                    result.m_dot.append(p.allocator, find_result.ref) catch unreachable;
-                                }
-                            }
-                        }
-
-                        try p.lexer.next();
-
-                        // "{ <A extends B>(): c.d \n <E extends F>(): g.h }" must not become a single type
-                        if (!p.lexer.has_newline_before) {
-                            _ = try p.skipTypeScriptTypeArguments(false);
-                        }
-                    },
-                    .t_open_bracket => {
-                        // "{ ['x']: string \n ['y']: string }" must not become a single type
-                        if (p.lexer.has_newline_before) {
-                            return;
-                        }
-                        try p.lexer.next();
-                        var skipped = false;
-                        if (p.lexer.token != .t_close_bracket) {
-                            skipped = true;
-                            try p.skipTypeScriptType(.lowest);
-                        }
-                        try p.lexer.expect(.t_close_bracket);
-
-                        if (comptime get_metadata) {
-                            if (result.* == .m_none) {
-                                result.* = .m_array;
-                            } else {
-                                // if something was skipped, it is object type
-                                if (skipped) {
-                                    result.* = .m_object;
-                                } else {
-                                    result.* = .m_array;
-                                }
-                            }
-                        }
-                    },
-                    .t_extends => {
-                        // "{ x: number \n extends: boolean }" must not become a single type
-                        if (p.lexer.has_newline_before or opts.contains(.disallow_conditional_types)) {
-                            return;
-                        }
-
-                        try p.lexer.next();
-
-                        // The type following "extends" is not permitted to be another conditional type
-                        var extends_type = if (get_metadata) TypeScript.Metadata.default;
-                        try p.skipTypeScriptTypeWithOpts(
-                            .lowest,
-                            TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types),
-                            get_metadata,
-                            if (get_metadata) &extends_type,
-                        );
-
-                        if (comptime get_metadata) {
-                            // intersection
-                            try p.lexer.expect(.t_question);
-                            var left = try p.skipTypeScriptTypeWithMetadata(.lowest);
-                            try p.lexer.expect(.t_colon);
-                            if (left.finishIntersection(p)) |final| {
-                                result.* = final;
-                                try p.skipTypeScriptType(.lowest);
-                            } else {
-                                try p.skipTypeScriptTypeWithOpts(.bitwise_and, TypeScript.SkipTypeOptions.empty, get_metadata, result);
-                                result.mergeIntersection(left);
-                            }
-                        } else {
-                            try p.lexer.expect(.t_question);
-                            try p.skipTypeScriptType(.lowest);
-                            try p.lexer.expect(.t_colon);
-                            try p.skipTypeScriptType(.lowest);
-                        }
-                    },
-                    else => {
-                        return;
-                    },
-                }
-            }
-        }
-        pub fn skipTypeScriptObjectType(p: *P) anyerror!void {
-            p.markTypeScriptOnly();
-
-            try p.lexer.expect(.t_open_brace);
-
-            while (p.lexer.token != .t_close_brace) {
-                // "{ -readonly [K in keyof T]: T[K] }"
-                // "{ +readonly [K in keyof T]: T[K] }"
-                if (p.lexer.token == .t_plus or p.lexer.token == .t_minus) {
-                    try p.lexer.next();
-                }
-
-                // Skip over modifiers and the property identifier
-                var found_key = false;
-                while (p.lexer.isIdentifierOrKeyword() or p.lexer.token == .t_string_literal or p.lexer.token == .t_numeric_literal) {
-                    try p.lexer.next();
-                    found_key = true;
-                }
-
-                if (p.lexer.token == .t_open_bracket) {
-                    // Index signature or computed property
-                    try p.lexer.next();
-                    try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_index_signature), false, {});
-
-                    // "{ [key: string]: number }"
-                    // "{ readonly [K in keyof T]: T[K] }"
-                    switch (p.lexer.token) {
-                        .t_colon => {
-                            try p.lexer.next();
-                            try p.skipTypeScriptType(.lowest);
-                        },
-                        .t_in => {
-                            try p.lexer.next();
-                            try p.skipTypeScriptType(.lowest);
-                            if (p.lexer.isContextualKeyword("as")) {
-                                // "{ [K in keyof T as `get-${K}`]: T[K] }"
-                                try p.lexer.next();
-                                try p.skipTypeScriptType(.lowest);
-                            }
-                        },
-                        else => {},
-                    }
-
-                    try p.lexer.expect(.t_close_bracket);
-
-                    // "{ [K in keyof T]+?: T[K] }"
-                    // "{ [K in keyof T]-?: T[K] }"
-                    switch (p.lexer.token) {
-                        .t_plus, .t_minus => {
-                            try p.lexer.next();
-                        },
-                        else => {},
-                    }
-
-                    found_key = true;
-                }
-
-                // "?" indicates an optional property
-                // "!" indicates an initialization assertion
-                if (found_key and (p.lexer.token == .t_question or p.lexer.token == .t_exclamation)) {
-                    try p.lexer.next();
-                }
-
-                // Type parameters come right after the optional mark
-                _ = try p.skipTypeScriptTypeParameters(.{
-                    .allow_const_modifier = true,
-                });
-
-                switch (p.lexer.token) {
-                    .t_colon => {
-                        // Regular property
-                        if (!found_key) {
-                            try p.lexer.expect(.t_identifier);
-                        }
-
-                        try p.lexer.next();
-                        try p.skipTypeScriptType(.lowest);
-                    },
-                    .t_open_paren => {
-                        // Method signature
-                        try p.skipTypescriptFnArgs();
-
-                        if (p.lexer.token == .t_colon) {
-                            try p.lexer.next();
-                            try p.skipTypescriptReturnType();
-                        }
-                    },
-                    else => {
-                        if (!found_key) {
-                            try p.lexer.unexpected();
-                            return error.SyntaxError;
-                        }
-                    },
-                }
-                switch (p.lexer.token) {
-                    .t_close_brace => {},
-                    .t_comma, .t_semicolon => {
-                        try p.lexer.next();
-                    },
-                    else => {
-                        if (!p.lexer.has_newline_before) {
-                            try p.lexer.unexpected();
-                            return error.SyntaxError;
-                        }
-                    },
-                }
-            }
-            try p.lexer.expect(.t_close_brace);
-        }
-
-        // This is the type parameter declarations that go with other symbol
-        // declarations (class, function, type, etc.)
-        pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) anyerror!SkipTypeParameterResult {
-            p.markTypeScriptOnly();
-
-            if (p.lexer.token != .t_less_than) {
-                return .did_not_skip_anything;
-            }
-
-            var result = SkipTypeParameterResult.could_be_type_cast;
-            try p.lexer.next();
-
-            if (p.lexer.token == .t_greater_than and flags.allow_empty_type_parameters) {
-                try p.lexer.next();
-                return .definitely_type_parameters;
-            }
-
-            while (true) {
-                var has_in = false;
-                var has_out = false;
-                var expect_identifier = true;
-
-                var invalid_modifier_range = logger.Range.None;
-
-                // Scan over a sequence of "in" and "out" modifiers (a.k.a. optional
-                // variance annotations) as well as "const" modifiers
-                while (true) {
-                    if (p.lexer.token == .t_const) {
-                        if (invalid_modifier_range.len == 0 and !flags.allow_const_modifier) {
-                            // Valid:
-                            //   "class Foo<const T> {}"
-                            // Invalid:
-                            //   "interface Foo<const T> {}"
-                            invalid_modifier_range = p.lexer.range();
-                        }
-
-                        result = .definitely_type_parameters;
-                        try p.lexer.next();
-                        expect_identifier = true;
-                        continue;
-                    }
-
-                    if (p.lexer.token == .t_in) {
-                        if (invalid_modifier_range.len == 0 and (!flags.allow_in_out_variance_annotations or has_in or has_out)) {
-                            // Valid:
-                            //   "type Foo<in T> = T"
-                            // Invalid:
-                            //   "type Foo<in in T> = T"
-                            //   "type Foo<out in T> = T"
-                            invalid_modifier_range = p.lexer.range();
-                        }
-
-                        try p.lexer.next();
-                        has_in = true;
-                        expect_identifier = true;
-                        continue;
-                    }
-
-                    if (p.lexer.isContextualKeyword("out")) {
-                        const r = p.lexer.range();
-                        if (invalid_modifier_range.len == 0 and !flags.allow_in_out_variance_annotations) {
-                            // Valid:
-                            //   "type Foo<out T> = T"
-                            // Invalid:
-                            //   "type Foo<out out T> = T"
-                            //   "type Foo<in out T> = T"
-                            invalid_modifier_range = r;
-                        }
-
-                        try p.lexer.next();
-                        if (invalid_modifier_range.len == 0 and has_out and (p.lexer.token == .t_in or p.lexer.token == .t_identifier)) {
-                            // Valid:
-                            //   "type Foo<out T> = T"
-                            //   "type Foo<out out> = T"
-                            //   "type Foo<out out, T> = T"
-                            //   "type Foo<out out = T> = T"
-                            //   "type Foo<out out extends T> = T"
-                            // Invalid:
-                            //   "type Foo<out out in T> = T"
-                            //   "type Foo<out out T> = T"
-                            invalid_modifier_range = r;
-                        }
-                        has_out = true;
-                        expect_identifier = false;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                // Only report an error for the first invalid modifier
-                if (invalid_modifier_range.len > 0) {
-                    try p.log.addRangeErrorFmt(
-                        p.source,
-                        invalid_modifier_range,
-                        p.allocator,
-                        "The modifier \"{s}\" is not valid here",
-                        .{p.source.textForRange(invalid_modifier_range)},
-                    );
-                }
-
-                // expectIdentifier => Mandatory identifier (e.g. after "type Foo <in ___")
-                // !expectIdentifier => Optional identifier (e.g. after "type Foo <out ___" since "out" may be the identifier)
-                if (expect_identifier or p.lexer.token == .t_identifier) {
-                    try p.lexer.expect(.t_identifier);
-                }
-
-                // "class Foo<T extends number> {}"
-                if (p.lexer.token == .t_extends) {
-                    result = .definitely_type_parameters;
-                    try p.lexer.next();
-                    try p.skipTypeScriptType(.lowest);
-                }
-
-                // "class Foo<T = void> {}"
-                if (p.lexer.token == .t_equals) {
-                    result = .definitely_type_parameters;
-                    try p.lexer.next();
-                    try p.skipTypeScriptType(.lowest);
-                }
-
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-
-                try p.lexer.next();
-
-                if (p.lexer.token == .t_greater_than) {
-                    result = .definitely_type_parameters;
-                    break;
-                }
-            }
-
-            try p.lexer.expectGreaterThan(false);
-            return result;
-        }
-
-        pub fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
-            if (opts.is_export) {
-                switch (p.lexer.token) {
-                    .t_open_brace => {
-                        // "export type {foo}"
-                        // "export type {foo} from 'bar'"
-                        _ = try p.parseExportClause();
-                        if (p.lexer.isContextualKeyword("from")) {
-                            try p.lexer.next();
-                            _ = try p.parsePath();
-                        }
-                        try p.lexer.expectOrInsertSemicolon();
-                        return;
-                    },
-                    .t_asterisk => {
-                        // https://github.com/microsoft/TypeScript/pull/52217
-                        // - export type * as Foo from 'bar';
-                        // - export type Foo from 'bar';
-                        try p.lexer.next();
-                        if (p.lexer.isContextualKeyword("as")) {
-                            // "export type * as ns from 'path'"
-                            try p.lexer.next();
-                            _ = try p.parseClauseAlias("export");
-                            try p.lexer.next();
-                        }
-                        try p.lexer.expectContextualKeyword("from");
-                        _ = try p.parsePath();
-                        try p.lexer.expectOrInsertSemicolon();
-                        return;
-                    },
-                    else => {},
-                }
-            }
-
-            const name = p.lexer.identifier;
-            try p.lexer.expect(.t_identifier);
-
-            if (opts.is_module_scope) {
-                p.local_type_names.put(p.allocator, name, true) catch unreachable;
-            }
-
-            _ = try p.skipTypeScriptTypeParameters(.{
-                .allow_in_out_variance_annotations = true,
-                .allow_empty_type_parameters = true,
-            });
-
-            try p.lexer.expect(.t_equals);
-            try p.skipTypeScriptType(.lowest);
-            try p.lexer.expectOrInsertSemicolon();
-        }
-
-        pub fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
-            const name = p.lexer.identifier;
-            try p.lexer.expect(.t_identifier);
-
-            if (opts.is_module_scope) {
-                p.local_type_names.put(p.allocator, name, true) catch unreachable;
-            }
-
-            _ = try p.skipTypeScriptTypeParameters(.{
-                .allow_in_out_variance_annotations = true,
-                .allow_empty_type_parameters = true,
-            });
-
-            if (p.lexer.token == .t_extends) {
-                try p.lexer.next();
-
-                while (true) {
-                    try p.skipTypeScriptType(.lowest);
-                    if (p.lexer.token != .t_comma) {
-                        break;
-                    }
-                    try p.lexer.next();
-                }
-            }
-
-            if (p.lexer.isContextualKeyword("implements")) {
-                try p.lexer.next();
-                while (true) {
-                    try p.skipTypeScriptType(.lowest);
-                    if (p.lexer.token != .t_comma) {
-                        break;
-                    }
-                    try p.lexer.next();
-                }
-            }
-
-            try p.skipTypeScriptObjectType();
-        }
-
-        pub fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool) anyerror!bool {
-            p.markTypeScriptOnly();
-            switch (p.lexer.token) {
-                .t_less_than, .t_less_than_equals, .t_less_than_less_than, .t_less_than_less_than_equals => {},
-                else => {
-                    return false;
-                },
-            }
-
-            try p.lexer.expectLessThan(false);
-
-            while (true) {
-                try p.skipTypeScriptType(.lowest);
-                if (p.lexer.token != .t_comma) {
-                    break;
-                }
-                try p.lexer.next();
-            }
-
-            // This type argument list must end with a ">"
-            try p.lexer.expectGreaterThan(isInsideJSXElement);
-            return true;
-        }
-
-        pub const Backtracking = struct {
-            pub inline fn lexerBacktracker(p: *P, func: anytype, comptime ReturnType: type) ReturnType {
-                p.markTypeScriptOnly();
-                const old_lexer = p.lexer;
-                const old_log_disabled = p.lexer.is_log_disabled;
-                p.lexer.is_log_disabled = true;
-                defer p.lexer.is_log_disabled = old_log_disabled;
-                var backtrack = false;
-                const FnReturnType = bun.meta.ReturnOf(func);
-                const result = func(p) catch |err| brk: {
-                    switch (err) {
-                        error.Backtrack => {
-                            backtrack = true;
-                        },
-                        else => {
-                            if (p.lexer.did_panic) {
-                                backtrack = true;
-                            }
-                        },
-                    }
-                    if (comptime FnReturnType == anyerror!bool or FnReturnType == anyerror!void)
-                        // we are not using the value
-                        break :brk undefined;
-
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-                };
-
-                if (backtrack) {
-                    p.lexer.restore(&old_lexer);
-
-                    if (comptime FnReturnType == anyerror!bool) {
-                        return false;
-                    }
-                }
-
-                if (comptime FnReturnType == anyerror!bool) {
-                    return true;
-                }
-
-                if (comptime ReturnType == void or ReturnType == bool)
-                    // If we did not backtrack, then we skipped successfully.
-                    return !backtrack;
-
-                return result;
-            }
-
-            pub inline fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime ReturnType: type) ReturnType {
-                p.markTypeScriptOnly();
-                const old_lexer = p.lexer;
-                const old_log_disabled = p.lexer.is_log_disabled;
-                p.lexer.is_log_disabled = true;
-
-                defer p.lexer.is_log_disabled = old_log_disabled;
-                var backtrack = false;
-                const FnReturnType = bun.meta.ReturnOf(func);
-                const result = @call(.auto, func, args) catch |err| brk: {
-                    switch (err) {
-                        error.Backtrack => {
-                            backtrack = true;
-                        },
-                        else => {},
-                    }
-                    if (comptime FnReturnType == anyerror!bool or FnReturnType == anyerror!void)
-                        // we are not using the value
-                        break :brk undefined;
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-                };
-
-                if (backtrack) {
-                    p.lexer.restore(&old_lexer);
-                    if (comptime FnReturnType == anyerror!bool) {
-                        return false;
-                    }
-                }
-
-                if (comptime FnReturnType == anyerror!bool) {
-                    return true;
-                }
-
-                if (comptime ReturnType == void or ReturnType == bool) return backtrack;
-                return result;
-            }
-
-            pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) anyerror!SkipTypeParameterResult {
-                const result = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-                if (p.lexer.token != .t_open_paren) {
-                    return error.Backtrack;
-                }
-
-                return result;
-            }
-
-            pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) anyerror!bool {
-                try p.lexer.expect(.t_extends);
-                try p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, {});
-
-                if (!flags.contains(.disallow_conditional_types) and p.lexer.token == .t_question) {
-                    return error.Backtrack;
-                }
-
-                return true;
-            }
-
-            pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) anyerror!bool {
-                try p.skipTypescriptFnArgs();
-                p.lexer.expect(.t_equals_greater_than) catch
-                    return error.Backtrack;
-
-                return true;
-            }
-
-            pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) anyerror!bool {
-                if (try p.skipTypeScriptTypeArguments(false)) {
-                    // Check the token after this and backtrack if it's the wrong one
-                    if (!TypeScript.canFollowTypeArgumentsInExpression(p)) {
-                        return error.Backtrack;
-                    }
-                }
-
-                return true;
-            }
-
-            pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) anyerror!void {
-                try p.lexer.expect(.t_colon);
-
-                try p.skipTypescriptReturnType();
-                // Check the token after this and backtrack if it's the wrong one
-                if (p.lexer.token != .t_equals_greater_than) {
-                    return error.Backtrack;
-                }
-            }
-        };
-
-        pub fn trySkipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) SkipTypeParameterResult {
-            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptTypeParametersThenOpenParenWithBacktracking, SkipTypeParameterResult);
-        }
-
-        pub fn trySkipTypeScriptTypeArgumentsWithBacktracking(p: *P) bool {
-            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptTypeArgumentsWithBacktracking, bool);
-        }
-
-        pub fn trySkipTypeScriptArrowReturnTypeWithBacktracking(p: *P) bool {
-            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptArrowReturnTypeWithBacktracking, bool);
-        }
-
-        pub fn trySkipTypeScriptArrowArgsWithBacktracking(p: *P) bool {
-            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptArrowArgsWithBacktracking, bool);
-        }
-
-        pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) bool {
-            return Backtracking.lexerBacktrackerWithArgs(p, Backtracking.skipTypeScriptConstraintOfInferTypeWithBacktracking, .{ p, flags }, bool);
-        }
-    };
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const string = []const u8;
-
-const bun = @import("bun");
 const assert = bun.assert;
 const logger = bun.logger;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const E = js_ast.E;
-
 const Op = js_ast.Op;
 const Level = js_ast.Op.Level;
-
 const js_lexer = bun.js_lexer;
 const T = js_lexer.T;
-
 const js_parser = bun.js_parser;
 const JSXTransformType = js_parser.JSXTransformType;
 const ParseStatementOptions = js_parser.ParseStatementOptions;
@@ -1312,6 +78,993 @@ const SkipTypeParameterResult = js_parser.SkipTypeParameterResult;
 const TypeParameterFlag = js_parser.TypeParameterFlag;
 const TypeScript = js_parser.TypeScript;
 const fs = js_parser.fs;
-
-const std = @import("std");
 const List = std.ArrayListUnmanaged;
+
+pub fn SkipTypescript(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn skipTypescriptReturnType(p: *P) anyerror!void {
+            _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, .{});
+    }
+
+pub fn skipTypescriptReturnTypeWithMetadata(p: *P) anyerror!TypeScript.Metadata {
+            var result = TypeScript.Metadata.default;
+            _ = &result;
+            _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), true, (&result));
+            return result;
+    }
+
+pub fn skipTypeScriptType(p: *P, level: js_ast.Op.Level) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            _ = try p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, .{});
+    }
+
+pub fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level) anyerror!TypeScript.Metadata {
+            _ = p.markTypeScriptOnly();
+            var result = TypeScript.Metadata.default;
+            _ = &result;
+            _ = try p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, true, (&result));
+            return result;
+    }
+
+pub fn skipTypeScriptBinding(p: *P) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            switch (p.lexer.token) {
+.t_identifier, .t_this => {
+_ = try p.lexer.next();
+},
+.t_open_bracket => {
+_ = try p.lexer.next();
+            while ((p.lexer.token == .t_comma)) {
+                _ = try p.lexer.next();
+            }
+            while ((p.lexer.token != .t_close_bracket)) {
+                if ((p.lexer.token == .t_dot_dot_dot)) {
+                    _ = try p.lexer.next();
+                }
+                _ = try p.skipTypeScriptBinding();
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                _ = try p.lexer.next();
+            }
+            _ = try p.lexer.expect(.t_close_bracket);
+},
+.t_open_brace => {
+_ = try p.lexer.next();
+            while ((p.lexer.token != .t_close_brace)) {
+                var found_identifier = false;
+                _ = &found_identifier;
+                switch (p.lexer.token) {
+.t_identifier => {
+found_identifier = true;
+                _ = try p.lexer.next();
+},
+.t_dot_dot_dot => {
+_ = try p.lexer.next();
+                if ((p.lexer.token != .t_identifier)) {
+                    _ = try p.lexer.unexpected();
+                }
+                found_identifier = true;
+                _ = try p.lexer.next();
+},
+.t_string_literal, .t_numeric_literal => {
+_ = try p.lexer.next();
+},
+else => {
+if (p.lexer.isIdentifierOrKeyword()) {
+                    _ = try p.lexer.next();
+                } else {
+                    _ = try p.lexer.unexpected();
+                }
+},
+}
+                if (((p.lexer.token == .t_colon) or (!found_identifier))) {
+                    _ = try p.lexer.expect(.t_colon);
+                    _ = try p.skipTypeScriptBinding();
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                _ = try p.lexer.next();
+            }
+            _ = try p.lexer.expect(.t_close_brace);
+},
+else => {
+return error.Backtrack;
+},
+}
+    }
+
+pub fn skipTypescriptFnArgs(p: *P) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            _ = try p.lexer.expect(.t_open_paren);
+            while ((p.lexer.token != .t_close_paren)) {
+                if ((p.lexer.token == .t_dot_dot_dot)) {
+                    _ = try p.lexer.next();
+                }
+                _ = try p.skipTypeScriptBinding();
+                if ((p.lexer.token == .t_question)) {
+                    _ = try p.lexer.next();
+                }
+                if ((p.lexer.token == .t_colon)) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                _ = try p.lexer.next();
+            }
+            _ = try p.lexer.expect(.t_close_paren);
+    }
+
+pub fn skipTypeScriptParenOrFnType(p: *P, comptime get_metadata: bool, result: if (get_metadata) *TypeScript.Metadata else void) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            if (p.trySkipTypeScriptArrowArgsWithBacktracking()) {
+                _ = try p.skipTypescriptReturnType();
+                if (comptime get_metadata) {
+                    result.* = .m_function;
+                }
+            } else {
+                _ = try p.lexer.expect(.t_open_paren);
+                if (comptime get_metadata) {
+                    result.* = try p.skipTypeScriptTypeWithMetadata(.lowest);
+                } else {
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+                _ = try p.lexer.expect(.t_close_paren);
+            }
+    }
+
+pub fn skipTypeScriptTypeWithOpts(p: *P, level: js_ast.Op.Level, opts: TypeScript.SkipTypeOptions.Bitset, comptime get_metadata: bool, result: if (get_metadata) *TypeScript.Metadata else void) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            while (true) {
+                switch (p.lexer.token) {
+.t_numeric_literal => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_number;
+                }
+},
+.t_big_integer_literal => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_bigint;
+                }
+},
+.t_string_literal, .t_no_substitution_template_literal => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_string;
+                }
+},
+.t_true, .t_false => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_boolean;
+                }
+},
+.t_null => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_null;
+                }
+},
+.t_void => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_void;
+                }
+},
+.t_const => {
+const r = p.lexer.range();
+                _ = try p.lexer.next();
+                if ((opts.contains(.allow_tuple_labels) and (p.lexer.token == .t_colon))) {
+                    _ = try p.log.addRangeError(p.source, r, "Unexpected \"const\"");
+                }
+},
+.t_this => {
+_ = try p.lexer.next();
+                if ((p.lexer.isContextualKeyword("is") and (!p.lexer.has_newline_before))) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                    return;
+                }
+                if (comptime get_metadata) {
+                    result.* = .m_object;
+                }
+},
+.t_minus => {
+_ = try p.lexer.next();
+                if ((p.lexer.token == .t_big_integer_literal)) {
+                    _ = try p.lexer.next();
+                    if (comptime get_metadata) {
+                        result.* = .m_bigint;
+                    }
+                } else {
+                    _ = try p.lexer.expect(.t_numeric_literal);
+                    if (comptime get_metadata) {
+                        result.* = .m_number;
+                    }
+                }
+},
+.t_ampersand, .t_bar => {
+_ = try p.lexer.next();
+                continue;
+},
+.t_import => {
+_ = try p.lexer.next();
+                if ((opts.contains(.allow_tuple_labels) and (p.lexer.token == .t_colon))) {
+                    return;
+                }
+                _ = try p.lexer.expect(.t_open_paren);
+                _ = try p.lexer.expect(.t_string_literal);
+                if ((p.lexer.token == .t_comma)) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptObjectType();
+                    if ((p.lexer.token == .t_comma)) {
+                        _ = try p.lexer.next();
+                    }
+                }
+                _ = try p.lexer.expect(.t_close_paren);
+},
+.t_new => {
+_ = try p.lexer.next();
+                if ((opts.contains(.allow_tuple_labels) and (p.lexer.token == .t_colon))) {
+                    return;
+                }
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+                _ = try p.skipTypeScriptParenOrFnType(get_metadata, result);
+},
+.t_less_than => {
+_ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+                _ = try p.skipTypeScriptParenOrFnType(get_metadata, result);
+},
+.t_open_paren => {
+_ = try p.skipTypeScriptParenOrFnType(get_metadata, result);
+},
+.t_identifier => {
+const kind = ((TypeScript.Identifier.IMap.get(p.lexer.identifier)) orelse (.normal));
+                var check_type_parameters = true;
+                _ = &check_type_parameters;
+                switch (kind) {
+.prefix_keyof => {
+_ = try p.lexer.next();
+                if ((((p.lexer.token != .t_colon) and (p.lexer.token != .t_in)) or ((!opts.contains(.is_index_signature)) and (!opts.contains(.allow_tuple_labels))))) {
+                    _ = try p.skipTypeScriptType(.prefix);
+                }
+                if (comptime get_metadata) {
+                    result.* = .m_object;
+                }
+                break;
+},
+.prefix_readonly => {
+_ = try p.lexer.next();
+                if ((((p.lexer.token != .t_colon) and (p.lexer.token != .t_in)) or ((!opts.contains(.is_index_signature)) and (!opts.contains(.allow_tuple_labels))))) {
+                    _ = try p.skipTypeScriptType(.prefix);
+                }
+                if (comptime get_metadata) {
+                    result.* = .m_array;
+                }
+                break;
+},
+.infer => {
+_ = try p.lexer.next();
+                if ((((p.lexer.token != .t_colon) and (p.lexer.token != .t_in)) or ((!opts.contains(.is_index_signature)) and (!opts.contains(.allow_tuple_labels))))) {
+                    _ = try p.lexer.expect(.t_identifier);
+                    if ((p.lexer.token == .t_extends)) {
+                        _ = p.trySkipTypeScriptConstraintOfInferTypeWithBacktracking(opts);
+                    }
+                }
+                break;
+},
+.unique => {
+_ = try p.lexer.next();
+                if (p.lexer.isContextualKeyword("symbol")) {
+                    _ = try p.lexer.next();
+                    break;
+                }
+},
+.abstract => {
+_ = try p.lexer.next();
+                if ((p.lexer.token == .t_new)) {
+                    continue;
+                }
+},
+.asserts => {
+_ = try p.lexer.next();
+                if (((opts.contains(.is_return_type) and (!p.lexer.has_newline_before)) and ((p.lexer.token == .t_identifier) or (p.lexer.token == .t_this)))) {
+                    _ = try p.lexer.next();
+                }
+},
+.primitive_any => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_any;
+                }
+},
+.primitive_never => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_never;
+                }
+},
+.primitive_unknown => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_unknown;
+                }
+},
+.primitive_undefined => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_undefined;
+                }
+},
+.primitive_object => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_object;
+                }
+},
+.primitive_number => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_number;
+                }
+},
+.primitive_string => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_string;
+                }
+},
+.primitive_boolean => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_boolean;
+                }
+},
+.primitive_bigint => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_bigint;
+                }
+},
+.primitive_symbol => {
+_ = try p.lexer.next();
+                check_type_parameters = false;
+                if (comptime get_metadata) {
+                    result.* = .m_symbol;
+                }
+},
+else => {
+if (comptime get_metadata) {
+                    const find_result = ((p.findSymbol(logger.Loc.Empty, p.lexer.identifier)) catch unreachable);
+                    result.* = .{ .m_identifier = find_result.ref };
+                }
+                _ = try p.lexer.next();
+},
+}
+                if ((p.lexer.isContextualKeyword("is") and (!p.lexer.has_newline_before))) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                    return;
+                }
+                if ((check_type_parameters and (!p.lexer.has_newline_before))) {
+                    _ = try p.skipTypeScriptTypeArguments(false);
+                }
+},
+.t_typeof => {
+_ = try p.lexer.next();
+                if ((opts.contains(.allow_tuple_labels) and (p.lexer.token == .t_colon))) {
+                    return;
+                }
+                if (comptime get_metadata) {
+                    result.* = .m_object;
+                }
+                if ((p.lexer.token == .t_import)) {
+                    continue;
+                } else {
+                    if ((!p.lexer.isIdentifierOrKeyword())) {
+                        _ = try p.lexer.expected(.t_identifier);
+                    }
+                    _ = try p.lexer.next();
+                    while ((p.lexer.token == .t_dot)) {
+                        _ = try p.lexer.next();
+                        if (((!p.lexer.isIdentifierOrKeyword()) and (p.lexer.token != .t_private_identifier))) {
+                            _ = try p.lexer.expected(.t_identifier);
+                        }
+                        _ = try p.lexer.next();
+                    }
+                    if ((!p.lexer.has_newline_before)) {
+                        _ = try p.skipTypeScriptTypeArguments(false);
+                    }
+                }
+},
+.t_open_bracket => {
+_ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    result.* = .m_array;
+                }
+                while ((p.lexer.token != .t_close_bracket)) {
+                    if ((p.lexer.token == .t_dot_dot_dot)) {
+                        _ = try p.lexer.next();
+                    }
+                    _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.allow_tuple_labels), false, .{});
+                    if ((p.lexer.token == .t_question)) {
+                        _ = try p.lexer.next();
+                    }
+                    if ((p.lexer.token == .t_colon)) {
+                        _ = try p.lexer.next();
+                        _ = try p.skipTypeScriptType(.lowest);
+                    }
+                    if ((p.lexer.token != .t_comma)) {
+                        break;
+                    }
+                    _ = try p.lexer.next();
+                }
+                _ = try p.lexer.expect(.t_close_bracket);
+},
+.t_open_brace => {
+_ = try p.skipTypeScriptObjectType();
+                if (comptime get_metadata) {
+                    result.* = .m_object;
+                }
+},
+.t_template_head => {
+while (true) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                    _ = try p.lexer.rescanCloseBraceAsTemplateToken();
+                    if ((p.lexer.token == .t_template_tail)) {
+                        _ = try p.lexer.next();
+                        break;
+                    }
+                }
+                if (comptime get_metadata) {
+                    result.* = .m_string;
+                }
+},
+else => {
+if ((opts.contains(.allow_tuple_labels) and p.lexer.isIdentifierOrKeyword())) {
+                    if ((p.lexer.token != .t_function)) {
+                        _ = try p.lexer.unexpected();
+                    }
+                    _ = try p.lexer.next();
+                    if ((p.lexer.token != .t_colon)) {
+                        _ = try p.lexer.expect(.t_colon);
+                    }
+                    return;
+                }
+                _ = try p.lexer.unexpected();
+},
+}
+                break;
+            }
+            while (true) {
+                switch (p.lexer.token) {
+.t_bar => {
+if (level.gte(.bitwise_or)) {
+                    return;
+                }
+                _ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    var left = result.*;
+                    _ = &left;
+                    if (left.finishUnion(p)) |final| {
+                        _ = &final;
+                        result.* = final;
+                        _ = try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, .{});
+                    } else {
+                        _ = try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, get_metadata, result);
+                        _ = result.mergeUnion(left);
+                    }
+                } else {
+                    _ = try p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, .{});
+                }
+},
+.t_ampersand => {
+if (level.gte(.bitwise_and)) {
+                    return;
+                }
+                _ = try p.lexer.next();
+                if (comptime get_metadata) {
+                    var left = result.*;
+                    _ = &left;
+                    if (left.finishIntersection(p)) |final| {
+                        _ = &final;
+                        result.* = final;
+                        _ = try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, .{});
+                    } else {
+                        _ = try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, get_metadata, result);
+                        _ = result.mergeIntersection(left);
+                    }
+                } else {
+                    _ = try p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, .{});
+                }
+},
+.t_exclamation => {
+if (p.lexer.has_newline_before) {
+                    return;
+                }
+                _ = try p.lexer.next();
+},
+.t_dot => {
+_ = try p.lexer.next();
+                if ((!p.lexer.isIdentifierOrKeyword())) {
+                    _ = try p.lexer.expect(.t_identifier);
+                }
+                if (comptime get_metadata) {
+                    if ((result.* == .m_identifier)) {
+                        var dot = ((List(Ref).initCapacity(p.allocator, 2)) catch unreachable);
+                        _ = &dot;
+                        _ = dot.appendAssumeCapacity(result.m_identifier);
+                        const find_result = ((p.findSymbol(logger.Loc.Empty, p.lexer.identifier)) catch unreachable);
+                        _ = dot.appendAssumeCapacity(find_result.ref);
+                        result.* = .{ .m_dot = dot };
+                    } else {
+                        if ((result.* == .m_dot)) {
+                            if (p.lexer.isIdentifierOrKeyword()) {
+                                const find_result = ((p.findSymbol(logger.Loc.Empty, p.lexer.identifier)) catch unreachable);
+                                _ = ((result.m_dot.append(p.allocator, find_result.ref)) catch unreachable);
+                            }
+                        }
+                    }
+                }
+                _ = try p.lexer.next();
+                if ((!p.lexer.has_newline_before)) {
+                    _ = try p.skipTypeScriptTypeArguments(false);
+                }
+},
+.t_open_bracket => {
+if (p.lexer.has_newline_before) {
+                    return;
+                }
+                _ = try p.lexer.next();
+                var skipped = false;
+                _ = &skipped;
+                if ((p.lexer.token != .t_close_bracket)) {
+                    skipped = true;
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+                _ = try p.lexer.expect(.t_close_bracket);
+                if (comptime get_metadata) {
+                    if ((result.* == .m_none)) {
+                        result.* = .m_array;
+                    } else {
+                        if (skipped) {
+                            result.* = .m_object;
+                        } else {
+                            result.* = .m_array;
+                        }
+                    }
+                }
+},
+.t_extends => {
+if ((p.lexer.has_newline_before or opts.contains(.disallow_conditional_types))) {
+                    return;
+                }
+                _ = try p.lexer.next();
+                var extends_type = (if (get_metadata) TypeScript.Metadata.default else null);
+                _ = &extends_type;
+                _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), get_metadata, (if (get_metadata) (&extends_type) else null));
+                if (comptime get_metadata) {
+                    _ = try p.lexer.expect(.t_question);
+                    var left = try p.skipTypeScriptTypeWithMetadata(.lowest);
+                    _ = &left;
+                    _ = try p.lexer.expect(.t_colon);
+                    if (left.finishIntersection(p)) |final| {
+                        _ = &final;
+                        result.* = final;
+                        _ = try p.skipTypeScriptType(.lowest);
+                    } else {
+                        _ = try p.skipTypeScriptTypeWithOpts(.bitwise_and, TypeScript.SkipTypeOptions.empty, get_metadata, result);
+                        _ = result.mergeIntersection(left);
+                    }
+                } else {
+                    _ = try p.lexer.expect(.t_question);
+                    _ = try p.skipTypeScriptType(.lowest);
+                    _ = try p.lexer.expect(.t_colon);
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+},
+else => {
+return;
+},
+}
+            }
+    }
+
+pub fn skipTypeScriptObjectType(p: *P) anyerror!void {
+            _ = p.markTypeScriptOnly();
+            _ = try p.lexer.expect(.t_open_brace);
+            while ((p.lexer.token != .t_close_brace)) {
+                if (((p.lexer.token == .t_plus) or (p.lexer.token == .t_minus))) {
+                    _ = try p.lexer.next();
+                }
+                var found_key = false;
+                _ = &found_key;
+                while (((p.lexer.isIdentifierOrKeyword() or (p.lexer.token == .t_string_literal)) or (p.lexer.token == .t_numeric_literal))) {
+                    _ = try p.lexer.next();
+                    found_key = true;
+                }
+                if ((p.lexer.token == .t_open_bracket)) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_index_signature), false, .{});
+                    switch (p.lexer.token) {
+.t_colon => {
+_ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+},
+.t_in => {
+_ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                    if (p.lexer.isContextualKeyword("as")) {
+                        _ = try p.lexer.next();
+                        _ = try p.skipTypeScriptType(.lowest);
+                    }
+},
+else => {
+
+},
+}
+                    _ = try p.lexer.expect(.t_close_bracket);
+                    switch (p.lexer.token) {
+.t_plus, .t_minus => {
+_ = try p.lexer.next();
+},
+else => {
+
+},
+}
+                    found_key = true;
+                }
+                if ((found_key and ((p.lexer.token == .t_question) or (p.lexer.token == .t_exclamation)))) {
+                    _ = try p.lexer.next();
+                }
+                _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+                switch (p.lexer.token) {
+.t_colon => {
+if ((!found_key)) {
+                    _ = try p.lexer.expect(.t_identifier);
+                }
+                _ = try p.lexer.next();
+                _ = try p.skipTypeScriptType(.lowest);
+},
+.t_open_paren => {
+_ = try p.skipTypescriptFnArgs();
+                if ((p.lexer.token == .t_colon)) {
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypescriptReturnType();
+                }
+},
+else => {
+if ((!found_key)) {
+                    _ = try p.lexer.unexpected();
+                    return error.SyntaxError;
+                }
+},
+}
+                switch (p.lexer.token) {
+.t_close_brace => {
+
+},
+.t_comma, .t_semicolon => {
+_ = try p.lexer.next();
+},
+else => {
+if ((!p.lexer.has_newline_before)) {
+                    _ = try p.lexer.unexpected();
+                    return error.SyntaxError;
+                }
+},
+}
+            }
+            _ = try p.lexer.expect(.t_close_brace);
+    }
+
+pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) anyerror!SkipTypeParameterResult {
+            _ = p.markTypeScriptOnly();
+            if ((p.lexer.token != .t_less_than)) {
+                return error.did_not_skip_anything;
+            }
+            var result = SkipTypeParameterResult.could_be_type_cast;
+            _ = &result;
+            _ = try p.lexer.next();
+            if (((p.lexer.token == .t_greater_than) and flags.allow_empty_type_parameters)) {
+                _ = try p.lexer.next();
+                return error.definitely_type_parameters;
+            }
+            while (true) {
+                var has_in = false;
+                _ = &has_in;
+                var has_out = false;
+                _ = &has_out;
+                var expect_identifier = true;
+                _ = &expect_identifier;
+                var invalid_modifier_range = logger.Range.None;
+                _ = &invalid_modifier_range;
+                while (true) {
+                    if ((p.lexer.token == .t_const)) {
+                        if (((invalid_modifier_range.len == 0) and (!flags.allow_const_modifier))) {
+                            invalid_modifier_range = p.lexer.range();
+                        }
+                        result = .definitely_type_parameters;
+                        _ = try p.lexer.next();
+                        expect_identifier = true;
+                        continue;
+                    }
+                    if ((p.lexer.token == .t_in)) {
+                        if (((invalid_modifier_range.len == 0) and (((!flags.allow_in_out_variance_annotations) or has_in) or has_out))) {
+                            invalid_modifier_range = p.lexer.range();
+                        }
+                        _ = try p.lexer.next();
+                        has_in = true;
+                        expect_identifier = true;
+                        continue;
+                    }
+                    if (p.lexer.isContextualKeyword("out")) {
+                        const r = p.lexer.range();
+                        if (((invalid_modifier_range.len == 0) and (!flags.allow_in_out_variance_annotations))) {
+                            invalid_modifier_range = r;
+                        }
+                        _ = try p.lexer.next();
+                        if ((((invalid_modifier_range.len == 0) and has_out) and ((p.lexer.token == .t_in) or (p.lexer.token == .t_identifier)))) {
+                            invalid_modifier_range = r;
+                        }
+                        has_out = true;
+                        expect_identifier = false;
+                        continue;
+                    }
+                    break;
+                }
+                if ((invalid_modifier_range.len > 0)) {
+                    _ = try p.log.addRangeErrorFmt(p.source, invalid_modifier_range, p.allocator, "The modifier \"{s}\" is not valid here", .{ p.source.textForRange(invalid_modifier_range) });
+                }
+                if ((expect_identifier or (p.lexer.token == .t_identifier))) {
+                    _ = try p.lexer.expect(.t_identifier);
+                }
+                if ((p.lexer.token == .t_extends)) {
+                    result = .definitely_type_parameters;
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+                if ((p.lexer.token == .t_equals)) {
+                    result = .definitely_type_parameters;
+                    _ = try p.lexer.next();
+                    _ = try p.skipTypeScriptType(.lowest);
+                }
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                _ = try p.lexer.next();
+                if ((p.lexer.token == .t_greater_than)) {
+                    result = .definitely_type_parameters;
+                    break;
+                }
+            }
+            _ = try p.lexer.expectGreaterThan(false);
+            return result;
+    }
+
+pub fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
+            if (opts.is_export) {
+                switch (p.lexer.token) {
+.t_open_brace => {
+_ = try p.parseExportClause();
+                if (p.lexer.isContextualKeyword("from")) {
+                    _ = try p.lexer.next();
+                    _ = try p.parsePath();
+                }
+                _ = try p.lexer.expectOrInsertSemicolon();
+                return;
+},
+.t_asterisk => {
+_ = try p.lexer.next();
+                if (p.lexer.isContextualKeyword("as")) {
+                    _ = try p.lexer.next();
+                    _ = try p.parseClauseAlias("export");
+                    _ = try p.lexer.next();
+                }
+                _ = try p.lexer.expectContextualKeyword("from");
+                _ = try p.parsePath();
+                _ = try p.lexer.expectOrInsertSemicolon();
+                return;
+},
+else => {
+
+},
+}
+            }
+            const name = p.lexer.identifier;
+            _ = try p.lexer.expect(.t_identifier);
+            if (opts.is_module_scope) {
+                _ = ((p.local_type_names.put(p.allocator, name, true)) catch unreachable);
+            }
+            _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_empty_type_parameters = true });
+            _ = try p.lexer.expect(.t_equals);
+            _ = try p.skipTypeScriptType(.lowest);
+            _ = try p.lexer.expectOrInsertSemicolon();
+    }
+
+pub fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
+            const name = p.lexer.identifier;
+            _ = try p.lexer.expect(.t_identifier);
+            if (opts.is_module_scope) {
+                _ = ((p.local_type_names.put(p.allocator, name, true)) catch unreachable);
+            }
+            _ = try p.skipTypeScriptTypeParameters(.{ .allow_in_out_variance_annotations = true, .allow_empty_type_parameters = true });
+            if ((p.lexer.token == .t_extends)) {
+                _ = try p.lexer.next();
+                while (true) {
+                    _ = try p.skipTypeScriptType(.lowest);
+                    if ((p.lexer.token != .t_comma)) {
+                        break;
+                    }
+                    _ = try p.lexer.next();
+                }
+            }
+            if (p.lexer.isContextualKeyword("implements")) {
+                _ = try p.lexer.next();
+                while (true) {
+                    _ = try p.skipTypeScriptType(.lowest);
+                    if ((p.lexer.token != .t_comma)) {
+                        break;
+                    }
+                    _ = try p.lexer.next();
+                }
+            }
+            _ = try p.skipTypeScriptObjectType();
+    }
+
+pub fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool) anyerror!bool {
+            _ = p.markTypeScriptOnly();
+            switch (p.lexer.token) {
+.t_less_than, .t_less_than_equals, .t_less_than_less_than, .t_less_than_less_than_equals => {
+
+},
+else => {
+return false;
+},
+}
+            _ = try p.lexer.expectLessThan(false);
+            while (true) {
+                _ = try p.skipTypeScriptType(.lowest);
+                if ((p.lexer.token != .t_comma)) {
+                    break;
+                }
+                _ = try p.lexer.next();
+            }
+            _ = try p.lexer.expectGreaterThan(isInsideJSXElement);
+            return true;
+    }
+
+pub fn trySkipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) SkipTypeParameterResult {
+            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptTypeParametersThenOpenParenWithBacktracking, SkipTypeParameterResult);
+    }
+
+pub fn trySkipTypeScriptTypeArgumentsWithBacktracking(p: *P) bool {
+            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptTypeArgumentsWithBacktracking, bool);
+    }
+
+pub fn trySkipTypeScriptArrowReturnTypeWithBacktracking(p: *P) bool {
+            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptArrowReturnTypeWithBacktracking, bool);
+    }
+
+pub fn trySkipTypeScriptArrowArgsWithBacktracking(p: *P) bool {
+            return Backtracking.lexerBacktracker(p, Backtracking.skipTypeScriptArrowArgsWithBacktracking, bool);
+    }
+
+pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) bool {
+            return Backtracking.lexerBacktrackerWithArgs(p, Backtracking.skipTypeScriptConstraintOfInferTypeWithBacktracking, .{ p, flags }, bool);
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    pub const Backtracking = struct {
+    
+    pub fn lexerBacktracker(p: *P, func: anytype, comptime ReturnType: type) ReturnType {
+                _ = p.markTypeScriptOnly();
+                const old_lexer = p.lexer;
+                const old_log_disabled = p.lexer.is_log_disabled;
+                p.lexer.is_log_disabled = true;
+                defer {
+                p.lexer.is_log_disabled = old_log_disabled;
+                }
+                var backtrack = false;
+                _ = &backtrack;
+                const FnReturnType = bun.@"meta".ReturnOf(func);
+                _ = &FnReturnType;
+                const result = (blk_catch_0: { break :blk_catch_0 ((func(p)) catch |e| { _ = &e; break :blk_catch_0 brk: {
+                if (((e == error.Backtrack) or p.lexer.did_panic)) {
+                    backtrack = true;
+                }
+                break :brk SkipTypeParameterResult.did_not_skip_anything;
+    }; }); });
+                if (backtrack) {
+                    _ = p.lexer.restore((&old_lexer));
+                }
+                if (comptime ((ReturnType == void) or (ReturnType == bool))) {
+                    return (!backtrack);
+                }
+                return result;
+        }
+    
+    pub fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime ReturnType: type) ReturnType {
+                _ = p.markTypeScriptOnly();
+                const old_lexer = p.lexer;
+                const old_log_disabled = p.lexer.is_log_disabled;
+                p.lexer.is_log_disabled = true;
+                defer {
+                p.lexer.is_log_disabled = old_log_disabled;
+                }
+                var backtrack = false;
+                _ = &backtrack;
+                const FnReturnType = bun.@"meta".ReturnOf(func);
+                _ = &FnReturnType;
+                const result = (blk_catch_1: { break :blk_catch_1 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_1 brk: {
+                if ((e == error.Backtrack)) {
+                    backtrack = true;
+                }
+                break :brk SkipTypeParameterResult.did_not_skip_anything;
+    }; }); });
+                if (backtrack) {
+                    _ = p.lexer.restore((&old_lexer));
+                }
+                if (comptime ((ReturnType == void) or (ReturnType == bool))) {
+                    return backtrack;
+                }
+                return result;
+        }
+    
+    pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) anyerror!SkipTypeParameterResult {
+                const result = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+                if ((p.lexer.token != .t_open_paren)) {
+                    return error.Backtrack;
+                }
+                return result;
+        }
+    
+    pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) anyerror!bool {
+                _ = try p.lexer.expect(.t_extends);
+                _ = try p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, .{});
+                if (((!flags.contains(.disallow_conditional_types)) and (p.lexer.token == .t_question))) {
+                    return error.Backtrack;
+                }
+                return true;
+        }
+    
+    pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) anyerror!bool {
+                _ = try p.skipTypescriptFnArgs();
+                _ = (blk_catch_2: { break :blk_catch_2 ((p.lexer.expect(.t_equals_greater_than)) catch |__ce_2| { _ = &__ce_2; return error.Backtrack; }); });
+                return true;
+        }
+    
+    pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) anyerror!bool {
+                if (try p.skipTypeScriptTypeArguments(false)) {
+                    if ((!TypeScript.canFollowTypeArgumentsInExpression(p))) {
+                        return error.Backtrack;
+                    }
+                }
+                return true;
+        }
+    
+    pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) anyerror!void {
+                _ = try p.lexer.expect(.t_colon);
+                _ = try p.skipTypescriptReturnType();
+                if ((p.lexer.token != .t_equals_greater_than)) {
+                    return error.Backtrack;
+                }
+        }
+    };
+};
+}

@@ -1479,3 +1479,6 @@
 
 ### 2026-11-20 03:15:21 UTC - src/cli/ 3 核心配置与入口模块迁移入库
 - 完成：`bunfig.cp` (1.025x), `cli.cp` (1.009x), `Arguments.cp` (1.016x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:18:05 UTC - src/js_parser/ast/ 4 核心解析与访问模块迁移入库
+- 完成：`skipTypescript.cp` (1.005x), `parse.cp` (1.001x), `parseStmt.cp` (1.000x), `visit.cp` (1.000x)，4 项硬门禁全 PASS。

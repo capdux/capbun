@@ -1209,3 +1209,6 @@
 
 ### 2026-11-20 03:15:21 UTC - src/cli/ 迁移经验与新坑入表
 - 发现 `cpc` 对多参 `.exec(...)` 误截断为单参及 `static let` 规则，已同步写入 `CP_PITFALLS.md`。
+
+### 2026-11-20 03:18:05 UTC - js_parser/ast 核心解析批次经验
+- 规避 `extends`/`dec` 等 CP 关键字冲突与 `if (comptime ...)` 内 `break :brk`，4 模块膨胀率稳定在 1.000x~1.005x。

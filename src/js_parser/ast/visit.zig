@@ -1,1376 +1,75 @@
-pub fn Visit(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const allow_macros = P.allow_macros;
-        const is_typescript_enabled = P.is_typescript_enabled;
-        const isSimpleParameterList = P.isSimpleParameterList;
-        const LowerUsingDeclarationsContext = P.LowerUsingDeclarationsContext;
-        const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
-
-        pub const visitExpr = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExpr;
-        pub const visitExprInOut = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExprInOut;
-        pub const visitAndAppendStmt = @import("./visitStmt.zig").VisitStmt(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitAndAppendStmt;
-
-        pub fn visitStmtsAndPrependTempRefs(p: *P, stmts: *ListManaged(Stmt), opts: *PrependTempRefsOpts) anyerror!void {
-            if (only_scan_imports_and_do_not_visit) {
-                @compileError("only_scan_imports_and_do_not_visit must not run this.");
-            }
-
-            p.temp_refs_to_declare.deinit(p.allocator);
-            p.temp_refs_to_declare = @TypeOf(p.temp_refs_to_declare){};
-            p.temp_ref_count = 0;
-
-            try p.visitStmts(stmts, opts.kind);
-
-            // Prepend values for "this" and "arguments"
-            if (opts.fn_body_loc) |fn_body_loc| {
-                // Capture "this"
-                if (p.fn_only_data_visit.this_capture_ref) |ref| {
-                    try p.temp_refs_to_declare.append(p.allocator, TempRef{
-                        .ref = ref,
-                        .value = p.newExpr(E.This{}, fn_body_loc),
-                    });
-                }
-            }
-        }
-
-        pub fn recordDeclaredSymbol(noalias p: *P, ref: Ref) anyerror!void {
-            bun.assert(ref.isSymbol());
-            try p.declared_symbols.append(p.allocator, DeclaredSymbol{
-                .ref = ref,
-                .is_top_level = p.current_scope == p.module_scope,
-            });
-        }
-
-        pub fn visitFunc(p: *P, _func: G.Fn, open_parens_loc: logger.Loc) G.Fn {
-            if (only_scan_imports_and_do_not_visit) {
-                @compileError("only_scan_imports_and_do_not_visit must not run this.");
-            }
-
-            var func = _func;
-            const old_fn_or_arrow_data = p.fn_or_arrow_data_visit;
-            const old_fn_only_data = p.fn_only_data_visit;
-            p.fn_or_arrow_data_visit = FnOrArrowDataVisit{ .is_async = func.flags.contains(.is_async) };
-            p.fn_only_data_visit = FnOnlyDataVisit{ .is_this_nested = true, .arguments_ref = func.arguments_ref };
-
-            if (func.name) |name| {
-                if (name.ref) |name_ref| {
-                    p.recordDeclaredSymbol(name_ref) catch unreachable;
-                    const symbol_name = p.loadNameFromRef(name_ref);
-                    if (isEvalOrArguments(symbol_name)) {
-                        p.markStrictModeFeature(.eval_or_arguments, js_lexer.rangeOfIdentifier(p.source, name.loc), symbol_name) catch unreachable;
-                    }
-                }
-            }
-
-            const body = func.body;
-
-            p.pushScopeForVisitPass(.function_args, open_parens_loc) catch unreachable;
-            p.visitArgs(
-                func.args,
-                VisitArgsOpts{
-                    .has_rest_arg = func.flags.contains(.has_rest_arg),
-                    .body = body.stmts,
-                    .is_unique_formal_parameters = true,
-                },
-            );
-
-            p.pushScopeForVisitPass(.function_body, body.loc) catch unreachable;
-            var stmts = ListManaged(Stmt).fromOwnedSlice(p.allocator, body.stmts);
-            var temp_opts = PrependTempRefsOpts{ .kind = StmtsKind.fn_body, .fn_body_loc = body.loc };
-            p.visitStmtsAndPrependTempRefs(&stmts, &temp_opts) catch unreachable;
-
-            if (p.options.features.react_fast_refresh) {
-                const hook_storage = p.react_refresh.hook_ctx_storage orelse
-                    unreachable; // caller did not init hook storage. any function can have react hooks!
-
-                if (hook_storage.*) |*hook| {
-                    p.handleReactRefreshPostVisitFunctionBody(&stmts, hook);
-                }
-            }
-
-            func.body = G.FnBody{ .stmts = stmts.items, .loc = body.loc };
-
-            p.popScope();
-            p.popScope();
-
-            p.fn_or_arrow_data_visit = old_fn_or_arrow_data;
-            p.fn_only_data_visit = old_fn_only_data;
-
-            return func;
-        }
-
-        pub fn visitArgs(p: *P, args: []G.Arg, opts: VisitArgsOpts) void {
-            const strict_loc = fnBodyContainsUseStrict(opts.body);
-            const has_simple_args = isSimpleParameterList(args, opts.has_rest_arg);
-            var duplicate_args_check: ?*StringVoidMap.Node = null;
-            defer {
-                if (duplicate_args_check) |checker| {
-                    StringVoidMap.release(checker);
-                }
-            }
-
-            // Section 15.2.1 Static Semantics: Early Errors: "It is a Syntax Error if
-            // FunctionBodyContainsUseStrict of FunctionBody is true and
-            // IsSimpleParameterList of FormalParameters is false."
-            if (strict_loc != null and !has_simple_args) {
-                p.log.addRangeError(p.source, p.source.rangeOfString(strict_loc.?), "Cannot use a \"use strict\" directive in a function with a non-simple parameter list") catch unreachable;
-            }
-
-            // Section 15.1.1 Static Semantics: Early Errors: "Multiple occurrences of
-            // the same BindingIdentifier in a FormalParameterList is only allowed for
-            // functions which have simple parameter lists and which are not defined in
-            // strict mode code."
-            if (opts.is_unique_formal_parameters or strict_loc != null or !has_simple_args or p.isStrictMode()) {
-                duplicate_args_check = StringVoidMap.get(bun.default_allocator);
-            }
-
-            const duplicate_args_check_ptr: ?*StringVoidMap = if (duplicate_args_check != null)
-                &duplicate_args_check.?.data
-            else
-                null;
-
-            for (args) |*arg| {
-                if (arg.ts_decorators.len > 0) {
-                    arg.ts_decorators = p.visitTSDecorators(arg.ts_decorators);
-                }
-
-                p.visitBinding(arg.binding, duplicate_args_check_ptr);
-                if (arg.default) |default| {
-                    arg.default = p.visitExpr(default);
-                }
-            }
-        }
-
-        pub fn visitTSDecorators(p: *P, decs: ExprNodeList) ExprNodeList {
-            for (decs.slice()) |*dec| {
-                dec.* = p.visitExpr(dec.*);
-            }
-
-            return decs;
-        }
-
-        pub fn visitDecls(noalias p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_decl_to_remove: bool) usize {
-            var j: usize = 0;
-            var out_decls = decls;
-            for (decls) |*decl| {
-                p.visitBinding(decl.binding, null);
-
-                if (decl.value != null) {
-                    var val = decl.value.?;
-                    const was_anonymous_named_expr = val.isAnonymousNamed();
-                    var replacement: ?*const RuntimeFeatures.ReplaceableExport = null;
-
-                    const prev_require_to_convert_count = p.imports_to_convert_from_require.items.len;
-                    const prev_macro_call_count = p.macro_call_count;
-                    const orig_dead = p.is_control_flow_dead;
-                    if (comptime is_possibly_decl_to_remove) {
-                        if (decl.binding.data == .b_identifier) {
-                            if (p.options.features.replace_exports.getPtr(p.loadNameFromRef(decl.binding.data.b_identifier.ref))) |replacer| {
-                                replacement = replacer;
-                                if (p.options.features.dead_code_elimination and (replacer.* != .replace)) {
-                                    p.is_control_flow_dead = true;
-                                }
-                            }
-                        }
-                    }
-
-                    if (p.options.features.react_fast_refresh) {
-                        p.react_refresh.last_hook_seen = null;
-                    }
-
-                    if (only_scan_imports_and_do_not_visit) {
-                        @compileError("only_scan_imports_and_do_not_visit must not run this.");
-                    }
-                    // Propagate name from binding to anonymous decorated class expressions
-                    const prev_decorator_class_name = p.decorator_class_name;
-                    if (was_anonymous_named_expr and val.data == .e_class and val.data.e_class.should_lower_standard_decorators and decl.binding.data == .b_identifier) {
-                        p.decorator_class_name = p.loadNameFromRef(decl.binding.data.b_identifier.ref);
-                    }
-                    decl.value = p.visitExprInOut(val, .{
-                        .is_immediately_assigned_to_decl = true,
-                    });
-                    p.decorator_class_name = prev_decorator_class_name;
-
-                    if (p.options.features.react_fast_refresh) {
-                        // When hooks are immediately assigned to something, we need to hash the binding.
-                        if (p.react_refresh.last_hook_seen) |last_hook| {
-                            if (decl.value.?.data.as(.e_call)) |call| {
-                                if (last_hook == call) {
-                                    decl.binding.data.writeToHasher(&p.react_refresh.hook_ctx_storage.?.*.?.hasher, p.symbols.items);
-                                }
-                            }
-                        }
-                    }
-
-                    if (p.shouldUnwrapCommonJSToESM()) {
-                        if (prev_require_to_convert_count < p.imports_to_convert_from_require.items.len) {
-                            if (decl.binding.data == .b_identifier) {
-                                const ref = decl.binding.data.b_identifier.ref;
-                                if (decl.value != null and
-                                    decl.value.?.data == .e_require_string and
-                                    decl.value.?.data.e_require_string.unwrapped_id != std.math.maxInt(u32))
-                                {
-                                    p.imports_to_convert_from_require.items[decl.value.?.data.e_require_string.unwrapped_id].namespace.ref = ref;
-                                    p.import_items_for_namespace.put(
-                                        p.allocator,
-                                        ref,
-                                        ImportItemForNamespaceMap.init(p.allocator),
-                                    ) catch unreachable;
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    if (comptime is_possibly_decl_to_remove) {
-                        p.is_control_flow_dead = orig_dead;
-                    }
-                    if (comptime is_possibly_decl_to_remove) {
-                        if (decl.binding.data == .b_identifier) {
-                            if (replacement) |ptr| {
-                                if (!p.replaceDeclAndPossiblyRemove(decl, ptr)) {
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    p.visitDecl(
-                        decl,
-                        was_anonymous_named_expr,
-                        was_const and !p.current_scope.is_after_const_local_prefix,
-                        if (comptime allow_macros)
-                            prev_macro_call_count != p.macro_call_count
-                        else
-                            false,
-                    );
-                } else if (comptime is_possibly_decl_to_remove) {
-                    if (decl.binding.data == .b_identifier) {
-                        if (p.options.features.replace_exports.getPtr(p.loadNameFromRef(decl.binding.data.b_identifier.ref))) |ptr| {
-                            if (!p.replaceDeclAndPossiblyRemove(decl, ptr)) {
-                                p.visitDecl(
-                                    decl,
-                                    was_const and !p.current_scope.is_after_const_local_prefix,
-                                    false,
-                                    false,
-                                );
-                            } else {
-                                continue;
-                            }
-                        }
-                    }
-                }
-
-                out_decls[j] = decl.*;
-                j += 1;
-            }
-
-            return j;
-        }
-
-        pub fn visitBindingAndExprForMacro(p: *P, binding: Binding, expr: Expr) void {
-            switch (binding.data) {
-                .b_object => |bound_object| {
-                    if (expr.data == .e_object and
-                        expr.data.e_object.was_originally_macro)
-                    {
-                        var object = expr.data.e_object;
-                        for (bound_object.properties) |property| {
-                            if (property.flags.contains(.is_spread)) return;
-                        }
-                        var output_properties = object.properties.slice();
-                        var end: u32 = 0;
-                        for (bound_object.properties) |property| {
-                            if (property.key.asStringLiteral(p.allocator)) |name| {
-                                if (object.asProperty(name)) |query| {
-                                    switch (query.expr.data) {
-                                        .e_object, .e_array => p.visitBindingAndExprForMacro(property.value, query.expr),
-                                        else => {
-                                            if (p.options.features.inlining) {
-                                                if (property.value.data == .b_identifier) {
-                                                    p.const_values.put(p.allocator, property.value.data.b_identifier.ref, query.expr) catch unreachable;
-                                                }
-                                            }
-                                        },
-                                    }
-                                    output_properties[end] = output_properties[query.i];
-                                    end += 1;
-                                }
-                            }
-                        }
-
-                        object.properties.len = end;
-                    }
-                },
-                .b_array => |bound_array| {
-                    if (expr.data == .e_array and
-                        expr.data.e_array.was_originally_macro and !bound_array.has_spread)
-                    {
-                        var array = expr.data.e_array;
-
-                        array.items.len = @min(array.items.len, @as(u32, @truncate(bound_array.items.len)));
-                        for (bound_array.items[0..array.items.len], array.items.slice()) |item, *child_expr| {
-                            if (item.binding.data == .b_missing) {
-                                child_expr.* = p.newExpr(E.Missing{}, expr.loc);
-                                continue;
-                            }
-
-                            p.visitBindingAndExprForMacro(item.binding, child_expr.*);
-                        }
-                    }
-                },
-                .b_identifier => |id| {
-                    if (p.options.features.inlining) {
-                        p.const_values.put(p.allocator, id.ref, expr) catch unreachable;
-                    }
-                },
-                else => {},
-            }
-        }
-
-        pub fn visitDecl(p: *P, decl: *Decl, was_anonymous_named_expr: bool, could_be_const_value: bool, could_be_macro: bool) void {
-            // Optionally preserve the name
-            switch (decl.binding.data) {
-                .b_identifier => |id| {
-                    if (could_be_const_value or (allow_macros and could_be_macro)) {
-                        if (decl.value) |val| {
-                            if (val.canBeConstValue()) {
-                                p.const_values.put(p.allocator, id.ref, val) catch unreachable;
-                            }
-                        }
-                    } else {
-                        p.current_scope.is_after_const_local_prefix = true;
-                    }
-                    decl.value = p.maybeKeepExprSymbolName(
-                        decl.value.?,
-                        p.symbols.items[id.ref.innerIndex()].original_name,
-                        was_anonymous_named_expr,
-                    );
-                },
-                .b_object, .b_array => {
-                    if (comptime allow_macros) {
-                        if (could_be_macro and decl.value != null) {
-                            p.visitBindingAndExprForMacro(decl.binding, decl.value.?);
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-
-        pub fn visitForLoopInit(p: *P, stmt: Stmt, is_in_or_of: bool) Stmt {
-            switch (stmt.data) {
-                .s_expr => |st| {
-                    const assign_target = if (is_in_or_of) js_ast.AssignTarget.replace else js_ast.AssignTarget.none;
-                    p.stmt_expr_value = st.value.data;
-                    st.value = p.visitExprInOut(st.value, ExprIn{ .assign_target = assign_target });
-                },
-                .s_local => |st| {
-                    for (st.decls.slice()) |*dec| {
-                        p.visitBinding(dec.binding, null);
-                        if (dec.value) |val| {
-                            dec.value = p.visitExpr(val);
-                        }
-                    }
-                    st.kind = p.selectLocalKind(st.kind);
-                },
-                else => {
-                    p.panic("Unexpected stmt in visitForLoopInit", .{});
-                },
-            }
-
-            return stmt;
-        }
-
-        pub fn visitBinding(noalias p: *P, binding: BindingNodeIndex, duplicate_arg_check: ?*StringVoidMap) void {
-            switch (binding.data) {
-                .b_missing => {},
-                .b_identifier => |bind| {
-                    p.recordDeclaredSymbol(bind.ref) catch unreachable;
-                    const name = p.symbols.items[bind.ref.innerIndex()].original_name;
-                    if (isEvalOrArguments(name)) {
-                        p.markStrictModeFeature(.eval_or_arguments, js_lexer.rangeOfIdentifier(p.source, binding.loc), name) catch unreachable;
-                    }
-                    if (duplicate_arg_check) |dup| {
-                        if (dup.getOrPutContains(name)) {
-                            p.log.addRangeErrorFmt(
-                                p.source,
-                                js_lexer.rangeOfIdentifier(p.source, binding.loc),
-                                p.allocator,
-                                "\"{s}\" cannot be bound multiple times in the same parameter list",
-                                .{name},
-                            ) catch unreachable;
-                        }
-                    }
-                },
-                .b_array => |bind| {
-                    for (bind.items) |*item| {
-                        p.visitBinding(item.binding, duplicate_arg_check);
-                        if (item.default_value) |default_value| {
-                            const was_anonymous_named_expr = default_value.isAnonymousNamed();
-                            const prev_decorator_class_name2 = p.decorator_class_name;
-                            if (was_anonymous_named_expr and default_value.data == .e_class and
-                                default_value.data.e_class.should_lower_standard_decorators and
-                                item.binding.data == .b_identifier)
-                            {
-                                p.decorator_class_name = p.loadNameFromRef(item.binding.data.b_identifier.ref);
-                            }
-                            item.default_value = p.visitExpr(default_value);
-                            p.decorator_class_name = prev_decorator_class_name2;
-
-                            switch (item.binding.data) {
-                                .b_identifier => |bind_| {
-                                    item.default_value = p.maybeKeepExprSymbolName(
-                                        item.default_value orelse unreachable,
-                                        p.symbols.items[bind_.ref.innerIndex()].original_name,
-                                        was_anonymous_named_expr,
-                                    );
-                                },
-                                else => {},
-                            }
-                        }
-                    }
-                },
-                .b_object => |bind| {
-                    for (bind.properties) |*property| {
-                        if (!property.flags.contains(.is_spread)) {
-                            property.key = p.visitExpr(property.key);
-                        }
-
-                        p.visitBinding(property.value, duplicate_arg_check);
-                        if (property.default_value) |default_value| {
-                            const was_anonymous_named_expr = default_value.isAnonymousNamed();
-                            const prev_decorator_class_name3 = p.decorator_class_name;
-                            if (was_anonymous_named_expr and default_value.data == .e_class and
-                                default_value.data.e_class.should_lower_standard_decorators and
-                                property.value.data == .b_identifier)
-                            {
-                                p.decorator_class_name = p.loadNameFromRef(property.value.data.b_identifier.ref);
-                            }
-                            property.default_value = p.visitExpr(default_value);
-                            p.decorator_class_name = prev_decorator_class_name3;
-
-                            switch (property.value.data) {
-                                .b_identifier => |bind_| {
-                                    property.default_value = p.maybeKeepExprSymbolName(
-                                        property.default_value orelse unreachable,
-                                        p.symbols.items[bind_.ref.innerIndex()].original_name,
-                                        was_anonymous_named_expr,
-                                    );
-                                },
-                                else => {},
-                            }
-                        }
-                    }
-                },
-            }
-        }
-
-        pub fn visitLoopBody(noalias p: *P, stmt: StmtNodeIndex) StmtNodeIndex {
-            const old_is_inside_loop = p.fn_or_arrow_data_visit.is_inside_loop;
-            p.fn_or_arrow_data_visit.is_inside_loop = true;
-            p.loop_body = stmt.data;
-            const res = p.visitSingleStmt(stmt, .loop_body);
-            p.fn_or_arrow_data_visit.is_inside_loop = old_is_inside_loop;
-            return res;
-        }
-
-        pub fn visitSingleStmtBlock(noalias p: *P, stmt: Stmt, kind: StmtsKind) Stmt {
-            var new_stmt = stmt;
-            p.pushScopeForVisitPass(.block, stmt.loc) catch unreachable;
-            var stmts = ListManaged(Stmt).initCapacity(p.allocator, stmt.data.s_block.stmts.len) catch unreachable;
-            stmts.appendSlice(stmt.data.s_block.stmts) catch unreachable;
-            p.visitStmts(&stmts, kind) catch unreachable;
-            p.popScope();
-            new_stmt.data.s_block.stmts = stmts.items;
-            if (p.options.features.minify_syntax) {
-                new_stmt = p.stmtsToSingleStmt(stmt.loc, stmts.items);
-            }
-
-            return new_stmt;
-        }
-
-        pub fn visitSingleStmt(noalias p: *P, stmt: Stmt, kind: StmtsKind) Stmt {
-            if (stmt.data == .s_block) {
-                return p.visitSingleStmtBlock(stmt, kind);
-            }
-
-            const has_if_scope = switch (stmt.data) {
-                .s_function => stmt.data.s_function.func.flags.contains(.has_if_scope),
-                else => false,
-            };
-
-            // Introduce a fake block scope for function declarations inside if statements
-            if (has_if_scope) {
-                p.pushScopeForVisitPass(.block, stmt.loc) catch unreachable;
-            }
-
-            var stmts = ListManaged(Stmt).initCapacity(p.allocator, 1) catch unreachable;
-            stmts.append(stmt) catch unreachable;
-            p.visitStmts(&stmts, kind) catch unreachable;
-
-            if (has_if_scope) {
-                p.popScope();
-            }
-
-            return p.stmtsToSingleStmt(stmt.loc, stmts.items);
-        }
-
-        pub fn visitClass(noalias p: *P, name_scope_loc: logger.Loc, noalias class: *G.Class, default_name_ref: Ref) Ref {
-            if (only_scan_imports_and_do_not_visit) {
-                @compileError("only_scan_imports_and_do_not_visit must not run this.");
-            }
-
-            class.ts_decorators = p.visitTSDecorators(class.ts_decorators);
-
-            if (class.class_name) |name| {
-                p.recordDeclaredSymbol(name.ref.?) catch unreachable;
-            }
-
-            p.pushScopeForVisitPass(.class_name, name_scope_loc) catch unreachable;
-            const old_enclosing_class_keyword = p.enclosing_class_keyword;
-            p.enclosing_class_keyword = class.class_keyword;
-            p.current_scope.recursiveSetStrictMode(.implicit_strict_mode_class);
-            var shadow_ref = Ref.None;
-
-            // Insert a shadowing name that spans the whole class, which matches
-            // JavaScript's semantics. The class body (and extends clause) "captures" the
-            // original value of the name. This matters for class statements because the
-            // symbol can be re-assigned to something else later. The captured values
-            // must be the original value of the name, not the re-assigned value.
-            // Use "const" for this symbol to match JavaScript run-time semantics. You
-            // are not allowed to assign to this symbol (it throws a TypeError).
-            if (class.class_name) |name| {
-                shadow_ref = name.ref.?;
-                p.current_scope.members.put(
-                    p.allocator,
-                    p.symbols.items[shadow_ref.innerIndex()].original_name,
-                    Scope.Member{ .ref = name.ref orelse Ref.None, .loc = name.loc },
-                ) catch unreachable;
-            } else {
-                const name_str: []const u8 = if (default_name_ref.isNull()) "_this" else "_default";
-                shadow_ref = p.newSymbol(.constant, name_str) catch unreachable;
-            }
-
-            p.recordDeclaredSymbol(shadow_ref) catch unreachable;
-
-            if (class.extends) |extends| {
-                class.extends = p.visitExpr(extends);
-            }
-
-            {
-                p.pushScopeForVisitPass(.class_body, class.body_loc) catch unreachable;
-                defer {
-                    p.popScope();
-                    p.enclosing_class_keyword = old_enclosing_class_keyword;
-                }
-
-                var constructor_function: ?*E.Function = null;
-                for (class.properties) |*property| {
-                    if (property.kind == .class_static_block) {
-                        const old_fn_or_arrow_data = p.fn_or_arrow_data_visit;
-                        const old_fn_only_data = p.fn_only_data_visit;
-                        p.fn_or_arrow_data_visit = .{};
-                        p.fn_only_data_visit = .{
-                            .is_this_nested = true,
-                            .is_new_target_allowed = true,
-                            .class_name_ref = &shadow_ref,
-
-                            // TODO: down transpilation
-                            .should_replace_this_with_class_name_ref = false,
-                        };
-                        p.pushScopeForVisitPass(.class_static_init, property.class_static_block.?.loc) catch unreachable;
-
-                        // Make it an error to use "arguments" in a static class block
-                        p.current_scope.forbid_arguments = true;
-
-                        var list = property.class_static_block.?.stmts.moveToListManaged(p.allocator);
-                        p.visitStmts(&list, .fn_body) catch unreachable;
-                        property.class_static_block.?.stmts = js_ast.BabyList(Stmt).moveFromList(&list);
-                        p.popScope();
-
-                        p.fn_or_arrow_data_visit = old_fn_or_arrow_data;
-                        p.fn_only_data_visit = old_fn_only_data;
-
-                        continue;
-                    }
-                    property.ts_decorators = p.visitTSDecorators(property.ts_decorators);
-                    const is_private = if (property.key != null) @as(Expr.Tag, property.key.?.data) == .e_private_identifier else false;
-
-                    // Special-case EPrivateIdentifier to allow it here
-
-                    if (is_private) {
-                        p.recordDeclaredSymbol(property.key.?.data.e_private_identifier.ref) catch unreachable;
-                    } else if (property.key) |key| {
-                        property.key = p.visitExpr(key);
-                    }
-
-                    // Make it an error to use "arguments" in a class body
-                    p.current_scope.forbid_arguments = true;
-                    defer p.current_scope.forbid_arguments = false;
-
-                    // The value of "this" is shadowed inside property values
-                    const old_is_this_captured = p.fn_only_data_visit.is_this_nested;
-                    const old_class_name_ref = p.fn_only_data_visit.class_name_ref;
-                    p.fn_only_data_visit.is_this_nested = true;
-                    p.fn_only_data_visit.is_new_target_allowed = true;
-                    p.fn_only_data_visit.class_name_ref = &shadow_ref;
-                    defer p.fn_only_data_visit.is_this_nested = old_is_this_captured;
-                    defer p.fn_only_data_visit.class_name_ref = old_class_name_ref;
-
-                    // We need to explicitly assign the name to the property initializer if it
-                    // will be transformed such that it is no longer an inline initializer.
-
-                    var constructor_function_: ?*E.Function = null;
-
-                    var name_to_keep: ?string = null;
-                    if (is_private) {} else if (!property.flags.contains(.is_method) and !property.flags.contains(.is_computed)) {
-                        if (property.key) |key| {
-                            if (@as(Expr.Tag, key.data) == .e_string) {
-                                name_to_keep = key.data.e_string.string(p.allocator) catch unreachable;
-                            }
-                        }
-                    } else if (property.flags.contains(.is_method)) {
-                        if (comptime is_typescript_enabled) {
-                            if (property.value.?.data == .e_function and property.key.?.data == .e_string and
-                                property.key.?.data.e_string.eqlComptime("constructor"))
-                            {
-                                constructor_function_ = property.value.?.data.e_function;
-                                constructor_function = constructor_function_;
-                            }
-                        }
-                    }
-
-                    if (property.value) |val| {
-                        if (name_to_keep) |name| {
-                            const was_anon = val.isAnonymousNamed();
-                            const prev_dcn = p.decorator_class_name;
-                            if (val.data == .e_class and val.data.e_class.class_name == null and val.data.e_class.should_lower_standard_decorators) {
-                                p.decorator_class_name = name;
-                            }
-                            property.value = p.maybeKeepExprSymbolName(p.visitExpr(val), name, was_anon);
-                            p.decorator_class_name = prev_dcn;
-                        } else {
-                            property.value = p.visitExpr(val);
-                        }
-
-                        if (comptime is_typescript_enabled) {
-                            if (constructor_function_ != null and property.value != null and property.value.?.data == .e_function) {
-                                constructor_function = property.value.?.data.e_function;
-                            }
-                        }
-                    }
-
-                    if (property.initializer) |val| {
-                        // if (property.flags.is_static and )
-                        if (name_to_keep) |name| {
-                            const was_anon = val.isAnonymousNamed();
-                            const prev_dcn2 = p.decorator_class_name;
-                            if (val.data == .e_class and val.data.e_class.class_name == null and val.data.e_class.should_lower_standard_decorators) {
-                                p.decorator_class_name = name;
-                            }
-                            property.initializer = p.maybeKeepExprSymbolName(p.visitExpr(val), name, was_anon);
-                            p.decorator_class_name = prev_dcn2;
-                        } else {
-                            property.initializer = p.visitExpr(val);
-                        }
-                    }
-                }
-
-                // note: our version assumes useDefineForClassFields is true
-                if (comptime is_typescript_enabled) {
-                    if (constructor_function) |constructor| {
-                        var to_add: usize = 0;
-                        for (constructor.func.args) |arg| {
-                            to_add += @intFromBool(arg.is_typescript_ctor_field and arg.binding.data == .b_identifier);
-                        }
-
-                        // if this is an expression, we can move statements after super() because there will be 0 decorators
-                        var super_index: ?usize = null;
-                        if (class.extends != null) {
-                            for (constructor.func.body.stmts, 0..) |stmt, index| {
-                                if (stmt.data != .s_expr or stmt.data.s_expr.value.data != .e_call or stmt.data.s_expr.value.data.e_call.target.data != .e_super) continue;
-                                super_index = index;
-                                break;
-                            }
-                        }
-
-                        if (to_add > 0) {
-                            // to match typescript behavior, we also must prepend to the class body
-                            var stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, constructor.func.body.stmts);
-                            stmts.ensureUnusedCapacity(to_add) catch unreachable;
-                            var class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, class.properties);
-                            class_body.ensureUnusedCapacity(to_add) catch unreachable;
-                            var j: usize = 0;
-
-                            for (constructor.func.args) |arg| {
-                                if (arg.is_typescript_ctor_field) {
-                                    switch (arg.binding.data) {
-                                        .b_identifier => |id| {
-                                            const arg_symbol = p.symbols.items[id.ref.innerIndex()];
-                                            const name = arg_symbol.original_name;
-                                            const arg_ident = p.newExpr(E.Identifier{ .ref = id.ref }, arg.binding.loc);
-
-                                            stmts.insert(if (super_index) |k| j + k + 1 else j, Stmt.assign(
-                                                p.newExpr(E.Dot{
-                                                    .target = p.newExpr(E.This{}, arg.binding.loc),
-                                                    .name = name,
-                                                    .name_loc = arg.binding.loc,
-                                                }, arg.binding.loc),
-                                                arg_ident,
-                                            )) catch unreachable;
-                                            // O(N)
-                                            class_body.items.len += 1;
-                                            bun.copy(G.Property, class_body.items[j + 1 ..], class_body.items[j .. class_body.items.len - 1]);
-                                            // Copy the argument name symbol to prevent the class field declaration from being renamed
-                                            // but not the constructor argument.
-                                            const field_symbol_ref = p.declareSymbol(.other, arg.binding.loc, name) catch id.ref;
-                                            field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
-                                            const field_ident = p.newExpr(E.Identifier{ .ref = field_symbol_ref }, arg.binding.loc);
-                                            class_body.items[j] = G.Property{ .key = field_ident };
-                                            j += 1;
-                                        },
-                                        else => {},
-                                    }
-                                }
-                            }
-
-                            class.properties = class_body.items;
-                            constructor.func.body.stmts = stmts.items;
-                        }
-                    }
-                }
-            }
-
-            if (p.symbols.items[shadow_ref.innerIndex()].use_count_estimate == 0) {
-                // If there was originally no class name but something inside needed one
-                // (e.g. there was a static property initializer that referenced "this"),
-                // store our generated name so the class expression ends up with a name.
-                shadow_ref = Ref.None;
-            } else if (class.class_name == null) {
-                class.class_name = LocRef{
-                    .ref = shadow_ref,
-                    .loc = name_scope_loc,
-                };
-                p.recordDeclaredSymbol(shadow_ref) catch unreachable;
-            }
-
-            // class name scope
-            p.popScope();
-
-            return shadow_ref;
-        }
-
-        // Try separating the list for appending, so that it's not a pointer.
-        pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!void {
-            if (only_scan_imports_and_do_not_visit) {
-                @compileError("only_scan_imports_and_do_not_visit must not run this.");
-            }
-
-            const initial_scope = if (comptime Environment.allow_assert) p.current_scope;
-
-            {
-                // Save the current control-flow liveness. This represents if we are
-                // currently inside an "if (false) { ... }" block.
-                const old_is_control_flow_dead = p.is_control_flow_dead;
-                defer p.is_control_flow_dead = old_is_control_flow_dead;
-
-                var before = ListManaged(Stmt).init(p.allocator);
-                defer before.deinit();
-
-                var after = ListManaged(Stmt).init(p.allocator);
-                defer after.deinit();
-
-                // Preprocess TypeScript enums to improve code generation. Otherwise
-                // uses of an enum before that enum has been declared won't be inlined:
-                //
-                //   console.log(Foo.FOO) // We want "FOO" to be inlined here
-                //   const enum Foo { FOO = 0 }
-                //
-                // The TypeScript compiler itself contains code with this pattern, so
-                // it's important to implement this optimization.
-                var preprocessed_enums: std.ArrayListUnmanaged([]Stmt) = .{};
-                defer preprocessed_enums.deinit(p.allocator);
-                if (p.scopes_in_order_for_enum.count() > 0) {
-                    var found: usize = 0;
-                    for (stmts.items) |*stmt| {
-                        if (stmt.data == .s_enum) {
-                            const old_scopes_in_order = p.scope_order_to_visit;
-                            defer p.scope_order_to_visit = old_scopes_in_order;
-
-                            p.scope_order_to_visit = p.scopes_in_order_for_enum.get(stmt.loc).?;
-
-                            var temp = ListManaged(Stmt).init(p.allocator);
-                            try p.visitAndAppendStmt(&temp, stmt);
-                            try preprocessed_enums.append(p.allocator, temp.items);
-                            found += 1;
-                        }
-                    }
-                }
-
-                if (p.current_scope == p.module_scope) {
-                    p.macro.prepend_stmts = &before;
-                }
-
-                // visit all statements first
-                var visited = try ListManaged(Stmt).initCapacity(p.allocator, stmts.items.len);
-                defer visited.deinit();
-
-                const prev_nearest_stmt_list = p.nearest_stmt_list;
-                defer p.nearest_stmt_list = prev_nearest_stmt_list;
-                p.nearest_stmt_list = &before;
-
-                var preprocessed_enum_i: usize = 0;
-
-                for (stmts.items) |*stmt| {
-                    const list = list_getter: {
-                        switch (stmt.data) {
-                            .s_export_equals => {
-                                // TypeScript "export = value;" becomes "module.exports = value;". This
-                                // must happen at the end after everything is parsed because TypeScript
-                                // moves this statement to the end when it generates code.
-                                break :list_getter &after;
-                            },
-                            .s_function => |data| {
-                                if (
-                                // Manually hoist block-level function declarations to preserve semantics.
-                                // This is only done for function declarations that are not generators
-                                // or async functions, since this is a backwards-compatibility hack from
-                                // Annex B of the JavaScript standard.
-                                !p.current_scope.kindStopsHoisting() and
-                                    p.symbols.items[data.func.name.?.ref.?.innerIndex()].kind == .hoisted_function)
-                                {
-                                    break :list_getter &before;
-                                }
-                            },
-                            .s_enum => {
-                                const enum_stmts = preprocessed_enums.items[preprocessed_enum_i];
-                                preprocessed_enum_i += 1;
-                                try visited.appendSlice(enum_stmts);
-
-                                const enum_scope_count = p.scopes_in_order_for_enum.get(stmt.loc).?.len;
-                                p.scope_order_to_visit = p.scope_order_to_visit[enum_scope_count..];
-                                continue;
-                            },
-                            else => {},
-                        }
-                        break :list_getter &visited;
-                    };
-                    try p.visitAndAppendStmt(list, stmt);
-                }
-
-                // Transform block-level function declarations into variable declarations
-                if (before.items.len > 0) {
-                    var let_decls = ListManaged(G.Decl).init(p.allocator);
-                    var var_decls = ListManaged(G.Decl).init(p.allocator);
-                    var non_fn_stmts = ListManaged(Stmt).init(p.allocator);
-                    var fn_stmts = std.AutoHashMap(Ref, u32).init(p.allocator);
-
-                    defer {
-                        non_fn_stmts.deinit();
-                        fn_stmts.deinit();
-                    }
-
-                    for (before.items) |stmt| {
-                        switch (stmt.data) {
-                            .s_function => |data| {
-                                // This transformation of function declarations in nested scopes is
-                                // intended to preserve the hoisting semantics of the original code. In
-                                // JavaScript, function hoisting works differently in strict mode vs.
-                                // sloppy mode code. We want the code we generate to use the semantics of
-                                // the original environment, not the generated environment. However, if
-                                // direct "eval" is present then it's not possible to preserve the
-                                // semantics because we need two identifiers to do that and direct "eval"
-                                // means neither identifier can be renamed to something else. So in that
-                                // case we give up and do not preserve the semantics of the original code.
-                                const name_ref = data.func.name.?.ref.?;
-                                if (p.current_scope.contains_direct_eval) {
-                                    if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
-                                        // Merge the two identifiers back into a single one
-                                        p.symbols.items[hoisted_ref.innerIndex()].link = name_ref;
-                                    }
-                                    bun.handleOom(non_fn_stmts.append(stmt));
-                                    continue;
-                                }
-
-                                const gpe = bun.handleOom(fn_stmts.getOrPut(name_ref));
-                                var index = gpe.value_ptr.*;
-                                if (!gpe.found_existing) {
-                                    index = @as(u32, @intCast(let_decls.items.len));
-                                    gpe.value_ptr.* = index;
-                                    let_decls.append(.{
-                                        .binding = p.b(B.Identifier{
-                                            .ref = name_ref,
-                                        }, data.func.name.?.loc),
-                                    }) catch unreachable;
-
-                                    // Also write the function to the hoisted sibling symbol if applicable
-                                    if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
-                                        p.recordUsage(name_ref);
-                                        var_decls.append(.{
-                                            .binding = p.b(
-                                                B.Identifier{ .ref = hoisted_ref },
-                                                data.func.name.?.loc,
-                                            ),
-                                            .value = p.newExpr(
-                                                E.Identifier{
-                                                    .ref = name_ref,
-                                                },
-                                                data.func.name.?.loc,
-                                            ),
-                                        }) catch |err| bun.handleOom(err);
-                                    }
-                                }
-
-                                // The last function statement for a given symbol wins
-                                data.func.name = null;
-                                let_decls.items[index].value = p.newExpr(
-                                    E.Function{
-                                        .func = data.func,
-                                    },
-                                    stmt.loc,
-                                );
-                            },
-                            else => {
-                                non_fn_stmts.append(stmt) catch unreachable;
-                            },
-                        }
-                    }
-                    before.items.len = 0;
-
-                    before.ensureUnusedCapacity(@as(usize, @intFromBool(let_decls.items.len > 0)) + @as(usize, @intFromBool(var_decls.items.len > 0)) + non_fn_stmts.items.len) catch unreachable;
-
-                    if (let_decls.items.len > 0) {
-                        const decls: Decl.List = .moveFromList(&let_decls);
-                        before.appendAssumeCapacity(p.s(
-                            S.Local{
-                                .kind = .k_let,
-                                .decls = decls,
-                            },
-                            decls.at(0).value.?.loc,
-                        ));
-                    }
-
-                    if (var_decls.items.len > 0) {
-                        const relocated = p.maybeRelocateVarsToTopLevel(var_decls.items, .normal);
-                        if (relocated.ok) {
-                            if (relocated.stmt) |new| {
-                                before.appendAssumeCapacity(new);
-                            }
-                        } else {
-                            const decls: Decl.List = .moveFromList(&var_decls);
-                            before.appendAssumeCapacity(p.s(
-                                S.Local{
-                                    .kind = .k_var,
-                                    .decls = decls,
-                                },
-                                decls.at(0).value.?.loc,
-                            ));
-                        }
-                    }
-
-                    before.appendSliceAssumeCapacity(non_fn_stmts.items);
-                }
-
-                var visited_count = visited.items.len;
-                if (p.is_control_flow_dead and p.options.features.dead_code_elimination) {
-                    var end: usize = 0;
-                    for (visited.items) |item| {
-                        if (!SideEffects.shouldKeepStmtInDeadControlFlow(item, p.allocator)) {
-                            continue;
-                        }
-
-                        visited.items[end] = item;
-                        end += 1;
-                    }
-                    visited_count = end;
-                }
-
-                const total_size = visited_count + before.items.len + after.items.len;
-
-                if (total_size != stmts.items.len) {
-                    try stmts.resize(total_size);
-                }
-
-                var remain = stmts.items;
-
-                for (before.items) |item| {
-                    remain[0] = item;
-                    remain = remain[1..];
-                }
-
-                const visited_slice = visited.items[0..visited_count];
-                for (visited_slice) |item| {
-                    remain[0] = item;
-                    remain = remain[1..];
-                }
-
-                for (after.items) |item| {
-                    remain[0] = item;
-                    remain = remain[1..];
-                }
-            }
-
-            // Lower using declarations
-            if (kind != .switch_stmt and p.shouldLowerUsingDeclarations(stmts.items)) {
-                var ctx = try LowerUsingDeclarationsContext.init(p);
-                ctx.scanStmts(p, stmts.items);
-                stmts.* = ctx.finalize(p, stmts.items, p.current_scope.parent == null);
-            }
-
-            if (comptime Environment.allow_assert)
-                // if this fails it means that scope pushing/popping is not balanced
-                assert(p.current_scope == initial_scope);
-
-            if (!p.options.features.minify_syntax or !p.options.features.dead_code_elimination) {
-                return;
-            }
-
-            if (p.current_scope.parent != null and !p.current_scope.contains_direct_eval) {
-                // Remove inlined constants now that we know whether any of these statements
-                // contained a direct eval() or not. This can't be done earlier when we
-                // encounter the constant because we haven't encountered the eval() yet.
-                // Inlined constants are not removed if they are in a top-level scope or
-                // if they are exported (which could be in a nested TypeScript namespace).
-                if (p.const_values.count() > 0) {
-                    const items: []Stmt = stmts.items;
-                    for (items) |*stmt| {
-                        switch (stmt.data) {
-                            .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => continue,
-                            .s_local => |local| {
-                                // "using" / "await using" declarations have disposal
-                                // side-effects on scope exit. Their refs can end up in
-                                // `const_values` via the macro path in `visitDecl`
-                                // (`could_be_macro`), so skip them here to avoid
-                                // silently dropping the declaration.
-                                if (local.kind.isUsing()) continue;
-                                if (!local.is_export and !local.was_commonjs_export) {
-                                    var decls: []Decl = local.decls.slice();
-                                    var end: usize = 0;
-                                    var any_decl_in_const_values = local.kind == .k_const;
-                                    for (decls) |decl| {
-                                        if (decl.binding.data == .b_identifier) {
-                                            if (p.const_values.contains(decl.binding.data.b_identifier.ref)) {
-                                                any_decl_in_const_values = true;
-                                                const symbol = p.symbols.items[decl.binding.data.b_identifier.ref.innerIndex()];
-                                                if (symbol.use_count_estimate == 0) {
-                                                    // Skip declarations that are constants with zero usage
-                                                    continue;
-                                                }
-                                            }
-                                        }
-                                        decls[end] = decl;
-                                        end += 1;
-                                    }
-                                    local.decls.len = @as(u32, @truncate(end));
-                                    if (any_decl_in_const_values) {
-                                        if (end == 0) {
-                                            stmt.* = stmt.*.toEmpty();
-                                        }
-                                        continue;
-                                    }
-                                }
-                            },
-                            else => {},
-                        }
-
-                        // Break after processing relevant statements
-                        break;
-                    }
-                }
-            }
-
-            var is_control_flow_dead = false;
-
-            var output = ListManaged(Stmt).initCapacity(p.allocator, stmts.items.len) catch unreachable;
-
-            const dead_code_elimination = p.options.features.dead_code_elimination;
-            for (stmts.items) |stmt| {
-                if (is_control_flow_dead and dead_code_elimination and
-                    !SideEffects.shouldKeepStmtInDeadControlFlow(stmt, p.allocator))
-                {
-                    // Strip unnecessary statements if the control flow is dead here
-                    continue;
-                }
-
-                // Inline single-use variable declarations where possible:
-                //
-                //   // Before
-                //   let x = fn();
-                //   return x.y();
-                //
-                //   // After
-                //   return fn().y();
-                //
-                // The declaration must not be exported. We can't just check for the
-                // "export" keyword because something might do "export {id};" later on.
-                // Instead we just ignore all top-level declarations for now. That means
-                // this optimization currently only applies in nested scopes.
-                //
-                // Ignore declarations if the scope is shadowed by a direct "eval" call.
-                // The eval'd code may indirectly reference this symbol and the actual
-                // use count may be greater than 1.
-                if (p.current_scope != p.module_scope and !p.current_scope.contains_direct_eval) {
-                    // Keep inlining variables until a failure or until there are none left.
-                    // That handles cases like this:
-                    //
-                    //   // Before
-                    //   let x = fn();
-                    //   let y = x.prop;
-                    //   return y;
-                    //
-                    //   // After
-                    //   return fn().prop;
-                    //
-                    inner: while (output.items.len > 0) {
-                        // Ignore "var" declarations since those have function-level scope and
-                        // we may not have visited all of their uses yet by this point. We
-                        // should have visited all the uses of "let" and "const" declarations
-                        // by now since they are scoped to this block which we just finished
-                        // visiting.
-                        const prev_statement = &output.items[output.items.len - 1];
-                        switch (prev_statement.data) {
-                            .s_local => {
-                                var local = prev_statement.data.s_local;
-                                // "using" / "await using" declarations have disposal
-                                // side-effects on scope exit, so they must not be
-                                // removed by inlining their initializer into the use.
-                                if (local.decls.len == 0 or local.kind == .k_var or local.kind.isUsing() or local.is_export) {
-                                    break;
-                                }
-
-                                const last: *Decl = local.decls.last().?;
-                                // The variable must be initialized, since we will be substituting
-                                // the value into the usage.
-                                if (last.value == null)
-                                    break;
-
-                                // The binding must be an identifier that is only used once.
-                                // Ignore destructuring bindings since that's not the simple case.
-                                // Destructuring bindings could potentially execute side-effecting
-                                // code which would invalidate reordering.
-
-                                switch (last.binding.data) {
-                                    .b_identifier => |ident| {
-                                        const id = ident.ref;
-
-                                        const symbol: *const Symbol = &p.symbols.items[id.innerIndex()];
-
-                                        // Try to substitute the identifier with the initializer. This will
-                                        // fail if something with side effects is in between the declaration
-                                        // and the usage.
-                                        if (symbol.use_count_estimate == 1) {
-                                            if (p.substituteSingleUseSymbolInStmt(stmt, id, last.value.?)) {
-                                                switch (local.decls.len) {
-                                                    1 => {
-                                                        local.decls.len = 0;
-                                                        output.items.len -= 1;
-                                                        continue :inner;
-                                                    },
-                                                    else => {
-                                                        local.decls.len -= 1;
-                                                        continue :inner;
-                                                    },
-                                                }
-                                            }
-                                        }
-                                    },
-                                    else => {},
-                                }
-                            },
-                            else => {},
-                        }
-                        break;
-                    }
-                }
-
-                // don't merge super calls to ensure they are called before "this" is accessed
-                if (stmt.isSuperCall()) {
-                    output.append(stmt) catch unreachable;
-                    continue;
-                }
-
-                // The following calls to `joinWithComma` are only enabled during bundling. We do this
-                // to avoid changing line numbers too much for source maps
-
-                switch (stmt.data) {
-                    .s_empty => continue,
-
-                    // skip directives for now
-                    .s_directive => continue,
-
-                    .s_local => |local| {
-                        // Merge adjacent local statements
-                        if (output.items.len > 0) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_local and
-                                local.canMergeWith(prev_stmt.data.s_local))
-                            {
-                                prev_stmt.data.s_local.decls.appendSlice(
-                                    p.allocator,
-                                    local.decls.slice(),
-                                ) catch |err| bun.handleOom(err);
-                                continue;
-                            }
-                        }
-                    },
-
-                    .s_expr => |s_expr| {
-                        // Merge adjacent expression statements
-                        if (output.items.len > 0) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_expr and !prev_stmt.isSuperCall() and p.options.runtimeMergeAdjacentExpressionStatements()) {
-                                prev_stmt.data.s_expr.does_not_affect_tree_shaking = prev_stmt.data.s_expr.does_not_affect_tree_shaking and
-                                    s_expr.does_not_affect_tree_shaking;
-                                prev_stmt.data.s_expr.value = prev_stmt.data.s_expr.value.joinWithComma(
-                                    s_expr.value,
-                                    p.allocator,
-                                );
-                                continue;
-                            } else if
-                            //
-                            // Input:
-                            //      var f;
-                            //      f = 123;
-                            // Output:
-                            //      var f = 123;
-                            //
-                            // This doesn't handle every case. Only the very simple one.
-                            (prev_stmt.data == .s_local and
-                                s_expr.value.data == .e_binary and
-                                prev_stmt.data.s_local.decls.len == 1 and
-                                s_expr.value.data.e_binary.op == .bin_assign and
-                                // we can only do this with var because var is hoisted
-                                // the statement we are merging into may use the statement before its defined.
-                                prev_stmt.data.s_local.kind == .k_var)
-                            {
-                                var prev_local = prev_stmt.data.s_local;
-                                const bin_assign = s_expr.value.data.e_binary;
-
-                                if (bin_assign.left.data == .e_identifier) {
-                                    var decl = &prev_local.decls.slice()[0];
-                                    if (decl.binding.data == .b_identifier and
-                                        decl.binding.data.b_identifier.ref.eql(bin_assign.left.data.e_identifier.ref) and
-                                        // If the value was assigned, we shouldn't merge it incase it was used in the current statement
-                                        // https://github.com/oven-sh/bun/issues/2948
-                                        // We don't have a more granular way to check symbol usage so this is the best we can do
-                                        decl.value == null)
-                                    {
-                                        decl.value = bin_assign.right;
-                                        p.ignoreUsage(bin_assign.left.data.e_identifier.ref);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    .s_switch => |s_switch| {
-                        // Absorb a previous expression statement
-                        if (output.items.len > 0 and p.options.runtimeMergeAdjacentExpressionStatements()) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_expr and !prev_stmt.isSuperCall()) {
-                                s_switch.test_ = prev_stmt.data.s_expr.value.joinWithComma(s_switch.test_, p.allocator);
-                                output.items.len -= 1;
-                            }
-                        }
-                    },
-                    .s_if => |s_if| {
-                        // Absorb a previous expression statement
-                        if (output.items.len > 0 and p.options.runtimeMergeAdjacentExpressionStatements()) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_expr and !prev_stmt.isSuperCall()) {
-                                s_if.test_ = prev_stmt.data.s_expr.value.joinWithComma(s_if.test_, p.allocator);
-                                output.items.len -= 1;
-                            }
-                        }
-
-                        // TODO: optimize jump
-                    },
-
-                    .s_return => |ret| {
-                        // Merge return statements with the previous expression statement
-                        if (output.items.len > 0 and ret.value != null and p.options.runtimeMergeAdjacentExpressionStatements()) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_expr and !prev_stmt.isSuperCall()) {
-                                ret.value = prev_stmt.data.s_expr.value.joinWithComma(ret.value.?, p.allocator);
-                                prev_stmt.* = stmt;
-                                continue;
-                            }
-                        }
-
-                        is_control_flow_dead = true;
-                    },
-
-                    .s_break, .s_continue => {
-                        is_control_flow_dead = true;
-                    },
-
-                    .s_throw => {
-                        // Merge throw statements with the previous expression statement
-                        if (output.items.len > 0 and p.options.runtimeMergeAdjacentExpressionStatements()) {
-                            var prev_stmt = &output.items[output.items.len - 1];
-                            if (prev_stmt.data == .s_expr and !prev_stmt.isSuperCall()) {
-                                prev_stmt.* = p.s(S.Throw{
-                                    .value = prev_stmt.data.s_expr.value.joinWithComma(
-                                        stmt.data.s_throw.value,
-                                        p.allocator,
-                                    ),
-                                }, stmt.loc);
-                                continue;
-                            }
-                        }
-
-                        is_control_flow_dead = true;
-                    },
-
-                    else => {},
-                }
-
-                output.append(stmt) catch unreachable;
-            }
-
-            stmts.deinit();
-            stmts.* = output;
-        }
-    };
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-
-pub fn fnBodyContainsUseStrict(body: []Stmt) ?logger.Loc {
-    for (body) |stmt| {
-        // "use strict" has to appear at the top of the function body
-        // but we can allow comments
-        switch (stmt.data) {
-            .s_comment => {
-                continue;
-            },
-            .s_directive => |dir| {
-                if (strings.eqlComptime(dir.value, "use strict")) {
-                    return stmt.loc;
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
                 }
-            },
-            .s_empty => {},
-            else => return null,
+            }
+            return @ptrCast(@alignCast(__c));
         }
+        return null;
     }
-
-    return null;
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const string = []const u8;
-
-const bun = @import("bun");
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
 const js_lexer = bun.js_lexer;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const Binding = js_ast.Binding;
@@ -1385,12 +84,10 @@ const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
 const StmtNodeIndex = js_ast.StmtNodeIndex;
 const Symbol = js_ast.Symbol;
-
 const G = js_ast.G;
 const Arg = G.Arg;
 const Decl = G.Decl;
 const Property = G.Property;
-
 const js_parser = bun.js_parser;
 const ExprIn = js_parser.ExprIn;
 const FnOnlyDataVisit = js_parser.FnOnlyDataVisit;
@@ -1408,8 +105,1091 @@ const TypeScript = js_parser.TypeScript;
 const VisitArgsOpts = js_parser.VisitArgsOpts;
 const isEvalOrArguments = js_parser.isEvalOrArguments;
 const options = js_parser.options;
-
-const std = @import("std");
 const AutoHashMap = std.AutoHashMap;
 const List = std.ArrayListUnmanaged;
 const ListManaged = std.array_list.Managed;
+
+pub fn Visit(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn visitStmtsAndPrependTempRefs(p: *P, stmts: *ListManaged(Stmt), opts: *PrependTempRefsOpts) anyerror!void {
+            if (only_scan_imports_and_do_not_visit) {
+                _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+            }
+            _ = p.temp_refs_to_declare.deinit(p.allocator);
+            const TempRefsType = @TypeOf(p.temp_refs_to_declare);
+            _ = &TempRefsType;
+            p.temp_refs_to_declare = TempRefsType{  };
+            p.temp_ref_count = 0;
+            _ = try p.visitStmts(stmts, opts.kind);
+            if (opts.fn_body_loc) |fn_body_loc| {
+                _ = &fn_body_loc;
+                if (p.fn_only_data_visit.this_capture_ref) |sym_ref| {
+                    _ = &sym_ref;
+                    _ = try p.temp_refs_to_declare.append(p.allocator, TempRef{ .@"ref" = sym_ref, .value = p.newExpr(E.This, fn_body_loc) });
+                }
+            }
+    }
+
+pub fn recordDeclaredSymbol(p: *P, sym_ref: Ref) anyerror!void {
+            _ = try p.declared_symbols.append(p.allocator, DeclaredSymbol{ .@"ref" = sym_ref, .is_top_level = (p.current_scope == p.module_scope) });
+    }
+
+pub fn visitFunc(p: *P, _func: G.Fn, open_parens_loc: logger.Loc) G.Fn {
+            if (only_scan_imports_and_do_not_visit) {
+                _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+            }
+            var func = _func;
+            _ = &func;
+            const old_fn_or_arrow_data = p.fn_or_arrow_data_visit;
+            const old_fn_only_data = p.fn_only_data_visit;
+            p.fn_or_arrow_data_visit = FnOrArrowDataVisit{ .is_async = func.flags.contains(.is_async) };
+            p.fn_only_data_visit = FnOnlyDataVisit{ .is_this_nested = true, .arguments_ref = func.arguments_ref };
+            if ((if (@typeInfo(@TypeOf(func)) == .@"enum" or @typeInfo(@TypeOf(func)) == .@"union") @tagName(func) else func.name)) |name| {
+                _ = &name;
+                if (name.ref) |name_ref| {
+                    _ = &name_ref;
+                    _ = ((p.recordDeclaredSymbol(name_ref)) catch unreachable);
+                    const symbol_name = p.loadNameFromRef(name_ref);
+                    if (isEvalOrArguments(symbol_name)) {
+                        _ = ((p.markStrictModeFeature(.eval_or_arguments, js_lexer.rangeOfIdentifier(p.source, name.loc), symbol_name)) catch unreachable);
+                    }
+                }
+            }
+            const body = func.body;
+            _ = ((p.pushScopeForVisitPass(.function_args, open_parens_loc)) catch unreachable);
+            _ = p.visitArgs(func.args, VisitArgsOpts{ .has_rest_arg = func.flags.contains(.has_rest_arg), .body = body.stmts, .is_unique_formal_parameters = true });
+            _ = ((p.pushScopeForVisitPass(.function_body, body.loc)) catch unreachable);
+            var stmts = ListManaged(Stmt).fromOwnedSlice(p.allocator, body.stmts);
+            _ = &stmts;
+            var temp_opts = PrependTempRefsOpts{ .kind = StmtsKind.fn_body, .fn_body_loc = body.loc };
+            _ = &temp_opts;
+            _ = ((p.visitStmtsAndPrependTempRefs((&stmts), (&temp_opts))) catch unreachable);
+            if (p.options.features.react_fast_refresh) {
+                const hook_storage = ((p.react_refresh.hook_ctx_storage) orelse (unreachable));
+                if (hook_storage.*) |*hook| {
+                    _ = &hook;
+                    _ = p.handleReactRefreshPostVisitFunctionBody((&stmts), (hook.*));
+                }
+            }
+            func.body = G.FnBody{ .stmts = stmts.items, .loc = body.loc };
+            _ = p.popScope();
+            _ = p.popScope();
+            p.fn_or_arrow_data_visit = old_fn_or_arrow_data;
+            p.fn_only_data_visit = old_fn_only_data;
+            return func;
+    }
+
+pub fn visitArgs(p: *P, args: []G.Arg, opts: VisitArgsOpts) void {
+            const strict_loc = fnBodyContainsUseStrict(opts.body);
+            const has_simple_args = isSimpleParameterList(args, opts.has_rest_arg);
+            var duplicate_args_check: ?*StringVoidMap.Node = null;
+            _ = &duplicate_args_check;
+            defer {
+            {
+                if (duplicate_args_check) |checker| {
+                    _ = &checker;
+                    _ = (if (comptime @typeInfo(@TypeOf(StringVoidMap)) == .pointer) (StringVoidMap) else &(StringVoidMap)).release();
+                }
+            }
+            }
+            if (((strict_loc != null) and (!has_simple_args))) {
+                _ = ((p.log.addRangeError(p.source, p.source.rangeOfString(strict_loc.?), "Cannot use a \"use strict\" directive in a function with a non-simple parameter list")) catch unreachable);
+            }
+            if ((((opts.is_unique_formal_parameters or (strict_loc != null)) or (!has_simple_args)) or p.isStrictMode())) {
+                duplicate_args_check = StringVoidMap.get(bun.default_allocator);
+            }
+            const duplicate_args_check_ptr: ?*StringVoidMap = (if ((duplicate_args_check != null)) (&duplicate_args_check.?.data) else null);
+            for (cp_mut_slice(&args)) |*arg| {
+                _ = &arg;
+                if (((arg.*).ts_decorators.len > 0)) {
+                    (arg.*).ts_decorators = p.visitTSDecorators((arg.*).ts_decorators);
+                }
+                _ = p.visitBinding((arg.*).binding, duplicate_args_check_ptr);
+                if ((arg.*).default) |default| {
+                    _ = &default;
+                    (arg.*).default = p.visitExpr(default);
+                }
+            }
+    }
+
+pub fn visitTSDecorators(p: *P, decs: ExprNodeList) ExprNodeList {
+        _ = p;
+            for (cp_mut_slice(&decs.slice())) |*dec| {
+                _ = &dec;
+            }
+            return decs;
+    }
+
+pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_decl_to_remove: bool) usize {
+            var j: usize = 0;
+            _ = &j;
+            var out_decls = decls;
+            _ = &out_decls;
+            for (cp_mut_slice(&decls)) |*decl| {
+                _ = &decl;
+                _ = p.visitBinding((decl.*).binding, null);
+                if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                    var val = (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?;
+                    _ = &val;
+                    const was_anonymous_named_expr = val.isAnonymousNamed();
+                    var replacement: ?*const RuntimeFeatures.ReplaceableExport = null;
+                    _ = &replacement;
+                    const prev_require_to_convert_count = p.imports_to_convert_from_require.items.len;
+                    const prev_macro_call_count = p.macro_call_count;
+                    const orig_dead = p.is_control_flow_dead;
+                    if (comptime is_possibly_decl_to_remove) {
+                        if (((decl.*).binding.data == .b_identifier)) {
+                            if (p.options.features.replace_exports.getPtr(p.loadNameFromRef((decl.*).binding.data.b_identifier.ref))) |replacer| {
+                                _ = &replacer;
+                                replacement = replacer;
+                                if ((p.options.features.dead_code_elimination and (replacer.* != .replace))) {
+                                    p.is_control_flow_dead = true;
+                                }
+                            }
+                        }
+                    }
+                    if (p.options.features.react_fast_refresh) {
+                        p.react_refresh.last_hook_seen = null;
+                    }
+                    if (only_scan_imports_and_do_not_visit) {
+                        _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+                    }
+                    const prev_decorator_class_name = p.decorator_class_name;
+                    if ((((was_anonymous_named_expr and (val.data == .e_class)) and val.data.e_class.should_lower_standard_decorators) and ((decl.*).binding.data == .b_identifier))) {
+                        p.decorator_class_name = p.loadNameFromRef((decl.*).binding.data.b_identifier.ref);
+                    }
+                    (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.visitExprInOut(val, .{ .is_immediately_assigned_to_decl = true });
+                    p.decorator_class_name = prev_decorator_class_name;
+                    if (p.options.features.react_fast_refresh) {
+                        if (p.react_refresh.last_hook_seen) |last_hook| {
+                            _ = &last_hook;
+                            if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data.@"as"(.e_call)) |call| {
+                                _ = &call;
+                                if ((last_hook == call)) {
+                                    _ = (decl.*).binding.data.writeToHasher((&(p.react_refresh.hook_ctx_storage.?).*.?.hasher), p.symbols.items);
+                                }
+                            }
+                        }
+                    }
+                    if (p.shouldUnwrapCommonJSToESM()) {
+                        if ((prev_require_to_convert_count < p.imports_to_convert_from_require.items.len)) {
+                            if (((decl.*).binding.data == .b_identifier)) {
+                                const sym_ref = (decl.*).binding.data.b_identifier.ref;
+                                if (((((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null) and ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data == .e_require_string)) and ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data.e_require_string.unwrapped_id != std.math.maxInt(u32)))) {
+                                    p.imports_to_convert_from_require.items[@as(usize, @intCast((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data.e_require_string.unwrapped_id))].namespace.ref = sym_ref;
+                                    _ = ((p.import_items_for_namespace.put(p.allocator, sym_ref, ImportItemForNamespaceMap.init(p.allocator))) catch unreachable);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    if (comptime is_possibly_decl_to_remove) {
+                        p.is_control_flow_dead = orig_dead;
+                    }
+                    if (comptime is_possibly_decl_to_remove) {
+                        if (((decl.*).binding.data == .b_identifier)) {
+                            if (replacement) |ptr| {
+                                _ = &ptr;
+                                if ((!p.replaceDeclAndPossiblyRemove((decl.*), ptr))) {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    _ = p.visitDecl((decl.*), was_anonymous_named_expr, (was_const and (!p.current_scope.is_after_const_local_prefix)), (if (comptime allow_macros) (prev_macro_call_count != p.macro_call_count) else false));
+                } else {
+                    if (comptime is_possibly_decl_to_remove) {
+                        if (((decl.*).binding.data == .b_identifier)) {
+                            if (p.options.features.replace_exports.getPtr(p.loadNameFromRef((decl.*).binding.data.b_identifier.ref))) |ptr| {
+                                _ = &ptr;
+                                if ((!p.replaceDeclAndPossiblyRemove((decl.*), ptr))) {
+                                    _ = p.visitDecl((decl.*), (was_const and (!p.current_scope.is_after_const_local_prefix)), false, false);
+                                } else {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                out_decls[cp_cast_int(usize, j)] = (decl.*).*;
+                j = (j + 1);
+            }
+            return j;
+    }
+
+pub fn visitBindingAndExprForMacro(p: *P, binding: Binding, expr: Expr) void {
+            switch (binding.data) {
+.b_object => |bound_object| {
+if (((expr.data == .e_object) and expr.data.e_object.was_originally_macro)) {
+                var object = expr.data.e_object;
+                _ = &object;
+                for (cp_iter_slice(bound_object.properties)) |property| {
+                    _ = &property;
+                    if (property.flags.contains(.is_spread)) {
+                        return;
+                    }
+                }
+                var output_properties = object.properties.slice();
+                _ = &output_properties;
+                var end: u32 = 0;
+                _ = &end;
+                for (cp_iter_slice(bound_object.properties)) |property| {
+                    _ = &property;
+                    if (property.key.asStringLiteral(p.allocator)) |name| {
+                        _ = &name;
+                        if (object.asProperty(name)) |query| {
+                            _ = &query;
+                            switch (query.expr.data) {
+.e_object, .e_array => {
+_ = p.visitBindingAndExprForMacro((if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value), query.expr);
+},
+else => {
+if (p.options.features.inlining) {
+                                if (((if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).data == .b_identifier)) {
+                                    _ = ((p.const_values.put(p.allocator, (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).data.b_identifier.ref, query.expr)) catch unreachable);
+                                }
+                            }
+},
+}
+                            output_properties[cp_cast_int(usize, end)] = output_properties[@as(usize, @intCast(query.i))];
+                            end = (end + 1);
+                        }
+                    }
+                }
+                object.properties.len = end;
+            }
+},
+.b_array => |bound_array| {
+if ((((expr.data == .e_array) and expr.data.e_array.was_originally_macro) and (!bound_array.has_spread))) {
+                var array = expr.data.e_array;
+                _ = &array;
+                array.items.len = @min(array.items.len, @as(u32, @truncate(bound_array.items.len)));
+            }
+},
+.b_identifier => |id| {
+if (p.options.features.inlining) {
+                _ = ((p.const_values.put(p.allocator, id.ref, expr)) catch unreachable);
+            }
+},
+else => {
+
+},
+}
+    }
+
+pub fn visitDecl(p: *P, decl: *Decl, was_anonymous_named_expr: bool, could_be_const_value: bool, could_be_macro: bool) void {
+            switch (decl.binding.data) {
+.b_identifier => |id| {
+if ((could_be_const_value or (allow_macros and could_be_macro))) {
+                if ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value)) |val| {
+                    _ = &val;
+                    if (val.canBeConstValue()) {
+                        _ = ((p.const_values.put(p.allocator, id.ref, val)) catch unreachable);
+                    }
+                }
+            } else {
+                p.current_scope.is_after_const_local_prefix = true;
+            }
+            (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) = p.maybeKeepExprSymbolName((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?, p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+},
+.b_object, .b_array => {
+if (comptime allow_macros) {
+                if ((could_be_macro and ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) != null))) {
+                    _ = p.visitBindingAndExprForMacro(decl.binding, (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?);
+                }
+            }
+},
+else => {
+
+},
+}
+    }
+
+pub fn visitForLoopInit(p: *P, stmt: Stmt, is_in_or_of: bool) Stmt {
+            switch (stmt.data) {
+.s_expr => |st| {
+const assign_target = (if (is_in_or_of) js_ast.AssignTarget.replace else js_ast.AssignTarget.none);
+            p.stmt_expr_value = (if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value).data;
+            (if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value), ExprIn{ .assign_target = assign_target });
+},
+.s_local => |st| {
+for (cp_mut_slice(&st.decls.slice())) |*dec| {
+                _ = &dec;
+            }
+            st.kind = p.selectLocalKind(st.kind);
+},
+else => {
+_ = p.panic("Unexpected stmt in visitForLoopInit", .{});
+},
+}
+            return stmt;
+    }
+
+pub fn visitBinding(p: *P, binding: BindingNodeIndex, duplicate_arg_check: ?*StringVoidMap) void {
+            switch (binding.data) {
+.b_missing => {
+
+},
+.b_identifier => |bind| {
+_ = ((p.recordDeclaredSymbol(bind.ref)) catch unreachable);
+            const name = p.symbols.items[@as(usize, @intCast(bind.ref.innerIndex()))].original_name;
+            if (isEvalOrArguments(name)) {
+                _ = ((p.markStrictModeFeature(.eval_or_arguments, js_lexer.rangeOfIdentifier(p.source, binding.loc), name)) catch unreachable);
+            }
+            if (duplicate_arg_check) |dup| {
+                _ = &dup;
+                if (dup.getOrPutContains(name)) {
+                    _ = ((p.log.addRangeErrorFmt(p.source, js_lexer.rangeOfIdentifier(p.source, binding.loc), p.allocator, "\"{s}\" cannot be bound multiple times in the same parameter list", .{ name })) catch unreachable);
+                }
+            }
+},
+.b_array => |bind| {
+for (bind.items) |*item| {
+                _ = &item;
+                _ = p.visitBinding((item.*).binding, duplicate_arg_check);
+                if ((item.*).default_value) |default_value| {
+                    _ = &default_value;
+                    const was_anonymous_named_expr = default_value.isAnonymousNamed();
+                    const prev_decorator_class_name2 = p.decorator_class_name;
+                    if ((((was_anonymous_named_expr and (default_value.data == .e_class)) and default_value.data.e_class.should_lower_standard_decorators) and ((item.*).binding.data == .b_identifier))) {
+                        p.decorator_class_name = p.loadNameFromRef((item.*).binding.data.b_identifier.ref);
+                    }
+                    (item.*).default_value = p.visitExpr(default_value);
+                    p.decorator_class_name = prev_decorator_class_name2;
+                    switch ((item.*).binding.data) {
+.b_identifier => |bind_| {
+(item.*).default_value = p.maybeKeepExprSymbolName((((item.*).default_value) orelse (unreachable)), p.symbols.items[@as(usize, @intCast(bind_.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+},
+else => {
+
+},
+}
+                }
+            }
+},
+.b_object => |bind| {
+for (cp_mut_slice(&bind.properties)) |*property| {
+                _ = &property;
+                if ((!(property.*).flags.contains(.is_spread))) {
+                    (property.*).key = p.visitExpr((property.*).key);
+                }
+                _ = p.visitBinding((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value), duplicate_arg_check);
+                if ((property.*).default_value) |default_value| {
+                    _ = &default_value;
+                    const was_anonymous_named_expr = default_value.isAnonymousNamed();
+                    const prev_decorator_class_name3 = p.decorator_class_name;
+                    if ((((was_anonymous_named_expr and (default_value.data == .e_class)) and default_value.data.e_class.should_lower_standard_decorators) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).data == .b_identifier))) {
+                        p.decorator_class_name = p.loadNameFromRef((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).data.b_identifier.ref);
+                    }
+                    (property.*).default_value = p.visitExpr(default_value);
+                    p.decorator_class_name = prev_decorator_class_name3;
+                    switch ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).data) {
+.b_identifier => |bind_| {
+(property.*).default_value = p.maybeKeepExprSymbolName((((property.*).default_value) orelse (unreachable)), p.symbols.items[@as(usize, @intCast(bind_.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+},
+else => {
+
+},
+}
+                }
+            }
+},
+}
+    }
+
+pub fn visitLoopBody(p: *P, stmt: StmtNodeIndex) StmtNodeIndex {
+            const old_is_inside_loop = p.fn_or_arrow_data_visit.is_inside_loop;
+            p.fn_or_arrow_data_visit.is_inside_loop = true;
+            p.loop_body = stmt.data;
+            const res = p.visitSingleStmt(stmt, .loop_body);
+            p.fn_or_arrow_data_visit.is_inside_loop = old_is_inside_loop;
+            return res;
+    }
+
+pub fn visitSingleStmtBlock(p: *P, stmt: Stmt, kind: StmtsKind) Stmt {
+            var new_stmt = stmt;
+            _ = &new_stmt;
+            _ = ((p.pushScopeForVisitPass(.block, stmt.loc)) catch unreachable);
+            var stmts = ((ListManaged(Stmt).initCapacity(p.allocator, stmt.data.s_block.stmts.len)) catch unreachable);
+            _ = &stmts;
+            _ = ((stmts.appendSlice(stmt.data.s_block.stmts)) catch unreachable);
+            _ = ((p.visitStmts((&stmts), kind)) catch unreachable);
+            _ = p.popScope();
+            new_stmt.data.s_block.stmts = stmts.items;
+            if (p.options.features.minify_syntax) {
+                new_stmt = p.stmtsToSingleStmt(stmt.loc, stmts.items);
+            }
+            return new_stmt;
+    }
+
+pub fn visitSingleStmt(p: *P, stmt: Stmt, kind: StmtsKind) Stmt {
+            if ((stmt.data == .s_block)) {
+                return p.visitSingleStmtBlock(stmt, kind);
+            }
+            const has_if_scope = (switch (stmt.data) {
+.s_function => stmt.data.s_function.func.flags.contains(.has_if_scope),
+else => false,
+});
+            if (has_if_scope) {
+                _ = ((p.pushScopeForVisitPass(.block, stmt.loc)) catch unreachable);
+            }
+            var stmts = ((ListManaged(Stmt).initCapacity(p.allocator, 1)) catch unreachable);
+            _ = &stmts;
+            _ = ((stmts.append(stmt)) catch unreachable);
+            _ = ((p.visitStmts((&stmts), kind)) catch unreachable);
+            if (has_if_scope) {
+                _ = p.popScope();
+            }
+            return p.stmtsToSingleStmt(stmt.loc, stmts.items);
+    }
+
+pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name_ref: Ref) Ref {
+            if (only_scan_imports_and_do_not_visit) {
+                _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+            }
+            cls.ts_decorators = p.visitTSDecorators(cls.ts_decorators);
+            if (cls.class_name) |name| {
+                _ = &name;
+                _ = ((p.recordDeclaredSymbol(name.ref.?)) catch unreachable);
+            }
+            _ = ((p.pushScopeForVisitPass(.class_name, name_scope_loc)) catch unreachable);
+            const old_enclosing_class_keyword = p.enclosing_class_keyword;
+            p.enclosing_class_keyword = cls.class_keyword;
+            _ = p.current_scope.recursiveSetStrictMode(.implicit_strict_mode_class);
+            var shadow_ref = Ref.None;
+            _ = &shadow_ref;
+            if (cls.class_name) |name| {
+                _ = &name;
+                shadow_ref = name.ref.?;
+                _ = ((p.current_scope.members.put(p.allocator, p.symbols.items[@as(usize, @intCast(shadow_ref.innerIndex()))].original_name, Scope.Member{ .@"ref" = ((name.ref) orelse (Ref.None)), .loc = name.loc })) catch unreachable);
+            } else {
+                const name_str: []const u8 = (if (default_name_ref.isNull()) "_this" else "_default");
+                shadow_ref = ((p.newSymbol(.constant, name_str)) catch unreachable);
+            }
+            _ = ((p.recordDeclaredSymbol(shadow_ref)) catch unreachable);
+            {
+                _ = ((p.pushScopeForVisitPass(.class_body, cls.body_loc)) catch unreachable);
+                defer {
+                {
+                    _ = p.popScope();
+                    p.enclosing_class_keyword = old_enclosing_class_keyword;
+                }
+                }
+                var constructor_function: ?*E.Function = null;
+                _ = &constructor_function;
+                for (cp_mut_slice(&cls.properties)) |*property| {
+                    _ = &property;
+                    if (((property.*).kind == .class_static_block)) {
+                        const old_fn_or_arrow_data = p.fn_or_arrow_data_visit;
+                        const old_fn_only_data = p.fn_only_data_visit;
+                        p.fn_or_arrow_data_visit = .{};
+                        p.fn_only_data_visit = .{ .is_this_nested = true, .is_new_target_allowed = true, .class_name_ref = (&shadow_ref), .should_replace_this_with_class_name_ref = false };
+                        _ = ((p.pushScopeForVisitPass(.class_static_init, (property.*).class_static_block.?.loc)) catch unreachable);
+                        p.current_scope.forbid_arguments = true;
+                        var list = (property.*).class_static_block.?.stmts.moveToListManaged(p.allocator);
+                        _ = &list;
+                        _ = ((p.visitStmts((&list), .fn_body)) catch unreachable);
+                        (property.*).class_static_block.?.stmts = js_ast.BabyList(Stmt).moveFromList((&list));
+                        _ = p.popScope();
+                        p.fn_or_arrow_data_visit = old_fn_or_arrow_data;
+                        p.fn_only_data_visit = old_fn_only_data;
+                        continue;
+                    }
+                    (property.*).ts_decorators = p.visitTSDecorators((property.*).ts_decorators);
+                    const is_private = (if (((property.*).key != null)) ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt((property.*).key.?.data)) else @as(Expr.Tag, (property.*).key.?.data)) == .e_private_identifier) else false);
+                    if (is_private) {
+                        _ = ((p.recordDeclaredSymbol((property.*).key.?.data.e_private_identifier.ref)) catch unreachable);
+                    } else {
+                        if ((property.*).key) |key| {
+                            _ = &key;
+                            (property.*).key = p.visitExpr(key);
+                        }
+                    }
+                    p.current_scope.forbid_arguments = true;
+                    defer {
+                    p.current_scope.forbid_arguments = false;
+                    }
+                    const old_is_this_captured = p.fn_only_data_visit.is_this_nested;
+                    const old_class_name_ref = p.fn_only_data_visit.class_name_ref;
+                    p.fn_only_data_visit.is_this_nested = true;
+                    p.fn_only_data_visit.is_new_target_allowed = true;
+                    p.fn_only_data_visit.class_name_ref = (&shadow_ref);
+                    defer {
+                    p.fn_only_data_visit.is_this_nested = old_is_this_captured;
+                    }
+                    defer {
+                    p.fn_only_data_visit.class_name_ref = old_class_name_ref;
+                    }
+                    var constructor_function_: ?*E.Function = null;
+                    _ = &constructor_function_;
+                    var name_to_keep: ?[]const u8 = null;
+                    _ = &name_to_keep;
+                    if (is_private) {
+                    } else {
+                        if (((!(property.*).flags.contains(.is_method)) and (!(property.*).flags.contains(.is_computed)))) {
+                            if ((property.*).key) |key| {
+                                _ = &key;
+                                if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(key.data)) else @as(Expr.Tag, key.data)) == .e_string)) {
+                                    name_to_keep = ((key.data.e_string.string(p.allocator)) catch unreachable);
+                                }
+                            }
+                        } else {
+                            if ((property.*).flags.contains(.is_method)) {
+                                if (comptime is_typescript_enabled) {
+                                    if (((((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_function) and ((property.*).key.?.data == .e_string)) and (property.*).key.?.data.e_string.eqlComptime("constructor"))) {
+                                        constructor_function_ = (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_function;
+                                        constructor_function = constructor_function_;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |val| {
+                        _ = &val;
+                        if (name_to_keep) |name| {
+                            _ = &name;
+                            const was_anon = val.isAnonymousNamed();
+                            const prev_dcn = p.decorator_class_name;
+                            if ((((val.data == .e_class) and (val.data.e_class.class_name == null)) and val.data.e_class.should_lower_standard_decorators)) {
+                                p.decorator_class_name = name;
+                            }
+                            (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = p.maybeKeepExprSymbolName(p.visitExpr(val), name, was_anon);
+                            p.decorator_class_name = prev_dcn;
+                        } else {
+                            (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = p.visitExpr(val);
+                        }
+                        if (comptime is_typescript_enabled) {
+                            if ((((constructor_function_ != null) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_function))) {
+                                constructor_function = (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_function;
+                            }
+                        }
+                    }
+                    if ((property.*).initializer) |val| {
+                        _ = &val;
+                        if (name_to_keep) |name| {
+                            _ = &name;
+                            const was_anon = val.isAnonymousNamed();
+                            const prev_dcn2 = p.decorator_class_name;
+                            if ((((val.data == .e_class) and (val.data.e_class.class_name == null)) and val.data.e_class.should_lower_standard_decorators)) {
+                                p.decorator_class_name = name;
+                            }
+                            (property.*).initializer = p.maybeKeepExprSymbolName(p.visitExpr(val), name, was_anon);
+                            p.decorator_class_name = prev_dcn2;
+                        } else {
+                            (property.*).initializer = p.visitExpr(val);
+                        }
+                    }
+                }
+                if (comptime is_typescript_enabled) {
+                    if (constructor_function) |constructor| {
+                        _ = &constructor;
+                        var to_add: usize = 0;
+                        _ = &to_add;
+                        for (cp_iter_slice(constructor.func.args)) |arg| {
+                            _ = &arg;
+                            to_add = (to_add + @intFromBool((arg.is_typescript_ctor_field and (arg.binding.data == .b_identifier))));
+                        }
+                        var super_index: ?usize = null;
+                        _ = &super_index;
+                        if ((cls.@"extends" != null)) {
+                        }
+                        if ((to_add > 0)) {
+                            var stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, constructor.func.body.stmts);
+                            _ = &stmts;
+                            _ = ((stmts.ensureUnusedCapacity(to_add)) catch unreachable);
+                            var class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
+                            _ = &class_body;
+                            _ = ((class_body.ensureUnusedCapacity(to_add)) catch unreachable);
+                            var j: usize = 0;
+                            _ = &j;
+                            for (cp_iter_slice(constructor.func.args)) |arg| {
+                                _ = &arg;
+                                if (arg.is_typescript_ctor_field) {
+                                    switch (arg.binding.data) {
+.b_identifier => |id| {
+const arg_symbol = p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))];
+                                    const name = arg_symbol.original_name;
+                                    const arg_ident = p.newExpr(E.Identifier{ .@"ref" = id.ref }, arg.binding.loc);
+                                    _ = &arg_ident;
+                                    class_body.items.len = (class_body.items.len + 1);
+                                    _ = bun.copy(G.Property, class_body.items[(j + 1)..], class_body.items[j..(class_body.items.len - 1)]);
+                                    const field_symbol_ref = (blk_catch_33: { break :blk_catch_33 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 id.ref; }); });
+                                    field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
+                                    const field_ident = p.newExpr(E.Identifier{ .@"ref" = field_symbol_ref }, arg.binding.loc);
+                                    class_body.items[cp_cast_int(usize, j)] = G.Property{ .key = field_ident };
+                                    j = (j + 1);
+},
+else => {
+
+},
+}
+                                }
+                            }
+                            cls.properties = class_body.items;
+                            constructor.func.body.stmts = stmts.items;
+                        }
+                    }
+                }
+            }
+            if ((p.symbols.items[@as(usize, @intCast(shadow_ref.innerIndex()))].use_count_estimate == 0)) {
+                shadow_ref = Ref.None;
+            } else {
+                if ((cls.class_name == null)) {
+                    cls.class_name = LocRef{ .@"ref" = shadow_ref, .loc = name_scope_loc };
+                    _ = ((p.recordDeclaredSymbol(shadow_ref)) catch unreachable);
+                }
+            }
+            _ = p.popScope();
+            return shadow_ref;
+    }
+
+pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!void {
+            if (only_scan_imports_and_do_not_visit) {
+                _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+            }
+            const initial_scope = (if (comptime Environment.allow_assert) p.current_scope else null);
+            {
+                const old_is_control_flow_dead = p.is_control_flow_dead;
+                defer {
+                p.is_control_flow_dead = old_is_control_flow_dead;
+                }
+                var before = ListManaged(Stmt).init(p.allocator);
+                _ = &before;
+                defer {
+                _ = before.deinit();
+                }
+                var after = ListManaged(Stmt).init(p.allocator);
+                _ = &after;
+                defer {
+                _ = after.deinit();
+                }
+                var preprocessed_enums: std.ArrayListUnmanaged([]Stmt) = .{};
+                _ = &preprocessed_enums;
+                defer {
+                _ = preprocessed_enums.deinit(p.allocator);
+                }
+                if ((p.scopes_in_order_for_enum.count() > 0)) {
+                    var found: usize = 0;
+                    _ = &found;
+                    for (stmts.items) |*stmt| {
+                        _ = &stmt;
+                        if (((stmt.*).data == .s_enum)) {
+                            const old_scopes_in_order = p.scope_order_to_visit;
+                            defer {
+                            p.scope_order_to_visit = old_scopes_in_order;
+                            }
+                            p.scope_order_to_visit = (p.scopes_in_order_for_enum.get((stmt.*).loc)).?;
+                            var temp = ListManaged(Stmt).init(p.allocator);
+                            _ = &temp;
+                            _ = try p.visitAndAppendStmt((&temp), (stmt.*));
+                            _ = try preprocessed_enums.append(p.allocator, temp.items);
+                            found = (found + 1);
+                        }
+                    }
+                }
+                if ((p.current_scope == p.module_scope)) {
+                    p.@"macro".prepend_stmts = (&before);
+                }
+                var visited = try ListManaged(Stmt).initCapacity(p.allocator, stmts.items.len);
+                _ = &visited;
+                defer {
+                _ = visited.deinit();
+                }
+                const prev_nearest_stmt_list = p.nearest_stmt_list;
+                defer {
+                p.nearest_stmt_list = prev_nearest_stmt_list;
+                }
+                p.nearest_stmt_list = (&before);
+                var preprocessed_enum_i: usize = 0;
+                _ = &preprocessed_enum_i;
+                for (stmts.items) |*stmt| {
+                    _ = &stmt;
+                    const list = list_getter: {
+                    switch ((stmt.*).data) {
+.s_export_equals => {
+break :list_getter (&after);
+},
+.s_function => |data| {
+if (((!p.current_scope.kindStopsHoisting()) and (p.symbols.items[@as(usize, @intCast((if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.ref.?.innerIndex()))].kind == .hoisted_function))) {
+                        break :list_getter (&before);
+                    }
+},
+.s_enum => {
+const enum_stmts = preprocessed_enums.items[@as(usize, @intCast(preprocessed_enum_i))];
+                    preprocessed_enum_i = (preprocessed_enum_i + 1);
+                    _ = try visited.appendSlice(enum_stmts);
+                    const enum_scope_count = (p.scopes_in_order_for_enum.get((stmt.*).loc)).?.len;
+                    p.scope_order_to_visit = p.scope_order_to_visit[enum_scope_count..];
+                    continue;
+},
+else => {
+
+},
+}
+                    break :list_getter (&visited);
+};
+                    _ = try p.visitAndAppendStmt(list, (stmt.*));
+                }
+                if ((before.items.len > 0)) {
+                    var let_decls = ListManaged(G.Decl).init(p.allocator);
+                    _ = &let_decls;
+                    var var_decls = ListManaged(G.Decl).init(p.allocator);
+                    _ = &var_decls;
+                    var non_fn_stmts = ListManaged(Stmt).init(p.allocator);
+                    _ = &non_fn_stmts;
+                    var fn_stmts = std.AutoHashMap(Ref, u32).init(p.allocator);
+                    _ = &fn_stmts;
+                    defer {
+                    {
+                        _ = non_fn_stmts.deinit();
+                        _ = fn_stmts.deinit();
+                    }
+                    }
+                    for (before.items) |stmt| {
+                        _ = &stmt;
+                        switch (stmt.data) {
+.s_function => |data| {
+const name_ref = (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.ref.?;
+                        if (p.current_scope.contains_direct_eval) {
+                            if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
+                                _ = &hoisted_ref;
+                                p.symbols.items[@as(usize, @intCast(hoisted_ref.innerIndex()))].link = name_ref;
+                            }
+                            _ = bun.handleOom(non_fn_stmts.append(stmt));
+                            continue;
+                        }
+                        const gpe = bun.handleOom(fn_stmts.getOrPut(name_ref));
+                        var index = gpe.value_ptr.*;
+                        _ = &index;
+                        if ((!gpe.found_existing)) {
+                            index = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(let_decls.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(let_decls.items.len)) else cp_cast_int(i32, let_decls.items.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(let_decls.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(let_decls.items.len)) else cp_cast_int(i32, let_decls.items.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(let_decls.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(let_decls.items.len)) else cp_cast_int(i32, let_decls.items.len))));
+                            gpe.value_ptr.* = index;
+                            _ = ((let_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch unreachable);
+                            if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
+                                _ = &hoisted_ref;
+                                _ = p.recordUsage(name_ref);
+                                _ = (blk_catch_36: { break :blk_catch_36 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_36 bun.handleOom(e); }); });
+                            }
+                        }
+                        (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name) = null;
+                        (if (@typeInfo(@TypeOf(let_decls.items[@as(usize, @intCast(index))])) == .@"enum") @intFromEnum(let_decls.items[@as(usize, @intCast(index))]) else let_decls.items[@as(usize, @intCast(index))].value) = p.newExpr(E.Function{ .func = data.func }, stmt.loc);
+},
+else => {
+_ = ((non_fn_stmts.append(stmt)) catch unreachable);
+},
+}
+                    }
+                    before.items.len = 0;
+                    _ = ((before.ensureUnusedCapacity((((if (comptime @typeInfo(@TypeOf(@intFromBool((let_decls.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((let_decls.items.len > 0)))) else cp_cast_int(usize, @intFromBool((let_decls.items.len > 0)))) + (if (comptime @typeInfo(@TypeOf(@intFromBool((var_decls.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((var_decls.items.len > 0)))) else cp_cast_int(usize, @intFromBool((var_decls.items.len > 0))))) + non_fn_stmts.items.len))) catch unreachable);
+                    if ((let_decls.items.len > 0)) {
+                        const decls: Decl.List = .moveFromList((&let_decls));
+                        _ = before.appendAssumeCapacity(p.s(S.Local{ .kind = .k_let, .decls = decls }, (if (@typeInfo(@TypeOf(decls.at(0))) == .@"enum") @intFromEnum(decls.at(0)) else decls.at(0).value).?.loc));
+                    }
+                    if ((var_decls.items.len > 0)) {
+                        const relocated = p.maybeRelocateVarsToTopLevel(var_decls.items, .normal);
+                        if (relocated.ok) {
+                            if (relocated.stmt) |new_stmt| {
+                                _ = &new_stmt;
+                                _ = before.appendAssumeCapacity(new_stmt);
+                            }
+                        } else {
+                            const decls: Decl.List = .moveFromList((&var_decls));
+                            _ = before.appendAssumeCapacity(p.s(S.Local{ .kind = .k_var, .decls = decls }, (if (@typeInfo(@TypeOf(decls.at(0))) == .@"enum") @intFromEnum(decls.at(0)) else decls.at(0).value).?.loc));
+                        }
+                    }
+                    _ = before.appendSliceAssumeCapacity(non_fn_stmts.items);
+                }
+                var visited_count = visited.items.len;
+                _ = &visited_count;
+                if ((p.is_control_flow_dead and p.options.features.dead_code_elimination)) {
+                    var end: usize = 0;
+                    _ = &end;
+                    for (visited.items) |item| {
+                        _ = &item;
+                        if ((!SideEffects.shouldKeepStmtInDeadControlFlow(item, p.allocator))) {
+                            continue;
+                        }
+                        visited.items[cp_cast_int(usize, end)] = item;
+                        end = (end + 1);
+                    }
+                    visited_count = end;
+                }
+                const total_size = ((visited_count + before.items.len) + after.items.len);
+                if ((total_size != stmts.items.len)) {
+                    _ = try stmts.resize(total_size);
+                }
+                var remain = stmts.items;
+                _ = &remain;
+                for (before.items) |item| {
+                    _ = &item;
+                    remain[cp_cast_int(usize, 0)] = item;
+                    remain = remain[1..];
+                }
+                const visited_slice = visited.items[0..visited_count];
+                for (cp_iter_slice(visited_slice)) |item| {
+                    _ = &item;
+                    remain[cp_cast_int(usize, 0)] = item;
+                    remain = remain[1..];
+                }
+                for (after.items) |item| {
+                    _ = &item;
+                    remain[cp_cast_int(usize, 0)] = item;
+                    remain = remain[1..];
+                }
+            }
+            if (((kind != .switch_stmt) and p.shouldLowerUsingDeclarations(stmts.items))) {
+                var ctx = try LowerUsingDeclarationsContext.init(p);
+                _ = &ctx;
+                _ = ctx.scanStmts(p, stmts.items);
+                stmts.* = ctx.finalize(p, stmts.items, (p.current_scope.parent == null));
+            }
+            if (comptime Environment.allow_assert) {
+                _ = assert((p.current_scope == initial_scope));
+            }
+            if (((!p.options.features.minify_syntax) or (!p.options.features.dead_code_elimination))) {
+                return;
+            }
+            if (((p.current_scope.parent != null) and (!p.current_scope.contains_direct_eval))) {
+                if ((p.const_values.count() > 0)) {
+                    const items: []Stmt = stmts.items;
+                    for (cp_mut_slice(&items)) |*stmt| {
+                        _ = &stmt;
+                        switch ((stmt.*).data) {
+.s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {
+_ = continue;
+},
+.s_local => |local| {
+if (local.kind.isUsing()) {
+                            continue;
+                        }
+                        if (((!local.is_export) and (!local.was_commonjs_export))) {
+                            var decls: []Decl = local.decls.slice();
+                            _ = &decls;
+                            var end: usize = 0;
+                            _ = &end;
+                            var any_decl_in_const_values = (local.kind == .k_const);
+                            _ = &any_decl_in_const_values;
+                            for (cp_iter_slice(decls)) |decl| {
+                                _ = &decl;
+                                if ((decl.binding.data == .b_identifier)) {
+                                    if (p.const_values.contains(decl.binding.data.b_identifier.ref)) {
+                                        any_decl_in_const_values = true;
+                                        const symbol = p.symbols.items[@as(usize, @intCast(decl.binding.data.b_identifier.ref.innerIndex()))];
+                                        if ((symbol.use_count_estimate == 0)) {
+                                            continue;
+                                        }
+                                    }
+                                }
+                                decls[cp_cast_int(usize, end)] = decl;
+                                end = (end + 1);
+                            }
+                            local.decls.len = @as(u32, @truncate(end));
+                            if (any_decl_in_const_values) {
+                                if ((end == 0)) {
+                                    (stmt.*).* = (stmt.*).*.toEmpty();
+                                }
+                                continue;
+                            }
+                        }
+},
+else => {
+
+},
+}
+                        break;
+                    }
+                }
+            }
+            var is_control_flow_dead = false;
+            _ = &is_control_flow_dead;
+            var output = ((ListManaged(Stmt).initCapacity(p.allocator, stmts.items.len)) catch unreachable);
+            _ = &output;
+            const dead_code_elimination = p.options.features.dead_code_elimination;
+            for (stmts.items) |stmt| {
+                _ = &stmt;
+                if (((is_control_flow_dead and dead_code_elimination) and (!SideEffects.shouldKeepStmtInDeadControlFlow(stmt, p.allocator)))) {
+                    continue;
+                }
+                if (((p.current_scope != p.module_scope) and (!p.current_scope.contains_direct_eval))) {
+                    inner: while ((output.items.len > 0)) {
+                        const prev_statement = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                        switch (prev_statement.data) {
+.s_local => {
+var local = prev_statement.data.s_local;
+                        _ = &local;
+                        if (((((local.decls.len == 0) or (local.kind == .k_var)) or local.kind.isUsing()) or local.is_export)) {
+                            break;
+                        }
+                        const last: *Decl = (local.decls.last()).?;
+                        if (((if (@typeInfo(@TypeOf(last)) == .@"enum") @intFromEnum(last) else last.value) == null)) {
+                            break;
+                        }
+                        switch (last.binding.data) {
+.b_identifier => |ident| {
+const id = ident.ref;
+                        const symbol: *const Symbol = (&p.symbols.items[@as(usize, @intCast(id.innerIndex()))]);
+                        if ((symbol.use_count_estimate == 1)) {
+                            if (p.substituteSingleUseSymbolInStmt(stmt, id, (if (@typeInfo(@TypeOf(last)) == .@"enum") @intFromEnum(last) else last.value).?)) {
+                                switch (local.decls.len) {
+1 => {
+local.decls.len = 0;
+                                output.items.len = (output.items.len - 1);
+                                continue :inner;
+},
+else => {
+local.decls.len = (local.decls.len - 1);
+                                continue :inner;
+},
+}
+                            }
+                        }
+},
+else => {
+
+},
+}
+},
+else => {
+
+},
+}
+                        break;
+                    }
+                }
+                if (stmt.isSuperCall()) {
+                    _ = ((output.append(stmt)) catch unreachable);
+                    continue;
+                }
+                switch (stmt.data) {
+.s_empty => {
+_ = continue;
+},
+.s_directive => {
+_ = continue;
+},
+.s_local => |local| {
+if ((output.items.len > 0)) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if (((prev_stmt.data == .s_local) and local.canMergeWith(prev_stmt.data.s_local))) {
+                        _ = (blk_catch_41: { break :blk_catch_41 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_41 bun.handleOom(e); }); });
+                        continue;
+                    }
+                }
+},
+.s_expr => |s_expr| {
+if ((output.items.len > 0)) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if ((((prev_stmt.data == .s_expr) and (!prev_stmt.isSuperCall())) and p.options.runtimeMergeAdjacentExpressionStatements())) {
+                        prev_stmt.data.s_expr.does_not_affect_tree_shaking = (prev_stmt.data.s_expr.does_not_affect_tree_shaking and s_expr.does_not_affect_tree_shaking);
+                        (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value) = (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value).joinWithComma((if (@typeInfo(@TypeOf(s_expr)) == .@"enum") @intFromEnum(s_expr) else s_expr.value), p.allocator);
+                        continue;
+                    } else {
+                        if ((((((prev_stmt.data == .s_local) and ((if (@typeInfo(@TypeOf(s_expr)) == .@"enum") @intFromEnum(s_expr) else s_expr.value).data == .e_binary)) and (prev_stmt.data.s_local.decls.len == 1)) and ((if (@typeInfo(@TypeOf(s_expr)) == .@"enum") @intFromEnum(s_expr) else s_expr.value).data.e_binary.op == .bin_assign)) and (prev_stmt.data.s_local.kind == .k_var))) {
+                            var prev_local = prev_stmt.data.s_local;
+                            _ = &prev_local;
+                            const bin_assign = (if (@typeInfo(@TypeOf(s_expr)) == .@"enum") @intFromEnum(s_expr) else s_expr.value).data.e_binary;
+                            if ((bin_assign.left.data == .e_identifier)) {
+                                var decl = (&prev_local.decls.slice()[0]);
+                                _ = &decl;
+                                if ((((decl.binding.data == .b_identifier) and decl.binding.data.b_identifier.ref.eql(bin_assign.left.data.e_identifier.ref)) and ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) == null))) {
+                                    (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) = bin_assign.right;
+                                    _ = p.ignoreUsage(bin_assign.left.data.e_identifier.ref);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+},
+.s_switch => |s_switch| {
+if (((output.items.len > 0) and p.options.runtimeMergeAdjacentExpressionStatements())) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if (((prev_stmt.data == .s_expr) and (!prev_stmt.isSuperCall()))) {
+                        s_switch.test_ = (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value).joinWithComma(s_switch.test_, p.allocator);
+                        output.items.len = (output.items.len - 1);
+                    }
+                }
+},
+.s_if => |s_if| {
+if (((output.items.len > 0) and p.options.runtimeMergeAdjacentExpressionStatements())) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if (((prev_stmt.data == .s_expr) and (!prev_stmt.isSuperCall()))) {
+                        s_if.test_ = (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value).joinWithComma(s_if.test_, p.allocator);
+                        output.items.len = (output.items.len - 1);
+                    }
+                }
+},
+.s_return => |ret| {
+if ((((output.items.len > 0) and ((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value) != null)) and p.options.runtimeMergeAdjacentExpressionStatements())) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if (((prev_stmt.data == .s_expr) and (!prev_stmt.isSuperCall()))) {
+                        (if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value) = (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value).joinWithComma((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value).?, p.allocator);
+                        prev_stmt.* = stmt;
+                        continue;
+                    }
+                }
+                is_control_flow_dead = true;
+},
+.s_break, .s_continue => {
+is_control_flow_dead = true;
+},
+.s_throw => {
+if (((output.items.len > 0) and p.options.runtimeMergeAdjacentExpressionStatements())) {
+                    var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
+                    _ = &prev_stmt;
+                    if (((prev_stmt.data == .s_expr) and (!prev_stmt.isSuperCall()))) {
+                        prev_stmt.* = p.s(S.Throw{ .value = (if (@typeInfo(@TypeOf(prev_stmt.data.s_expr)) == .@"enum") @intFromEnum(prev_stmt.data.s_expr) else prev_stmt.data.s_expr.value).joinWithComma((if (@typeInfo(@TypeOf(stmt.data.s_throw)) == .@"enum") @intFromEnum(stmt.data.s_throw) else stmt.data.s_throw.value), p.allocator) }, stmt.loc);
+                        continue;
+                    }
+                }
+                is_control_flow_dead = true;
+},
+else => {
+
+},
+}
+                _ = ((output.append(stmt)) catch unreachable);
+            }
+            _ = stmts.deinit();
+            stmts.* = output;
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const allow_macros = P.allow_macros;
+    const is_typescript_enabled = P.is_typescript_enabled;
+    const isSimpleParameterList = P.isSimpleParameterList;
+    const LowerUsingDeclarationsContext = P.LowerUsingDeclarationsContext;
+    const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+    pub const visitExpr = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExpr;
+    pub const visitExprInOut = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExprInOut;
+    pub const visitAndAppendStmt = @import("./visitStmt.zig").VisitStmt(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitAndAppendStmt;
+};
+}
+
+pub fn fnBodyContainsUseStrict(body: []Stmt) ?logger.Loc {
+        for (cp_iter_slice(body)) |stmt| {
+            _ = &stmt;
+            switch (stmt.data) {
+.s_comment => {
+continue;
+},
+.s_directive => |dir| {
+if (strings.eqlComptime((if (@typeInfo(@TypeOf(dir)) == .@"enum") @intFromEnum(dir) else dir.value), "use strict")) {
+                return stmt.loc;
+            }
+},
+.s_empty => {
+
+},
+else => {
+return null;
+},
+}
+        }
+        return null;
+}
