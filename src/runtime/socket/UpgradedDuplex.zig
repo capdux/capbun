@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -42,8 +43,8 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -127,16 +128,16 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
                 const fn_name = (if (msg_more) "write" else "end");
                 const writeOrEnd_opt = (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(globalThis, fn_name)) catch |__ce_0| { _ = &__ce_0; return; }); });
                 var __writeOrEnd_opt_moved = false; _ = &__writeOrEnd_opt_moved;
-                defer if (!__writeOrEnd_opt_moved) { const __T = @TypeOf(writeOrEnd_opt); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = writeOrEnd_opt.release() catch {}; } else { writeOrEnd_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd_opt; _drop_val.release(); } };
+                defer if (!__writeOrEnd_opt_moved) { const __T = @TypeOf(writeOrEnd_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd_opt.release() catch {}; } else { writeOrEnd_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd_opt; _drop_val.release(); } };
                 const writeOrEnd = ((writeOrEnd_opt) orelse { return; });
                 var __writeOrEnd_moved = false; _ = &__writeOrEnd_moved;
-                defer if (!__writeOrEnd_moved) { const __T = @TypeOf(writeOrEnd); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = writeOrEnd.release() catch {}; } else { writeOrEnd.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd; _drop_val.release(); } };
+                defer if (!__writeOrEnd_moved) { const __T = @TypeOf(writeOrEnd); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd.release() catch {}; } else { writeOrEnd.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd; _drop_val.release(); } };
                 if (data) |data_| {
                     _ = &data_;
                     const buffer = (blk_catch_1: { break :blk_catch_1 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e));
                     return; }); });
                     var __buffer_moved = false; _ = &__buffer_moved;
-                    defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
+                    defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
                     _ = buffer.ensureStillAlive();
                     _ = (blk_catch_2: { break :blk_catch_2 ((writeOrEnd.call(globalThis, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_2 self.handlers.onError(self.handlers.ctx, (globalThis).?.takeException(e)); }); });
                 } else {
@@ -169,15 +170,15 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
             _ = log("onReceivedData", .{});
             const function = callframe.callee();
             var __function_moved = false; _ = &__function_moved;
-            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
+            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
             const args = callframe.arguments_old(1);
             var __args_moved = false; _ = &__args_moved;
-            defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
+            defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
             if (jsc.host_fn.getFunctionData(function)) |self| {
                 _ = &self;
                 const req = bun.cast(*UpgradedDuplex, self);
                 var __req_moved = false; _ = &__req_moved;
-                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
+                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
                 if ((args.len >= 1)) {
                     const data_arg = args.ptr[0];
                     if (req.origin.has()) {
@@ -188,12 +189,12 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                             _ = &array_buffer;
                             const payload = array_buffer.slice();
                             var __payload_moved = false; _ = &__payload_moved;
-                            defer if (!__payload_moved) { const __T = @TypeOf(payload); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = payload.release() catch {}; } else { payload.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = payload; _drop_val.release(); } };
+                            defer if (!__payload_moved) { const __T = @TypeOf(payload); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = payload.release() catch {}; } else { payload.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = payload; _drop_val.release(); } };
                             _ = req.onInternalReceiveData(payload);
                         } else {
                             const error_value = globalObject.ERR(.STREAM_WRAP, "Stream has StringDecoder set or is in objectMode", .{}).toJS();
                             var __error_value_moved = false; _ = &__error_value_moved;
-                            defer if (!__error_value_moved) { const __T = @TypeOf(error_value); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = error_value.release() catch {}; } else { error_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = error_value; _drop_val.release(); } };
+                            defer if (!__error_value_moved) { const __T = @TypeOf(error_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = error_value.release() catch {}; } else { error_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = error_value; _drop_val.release(); } };
                             _ = error_value.ensureStillAlive();
                             _ = req.handlers.onError(req.handlers.ctx, error_value);
                         }
@@ -208,12 +209,12 @@ pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
             _ = &globalObject;
             const function = callframe.callee();
             var __function_moved = false; _ = &__function_moved;
-            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
+            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
             if (jsc.host_fn.getFunctionData(function)) |self| {
                 _ = &self;
                 const req = bun.cast(*UpgradedDuplex, self);
                 var __req_moved = false; _ = &__req_moved;
-                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
+                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
                 if ((req.wrapper != null)) {
                     _ = req.handlers.onEnd(req.handlers.ctx);
                 }
@@ -226,12 +227,12 @@ pub fn onWritable(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
             _ = &globalObject;
             const function = callframe.callee();
             var __function_moved = false; _ = &__function_moved;
-            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
+            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
             if (jsc.host_fn.getFunctionData(function)) |self| {
                 _ = &self;
                 const req = bun.cast(*UpgradedDuplex, self);
                 var __req_moved = false; _ = &__req_moved;
-                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
+                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
                 if (req.wrapper) |*wrapper| {
                     _ = &wrapper;
                     _ = (wrapper.*).flush();
@@ -246,12 +247,12 @@ pub fn onCloseJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             _ = &globalObject;
             const function = callframe.callee();
             var __function_moved = false; _ = &__function_moved;
-            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
+            defer if (!__function_moved) { const __T = @TypeOf(function); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = function.release() catch {}; } else { function.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = function; _drop_val.release(); } };
             if (jsc.host_fn.getFunctionData(function)) |self| {
                 _ = &self;
                 const req = bun.cast(*UpgradedDuplex, self);
                 var __req_moved = false; _ = &__req_moved;
-                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
+                defer if (!__req_moved) { const __T = @TypeOf(req); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = req.release() catch {}; } else { req.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req; _drop_val.release(); } };
                 if (req.wrapper) |*wrapper| {
                     _ = &wrapper;
                     _ = (wrapper.*).shutdown(true);
@@ -278,62 +279,74 @@ pub fn from(globalThis: *jsc.JSGlobalObject, origin: jsc.JSValue, handlers: Hand
 pub fn getJSHandlers(self: *UpgradedDuplex, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
             var array = try jsc.JSValue.createEmptyArray(globalThis, 4);
             var __array_moved = false; _ = &__array_moved;
-            defer if (!__array_moved) { const __T = @TypeOf(array); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = array.release() catch {}; } else { array.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = array; _drop_val.release(); } };
+            defer if (!__array_moved) { const __T = @TypeOf(array); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = array.release() catch {}; } else { array.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = array; _drop_val.release(); } };
             _ = array.ensureStillAlive();
             {
-                const callback = ((self.onDataCallback.get()) orelse (blk: {
-                var dataCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onReceivedData, self);
-                var __dataCallback_moved = false; _ = &__dataCallback_moved;
-                defer if (!__dataCallback_moved) { const __T = @TypeOf(dataCallback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = dataCallback.release() catch {}; } else { dataCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dataCallback; _drop_val.release(); } };
-                _ = dataCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(dataCallback, self);
-                self.onDataCallback = .create(dataCallback, globalThis);
-                break :blk dataCallback;
-}));
-                var __callback_moved = false; _ = &__callback_moved;
-                defer if (!__callback_moved) { const __T = @TypeOf(callback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = callback.release() catch {}; } else { callback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = callback; _drop_val.release(); } };
+                var callback: jsc.JSValue = undefined;
+                _ = &callback;
+                if (self.onDataCallback.get()) |existing| {
+                    _ = &existing;
+                    callback = existing;
+                } else {
+                    var dataCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onReceivedData, self);
+                    var __dataCallback_moved = false; _ = &__dataCallback_moved;
+                    defer if (!__dataCallback_moved) { const __T = @TypeOf(dataCallback); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dataCallback.release() catch {}; } else { dataCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dataCallback; _drop_val.release(); } };
+                    _ = dataCallback.ensureStillAlive();
+                    _ = jsc.host_fn.setFunctionData(dataCallback, self);
+                    self.onDataCallback = .create(dataCallback, globalThis);
+                    callback = dataCallback;
+                }
                 _ = try array.putIndex(globalThis, 0, callback);
             }
             {
-                const callback = ((self.onEndCallback.get()) orelse (blk: {
-                var endCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onEnd, self);
-                var __endCallback_moved = false; _ = &__endCallback_moved;
-                defer if (!__endCallback_moved) { const __T = @TypeOf(endCallback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = endCallback.release() catch {}; } else { endCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = endCallback; _drop_val.release(); } };
-                _ = endCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(endCallback, self);
-                self.onEndCallback = .create(endCallback, globalThis);
-                break :blk endCallback;
-}));
-                var __callback_moved = false; _ = &__callback_moved;
-                defer if (!__callback_moved) { const __T = @TypeOf(callback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = callback.release() catch {}; } else { callback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = callback; _drop_val.release(); } };
+                var callback: jsc.JSValue = undefined;
+                _ = &callback;
+                if (self.onEndCallback.get()) |existing| {
+                    _ = &existing;
+                    callback = existing;
+                } else {
+                    var endCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onEnd, self);
+                    var __endCallback_moved = false; _ = &__endCallback_moved;
+                    defer if (!__endCallback_moved) { const __T = @TypeOf(endCallback); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = endCallback.release() catch {}; } else { endCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = endCallback; _drop_val.release(); } };
+                    _ = endCallback.ensureStillAlive();
+                    _ = jsc.host_fn.setFunctionData(endCallback, self);
+                    self.onEndCallback = .create(endCallback, globalThis);
+                    callback = endCallback;
+                }
                 _ = try array.putIndex(globalThis, 1, callback);
             }
             {
-                const callback = ((self.onWritableCallback.get()) orelse (blk: {
-                var writableCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onWritable, self);
-                var __writableCallback_moved = false; _ = &__writableCallback_moved;
-                defer if (!__writableCallback_moved) { const __T = @TypeOf(writableCallback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = writableCallback.release() catch {}; } else { writableCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writableCallback; _drop_val.release(); } };
-                _ = writableCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(writableCallback, self);
-                self.onWritableCallback = .create(writableCallback, globalThis);
-                break :blk writableCallback;
-}));
-                var __callback_moved = false; _ = &__callback_moved;
-                defer if (!__callback_moved) { const __T = @TypeOf(callback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = callback.release() catch {}; } else { callback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = callback; _drop_val.release(); } };
+                var callback: jsc.JSValue = undefined;
+                _ = &callback;
+                if (self.onWritableCallback.get()) |existing| {
+                    _ = &existing;
+                    callback = existing;
+                } else {
+                    var writableCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onWritable, self);
+                    var __writableCallback_moved = false; _ = &__writableCallback_moved;
+                    defer if (!__writableCallback_moved) { const __T = @TypeOf(writableCallback); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writableCallback.release() catch {}; } else { writableCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writableCallback; _drop_val.release(); } };
+                    _ = writableCallback.ensureStillAlive();
+                    _ = jsc.host_fn.setFunctionData(writableCallback, self);
+                    self.onWritableCallback = .create(writableCallback, globalThis);
+                    callback = writableCallback;
+                }
                 _ = try array.putIndex(globalThis, 2, callback);
             }
             {
-                const callback = ((self.onCloseCallback.get()) orelse (blk: {
-                var closeCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onCloseJS, self);
-                var __closeCallback_moved = false; _ = &__closeCallback_moved;
-                defer if (!__closeCallback_moved) { const __T = @TypeOf(closeCallback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = closeCallback.release() catch {}; } else { closeCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = closeCallback; _drop_val.release(); } };
-                _ = closeCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(closeCallback, self);
-                self.onCloseCallback = .create(closeCallback, globalThis);
-                break :blk closeCallback;
-}));
-                var __callback_moved = false; _ = &__callback_moved;
-                defer if (!__callback_moved) { const __T = @TypeOf(callback); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = callback.release() catch {}; } else { callback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = callback; _drop_val.release(); } };
+                var callback: jsc.JSValue = undefined;
+                _ = &callback;
+                if (self.onCloseCallback.get()) |existing| {
+                    _ = &existing;
+                    callback = existing;
+                } else {
+                    var closeCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onCloseJS, self);
+                    var __closeCallback_moved = false; _ = &__closeCallback_moved;
+                    defer if (!__closeCallback_moved) { const __T = @TypeOf(closeCallback); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = closeCallback.release() catch {}; } else { closeCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = closeCallback; _drop_val.release(); } };
+                    _ = closeCallback.ensureStillAlive();
+                    _ = jsc.host_fn.setFunctionData(closeCallback, self);
+                    self.onCloseCallback = .create(closeCallback, globalThis);
+                    callback = closeCallback;
+                }
                 _ = try array.putIndex(globalThis, 3, callback);
             }
             __array_moved = true;
@@ -472,7 +485,7 @@ pub fn release(self: *UpgradedDuplex) void {
             }
             var ssl_error = self.ssl_error;
             var __ssl_error_moved = false; _ = &__ssl_error_moved;
-            defer if (!__ssl_error_moved) { const __T = @TypeOf(ssl_error); if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (@typeInfo(Child) == .@"struct" and @hasDecl(Child, "release")) { const RType = @typeInfo(@TypeOf(Child.release)).@"fn".return_type.?; if (@typeInfo(RType) == .error_union) { _ = ssl_error.release() catch {}; } else { ssl_error.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ssl_error; _drop_val.release(); } };
+            defer if (!__ssl_error_moved) { const __T = @TypeOf(ssl_error); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ssl_error.release() catch {}; } else { ssl_error.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ssl_error; _drop_val.release(); } };
             _ = (if (comptime @typeInfo(@TypeOf(ssl_error)) == .pointer) (ssl_error) else &(ssl_error)).release();
             self.ssl_error = .{};
     }

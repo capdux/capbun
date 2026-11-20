@@ -250,7 +250,10 @@ pub struct UpgradedDuplex {
         array.ensureStillAlive();
 
         {
-            const callback = _.onDataCallback.get() orelse ({
+            let callback: jsc.JSValue = undefined;
+            if (existing := _.onDataCallback.get()) {
+                callback = existing;
+            } else {
                 let dataCallback = jsc.host_fn.NewFunctionWithData(
                     globalThis,
                     null,
@@ -261,13 +264,16 @@ pub struct UpgradedDuplex {
                 dataCallback.ensureStillAlive();
                 jsc.host_fn.setFunctionData(dataCallback, _);
                 _.onDataCallback = .create(dataCallback, globalThis);
-                break dataCallback;
-            });
+                callback = dataCallback;
+            }
             array.putIndex(globalThis, 0, callback)?;
         }
 
         {
-            const callback = _.onEndCallback.get() orelse ({
+            let callback: jsc.JSValue = undefined;
+            if (existing := _.onEndCallback.get()) {
+                callback = existing;
+            } else {
                 let endCallback = jsc.host_fn.NewFunctionWithData(
                     globalThis,
                     null,
@@ -278,13 +284,16 @@ pub struct UpgradedDuplex {
                 endCallback.ensureStillAlive();
                 jsc.host_fn.setFunctionData(endCallback, _);
                 _.onEndCallback = .create(endCallback, globalThis);
-                break endCallback;
-            });
+                callback = endCallback;
+            }
             array.putIndex(globalThis, 1, callback)?;
         }
 
         {
-            const callback = _.onWritableCallback.get() orelse ({
+            let callback: jsc.JSValue = undefined;
+            if (existing := _.onWritableCallback.get()) {
+                callback = existing;
+            } else {
                 let writableCallback = jsc.host_fn.NewFunctionWithData(
                     globalThis,
                     null,
@@ -295,13 +304,16 @@ pub struct UpgradedDuplex {
                 writableCallback.ensureStillAlive();
                 jsc.host_fn.setFunctionData(writableCallback, _);
                 _.onWritableCallback = .create(writableCallback, globalThis);
-                break writableCallback;
-            });
+                callback = writableCallback;
+            }
             array.putIndex(globalThis, 2, callback)?;
         }
 
         {
-            const callback = _.onCloseCallback.get() orelse ({
+            let callback: jsc.JSValue = undefined;
+            if (existing := _.onCloseCallback.get()) {
+                callback = existing;
+            } else {
                 let closeCallback = jsc.host_fn.NewFunctionWithData(
                     globalThis,
                     null,
@@ -312,8 +324,8 @@ pub struct UpgradedDuplex {
                 closeCallback.ensureStillAlive();
                 jsc.host_fn.setFunctionData(closeCallback, _);
                 _.onCloseCallback = .create(closeCallback, globalThis);
-                break closeCallback;
-            });
+                callback = closeCallback;
+            }
             array.putIndex(globalThis, 3, callback)?;
         }
 

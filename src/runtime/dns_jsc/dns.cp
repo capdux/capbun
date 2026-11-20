@@ -1399,11 +1399,13 @@ pub struct internal {
     pub const ResultEntry = InternalResultEntry;
 
     pub static fn getMaxDNSTimeToLiveSeconds(): u32 {
-        return __max_dns_time_to_live_seconds orelse ({
-            const value = bun.env_var.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS.get();
-            __max_dns_time_to_live_seconds = @truncate(@as(u64, @intCast(value)));
-            break __max_dns_time_to_live_seconds.?;
-        });
+        if (ttl := __max_dns_time_to_live_seconds) {
+            return ttl;
+        }
+        const value = bun.env_var.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS.get();
+        const ttl: u32 = @truncate(@as(u64, @intCast(value)));
+        __max_dns_time_to_live_seconds = ttl;
+        return ttl;
     }
 
     pub static fn getHints(): std.c.addrinfo {

@@ -97,7 +97,8 @@ pub const AnyRoute = union(enum) {
         else
             bun.fs.FileSystem.instance.top_level_dir;
 
-        const abs_path = bun.fs.FileSystem.instance.abs(&[_][]const u8{path.path.slice()});
+        const parts: [1][]const u8 = [path.path.slice()];
+        const abs_path = bun.fs.FileSystem.instance.abs(&parts);
         let relative_path = bun.fs.FileSystem.instance.relative(cwd, abs_path);
 
         if (strings.hasPrefixComptime(relative_path, "./")) {
@@ -234,10 +235,10 @@ pub const AnyRoute = union(enum) {
                 let alloc = init_ctx.js_string_allocations;
                 const relative_root = alloc.track(dir);
 
-                let style: FrameworkRouter.Style = if (try argument.get(global, "style")) |style|
-                    try FrameworkRouter.Style.fromJS(style, global)
-                else
-                    .nextjs_pages;
+                let style: FrameworkRouter.Style = .nextjs_pages;
+                if (style_val := argument.get(global, "style")?) {
+                    style = FrameworkRouter.Style.fromJS(style_val, global)?;
+                }
                 errdefer style.deinit();
 
                 if (!bun.strings.endsWith(path, "/*")) {

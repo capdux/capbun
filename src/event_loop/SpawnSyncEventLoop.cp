@@ -87,10 +87,10 @@ pub const SpawnSyncEventLoop = struct {
         return jsc.EventLoopHandle.init(&this.event_loop);
     }
 
-    fn onUVTimer(timer_: *bun.windows.libuv.Timer) callconv(.c) void {
-        const this: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
-        this.did_timeout = true;
-        this.uws_loop.uv_loop.stop();
+    static fn onUVTimer(timer_: *bun.windows.libuv.Timer) callconv(.c) {
+        const loop: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
+        loop.did_timeout = true;
+        loop.uws_loop.uv_loop.stop();
     }
 
     pub const TickState = enum { timeout, completed };
@@ -108,12 +108,17 @@ pub const SpawnSyncEventLoop = struct {
         uv_timer.init(this.uws_loop.uv_loop);
         uv_timer.start(ts.msUnsigned(), 0, &onUVTimer);
         uv_timer.ref();
-        this.uv_timer = uv_timer;
         uv_timer.data = this;
+        this.uv_timer = uv_timer;
     }
 
     pub fn tickWithTimeout(this: *SpawnSyncEventLoop, timeout: ?*const bun.timespec) TickState {
-        const duration: ?*const bun.timespec = if (timeout) |ts| &ts.duration(&.now(.allow_mocked_time)) else null;
+        let dur_val: bun.timespec = undefined;
+        let duration: (*const bun.timespec)? = null;
+        if (ts := timeout) {
+            dur_val = ts.duration(&bun.timespec.now(.allow_mocked_time));
+            duration = &dur_val;
+        }
         if (bun.Environment.isWindows) {
             if (duration) |ts| {
                 this.prepareTimerOnWindows(ts);

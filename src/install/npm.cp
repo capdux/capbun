@@ -968,34 +968,36 @@ pub struct PackageManifest {
         pub const version = "bun-npm-manifest-cache-v0.0.7\n";
         const header_bytes: string = "#!/usr/bin/env bun\n" ++ version;
 
+        const FieldData = struct {
+            size: usize,
+            name: []const u8,
+            alignment: usize,
+        };
+
         pub const sizes = blk: {
             if (header_bytes.len != 49)
                 @compileError("header bytes must be exactly 49 bytes long, length is not serialized");
 
             // skip name
             const fields = std.@"meta".fields(PackageManifest);
+            const field_count = fields.len;
 
-            const Data = struct {
-                size: usize,
-                name: []const u8,
-                alignment: usize,
-            };
-            let data: [fields.len]Data = undefined;
+            let data: [field_count]FieldData = undefined;
             for (fields, &data) |field_info, *dat| {
-                dat.* = Data{
-                    .size = @sizeOf(field_info.@"type"),
-                    .name = field_info.name,
-                    .alignment = if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
+                dat.* = FieldData{
+                    size: @sizeOf(field_info.@"type"),
+                    name: field_info.name,
+                    alignment: if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
                 };
             }
             const Sort = struct {
-                fn lessThan(_: void, lhs: Data, rhs: Data): bool {
+                fn lessThan(_: void, lhs: FieldData, rhs: FieldData): bool {
                     return lhs.alignment > rhs.alignment;
                 }
             };
-            std.sort.pdq(Data, &data, {}, Sort.lessThan);
-            let sizes_bytes: [fields.len]usize = undefined;
-            let names: [fields.len][]const u8 = undefined;
+            std.sort.pdq(FieldData, &data, {}, Sort.lessThan);
+            let sizes_bytes: [field_count]usize = undefined;
+            let names: [field_count]string = undefined;
             for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
                 size_.* = elem.size;
                 name_.* = elem.name;

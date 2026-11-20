@@ -968,8 +968,12 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
             bun.BoringSSL.load();
 
             const ctx_opts: uws.SocketContext.BunSocketContextOptions = ssl_options.asUSockets();
-            let err: uws.create_bun_socket_error_t = .none;
-            this_ctx.ctx = ctx_opts.createSSLContext(&err) orelse return error.InvalidOptions;
+            let err_code: uws.create_bun_socket_error_t = .none;
+            if (ctx := ctx_opts.createSSLContext(&err_code)) {
+                this_ctx.ctx = ctx;
+            } else {
+                return error.InvalidOptions;
+            }
         }
 
         const initResult = this_ctx.uvPipe.init(this_ctx.vm.uvLoop(), false);

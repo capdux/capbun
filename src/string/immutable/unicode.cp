@@ -117,7 +117,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             unreachable;
         }
 
-        pub inline fn next(noalias it: *const Iterator, noalias cursor: *Cursor): bool {
+        pub inline fn next(it: *const Iterator, cursor: *Cursor): bool {
             const pos: u32 = @as(u32, cursor.width) + cursor.i;
             if (pos >= it.bytes.len) {
                 return false;
@@ -126,39 +126,26 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             const cp_len = wtf8ByteSequenceLength(it.bytes[pos]);
             const error_char = comptime std.math.maxInt(CodePointType);
 
-            const codepoint = @as(
-                CodePointType,
-                switch (cp_len) {
-                    0 => return false,
-                    1 => it.bytes[pos],
-                    else => blk: {
-                        // Copy into a zero-padded stack buffer so we never read past
-                        // the end of `it.bytes` when a multi-byte lead appears near
-                        // EOF without enough continuation bytes. The zero padding is
-                        // rejected by decodeWTF8RuneTMultibyte (0x00 is not a valid
-                        // continuation byte), so truncated sequences become U+FFFD.
-                        const remaining = it.bytes[pos..];
-                        const cp_bytes: [4]u8 = switch (@min(remaining.len, 4)) {
-                            inline 1, 2, 3, 4 => |n| .{
-                                remaining[0],
-                                if (comptime n > 1) remaining[1] else 0,
-                                if (comptime n > 2) remaining[2] else 0,
-                                if (comptime n > 3) remaining[3] else 0,
-                            },
-                            else => unreachable,
-                        };
-                        break :blk decodeWTF8RuneTMultibyte(&cp_bytes, cp_len, CodePointType, error_char);
-                    },
-                },
-            );
+            let cp: CodePointType = 0;
+            if (cp_len == 0) {
+                return false;
+            } else if (cp_len == 1) {
+                cp = @as(CodePointType, it.bytes[pos]);
+            } else {
+                const remaining = it.bytes[pos..];
+                const rem_len = @min(remaining.len, 4);
+                const b0: u8 = remaining[0];
+                const b1: u8 = if (rem_len > 1) remaining[1] else 0;
+                const b2: u8 = if (rem_len > 2) remaining[2] else 0;
+                const b3: u8 = if (rem_len > 3) remaining[3] else 0;
+                const cp_bytes: [4]u8 = [ b0, b1, b2, b3 ];
+                cp = decodeWTF8RuneTMultibyte(&cp_bytes, cp_len, CodePointType, error_char);
+            }
 
             cursor.* = Cursor{
-                .i = pos,
-                .c = if (error_char != codepoint)
-                    codepoint
-                else
-                    unicode_replacement,
-                .width = if (codepoint != error_char) cp_len else 1,
+                i: pos,
+                c: if (error_char != cp) cp else unicode_replacement,
+                width: if (cp != error_char) cp_len else 1,
             };
 
             return true;

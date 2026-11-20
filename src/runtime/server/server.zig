@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -49,8 +50,23 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const ProtocolEnum = enum { http, https };
@@ -65,254 +81,242 @@ pub const FileRoute = @import("./FileRoute.zig");
 pub const FileResponseStream = @import("./FileResponseStream.zig");
 pub const RangeRequest = @import("./RangeRequest.zig");
 pub const AnyRoute = union(enum) {
-    /// Serve a static file
-    /// "/robots.txt": new Response(...),
     static: *StaticRoute,
-    /// Serve a file from disk
     file: *FileRoute,
-    /// Bundle an HTML import
-    /// import html from "./index.html";
-    /// "/": html,
     html: bun.ptr.RefPtr(HTMLBundle.Route),
-    /// Use file system routing.
-    /// "/*": {
-    ///   "dir": import.meta.resolve("./pages"),
-    ///   "style": "nextjs-pages",
-    /// }
     framework_router: bun.bake.FrameworkRouter.Type.Index,
 
-    pub fn memoryCost(this: AnyRoute) usize {
-        return switch (this) {
-            .static => |static_route| static_route.memoryCost(),
-            .file => |file_route| file_route.memoryCost(),
-            .html => |html_bundle_route| html_bundle_route.data.memoryCost(),
-            .framework_router => @sizeOf(bun.bake.Framework.FileSystemRouterType),
-        };
+pub fn memoryCost(self: @This()) usize {
+            return (switch (self) {
+.static => |static_route| static_route.memoryCost(),
+.file => |file_route| file_route.memoryCost(),
+.html => |html_bundle_route| html_bundle_route.data.memoryCost(),
+.framework_router => @sizeOf(bun.bake.Framework.FileSystemRouterType),
+});
     }
 
-    pub fn setServer(this: AnyRoute, server: ?AnyServer) void {
-        switch (this) {
-            .static => |static_route| static_route.server = server,
-            .file => |file_route| file_route.server = server,
-            .html => |html_bundle_route| html_bundle_route.server = server,
-            .framework_router => {}, // DevServer contains .server field
-        }
+pub fn setServer(self: @This(), server: ?AnyServer) void {
+            switch (self) {
+.static => |static_route| {
+static_route.server = server;
+},
+.file => |file_route| {
+file_route.server = server;
+},
+.html => |html_bundle_route| {
+html_bundle_route.server = server;
+},
+.framework_router => {
+
+},
+}
     }
 
-    pub fn deref(this: AnyRoute) void {
-        switch (this) {
-            .static => |static_route| static_route.deref(),
-            .file => |file_route| file_route.deref(),
-            .html => |html_bundle_route| html_bundle_route.deref(),
-            .framework_router => {}, // not reference counted
-        }
+pub fn deref(self: @This()) void {
+            switch (self) {
+.static => |static_route| {
+_ = static_route.deref();
+},
+.file => |file_route| {
+_ = file_route.deref();
+},
+.html => |html_bundle_route| {
+_ = html_bundle_route.deref();
+},
+.framework_router => {
+
+},
+}
     }
 
-    pub fn ref(this: AnyRoute) void {
-        switch (this) {
-            .static => |static_route| static_route.ref(),
-            .file => |file_route| file_route.ref(),
-            .html => |html_bundle_route| html_bundle_route.ref(),
-            .framework_router => {}, // not reference counted
-        }
+pub fn ref(self: @This()) void {
+            switch (self) {
+.static => |static_route| {
+_ = static_route.ref();
+},
+.file => |file_route| {
+_ = file_route.ref();
+},
+.html => |html_bundle_route| {
+_ = html_bundle_route.ref();
+},
+.framework_router => {
+
+},
+}
     }
 
-    fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
-        if (!argument.isObject()) return null;
-
-        var path_string = try bun.String.fromJS(try argument.get(init_ctx.global, "path") orelse return null, init_ctx.global);
-        defer path_string.deref();
-        var path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, &path_string, false, bun.default_allocator) };
-        defer path.deinit();
-
-        // Construct the route by stripping paths above the root.
-        //
-        //    "./index-abc.js" -> "/index-abc.js"
-        //    "../index-abc.js" -> "/index-abc.js"
-        //    "/index-abc.js" -> "/index-abc.js"
-        //    "index-abc.js" -> "/index-abc.js"
-        //
-        const cwd = if (bun.StandaloneModuleGraph.isBunStandaloneFilePath(path.path.slice()))
-            bun.StandaloneModuleGraph.targetBasePublicPath(bun.Environment.os, "root/")
-        else
-            bun.fs.FileSystem.instance.top_level_dir;
-
-        const abs_path = bun.fs.FileSystem.instance.abs(&[_][]const u8{path.path.slice()});
-        var relative_path = bun.fs.FileSystem.instance.relative(cwd, abs_path);
-
-        if (strings.hasPrefixComptime(relative_path, "./")) {
-            relative_path = relative_path[2..];
-        } else if (strings.hasPrefixComptime(relative_path, "../")) {
-            while (strings.hasPrefixComptime(relative_path, "../")) {
-                relative_path = relative_path[3..];
+pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+            if ((!argument.isObject())) {
+                return null;
             }
-        }
-        const is_index_route = bun.strings.eql(path.path.slice(), index_path);
-        var builder = std.array_list.Managed(u8).init(bun.default_allocator);
-        defer builder.deinit();
-        if (!strings.hasPrefixComptime(relative_path, "/")) {
-            try builder.append('/');
-        }
-
-        try builder.appendSlice(relative_path);
-
-        const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, try argument.get(init_ctx.global, "headers") orelse return null);
-        defer if (fetch_headers) |headers| headers.deref();
-        if (init_ctx.global.hasException()) return error.JSError;
-
-        const route = try fromOptions(init_ctx.global, fetch_headers, &path);
-
-        if (is_index_route) {
-            return route;
-        }
-
-        var methods = HTTP.Method.Optional{ .method = .initEmpty() };
-        methods.insert(.GET);
-        methods.insert(.HEAD);
-
-        try init_ctx.user_routes.append(.{
-            .path = try builder.toOwnedSlice(),
-            .route = route,
-            .method = methods,
-        });
-        return null;
-    }
-
-    /// This is the JS representation of an HTMLImportManifest
-    ///
-    /// See ./src/bundler/HTMLImportManifest.zig
-    fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
-        if (!argument.isObject()) return null;
-
-        const index = try argument.getOptional(init_ctx.global, "index", ZigString.Slice) orelse return null;
-        defer index.deinit();
-
-        const files = try argument.getArray(init_ctx.global, "files") orelse return null;
-        var iter = try files.arrayIterator(init_ctx.global);
-        var html_route: ?AnyRoute = null;
-        while (try iter.next()) |file_entry| {
-            if (try bundledHTMLManifestItemFromJS(file_entry, index.slice(), init_ctx)) |item| {
-                html_route = item;
+            var path_string = try bun.String.fromJS(try ((argument.get(init_ctx.global, "path")) orelse { return .{ .ok = null }; }), init_ctx.global);
+            _ = &path_string;
+            defer {
+            _ = path_string.deref();
             }
-        }
-
-        return html_route;
-    }
-
-    pub fn fromOptions(global: *jsc.JSGlobalObject, headers: ?*jsc.WebCore.FetchHeaders, path: *jsc.Node.PathOrFileDescriptor) !AnyRoute {
-        // The file/static route doesn't ref it.
-        var blob = Blob.findOrCreateFileFromPath(path, global, false);
-
-        if (blob.needsToReadFile()) {
-            // Throw a more helpful error upfront if the file does not exist.
-            //
-            // In production, you do NOT want to find out that all the assets
-            // are 404'ing when the user goes to the route. You want to find
-            // that out immediately so that the health check on startup fails
-            // and the process exits with a non-zero status code.
-            if (blob.store) |store| {
-                if (store.getPath()) |store_path| {
-                    switch (bun.sys.existsAtType(bun.FD.cwd(), store_path)) {
-                        .result => |file_type| {
-                            if (file_type == .directory) {
-                                return global.throwInvalidArguments("Bundled file {f} cannot be a directory. You may want to configure --asset-naming or `naming` when bundling.", .{bun.fmt.quote(store_path)});
-                            }
-                        },
-                        .err => {
-                            return global.throwInvalidArguments("Bundled file {f} not found. You may want to configure --asset-naming or `naming` when bundling.", .{bun.fmt.quote(store_path)});
-                        },
+            var path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, (&path_string), false, bun.default_allocator) };
+            _ = &path;
+            defer {
+            _ = path.deinit();
+            }
+            const cwd = (if (bun.StandaloneModuleGraph.isBunStandaloneFilePath(path.path.slice())) bun.StandaloneModuleGraph.targetBasePublicPath(bun.Environment.os, "root/") else bun.fs.FileSystem.instance.top_level_dir);
+            const parts: [1][]const u8 = .{ path.path.slice() };
+            const abs_path = bun.fs.FileSystem.instance.abs((&parts));
+            var relative_path = bun.fs.FileSystem.instance.relative(cwd, abs_path);
+            _ = &relative_path;
+            if (strings.hasPrefixComptime(relative_path, "./")) {
+                relative_path = relative_path[2..];
+            } else {
+                if (strings.hasPrefixComptime(relative_path, "../")) {
+                    while (strings.hasPrefixComptime(relative_path, "../")) {
+                        relative_path = relative_path[3..];
                     }
                 }
             }
-
-            return AnyRoute{ .file = FileRoute.initFromBlob(blob, .{ .server = null, .headers = headers }) };
-        }
-
-        return AnyRoute{ .static = StaticRoute.initFromAnyBlob(&.{ .Blob = blob }, .{ .server = null, .headers = headers }) };
-    }
-
-    pub fn htmlRouteFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
-        if (argument.as(HTMLBundle)) |html_bundle| {
-            const entry = bun.handleOom(init_ctx.dedupe_html_bundle_map.getOrPut(html_bundle));
-            if (!entry.found_existing) {
-                entry.value_ptr.* = HTMLBundle.Route.init(html_bundle);
-                return .{ .html = entry.value_ptr.* };
-            } else {
-                return .{ .html = entry.value_ptr.dupeRef() };
+            const is_index_route = bun.strings.eql(path.path.slice(), index_path);
+            var builder = std.array_list.Managed(u8).init(bun.default_allocator);
+            _ = &builder;
+            defer {
+            _ = builder.deinit();
             }
-        }
-
-        if (try bundledHTMLManifestFromJS(argument, init_ctx)) |html_route| {
-            return html_route;
-        }
-
-        return null;
+            if ((!strings.hasPrefixComptime(relative_path, "/"))) {
+                _ = try builder.append(47);
+            }
+            _ = try builder.appendSlice(relative_path);
+            const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, try ((argument.get(init_ctx.global, "headers")) orelse { return .{ .ok = null }; }));
+            defer {
+            if (fetch_headers) |headers| {
+                _ = &headers;
+                _ = headers.deref();
+            }
+            }
+            if (init_ctx.global.hasException()) {
+                return error.JSError;
+            }
+            const route = try fromOptions(init_ctx.global, fetch_headers, (&path));
+            if (is_index_route) {
+                return route;
+            }
+            var methods = HTTP.Method.Optional{ .method = .initEmpty() };
+            _ = &methods;
+            _ = methods.insert(.GET);
+            _ = methods.insert(.HEAD);
+            _ = try init_ctx.user_routes.append(.{ .path = try builder.toOwnedSlice(), .route = route, .method = methods });
+            return null;
     }
 
+pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+            if ((!argument.isObject())) {
+                return null;
+            }
+            const index = try ((argument.getOptional(init_ctx.global, "index", ZigString.Slice)) orelse { return .{ .ok = null }; });
+            defer {
+            _ = index.deinit();
+            }
+            const files = try ((argument.getArray(init_ctx.global, "files")) orelse { return .{ .ok = null }; });
+            var iter = try files.arrayIterator(init_ctx.global);
+            _ = &iter;
+            var html_route: ?AnyRoute = null;
+            _ = &html_route;
+            while (try iter.next()) |file_entry| {
+                if (try bundledHTMLManifestItemFromJS(file_entry, index.slice(), init_ctx)) |item| {
+                    _ = &item;
+                    html_route = item;
+                }
+            }
+            return html_route;
+    }
+
+pub fn fromOptions(global: *jsc.JSGlobalObject, headers: ?*jsc.WebCore.FetchHeaders, path: *jsc.Node.PathOrFileDescriptor) AnyRoute!void {
+            var blob = Blob.findOrCreateFileFromPath(path, global, false);
+            _ = &blob;
+            if (blob.needsToReadFile()) {
+                if (blob.store) |store| {
+                    _ = &store;
+                    if (store.getPath()) |store_path| {
+                        _ = &store_path;
+                        switch (bun.sys.existsAtType(bun.FD.cwd(), store_path)) {
+.result => |file_type| {
+if ((file_type == .directory)) {
+                            return global.throwInvalidArguments("Bundled file {f} cannot be a directory. You may want to configure --asset-naming or `naming` when bundling.", .{ bun.fmt.quote(store_path) });
+                        }
+},
+.err => {
+return global.throwInvalidArguments("Bundled file {f} not found. You may want to configure --asset-naming or `naming` when bundling.", .{ bun.fmt.quote(store_path) });
+},
+}
+                    }
+                }
+                return AnyRoute{ .file = FileRoute.initFromBlob(blob, .{ .server = null, .headers = headers }) };
+            }
+            return AnyRoute{ .static = StaticRoute.initFromAnyBlob((&.{ .Blob = blob }), .{ .server = null, .headers = headers }) };
+    }
+
+pub fn htmlRouteFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+            if (argument.as(HTMLBundle)) |html_bundle| {
+                _ = &html_bundle;
+                const entry = bun.handleOom(init_ctx.dedupe_html_bundle_map.getOrPut(html_bundle));
+                if ((!entry.found_existing)) {
+                    entry.value_ptr.* = HTMLBundle.Route.init(html_bundle);
+                    return .{ .html = entry.value_ptr.* };
+                } else {
+                    return .{ .html = entry.value_ptr.dupeRef() };
+                }
+            }
+            if (try bundledHTMLManifestFromJS(argument, init_ctx)) |html_route| {
+                _ = &html_route;
+                return html_route;
+            }
+            return null;
+    }
+
+pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+            if (try AnyRoute.htmlRouteFromJS(argument, init_ctx)) |html_route| {
+                _ = &html_route;
+                return html_route;
+            }
+            if (argument.isObject()) {
+                const FrameworkRouter = bun.bake.FrameworkRouter;
+                if (try argument.getOptional(global, "dir", bun.String.Slice)) |dir| {
+                    _ = &dir;
+                    var alloc = init_ctx.js_string_allocations;
+                    _ = &alloc;
+                    const relative_root = alloc.track(dir);
+                    var style: FrameworkRouter.Style = .nextjs_pages;
+                    _ = &style;
+                    if (try argument.get(global, "style")) |style_val| {
+                        _ = &style_val;
+                        style = try FrameworkRouter.Style.fromJS(style_val, global);
+                    }
+                    errdefer {
+                    _ = style.deinit();
+                    }
+                    if ((!bun.strings.endsWith(path, "/*"))) {
+                        return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
+                    }
+                    _ = try init_ctx.framework_router_list.append(.{ .root = relative_root, .style = style, .prefix = (if ((path.len == 2)) "/" else path[0..(path.len - 2)]), .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&.{ "node_modules", ".git" }), .extensions = (&.{ ".tsx", ".jsx" }), .allow_layouts = true });
+                    const limit = std.math.maxInt(@typeInfo(FrameworkRouter.Type.Index).@"enum".tag_type);
+                    if ((init_ctx.framework_router_list.items.len > limit)) {
+                        return global.throwInvalidArguments("Too many framework routers. Maximum is {d}.", .{ limit });
+                    }
+                    return .{ .framework_router = .init(@intCast((init_ctx.framework_router_list.items.len - 1))) };
+                }
+            }
+            if (try FileRoute.fromJS(global, argument)) |file_route| {
+                _ = &file_route;
+                return .{ .file = file_route };
+            }
+            return .{ .static = try ((StaticRoute.fromJS(global, argument)) orelse { return .{ .ok = null }; }) };
+    }
     pub const ServerInitContext = struct {
-        arena: std.heap.ArenaAllocator,
-        dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
-        js_string_allocations: bun.bake.StringRefList,
-        global: *jsc.JSGlobalObject,
-        framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
-        user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
-    };
-
-    pub fn fromJS(
-        global: *jsc.JSGlobalObject,
-        path: []const u8,
-        argument: jsc.JSValue,
-        init_ctx: *ServerInitContext,
-    ) bun.JSError!?AnyRoute {
-        if (try AnyRoute.htmlRouteFromJS(argument, init_ctx)) |html_route| {
-            return html_route;
-        }
-
-        if (argument.isObject()) {
-            const FrameworkRouter = bun.bake.FrameworkRouter;
-            if (try argument.getOptional(global, "dir", bun.String.Slice)) |dir| {
-                var alloc = init_ctx.js_string_allocations;
-                const relative_root = alloc.track(dir);
-
-                var style: FrameworkRouter.Style = if (try argument.get(global, "style")) |style|
-                    try FrameworkRouter.Style.fromJS(style, global)
-                else
-                    .nextjs_pages;
-                errdefer style.deinit();
-
-                if (!bun.strings.endsWith(path, "/*")) {
-                    return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
-                }
-
-                try init_ctx.framework_router_list.append(.{
-                    .root = relative_root,
-                    .style = style,
-
-                    // trim the /*
-                    .prefix = if (path.len == 2) "/" else path[0 .. path.len - 2],
-
-                    // TODO: customizable framework option.
-                    .entry_client = "bun-framework-react/client.tsx",
-                    .entry_server = "bun-framework-react/server.tsx",
-                    .ignore_underscores = true,
-                    .ignore_dirs = &.{ "node_modules", ".git" },
-                    .extensions = &.{ ".tsx", ".jsx" },
-                    .allow_layouts = true,
-                });
-
-                const limit = std.math.maxInt(@typeInfo(FrameworkRouter.Type.Index).@"enum".tag_type);
-                if (init_ctx.framework_router_list.items.len > limit) {
-                    return global.throwInvalidArguments("Too many framework routers. Maximum is {d}.", .{limit});
-                }
-                return .{ .framework_router = .init(@intCast(init_ctx.framework_router_list.items.len - 1)) };
-            }
-        }
-
-        if (try FileRoute.fromJS(global, argument)) |file_route| {
-            return .{ .file = file_route };
-        }
-        return .{ .static = try StaticRoute.fromJS(global, argument) orelse return null };
-    }
+            arena: std.heap.ArenaAllocator,
+            dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
+            js_string_allocations: bun.bake.StringRefList,
+            global: *jsc.JSGlobalObject,
+            framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
+            user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
+        };
 };
 pub const ServerConfig = @import("./ServerConfig.zig");
 pub const ServerWebSocket = @import("./ServerWebSocket.zig");

@@ -4557,11 +4557,12 @@ return .{ .err = e };
 }
 
 pub fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule),void) {
-    _ = prelude;
-    _ = start;
-    _ = options;
-    _ = at_rule_parser;
-    _ = is_nested;
+        const RuleT = CssRule(T.CustomAtRuleParser.AtRule);
+        _ = &RuleT;
+        return (switch (T.CustomAtRuleParser.ruleWithoutBlock(at_rule_parser, prelude, start, options, is_nested)) {
+.result => |v| .{ .result = RuleT{ .custom = v } },
+.err => |e| .{ .err = e },
+});
 }
 
 pub fn parse_custom_at_rule_body(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, input: *Parser, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Result(T.CustomAtRuleParser.AtRule) {
@@ -5023,859 +5024,724 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
 
 pub fn NestedRuleParser(comptime T: type) type {
         _ = ValidCustomAtRuleParser(T);
-        const AtRuleT = T.CustomAtRuleParser.AtRule;
         return struct {
-        options: *const ParserOptions,
-        at_rule_parser: *T,
-        // todo_stuff.think_mem_mgmt
-        declarations: DeclarationList,
-        // todo_stuff.think_mem_mgmt
-        important_declarations: DeclarationList,
-        // todo_stuff.think_mem_mgmt
-        rules: *CssRuleList(T.CustomAtRuleParser.AtRule),
-        is_in_style_rule: bool,
-        allow_declarations: bool,
+    options: *const ParserOptions,
+    at_rule_parser: *T,
+    declarations: DeclarationList,
+    important_declarations: DeclarationList,
+    rules: *CssRuleList(T.CustomAtRuleParser.AtRule),
+    is_in_style_rule: bool,
+    allow_declarations: bool,
+    composes_state: ComposesState = .disallow_entirely,
+    composes_refs: *SmallList(bun.bundle_v2.Ref,2),
+    composes: *ComposesMap,
+    local_properties: *LocalPropertyUsage,
+    allocator: Allocator,
 
-        composes_state: ComposesState = .disallow_entirely,
-        composes_refs: *SmallList(bun.bundle_v2.Ref, 2),
-        composes: *ComposesMap,
-        local_properties: *LocalPropertyUsage,
-
-        allocator: Allocator,
-
-        const ComposesState = union(enum) {
-            allow: SourceLocation,
-            disallow_nested: SourceLocation,
-            disallow_not_single_class: SourceLocation,
-            disallow_entirely,
-        };
-
-        const This = @This();
-
-        pub fn getLoc(this: *This, start: *const ParserState) Location {
+pub fn getLoc(self: *@This(), start: *const ParserState) Location {
             const loc = start.sourceLocation();
-            return Location{
-                .source_index = this.options.source_index,
-                .line = loc.line,
-                .column = loc.column,
-            };
-        }
+            return Location{ .source_index = self.options.source_index, .line = loc.line, .column = loc.column };
+    }
 
-        pub const AtRuleParser = struct {
-            pub const Prelude = AtRulePrelude(T.CustomAtRuleParser.Prelude);
-            pub const AtRule = void;
-
-            pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
-                const result: Prelude = brk: {
-                    const PreludeEnum = enum {
-                        media,
-                        supports,
-                        @"font-face",
-                        @"font-palette-values",
-                        @"counter-style",
-                        viewport,
-                        @"-ms-viewport",
-                        keyframes,
-                        @"-webkit-keyframes",
-                        @"-moz-keyframes",
-                        @"-o-keyframes",
-                        @"-ms-keyframes",
-                        page,
-                        @"-moz-document",
-                        layer,
-                        container,
-                        @"starting-style",
-                        scope,
-                        nest,
-                    };
-                    const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
-                    if (Map.getASCIIICaseInsensitive(name)) |kind| switch (kind) {
-                        .media => {
-                            const media = switch (MediaList.parse(input)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .media = media };
-                        },
-                        .supports => {
-                            const cond = switch (SupportsCondition.parse(input)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .supports = cond };
-                        },
-                        .@"font-face" => break :brk .font_face,
-                        .@"font-palette-values" => {
-                            const dashed_ident_name = switch (DashedIdentFns.parse(input)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .font_palette_values = dashed_ident_name };
-                        },
-                        .@"counter-style" => {
-                            const custom_name = switch (CustomIdentFns.parse(input)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .counter_style = custom_name };
-                        },
-                        .viewport, .@"-ms-viewport" => {
-                            const prefix: VendorPrefix = if (bun.strings.startsWithCaseInsensitiveAscii(name, "-ms")) VendorPrefix{ .ms = true } else VendorPrefix{ .none = true };
-                            break :brk .{ .viewport = prefix };
-                        },
-                        inline .keyframes, .@"-webkit-keyframes", .@"-moz-keyframes", .@"-o-keyframes", .@"-ms-keyframes" => |n| {
-                            const prefix: VendorPrefix = switch (n) {
-                                .@"-webkit-keyframes" => VendorPrefix{ .webkit = true },
-                                .@"-moz-keyframes" => VendorPrefix{ .moz = true },
-                                .@"-o-keyframes" => VendorPrefix{ .o = true },
-                                .@"-ms-keyframes" => VendorPrefix{ .ms = true },
-                                else => VendorPrefix{ .none = true },
-                            };
-
-                            const keyframes_name = switch (input.tryParse(css_rules.keyframes.KeyframesName.parse, {})) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .keyframes = .{ .name = keyframes_name, .prefix = prefix } };
-                        },
-                        .page => {
-                            const Fn = struct {
-                                pub fn parsefn(input2: *Parser) Result(ArrayList(css_rules.page.PageSelector)) {
-                                    return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
-                                }
-                            };
-                            const selectors = switch (input.tryParse(Fn.parsefn, {})) {
-                                .result => |v| v,
-                                .err => ArrayList(css_rules.page.PageSelector){},
-                            };
-                            break :brk .{ .page = selectors };
-                        },
-                        .@"-moz-document" => {
-                            // Firefox only supports the url-prefix() function with no arguments as a legacy CSS hack.
-                            // See https://css-tricks.com/snippets/css/css-hacks-targeting-firefox/
-                            if (input.expectFunctionMatching("url-prefix").asErr()) |e| return .{ .err = e };
-                            const Fn = struct {
-                                pub fn parsefn(_: void, input2: *Parser) Result(void) {
-                                    // Firefox also allows an empty string as an argument...
-                                    // https://github.com/mozilla/gecko-dev/blob/0077f2248712a1b45bf02f0f866449f663538164/servo/components/style/stylesheets/document_rule.rs#L303
-                                    _ = input2.tryParse(parseInner, {});
-                                    if (input2.expectExhausted().asErr()) |e| return .{ .err = e };
-                                    return .success;
-                                }
-                                fn parseInner(input2: *Parser) Result(void) {
-                                    const s = switch (input2.expectString()) {
-                                        .err => |e| return .{ .err = e },
-                                        .result => |v| v,
-                                    };
-                                    if (s.len > 0) {
-                                        return .{ .err = input2.newCustomError(ParserError.invalid_value) };
-                                    }
-                                    return .success;
-                                }
-                            };
-                            if (input.parseNestedBlock(void, {}, Fn.parsefn).asErr()) |e| return .{ .err = e };
-                            break :brk .moz_document;
-                        },
-                        .layer => {
-                            const names = switch (bun.css.SmallList(LayerName, 1).parse(input)) {
-                                .result => |vv| vv,
-                                .err => |e| names: {
-                                    if (e.kind == .basic and e.kind.basic == .end_of_input) {
-                                        break :names bun.css.SmallList(LayerName, 1){};
-                                    }
-                                    return .{ .err = e };
-                                },
-                            };
-
-                            break :brk .{ .layer = names };
-                        },
-                        .container => {
-                            const container_name = switch (input.tryParse(css_rules.container.ContainerName.parse, {})) {
-                                .result => |vv| vv,
-                                .err => null,
-                            };
-                            const condition = switch (css_rules.container.ContainerCondition.parse(input)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            };
-                            break :brk .{ .container = .{ .name = container_name, .condition = condition } };
-                        },
-                        .@"starting-style" => break :brk .starting_style,
-                        .scope => {
-                            var selector_parser = selector.parser.SelectorParser{
-                                .is_nesting_allowed = true,
-                                .options = parser.options,
-                                .allocator = input.allocator(),
-                            };
-                            const Closure = struct {
-                                selector_parser: *selector.parser.SelectorParser,
-                                pub fn parsefn(self: *@This(), input2: *Parser) Result(selector.parser.SelectorList) {
-                                    return selector.parser.SelectorList.parseRelative(self.selector_parser, input2, .ignore_invalid_selector, .none);
-                                }
-                            };
-                            var closure = Closure{
-                                .selector_parser = &selector_parser,
-                            };
-
-                            const scope_start = if (input.tryParse(Parser.expectParenthesisBlock, {}).isOk()) scope_start: {
-                                break :scope_start switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, Closure.parsefn)) {
-                                    .result => |v| v,
-                                    .err => |e| return .{ .err = e },
-                                };
-                            } else null;
-
-                            const scope_end = if (input.tryParse(Parser.expectIdentMatching, .{"to"}).isOk()) scope_end: {
-                                if (input.expectParenthesisBlock().asErr()) |e| return .{ .err = e };
-                                break :scope_end switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, Closure.parsefn)) {
-                                    .result => |v| v,
-                                    .err => |e| return .{ .err = e },
-                                };
-                            } else null;
-
-                            break :brk .{
-                                .scope = .{
-                                    .scope_start = scope_start,
-                                    .scope_end = scope_end,
-                                },
-                            };
-                        },
-                        .nest => {
-                            if (parser.is_in_style_rule) {
-                                parser.options.warn(input.newCustomError(ParserError{ .deprecated_nest_rule = {} }));
-                                var selector_parser = selector.parser.SelectorParser{
-                                    .is_nesting_allowed = true,
-                                    .options = parser.options,
-                                    .allocator = input.allocator(),
-                                };
-                                const selectors = switch (selector.parser.SelectorList.parse(&selector_parser, input, .discard_list, .contained)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                };
-                                break :brk .{ .nest = selectors };
-                            }
-                        },
-                    };
-
-                    switch (parse_custom_at_rule_prelude(
-                        name,
-                        input,
-                        parser.options,
-                        T,
-                        parser.at_rule_parser,
-                    )) {
-                        .result => |v| break :brk v,
-                        .err => |e| return .{ .err = e },
-                    }
-                };
-
-                if (parser.is_in_style_rule and !result.allowedInStyleRule()) {
-                    return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+pub fn recordComposes(self: *@This(), allocator: Allocator, composes: *Composes) void {
+            for (cp_iter_slice(self.composes_refs.slice())) |comp_ref| {
+                _ = &comp_ref;
+                const gop = bun.handleOom(self.composes.getOrPut(allocator, comp_ref));
+                if ((!gop.found_existing)) {
+                    gop.value_ptr.* = ComposesEntry{  };
                 }
-
-                return .{ .result = result };
+                _ = bun.handleOom(gop.value_ptr.*.composes.append(allocator, composes.deepClone(allocator)));
             }
+    }
 
-            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
-                const loc = parser.getLoc(start);
-                switch (prelude) {
-                    .font_face => {
-                        var decl_parser = css_rules.font_face.FontFaceDeclarationParser{};
-                        var body_parser = RuleBodyParser(css_rules.font_face.FontFaceDeclarationParser).new(input, &decl_parser);
-                        // todo_stuff.think_mem_mgmt
-                        var properties: ArrayList(css_rules.font_face.FontFaceProperty) = .{};
-
-                        while (body_parser.next()) |result| {
-                            if (result.asValue()) |decl| {
-                                properties.append(
-                                    input.allocator(),
-                                    decl,
-                                ) catch |e| bun.handleOom(e);
-                            }
-                        }
-
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .font_face = css_rules.font_face.FontFaceRule{
-                                    .properties = properties,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .font_palette_values => {
-                        const name = prelude.font_palette_values;
-                        const rule = switch (css_rules.font_palette_values.FontPaletteValuesRule.parse(name, input, loc)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{ .font_palette_values = rule },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .counter_style => {
-                        const name = prelude.counter_style;
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .counter_style = css_rules.counter_style.CounterStyleRule{
-                                    .name = name,
-                                    .declarations = switch (DeclarationBlock.parse(input, parser.options)) {
-                                        .err => |e| return .{ .err = e },
-                                        .result => |v| v,
-                                    },
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .media => {
-                        const query = prelude.media;
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .media = css_rules.media.MediaRule(T.CustomAtRuleParser.AtRule){
-                                    .query = query,
-                                    .rules = rules,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .supports => {
-                        const condition = prelude.supports;
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(input.allocator(), .{
-                            .supports = css_rules.supports.SupportsRule(T.CustomAtRuleParser.AtRule){
-                                .condition = condition,
-                                .rules = rules,
-                                .loc = loc,
-                            },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .container => {
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .container = css_rules.container.ContainerRule(T.CustomAtRuleParser.AtRule){
-                                    .name = prelude.container.name,
-                                    .condition = prelude.container.condition,
-                                    .rules = rules,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .scope => {
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .scope = css_rules.scope.ScopeRule(T.CustomAtRuleParser.AtRule){
-                                    .scope_start = prelude.scope.scope_start,
-                                    .scope_end = prelude.scope.scope_end,
-                                    .rules = rules,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .viewport => {
-                        parser.rules.v.append(input.allocator(), .{
-                            .viewport = css_rules.viewport.ViewportRule{
-                                .vendor_prefix = prelude.viewport,
-                                .declarations = switch (DeclarationBlock.parse(input, parser.options)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                },
-                                .loc = loc,
-                            },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .keyframes => {
-                        var kf_parser = css_rules.keyframes.KeyframesListParser{};
-                        var iter = RuleBodyParser(css_rules.keyframes.KeyframesListParser).new(input, &kf_parser);
-                        // todo_stuff.think_mem_mgmt
-                        var keyframes = ArrayList(css_rules.keyframes.Keyframe){};
-
-                        while (iter.next()) |result| {
-                            if (result.asValue()) |keyframe| {
-                                keyframes.append(
-                                    input.allocator(),
-                                    keyframe,
-                                ) catch |e| bun.handleOom(e);
-                            }
-                        }
-
-                        parser.rules.v.append(input.allocator(), .{
-                            .keyframes = css_rules.keyframes.KeyframesRule{
-                                .name = prelude.keyframes.name,
-                                .keyframes = keyframes,
-                                .vendor_prefix = prelude.keyframes.prefix,
-                                .loc = loc,
-                            },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .page => {
-                        const selectors = prelude.page;
-                        const rule = switch (css_rules.page.PageRule.parse(selectors, input, loc, parser.options)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{ .page = rule },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .moz_document => {
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(input.allocator(), .{
-                            .moz_document = css_rules.document.MozDocumentRule(T.CustomAtRuleParser.AtRule){
-                                .rules = rules,
-                                .loc = loc,
-                            },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .layer => {
-                        const name = if (prelude.layer.len() == 0) null else if (prelude.layer.len() == 1) names: {
-                            break :names prelude.layer.at(0).*;
-                        } else return .{ .err = input.newError(.at_rule_body_invalid) };
-
-                        T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, &prelude.layer);
-                        const old_len = T.CustomAtRuleParser.enclosingLayerLength(parser.at_rule_parser);
-                        if (name != null) {
-                            T.CustomAtRuleParser.pushToEnclosingLayer(parser.at_rule_parser, name.?);
-                        } else {
-                            T.CustomAtRuleParser.bumpAnonLayerCount(parser.at_rule_parser, 1);
-                        }
-
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-
-                        if (name == null) {
-                            T.CustomAtRuleParser.bumpAnonLayerCount(parser.at_rule_parser, -1);
-                        }
-                        T.CustomAtRuleParser.resetEnclosingLayer(parser.at_rule_parser, old_len);
-
-                        parser.rules.v.append(input.allocator(), .{
-                            .layer_block = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule){ .name = name, .rules = rules, .loc = loc },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .property => {
-                        const name = prelude.property[0];
-                        parser.rules.v.append(input.allocator(), .{
-                            .property = switch (css_rules.property.PropertyRule.parse(name, input, loc)) {
-                                .err => |e| return .{ .err = e },
-                                .result => |v| v,
-                            },
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .import, .namespace, .custom_media, .charset => {
-                        // These rules don't have blocks
-                        return .{ .err = input.newUnexpectedTokenError(.open_curly) };
-                    },
-                    .starting_style => {
-                        const rules = switch (parser.parseStyleBlock(input)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .starting_style = css_rules.starting_style.StartingStyleRule(T.CustomAtRuleParser.AtRule){
-                                    .rules = rules,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .nest => {
-                        const selectors = prelude.nest;
-                        const result = switch (parser.parseNested(input, true)) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        };
-                        const declarations = result[0];
-                        const rules = result[1];
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .nesting = css_rules.nesting.NestingRule(T.CustomAtRuleParser.AtRule){
-                                    .style = css_rules.style.StyleRule(T.CustomAtRuleParser.AtRule){
-                                        .selectors = selectors,
-                                        .declarations = declarations,
-                                        .vendor_prefix = .{},
-                                        .rules = rules,
-                                        .loc = loc,
-                                    },
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .font_feature_values => bun.unreachablePanic("", .{}),
-                    .unknown => {
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .unknown = css_rules.unknown.UnknownAtRule{
-                                    .name = prelude.unknown.name,
-                                    .prelude = prelude.unknown.tokens,
-                                    .block = switch (TokenListFns.parse(input, parser.options, 0)) {
-                                        .err => |e| return .{ .err = e },
-                                        .result => |v| v,
-                                    },
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .custom => {
-                        parser.rules.v.append(
-                            input.allocator(),
-                            .{
-                                .custom = switch (parse_custom_at_rule_body(T, prelude.custom, input, start, parser.options, parser.at_rule_parser, parser.is_in_style_rule)) {
-                                    .err => |e| return .{ .err = e },
-                                    .result => |v| v,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                }
+pub fn parseNested(self: *@This(), input: *Parser, is_style_rule: bool) Result(struct{DeclarationBlock,CssRuleList(T.CustomAtRuleParser.AtRule)}) {
+            var rules = CssRuleList(T.CustomAtRuleParser.AtRule);
+            _ = &rules;
+            {
             }
-
-            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
-                const loc = parser.getLoc(start);
-                switch (prelude) {
-                    .layer => {
-                        if (parser.is_in_style_rule or prelude.layer.len() == 0) {
-                            return .{ .err = {} };
-                        }
-
-                        T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, &prelude.layer);
-
-                        parser.rules.v.append(
-                            parser.allocator,
-                            .{
-                                .layer_statement = css_rules.layer.LayerStatementRule{
-                                    .names = prelude.layer,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .unknown => {
-                        parser.rules.v.append(
-                            parser.allocator,
-                            .{
-                                .unknown = css_rules.unknown.UnknownAtRule{
-                                    .name = prelude.unknown.name,
-                                    .prelude = prelude.unknown.tokens,
-                                    .block = null,
-                                    .loc = loc,
-                                },
-                            },
-                        ) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    .custom => {
-                        parser.rules.v.append(parser.allocator, switch (parse_custom_at_rule_without_block(
-                            T,
-                            prelude.custom,
-                            start,
-                            parser.options,
-                            parser.at_rule_parser,
-                            parser.is_in_style_rule,
-                        )) {
-                            .err => |e| return .{ .err = e },
-                            .result => |v| v,
-                        }) catch |e| bun.handleOom(e);
-                        return .success;
-                    },
-                    else => return .{ .err = {} },
-                }
+            var nested_parser = This{ .allocator = input.allocator(), .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = rules, .is_in_style_rule = (self.is_in_style_rule or is_style_rule), .allow_declarations = ((self.allow_declarations or self.is_in_style_rule) or is_style_rule), .composes_state = (if ((self.is_in_style_rule and (self.composes_state == .allow))) .{ .disallow_nested = .{ .line = self.composes_state.allow.line, .column = self.composes_state.allow.column } } else self.composes_state), .composes = self.composes, .composes_refs = self.composes_refs, .local_properties = self.local_properties };
+            _ = &nested_parser;
+            const parse_declarations = This.RuleBodyItemParser.parseDeclarations((&nested_parser));
+            var errors = ArrayList(ParseError(ParserError));
+            _ = &errors;
+            {
             }
-        };
-
-        pub const QualifiedRuleParser = struct {
-            pub const Prelude = selector.parser.SelectorList;
-            pub const QualifiedRule = void;
-
-            pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
-                var selector_parser = selector.parser.SelectorParser{
-                    .is_nesting_allowed = true,
-                    .options = parser.options,
-                    .allocator = input.allocator(),
-                };
-
-                if (parser.is_in_style_rule) {
-                    return selector.parser.SelectorList.parseRelative(&selector_parser, input, .discard_list, .implicit);
-                } else {
-                    return selector.parser.SelectorList.parse(&selector_parser, input, .discard_list, .none);
-                }
-            }
-
-            pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
-                const loc = parser.getLoc(start);
-                defer parser.composes_refs.clearRetainingCapacity();
-                // allow composes if:
-                // - NOT in nested style rules
-                // - AND there is only one class selector
-                if (input.flags.css_modules) out: {
-                    if (parser.is_in_style_rule) {
-                        parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    if (selectors.v.len() != 1) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    const sel = selectors.v.slice()[0];
-                    if (sel.components.items.len != 1) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    const comp = &sel.components.items[0];
-                    if (comp.asClass()) |r| {
-                        const ref = r.asRef().?;
-                        parser.composes_refs.append(input.allocator(), ref);
-                        parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                }
-                const location = input.position();
-                const result = switch (parser.parseNested(input, true)) {
-                    .err => |e| return .{ .err = e },
-                    .result => |v| v,
-                };
-                const declarations: DeclarationBlock = result[0];
-                const rules = result[1];
-
-                // We parsed a style rule with the `composes` property
-                //
-                // Track which properties it used so we can validate it later (it is undefined
-                // behavior when composing and properties conflict so we will warn the user
-                // about that).
-                if (parser.composes_state == .allow) {
-                    const len = input.position() - location;
-                    var usage = PropertyBitset.initEmpty();
-                    var custom_properties = bun.BabyList(string){};
-                    fillPropertyBitSet(parser.allocator, &usage, &declarations, &custom_properties);
-
-                    const custom_properties_slice = custom_properties.slice();
-
-                    for (parser.composes_refs.slice()) |ref| {
-                        const entry = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, ref));
-                        const property_usage: *PropertyUsage = if (!entry.found_existing) brk: {
-                            entry.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
-                            break :brk entry.value_ptr;
-                        } else entry.value_ptr;
-                        property_usage.fill(&usage, custom_properties_slice);
-                    }
-                }
-
-                parser.rules.v.append(parser.allocator, .{
-                    .style = StyleRule(AtRuleT){
-                        .selectors = selectors,
-                        .vendor_prefix = VendorPrefix{},
-                        .declarations = declarations,
-                        .rules = rules,
-                        .loc = loc,
-                    },
-                }) catch |e| bun.handleOom(e);
-
-                return .success;
-            }
-        };
-
-        pub const RuleBodyItemParser = struct {
-            pub fn parseQualified(parser: *This) bool {
-                _ = parser; // autofix
-                return true;
-            }
-
-            pub fn parseDeclarations(parser: *This) bool {
-                return parser.allow_declarations;
-            }
-        };
-
-        pub const DeclarationParser = struct {
-            pub const Declaration = void;
-
-            pub fn parseValue(parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
-                return css_decls.parse_declaration_impl(
-                    name,
-                    input,
-                    &parser.declarations,
-                    &parser.important_declarations,
-                    parser.options,
-                    parser,
-                );
-            }
-        };
-
-        /// If css modules is enabled, we want to record each occurrence of the `composes` property
-        /// for the bundler so we can generate the lazy JS import object later.
-        pub fn recordComposes(this: *This, allocator: Allocator, composes: *Composes) void {
-            for (this.composes_refs.slice()) |ref| {
-                const entry = bun.handleOom(this.composes.getOrPut(allocator, ref));
-                if (!entry.found_existing) {
-                    entry.value_ptr.* = ComposesEntry{};
-                }
-                bun.handleOom(entry.value_ptr.*.composes.append(allocator, composes.deepClone(allocator)));
-            }
-        }
-
-        pub fn parseNested(this: *This, input: *Parser, is_style_rule: bool) Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
-            // TODO: think about memory management in error cases
-            var rules = CssRuleList(T.CustomAtRuleParser.AtRule){};
-            var nested_parser = This{
-                .allocator = input.allocator(),
-                .options = this.options,
-                .at_rule_parser = this.at_rule_parser,
-                .declarations = DeclarationList{},
-                .important_declarations = DeclarationList{},
-                .rules = &rules,
-                .is_in_style_rule = this.is_in_style_rule or is_style_rule,
-                .allow_declarations = this.allow_declarations or this.is_in_style_rule or is_style_rule,
-                // .composes_state = this.allow_composes and !this.is_in_style_rule,
-                .composes_state = if (this.is_in_style_rule and this.composes_state == .allow)
-                    .{ .disallow_nested = .{ .line = this.composes_state.allow.line, .column = this.composes_state.allow.column } }
-                else
-                    this.composes_state,
-                .composes = this.composes,
-                .composes_refs = this.composes_refs,
-                .local_properties = this.local_properties,
-            };
-
-            const parse_declarations = This.RuleBodyItemParser.parseDeclarations(&nested_parser);
-            // TODO: think about memory management
-            var errors = ArrayList(ParseError(ParserError)){};
-            var iter = RuleBodyParser(This).new(input, &nested_parser);
-
+            var iter = RuleBodyParser(This).new(input, (&nested_parser));
+            _ = &iter;
             while (iter.next()) |result| {
                 if (result.asErr()) |e| {
+                    _ = &e;
                     if (parse_declarations) {
-                        iter.parser.declarations.clearRetainingCapacity();
-                        iter.parser.important_declarations.clearRetainingCapacity();
-                        errors.append(
-                            this.allocator,
-                            e,
-                        ) catch |oom| bun.handleOom(oom);
+                        _ = iter.parser.declarations.clearRetainingCapacity();
+                        _ = iter.parser.important_declarations.clearRetainingCapacity();
+                        _ = (blk_catch_0: { break :blk_catch_0 ((errors.append(self.allocator, e)) catch |oom| { _ = &oom; break :blk_catch_0 bun.handleOom(oom); }); });
                     } else {
                         if (iter.parser.options.error_recovery) {
-                            iter.parser.options.warn(e);
+                            _ = iter.parser.options.warn(e);
                             continue;
                         }
                         return .{ .err = e };
                     }
                 }
             }
-
             if (parse_declarations) {
-                if (errors.items.len > 0) {
-                    if (this.options.error_recovery) {
+                if ((errors.items.len > 0)) {
+                    if (self.options.error_recovery) {
                         for (errors.items) |e| {
-                            this.options.warn(e);
+                            _ = &e;
+                            _ = self.options.warn(e);
                         }
                     } else {
                         return .{ .err = errors.orderedRemove(0) };
                     }
                 }
             }
+            return .{ .result = .{ DeclarationBlock{ .declarations = nested_parser.declarations, .important_declarations = nested_parser.important_declarations }, rules } };
+    }
 
-            return .{
-                .result = .{
-                    DeclarationBlock{
-                        .declarations = nested_parser.declarations,
-                        .important_declarations = nested_parser.important_declarations,
-                    },
-                    rules,
-                },
-            };
-        }
-
-        pub fn parseStyleBlock(this: *This, input: *Parser) Result(CssRuleList(T.CustomAtRuleParser.AtRule)) {
+pub fn parseStyleBlock(self: *@This(), input: *Parser) Result(CssRuleList(T.CustomAtRuleParser.AtRule)) {
             const srcloc = input.currentSourceLocation();
-            const loc = Location{
-                .source_index = this.options.source_index,
-                .line = srcloc.line,
-                .column = srcloc.column,
-            };
-
-            // Declarations can be immediately within @media and @supports blocks that are nested within a parent style rule.
-            // These act the same way as if they were nested within a `& { ... }` block.
-            const res = switch (this.parseNested(input, false)) {
-                .err => |e| return .{ .err = e },
-                .result => |v| v,
-            };
+            const loc = Location{ .source_index = self.options.source_index, .line = srcloc.line, .column = srcloc.column };
+            const res = (switch (self.parseNested(input, false)) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
             const declarations = res[0];
             var rules = res[1];
-
-            if (declarations.len() > 0) {
-                rules.v.insert(
-                    input.allocator(),
-                    0,
-                    .{
-                        .style = StyleRule(T.CustomAtRuleParser.AtRule){
-                            .selectors = selector.parser.SelectorList.fromSelector(
-                                input.allocator(),
-                                selector.parser.Selector.fromComponent(input.allocator(), .nesting),
-                            ),
-                            .declarations = declarations,
-                            .vendor_prefix = .{},
-                            .rules = .{},
-                            .loc = loc,
-                        },
-                    },
-                ) catch unreachable;
+            _ = &rules;
+            if ((declarations.len() > 0)) {
+                const StyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
+                _ = &StyleRuleT;
+                _ = ((rules.v.insert(input.allocator(), 0, .{ .style = StyleRuleT{ .selectors = selector.parser.SelectorList.fromSelector(input.allocator(), selector.parser.Selector.fromComponent(input.allocator(), .nesting)), .declarations = declarations, .vendor_prefix = .{}, .rules = .{}, .loc = loc } })) catch unreachable);
             }
-
             return .{ .result = rules };
+    }
+    const ComposesState = union(enum) {
+                allow: SourceLocation,
+                disallow_nested: SourceLocation,
+                disallow_not_single_class: SourceLocation,
+                disallow_entirely,
+            };
+    const This = @This();
+    pub const AtRuleParser = struct {
+    
+    pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
+                const result: Prelude = brk: {
+                const PreludeEnum = enum {
+                            media,
+                            supports,
+                            @"font-face",
+                            @"font-palette-values",
+                            @"counter-style",
+                            viewport,
+                            @"-ms-viewport",
+                            keyframes,
+                            @"-webkit-keyframes",
+                            @"-moz-keyframes",
+                            @"-o-keyframes",
+                            @"-ms-keyframes",
+                            page,
+                            @"-moz-document",
+                            layer,
+                            container,
+                            @"starting-style",
+                            scope,
+                            nest,
+                        };
+                const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
+                if (Map.getASCIIICaseInsensitive(name)) |kind| {
+                    _ = &kind;
+                    switch (kind) {
+    .media => {
+    const media = (switch (MediaList.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .media = media };
+    },
+    .supports => {
+    const cond = (switch (SupportsCondition.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .supports = cond };
+    },
+    .@"font-face" => {
+    break :brk .font_face;
+    },
+    .@"font-palette-values" => {
+    const dashed_ident_name = (switch (DashedIdentFns.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .font_palette_values = dashed_ident_name };
+    },
+    .@"counter-style" => {
+    const custom_name = (switch (CustomIdentFns.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .counter_style = custom_name };
+    },
+    .viewport, .@"-ms-viewport" => {
+    const prefix: VendorPrefix = (if (bun.strings.startsWithCaseInsensitiveAscii(name, "-ms")) VendorPrefix{ .ms = true } else VendorPrefix{ .none = true });
+                    break :brk .{ .viewport = prefix };
+    },
+    inline .keyframes, .@"-webkit-keyframes", .@"-moz-keyframes", .@"-o-keyframes", .@"-ms-keyframes" => |n| {
+    const prefix: VendorPrefix = (switch (n) {
+    .@"-webkit-keyframes" => VendorPrefix{ .webkit = true },
+    .@"-moz-keyframes" => VendorPrefix{ .moz = true },
+    .@"-o-keyframes" => VendorPrefix{ .o = true },
+    .@"-ms-keyframes" => VendorPrefix{ .ms = true },
+    else => VendorPrefix{ .none = true },
+    });
+                    const keyframes_name = (switch (input.tryParse(css_rules.keyframes.KeyframesName.parse, .{})) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .keyframes = .{ .name = keyframes_name, .prefix = prefix } };
+    },
+    .page => {
+    const PageSelectors = ArrayList(css_rules.page.PageSelector);
+                    const Fn = struct {
+    
+    pub fn parsefn(input2: *Parser) Result(PageSelectors) {
+                return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
         }
     };
+                    const selectors = (switch (input.tryParse(Fn.parsefn, .{})) {
+    .result => |v| v,
+    .err => PageSelectors{  },
+    });
+                    break :brk .{ .page = selectors };
+    },
+    .@"-moz-document" => {
+    if (input.expectFunctionMatching("url-prefix").asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    const Fn = struct {
+    
+    pub fn parsefn(_: void, input2: *Parser) Result(void) {
+                _ = input2.tryParse(parseInner, .{});
+                if (input2.expectExhausted().asErr()) |e| {
+                    _ = &e;
+                    return .{ .err = e };
+                }
+                return .success;
+        }
+    
+    pub fn parseInner(input2: *Parser) Result(void) {
+                const s = (switch (input2.expectString()) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                if ((s.len > 0)) {
+                    return .{ .err = input2.newCustomError(ParserError.invalid_value) };
+                }
+                return .success;
+        }
+    };
+                    if (input.parseNestedBlock(void, .{}, Fn.parsefn).asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    break :brk .moz_document;
+    },
+    .layer => {
+    const LayerNames = bun.css.SmallList(LayerName, 1);
+                    const names = (switch (LayerNames.parse(input)) {
+    .result => |vv| vv,
+    .err => |e| names: {
+                    if (((e.kind == .basic) and (e.kind.basic == .end_of_input))) {
+                        break :names LayerNames{  };
+                    }
+                    return .{ .err = e };
+    },
+    });
+                    break :brk .{ .layer = names };
+    },
+    .container => {
+    const container_name = (switch (input.tryParse(css_rules.container.ContainerName.parse, .{})) {
+    .result => |vv| vv,
+    .err => null,
+    });
+                    const condition = (switch (css_rules.container.ContainerCondition.parse(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                    break :brk .{ .container = .{ .name = container_name, .condition = condition } };
+    },
+    .@"starting-style" => {
+    break :brk .starting_style;
+    },
+    .scope => {
+    var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
+                    _ = &selector_parser;
+                    const Closure = struct {
+        selector_parser: *selector.parser.SelectorParser,
+    
+    pub fn parsefn(self: *@This(), input2: *Parser) Result(selector.parser.SelectorList) {
+                return selector.parser.SelectorList.parseRelative(self.selector_parser, input2, .ignore_invalid_selector, .none);
+        }
+    };
+                    var closure = Closure{ .selector_parser = (&selector_parser) };
+                    _ = &closure;
+                    const scope_start = (if (input.tryParse(Parser.expectParenthesisBlock, .{}).isOk()) scope_start: {
+                    break :scope_start (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), Closure.parsefn)) {
+    .result => |v| v,
+    .err => |e| {
+    return .{ .err = e };
+    },
+    });
+    } else null);
+                    const scope_end = (if (input.tryParse(Parser.expectIdentMatching, .{ "to" }).isOk()) scope_end: {
+                    if (input.expectParenthesisBlock().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    break :scope_end (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), Closure.parsefn)) {
+    .result => |v| v,
+    .err => |e| {
+    return .{ .err = e };
+    },
+    });
+    } else null);
+                    break :brk .{ .scope = .{ .scope_start = scope_start, .scope_end = scope_end } };
+    },
+    .nest => {
+    if (parser.is_in_style_rule) {
+                        _ = parser.options.warn(input.newCustomError(ParserError{ .deprecated_nest_rule = .{} }));
+                        var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
+                        _ = &selector_parser;
+                        const selectors = (switch (selector.parser.SelectorList.parse((&selector_parser), input, .discard_list, .contained)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                        break :brk .{ .nest = selectors };
+                    }
+    },
+    }
+                }
+                break :brk (switch (parse_custom_at_rule_prelude(name, input, parser.options, T, parser.at_rule_parser)) {
+    .result => |v| break :brk v,
+    .err => |e| {
+    return .{ .err = e };
+    },
+    });
+    
+    };
+                if ((parser.is_in_style_rule and (!result.allowedInStyleRule()))) {
+                    return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+                }
+                return .{ .result = result };
+        }
+    
+    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+                const loc = parser.getLoc(start);
+                switch (prelude) {
+    .font_face => {
+    var decl_parser = css_rules.font_face.FontFaceDeclarationParser{  };
+                _ = &decl_parser;
+                var body_parser = RuleBodyParser(css_rules.font_face.FontFaceDeclarationParser).new(input, (&decl_parser));
+                _ = &body_parser;
+                const FontFaceProps = ArrayList(css_rules.font_face.FontFaceProperty);
+                _ = &FontFaceProps;
+                var properties = FontFaceProps{  };
+                _ = &properties;
+                while (body_parser.next()) |result| {
+                    if (result.asValue()) |decl| {
+                        _ = &decl;
+                        _ = (blk_catch_0: { break :blk_catch_0 ((properties.append(input.allocator(), decl)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                    }
+                }
+                _ = (blk_catch_1: { break :blk_catch_1 ((parser.rules.v.append(input.allocator(), .{ .font_face = css_rules.font_face.FontFaceRule{ .properties = properties, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                return .success;
+    },
+    .font_palette_values => {
+    const name = prelude.font_palette_values;
+                const rule = (switch (css_rules.font_palette_values.FontPaletteValuesRule.parse(name, input, loc)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_2: { break :blk_catch_2 ((parser.rules.v.append(input.allocator(), .{ .font_palette_values = rule })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                return .success;
+    },
+    .counter_style => {
+    const name = prelude.counter_style;
+                _ = (blk_catch_3: { break :blk_catch_3 ((parser.rules.v.append(input.allocator(), .{ .counter_style = css_rules.counter_style.CounterStyleRule{ .name = name, .declarations = (switch (DeclarationBlock.parse(input, parser.options)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }), .loc = loc } })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                return .success;
+    },
+    .media => {
+    const query = prelude.media;
+                const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_4: { break :blk_catch_4 ((parser.rules.v.append(input.allocator(), .{ .media = blk_mr: {
+                const MediaRuleT = css_rules.media.MediaRule(T.CustomAtRuleParser.AtRule);
+                _ = &MediaRuleT;
+                break :blk_mr MediaRuleT{ .query = query, .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                return .success;
+    },
+    .supports => {
+    const condition = prelude.supports;
+                const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_5: { break :blk_catch_5 ((parser.rules.v.append(input.allocator(), .{ .supports = blk_sr: {
+                const SupportsRuleT = css_rules.supports.SupportsRule(T.CustomAtRuleParser.AtRule);
+                _ = &SupportsRuleT;
+                break :blk_sr SupportsRuleT{ .condition = condition, .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                return .success;
+    },
+    .container => {
+    const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_6: { break :blk_catch_6 ((parser.rules.v.append(input.allocator(), .{ .container = blk_cr: {
+                const ContainerRuleT = css_rules.container.ContainerRule(T.CustomAtRuleParser.AtRule);
+                _ = &ContainerRuleT;
+                break :blk_cr ContainerRuleT{ .name = (if (@typeInfo(@TypeOf(prelude.container)) == .@"enum" or @typeInfo(@TypeOf(prelude.container)) == .@"union") @tagName(prelude.container) else prelude.container.name), .condition = prelude.container.condition, .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+                return .success;
+    },
+    .scope => {
+    const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_7: { break :blk_catch_7 ((parser.rules.v.append(input.allocator(), .{ .scope = blk_scr: {
+                const ScopeRuleT = css_rules.scope.ScopeRule(T.CustomAtRuleParser.AtRule);
+                _ = &ScopeRuleT;
+                break :blk_scr ScopeRuleT{ .scope_start = prelude.scope.scope_start, .scope_end = prelude.scope.scope_end, .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
+                return .success;
+    },
+    .viewport => {
+    _ = (blk_catch_8: { break :blk_catch_8 ((parser.rules.v.append(input.allocator(), .{ .viewport = css_rules.viewport.ViewportRule{ .vendor_prefix = prelude.viewport, .declarations = (switch (DeclarationBlock.parse(input, parser.options)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }), .loc = loc } })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+                return .success;
+    },
+    .keyframes => {
+    var kf_parser = css_rules.keyframes.KeyframesListParser{  };
+                _ = &kf_parser;
+                var iter = RuleBodyParser(css_rules.keyframes.KeyframesListParser).new(input, (&kf_parser));
+                _ = &iter;
+                var keyframes = ArrayList(css_rules.keyframes.Keyframe);
+                _ = &keyframes;
+                {
+                }
+                while (iter.next()) |result| {
+                    if (result.asValue()) |keyframe| {
+                        _ = &keyframe;
+                        _ = (blk_catch_9: { break :blk_catch_9 ((keyframes.append(input.allocator(), keyframe)) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
+                    }
+                }
+                _ = (blk_catch_10: { break :blk_catch_10 ((parser.rules.v.append(input.allocator(), .{ .keyframes = css_rules.keyframes.KeyframesRule{ .name = (if (@typeInfo(@TypeOf(prelude.keyframes)) == .@"enum" or @typeInfo(@TypeOf(prelude.keyframes)) == .@"union") @tagName(prelude.keyframes) else prelude.keyframes.name), .keyframes = keyframes, .vendor_prefix = prelude.keyframes.prefix, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                return .success;
+    },
+    .page => {
+    const selectors = prelude.page;
+                const rule = (switch (css_rules.page.PageRule.parse(selectors, input, loc, parser.options)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_11: { break :blk_catch_11 ((parser.rules.v.append(input.allocator(), .{ .page = rule })) catch |e| { _ = &e; break :blk_catch_11 bun.handleOom(e); }); });
+                return .success;
+    },
+    .moz_document => {
+    const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_12: { break :blk_catch_12 ((parser.rules.v.append(input.allocator(), .{ .moz_document = blk_mdr: {
+                const MozDocumentRuleT = css_rules.document.MozDocumentRule(T.CustomAtRuleParser.AtRule);
+                _ = &MozDocumentRuleT;
+                break :blk_mdr MozDocumentRuleT{ .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
+                return .success;
+    },
+    .layer => {
+    var name: ?LayerName = null;
+                _ = &name;
+                if ((prelude.layer.len() == 1)) {
+                    name = (prelude.layer.at(0)).*;
+                } else {
+                    if ((prelude.layer.len() > 1)) {
+                        return .{ .err = input.newError(.at_rule_body_invalid) };
+                    }
+                }
+                _ = T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, (&prelude.layer));
+                const old_len = T.CustomAtRuleParser.enclosingLayerLength(parser.at_rule_parser);
+                if ((name != null)) {
+                    _ = T.CustomAtRuleParser.pushToEnclosingLayer(parser.at_rule_parser, name.?);
+                } else {
+                    _ = T.CustomAtRuleParser.bumpAnonLayerCount(parser.at_rule_parser, 1);
+                }
+                const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                if ((name == null)) {
+                    _ = T.CustomAtRuleParser.bumpAnonLayerCount(parser.at_rule_parser, -1);
+                }
+                _ = T.CustomAtRuleParser.resetEnclosingLayer(parser.at_rule_parser, old_len);
+                _ = (blk_catch_13: { break :blk_catch_13 ((parser.rules.v.append(input.allocator(), .{ .layer_block = blk_lbr: {
+                const LayerBlockRuleT = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule);
+                _ = &LayerBlockRuleT;
+                break :blk_lbr LayerBlockRuleT{ .name = name, .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
+                return .success;
+    },
+    .property => {
+    const name = prelude.property[0];
+                _ = (blk_catch_14: { break :blk_catch_14 ((parser.rules.v.append(input.allocator(), .{ .property = (switch (css_rules.property.PropertyRule.parse(name, input, loc)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }) })) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
+                return .success;
+    },
+    .import, .namespace, .custom_media, .charset => {
+    return .{ .err = input.newUnexpectedTokenError(.open_curly) };
+    },
+    .starting_style => {
+    const rules = (switch (parser.parseStyleBlock(input)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                _ = (blk_catch_15: { break :blk_catch_15 ((parser.rules.v.append(input.allocator(), .{ .starting_style = blk_ssr: {
+                const StartingStyleRuleT = css_rules.starting_style.StartingStyleRule(T.CustomAtRuleParser.AtRule);
+                _ = &StartingStyleRuleT;
+                break :blk_ssr StartingStyleRuleT{ .rules = rules, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_15 bun.handleOom(e); }); });
+                return .success;
+    },
+    .nest => {
+    const selectors = prelude.nest;
+                const result = (switch (parser.parseNested(input, true)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                const declarations = result[0];
+                const rules = result[1];
+                _ = (blk_catch_16: { break :blk_catch_16 ((parser.rules.v.append(input.allocator(), .{ .nesting = blk_nr: {
+                const NestingRuleT = css_rules.nesting.NestingRule(T.CustomAtRuleParser.AtRule);
+                _ = &NestingRuleT;
+                const NestStyleRuleT = css_rules.style.StyleRule(T.CustomAtRuleParser.AtRule);
+                _ = &NestStyleRuleT;
+                break :blk_nr NestingRuleT{ .style = NestStyleRuleT{ .selectors = selectors, .declarations = declarations, .vendor_prefix = .{}, .rules = rules, .loc = loc }, .loc = loc };
+    } })) catch |e| { _ = &e; break :blk_catch_16 bun.handleOom(e); }); });
+                return .success;
+    },
+    .font_feature_values => {
+    _ = bun.unreachablePanic("", .{});
+    },
+    .unknown => {
+    _ = (blk_catch_17: { break :blk_catch_17 ((parser.rules.v.append(input.allocator(), .{ .unknown = css_rules.unknown.UnknownAtRule{ .name = (if (@typeInfo(@TypeOf(prelude.unknown)) == .@"enum" or @typeInfo(@TypeOf(prelude.unknown)) == .@"union") @tagName(prelude.unknown) else prelude.unknown.name), .prelude = prelude.unknown.tokens, .block = (switch (TokenListFns.parse(input, parser.options, 0)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }), .loc = loc } })) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+                return .success;
+    },
+    .custom => {
+    _ = (blk_catch_18: { break :blk_catch_18 ((parser.rules.v.append(input.allocator(), .{ .custom = (switch (parse_custom_at_rule_body(T, prelude.custom, input, start, parser.options, parser.at_rule_parser, parser.is_in_style_rule)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }) })) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); });
+                return .success;
+    },
+    }
+        }
+    
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule,void) {
+                const loc = parser.getLoc(start);
+                switch (prelude) {
+    .layer => {
+    if ((parser.is_in_style_rule or (prelude.layer.len() == 0))) {
+                    return .{ .err = .{} };
+                }
+                _ = T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, (&prelude.layer));
+                _ = (blk_catch_19: { break :blk_catch_19 ((parser.rules.v.append(parser.allocator, .{ .layer_statement = css_rules.layer.LayerStatementRule{ .names = prelude.layer, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
+                return .success;
+    },
+    .unknown => {
+    _ = (blk_catch_20: { break :blk_catch_20 ((parser.rules.v.append(parser.allocator, .{ .unknown = css_rules.unknown.UnknownAtRule{ .name = (if (@typeInfo(@TypeOf(prelude.unknown)) == .@"enum" or @typeInfo(@TypeOf(prelude.unknown)) == .@"union") @tagName(prelude.unknown) else prelude.unknown.name), .prelude = prelude.unknown.tokens, .block = null, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_20 bun.handleOom(e); }); });
+                return .success;
+    },
+    .custom => {
+    _ = (blk_catch_21: { break :blk_catch_21 ((parser.rules.v.append(parser.allocator, (switch (parse_custom_at_rule_without_block(T, prelude.custom, start, parser.options, parser.at_rule_parser, parser.is_in_style_rule)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    }))) catch |e| { _ = &e; break :blk_catch_21 bun.handleOom(e); }); });
+                return .success;
+    },
+    else => {
+    return .{ .err = .{} };
+    },
+    }
+        }
+        pub const Prelude = AtRulePrelude(T.CustomAtRuleParser.Prelude);
+        pub const AtRule = void;
+    };
+    pub const QualifiedRuleParser = struct {
+    
+    pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
+                var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
+                _ = &selector_parser;
+                if (parser.is_in_style_rule) {
+                    return selector.parser.SelectorList.parseRelative((&selector_parser), input, .discard_list, .implicit);
+                } else {
+                    return selector.parser.SelectorList.parse((&selector_parser), input, .discard_list, .none);
+                }
+        }
+    
+    pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
+                const loc = parser.getLoc(start);
+                defer {
+                _ = parser.composes_refs.clearRetainingCapacity();
+                }
+                if (input.flags.css_modules) {
+                    _ = out: {
+                    if (parser.is_in_style_rule) {
+                        parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+                    if ((selectors.v.len() != 1)) {
+                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+                    const sel = selectors.v.slice()[0];
+                    if ((sel.components.items.len != 1)) {
+                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+                    const comp = (&sel.components.items[0]);
+                    if (comp.asClass()) |r| {
+                        _ = &r;
+                        const ref = (r.asRef()).?;
+                        _ = &ref;
+                        parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+    };
+                }
+                const location = input.position();
+                const result = (switch (parser.parseNested(input, true)) {
+    .err => |e| {
+    return .{ .err = e };
+    },
+    .result => |v| v,
+    });
+                const declarations: DeclarationBlock = result[0];
+                const rules = result[1];
+                if ((parser.composes_state == .allow)) {
+                    const len = (input.position() - location);
+                    var usage = PropertyBitset.initEmpty();
+                    _ = &usage;
+                    var custom_properties = bun.BabyList(string);
+                    _ = &custom_properties;
+                    {
+                    }
+                    const custom_properties_slice = custom_properties.slice();
+                    for (cp_iter_slice(parser.composes_refs.slice())) |comp_ref| {
+                        _ = &comp_ref;
+                        const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
+                        const property_usage: *PropertyUsage = (if ((!gop.found_existing)) brk: {
+                        gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
+                        break :brk gop.value_ptr;
+    } else gop.value_ptr);
+                        _ = property_usage.fill((&usage), custom_properties_slice);
+                    }
+                }
+                const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
+                _ = &QualStyleRuleT;
+                _ = (blk_catch_0: { break :blk_catch_0 ((parser.rules.v.append(parser.allocator, .{ .style = QualStyleRuleT{ .selectors = selectors, .vendor_prefix = VendorPrefix{  }, .declarations = declarations, .rules = rules, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                return .success;
+        }
+        pub const Prelude = selector.parser.SelectorList;
+        pub const QualifiedRule = void;
+    };
+    pub const RuleBodyItemParser = struct {
+    
+    pub fn parseQualified(parser: *This) bool {
+                _ = parser;
+                return true;
+        }
+    
+    pub fn parseDeclarations(parser: *This) bool {
+                return parser.allow_declarations;
+        }
+    };
+    pub const DeclarationParser = struct {
+    
+    pub fn parseValue(parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
+                return css_decls.parse_declaration_impl(name, input, (&parser.declarations), (&parser.important_declarations), parser.options, parser);
+        }
+        pub const Declaration = void;
+    };
+};
 }
 
 pub fn StyleSheetParser(comptime P: type) type {

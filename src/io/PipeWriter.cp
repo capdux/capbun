@@ -777,14 +777,15 @@ fn BaseWindowsPipeWriter(
             this.updateRef(event_loop, false);
         }
 
-        fn onPipeClose(handle: *uv.Pipe) callconv(.c) void {
-            const this = bun.cast(*uv.Pipe, handle.data);
-            bun.default_allocator.destroy(this);
+        static fn onPipeClose(handle: *uv.Pipe) callconv(.c) {
+            const pipe = bun.cast(*uv.Pipe, handle.data);
+            bun.default_allocator.destroy(pipe);
         }
 
-        fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
-            const this = bun.cast(*uv.uv_tty_t, handle.data);
-            bun.default_allocator.destroy(this);
+        static fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) {
+            const TtyPtr = *uv.uv_tty_t;
+            const tty = bun.cast(TtyPtr, handle.data);
+            bun.default_allocator.destroy(tty);
         }
 
         pub fn close(this: *WindowsPipeWriter) void {
@@ -979,7 +980,7 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
             }
         }
 
-        fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
+        static fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) {
             const file = Source.File.fromFS(fs);
             const result = fs.result;
             const was_canceled = result.int() == uv.UV_ECANCELED;
@@ -991,20 +992,20 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
                 return;
             }
 
-            const this = bun.cast(*WindowsWriter, parent_ptr);
+            const writer = bun.cast(*WindowsWriter, parent_ptr);
 
             if (was_canceled) {
-                this.pending_payload_size = 0;
+                writer.pending_payload_size = 0;
                 return;
             }
 
             if (result.toError(.write)) |err| {
-                this.close();
-                onError(this.parent, err);
+                writer.close();
+                onError(writer.parent, err);
                 return;
             }
 
-            this.onWriteComplete(.zero);
+            writer.onWriteComplete(.zero);
         }
 
         pub fn write(this: *WindowsWriter) void {
@@ -1278,7 +1279,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
             }
         }
 
-        fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
+        static fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) {
             const file = Source.File.fromFS(fs);
             const result = fs.result;
             const was_canceled = result.int() == uv.UV_ECANCELED;
@@ -1290,22 +1291,22 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                 return;
             }
 
-            const this = bun.cast(*WindowsWriter, parent_ptr);
+            const writer = bun.cast(*WindowsWriter, parent_ptr);
 
             if (was_canceled) {
-                this.current_payload.reset();
-                this.parent.deref();
+                writer.current_payload.reset();
+                writer.parent.deref();
                 return;
             }
 
             if (result.toError(.write)) |err| {
-                defer this.parent.deref();
-                this.close();
-                onError(this.parent, err);
+                defer writer.parent.deref();
+                writer.close();
+                onError(writer.parent, err);
                 return;
             }
 
-            this.onWriteComplete(.zero);
+            writer.onWriteComplete(.zero);
         }
 
         fn processSend(this: *WindowsWriter) void {

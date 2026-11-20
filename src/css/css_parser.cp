@@ -1084,8 +1084,9 @@ fn parse_custom_at_rule_without_block(
     at_rule_parser: *T,
     is_nested: bool,
 ): Maybe(CssRule(T.CustomAtRuleParser.AtRule), void) {
+    const RuleT = CssRule(T.CustomAtRuleParser.AtRule);
     return switch (T.CustomAtRuleParser.ruleWithoutBlock(at_rule_parser, prelude, start, options, is_nested)) {
-        .result => |v| .{ .result = CssRule(T.CustomAtRuleParser.AtRule){ .custom = v } },
+        .result => |v| .{ .result = RuleT{ .custom = v } },
         .err => |e| .{ .err = e },
     };
 }
@@ -1962,8 +1963,6 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
 pub fn NestedRuleParser(comptime T: type): type {
     ValidCustomAtRuleParser(T);
 
-    const AtRuleT = T.CustomAtRuleParser.AtRule;
-
     return struct {
         options: *const ParserOptions,
         at_rule_parser: *T,
@@ -2005,7 +2004,7 @@ pub fn NestedRuleParser(comptime T: type): type {
             pub const Prelude = AtRulePrelude(T.CustomAtRuleParser.Prelude);
             pub const AtRule = void;
 
-            pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
+            static fn parsePrelude(parser: *This, name: []const u8, input: *Parser): Result(Prelude) {
                 const result: Prelude = brk: {
                     const PreludeEnum = enum {
                         media,
@@ -2079,14 +2078,15 @@ pub fn NestedRuleParser(comptime T: type): type {
                             break :brk .{ .keyframes = .{ .name = keyframes_name, .prefix = prefix } };
                         },
                         .page => {
+                            const PageSelectors = ArrayList(css_rules.page.PageSelector);
                             const Fn = struct {
-                                pub fn parsefn(input2: *Parser): Result(ArrayList(css_rules.page.PageSelector)) {
+                                pub fn parsefn(input2: *Parser): Result(PageSelectors) {
                                     return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
                                 }
                             };
                             const selectors = switch (input.tryParse(Fn.parsefn, {})) {
                                 .result => |v| v,
-                                .err => ArrayList(css_rules.page.PageSelector){},
+                                .err => PageSelectors{},
                             };
                             break :brk .{ .page = selectors };
                         },
@@ -2117,11 +2117,12 @@ pub fn NestedRuleParser(comptime T: type): type {
                             break :brk .moz_document;
                         },
                         .layer => {
-                            const names = switch (bun.css.SmallList(LayerName, 1).parse(input)) {
+                            const LayerNames = bun.css.SmallList(LayerName, 1);
+                            const names = switch (LayerNames.parse(input)) {
                                 .result => |vv| vv,
                                 .err => |e| names: {
                                     if (e.kind == .basic and e.kind.basic == .end_of_input) {
-                                        break :names bun.css.SmallList(LayerName, 1){};
+                                        break :names LayerNames{};
                                     }
                                     return .{ .err = e };
                                 },
@@ -2222,7 +2223,8 @@ pub fn NestedRuleParser(comptime T: type): type {
                         let decl_parser = css_rules.font_face.FontFaceDeclarationParser{};
                         let body_parser = RuleBodyParser(css_rules.font_face.FontFaceDeclarationParser).new(input, &decl_parser);
                         // todo_stuff.think_mem_mgmt
-                        let properties: ArrayList(css_rules.font_face.FontFaceProperty) = .{};
+                        const FontFaceProps = ArrayList(css_rules.font_face.FontFaceProperty);
+                        let properties = FontFaceProps{};
 
                         while (body_parser.next()) |result| {
                             if (result.asValue()) |decl| {
@@ -2282,11 +2284,11 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{
-                                .media = css_rules.media.MediaRule(T.CustomAtRuleParser.AtRule){
+                                .media = blk_mr: { const MediaRuleT = css_rules.media.MediaRule(T.CustomAtRuleParser.AtRule); break :blk_mr MediaRuleT{
                                     .query = query,
                                     .rules = rules,
                                     .loc = loc,
-                                },
+                                }; },
                             },
                         ) catch |e| bun.handleOom(e);
                         return .success;
@@ -2298,11 +2300,11 @@ pub fn NestedRuleParser(comptime T: type): type {
                             .result => |v| v,
                         };
                         parser.rules.v.append(input.allocator(), .{
-                            .supports = css_rules.supports.SupportsRule(T.CustomAtRuleParser.AtRule){
+                            .supports = blk_sr: { const SupportsRuleT = css_rules.supports.SupportsRule(T.CustomAtRuleParser.AtRule); break :blk_sr SupportsRuleT{
                                 .condition = condition,
                                 .rules = rules,
                                 .loc = loc,
-                            },
+                            }; },
                         }) catch |e| bun.handleOom(e);
                         return .success;
                     },
@@ -2314,12 +2316,12 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{
-                                .container = css_rules.container.ContainerRule(T.CustomAtRuleParser.AtRule){
+                                .container = blk_cr: { const ContainerRuleT = css_rules.container.ContainerRule(T.CustomAtRuleParser.AtRule); break :blk_cr ContainerRuleT{
                                     .name = prelude.container.name,
                                     .condition = prelude.container.condition,
                                     .rules = rules,
                                     .loc = loc,
-                                },
+                                }; },
                             },
                         ) catch |e| bun.handleOom(e);
                         return .success;
@@ -2332,12 +2334,12 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{
-                                .scope = css_rules.scope.ScopeRule(T.CustomAtRuleParser.AtRule){
+                                .scope = blk_scr: { const ScopeRuleT = css_rules.scope.ScopeRule(T.CustomAtRuleParser.AtRule); break :blk_scr ScopeRuleT{
                                     .scope_start = prelude.scope.scope_start,
                                     .scope_end = prelude.scope.scope_end,
                                     .rules = rules,
                                     .loc = loc,
-                                },
+                                }; },
                             },
                         ) catch |e| bun.handleOom(e);
                         return .success;
@@ -2398,17 +2400,20 @@ pub fn NestedRuleParser(comptime T: type): type {
                             .result => |v| v,
                         };
                         parser.rules.v.append(input.allocator(), .{
-                            .moz_document = css_rules.document.MozDocumentRule(T.CustomAtRuleParser.AtRule){
+                            .moz_document = blk_mdr: { const MozDocumentRuleT = css_rules.document.MozDocumentRule(T.CustomAtRuleParser.AtRule); break :blk_mdr MozDocumentRuleT{
                                 .rules = rules,
                                 .loc = loc,
-                            },
+                            }; },
                         }) catch |e| bun.handleOom(e);
                         return .success;
                     },
                     .layer => {
-                        const name = if (prelude.layer.len() == 0) null else if (prelude.layer.len() == 1) names: {
-                            break :names prelude.layer.at(0).*;
-                        } else return .{ .err = input.newError(.at_rule_body_invalid) };
+                        let name: LayerName? = null;
+                        if (prelude.layer.len() == 1) {
+                            name = prelude.layer.at(0).*;
+                        } else if (prelude.layer.len() > 1) {
+                            return .{ .err = input.newError(.at_rule_body_invalid) };
+                        }
 
                         T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, &prelude.layer);
                         const old_len = T.CustomAtRuleParser.enclosingLayerLength(parser.at_rule_parser);
@@ -2429,7 +2434,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         T.CustomAtRuleParser.resetEnclosingLayer(parser.at_rule_parser, old_len);
 
                         parser.rules.v.append(input.allocator(), .{
-                            .layer_block = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule){ .name = name, .rules = rules, .loc = loc },
+                            .layer_block = blk_lbr: { const LayerBlockRuleT = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule); break :blk_lbr LayerBlockRuleT{ .name = name, .rules = rules, .loc = loc }; },
                         }) catch |e| bun.handleOom(e);
                         return .success;
                     },
@@ -2455,10 +2460,10 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{
-                                .starting_style = css_rules.starting_style.StartingStyleRule(T.CustomAtRuleParser.AtRule){
+                                .starting_style = blk_ssr: { const StartingStyleRuleT = css_rules.starting_style.StartingStyleRule(T.CustomAtRuleParser.AtRule); break :blk_ssr StartingStyleRuleT{
                                     .rules = rules,
                                     .loc = loc,
-                                },
+                                }; },
                             },
                         ) catch |e| bun.handleOom(e);
                         return .success;
@@ -2474,8 +2479,8 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{
-                                .nesting = css_rules.nesting.NestingRule(T.CustomAtRuleParser.AtRule){
-                                    .style = css_rules.style.StyleRule(T.CustomAtRuleParser.AtRule){
+                                .nesting = blk_nr: { const NestingRuleT = css_rules.nesting.NestingRule(T.CustomAtRuleParser.AtRule); const NestStyleRuleT = css_rules.style.StyleRule(T.CustomAtRuleParser.AtRule); break :blk_nr NestingRuleT{
+                                    .style = NestStyleRuleT{
                                         .selectors = selectors,
                                         .declarations = declarations,
                                         .vendor_prefix = .{},
@@ -2483,7 +2488,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                         .loc = loc,
                                     },
                                     .loc = loc,
-                                },
+                                }; },
                             },
                         ) catch |e| bun.handleOom(e);
                         return .success;
@@ -2624,6 +2629,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                     }
 
                     parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
                 }
                 const location = input.position();
                 const result = switch (parser.parseNested(input, true)) {
@@ -2646,18 +2652,19 @@ pub fn NestedRuleParser(comptime T: type): type {
 
                     const custom_properties_slice = custom_properties.slice();
 
-                    for (parser.composes_refs.slice()) |ref| {
-                        const entry = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, ref));
-                        const property_usage: *PropertyUsage = if (!entry.found_existing) brk: {
-                            entry.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
-                            break :brk entry.value_ptr;
-                        } else entry.value_ptr;
+                    for (comp_ref of parser.composes_refs.slice()) {
+                        const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
+                        const property_usage: *PropertyUsage = if (!gop.found_existing) brk: {
+                            gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
+                            break :brk gop.value_ptr;
+                        } else gop.value_ptr;
                         property_usage.fill(&usage, custom_properties_slice);
                     }
                 }
 
+                const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
                 parser.rules.v.append(parser.allocator, .{
-                    .style = StyleRule(AtRuleT){
+                    .style = QualStyleRuleT{
                         .selectors = selectors,
                         .vendor_prefix = VendorPrefix{},
                         .declarations = declarations,
@@ -2698,13 +2705,13 @@ pub fn NestedRuleParser(comptime T: type): type {
 
         /// If css modules is enabled, we want to record each occurrence of the `composes` property
         /// for the bundler so we can generate the lazy JS import object later.
-        pub fn recordComposes(this: *This, allocator: Allocator, composes: *Composes) void {
-            for (this.composes_refs.slice()) |ref| {
-                const entry = bun.handleOom(this.composes.getOrPut(allocator, ref));
-                if (!entry.found_existing) {
-                    entry.value_ptr.* = ComposesEntry{};
+        pub fn recordComposes(*_, allocator: Allocator, composes: *Composes) {
+            for (comp_ref of _.composes_refs.slice()) {
+                const gop = bun.handleOom(_.composes.getOrPut(allocator, comp_ref));
+                if (!gop.found_existing) {
+                    gop.value_ptr.* = ComposesEntry{};
                 }
-                bun.handleOom(entry.value_ptr.*.composes.append(allocator, composes.deepClone(allocator)));
+                bun.handleOom(gop.value_ptr.*.composes.append(allocator, composes.deepClone(allocator)));
             }
         }
 
@@ -2795,11 +2802,12 @@ pub fn NestedRuleParser(comptime T: type): type {
             let rules = res[1];
 
             if (declarations.len() > 0) {
+                const StyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
                 rules.v.insert(
                     input.allocator(),
                     0,
                     .{
-                        .style = StyleRule(T.CustomAtRuleParser.AtRule){
+                        .style = StyleRuleT{
                             .selectors = selector.parser.SelectorList.fromSelector(
                                 input.allocator(),
                                 selector.parser.Selector.fromComponent(input.allocator(), .nesting),

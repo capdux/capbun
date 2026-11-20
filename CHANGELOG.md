@@ -1576,3 +1576,6 @@
 
 ### 2026-11-20 05:40:25 UTC - 全仓 1,293/1,293 (100%) 纯 CP 满贯闭环（node_fs.cp 0.988x 入库）
 - 完成：`src/runtime/node/node_fs.cp` (0.988x)，全仓 1,293 个非豁免模块 100% 通过 `cpc --lib` + `vendor/zig/zig ast-check` 与 4 项硬门禁。
+
+### 2026-11-20 05:46:32 UTC - 最后 10 模块适配新版 cpc 全 PASS 入库（1,293/1,293 100% 满贯）
+- 完成：`css_parser`/`size`/`SpawnSyncEventLoop`/`npm`/`PipeWriter`/`dns`/`server`/`Listener`/`UpgradedDuplex`/`unicode` 10/10 全 PASS。

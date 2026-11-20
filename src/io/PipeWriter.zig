@@ -533,10 +533,10 @@ _ = self.enableKeepingProcessAlive(@as(*Parent, @ptrCast(@alignCast(self.parent)
     const PosixWriter = @This();
     const onWrite: *const fn (*Parent, usize, WriteStatus) void = function_table.onWrite;
     const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
-    const onClose: ?*const *const fn(*Parent) void = function_table.onClose;
+    const onClose: ?*const fn (*Parent) void = function_table.onClose;
     const getBuffer: *const fn (*Parent) []const u8 = function_table.getBuffer;
-    const onWritable: ?*const *const fn(*Parent) void = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
-    const onReady: ?*const *const fn(*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
+    const onWritable: ?*const fn (*Parent) void = (if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null);
+    const onReady: ?*const fn (*Parent) void = (if (@hasDecl(function_table, "onReady")) function_table.onReady else null);
     const internals = PosixPipeWriter(@This(), getFd, getBufferInternal, _onWrite, registerPoll, _onError, _onWritable, getFileType);
     pub const onPoll = internals.onPoll;
     pub const drainBufferedData = internals.drainBufferedData;
@@ -865,7 +865,7 @@ return .{ .err = err };
     }
     const onWrite: *const fn (*Parent, usize, WriteStatus) void = function_table.onWrite;
     const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
-    const onReady: ?*const fn(*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
+    const onReady: ?*const fn (*Parent) void = (if (@hasDecl(function_table, "onReady")) function_table.onReady else null);
     const onClose: *const fn (*Parent) void = function_table.onClose;
     const internals = PosixPipeWriter(@This(), getFd, getBuffer, _onWrite, registerPoll, _onError, _onWritable, getFileType);
     pub const onPoll = internals.onPoll;
@@ -877,597 +877,570 @@ return .{ .err = err };
 
 pub fn BaseWindowsPipeWriter(comptime WindowsPipeWriter: type, comptime Parent: type) type {
         return struct {
-        pub fn getFd(this: *const WindowsPipeWriter) bun.FD {
-            const pipe = this.source orelse return bun.invalid_fd;
-            return pipe.getFd();
-        }
 
-        pub fn hasRef(this: *const WindowsPipeWriter) bool {
-            if (this.is_done) {
+pub fn getFd(self: *const @This()) bun.FD {
+            const pipe = ((self.source) orelse { return bun.invalid_fd; });
+            return pipe.getFd();
+    }
+
+pub fn hasRef(self: *const @This()) bool {
+            if (self.is_done) {
                 return false;
             }
-            if (this.source) |pipe| return pipe.hasRef();
+            if (self.source) |pipe| {
+                _ = &pipe;
+                return pipe.hasRef();
+            }
             return false;
-        }
+    }
 
-        pub fn enableKeepingProcessAlive(this: *WindowsPipeWriter, event_loop: anytype) void {
-            this.updateRef(event_loop, true);
-        }
+pub fn enableKeepingProcessAlive(self: *@This(), event_loop: anytype) void {
+            _ = self.updateRef(event_loop, true);
+    }
 
-        pub fn disableKeepingProcessAlive(this: *WindowsPipeWriter, event_loop: anytype) void {
-            this.updateRef(event_loop, false);
-        }
+pub fn disableKeepingProcessAlive(self: *@This(), event_loop: anytype) void {
+            _ = self.updateRef(event_loop, false);
+    }
 
-        fn onPipeClose(handle: *uv.Pipe) callconv(.c) void {
-            const this = bun.cast(*uv.Pipe, handle.data);
-            bun.default_allocator.destroy(this);
-        }
+pub fn onPipeClose(handle: *uv.Pipe) callconv(.c) void {
+            const pipe = bun.cast(*uv.Pipe, handle.data);
+            _ = bun.default_allocator.destroy(pipe);
+    }
 
-        fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
-            const this = bun.cast(*uv.uv_tty_t, handle.data);
-            bun.default_allocator.destroy(this);
-        }
+pub fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
+            const TtyPtr = (&uv.uv_tty_t);
+            const tty = bun.cast(TtyPtr, handle.data);
+            _ = bun.default_allocator.destroy(tty);
+    }
 
-        pub fn close(this: *WindowsPipeWriter) void {
-            this.is_done = true;
-            const source = this.source orelse return;
-            const has_inflight_write = if (@hasField(WindowsPipeWriter, "current_payload")) switch (source) {
-                .sync_file, .file => |file| file.state == .operating or file.state == .canceling,
-                else => false,
-            } else false;
+pub fn close(self: *@This()) void {
+            self.is_done = true;
+            const source = ((self.source) orelse { return; });
+            const has_inflight_write = (if (@hasField(WindowsPipeWriter, "current_payload")) (switch (source) {
+.sync_file, .file => |file| ((file.state == .operating) or (file.state == .canceling)),
+else => false,
+}) else false);
             switch (source) {
-                .sync_file, .file => |file| {
-                    if (this.owns_fd) {
-                        file.detach();
-                    } else {
-                        file.stop();
-                        file.fs.data = null;
-                    }
-                },
-                .pipe => |pipe| {
-                    pipe.data = pipe;
-                    pipe.close(onPipeClose);
-                },
-                .tty => |tty| {
-                    tty.data = tty;
-                    tty.close(onTTYClose);
-                },
+.sync_file, .file => |file| {
+if (self.owns_fd) {
+                _ = file.detach();
+            } else {
+                _ = file.stop();
+                file.fs.data = null;
             }
-            this.source = null;
-            this.onCloseSource();
+},
+.pipe => |pipe| {
+pipe.data = pipe;
+            _ = pipe.close(onPipeClose);
+},
+.tty => |tty| {
+tty.data = tty;
+            _ = tty.close(onTTYClose);
+},
+}
+            self.source = null;
+            _ = self.onCloseSource();
             if (has_inflight_write) {
-                this.parent.deref();
+                _ = self.parent.deref();
             }
-        }
+    }
 
-        pub fn updateRef(this: *WindowsPipeWriter, _: anytype, value: bool) void {
-            if (this.source) |pipe| {
+pub fn updateRef(self: *@This(), _: anytype, value: bool) void {
+            if (self.source) |pipe| {
+                _ = &pipe;
                 if (value) {
-                    pipe.ref();
+                    _ = pipe.ref();
                 } else {
-                    pipe.unref();
+                    _ = pipe.unref();
                 }
             }
-        }
+    }
 
-        pub fn setParent(this: *WindowsPipeWriter, parent: *Parent) void {
-            this.parent = parent;
-            if (!this.is_done) {
-                if (this.source) |pipe| {
-                    pipe.setData(this);
+pub fn setParent(self: *@This(), parent: *Parent) void {
+            self.parent = parent;
+            if ((!self.is_done)) {
+                if (self.source) |pipe| {
+                    _ = &pipe;
+                    _ = pipe.setData(self);
                 }
             }
-        }
+    }
 
-        pub fn watch(_: *WindowsPipeWriter) void {
-        }
+pub fn watch(self: *@This(), _: *WindowsPipeWriter) void {
+        _ = self;
+    }
 
-        pub fn startWithPipe(this: *WindowsPipeWriter, pipe: *uv.Pipe) bun.sys.Maybe(void) {
-            bun.assert(this.source == null);
-            this.source = .{ .pipe = pipe };
-            this.setParent(this.parent);
-            return this.startWithCurrentPipe();
-        }
+pub fn startWithPipe(self: *@This(), pipe: *uv.Pipe) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source == null));
+            self.source = .{ .pipe = pipe };
+            _ = self.setParent(self.parent);
+            return self.startWithCurrentPipe();
+    }
 
-        pub fn startSync(this: *WindowsPipeWriter, fd: bun.FD, _: bool) bun.sys.Maybe(void) {
-            bun.assert(this.source == null);
-            const source = Source{
-                .sync_file = Source.openFile(fd),
-            };
-            source.setData(this);
-            this.source = source;
-            this.setParent(this.parent);
-            return this.startWithCurrentPipe();
-        }
+pub fn startSync(self: *@This(), fd: bun.FD, _: bool) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source == null));
+            const source = Source{ .sync_file = Source.openFile(fd) };
+            _ = source.setData(self);
+            self.source = source;
+            _ = self.setParent(self.parent);
+            return self.startWithCurrentPipe();
+    }
 
-        pub fn startWithFile(this: *WindowsPipeWriter, fd: bun.FD) bun.sys.Maybe(void) {
-            bun.assert(this.source == null);
+pub fn startWithFile(self: *@This(), fd: bun.FD) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source == null));
             const source: bun.io.Source = .{ .file = Source.openFile(fd) };
-            source.setData(this);
-            this.source = source;
-            this.setParent(this.parent);
-            return this.startWithCurrentPipe();
-        }
+            _ = source.setData(self);
+            self.source = source;
+            _ = self.setParent(self.parent);
+            return self.startWithCurrentPipe();
+    }
 
-        pub fn start(this: *WindowsPipeWriter, rawfd: anytype, _: bool) bun.sys.Maybe(void) {
+pub fn start(self: *@This(), rawfd: anytype, _: bool) bun.sys.Maybe(void) {
             const FDType = @TypeOf(rawfd);
-            const fd = switch (FDType) {
-                bun.FD => rawfd,
-                *bun.MovableIfWindowsFd => rawfd.get().?,
-                else => @compileError("Expected `bun.FD` or `*bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd)),
-            };
-            bun.assert(this.source == null);
-            const loop = this.parent.loop();
-            const source = switch (Source.open(loop, fd)) {
-                .result => |source| source,
-                .err => |err| return .{ .err = err },
-            };
-            if (switch (source) {
-                .pipe, .tty => true,
-                else => false,
-            } and FDType == *bun.MovableIfWindowsFd) {
+            const fd = (if (FDType == bun.FD) rawfd else if (FDType == *bun.MovableIfWindowsFd) (rawfd.get()).? else @compileError(("Expected `bun.FD` or `*bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd))));
+            _ = bun.assert((self.source == null));
+            const loop = self.parent.loop();
+            const source = (switch (Source.open(loop, fd)) {
+.result => |source| source,
+.err => |err| {
+return .{ .err = err };
+},
+});
+            if (((switch (source) {
+.pipe, .tty => true,
+else => false,
+}) and (FDType == *bun.MovableIfWindowsFd))) {
                 _ = rawfd.take();
             }
-            source.setData(this);
-            this.source = source;
-            this.setParent(this.parent);
-            return this.startWithCurrentPipe();
-        }
+            _ = source.setData(self);
+            self.source = source;
+            _ = self.setParent(self.parent);
+            return self.startWithCurrentPipe();
+    }
 
-        pub fn setPipe(this: *WindowsPipeWriter, pipe: *uv.Pipe) void {
-            this.source = .{ .pipe = pipe };
-            this.setParent(this.parent);
-        }
+pub fn setPipe(self: *@This(), pipe: *uv.Pipe) void {
+            self.source = .{ .pipe = pipe };
+            _ = self.setParent(self.parent);
+    }
 
-        pub fn getStream(this: *const WindowsPipeWriter) ?*uv.uv_stream_t {
-            const source = this.source orelse return null;
-            if (source == .file) return null;
+pub fn getStream(self: *const @This()) ?*uv.uv_stream_t {
+            const source = ((self.source) orelse { return null; });
+            if ((source == .file)) {
+                return null;
+            }
             return source.toStream();
-        }
-    };
+    }
+};
 }
 
 pub fn WindowsBufferedWriter(comptime Parent: type, comptime function_table: anytype) type {
         return struct {
-        source: ?Source = null,
-        owns_fd: bool = true,
-        parent: *Parent = undefined,
-        is_done: bool = false,
-        write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
-        write_buffer: uv.uv_buf_t = uv.uv_buf_t.init(""),
-        pending_payload_size: usize = 0,
+    source: ?Source = null,
+    owns_fd: bool = true,
+    parent: *Parent = undefined,
+    is_done: bool = false,
+    write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
+    write_buffer: uv.uv_buf_t = uv.uv_buf_t.init(""),
+    pending_payload_size: usize = 0,
 
-        const onWrite: *const *const fn(*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
-        const onError: *const *const fn(*Parent, bun.sys.Error) void = function_table.onError;
-        const onClose: ?*const *const fn(*Parent) void = function_table.onClose;
-        const getBuffer: *const *const fn(*Parent) []const u8 = function_table.getBuffer;
-        const onWritable: ?*const *const fn(*Parent) void = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
-        const onReady: ?*const *const fn(*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
-
-        const WindowsWriter = @This();
-
-        const internals = BaseWindowsPipeWriter(WindowsWriter, Parent);
-        pub const getFd = internals.getFd;
-        pub const hasRef = internals.hasRef;
-        pub const enableKeepingProcessAlive = internals.enableKeepingProcessAlive;
-        pub const disableKeepingProcessAlive = internals.disableKeepingProcessAlive;
-        pub const close = internals.close;
-        pub const updateRef = internals.updateRef;
-        pub const setParent = internals.setParent;
-        pub const watch = internals.watch;
-        pub const startWithPipe = internals.startWithPipe;
-        pub const startSync = internals.startSync;
-        pub const startWithFile = internals.startWithFile;
-        pub const start = internals.start;
-        pub const setPipe = internals.setPipe;
-        pub const getStream = internals.getStream;
-
-        fn onCloseSource(this: *WindowsWriter) void {
+pub fn onCloseSource(self: *@This()) void {
             if (onClose) |onCloseFn| {
-                onCloseFn(this.parent);
+                _ = &onCloseFn;
+                _ = onCloseFn(self.parent);
             }
-        }
+    }
 
-        pub fn memoryCost(this: *const WindowsWriter) usize {
-            return @sizeOf(@This()) + this.write_buffer.len;
-        }
+pub fn memoryCost(self: *const @This()) usize {
+            return (@sizeOf(@This()) + self.write_buffer.len);
+    }
 
-        pub fn startWithCurrentPipe(this: *WindowsWriter) bun.sys.Maybe(void) {
-            bun.assert(this.source != null);
-            this.is_done = false;
-            this.write();
+pub fn startWithCurrentPipe(self: *@This()) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source != null));
+            self.is_done = false;
+            _ = self.write();
             return .success;
-        }
+    }
 
-        fn onWriteComplete(this: *WindowsWriter, status: uv.ReturnCode) void {
-            const written = this.pending_payload_size;
-            this.pending_payload_size = 0;
+pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
+            const written = self.pending_payload_size;
+            self.pending_payload_size = 0;
             if (status.toError(.write)) |err| {
-                this.close();
-                onError(this.parent, err);
+                _ = &err;
+                _ = self.close();
+                _ = onError(self.parent, err);
                 return;
             }
-            const pending = this.getBufferInternal();
-            const has_pending_data = (pending.len - written) != 0;
-            onWrite(this.parent, @intCast(written), if (this.is_done and !has_pending_data) .drained else .pending);
-            if (this.is_done and !has_pending_data) {
-                this.close();
+            const pending = self.getBufferInternal();
+            const has_pending_data = ((pending.len - written) != 0);
+            _ = onWrite(self.parent, @intCast(written), (if ((self.is_done and (!has_pending_data))) .drained else .pending));
+            if ((self.is_done and (!has_pending_data))) {
+                _ = self.close();
                 return;
             }
-
             if (onWritable) |onWritableFn| {
-                onWritableFn(this.parent);
+                _ = &onWritableFn;
+                _ = onWritableFn(self.parent);
             }
-        }
+    }
 
-        fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
+pub fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
             const file = Source.File.fromFS(fs);
             const result = fs.result;
-            const was_canceled = result.int() == uv.UV_ECANCELED;
+            const was_canceled = (result.int() == uv.UV_ECANCELED);
             const parent_ptr = fs.data;
-
-            file.complete(was_canceled);
-
-            if (parent_ptr == null) {
+            _ = file.complete(was_canceled);
+            if ((parent_ptr == null)) {
                 return;
             }
-
-            const this = bun.cast(*WindowsWriter, parent_ptr);
-
+            const writer = bun.cast(*WindowsWriter, parent_ptr);
             if (was_canceled) {
-                this.pending_payload_size = 0;
+                writer.pending_payload_size = 0;
                 return;
             }
-
             if (result.toError(.write)) |err| {
-                this.close();
-                onError(this.parent, err);
+                _ = &err;
+                _ = writer.close();
+                _ = onError(writer.parent, err);
                 return;
             }
+            _ = writer.onWriteComplete(.zero);
+    }
 
-            this.onWriteComplete(.zero);
-        }
-
-        pub fn write(this: *WindowsWriter) void {
-            const buffer = this.getBufferInternal();
-            if (this.is_done or this.pending_payload_size > 0 or buffer.len == 0) {
+pub fn write(self: *@This()) void {
+            const buffer = self.getBufferInternal();
+            if (((self.is_done or (self.pending_payload_size > 0)) or (buffer.len == 0))) {
                 return;
             }
-
-            const pipe = this.source orelse return;
+            const pipe = ((self.source) orelse { return; });
             switch (pipe) {
-                .sync_file => {
-                    @panic("This code path shouldn't be reached - sync_file in PipeWriter.zig");
-                },
-                .file => |file| {
-                    bun.assert(file.canStart());
-
-                    this.pending_payload_size = buffer.len;
-                    file.fs.setData(this);
-                    file.prepare();
-                    this.write_buffer = uv.uv_buf_t.init(buffer);
-
-                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, @ptrCast(&this.write_buffer), 1, -1, onFsWriteComplete).toError(.write)) |err| {
-                        file.complete(false);
-                        this.close();
-                        onError(this.parent, err);
-                    }
-                },
-                else => {
-                    this.pending_payload_size = buffer.len;
-                    this.write_buffer = uv.uv_buf_t.init(buffer);
-                    if (this.write_req.write(pipe.toStream(), &this.write_buffer, this, onWriteComplete).asErr()) |write_err| {
-                        this.close();
-                        onError(this.parent, write_err);
-                    }
-                },
+.sync_file => {
+_ = @panic("This code path shouldn't be reached - sync_file in PipeWriter.zig");
+},
+.file => |file| {
+_ = bun.assert(file.canStart());
+            self.pending_payload_size = buffer.len;
+            _ = file.fs.setData(self);
+            _ = file.prepare();
+            self.write_buffer = uv.uv_buf_t.init(buffer);
+            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, @ptrCast((&self.write_buffer)), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+                _ = &err;
+                _ = file.complete(false);
+                _ = self.close();
+                _ = onError(self.parent, err);
             }
-        }
+},
+else => {
+self.pending_payload_size = buffer.len;
+            self.write_buffer = uv.uv_buf_t.init(buffer);
+            if (self.write_req.write(pipe.toStream(), (&self.write_buffer), self, onWriteComplete).asErr()) |write_err| {
+                _ = &write_err;
+                _ = self.close();
+                _ = onError(self.parent, write_err);
+            }
+},
+}
+    }
 
-        fn getBufferInternal(this: *WindowsWriter) []const u8 {
-            return getBuffer(this.parent);
-        }
+pub fn getBufferInternal(self: *@This()) []const u8 {
+            return getBuffer(self.parent);
+    }
 
-        pub fn end(this: *WindowsWriter) void {
-            if (this.is_done) {
+pub fn end(self: *@This()) void {
+            if (self.is_done) {
                 return;
             }
-
-            this.is_done = true;
-            if (this.pending_payload_size == 0) {
-                this.close();
+            self.is_done = true;
+            if ((self.pending_payload_size == 0)) {
+                _ = self.close();
             }
-        }
-    };
+    }
+    const onWrite: *const fn (*Parent, usize, WriteStatus) void = function_table.onWrite;
+    const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
+    const onClose: ?*const fn (*Parent) void = function_table.onClose;
+    const getBuffer: *const fn (*Parent) []const u8 = function_table.getBuffer;
+    const onWritable: ?*const fn (*Parent) void = (if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null);
+    const onReady: ?*const fn (*Parent) void = (if (@hasDecl(function_table, "onReady")) function_table.onReady else null);
+    const WindowsWriter = @This();
+    const internals = BaseWindowsPipeWriter(WindowsWriter, Parent);
+    pub const getFd = internals.getFd;
+    pub const hasRef = internals.hasRef;
+    pub const enableKeepingProcessAlive = internals.enableKeepingProcessAlive;
+    pub const disableKeepingProcessAlive = internals.disableKeepingProcessAlive;
+    pub const close = internals.close;
+    pub const updateRef = internals.updateRef;
+    pub const setParent = internals.setParent;
+    pub const watch = internals.watch;
+    pub const startWithPipe = internals.startWithPipe;
+    pub const startSync = internals.startSync;
+    pub const startWithFile = internals.startWithFile;
+    pub const start = internals.start;
+    pub const setPipe = internals.setPipe;
+    pub const getStream = internals.getStream;
+};
 }
 
 pub fn WindowsStreamingWriter(comptime Parent: type, comptime function_table: anytype) type {
         return struct {
-        const onWrite: *const fn(*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
-        const onError: *const fn(*Parent, bun.sys.Error) void = function_table.onError;
-        const onWritable: ?*const fn(*Parent) void = function_table.onWritable;
-        const onClose: *const fn(*Parent) void = function_table.onClose;
+    source: ?Source = null,
+    owns_fd: bool = true,
+    parent: *Parent = undefined,
+    is_done: bool = false,
+    write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
+    write_buffer: uv.uv_buf_t = uv.uv_buf_t.init(""),
+    outgoing: StreamBuffer = .{},
+    current_payload: StreamBuffer = .{},
+    last_write_result: *WriteResult = .{ .wrote = 0 },
+    closed_without_reporting: bool = false,
 
-        source: ?Source = null,
-        owns_fd: bool = true,
-        parent: *Parent = undefined,
-        is_done: bool = false,
-        write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
-        write_buffer: uv.uv_buf_t = uv.uv_buf_t.init(""),
+pub fn memoryCost(self: *const @This()) usize {
+            return ((@sizeOf(@This()) + self.current_payload.memoryCost()) + self.outgoing.memoryCost());
+    }
 
-        outgoing: StreamBuffer = .{},
-        current_payload: StreamBuffer = .{},
-        last_write_result: WriteResult = .{ .wrote = 0 },
-        closed_without_reporting: bool = false,
-
-        const internals = BaseWindowsPipeWriter(WindowsWriter, Parent);
-        pub const getFd = internals.getFd;
-        pub const hasRef = internals.hasRef;
-        pub const enableKeepingProcessAlive = internals.enableKeepingProcessAlive;
-        pub const disableKeepingProcessAlive = internals.disableKeepingProcessAlive;
-        pub const close = internals.close;
-        pub const updateRef = internals.updateRef;
-        pub const setParent = internals.setParent;
-        pub const watch = internals.watch;
-        pub const startWithPipe = internals.startWithPipe;
-        pub const startSync = internals.startSync;
-        pub const startWithFile = internals.startWithFile;
-        pub const start = internals.start;
-        pub const setPipe = internals.setPipe;
-        pub const getStream = internals.getStream;
-
-        pub fn memoryCost(this: *const WindowsWriter) usize {
-            return @sizeOf(@This()) + this.current_payload.memoryCost() + this.outgoing.memoryCost();
-        }
-
-        fn onCloseSource(this: *WindowsWriter) void {
-            this.source = null;
-            if (this.closed_without_reporting) {
-                this.closed_without_reporting = false;
+pub fn onCloseSource(self: *@This()) void {
+            self.source = null;
+            if (self.closed_without_reporting) {
+                self.closed_without_reporting = false;
                 return;
             }
-            onClose(this.parent);
-        }
+            _ = onClose(self.parent);
+    }
 
-        pub fn startWithCurrentPipe(this: *WindowsWriter) bun.sys.Maybe(void) {
-            bun.assert(this.source != null);
-            this.is_done = false;
+pub fn startWithCurrentPipe(self: *@This()) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source != null));
+            self.is_done = false;
             return .success;
-        }
+    }
 
-        pub fn hasPendingData(this: *const WindowsWriter) bool {
-            return (this.outgoing.isNotEmpty() or this.current_payload.isNotEmpty());
-        }
+pub fn hasPendingData(self: *const @This()) bool {
+            return (self.outgoing.isNotEmpty() or self.current_payload.isNotEmpty());
+    }
 
-        fn isDone(this: *WindowsWriter) bool {
-            return this.is_done and !this.hasPendingData();
-        }
+pub fn isDone(self: *@This()) bool {
+            return (self.is_done and (!self.hasPendingData()));
+    }
 
-        fn onWriteComplete(this: *WindowsWriter, status: uv.ReturnCode) void {
-            defer this.parent.deref();
-
+pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
+            defer {
+            _ = self.parent.deref();
+            }
             if (status.toError(.write)) |err| {
-                this.last_write_result = .{ .err = err };
-                log("onWrite() = {s}", .{err.name()});
-
-                onError(this.parent, err);
-                this.closeWithoutReporting();
+                _ = &err;
+                self.last_write_result = .{ .err = err };
+                _ = log("onWrite() = {s}", .{ (if (@typeInfo(@TypeOf(err)) == .@"enum" or @typeInfo(@TypeOf(err)) == .@"union") @tagName(err) else err.name)() });
+                _ = onError(self.parent, err);
+                _ = self.closeWithoutReporting();
                 return;
             }
-
-            const written = this.current_payload.size();
-            this.current_payload.reset();
-
-            const done = this.outgoing.isEmpty();
-            const was_done = this.is_done;
-
-            log("onWrite({d}) ({d} left)", .{ written, this.outgoing.size() });
-
-            if (was_done and done) {
-                this.last_write_result = .{ .done = written };
-                onWrite(this.parent, written, .end_of_file);
+            const written = self.current_payload.size();
+            _ = self.current_payload.reset();
+            const done = self.outgoing.isEmpty();
+            const was_done = self.is_done;
+            _ = log("onWrite({d}) ({d} left)", .{ written, self.outgoing.size() });
+            if ((was_done and done)) {
+                self.last_write_result = .{ .done = written };
+                _ = onWrite(self.parent, written, .end_of_file);
                 return;
             }
-            this.last_write_result = .{ .wrote = written };
-
-            onWrite(this.parent, written, if (done) .drained else .pending);
-
-            this.processSend();
-
+            self.last_write_result = .{ .wrote = written };
+            _ = onWrite(self.parent, written, (if (done) .drained else .pending));
+            _ = self.processSend();
             if (onWritable) |onWritableFn| {
-                onWritableFn(this.parent);
+                _ = &onWritableFn;
+                _ = onWritableFn(self.parent);
             }
-        }
+    }
 
-        fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
+pub fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
             const file = Source.File.fromFS(fs);
             const result = fs.result;
-            const was_canceled = result.int() == uv.UV_ECANCELED;
+            const was_canceled = (result.int() == uv.UV_ECANCELED);
             const parent_ptr = fs.data;
-
-            file.complete(was_canceled);
-
-            if (parent_ptr == null) {
+            _ = file.complete(was_canceled);
+            if ((parent_ptr == null)) {
                 return;
             }
-
-            const this = bun.cast(*WindowsWriter, parent_ptr);
-
+            const writer = bun.cast(*WindowsWriter, parent_ptr);
             if (was_canceled) {
-                this.current_payload.reset();
-                this.parent.deref();
+                _ = writer.current_payload.reset();
+                _ = writer.parent.deref();
                 return;
             }
-
             if (result.toError(.write)) |err| {
-                defer this.parent.deref();
-                this.close();
-                onError(this.parent, err);
+                _ = &err;
+                defer {
+                _ = writer.parent.deref();
+                }
+                _ = writer.close();
+                _ = onError(writer.parent, err);
                 return;
             }
+            _ = writer.onWriteComplete(.zero);
+    }
 
-            this.onWriteComplete(.zero);
-        }
-
-        fn processSend(this: *WindowsWriter) void {
-            log("processSend", .{});
-            if (this.current_payload.isNotEmpty()) {
-                this.last_write_result = .{ .pending = 0 };
+pub fn processSend(self: *@This()) void {
+            _ = log("processSend", .{});
+            if (self.current_payload.isNotEmpty()) {
+                self.last_write_result = .{ .pending = 0 };
                 return;
             }
-
-            const bytes = this.outgoing.slice();
-            if (bytes.len == 0) {
-                this.last_write_result = .{ .wrote = 0 };
+            const bytes = self.outgoing.slice();
+            if ((bytes.len == 0)) {
+                self.last_write_result = .{ .wrote = 0 };
                 return;
             }
-
-            var pipe = this.source orelse {
-                const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
-                this.last_write_result = .{ .err = err };
-                onError(this.parent, err);
-                this.closeWithoutReporting();
-                return;
-            };
-
-            const temp = this.current_payload;
-            this.current_payload = this.outgoing;
-            this.outgoing = temp;
+            var pipe = ((self.source) orelse {
+            const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
+            self.last_write_result = .{ .err = err };
+            _ = onError(self.parent, err);
+            _ = self.closeWithoutReporting();
+            return;
+});
+            _ = &pipe;
+            const temp = self.current_payload;
+            self.current_payload = self.outgoing;
+            self.outgoing = temp;
             switch (pipe) {
-                .sync_file => {
-                    @panic("sync_file pipe write should not be reachable");
-                },
-                .file => |file| {
-                    bun.assert(file.canStart());
-
-                    file.fs.setData(this);
-                    file.prepare();
-                    this.write_buffer = uv.uv_buf_t.init(bytes);
-
-                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, @ptrCast(&this.write_buffer), 1, -1, onFsWriteComplete).toError(.write)) |err| {
-                        file.complete(false);
-                        this.last_write_result = .{ .err = err };
-                        onError(this.parent, err);
-                        this.closeWithoutReporting();
-                        return;
-                    }
-                },
-                else => {
-                    this.write_buffer = uv.uv_buf_t.init(bytes);
-                    if (this.write_req.write(pipe.toStream(), &this.write_buffer, this, onWriteComplete).asErr()) |err| {
-                        this.last_write_result = .{ .err = err };
-                        onError(this.parent, err);
-                        this.closeWithoutReporting();
-                        return;
-                    }
-                },
+.sync_file => {
+_ = @panic("sync_file pipe write should not be reachable");
+},
+.file => |file| {
+_ = bun.assert(file.canStart());
+            _ = file.fs.setData(self);
+            _ = file.prepare();
+            self.write_buffer = uv.uv_buf_t.init(bytes);
+            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, @ptrCast((&self.write_buffer)), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+                _ = &err;
+                _ = file.complete(false);
+                self.last_write_result = .{ .err = err };
+                _ = onError(self.parent, err);
+                _ = self.closeWithoutReporting();
+                return;
             }
-            this.parent.ref();
-            this.last_write_result = .{ .pending = 0 };
-        }
-
-        const WindowsWriter = @This();
-
-        fn closeWithoutReporting(this: *WindowsWriter) void {
-            if (this.getFd() != bun.invalid_fd) {
-                bun.assert(!this.closed_without_reporting);
-                this.closed_without_reporting = true;
-                this.close();
+},
+else => {
+self.write_buffer = uv.uv_buf_t.init(bytes);
+            if (self.write_req.write(pipe.toStream(), (&self.write_buffer), self, onWriteComplete).asErr()) |err| {
+                _ = &err;
+                self.last_write_result = .{ .err = err };
+                _ = onError(self.parent, err);
+                _ = self.closeWithoutReporting();
+                return;
             }
-        }
+},
+}
+            _ = self.parent.ref();
+            self.last_write_result = .{ .pending = 0 };
+    }
 
-        pub fn deinit(this: *WindowsWriter) void {
-            this.closeWithoutReporting();
-            this.outgoing.deinit();
-            this.current_payload.deinit();
-        }
+pub fn closeWithoutReporting(self: *@This()) void {
+            if ((self.getFd() != bun.invalid_fd)) {
+                _ = bun.assert((!self.closed_without_reporting));
+                self.closed_without_reporting = true;
+                _ = self.close();
+            }
+    }
 
-        fn writeInternal(this: *WindowsWriter, buffer: anytype, comptime writeFn: anytype) WriteResult {
-            if (this.is_done) {
+pub fn deinit(self: *@This()) void {
+            _ = self.closeWithoutReporting();
+            _ = self.outgoing.deinit();
+            _ = self.current_payload.deinit();
+    }
+
+pub fn writeInternal(self: *@This(), buffer: anytype, comptime writeFn: anytype) *WriteResult {
+            if (self.is_done) {
                 return .{ .done = 0 };
             }
-
-            if (this.source != null and this.source.? == .sync_file) {
-                defer this.outgoing.reset();
-                var remain = StreamBuffer.writeOrFallback(&this.outgoing, buffer, comptime writeFn) catch {
-                    return .{ .err = bun.sys.Error.oom };
-                };
-                const initial_len = remain.len;
-                const fd: bun.FD = .fromUV(this.source.?.sync_file.file);
-
-                while (remain.len > 0) {
-                    switch (fd.write(remain)) {
-                        .err => |err| {
-                            return .{ .err = err };
-                        },
-                        .result => |wrote| {
-                            remain = remain[wrote..];
-                            if (wrote == 0) {
-                                break;
-                            }
-                        },
-                    }
+            if (((self.source != null) and (self.source.? == .sync_file))) {
+                defer {
+                _ = self.outgoing.reset();
                 }
-
-                const wrote = initial_len - remain.len;
-                if (wrote == 0) {
+                var remain = (blk_catch_0: { break :blk_catch_0 ((StreamBuffer.writeOrFallback((&self.outgoing), buffer, (comptime writeFn))) catch |__ce_0| { _ = &__ce_0; return .{ .err = bun.sys.Error.oom }; }); });
+                _ = &remain;
+                const initial_len = remain.len;
+                const fd: bun.FD = .fromUV(self.source.?.sync_file.file);
+                while ((remain.len > 0)) {
+                    switch (fd.write(remain)) {
+.err => |err| {
+return .{ .err = err };
+},
+.result => |wrote| {
+remain = remain[wrote..];
+                    if ((wrote == 0)) {
+                        break;
+                    }
+},
+}
+                }
+                const wrote = (initial_len - remain.len);
+                if ((wrote == 0)) {
                     return .{ .done = wrote };
                 }
                 return .{ .wrote = wrote };
             }
-
-            const had_buffered_data = this.outgoing.isNotEmpty();
-            (if (comptime @TypeOf(writeFn) == @TypeOf(&StreamBuffer.writeLatin1) and writeFn == &StreamBuffer.writeLatin1)
-                writeFn(&this.outgoing, buffer, true)
-            else
-                writeFn(&this.outgoing, buffer)) catch {
-                return .{ .err = bun.sys.Error.oom };
-            };
+            const had_buffered_data = self.outgoing.isNotEmpty();
+            _ = (blk_catch_1: { break :blk_catch_1 (((if (comptime ((@TypeOf(writeFn) == @TypeOf((&StreamBuffer.writeLatin1))) and (writeFn == (&StreamBuffer.writeLatin1)))) writeFn((&self.outgoing), buffer, true) else writeFn((&self.outgoing), buffer))) catch |__ce_1| { _ = &__ce_1; return .{ .err = bun.sys.Error.oom }; }); });
             if (had_buffered_data) {
                 return .{ .pending = 0 };
             }
-            this.processSend();
-            return this.last_write_result;
-        }
+            _ = self.processSend();
+            return self.last_write_result;
+    }
 
-        pub fn writeUTF16(this: *WindowsWriter, buf: []const u16) WriteResult {
-            return writeInternal(this, buf, &StreamBuffer.writeUTF16);
-        }
+pub fn writeUTF16(self: *@This(), buf: []const u16) *WriteResult {
+            return writeInternal(self, buf, (&StreamBuffer.writeUTF16));
+    }
 
-        pub fn writeLatin1(this: *WindowsWriter, buffer: []const u8) WriteResult {
-            return writeInternal(this, buffer, &StreamBuffer.writeLatin1);
-        }
+pub fn writeLatin1(self: *@This(), buffer: []const u8) *WriteResult {
+            return writeInternal(self, buffer, (&StreamBuffer.writeLatin1));
+    }
 
-        pub fn write(this: *WindowsWriter, buffer: []const u8) WriteResult {
-            return writeInternal(this, buffer, &StreamBuffer.write);
-        }
+pub fn write(self: *@This(), buffer: []const u8) *WriteResult {
+            return writeInternal(self, buffer, (&StreamBuffer.write));
+    }
 
-        pub fn flush(this: *WindowsWriter) WriteResult {
-            if (this.is_done) {
+pub fn flush(self: *@This()) *WriteResult {
+            if (self.is_done) {
                 return .{ .done = 0 };
             }
-            if (!this.hasPendingData()) {
+            if ((!self.hasPendingData())) {
                 return .{ .wrote = 0 };
             }
+            _ = self.processSend();
+            return self.last_write_result;
+    }
 
-            this.processSend();
-            return this.last_write_result;
-        }
-
-        pub fn end(this: *WindowsWriter) void {
-            if (this.is_done) {
+pub fn end(self: *@This()) void {
+            if (self.is_done) {
                 return;
             }
-
-            this.closed_without_reporting = false;
-            this.is_done = true;
-
-            if (!this.hasPendingData()) {
-                if (!this.owns_fd) {
+            self.closed_without_reporting = false;
+            self.is_done = true;
+            if ((!self.hasPendingData())) {
+                if ((!self.owns_fd)) {
                     return;
                 }
-                this.close();
+                _ = self.close();
             }
-        }
-    };
+    }
+    const onWrite: *const fn (*Parent, usize, WriteStatus) void = function_table.onWrite;
+    const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
+    const onWritable: ?*const fn (*Parent) void = function_table.onWritable;
+    const onClose: *const fn (*Parent) void = function_table.onClose;
+    const internals = BaseWindowsPipeWriter(WindowsWriter, Parent);
+    pub const getFd = internals.getFd;
+    pub const hasRef = internals.hasRef;
+    pub const enableKeepingProcessAlive = internals.enableKeepingProcessAlive;
+    pub const disableKeepingProcessAlive = internals.disableKeepingProcessAlive;
+    pub const close = internals.close;
+    pub const updateRef = internals.updateRef;
+    pub const setParent = internals.setParent;
+    pub const watch = internals.watch;
+    pub const startWithPipe = internals.startWithPipe;
+    pub const startSync = internals.startSync;
+    pub const startWithFile = internals.startWithFile;
+    pub const start = internals.start;
+    pub const setPipe = internals.setPipe;
+    pub const getStream = internals.getStream;
+    const WindowsWriter = @This();
+};
 }

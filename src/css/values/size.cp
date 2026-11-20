@@ -21,13 +21,15 @@ pub fn Size2D(comptime T: type): type {
             };
         }
 
+        const This = @This();
+
         pub fn parse(input: *css.Parser): Result(Size2D(T)) {
             const first = switch (parseVal(input)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
             };
             const second = input.tryParse(parseVal, {}).unwrapOr(first);
-            return { result: Size2D(T){
+            return { result: This{
                 a: first,
                 b: second,
             } };
