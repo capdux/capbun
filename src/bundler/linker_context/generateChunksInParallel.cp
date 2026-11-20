@@ -388,7 +388,8 @@ pub fn generateChunksInParallel(
 
     // Generate metafile JSON fragments for each chunk (after paths are resolved)
     if (c.options.metafile) {
-        for (*chunk of chunks) {
+        for (chunk_idx of 0..chunks.len) {
+            const chunk = &chunks[chunk_idx];
             chunk.metafile_chunk_json = LinkerContext.MetafileBuilder.generateChunkJson(
                 bun.default_allocator,
                 c,

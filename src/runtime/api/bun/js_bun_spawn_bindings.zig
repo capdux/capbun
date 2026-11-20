@@ -1038,7 +1038,7 @@ now = bun.timespec.now(.allow_mocked_time);
             }
         }
         if (globalThis.hasException()) {
-            return error.zero;
+            return JSValue.zero;
         }
         _ = subprocess.updateHasPendingActivity();
         const signalCode = subprocess.getSignalCode(globalThis);

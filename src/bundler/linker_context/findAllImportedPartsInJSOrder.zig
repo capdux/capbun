@@ -170,16 +170,15 @@ pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
         defer {
         _ = parts_prefix_shared.deinit();
         }
-        var index: u32 = 0;
-        _ = &index;
-        for (cp_mut_slice(&chunks)) |*chunk| {
-            _ = &chunk;
-            defer {
-            index = (index + 1);
-            }
-            switch ((chunk.*).content) {
+        {
+            var index: i32 = 0;
+            _ = &index;
+            const __end_0 = chunks.len;
+            while (index < __end_0) : (index += 1) {
+                const chunk = (&chunks[@as(usize, @intCast(index))]);
+                switch (chunk.content) {
 .javascript => {
-_ = try findImportedPartsInJSOrder(ctx, (chunk.*), (&part_ranges_shared), (&parts_prefix_shared), index);
+_ = try findImportedPartsInJSOrder(ctx, chunk, (&part_ranges_shared), (&parts_prefix_shared), @as(u32, @intCast(index)));
 },
 .css => {
 
@@ -188,6 +187,7 @@ _ = try findImportedPartsInJSOrder(ctx, (chunk.*), (&part_ranges_shared), (&part
 
 },
 }
+            }
         }
 }
 

@@ -250,7 +250,7 @@ pub fn toBundledAst(self: *AstBuilder, target: BundlerOptions.Target) !js_ast.Bu
                 parts.len = @as(u32, @truncate(new_parts.len));
                 _ = bun.assert((new_parts.ptr == parts.ptr));
             } else {
-                const result = try js_parser.ImportScanner.scan(AstBuilder, self, self.stmts.items, false, false, .{});
+                const result = try js_parser.ImportScanner.scan(AstBuilder, self, self.stmts.items, false, false, undefined);
                 parts.mut(1).stmts = result.stmts;
             }
             parts.mut(1).declared_symbols = self.declared_symbols;

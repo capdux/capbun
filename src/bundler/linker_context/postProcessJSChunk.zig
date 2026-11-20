@@ -105,7 +105,8 @@ const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
 
 pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize) !void {
-        const trace = bun.perf.trace("Bundler.postProcessJSChunk");
+        var trace = bun.perf.trace("Bundler.postProcessJSChunk");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

@@ -1122,7 +1122,7 @@ pub fn spawnMaybeSync(
     }
     if (globalThis.hasException()) {
         // e.g. a termination exception.
-        return .zero;
+        return JSValue.zero;
     }
 
     subprocess.updateHasPendingActivity();

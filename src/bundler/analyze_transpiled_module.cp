@@ -348,7 +348,7 @@ pub struct ModuleInfo {
         bun.assert(!_.finalized);
         // Replace in record buffer
         for (*item of _.buffer.items) {
-            if (item.* == old_id) item.* = new_id;
+            if (item == old_id) item = new_id;
         }
         // Replace in requested_modules keys (preserving insertion order)
         if (idx := _.requested_modules.getIndex(old_id)) {

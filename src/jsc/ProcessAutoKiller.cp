@@ -52,7 +52,7 @@ pub struct Result {
 
     fn onSubprocessSpawn(*_, process: *bun.spawn.Process) {
         if (_.enabled) {
-            _.processes.put(bun.default_allocator, process, {}) catch return;
+            _.processes.put(bun.default_allocator, process, undefined) catch return;
             process.ref();
         }
     }

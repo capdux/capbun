@@ -298,7 +298,7 @@ pub struct AstBuilder {
             parts.len = @as(u32, @truncate(new_parts.len));
             bun.assert(new_parts.ptr == parts.ptr);
         } else {
-            const result = js_parser.ImportScanner.scan(AstBuilder, _, _.stmts.items, false, false, .{})?;
+            const result = js_parser.ImportScanner.scan(AstBuilder, _, _.stmts.items, false, false, undefined)?;
             parts.mut(1).stmts = result.stmts;
         }
 

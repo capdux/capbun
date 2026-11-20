@@ -106,7 +106,7 @@ pub fn clear(self: *ProcessAutoKiller) void {
 
 pub fn onSubprocessSpawn(self: *ProcessAutoKiller, process: *bun.spawn.Process) void {
         if (self.enabled) {
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.processes.put(bun.default_allocator, process, .{})) catch |__ce_0| { _ = &__ce_0; return; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.processes.put(bun.default_allocator, process, undefined)) catch |__ce_0| { _ = &__ce_0; return; }); });
             _ = process.ref();
         }
 }

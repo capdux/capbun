@@ -1,6 +1,6 @@
 /// This runs after we've already populated the compile results
 pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize)! {
-    const trace = bun.perf.trace("Bundler.postProcessJSChunk");
+    let trace = bun.perf.trace("Bundler.postProcessJSChunk");
     defer trace.end();
 
     * = chunk_index;

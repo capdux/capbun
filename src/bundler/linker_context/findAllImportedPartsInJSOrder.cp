@@ -6,9 +6,8 @@ pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
     let parts_prefix_shared = std.array_list.Managed(PartRange).init(temp_allocator);
     defer part_ranges_shared.deinit();
     defer parts_prefix_shared.deinit();
-    let index: u32 = 0;
-    for (*chunk of chunks) {
-        defer index += 1;
+    for (index of 0..chunks.len) {
+        const chunk = &chunks[index];
         switch (chunk.content) {
             .javascript => {
                 findImportedPartsInJSOrder(
@@ -16,7 +15,7 @@ pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
                     chunk,
                     &part_ranges_shared,
                     &parts_prefix_shared,
-                    index,
+                    @as(u32, @intCast(index)),
                 )?;
             },
             .css => {}, // handled in `findImportedCSSFilesInJSOrder`

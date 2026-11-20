@@ -121,7 +121,7 @@ pub fn detectAndLoadOtherLockfile(lockfile: *Lockfile, dir: bun.FD, manager: *In
         const lockfile_path = (blk_catch_2: { break :blk_catch_2 ((bun.getFdPathZ(lockfile_file.handle, (&lockfile_path_buf))) catch |__ce_2| { _ = &__ce_2; break :npm; }); });
         const data = (blk_catch_3: { break :blk_catch_3 ((lockfile_file.readToEnd(allocator).unwrap()) catch |__ce_3| { _ = &__ce_3; break :npm; }); });
         const migrate_result = (blk_catch_4: { break :blk_catch_4 ((migrateNPMLockfile(lockfile, manager, allocator, log, data, lockfile_path)) catch |e| { _ = &e; if ((e == error.NPMLockfileVersionMismatch)) {
-            _ = Output.prettyErrorln("<red><b>error<r><d>:<r> Please upgrade package-lock.json to lockfileVersion 2 or 3", "", "Run 'npm i --lockfile-version 3 --frozen-lockfile' to upgrade your lockfile without changing dependencies.", .{});
+            _ = Output.prettyErrorln("<red><b>error<r><d>:<r> Please upgrade package-lock.json to lockfileVersion 2 or 3\n\nRun 'npm i --lockfile-version 3 --frozen-lockfile' to upgrade your lockfile without changing dependencies.", .{});
             _ = Global.exit(1);
         }
         return LoadResult{ .err = .{ .step = .migrating, .value = e, .lockfile_path = "package-lock.json", .format = .text } }; }); });

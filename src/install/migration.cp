@@ -73,10 +73,9 @@ pub fn detectAndLoadOtherLockfile(
         const migrate_result = migrateNPMLockfile(lockfile, manager, allocator, log, data, lockfile_path) catch |e| {
             if (e == error.NPMLockfileVersionMismatch) {
                 Output.prettyErrorln(
-                    \\<red><b>error<r><d>:<r> Please upgrade package-lock.json to lockfileVersion 2 or 3
-                    \\
-                    \\Run 'npm i --lockfile-version 3 --frozen-lockfile' to upgrade your lockfile without changing dependencies.
-                , .{});
+                    "<red><b>error<r><d>:<r> Please upgrade package-lock.json to lockfileVersion 2 or 3\n\nRun 'npm i --lockfile-version 3 --frozen-lockfile' to upgrade your lockfile without changing dependencies.",
+                    .{},
+                );
                 Global.exit(1);
             }
             return LoadResult{ err: .{

@@ -751,9 +751,10 @@ pub struct BundleV2 {
             entry.value_ptr.* = idx;
             out_source_index = Index.init(idx);
 
-            if (*secondary := resolve_result.path_pair.secondary) {
+            if (resolve_result.path_pair.secondary != null) {
+                const secondary = &resolve_result.path_pair.secondary.?;
                 if (!secondary.is_disabled &&
-                    &secondary != path &&
+                    secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
                     const secondary_path_to_copy = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);
@@ -2547,7 +2548,7 @@ pub struct BundleV2 {
                         // to routes in DevServer. They have a JS chunk too,
                         // derived off of the import record list.
                         if (loaders[index] == .html) {
-                            html_files.put(_.allocator(), Index.init(index), {})?;
+                            html_files.put(_.allocator(), Index.init(index), undefined)?;
                         } else {
                             js_files.appendAssumeCapacity(Index.init(index));
 
@@ -3413,9 +3414,10 @@ pub struct BundleV2 {
             resolve_task.loader = import_record_loader;
             resolve_task.tree_shaking = transpiler.options.tree_shaking;
             resolve_entry.value_ptr.* = resolve_task;
-            if (*secondary := resolve_result.path_pair.secondary) {
+            if (resolve_result.path_pair.secondary != null) {
+                const secondary = &resolve_result.path_pair.secondary.?;
                 if (!secondary.is_disabled &&
-                    &secondary != path &&
+                    secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
                     resolve_task.secondary_path_for_commonjs_interop = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);
@@ -4277,7 +4279,7 @@ pub const CompileResult = union(enum) {
     };
 
     pub fn code(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .javascript => |r| r.code(),
             .css => |*c| switch (c.result) {
                 .result => |v| v,
@@ -4288,7 +4290,7 @@ pub const CompileResult = union(enum) {
     }
 
     pub fn sourceMapChunk(): SourceMap.Chunk? {
-        return switch (_.*) {
+        return switch (_) {
             .javascript => |r| switch (r.result) {
                 .result => |r2| r2.source_map,
                 else => null,
@@ -4299,7 +4301,7 @@ pub const CompileResult = union(enum) {
     }
 
     pub fn sourceIndex(): Index.Int {
-        return switch (_.*) {
+        return switch (_) {
             inline else => |*r| r.source_index,
         };
     }

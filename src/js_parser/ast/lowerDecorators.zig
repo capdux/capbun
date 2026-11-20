@@ -408,16 +408,14 @@ var val = (if (@typeInfo(@TypeOf(sexpr)) == .@"enum") @intFromEnum(sexpr) else s
 .s_local => |local| {
 for (cp_mut_slice(&local.decls.slice())) |*decl| {
                     _ = &decl;
-                    if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
-                        _ = &v;
-                        _ = rewriteExpr(p, (v.*), kind);
+                    if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                        _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?), kind);
                     }
                 }
 },
 .s_return => |ret| {
-if ((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value)) |*v| {
-                    _ = &v;
-                    _ = rewriteExpr(p, (v.*), kind);
+if (((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value) != null)) {
+                    _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value).?), kind);
                 }
 },
 .s_throw => |data| {
@@ -706,9 +704,8 @@ for (cp_mut_slice(&data.decls.slice())) |*decl| {
 .s_if => |data| {
 _ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
                 _ = rewritePrivateAccessesInStmts(p, (&data.yes)[0..1], map);
-                if (data.no) |*no| {
-                    _ = &no;
-                    _ = rewritePrivateAccessesInStmts(p, (no.*)[0..1], map);
+                if ((data.no != null)) {
+                    _ = rewritePrivateAccessesInStmts(p, (&data.no.?)[0..1], map);
                 }
 },
 .s_block => |data| {
@@ -1460,7 +1457,7 @@ else => 5,
 .block => {
 const sb = extracted_static_blocks.items[@as(usize, @intCast(elem.index))];
                     const stmts_slice = sb.stmts.slice();
-                    _ = rewriteStmts(p, stmts_slice, .{ .replace_this = .{ .ref = class_name_ref, .loc = class_name_loc } });
+                    _ = rewriteStmts(p, stmts_slice, .{ .replace_this = .{ .sym_ref = class_name_ref, .loc = class_name_loc } });
                     const all_exprs = blk: {
                     for (cp_iter_slice(stmts_slice)) |sb_stmt| {
                         _ = &sb_stmt;

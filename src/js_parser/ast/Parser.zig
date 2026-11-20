@@ -914,7 +914,7 @@ const uses_any_import_statements = brk: {
                     runtime_imports[cp_cast_int(usize, i)] = @as(u8, @intCast(entry.key));
                     i = (i + 1);
                 }
-                _ = std.sort.pdq(u8, runtime_imports[0..i], .{}, runtimeImportIsLessThan);
+                _ = std.sort.pdq(u8, runtime_imports[0..i], @as(void, undefined), runtimeImportIsLessThan);
                 if ((i > 0)) {
                     _ = ((p.generateImportStmt(RuntimeImports.Name, runtime_imports[0..i], (&before), p.runtime_imports, null, "import_", true)) catch unreachable);
                 }

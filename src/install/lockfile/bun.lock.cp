@@ -1932,7 +1932,7 @@ pub fn parseIntoBinaryLockfile(
 
         {
             // first the root dependencies are resolved
-            pkg_resolutions[0] = Resolution.init({ root: {} });
+            pkg_resolutions[0] = Resolution.init({ root: undefined });
             pkg_metas[0].origin = .local;
 
             for (_dep_id of pkg_deps[0].begin()..pkg_deps[0].end()) {

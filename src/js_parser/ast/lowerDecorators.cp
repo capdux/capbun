@@ -283,11 +283,11 @@ pub fn LowerDecorators(
                     },
                     .s_local => |local| {
                         for (*decl of local.decls.slice()) {
-                            if (*v := decl.value) rewriteExpr(p, v, kind);
+                            if (decl.value != null) rewriteExpr(p, &decl.value.?, kind);
                         }
                     },
                     .s_return => |ret| {
-                        if (*v := ret.value) rewriteExpr(p, v, kind);
+                        if (ret.value != null) rewriteExpr(p, &ret.value.?, kind);
                     },
                     .s_throw => |data| rewriteExpr(p, &data.value, kind),
                     .s_if => |data| {
@@ -490,7 +490,7 @@ pub fn LowerDecorators(
                     .s_if => |data| {
                         rewritePrivateAccessesInExpr(p, &data.test_, map);
                         rewritePrivateAccessesInStmts(p, (&data.yes)[0..1], map);
-                        if (*no := data.no) rewritePrivateAccessesInStmts(p, (&no)[0..1], map);
+                        if (data.no != null) rewritePrivateAccessesInStmts(p, (&data.no.?)[0..1], map);
                     },
                     .s_block => |data| rewritePrivateAccessesInStmts(p, data.stmts, map),
                     .s_for => |data| {
@@ -1203,7 +1203,7 @@ pub fn LowerDecorators(
                         .block => {
                             const sb = extracted_static_blocks.items[elem.index];
                             const stmts_slice = sb.stmts.slice();
-                            rewriteStmts(p, stmts_slice, { replace_this: { ref: class_name_ref, loc: class_name_loc } });
+                            rewriteStmts(p, stmts_slice, { replace_this: { sym_ref: class_name_ref, loc: class_name_loc } });
 
                             // Check if all statements are simple expressions
                             const all_exprs = blk: {

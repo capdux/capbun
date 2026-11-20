@@ -330,8 +330,8 @@ pub fn replaceStringID(self: *ModuleInfo, old_id: StringID, new_id: StringID) vo
             _ = bun.assert((!self.finalized));
             for (self.buffer.items) |*item| {
                 _ = &item;
-                if (((item.*).* == old_id)) {
-                    (item.*).* = new_id;
+                if (((item.*) == old_id)) {
+                    (item.*) = new_id;
                 }
             }
             if (self.requested_modules.getIndex(old_id)) |idx| {

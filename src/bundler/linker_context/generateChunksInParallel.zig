@@ -457,9 +457,14 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
             }
         }
         if (c.options.metafile) {
-            for (cp_mut_slice(&chunks)) |*chunk| {
-                _ = &chunk;
-                (chunk.*).metafile_chunk_json = (blk_catch_5: { break :blk_catch_5 ((LinkerContext.MetafileBuilder.generateChunkJson(bun.default_allocator, c, (chunk.*), chunks)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 ""; }); });
+            {
+                var chunk_idx: i32 = 0;
+                _ = &chunk_idx;
+                const __end_9 = chunks.len;
+                while (chunk_idx < __end_9) : (chunk_idx += 1) {
+                    const chunk = (&chunks[@as(usize, @intCast(chunk_idx))]);
+                    chunk.metafile_chunk_json = (blk_catch_5: { break :blk_catch_5 ((LinkerContext.MetafileBuilder.generateChunkJson(bun.default_allocator, c, chunk, chunks)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 ""; }); });
+                }
             }
         }
         var output_files = try OutputFileListBuilder.init(bun.default_allocator, c, chunks, c.parse_graph.additional_output_files.items.len);

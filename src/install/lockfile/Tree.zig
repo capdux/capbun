@@ -250,8 +250,8 @@ _ = bun.debugAssert((pkg_id != invalid_package_id));
             }
             for (dependency_lists[@as(usize, @intCast(replace.id))].items) |*placed_dep_id| {
                 _ = &placed_dep_id;
-                if (((placed_dep_id.*).* == replace.dep_id)) {
-                    (placed_dep_id.*).* = dep_id;
+                if (((placed_dep_id.*) == replace.dep_id)) {
+                    (placed_dep_id.*) = dep_id;
                 }
             }
             if (((pkg_id != invalid_package_id) and (builder.resolution_lists[@as(usize, @intCast(pkg_id))].len > 0))) {

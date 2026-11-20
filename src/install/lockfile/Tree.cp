@@ -625,8 +625,8 @@ pub fn isFilteredDependencyOrWorkspace(
                         }
                     }
                     for (*placed_dep_id of dependency_lists[replace.id].items) {
-                        if (placed_dep_id.* == replace.dep_id) {
-                            placed_dep_id.* = dep_id;
+                        if (placed_dep_id == replace.dep_id) {
+                            placed_dep_id = dep_id;
                         }
                     }
                     if (pkg_id != invalid_package_id && builder.resolution_lists[pkg_id].len > 0) {

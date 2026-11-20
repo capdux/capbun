@@ -464,10 +464,10 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                 const idx = (blk_catch_8: { break :blk_catch_8 ((self.enqueueParseTask((&resolve_result), (&.{ .path = path.*, .contents = "" }), loader, import_record.original_target)) catch |oom_err| { _ = &oom_err; break :blk_catch_8 @as(Index.Int, bun.handleOom(oom_err)); }); });
                 entry.value_ptr.* = idx;
                 out_source_index = Index.init(idx);
-                if (resolve_result.path_pair.secondary) |*secondary| {
-                    _ = &secondary;
-                    if ((((!(secondary.*).is_disabled) and ((secondary.*) != path)) and (!strings.eqlLong((secondary.*).text, path.text, true)))) {
-                        const secondary_path_to_copy = (blk_catch_9: { break :blk_catch_9 (((secondary.*).dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_9 bun.handleOom(oom_err); }); });
+                if ((resolve_result.path_pair.secondary != null)) {
+                    const secondary = (&resolve_result.path_pair.secondary.?);
+                    if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
+                        const secondary_path_to_copy = (blk_catch_9: { break :blk_catch_9 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_9 bun.handleOom(oom_err); }); });
                         self.graph.input_files.items(.secondary_path)[cp_cast_int(usize, idx)] = secondary_path_to_copy.text;
                         self.graph.has_any_secondary_paths = true;
                     }
@@ -1574,7 +1574,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
                         }
                     } else {
                         if ((loaders[@as(usize, @intCast(index))] == .html)) {
-                            _ = try html_files.put(self.allocator(), Index.init(index), .{});
+                            _ = try html_files.put(self.allocator(), Index.init(index), undefined);
                         } else {
                             _ = js_files.appendAssumeCapacity(Index.init(index));
                             for (cp_mut_slice(&part_list.slice())) |*p| {
@@ -2108,10 +2108,10 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 resolve_task.loader = import_record_loader;
                 resolve_task.tree_shaking = transpiler.options.tree_shaking;
                 resolve_entry.value_ptr.* = resolve_task;
-                if (resolve_result.path_pair.secondary) |*secondary| {
-                    _ = &secondary;
-                    if ((((!(secondary.*).is_disabled) and ((secondary.*) != path)) and (!strings.eqlLong((secondary.*).text, path.text, true)))) {
-                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_65: { break :blk_catch_65 (((secondary.*).dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
+                if ((resolve_result.path_pair.secondary != null)) {
+                    const secondary = (&resolve_result.path_pair.secondary.?);
+                    if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
+                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_65: { break :blk_catch_65 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                     }
                 }
                 if (is_html_entrypoint) {
@@ -2957,7 +2957,7 @@ pub const CompileResult = union(enum) {
     html: HtmlCompileResult,
 
 pub fn code(self: @This()) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 .javascript => |r| r.code(),
 .css => |*c| (switch (c.result) {
 .result => |v| v,
@@ -2968,7 +2968,7 @@ pub fn code(self: @This()) []const u8 {
     }
 
 pub fn sourceMapChunk(self: @This()) ?SourceMap.Chunk {
-            return (switch (self.*) {
+            return (switch (self) {
 .javascript => |r| (switch (r.result) {
 .result => |r2| r2.source_map,
 else => null,
@@ -2979,7 +2979,7 @@ else => null,
     }
 
 pub fn sourceIndex(self: @This()) Index.Int {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |*r| r.source_index,
 });
     }

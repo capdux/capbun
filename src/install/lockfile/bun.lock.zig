@@ -1542,7 +1542,7 @@ else => {
             var pkg_resolutions = pkgs.items(.resolution);
             _ = &pkg_resolutions;
             {
-                pkg_resolutions[cp_cast_int(usize, 0)] = Resolution.init(.{ .root = .{} });
+                pkg_resolutions[cp_cast_int(usize, 0)] = Resolution.init(.{ .root = undefined });
                 pkg_metas[0].origin = .local;
                 {
                     var _dep_id: i32 = pkg_deps[0].begin();

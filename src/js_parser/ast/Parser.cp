@@ -1360,7 +1360,7 @@ pub struct Parser {
             std.sort.pdq(
                 u8,
                 runtime_imports[0..i],
-                {},
+                @as(void, undefined),
                 runtimeImportIsLessThan,
             );
 
