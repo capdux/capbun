@@ -13,7 +13,7 @@ pub const from: [1]short = [@as(short, 16)];
 pub fn toJS(
     globalObject: *jsc.JSGlobalObject,
     value: bool,
-) AnyPostgresError!JSValue {
-    _ = globalObject;
+): AnyPostgresError!JSValue {
+    * = globalObject;
     return JSValue.jsBoolean(value);
 }

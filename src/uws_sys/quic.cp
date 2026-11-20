@@ -14,8 +14,8 @@ export const PendingConnect = pending_mod.PendingConnect;
 export const Header = header_mod.Header;
 export const Qpack = header_mod.Qpack;
 
-extern fn us_quic_global_init(): void;
+extern fn us_quic_global_init();
 
-export fn globalInit(): void {
+export fn globalInit() {
     us_quic_global_init();
 }

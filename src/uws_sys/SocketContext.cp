@@ -26,7 +26,7 @@ export @extern @value class BunSocketContextOptions {
     client_renegotiation_limit: u32 = 3,
     client_renegotiation_window: u32 = 600,
 
-    pub static fn createSSLContext(options: BunSocketContextOptions, *err: anytype): *bun.BoringSSL.c.SSL_CTX?! {
+    pub static fn createSSLContext(options: BunSocketContextOptions, err: *anytype): *bun.BoringSSL.c.SSL_CTX?! {
         return us_ssl_ctx_from_options(options, err);
     }
 
@@ -34,39 +34,42 @@ export @extern @value class BunSocketContextOptions {
         return us_ssl_ctx_live_count();
     }
 
-    static fn feedZ(hp: *bun.sha.Hashers.SHA256, s: cstr?): void {
+    static fn feedZ(hp: *bun.sha.Hashers.SHA256, s: cstr?) {
         let flag: [1]u8 = .{(if (s != null) 1 else 0)};
         hp.update(&flag);
         if (s != null) {
             let p = s.?;
             hp.update(bun.sliceTo(p, 0));
         }
-        let term: [1]u8 = .{0};
+        const z: u8 = 0;
+        let term: [1]u8 = [z];
         hp.update(&term);
     }
 
-    static fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: [*]cstr?!, n: u32): void {
+    static fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: [*]cstr?!, n: u32) {
         let flag: [1]u8 = .{(if (arr != null) 1 else 0)};
         hp.update(&flag);
         hp.update(bun.mem.asBytes(&n));
         if (arr != null) {
             let a = arr.?;
-            for (a[0..n]) |s| {
+            for (s of a[0..n]) {
                 let s_flag: [1]u8 = .{(if (s != null) 1 else 0)};
                 hp.update(&s_flag);
                 if (s != null) {
                     let p = s.?;
                     hp.update(bun.sliceTo(p, 0));
                 }
-                let term: [1]u8 = .{0};
+                const z: u8 = 0;
+        let term: [1]u8 = [z];
                 hp.update(&term);
             }
         }
-        let term: [1]u8 = .{0};
+        const z: u8 = 0;
+        let term: [1]u8 = [z];
         hp.update(&term);
     }
 
-    static fn feedPath(hp: *bun.sha.Hashers.SHA256, s: cstr?): void {
+    static fn feedPath(hp: *bun.sha.Hashers.SHA256, s: cstr?) {
         let flag: [1]u8 = .{(if (s != null) 1 else 0)};
         hp.update(&flag);
         if (s != null) {
@@ -85,58 +88,59 @@ export @extern @value class BunSocketContextOptions {
             }
             hp.update(bun.mem.asBytes(&meta));
         }
-        let term: [1]u8 = .{0};
+        const z: u8 = 0;
+        let term: [1]u8 = [z];
         hp.update(&term);
     }
 
-    pub fn digest(this): [32]u8 {
+    pub fn digest(): [32]u8 {
         let h = bun.sha.Hashers.SHA256.init();
-        feedPath(&h, this.key_file_name);
-        feedPath(&h, this.cert_file_name);
-        feedZ(&h, this.passphrase);
-        feedPath(&h, this.dh_params_file_name);
-        feedPath(&h, this.ca_file_name);
-        feedZ(&h, this.ssl_ciphers);
-        h.update(bun.mem.asBytes(&this.ssl_prefer_low_memory_usage));
-        feedArr(&h, this.key, this.key_count);
-        feedArr(&h, this.cert, this.cert_count);
-        feedArr(&h, this.ca, this.ca_count);
-        h.update(bun.mem.asBytes(&this.secure_options));
-        h.update(bun.mem.asBytes(&this.reject_unauthorized));
-        h.update(bun.mem.asBytes(&this.request_cert));
-        h.update(bun.mem.asBytes(&this.client_renegotiation_limit));
-        h.update(bun.mem.asBytes(&this.client_renegotiation_window));
+        feedPath(&h, _.key_file_name);
+        feedPath(&h, _.cert_file_name);
+        feedZ(&h, _.passphrase);
+        feedPath(&h, _.dh_params_file_name);
+        feedPath(&h, _.ca_file_name);
+        feedZ(&h, _.ssl_ciphers);
+        h.update(bun.mem.asBytes(&_.ssl_prefer_low_memory_usage));
+        feedArr(&h, _.key, _.key_count);
+        feedArr(&h, _.cert, _.cert_count);
+        feedArr(&h, _.ca, _.ca_count);
+        h.update(bun.mem.asBytes(&_.secure_options));
+        h.update(bun.mem.asBytes(&_.reject_unauthorized));
+        h.update(bun.mem.asBytes(&_.request_cert));
+        h.update(bun.mem.asBytes(&_.client_renegotiation_limit));
+        h.update(bun.mem.asBytes(&_.client_renegotiation_window));
         let out: [32]u8 = undefined;
         h.final(&out);
         return out;
     }
 
-    pub fn approxCertBytes(this): usize {
+    pub fn approxCertBytes(): usize {
         let n: usize = 0;
-        if (this.key != null) {
-            let keys = this.key.?;
-            let key_count = this.key_count;
-            for (keys[0..key_count]) |k| {
+        if (_.key != null) {
+            let keys = _.key.?;
+            let key_count = _.key_count;
+            for (k of keys[0..key_count]) {
                 if (k != null) {
                     let kp = k.?;
                     n += bun.sliceTo(kp, 0).len;
                 }
             }
         }
-        if (this.cert != null) {
-            let certs = this.cert.?;
-            let cert_count = this.cert_count;
-            for (certs[0..cert_count]) |k| {
+        if (_.cert != null) {
+            let certs = _.cert.?;
+            let cert_count = _.cert_count;
+            for (k of certs[0..cert_count]) {
                 if (k != null) {
                     let kp = k.?;
                     n += bun.sliceTo(kp, 0).len;
                 }
             }
         }
-        if (this.ca != null) {
-            let cas = this.ca.?;
-            let ca_count = this.ca_count;
-            for (cas[0..ca_count]) |k| {
+        if (_.ca != null) {
+            let cas = _.ca.?;
+            let ca_count = _.ca_count;
+            for (k of cas[0..ca_count]) {
                 if (k != null) {
                     let kp = k.?;
                     n += bun.sliceTo(kp, 0).len;

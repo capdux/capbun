@@ -22,7 +22,7 @@ const JSValue = jsc.JSValue;
         };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         if (this.prepared_statement_name.len > 0) {
             bun.default_allocator.free(this.prepared_statement_name);
         }
@@ -37,7 +37,7 @@ const JSValue = jsc.JSValue;
         }
     }
 
-    pub fn hash(this: *const @This()): u64 {
+    pub fn hash(_: *const @This()): u64 {
         let hasher = std.hash.Wyhash.init(0);
         hasher.update(this.name);
         hasher.update(std.mem.sliceAsBytes(this.fields));

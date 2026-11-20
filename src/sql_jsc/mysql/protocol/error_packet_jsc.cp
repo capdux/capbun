@@ -10,7 +10,7 @@ pub fn createMySQLError(
     globalObject: *JSC.JSGlobalObject,
     message: []const u8,
     options: MySQLErrorOptions,
-) bun.JSError!JSValue {
+): bun.JSError!JSValue {
     const opts_obj = JSValue.createEmptyObject(globalObject, 0);
     opts_obj.ensureStillAlive();
     opts_obj.put(globalObject, JSC.ZigString.static("code"), bun.String.createUTF8ForJS(globalObject, options.code)?);
@@ -25,7 +25,7 @@ pub fn createMySQLError(
     return opts_obj;
 }
 
-pub fn toJS(this: ErrorPacket, globalObject: *JSC.JSGlobalObject) JSValue {
+pub fn toJS(_: ErrorPacket, globalObject: *JSC.JSGlobalObject): JSValue {
     let msg = this.error_message.slice();
     if (msg.len == 0) {
         msg = "MySQL error occurred";

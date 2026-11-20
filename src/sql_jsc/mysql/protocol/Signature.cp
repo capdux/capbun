@@ -18,7 +18,7 @@ const ByteList = std.array_list.Managed(u8);
     name: []const u8 = "",
     query: []const u8 = "",
 
-    pub static fn empty() Signature {
+    pub static fn empty(): Signature {
         return Signature{
             fields: empty_params[0..0],
             name: "",
@@ -26,7 +26,7 @@ const ByteList = std.array_list.Managed(u8);
         };
     }
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         if (this.fields.len > 0) {
             bun.default_allocator.free(this.fields);
         }
@@ -38,14 +38,14 @@ const ByteList = std.array_list.Managed(u8);
         }
     }
 
-    pub fn hash(this: *const Signature) u64 {
+    pub fn hash(_: *const Signature): u64 {
         let hasher = std.hash.Wyhash.init(0);
         hasher.update(this.name);
         hasher.update(std.mem.sliceAsBytes(this.fields));
         return hasher.final();
     }
 
-    pub static fn generate(globalObject: *jsc.JSGlobalObject, query: []const u8, array_value: JSValue, columns: JSValue) anyerror!Signature {
+    pub static fn generate(globalObject: *jsc.JSGlobalObject, query: []const u8, array_value: JSValue, columns: JSValue): anyerror!Signature {
         let fields = ParamList.init(bun.default_allocator);
         let name = ByteList.initCapacity(bun.default_allocator, query.len)?;
 

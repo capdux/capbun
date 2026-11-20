@@ -36,24 +36,24 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
 
     status: SASLStatus = .init,
 
-    pub fn computeSaltedPassword(*this, salt_bytes: []const u8, iteration_count: u32, connection: *PostgresSQLConnection): void! {
+    pub fn computeSaltedPassword(*_, salt_bytes: []const u8, iteration_count: u32, connection: *PostgresSQLConnection): void! {
         this.salted_password_created = true;
         if (Crypto.EVP.pbkdf2(&this.salted_password_bytes, connection.password, salt_bytes, iteration_count, .sha256) == null) {
             return err.PBKDFD2;
         }
     }
 
-    pub fn saltedPassword(this: *const @This()): []const u8 {
+    pub fn saltedPassword(_: *const @This()): []const u8 {
         assert(this.salted_password_created);
         return this.salted_password_bytes[0..salted_password_byte_len];
     }
 
-    pub fn serverSignature(this: *const @This()): []const u8 {
+    pub fn serverSignature(_: *const @This()): []const u8 {
         assert(this.server_signature_len > 0);
         return this.server_signature_base64_bytes[0..this.server_signature_len];
     }
 
-    pub fn computeServerSignature(*this, auth_string: []const u8): void! {
+    pub fn computeServerSignature(*_, auth_string: []const u8): void! {
         assert(this.server_signature_len == 0);
 
         const server_key = hmac(this.saltedPassword(), "Server Key") orelse return err.InvalidServerKey;
@@ -61,18 +61,18 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
         this.server_signature_len = @intCast(bun.base64.encode(&this.server_signature_base64_bytes, &server_signature_bytes));
     }
 
-    pub fn clientKey(this: *const @This()): [32]u8 {
+    pub fn clientKey(_: *const @This()): [32]u8 {
         return hmac(this.saltedPassword(), "Client Key").?;
     }
 
-    pub fn clientKeySignature(this: *const @This(), client_key: []const u8, auth_string: []const u8): [32]u8 {
-        _ = this;
+    pub fn clientKeySignature(*_: *const @This(), client_key: []const u8, auth_string: []const u8): [32]u8 {
+        const __unused_self = _; * = __unused_self;
         let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
         bun.sha.SHA256.hash(client_key, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
         return hmac(&sha_digest, auth_string).?;
     }
 
-    pub fn nonce(*this): []const u8 {
+    pub fn nonce(*_): []const u8 {
         if (this.nonce_len == 0) {
             let bytes: [nonce_byte_len]u8 = std.mem.zeroes([nonce_byte_len]u8);
             bun.csprng(&bytes);
@@ -81,7 +81,7 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
         return this.nonce_base64_bytes[0..this.nonce_len];
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.nonce_len = 0;
         this.salted_password_created = false;
         this.server_signature_len = 0;

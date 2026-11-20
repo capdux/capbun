@@ -67,7 +67,7 @@ export enum Qpack: u8 {
         }
     };
 
-    pub fn classify(hdr_name: []const u8) ?Class {
+    pub fn classify(hdr_name: []const u8): Class? {
         return map.getAnyCase(hdr_name);
     }
 

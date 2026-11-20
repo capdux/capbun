@@ -84,39 +84,39 @@ export union AuthState {
 export struct Writer {
     connection: *MySQLConnection,
 
-    pub fn write(this, data: []const u8) AnyMySQLError.Error!void {
+    pub fn write(data: []const u8): AnyMySQLError.Error!void {
         this.connection.@"#write_buffer".write(bun.default_allocator, data)?;
     }
 
-    pub fn pwrite(this, data: []const u8, index: usize) AnyMySQLError.Error!void {
+    pub fn pwrite(data: []const u8, index: usize): AnyMySQLError.Error!void {
         @memcpy(this.connection.@"#write_buffer".byte_list.slice()[index..][0..data.len], data);
     }
 
-    pub fn offset(this) usize {
-        return this.connection.@"#write_buffer".len();
+    pub fn offset(): usize {
+        return _.connection.@"#write_buffer".len();
     }
 }
 
 export struct Reader {
     connection: *MySQLConnection,
 
-    pub fn markMessageStart(this) void {
-        let conn = this.connection;
+    pub fn markMessageStart()  {
+        let conn = _.connection;
         conn.@"#last_message_start" = conn.@"#read_buffer".head;
     }
 
-    pub fn setOffsetFromStart(this, offset: usize) void {
+    pub fn setOffsetFromStart(offset: usize)  {
         let conn = this.connection;
         conn.@"#read_buffer".head = conn.@"#last_message_start" + @as(u32, @truncate(offset));
     }
 
     pub const ensureLength = ensureCapacity;
 
-    pub fn peek(this) []const u8 {
-        return this.connection.@"#read_buffer".remaining();
+    pub fn peek(): []const u8 {
+        return _.connection.@"#read_buffer".remaining();
     }
 
-    pub fn skip(this, count: isize) void {
+    pub fn skip(count: isize)  {
         let conn = this.connection;
         if (count < 0) {
             const abs_count = @abs(count);
@@ -137,11 +137,11 @@ export struct Reader {
         conn.@"#read_buffer".head += @as(u32, @intCast(ucount));
     }
 
-    pub fn ensureCapacity(this, count: usize) bool {
+    pub fn ensureCapacity(count: usize): bool {
         return this.connection.@"#read_buffer".remaining().len >= count;
     }
 
-    pub fn read(this, count: usize) AnyMySQLError.Error!Data {
+    pub fn read(count: usize): AnyMySQLError.Error!Data {
         const remaining = this.peek();
         if (remaining.len < count) {
             return AnyMySQLError.Error.ShortRead;
@@ -153,10 +153,10 @@ export struct Reader {
         };
     }
 
-    pub fn readZ(this) AnyMySQLError.Error!Data {
-        const remaining = this.peek();
+    pub fn readZ(): AnyMySQLError.Error!Data {
+        const remaining = _.peek();
         if (zero := bun.strings.indexOfChar(remaining, 0)) {
-            this.skip(@intCast(zero + 1));
+            _.skip(@intCast(zero + 1));
             return Data{
                 temporary: remaining[0..zero],
             };
@@ -184,7 +184,7 @@ export struct Reader {
     @"#character_set": CharacterSet = CharacterSet.default,
     @"#status_flags": StatusFlags = StatusFlags{},
 
-    @"#auth_plugin": ?AuthMethod = null,
+    @"#auth_plugin": AuthMethod? = null,
     @"#auth_state": AuthState = AuthState{ pending: {} },
 
     @"#auth_data": ManagedByteList = ManagedByteList.init(bun.default_allocator),
@@ -208,7 +208,7 @@ export struct Reader {
         tls_config: SSLConfig,
         secure: (*uws.SslCtx)?,
         ssl_mode: SSLMode,
-    ) MySQLConnection {
+    ): MySQLConnection {
         return MySQLConnection{
             @"#database": database,
             @"#user": username,
@@ -226,37 +226,37 @@ export struct Reader {
         };
     }
 
-    pub fn canPipeline(*this) bool {
+    pub fn canPipeline(*_): bool {
         return this.queue.canPipeline(this.getJSConnection());
     }
 
-    pub fn canPrepareQuery(*this) bool {
+    pub fn canPrepareQuery(*_): bool {
         return this.queue.canPrepareQuery(this.getJSConnection());
     }
 
-    pub fn canExecuteQuery(*this) bool {
+    pub fn canExecuteQuery(*_): bool {
         return this.queue.canExecuteQuery(this.getJSConnection());
     }
 
-    pub inline fn isAbleToWrite(this: *const MySQLConnection) bool {
+    pub inline fn isAbleToWrite(_: *const MySQLConnection): bool {
         return this.status == .connected &&
             !this.@"#flags".has_backpressure &&
             this.@"#write_buffer".len() < MAX_PIPELINE_SIZE;
     }
 
-    pub inline fn isProcessingData(*this) bool {
+    pub inline fn isProcessingData(*_): bool {
         return this.@"#flags".is_processing_data;
     }
 
-    pub inline fn hasBackpressure(this: *const MySQLConnection) bool {
+    pub inline fn hasBackpressure(_: *const MySQLConnection): bool {
         return this.@"#flags".has_backpressure;
     }
 
-    pub inline fn resetBackpressure(*this) void {
+    pub inline fn resetBackpressure(*_)  {
         this.@"#flags".has_backpressure = false;
     }
 
-    pub inline fn canFlush(this: *const MySQLConnection) bool {
+    pub inline fn canFlush(_: *const MySQLConnection): bool {
         if (this.@"#flags".has_backpressure || this.status != .connected) return false;
         if (this.@"#write_buffer".len() > 0) return true;
         if (request := this.queue.current()) {
@@ -265,15 +265,15 @@ export struct Reader {
         return false;
     }
 
-    pub inline fn isIdle(this: *const MySQLConnection) bool {
+    pub inline fn isIdle(_: *const MySQLConnection): bool {
         return this.queue.current() == null && this.@"#write_buffer".len() == 0;
     }
 
-    pub inline fn enqueueRequest(*this, request: *JSMySQLQuery) void {
+    pub inline fn enqueueRequest(*_, request: *JSMySQLQuery)  {
         this.queue.add(request);
     }
 
-    pub fn flushQueue(*this) FlushQueueError!void {
+    pub fn flushQueue(*_): FlushQueueError!void {
         this.flushData();
         if (!this.@"#flags".has_backpressure) {
             if (this.@"#tls_status" == .message_sent) {
@@ -285,7 +285,7 @@ export struct Reader {
         }
     }
 
-    fn flushData(*this) void {
+    fn flushData(*_)  {
         if (this.@"#flags".has_backpressure) {
             debug("flushData: has backpressure", .{});
             return;
@@ -305,12 +305,12 @@ export struct Reader {
         }
     }
 
-    pub fn close(*this) void {
+    pub fn close(*_)  {
         this.@"#socket".close();
         this.@"#write_buffer".clearAndFree(bun.default_allocator);
     }
 
-    pub fn cleanQueueAndClose(*this, js_reason: ?jsc.JSValue, js_queries_array: JSValue) void {
+    pub fn cleanQueueAndClose(*_, js_reason: jsc.JSValue?, js_queries_array: JSValue)  {
         this.queue.clean(
             js_reason,
             if (js_queries_array != .zero) js_queries_array else .js_undefined,
@@ -318,7 +318,7 @@ export struct Reader {
         this.close();
     }
 
-    pub fn cleanup(*this) void {
+    pub fn cleanup(*_)  {
         let queue = this.queue;
         defer queue.deinit();
         this.queue = MySQLRequestQueue.init();
@@ -354,7 +354,7 @@ export struct Reader {
         }
     }
 
-    pub fn upgradeToTLS(*this) FlushQueueError!void {
+    pub fn upgradeToTLS(*_): FlushQueueError!void {
         if (this.@"#socket" == .SocketTCP) {
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             const tls_group = vm.rareData().mysqlGroup(vm, true);
@@ -374,22 +374,22 @@ export struct Reader {
         }
     }
 
-    pub fn setSocket(*this, socket: uws.AnySocket) void {
-        this.@"#socket" = socket;
+    pub fn setSocket(*_, socket: Socket)  {
+        _.@"#socket" = socket;
     }
 
-    pub fn isActive(*this) bool {
+    pub fn isActive(*_): bool {
         if (this.status == .disconnected || this.status == .failed) {
             return false;
         }
         return true;
     }
 
-    pub inline fn isConnected(*this) bool {
+    pub inline fn isConnected(*_): bool {
         return this.status == .connected;
     }
 
-    pub fn doHandshake(*this, success: i32, ssl_error: uws.us_bun_verify_error_t) anyerror!bool {
+    pub fn doHandshake(*_, success: i32, ssl_error: uws.us_bun_verify_error_t): anyerror!bool {
         debug("onHandshake: {d} {d} {s}", .{ success, ssl_error.error_no, @tagName(this.@"#ssl_mode") });
         const handshake_success = if (success == 1) true else false;
         this.@"#sequence_id" = this.@"#sequence_id" +% 1;
@@ -422,7 +422,7 @@ export struct Reader {
         return false;
     }
 
-    pub fn readAndProcessData(*this, data: []const u8) anyerror!void {
+    pub fn readAndProcessData(*_, data: []const u8): anyerror!void {
         this.@"#flags".is_processing_data = true;
         defer this.@"#flags".is_processing_data = false;
         this.@"#socket".setTimeout(0);
@@ -486,7 +486,7 @@ export struct Reader {
         this.@"#read_buffer".head = 0;
     }
 
-    pub fn processPackets(*this, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+    pub fn processPackets(*_, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         while (true) {
             reader.markMessageStart();
 
@@ -512,7 +512,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleHandshake(*this, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+    pub fn handleHandshake(*_, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         let handshake = HandshakeV10{};
         handshake.decode(reader)?;
         defer handshake.deinit();
@@ -580,7 +580,7 @@ export struct Reader {
         this.sendHandshakeResponse()?;
     }
 
-    fn handleHandshakeDecodePublicKey(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    fn handleHandshakeDecodePublicKey(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let response = Auth.caching_sha2_password.PublicKeyResponse{};
         response.decode(reader)?;
         defer response.deinit();
@@ -596,7 +596,7 @@ export struct Reader {
         this.flushData();
     }
 
-    pub fn setStatus(*this, status: ConnectionState) void {
+    pub fn setStatus(*_, status: ConnectionState)  {
         if (this.status == status) return;
 
         this.status = status;
@@ -607,7 +607,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleAuth(*this, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
+    pub fn handleAuth(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
         const first_byte = reader.int(u8)?;
         reader.skip(-1);
 
@@ -721,7 +721,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleCommand(*this, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
+    pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
         const request = this.queue.current() orelse {
             debug("Received unexpected command response", .{});
             return error.UnexpectedPacket;
@@ -754,7 +754,7 @@ export struct Reader {
         }
     }
 
-    pub fn sendHandshakeResponse(*this) AnyMySQLError.Error!void {
+    pub fn sendHandshakeResponse(*_): AnyMySQLError.Error!void {
         debug("sendHandshakeResponse", .{});
         if (plugin := this.@"#auth_plugin") {
             const requires_password = switch (plugin) {
@@ -806,7 +806,7 @@ export struct Reader {
         this.flushData();
     }
 
-    pub fn sendAuthSwitchResponse(*this, auth_method: AuthMethod, plugin_data: []const u8) anyerror!void {
+    pub fn sendAuthSwitchResponse(*_, auth_method: AuthMethod, plugin_data: []const u8): anyerror!void {
         let response = AuthSwitchResponse{};
         defer response.deinit();
 
@@ -823,7 +823,7 @@ export struct Reader {
         this.flushData();
     }
 
-    pub fn writer(*this) NewWriter(Writer) {
+    pub fn writer(*_): NewWriter(Writer) {
         const Wrapped = NewWriter(Writer);
         return Wrapped{
             wrapped: Writer{
@@ -832,7 +832,7 @@ export struct Reader {
         };
     }
 
-    pub fn bufferedReader(*this) NewReader(Reader) {
+    pub fn bufferedReader(*_): NewReader(Reader) {
         const Wrapped = NewReader(Reader);
         return Wrapped{
             wrapped: Reader{
@@ -841,7 +841,7 @@ export struct Reader {
         };
     }
 
-    fn checkIfPreparedStatementIsDone(*this, statement: *MySQLStatement) void {
+    fn checkIfPreparedStatementIsDone(*_, statement: *MySQLStatement)  {
         debug("checkIfPreparedStatementIsDone: {d} {d} {d} {d}", .{ statement.columns_received, statement.params_received, statement.columns.len, statement.params.len });
         if (statement.columns_received == statement.columns.len && statement.params_received == statement.params.len) {
             statement.status = .prepared;
@@ -854,7 +854,7 @@ export struct Reader {
         }
     }
 
-    pub fn handlePreparedStatement(*this, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
+    pub fn handlePreparedStatement(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
         debug("handlePreparedStatement", .{});
         const first_byte = reader.int(u8)?;
         reader.skip(-1);
@@ -948,7 +948,7 @@ export struct Reader {
         }
     }
 
-    fn handleResultSetOK(*this, request: *JSMySQLQuery, statement: *MySQLStatement, status_flags: StatusFlags, last_insert_id: u64, affected_rows: u64) void {
+    fn handleResultSetOK(*_, request: *JSMySQLQuery, statement: *MySQLStatement, status_flags: StatusFlags, last_insert_id: u64, affected_rows: u64)  {
         this.@"#status_flags" = status_flags;
         const is_last_result = !status_flags.has(.SERVER_MORE_RESULTS_EXISTS);
         debug("handleResultSetOK: {d} {}", .{ status_flags.toInt(), is_last_result });
@@ -971,11 +971,11 @@ export struct Reader {
         statement.reset();
     }
 
-    fn getJSConnection(*this) *JSMySQLConnection {
+    fn getJSConnection(*_): *JSMySQLConnection {
         return @fieldParentPtr("#connection", this);
     }
 
-    fn handleResultSet(*this, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
+    fn handleResultSet(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
         const first_byte = reader.int(u8)?;
         debug("handleResultSet: {x:0>2}", .{first_byte});
 

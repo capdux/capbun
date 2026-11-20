@@ -26,21 +26,21 @@ export enum SQLDataCellTag: u8 {
 }
 
 export @extern struct SQLDataCellArray {
-    ptr: ?[*]SQLDataCell = null,
+    ptr: [*]SQLDataCell? = null,
     len: u32,
     cap: u32,
 
-    pub fn slice(*this) []SQLDataCell {
+    pub fn slice(*_): []SQLDataCell {
         const ptr = this.ptr orelse return empty_cells[0..0];
         return unsafe { ptr[0..this.len] };
     }
 
-    pub fn allocatedSlice(*this) []SQLDataCell {
+    pub fn allocatedSlice(*_): []SQLDataCell {
         const ptr = this.ptr orelse return empty_cells[0..0];
         return unsafe { ptr[0..this.cap] };
     }
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         const allocated = this.allocatedSlice();
         this.ptr = null;
         this.len = 0;
@@ -50,23 +50,23 @@ export @extern struct SQLDataCellArray {
 }
 
 export @extern struct SQLDataCellRaw {
-    ptr: ?[*]const u8 = null,
+    ptr: [*]const u8? = null,
     len: u64,
 }
 
 export @extern struct SQLDataCellTypedArray {
-    head_ptr: ?[*]u8 = null,
-    ptr: ?[*]u8 = null,
+    head_ptr: [*]u8? = null,
+    ptr: [*]u8? = null,
     len: u32,
     byte_len: u32,
     type: JSValue.JSType,
 
-    pub fn slice(*this) []u8 {
+    pub fn slice(*_): []u8 {
         const ptr = this.ptr orelse return empty_u8[0..0];
         return unsafe { ptr[0..this.len] };
     }
 
-    pub fn byteSlice(*this) []u8 {
+    pub fn byteSlice(*_): []u8 {
         const ptr = this.head_ptr orelse return empty_u8[0..0];
         return unsafe { ptr[0..this.len] };
     }
@@ -74,7 +74,7 @@ export @extern struct SQLDataCellTypedArray {
 
 export @extern union SQLDataCellValue {
     @"null": u8,
-    string: ?bun.WTF.StringImpl,
+    string: bun.WTF.StringImpl?,
     float8: f64,
     int4: i32,
     int8: i64,
@@ -82,7 +82,7 @@ export @extern union SQLDataCellValue {
     date: f64,
     date_with_time_zone: f64,
     bytea: [2]usize,
-    json: ?bun.WTF.StringImpl,
+    json: bun.WTF.StringImpl?,
     array: SQLDataCellArray,
     typed_array: SQLDataCellTypedArray,
     raw: SQLDataCellRaw,
@@ -105,9 +105,9 @@ extern fn JSC__constructObjectFromDataCell(
     count: u32,
     flags: SQLDataCellFlags,
     result_mode: u8,
-    namesPtr: ?[*]jsc.JSObject.ExternColumnIdentifier,
+    namesPtr: [*]jsc.JSObject.ExternColumnIdentifier?,
     namesCount: u32,
-) JSValue;
+): JSValue;
 
 const constructObjectFromDataCellExtern = JSC__constructObjectFromDataCell;
 
@@ -126,7 +126,7 @@ export @extern struct SQLDataCell {
     pub const Flags = SQLDataCellFlags;
     pub const JSC__constructObjectFromDataCell = constructObjectFromDataCellExtern;
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         if (this.free_value == 0) return;
 
         switch (this.tag) {
@@ -162,7 +162,7 @@ export @extern struct SQLDataCell {
         }
     }
 
-    pub static fn raw(optional_bytes: (*const Data)?) SQLDataCell {
+    pub static fn raw(optional_bytes: (*const Data)?): SQLDataCell {
         if (bytes := optional_bytes) {
             const bytes_slice = bytes.slice();
             return SQLDataCell{
@@ -184,9 +184,9 @@ export @extern struct SQLDataCell {
         count: u32,
         flags: SQLDataCellFlags,
         result_mode: u8,
-        namesPtr: ?[*]bun.jsc.JSObject.ExternColumnIdentifier,
+        namesPtr: [*]bun.jsc.JSObject.ExternColumnIdentifier?,
         namesCount: u32,
-    ) anyerror!jsc.JSValue {
+    ): anyerror!jsc.JSValue {
         if (comptime bun.Environment.ci_assert) {
             let scope: jsc.ExceptionValidationScope = undefined;
             scope.init(globalObject, @src());

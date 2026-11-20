@@ -13,13 +13,13 @@ pub const from: [3]short = [ @as(short, 1082), @as(short, 1114), @as(short, 1184
 
 const POSTGRES_EPOCH_DATE = 946684800000;
 
-pub fn fromBinary(bytes: []const u8) f64 {
+pub fn fromBinary(bytes: []const u8): f64 {
     const microseconds = std.mem.readInt(i64, bytes[0..8], .big);
     const double_microseconds: f64 = @floatFromInt(microseconds);
     return (double_microseconds / std.time.us_per_ms) + POSTGRES_EPOCH_DATE;
 }
 
-pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue) bun.JSError!i64 {
+pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!i64 {
     let double_value: f64 = 0;
     if (value.isDate()) {
         double_value = value.getUnixTimestamp();
@@ -40,7 +40,7 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue) bun.JSError!i64
 pub fn toJS(
     globalObject: *jsc.JSGlobalObject,
     value: anytype,
-) JSValue {
+): JSValue {
     switch (@TypeOf(value)) {
         i64 => {
             const ms = @divFloor(value, std.time.us_per_ms) + POSTGRES_EPOCH_DATE;

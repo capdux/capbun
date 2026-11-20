@@ -51,13 +51,13 @@ pub enum StatementStatus {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn reset(*this) {
+    pub fn reset(*_) {
         this.result_count = 0;
         this.columns_received = 0;
         this.execution_flags = .{};
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         debug("MySQLStatement deinit", .{});
 
         for (i of 0..this.columns.len) {
@@ -75,7 +75,7 @@ pub enum StatementStatus {
         bun.destroy(this);
     }
 
-    pub fn checkForDuplicateFields(*this) {
+    pub fn checkForDuplicateFields(*_) {
         if (!this.execution_flags.needs_duplicate_check) return;
         this.execution_flags.needs_duplicate_check = false;
 
@@ -118,7 +118,7 @@ pub enum StatementStatus {
         this.fields_flags = flags;
     }
 
-    pub fn structure(*this, owner: JSValue, globalObject: *jsc.JSGlobalObject): CachedStructure {
+    pub fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): CachedStructure {
         if (this.cached_structure.has()) {
             return this.cached_structure;
         }

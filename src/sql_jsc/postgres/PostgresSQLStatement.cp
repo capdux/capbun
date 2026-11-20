@@ -18,14 +18,14 @@ pub union(enum) StatementError {
     protocol: protocol.ErrorResponse,
     postgres_error: AnyPostgresError,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         switch (unsafe { this.* }) {
             .protocol => |*e| e.deinit(),
             .postgres_error => {},
         }
     }
 
-    pub fn toJS(this: *const @This(), globalObject: *jsc.JSGlobalObject): JSError!JSValue {
+    pub fn toJS(_: *const @This(), globalObject: *jsc.JSGlobalObject): JSError!JSValue {
         return switch (unsafe { this.* }) {
             .protocol => |e| e.toJS(globalObject),
             .postgres_error => |e| postgresErrorToJS(globalObject, null, e),
@@ -39,14 +39,15 @@ pub enum StatementStatus {
     prepared,
     failed,
 
-    pub fn isRunning(this): bool {
-        return this == .parsing;
+    pub fn isRunning(): bool {
+        return _ == .parsing;
     }
 }
 
+pub const Error = StatementError;
+
 @root struct PostgresSQLStatement {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const Error = StatementError;
     pub const Status = StatementStatus;
 
     cached_structure: PostgresCachedStructure = .{},
@@ -62,7 +63,7 @@ pub enum StatementStatus {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn checkForDuplicateFields(*this) {
+    pub fn checkForDuplicateFields(*_) {
         if (!this.needs_duplicate_check) return;
         this.needs_duplicate_check = false;
 
@@ -104,7 +105,7 @@ pub enum StatementStatus {
         this.fields_flags = flags;
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         debug("PostgresSQLStatement deinit", .{});
 
         this.ref_count.assertNoRefs();
@@ -124,7 +125,7 @@ pub enum StatementStatus {
         bun.default_allocator.destroy(this);
     }
 
-    pub fn structure(*this, owner: JSValue, globalObject: *jsc.JSGlobalObject): PostgresCachedStructure {
+    pub fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): PostgresCachedStructure {
         if (this.cached_structure.has()) {
             return this.cached_structure;
         }

@@ -42,44 +42,44 @@ const Base64XorBuf = [bun.base64.encodeLenFromSize(32)]u8;
 export struct Writer {
     connection: *PostgresSQLConnection,
 
-    pub fn write(this, data: []const u8) AnyPostgresError!void {
+    pub fn write(data: []const u8): AnyPostgresError!void {
         let conn = this.connection;
         conn.write_buffer.write(bun.default_allocator, data)?;
     }
 
-    pub fn pwrite(this, data: []const u8, index: usize) AnyPostgresError!void {
+    pub fn pwrite(data: []const u8, index: usize): AnyPostgresError!void {
         @memcpy(this.connection.write_buffer.byte_list.slice()[index..][0..data.len], data);
     }
 
-    pub fn offset(this) usize {
-        return this.connection.write_buffer.len();
+    pub fn offset(): usize {
+        return _.connection.write_buffer.len();
     }
 }
 
 export struct Reader {
     connection: *PostgresSQLConnection,
 
-    pub fn markMessageStart(this) void {
-        let conn = this.connection;
+    pub fn markMessageStart()  {
+        let conn = _.connection;
         conn.last_message_start = conn.read_buffer.head;
     }
 
     pub const ensureLength = ensureCapacity;
 
-    pub fn peek(this) []const u8 {
-        return this.connection.read_buffer.remaining();
+    pub fn peek(): []const u8 {
+        return _.connection.read_buffer.remaining();
     }
 
-    pub fn skip(this, count: usize) void {
+    pub fn skip(count: usize)  {
         let conn = this.connection;
         conn.read_buffer.head = @min(conn.read_buffer.head + @as(u32, @truncate(count)), conn.read_buffer.byte_list.len);
     }
 
-    pub fn ensureCapacity(this, count: usize) bool {
+    pub fn ensureCapacity(count: usize): bool {
         return @as(usize, this.connection.read_buffer.head) + count <= @as(usize, this.connection.read_buffer.byte_list.len);
     }
 
-    pub fn read(this, count: usize) AnyPostgresError!Data {
+    pub fn read(count: usize): AnyPostgresError!Data {
         const remaining = this.connection.read_buffer.remaining();
         if (@as(usize, remaining.len) < count) {
             return error.ShortRead;
@@ -91,11 +91,11 @@ export struct Reader {
         };
     }
 
-    pub fn readZ(this) AnyPostgresError!Data {
-        const remain = this.connection.read_buffer.remaining();
+    pub fn readZ(): AnyPostgresError!Data {
+        const remain = _.connection.read_buffer.remaining();
 
         if (zero := bun.strings.indexOfChar(remain, 0)) {
-            this.skip(zero + 1);
+            _.skip(zero + 1);
             return Data{
                 temporary: remain[0..zero],
             };
@@ -108,11 +108,11 @@ export struct Reader {
 export struct SocketHandlerTCP {
     const SocketType = uws.NewSocketHandler(false);
 
-    static fn _socket(s: SocketType) Socket {
+    static fn _socket(s: SocketType): Socket {
         return Socket{ SocketTCP: s };
     }
 
-    pub static fn onOpen(this: *PostgresSQLConnection, socket: SocketType) void {
+    pub static fn onOpen(*_: *PostgresSQLConnection, socket: SocketType)  {
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -123,18 +123,18 @@ export struct SocketHandlerTCP {
 
     pub const onHandshake = null;
 
-    pub static fn onClose(this: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?) void {
-        _ = socket;
+    pub static fn onClose(*_: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
+        * = socket;
         this.onClose();
     }
 
-    pub static fn onEnd(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onEnd(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         this.onClose();
     }
 
-    pub static fn onConnectError(this: *PostgresSQLConnection, socket: SocketType, _: i32) void {
-        _ = socket;
+    pub static fn onConnectError(*_: *PostgresSQLConnection, socket: SocketType, _: i32)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -143,8 +143,8 @@ export struct SocketHandlerTCP {
         this.onClose();
     }
 
-    pub static fn onTimeout(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onTimeout(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -153,8 +153,8 @@ export struct SocketHandlerTCP {
         this.onTimeout();
     }
 
-    pub static fn onData(this: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
-        _ = socket;
+    pub static fn onData(*_: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -163,8 +163,8 @@ export struct SocketHandlerTCP {
         this.onData(data);
     }
 
-    pub static fn onWritable(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onWritable(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -177,11 +177,11 @@ export struct SocketHandlerTCP {
 export struct SocketHandlerSSL {
     const SocketType = uws.NewSocketHandler(true);
 
-    static fn _socket(s: SocketType) Socket {
+    static fn _socket(s: SocketType): Socket {
         return Socket{ SocketTLS: s };
     }
 
-    pub static fn onOpen(this: *PostgresSQLConnection, socket: SocketType) void {
+    pub static fn onOpen(*_: *PostgresSQLConnection, socket: SocketType)  {
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -190,7 +190,7 @@ export struct SocketHandlerSSL {
         this.onOpen(_socket(socket));
     }
 
-    static fn onHandshake_(this: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
+    static fn onHandshake_(*_: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t)  {
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -201,18 +201,18 @@ export struct SocketHandlerSSL {
 
     pub const onHandshake = onHandshake_;
 
-    pub static fn onClose(this: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?) void {
-        _ = socket;
+    pub static fn onClose(*_: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
+        * = socket;
         this.onClose();
     }
 
-    pub static fn onEnd(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onEnd(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         this.onClose();
     }
 
-    pub static fn onConnectError(this: *PostgresSQLConnection, socket: SocketType, _: i32) void {
-        _ = socket;
+    pub static fn onConnectError(*_: *PostgresSQLConnection, socket: SocketType, _: i32)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -221,8 +221,8 @@ export struct SocketHandlerSSL {
         this.onClose();
     }
 
-    pub static fn onTimeout(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onTimeout(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -231,8 +231,8 @@ export struct SocketHandlerSSL {
         this.onTimeout();
     }
 
-    pub static fn onData(this: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
-        _ = socket;
+    pub static fn onData(*_: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -241,8 +241,8 @@ export struct SocketHandlerSSL {
         this.onData(data);
     }
 
-    pub static fn onWritable(this: *PostgresSQLConnection, socket: SocketType) void {
-        _ = socket;
+    pub static fn onWritable(*_: *PostgresSQLConnection, socket: SocketType)  {
+        * = socket;
         if (this.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             this.close();
@@ -315,7 +315,7 @@ export struct SocketHandlerSSL {
     pub const fromJSDirect = js.fromJSDirect;
     pub const toJS = js.toJS;
 
-    pub fn onAutoFlush(*this) bool {
+    pub fn onAutoFlush(*_): bool {
         if (this.flags.has_backpressure) {
             debug("onAutoFlush: has backpressure", .{});
             this.auto_flusher.registered = false;
@@ -332,7 +332,7 @@ export struct SocketHandlerSSL {
         return keep_flusher_registered;
     }
 
-    fn registerAutoFlusher(*this) void {
+    fn registerAutoFlusher(*_)  {
         const data_to_send = this.write_buffer.len();
         debug("registerAutoFlusher: backpressure: {} registered: {} data_to_send: {}", .{ this.flags.has_backpressure, this.auto_flusher.registered, data_to_send });
 
@@ -346,7 +346,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    fn unregisterAutoFlusher(*this) void {
+    fn unregisterAutoFlusher(*_)  {
         debug("unregisterAutoFlusher registered: {}", .{this.auto_flusher.registered});
         if (this.auto_flusher.registered) {
             AutoFlusher.unregisterDeferredMicrotaskWithType(PostgresSQLConnection, this, this.vm);
@@ -354,7 +354,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    fn getTimeoutInterval(this: *const PostgresSQLConnection) u32 {
+    fn getTimeoutInterval(_: *const PostgresSQLConnection): u32 {
         return switch (this.status) {
             .connected => this.idle_timeout_interval_ms,
             .failed => 0,
@@ -362,14 +362,14 @@ export struct SocketHandlerSSL {
         };
     }
 
-    pub fn disableConnectionTimeout(*this) void {
+    pub fn disableConnectionTimeout(*_)  {
         if (this.timer.state == .ACTIVE) {
             this.vm.timer.remove(&this.timer);
         }
         this.timer.state = .CANCELLED;
     }
 
-    pub fn resetConnectionTimeout(*this) void {
+    pub fn resetConnectionTimeout(*_)  {
         if (this.flags.is_processing_data) return;
         const interval = this.getTimeoutInterval();
         if (this.timer.state == .ACTIVE) {
@@ -383,7 +383,8 @@ export struct SocketHandlerSSL {
         this.vm.timer.insert(&this.timer);
     }
 
-    pub fn getQueries(_: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+    pub fn getQueries(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        const __unused_self = _; * = __unused_self;
         if (value := js.queriesGetCached(thisValue)) {
             return value;
         }
@@ -394,7 +395,7 @@ export struct SocketHandlerSSL {
         return array;
     }
 
-    pub fn getOnConnect(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
+    pub fn getOnConnect(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
         if (value := js.onconnectGetCached(thisValue)) {
             return value;
         }
@@ -402,11 +403,12 @@ export struct SocketHandlerSSL {
         return .js_undefined;
     }
 
-    pub fn setOnConnect(_: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
+    pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
+        const __unused_self = _; * = __unused_self;
         js.onconnectSetCached(thisValue, globalObject, value);
     }
 
-    pub fn getOnClose(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
+    pub fn getOnClose(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
         if (value := js.oncloseGetCached(thisValue)) {
             return value;
         }
@@ -414,11 +416,12 @@ export struct SocketHandlerSSL {
         return .js_undefined;
     }
 
-    pub fn setOnClose(_: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
+    pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
+        const __unused_self = _; * = __unused_self;
         js.oncloseSetCached(thisValue, globalObject, value);
     }
 
-    pub fn setupTLS(*this) void {
+    pub fn setupTLS(*_)  {
         debug("setupTLS", .{});
         const tls_group = this.vm.rareData().postgresGroup(this.vm, true);
         const new_socket = this.socket.SocketTCP.socket.connected.adoptTLS(
@@ -440,7 +443,7 @@ export struct SocketHandlerSSL {
         this.start();
     }
 
-    fn setupMaxLifetimeTimerIfNecessary(*this) void {
+    fn setupMaxLifetimeTimerIfNecessary(*_)  {
         if (this.max_lifetime_interval_ms == 0) return;
         if (this.max_lifetime_timer.state == .ACTIVE) return;
 
@@ -448,7 +451,7 @@ export struct SocketHandlerSSL {
         this.vm.timer.insert(&this.max_lifetime_timer);
     }
 
-    pub fn onConnectionTimeout(*this) void {
+    pub fn onConnectionTimeout(*_)  {
         debug("onConnectionTimeout", .{});
 
         this.timer.state = .FIRED;
@@ -474,14 +477,14 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn onMaxLifetimeTimeout(*this) void {
+    pub fn onMaxLifetimeTimeout(*_)  {
         debug("onMaxLifetimeTimeout", .{});
         this.max_lifetime_timer.state = .FIRED;
         if (this.status == .failed) return;
         this.failFmt("ERR_POSTGRES_LIFETIME_TIMEOUT", "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.max_lifetime_interval_ms) * std.time.ns_per_ms)});
     }
 
-    fn start(*this) void {
+    fn start(*_)  {
         this.setupMaxLifetimeTimerIfNecessary();
         this.resetConnectionTimeout();
         this.sendStartupMessage();
@@ -489,11 +492,11 @@ export struct SocketHandlerSSL {
         this.drainInternal();
     }
 
-    pub fn hasPendingActivity(*this) bool {
+    pub fn hasPendingActivity(*_): bool {
         return this.pending_activity_count.load(.acquire) > 0;
     }
 
-    fn updateHasPendingActivity(*this) void {
+    fn updateHasPendingActivity(*_)  {
         const a = @as(u32, @intFromBool(this.requests.readableLength() > 0));
         const b = switch (this.status) {
             .disconnected, .failed => @as(u32, @intFromBool(!this.socket.isClosed())),
@@ -502,7 +505,7 @@ export struct SocketHandlerSSL {
         this.pending_activity_count.store(a + b, .release);
     }
 
-    pub fn setStatus(*this, status: Status) void {
+    pub fn setStatus(*_, status: Status)  {
         if (this.status == status) return;
         defer this.updateHasPendingActivity();
 
@@ -522,19 +525,19 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn finalize(*this) void {
+    pub fn finalize(*_)  {
         debug("PostgresSQLConnection finalize", .{});
         this.stopTimers();
         this.js_value = .zero;
         this.deref();
     }
 
-    pub fn flushDataAndResetTimeout(*this) void {
+    pub fn flushDataAndResetTimeout(*_)  {
         this.resetConnectionTimeout();
         this.registerAutoFlusher();
     }
 
-    pub fn flushData(*this) void {
+    pub fn flushData(*_)  {
         if (this.flags.has_backpressure) {
             debug("flushData: has backpressure", .{});
             return;
@@ -555,7 +558,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn failWithJSValue(*this, value: JSValue) void {
+    pub fn failWithJSValue(*_, value: JSValue)  {
         defer this.updateHasPendingActivity();
         this.stopTimers();
         if (this.status == .failed) return;
@@ -575,7 +578,7 @@ export struct SocketHandlerSSL {
         }
         js_error.ensureStillAlive();
         defer loop.exit();
-        _ = on_close.call(
+        * = on_close.call(
             this.globalObject,
             .js_undefined,
             &[
@@ -585,7 +588,7 @@ export struct SocketHandlerSSL {
         ) catch |e| this.globalObject.reportActiveExceptionAsUnhandled(e);
     }
 
-    pub fn failFmt(*this, code: []const u8, comptime fmt: [:0]const u8, args: anytype) void {
+    pub fn failFmt(*_, code: []const u8, comptime fmt: [:0]const u8, args: anytype)  {
         const message = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args));
         defer bun.default_allocator.free(message);
 
@@ -594,7 +597,7 @@ export struct SocketHandlerSSL {
         this.failWithJSValue(pg_err);
     }
 
-    pub fn fail(*this, message: []const u8, pg_err: AnyPostgresError) void {
+    pub fn fail(*_, message: []const u8, pg_err: AnyPostgresError)  {
         debug("failed: {s}: {s}", .{ message, @errorName(pg_err) });
 
         const globalObject = this.globalObject;
@@ -602,7 +605,7 @@ export struct SocketHandlerSSL {
         this.failWithJSValue(postgresErrorToJS(globalObject, message, pg_err));
     }
 
-    pub fn onClose(*this) void {
+    pub fn onClose(*_)  {
         this.unregisterAutoFlusher();
 
         if (this.vm.isShuttingDown()) {
@@ -622,7 +625,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    fn sendStartupMessage(*this) void {
+    fn sendStartupMessage(*_)  {
         if (this.status != .connecting) return;
         debug("sendStartupMessage", .{});
         this.status = .sent_startup_message;
@@ -636,7 +639,7 @@ export struct SocketHandlerSSL {
         };
     }
 
-    fn startTLS(*this, socket: uws.AnySocket) void {
+    fn startTLS(*_, socket: uws.AnySocket)  {
         debug("startTLS", .{});
         const offset = switch (this.tls_status) {
             .message_sent => |count| count,
@@ -659,8 +662,8 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn onOpen(*this, socket: uws.AnySocket) void {
-        this.socket = socket;
+    pub fn onOpen(*_, socket: Socket)  {
+        _.socket = socket;
 
         this.poll_ref.ref(this.vm);
         this.updateHasPendingActivity();
@@ -673,7 +676,7 @@ export struct SocketHandlerSSL {
         this.start();
     }
 
-    pub fn onHandshake(*this, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
+    pub fn onHandshake(*_, success: i32, ssl_error: uws.us_bun_verify_error_t)  {
         debug("onHandshake: {d} {d}", .{ success, ssl_error.error_no });
         const handshake_success = if (success == 1) true else false;
         if (handshake_success) {
@@ -701,12 +704,12 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn onTimeout(*this) void {
-        _ = this;
+    pub fn onTimeout(*_)  {
+        const __unused_self = _; * = __unused_self;
         debug("onTimeout", .{});
     }
 
-    pub fn onDrain(*this) void {
+    pub fn onDrain(*_)  {
         debug("onDrain", .{});
         this.flags.has_backpressure = false;
         if (this.tls_status == .message_sent) {
@@ -720,7 +723,7 @@ export struct SocketHandlerSSL {
         this.drainInternal();
     }
 
-    fn drainInternal(*this) void {
+    fn drainInternal(*_)  {
         debug("drainInternal", .{});
         if (this.vm.isShuttingDown()) return this.close();
 
@@ -736,7 +739,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn onData(*this, data: []const u8) void {
+    pub fn onData(*_, data: []const u8)  {
         this.ref();
         this.flags.is_processing_data = true;
         const vm = this.vm;
@@ -809,12 +812,12 @@ export struct SocketHandlerSSL {
         this.read_buffer.head = 0;
     }
 
-    pub static fn constructor(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*PostgresSQLConnection {
-        _ = callframe;
+    pub static fn constructor(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*PostgresSQLConnection {
+        * = callframe;
         return globalObject.throw("PostgresSQLConnection cannot be constructed directly", .{});
     }
 
-    pub static fn call(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+    pub static fn call(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         let vm = globalObject.bunVM();
         const arguments = callframe.arguments();
         const hostname_str = arguments[0].toBunString(globalObject)?;
@@ -990,36 +993,36 @@ export struct SocketHandlerSSL {
         return if (ssl) SocketHandlerSSL else SocketHandlerTCP;
     }
 
-    pub fn doRef(*this, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+    pub fn doRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         this.poll_ref.ref(this.vm);
         this.updateHasPendingActivity();
         return .js_undefined;
     }
 
-    pub fn doUnref(*this, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+    pub fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         this.poll_ref.unref(this.vm);
         this.updateHasPendingActivity();
         return .js_undefined;
     }
 
-    pub fn doFlush(*this, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+    pub fn doFlush(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         this.registerAutoFlusher();
         return .js_undefined;
     }
 
-    fn close(*this) void {
+    fn close(*_)  {
         this.disconnect();
         this.unregisterAutoFlusher();
         this.write_buffer.clearAndFree(bun.default_allocator);
     }
 
-    pub fn doClose(*this, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-        _ = globalObject;
+    pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
         this.close();
         return .js_undefined;
     }
 
-    pub fn stopTimers(*this) void {
+    pub fn stopTimers(*_)  {
         if (this.timer.state == .ACTIVE) {
             this.vm.timer.remove(&this.timer);
         }
@@ -1028,7 +1031,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.disconnect();
         this.stopTimers();
         let iter = this.statements.valueIterator();
@@ -1049,7 +1052,7 @@ export struct SocketHandlerSSL {
         bun.default_allocator.destroy(this);
     }
 
-    fn cleanUpRequests(*this, js_reason: ?jsc.JSValue) void {
+    fn cleanUpRequests(*_, js_reason: jsc.JSValue?)  {
         while (request := this.current()) {
             switch (request.status) {
                 .pending => {
@@ -1081,7 +1084,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    fn refAndClose(*this, js_reason: ?jsc.JSValue) void {
+    fn refAndClose(*_, js_reason: jsc.JSValue?)  {
         if (!this.socket.isClosed()) {
             this.poll_ref.ref(this.vm);
             this.socket.close();
@@ -1090,7 +1093,7 @@ export struct SocketHandlerSSL {
         this.cleanUpRequests(js_reason);
     }
 
-    pub fn disconnect(*this) void {
+    pub fn disconnect(*_)  {
         this.stopTimers();
         this.unregisterAutoFlusher();
         if (this.status == .connected) {
@@ -1099,7 +1102,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    fn current(*this) ?*PostgresSQLQuery {
+    fn current(*_): (*PostgresSQLQuery)? {
         if (this.requests.readableLength() == 0) {
             return null;
         }
@@ -1107,11 +1110,11 @@ export struct SocketHandlerSSL {
         return this.requests.peekItem(0);
     }
 
-    pub fn hasQueryRunning(*this) bool {
+    pub fn hasQueryRunning(*_): bool {
         return !this.flags.is_ready_for_query || this.current() != null;
     }
 
-    pub fn canPipeline(*this) bool {
+    pub fn canPipeline(*_): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
@@ -1124,7 +1127,7 @@ export struct SocketHandlerSSL {
             this.write_buffer.len() < MAX_PIPELINE_SIZE;
     }
 
-    pub fn writer(*this) protocol.NewWriter(Writer) {
+    pub fn writer(*_): protocol.NewWriter(Writer) {
         return {
             wrapped: {
                 connection: this,
@@ -1132,13 +1135,13 @@ export struct SocketHandlerSSL {
         };
     }
 
-    pub fn bufferedReader(*this) protocol.NewReader(Reader) {
+    pub fn bufferedReader(*_): protocol.NewReader(Reader) {
         return {
             wrapped: { connection: this },
         };
     }
 
-    fn finishRequest(*this, item: *PostgresSQLQuery) void {
+    fn finishRequest(*_, item: *PostgresSQLQuery)  {
         switch (item.status) {
             .running, .binding, .partial_response => {
                 if (item.flags.simple) {
@@ -1151,18 +1154,18 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn canPrepareQuery(this: *const PostgresSQLConnection) bool {
+    pub fn canPrepareQuery(_: *const PostgresSQLConnection): bool {
         return this.flags.is_ready_for_query && !this.flags.waiting_to_prepare && this.pipelined_requests == 0;
     }
 
-    pub fn advanceAndFlush(*this) void {
+    pub fn advanceAndFlush(*_)  {
         if (!this.flags.has_backpressure && this.flags.is_ready_for_query) {
             this.advance();
             this.flushData();
         }
     }
 
-    fn advance(*this) void {
+    fn advance(*_)  {
         let offset: usize = 0;
         debug("advance", .{});
         defer {
@@ -1468,14 +1471,14 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn getQueriesArray(this: *const PostgresSQLConnection) JSValue {
+    pub fn getQueriesArray(_: *const PostgresSQLConnection): JSValue {
         if (this.js_value.isEmptyOrUndefinedOrNull()) {
             return .js_undefined;
         }
         return js.queriesGetCached(this.js_value) orelse .js_undefined;
     }
 
-    pub fn on(*this, comptime MessageType: anytype, comptime Context: type, reader: protocol.NewReader(Context)) AnyPostgresError!void {
+    pub fn on(*_, comptime MessageType: anytype, comptime Context: type, reader: protocol.NewReader(Context)): AnyPostgresError!void {
         debug("on({s})", .{@tagName(MessageType)});
 
         switch (comptime MessageType) {
@@ -1484,7 +1487,7 @@ export struct SocketHandlerSSL {
 
                 let statement = request.statement orelse return error.ExpectedStatement;
                 let structure: JSValue = .js_undefined;
-                let cached_structure: ?PostgresCachedStructure = null;
+                let cached_structure: PostgresCachedStructure? = null;
                 switch (request.flags.result_mode) {
                     .objects => {
                         cached_structure = statement.structure(this.js_value, this.globalObject);
@@ -1506,7 +1509,7 @@ export struct SocketHandlerSSL {
                 let cells: []DataCell.SQLDataCell = stack_buf[0..@min(statement.fields.len, jsc.JSObject.maxInlineCapacity())];
                 let free_cells = false;
                 defer {
-                    for (0..putter.count) |cell_idx| {
+                    for (cell_idx of 0..putter.count) {
                         cells[cell_idx].deinit();
                     }
                     if (free_cells) bun.default_allocator.free(cells);
@@ -1638,7 +1641,7 @@ export struct SocketHandlerSSL {
                 const request = this.current() orelse return error.ExpectedRequest;
                 let statement = request.statement orelse return error.ExpectedStatement;
                 if (statement.fields.len > 0) {
-                    for (0..statement.fields.len) |field_idx| {
+                    for (field_idx of 0..statement.fields.len) {
                         statement.fields[field_idx].deinit();
                     }
                     bun.default_allocator.free(statement.fields);
@@ -1715,7 +1718,7 @@ export struct SocketHandlerSSL {
                         const client_key = this.authentication_state.SASL.clientKey();
                         const client_key_signature = this.authentication_state.SASL.clientKeySignature(&client_key, auth_string);
                         let client_key_xor_buffer: [32]u8 = undefined;
-                        for (0..32) |idx| {
+                        for (idx of 0..32) {
                             client_key_xor_buffer[idx] = client_key[idx] ^ client_key_signature[idx];
                         }
 
@@ -1913,7 +1916,7 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn updateRef(*this) void {
+    pub fn updateRef(*_)  {
         this.updateHasPendingActivity();
         if (this.pending_activity_count.raw > 0) {
             this.poll_ref.ref(this.vm);
@@ -1922,11 +1925,11 @@ export struct SocketHandlerSSL {
         }
     }
 
-    pub fn getConnected(*this, _: *jsc.JSGlobalObject) JSValue {
+    pub fn getConnected(*_, _: *jsc.JSGlobalObject): JSValue {
         return JSValue.jsBoolean(this.status == Status.connected);
     }
 
-    pub fn consumeOnConnectCallback(this: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+    pub fn consumeOnConnectCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnConnectCallback", .{});
         const on_connect = js.onconnectGetCached(this.js_value) orelse return null;
         debug("consumeOnConnectCallback exists", .{});
@@ -1935,7 +1938,7 @@ export struct SocketHandlerSSL {
         return on_connect;
     }
 
-    pub fn consumeOnCloseCallback(this: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+    pub fn consumeOnCloseCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnCloseCallback", .{});
         const on_close = js.oncloseGetCached(this.js_value) orelse return null;
         debug("consumeOnCloseCallback exists", .{});

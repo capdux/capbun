@@ -15,7 +15,7 @@ pub const from: [2]short = [ @as(short, 114), @as(short, 3802) ];
 pub fn toJS(
     globalObject: *jsc.JSGlobalObject,
     value: *Data,
-) AnyPostgresError!JSValue {
+): AnyPostgresError!JSValue {
     defer value.deinit();
     let str = bun.String.borrowUTF8(value.slice());
     defer str.deref();

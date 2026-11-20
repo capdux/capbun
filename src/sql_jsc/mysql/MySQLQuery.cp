@@ -44,7 +44,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
     #status: Status,
     #flags: QueryFlags,
 
-    fn bind(*this, execute: *PreparedStatement.Execute, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue, roots: *bun.jsc.MarkedArgumentBuffer): AnyMySQLError.Error!void {
+    fn bind(*_, execute: *PreparedStatement.Execute, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue, roots: *bun.jsc.MarkedArgumentBuffer): AnyMySQLError.Error!void {
         let iter = QueryBindingIterator.init(binding_value, columns_value, globalObject)?;
 
         let i: u32 = 0;
@@ -82,7 +82,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         execute.params = params;
     }
 
-    fn bindAndExecute(*this, writer: anytype, statement: *MySQLStatement, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue): AnyMySQLError.Error!void {
+    fn bindAndExecute(*_, writer: anytype, statement: *MySQLStatement, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue): AnyMySQLError.Error!void {
         bun.assertf(statement.params.len == statement.params_received && statement.statement_id > 0, "statement is not prepared", .{});
         if (statement.signature.fields.len != statement.params.len) {
             return err.WrongNumberOfParametersProvided;
@@ -102,7 +102,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         return ctx.result;
     }
 
-    pub fn bindAndExecuteImpl(*this, writer: anytype, statement: *MySQLStatement, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue, roots: *bun.jsc.MarkedArgumentBuffer): AnyMySQLError.Error!void {
+    pub fn bindAndExecuteImpl(*_, writer: anytype, statement: *MySQLStatement, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue, roots: *bun.jsc.MarkedArgumentBuffer): AnyMySQLError.Error!void {
         let execute = PreparedStatement.Execute{
             statement_id: statement.statement_id,
             param_types: statement.signature.fields,
@@ -118,7 +118,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         this.#status = .running;
     }
 
-    fn runSimpleQuery(*this, connection: *MySQLConnection): void! {
+    fn runSimpleQuery(*_, connection: *MySQLConnection): void! {
         if (this.#status != .pending || !connection.canExecuteQuery()) {
             debug("cannot execute query", .{});
             return;
@@ -139,7 +139,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
     }
 
     fn runPreparedQuery(
-        *this,
+        *_,
         connection: *MySQLConnection,
         globalObject: *JSGlobalObject,
         columns_value: JSValue,
@@ -236,7 +236,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         };
     }
 
-    pub fn runQuery(*this, connection: *MySQLConnection, globalObject: *JSGlobalObject, columns_value: JSValue, binding_value: JSValue): void! {
+    pub fn runQuery(*_, connection: *MySQLConnection, globalObject: *JSGlobalObject, columns_value: JSValue, binding_value: JSValue): void! {
         if (this.#flags.simple) {
             debug("runSimpleQuery", .{});
             return this.runSimpleQuery(connection)?;
@@ -250,23 +250,23 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         )?;
     }
 
-    pub inline fn setResultMode(*this, result_mode: SQLQueryResultMode) {
+    pub inline fn setResultMode(*_, result_mode: SQLQueryResultMode) {
         this.#flags.result_mode = result_mode;
     }
 
-    pub inline fn result(*this, is_last_result: bool): bool {
+    pub inline fn result(*_, is_last_result: bool): bool {
         if (this.#status == .success || this.#status == .fail) return false;
         this.#status = if (is_last_result) .success else .partial_response;
         return true;
     }
 
-    pub fn fail(*this): bool {
+    pub fn fail(*_): bool {
         if (this.#status == .fail || this.#status == .success) return false;
         this.#status = .fail;
         return true;
     }
 
-    pub fn cleanup(*this) {
+    pub fn cleanup(*_) {
         if (statement := this.#statement) {
             statement.deref();
             this.#statement = null;
@@ -276,42 +276,42 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         this.#query = bun.String.empty;
     }
 
-    pub inline fn isCompleted(this: *const @This()): bool {
+    pub inline fn isCompleted(_: *const @This()): bool {
         return this.#status == .success || this.#status == .fail;
     }
 
-    pub inline fn isRunning(this: *const @This()): bool {
+    pub inline fn isRunning(_: *const @This()): bool {
         return switch (this.#status) {
             .running, .binding, .partial_response => true,
             .success, .fail, .pending => false,
         };
     }
 
-    pub inline fn isPending(this: *const @This()): bool {
+    pub inline fn isPending(_: *const @This()): bool {
         return this.#status == .pending;
     }
 
-    pub inline fn isBeingPrepared(*this): bool {
+    pub inline fn isBeingPrepared(*_): bool {
         return this.#status == .pending && this.#statement != null && this.#statement.?.status == .parsing;
     }
 
-    pub inline fn isPipelined(this: *const @This()): bool {
+    pub inline fn isPipelined(_: *const @This()): bool {
         return this.#flags.pipelined;
     }
 
-    pub inline fn isSimple(this: *const @This()): bool {
+    pub inline fn isSimple(_: *const @This()): bool {
         return this.#flags.simple;
     }
 
-    pub inline fn isBigintSupported(this: *const @This()): bool {
+    pub inline fn isBigintSupported(_: *const @This()): bool {
         return this.#flags.bigint;
     }
 
-    pub inline fn getResultMode(this: *const @This()): SQLQueryResultMode {
+    pub inline fn getResultMode(_: *const @This()): SQLQueryResultMode {
         return this.#flags.result_mode;
     }
 
-    pub inline fn markAsPrepared(*this) {
+    pub inline fn markAsPrepared(*_) {
         if (this.#status == .pending) {
             if (statement := this.#statement) {
                 if (statement.status == .parsing &&
@@ -324,7 +324,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         }
     }
 
-    pub inline fn getStatement(this: *const @This()): (*MySQLStatement)? {
+    pub inline fn getStatement(_: *const @This()): (*MySQLStatement)? {
         return this.#statement;
     }
 }

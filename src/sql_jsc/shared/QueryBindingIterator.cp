@@ -8,7 +8,7 @@ export union QueryBindingIterator {
     array: jsc.JSArrayIterator,
     objects: ObjectIterator,
 
-    pub static fn init(array: JSValue, columns: JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!QueryBindingIterator {
+    pub static fn init(array: JSValue, columns: JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!QueryBindingIterator {
         if (columns.isEmptyOrUndefinedOrNull()) {
             return QueryBindingIterator{ array: jsc.JSArrayIterator.init(array, globalObject)? };
         }
@@ -24,21 +24,21 @@ export union QueryBindingIterator {
         };
     }
 
-    pub fn next(*this) bun.JSError!?jsc.JSValue {
+    pub fn next(*_): bun.JSError!jsc.JSValue? {
         return switch (unsafe { this.* }) {
             .array => |*iter| iter.next(),
             .objects => |*iter| iter.next(),
         };
     }
 
-    pub fn anyFailed(this: *const QueryBindingIterator) bool {
+    pub fn anyFailed(_: *const QueryBindingIterator): bool {
         return switch (unsafe { this.* }) {
             .array => false,
             .objects => |*iter| iter.any_failed,
         };
     }
 
-    pub fn to(*this, index: u32) void {
+    pub fn to(*_, index: u32)  {
         switch (unsafe { this.* }) {
             .array => |*iter| {
                 iter.i = index;
@@ -51,7 +51,7 @@ export union QueryBindingIterator {
         }
     }
 
-    pub fn reset(*this) void {
+    pub fn reset(*_)  {
         switch (unsafe { this.* }) {
             .array => |*iter| {
                 iter.i = 0;

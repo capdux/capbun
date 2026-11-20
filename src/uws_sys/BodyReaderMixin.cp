@@ -3,7 +3,7 @@ const bun = @import("bun");
 const uws = bun.uws;
 
 pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime onBody: anytype, comptime onError: anytype): type {
-    _ = Wrap;
+    * = Wrap;
     return struct {
         body: std.array_list.Managed(u8),
 
@@ -11,15 +11,16 @@ pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime
             return .{ .body = .init(allocator) };
         }
 
-        pub fn readBody(ctx: *@This(), resp: anytype) void {
+        pub fn readBody(*_, resp: auto) {
+            const ctx = _;
             const Mixin = @This();
             const Response = @TypeOf(resp);
             const handlers = struct {
                 fn onDataGeneric(mixin: *Mixin, r: Response, chunk: []const u8, last: bool) void {
-                    const any = uws.AnyResponse.init(r);
-                    onData(mixin, any, chunk, last) catch |e| switch (e) {
-                        error.OutOfMemory => return mixin.onOOM(any),
-                        else => return mixin.onInvalid(any),
+                    const any_resp = uws.AnyResponse.init(r);
+                    onData(mixin, any_resp, chunk, last) catch |e| {
+                        if (e == error.OutOfMemory) return mixin.onOOM(any_resp);
+                        return mixin.onInvalid(any_resp);
                     };
                 }
                 fn onAborted(mixin: *Mixin, _: Response) void {

@@ -14,7 +14,7 @@ const JSValue = jsc.JSValue;
     array_length: usize = 0,
     any_failed: bool = false,
 
-    pub fn next(*this) ?jsc.JSValue {
+    pub fn next(*_): jsc.JSValue? {
         if (this.array.isEmptyOrUndefinedOrNull() || this.columns.isEmptyOrUndefinedOrNull()) {
             this.any_failed = true;
             return null;

@@ -445,7 +445,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
     return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @truncate(array.items.len), cap: @truncate(array.capacity) } }, free_value: 1 };
 }
 
-fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject) anyerror!SQLDataCell {
+fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject): anyerror!SQLDataCell {
     if (binary) {
         if (bytes.len < 12) {
             return error.InvalidBinaryData;
@@ -510,7 +510,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
     }
 }
 
-pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject) anyerror!SQLDataCell {
+pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject): anyerror!SQLDataCell {
     switch (oid) {
         .int4_array => return fromTypedArrayBytes(.int4_array, binary, bigint, bytes, globalObject),
         .float4_array => return fromTypedArrayBytes(.float4_array, binary, bigint, bytes, globalObject),
@@ -684,11 +684,11 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
     }
 }
 
-fn pg_ntoh16(x: u16) u16 {
+fn pg_ntoh16(x: u16): u16 {
     return @byteSwap(x);
 }
 
-fn pg_ntoh32(x: u32) u32 {
+fn pg_ntoh32(x: u32): u32 {
     return @byteSwap(x);
 }
 
@@ -696,7 +696,7 @@ union PGNummericString {
     static: []const u8,
     dynamic: []const u8,
 
-    pub fn slice(this) []const u8 {
+    pub fn slice(): []const u8 {
         return switch (this) {
             .static value => value,
             .dynamic value => value,
@@ -704,7 +704,7 @@ union PGNummericString {
     }
 }
 
-fn parseBinaryNumeric(input: []const u8, result: *ByteList) anyerror!PGNummericString {
+fn parseBinaryNumeric(input: []const u8, result: *ByteList): anyerror!PGNummericString {
     if (input.len < 8) return error.InvalidBuffer;
     let fixed_buffer = std.io.fixedBufferStream(input);
     let reader = fixed_buffer.reader();
@@ -793,7 +793,7 @@ fn parseBinaryNumeric(input: []const u8, result: *ByteList) anyerror!PGNummericS
     return PGNummericString{ dynamic: result.items };
 }
 
-pub fn parseBinary(comptime tag: PgTag, comptime ReturnType: type, bytes: []const u8) AnyPostgresError!ReturnType {
+pub fn parseBinary(comptime tag: PgTag, comptime ReturnType: type, bytes: []const u8): AnyPostgresError!ReturnType {
     switch (comptime tag) {
         .float8 => {
             const v: f64 = @bitCast(parseBinary(.int8, i64, bytes)?);
@@ -845,8 +845,8 @@ export struct Putter {
     count: usize = 0,
     globalObject: *jsc.JSGlobalObject,
 
-    pub fn toJS(*this, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: ?PostgresCachedStructure) anyerror!JSValue {
-        let names: ?[*]jsc.JSObject.ExternColumnIdentifier = null;
+    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: PostgresCachedStructure?): anyerror!JSValue {
+        let names: [*]jsc.JSObject.ExternColumnIdentifier? = null;
         let names_count: u32 = 0;
         if (c := cached_structure) {
             if (f := c.fields) {
@@ -868,7 +868,7 @@ export struct Putter {
         );
     }
 
-    fn putImpl(*this, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool) anyerror!bool {
+    fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): anyerror!bool {
         if (index >= this.fields.len) {
             debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, this.fields.len });
             return false;
@@ -913,11 +913,11 @@ export struct Putter {
         return true;
     }
 
-    pub fn putRaw(*this, index: u32, optional_bytes: (*Data)?) anyerror!bool {
+    pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): anyerror!bool {
         return this.putImpl(index, optional_bytes, true);
     }
 
-    pub fn put(*this, index: u32, optional_bytes: (*Data)?) anyerror!bool {
+    pub fn put(*_, index: u32, optional_bytes: (*Data)?): anyerror!bool {
         return this.putImpl(index, optional_bytes, false);
     }
 }

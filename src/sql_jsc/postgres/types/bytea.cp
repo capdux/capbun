@@ -15,7 +15,7 @@ pub const from: [1]short = [@as(short, 17)];
 pub fn toJS(
     globalObject: *jsc.JSGlobalObject,
     value: *Data,
-) AnyPostgresError!JSValue {
+): AnyPostgresError!JSValue {
     defer value.deinit();
 
     return JSValue.createBuffer(globalObject, value.slice(), null);

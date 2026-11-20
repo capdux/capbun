@@ -16,32 +16,32 @@ import { uws_res } from "./Response.cp";
 import { uws_app_t } from "./App.cp";
 
 export @opaque class RawWebSocket {
-    pub fn memoryCost(*this, ssl_flag: i32): usize {
+    pub fn memoryCost(*_, ssl_flag: i32): usize {
         return uws_ws_memory_cost(ssl_flag, this);
     }
 
-    pub fn asSocket(*this): *bun.uws.Socket {
+    pub fn asSocket(*_): *bun.uws.Socket {
         return bun.cast(*bun.uws.Socket, this);
     }
 }
 
 @c {
     fn uws_ws_memory_cost(ssl: i32, ws: *RawWebSocket): usize;
-    fn uws_ws(ssl: i32, app: *uws_app_t, ctx: *!, pattern: [*]const u8!, pattern_len: usize, id: usize, behavior: *const WebSocketBehavior): void;
+    fn uws_ws(ssl: i32, app: *uws_app_t, ctx: *!, pattern: [*]const u8!, pattern_len: usize, id: usize, behavior: *const WebSocketBehavior);
     fn uws_ws_get_user_data(ssl: i32, ws: *RawWebSocket?!): *!?;
-    fn uws_ws_close(ssl: i32, ws: *RawWebSocket?!): void;
+    fn uws_ws_close(ssl: i32, ws: *RawWebSocket?!);
     fn uws_ws_send(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode): bun.uws.SendStatus;
     fn uws_ws_send_with_options(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool, fin: bool): bun.uws.SendStatus;
     fn uws_ws_send_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
     fn uws_ws_send_first_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
     fn uws_ws_send_first_fragment_with_opcode(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool): bun.uws.SendStatus;
     fn uws_ws_send_last_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
-    fn uws_ws_end(ssl: i32, ws: *RawWebSocket?!, code: i32, message: [*c]const u8, length: usize): void;
-    fn uws_ws_cork(ssl: i32, ws: *RawWebSocket?!, handler: CorkCallback, user_data: *!?): void;
+    fn uws_ws_end(ssl: i32, ws: *RawWebSocket?!, code: i32, message: [*c]const u8, length: usize);
+    fn uws_ws_cork(ssl: i32, ws: *RawWebSocket?!, handler: CorkCallback, user_data: *!?);
     fn uws_ws_subscribe(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
     fn uws_ws_unsubscribe(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
     fn uws_ws_is_subscribed(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
-    fn uws_ws_iterate_topics(ssl: i32, ws: *RawWebSocket?!, callback: TopicCallback, user_data: *!?): void;
+    fn uws_ws_iterate_topics(ssl: i32, ws: *RawWebSocket?!, callback: TopicCallback, user_data: *!?);
     fn uws_ws_publish(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize): bool;
     fn uws_ws_publish_with_options(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize, opcode: bun.uws.Opcode, compress: bool): bool;
     fn uws_ws_get_buffered_amount(ssl: i32, ws: *RawWebSocket?!): usize;
@@ -128,98 +128,98 @@ export enum AnyWebSocket {
     ssl(*WebSocket(1)),
     tcp(*WebSocket(0)),
 
-    pub fn raw(this): *RawWebSocket {
+    pub fn raw(): *RawWebSocket {
         return switch (this) {
             .ssl(w) => w.raw(),
             .tcp(w) => w.raw(),
         };
     }
 
-    pub fn as(this, comptime T: type): ?*T {
+    pub fn as(comptime T: type): *T? {
         return switch (this) {
             .ssl(w) => w.as(T),
             .tcp(w) => w.as(T),
         };
     }
 
-    pub fn memoryCost(this): usize {
+    pub fn memoryCost(): usize {
         return switch (this) {
             .ssl(w) => w.memoryCost(),
             .tcp(w) => w.memoryCost(),
         };
     }
 
-    pub fn close(this): void {
+    pub fn close() {
         switch (this) {
             .ssl(w) => w.close(),
             .tcp(w) => w.close(),
         };
     }
 
-    pub fn send(this, message: string, opcode: bun.uws.Opcode, compress: bool, fin: bool): bun.uws.SendStatus {
+    pub fn send(message: string, opcode: bun.uws.Opcode, compress: bool, fin: bool): bun.uws.SendStatus {
         return switch (this) {
             .ssl(w) => w.sendWithOptions(message, opcode, compress, fin),
             .tcp(w) => w.sendWithOptions(message, opcode, compress, fin),
         };
     }
 
-    pub fn sendLastFragment(this, message: string, compress: bool): bun.uws.SendStatus {
+    pub fn sendLastFragment(message: string, compress: bool): bun.uws.SendStatus {
         return switch (this) {
             .ssl(w) => w.sendLastFragment(message, compress),
             .tcp(w) => w.sendLastFragment(message, compress),
         };
     }
 
-    pub fn end(this, code: i32, message: string): void {
+    pub fn end(code: i32, message: string) {
         switch (this) {
             .ssl(w) => w.end(code, message),
             .tcp(w) => w.end(code, message),
         };
     }
 
-    pub fn cork(this, ctx: anytype, comptime callback: anytype): void {
+    pub fn cork(ctx: anytype, comptime callback: anytype) {
         switch (this) {
             .ssl(w) => w.cork(ctx, callback),
             .tcp(w) => w.cork(ctx, callback),
         };
     }
 
-    pub fn subscribe(this, topic: string): bool {
+    pub fn subscribe(topic: string): bool {
         return switch (this) {
             .ssl(w) => w.subscribe(topic),
             .tcp(w) => w.subscribe(topic),
         };
     }
 
-    pub fn unsubscribe(this, topic: string): bool {
+    pub fn unsubscribe(topic: string): bool {
         return switch (this) {
             .ssl(w) => w.unsubscribe(topic),
             .tcp(w) => w.unsubscribe(topic),
         };
     }
 
-    pub fn isSubscribed(this, topic: string): bool {
+    pub fn isSubscribed(topic: string): bool {
         return switch (this) {
             .ssl(w) => w.isSubscribed(topic),
             .tcp(w) => w.isSubscribed(topic),
         };
     }
 
-    pub fn publish(this, topic: string, message: string, opcode: bun.uws.Opcode, compress: bool): bool {
+    pub fn publish(topic: string, message: string, opcode: bun.uws.Opcode, compress: bool): bool {
         return switch (this) {
             .ssl(w) => w.publishWithOptions(topic, message, opcode, compress),
             .tcp(w) => w.publishWithOptions(topic, message, opcode, compress),
         };
     }
 
-    pub fn getBufferedAmount(this): usize {
+    pub fn getBufferedAmount(): usize {
         return switch (this) {
             .ssl(w) => @intCast(w.getBufferedAmount()),
             .tcp(w) => @intCast(w.getBufferedAmount()),
         };
     }
 
-    pub fn getRemoteAddress(this, buf: []u8): []u8 {
+    pub fn getRemoteAddress(buf: []u8): []u8 {
         return switch (this) {
             .ssl(w) => w.getRemoteAddress(buf),
             .tcp(w) => w.getRemoteAddress(buf),

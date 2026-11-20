@@ -13,7 +13,7 @@ const Tag = TagMod.Tag;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 
-pub fn toJSTypedArrayType(comptime T: Tag) anyerror!JSValue.JSType {
+pub fn toJSTypedArrayType(comptime T: Tag): anyerror!JSValue.JSType {
     return comptime switch (T) {
         .int4_array => .Int32Array,
         .float4_array => .Float32Array,
@@ -26,7 +26,7 @@ fn toJSWithType(
     globalObject: *jsc.JSGlobalObject,
     comptime Type: type,
     value: Type,
-) AnyPostgresError!JSValue {
+): AnyPostgresError!JSValue {
     switch (tag) {
         .numeric => return JSValue.jsNumber(value),
         .float4, .float8 => return JSValue.jsNumber(value),
@@ -44,11 +44,11 @@ pub fn toJS(
     tag: Tag,
     globalObject: *jsc.JSGlobalObject,
     value: anytype,
-) AnyPostgresError!JSValue {
+): AnyPostgresError!JSValue {
     return toJSWithType(tag, globalObject, @TypeOf(value), value);
 }
 
-pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue) bun.JSError!Tag {
+pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!Tag {
     if (value.isEmptyOrUndefinedOrNull()) {
         return Tag.numeric;
     }

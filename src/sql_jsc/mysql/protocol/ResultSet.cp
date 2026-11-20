@@ -33,8 +33,8 @@ export struct Row {
     bigint: bool = false,
     globalObject: *jsc.JSGlobalObject,
 
-    pub fn toJS(*this, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: SQLQueryResultMode, cached_structure: ?CachedStructure) anyerror!JSValue {
-        let names: ?[*]jsc.JSObject.ExternColumnIdentifier = null;
+    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: SQLQueryResultMode, cached_structure: CachedStructure?): anyerror!JSValue {
+        let names: [*]jsc.JSObject.ExternColumnIdentifier? = null;
         let names_count: u32 = 0;
         if (c := cached_structure) {
             if (f := c.fields) {
@@ -56,7 +56,7 @@ export struct Row {
         );
     }
 
-    pub fn deinit(*this, allocator: std.mem.Allocator) void {
+    pub fn deinit(*_, allocator: std.mem.Allocator)  {
         let i: usize = 0;
         while (i < this.values.len) {
             this.values[i].deinit();
@@ -65,7 +65,7 @@ export struct Row {
         allocator.free(this.values);
     }
 
-    pub fn decodeInternal(*this, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+    pub fn decodeInternal(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         if (this.binary) {
             this.decodeBinary(allocator, Context, reader)?;
         } else {
@@ -73,7 +73,7 @@ export struct Row {
         }
     }
 
-    fn parseValueAndSetCell(*this, cell: *SQLDataCell, column: *const ColumnDefinition41, value: *const Data) void {
+    fn parseValueAndSetCell(*_, cell: *SQLDataCell, column: *const ColumnDefinition41, value: *const Data)  {
         debug("parseValueAndSetCell: {s} {s}", .{ @tagName(column.column_type), value.slice() });
         unsafe {
             switch (column.column_type) {
@@ -146,7 +146,7 @@ export struct Row {
                     let str = bun.String.init(value.slice());
                     defer str.deref();
                     const date = str.parseDate(this.globalObject) catch |e| {
-                        _ = this.globalObject.takeException(e);
+                        * = this.globalObject.takeException(e);
                         cell.* = SQLDataCell{ tag: .date, value: { date: std.math.nan(f64) } };
                         return;
                     };
@@ -172,7 +172,7 @@ export struct Row {
         }
     }
 
-    fn decodeText(*this, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+    fn decodeText(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         const cells = allocator.alloc(SQLDataCell, this.columns.len)?;
         @memset(cells, SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
         errdefer {
@@ -226,8 +226,8 @@ export struct Row {
         this.values = cells;
     }
 
-    fn decodeBinary(*this, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
-        _ = reader.int(u8)?;
+    fn decodeBinary(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
+        * = reader.int(u8)?;
 
         const bitmap_bytes = (this.columns.len + 7 + 2) / 8;
         let null_bitmap = reader.read(bitmap_bytes)?;

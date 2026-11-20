@@ -16,7 +16,7 @@ pub fn toJSWithType(
     globalThis: *jsc.JSGlobalObject,
     comptime Type: type,
     value: Type,
-) AnyPostgresError!JSValue {
+): AnyPostgresError!JSValue {
     if (comptime Type == bun.String) {
         return value.toJS(globalThis);
     } else if (comptime Type == *Data) {
@@ -34,7 +34,7 @@ pub fn toJSWithType(
 pub fn toJS(
     globalThis: *jsc.JSGlobalObject,
     value: anytype,
-) anyerror!JSValue {
+): anyerror!JSValue {
     let str = toJSWithType(globalThis, @TypeOf(value), value)?;
     defer str.deinit();
     return str.toJS(globalThis);

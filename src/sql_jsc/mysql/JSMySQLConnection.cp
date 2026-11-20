@@ -57,7 +57,7 @@ fn hasNullByte(s: []const u8): bool {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn onAutoFlush(*this): bool {
+    pub fn onAutoFlush(*_): bool {
         debug("onAutoFlush", .{});
         if (this.#connection.hasBackpressure()) {
             this.auto_flusher.registered = false;
@@ -71,21 +71,21 @@ fn hasNullByte(s: []const u8): bool {
         return keep_flusher_registered;
     }
 
-    pub fn registerAutoFlusher(*this) {
+    pub fn registerAutoFlusher(*_) {
         if (!this.auto_flusher.registered && this.#connection.canFlush()) {
             AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), this, this.#vm);
             this.auto_flusher.registered = true;
         }
     }
 
-    fn unregisterAutoFlusher(*this) {
+    fn unregisterAutoFlusher(*_) {
         if (this.auto_flusher.registered) {
             AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), this, this.#vm);
             this.auto_flusher.registered = false;
         }
     }
 
-    fn stopTimers(*this) {
+    fn stopTimers(*_) {
         debug("stopTimers", .{});
         if (this.timer.state == .ACTIVE) {
             this.#vm.timer.remove(&this.timer);
@@ -95,7 +95,7 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    fn getTimeoutInterval(*this): u32 {
+    fn getTimeoutInterval(*_): u32 {
         return switch (this.#connection.status) {
             .connected => {
                 if (this.#connection.isIdle()) {
@@ -108,7 +108,7 @@ fn hasNullByte(s: []const u8): bool {
         };
     }
 
-    pub fn resetConnectionTimeout(*this) {
+    pub fn resetConnectionTimeout(*_) {
         const interval = this.getTimeoutInterval();
         debug("resetConnectionTimeout {d}", .{interval});
         if (this.timer.state == .ACTIVE) {
@@ -122,7 +122,7 @@ fn hasNullByte(s: []const u8): bool {
         this.#vm.timer.insert(&this.timer);
     }
 
-    pub fn onConnectionTimeout(*this) {
+    pub fn onConnectionTimeout(*_) {
         this.timer.state = .FIRED;
 
         if (this.#connection.isProcessingData()) {
@@ -149,13 +149,13 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    pub fn onMaxLifetimeTimeout(*this) {
+    pub fn onMaxLifetimeTimeout(*_) {
         this.max_lifetime_timer.state = .FIRED;
         if (this.#connection.status == .failed) return;
         this.failFmt(err.LifetimeTimeout, "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.max_lifetime_interval_ms) * std.time.ns_per_ms)});
     }
 
-    pub fn setupMaxLifetimeTimerIfNecessary(*this) {
+    pub fn setupMaxLifetimeTimerIfNecessary(*_) {
         if (this.max_lifetime_interval_ms == 0) return;
         if (this.max_lifetime_timer.state == .ACTIVE) return;
 
@@ -164,18 +164,18 @@ fn hasNullByte(s: []const u8): bool {
     }
 
     pub static fn constructor(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*@This() {
-        _ = callframe;
+        * = callframe;
         return globalObject.throw("MySQLConnection cannot be constructed directly", .{});
     }
 
-    pub fn enqueueRequest(*this, item: *JSMySQLQuery) {
+    pub fn enqueueRequest(*_, item: *JSMySQLQuery) {
         debug("enqueueRequest", .{});
         this.#connection.enqueueRequest(item);
         this.resetConnectionTimeout();
         this.registerAutoFlusher();
     }
 
-    pub fn close(*this) {
+    pub fn close(*_) {
         this.ref();
         this.stopTimers();
         this.unregisterAutoFlusher();
@@ -190,7 +190,7 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    pub fn drainInternal(*this) {
+    pub fn drainInternal(*_) {
         debug("drainInternal", .{});
         if (this.#vm.isShuttingDown()) return this.close();
         this.ref();
@@ -206,7 +206,7 @@ fn hasNullByte(s: []const u8): bool {
         };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.stopTimers();
         this.#poll_ref.unref(this.#vm);
         this.unregisterAutoFlusher();
@@ -214,13 +214,13 @@ fn hasNullByte(s: []const u8): bool {
         bun.destroy(this);
     }
 
-    pub fn ensureJSValueIsAlive(*this) {
+    pub fn ensureJSValueIsAlive(*_) {
         if (value := this.#js_value.tryGet()) {
             value.ensureStillAlive();
         }
     }
 
-    pub fn finalize(*this) {
+    pub fn finalize(*_) {
         debug("finalize", .{});
         this.#js_value.finalize();
         this.deref();
@@ -322,7 +322,7 @@ fn hasNullByte(s: []const u8): bool {
         };
     }
 
-    pub fn updateReferenceType(*this) {
+    pub fn updateReferenceType(*_) {
         if (this.#connection.isActive()) {
             debug("connection is active", .{});
             if (this.#js_value.isNotEmpty() && this.#js_value == .weak) {
@@ -456,7 +456,7 @@ fn hasNullByte(s: []const u8): bool {
         const idle_timeout = arguments[11].toInt32();
         const connection_timeout = arguments[12].toInt32();
         const max_lifetime = arguments[13].toInt32();
-        _ = arguments[14].asBoolean();
+        * = arguments[14].asBoolean();
 
         let ptr = bun.new(JSMySQLConnection, {
             #globalObject: globalObject,
@@ -505,8 +505,8 @@ fn hasNullByte(s: []const u8): bool {
         return js_value;
     }
 
-    pub fn getQueries(*this, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        _ = this;
+    pub fn getQueries(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        const __unused_self = _; * = __unused_self;
         if (value := js.queriesGetCached(thisValue)) {
             return value;
         }
@@ -516,63 +516,63 @@ fn hasNullByte(s: []const u8): bool {
         return array;
     }
 
-    pub fn getConnected(*this, globalObject: *jsc.JSGlobalObject): JSValue {
-        _ = globalObject;
+    pub fn getConnected(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+        * = globalObject;
         return JSValue.jsBoolean(this.#connection.status == .connected);
     }
 
-    pub fn getOnConnect(*this, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        _ = this;
-        _ = globalObject;
+    pub fn getOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        const __unused_self = _; * = __unused_self;
+        * = globalObject;
         if (value := js.onconnectGetCached(thisValue)) {
             return value;
         }
         return .js_undefined;
     }
 
-    pub fn setOnConnect(*this, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
-        _ = this;
+    pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
+        const __unused_self = _; * = __unused_self;
         js.onconnectSetCached(thisValue, globalObject, value);
     }
 
-    pub fn getOnClose(*this, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        _ = this;
-        _ = globalObject;
+    pub fn getOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        const __unused_self = _; * = __unused_self;
+        * = globalObject;
         if (value := js.oncloseGetCached(thisValue)) {
             return value;
         }
         return .js_undefined;
     }
 
-    pub fn setOnClose(*this, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
-        _ = this;
+    pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
+        const __unused_self = _; * = __unused_self;
         js.oncloseSetCached(thisValue, globalObject, value);
     }
 
-    pub fn doRef(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalObject;
-        _ = callframe;
+    pub fn doRef(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
+        * = callframe;
         this.#poll_ref.ref(this.#vm);
         return .js_undefined;
     }
 
-    pub fn doUnref(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalObject;
-        _ = callframe;
+    pub fn doUnref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
+        * = callframe;
         this.#poll_ref.unref(this.#vm);
         return .js_undefined;
     }
 
-    pub fn doFlush(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalObject;
-        _ = callframe;
+    pub fn doFlush(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
+        * = callframe;
         this.registerAutoFlusher();
         return .js_undefined;
     }
 
-    pub fn doClose(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalObject;
-        _ = callframe;
+    pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
+        * = callframe;
         this.stopTimers();
 
         defer this.updateReferenceType();
@@ -580,7 +580,7 @@ fn hasNullByte(s: []const u8): bool {
         return .js_undefined;
     }
 
-    fn consumeOnConnectCallback(this: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+    fn consumeOnConnectCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         if (this.#vm.isShuttingDown()) return null;
         if (value := this.#js_value.tryGet()) {
             const on_connect = js.onconnectGetCached(value) orelse return null;
@@ -590,7 +590,7 @@ fn hasNullByte(s: []const u8): bool {
         return null;
     }
 
-    fn consumeOnCloseCallback(this: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+    fn consumeOnCloseCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         if (this.#vm.isShuttingDown()) return null;
         if (value := this.#js_value.tryGet()) {
             const on_close = js.oncloseGetCached(value) orelse return null;
@@ -600,7 +600,7 @@ fn hasNullByte(s: []const u8): bool {
         return null;
     }
 
-    pub fn getQueriesArray(*this): JSValue {
+    pub fn getQueriesArray(*_): JSValue {
         if (this.#vm.isShuttingDown()) return .js_undefined;
         if (value := this.#js_value.tryGet()) {
             return js.queriesGetCached(value) orelse .js_undefined;
@@ -608,26 +608,26 @@ fn hasNullByte(s: []const u8): bool {
         return .js_undefined;
     }
 
-    pub inline fn isAbleToWrite(this: *const @This()): bool {
+    pub inline fn isAbleToWrite(_: *const @This()): bool {
         return this.#connection.isAbleToWrite();
     }
-    pub inline fn isConnected(this: *const @This()): bool {
+    pub inline fn isConnected(_: *const @This()): bool {
         return this.#connection.status == .connected;
     }
-    pub inline fn canPipeline(*this): bool {
+    pub inline fn canPipeline(*_): bool {
         return this.#connection.canPipeline();
     }
-    pub inline fn canPrepareQuery(*this): bool {
+    pub inline fn canPrepareQuery(*_): bool {
         return this.#connection.canPrepareQuery();
     }
-    pub inline fn canExecuteQuery(*this): bool {
+    pub inline fn canExecuteQuery(*_): bool {
         return this.#connection.canExecuteQuery();
     }
-    pub inline fn getWriter(*this): NewWriter(MySQLConnection.Writer) {
+    pub inline fn getWriter(*_): NewWriter(MySQLConnection.Writer) {
         return this.#connection.writer();
     }
 
-    pub fn failFmt(*this, error_code: AnyMySQLError.Error, comptime fmt: [:0]const u8, args: anytype) {
+    pub fn failFmt(*_, error_code: AnyMySQLError.Error, comptime fmt: [:0]const u8, args: anytype) {
         const message = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args));
         defer bun.default_allocator.free(message);
 
@@ -635,7 +635,7 @@ fn hasNullByte(s: []const u8): bool {
         this.failWithJSValue(e);
     }
 
-    pub fn failWithJSValue(*this, value: JSValue) {
+    pub fn failWithJSValue(*_, value: JSValue) {
         this.ref();
 
         defer {
@@ -670,12 +670,12 @@ fn hasNullByte(s: []const u8): bool {
         loop.runCallback(on_close, this.#globalObject, .js_undefined, &cb_args);
     }
 
-    pub fn fail(*this, message: []const u8, mysql_err: AnyMySQLError.Error) {
+    pub fn fail(*_, message: []const u8, mysql_err: AnyMySQLError.Error) {
         const instance = AnyMySQLError.mysqlErrorToJS(this.#globalObject, message, mysql_err);
         this.failWithJSValue(instance);
     }
 
-    pub fn onConnectionEstabilished(*this) {
+    pub fn onConnectionEstabilished(*_) {
         if (this.#vm.isShuttingDown()) return;
         const on_connect = this.consumeOnConnectCallback(this.#globalObject) orelse return;
         on_connect.ensureStillAlive();
@@ -685,11 +685,11 @@ fn hasNullByte(s: []const u8): bool {
         this.#globalObject.queueMicrotask(on_connect, &cb_args);
     }
 
-    pub fn onQueryResult(*this, request: *JSMySQLQuery, result: MySQLQueryResult) {
+    pub fn onQueryResult(*_, request: *JSMySQLQuery, result: MySQLQueryResult) {
         request.resolve(this.getQueriesArray(), result);
     }
 
-    pub fn onResultRow(*this, request: *JSMySQLQuery, statement: *MySQLStatement, comptime Context: type, reader: NewReader(Context)): RowError!void {
+    pub fn onResultRow(*_, request: *JSMySQLQuery, statement: *MySQLStatement, comptime Context: type, reader: NewReader(Context)): RowError!void {
         const result_mode = request.getResultMode();
         let stack_fallback = std.heap.stackFallback(4096, bun.default_allocator);
         const allocator = stack_fallback.get();
@@ -741,7 +741,7 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    pub fn onError(*this, request: (*JSMySQLQuery)?, mysql_err: AnyMySQLError.Error) {
+    pub fn onError(*_, request: (*JSMySQLQuery)?, mysql_err: AnyMySQLError.Error) {
         if (_request := request) {
             if (this.#vm.isShuttingDown()) {
                 _request.markAsFailed();
@@ -765,7 +765,7 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    pub fn onErrorPacket(*this, request: (*JSMySQLQuery)?, pkt: ErrorPacket) {
+    pub fn onErrorPacket(*_, request: (*JSMySQLQuery)?, pkt: ErrorPacket) {
         if (_request := request) {
             if (this.#vm.isShuttingDown()) {
                 _request.markAsFailed();
@@ -789,7 +789,7 @@ fn hasNullByte(s: []const u8): bool {
         }
     }
 
-    pub fn getStatementFromSignatureHash(*this, signature_hash: u64): MySQLConnection.PreparedStatementsMapGetOrPutResult! {
+    pub fn getStatementFromSignatureHash(*_, signature_hash: u64): MySQLConnection.PreparedStatementsMapGetOrPutResult! {
         return this.#connection.statements.getOrPut(bun.default_allocator, signature_hash)?;
     }
 

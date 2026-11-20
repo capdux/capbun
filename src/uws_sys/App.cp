@@ -20,41 +20,41 @@ export type uws_app_t = uws_app_s;
 
 export @extern @value class uws_app_listen_config_t {
     port: i32,
-    host: ?[*:0]const u8 = null,
+    host: [*:0]const u8? = null,
     options: i32 = 0,
 }
 
 @c {
-    fn uws_create_app(ssl: i32, opts: BunSocketContextOptions): ?*uws_app_t;
-    fn uws_app_destroy(ssl: i32, app: *uws_app_s): void;
-    fn uws_app_close(ssl: i32, app: *uws_app_s): void;
-    fn uws_app_close_idle(ssl: i32, app: *uws_app_s): void;
-    fn uws_app_set_on_clienterror(ssl: i32, app: *uws_app_s, handler: ClientErrorHandler, user_data: *!?): void;
-    fn uws_app_get(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_post(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_put(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_delete(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_patch(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_head(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_options(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_connect(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_trace(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_any(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?): void;
-    fn uws_app_run(ssl: i32, app: *uws_app_t): void;
-    fn uws_app_domain(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8): void;
-    fn uws_app_set_flags(ssl: i32, app: *uws_app_t, require_host: bool, strict_method: bool): void;
-    fn uws_app_set_max_http_header_size(ssl: i32, app: *uws_app_t, max_sz: u64): void;
-    fn uws_app_listen(ssl: i32, app: *uws_app_t, host: ?[*:0]const u8, port: i32, options: i32, handler: ListenHandler, user_data: *!?): void;
-    fn uws_app_listen_with_config(ssl: i32, app: *uws_app_t, host: ?[*:0]const u8, port: u16, options: i32, handler: ListenConfigHandler, user_data: *!?): void;
+    fn uws_create_app(ssl: i32, opts: BunSocketContextOptions): *uws_app_t?;
+    fn uws_app_destroy(ssl: i32, app: *uws_app_s);
+    fn uws_app_close(ssl: i32, app: *uws_app_s);
+    fn uws_app_close_idle(ssl: i32, app: *uws_app_s);
+    fn uws_app_set_on_clienterror(ssl: i32, app: *uws_app_s, handler: ClientErrorHandler, user_data: *!?);
+    fn uws_app_get(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_post(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_put(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_delete(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_patch(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_head(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_options(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_connect(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_trace(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_any(ssl: i32, app: *uws_app_t, pattern: [*]const u8!, pattern_length: usize, handler: RouteHandler, user_data: *!?);
+    fn uws_app_run(ssl: i32, app: *uws_app_t);
+    fn uws_app_domain(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8);
+    fn uws_app_set_flags(ssl: i32, app: *uws_app_t, require_host: bool, strict_method: bool);
+    fn uws_app_set_max_http_header_size(ssl: i32, app: *uws_app_t, max_sz: u64);
+    fn uws_app_listen(ssl: i32, app: *uws_app_t, host: [*:0]const u8?, port: i32, options: i32, handler: ListenHandler, user_data: *!?);
+    fn uws_app_listen_with_config(ssl: i32, app: *uws_app_t, host: [*:0]const u8?, port: u16, options: i32, handler: ListenConfigHandler, user_data: *!?);
     fn uws_constructor_failed(ssl: i32, app: *uws_app_t): bool;
     fn uws_num_subscribers(ssl: i32, app: *uws_app_t, topic: [*]const u8!, len: usize): u32;
     fn uws_publish(ssl: i32, app: *uws_app_t, topic: [*]const u8!, tl: usize, msg: [*]const u8!, ml: usize, op: bun.uws.Opcode, compress: bool): bool;
     fn uws_get_native_handle(ssl: i32, app: *!?): *!?;
-    fn uws_remove_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8): void;
-    fn uws_add_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8): void;
+    fn uws_remove_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8);
+    fn uws_add_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8);
     fn uws_add_server_name_with_options(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8, opts: BunSocketContextOptions): i32;
-    fn uws_app_clear_routes(ssl: i32, app: *uws_app_t): void;
-    fn uws_app_listen_domain_with_options(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8, pathlen: usize, flags: i32, cb: ListenDomainHandler, ud: *!?): void;
+    fn uws_app_clear_routes(ssl: i32, app: *uws_app_t);
+    fn uws_app_listen_domain_with_options(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8, pathlen: usize, flags: i32, cb: ListenDomainHandler, ud: *!?);
 }
 
 pub fn NewApp(comptime ssl: bool): type {

@@ -15,7 +15,7 @@ pub const PostgresSQLQuery = PostgresSQLQueryMod;
 pub const protocol = protocolMod;
 pub const types = typesMod;
 
-pub fn createBinding(globalObject: *jsc.JSGlobalObject) JSValue {
+pub fn createBinding(globalObject: *jsc.JSGlobalObject): JSValue {
     const binding = JSValue.createEmptyObjectWithNullPrototype(globalObject);
     binding.put(globalObject, ZigString.static("PostgresSQLConnection"), PostgresSQLConnection.js.getConstructor(globalObject));
     binding.put(globalObject, ZigString.static("init"), jsc.JSFunction.create(globalObject, "init", PostgresSQLContext.init, 0, {}));

@@ -33,7 +33,7 @@ pub enum QueryStatus: u8 {
     success,
     fail,
 
-    pub fn isRunning(this): bool {
+    pub fn isRunning(): bool {
         return @intFromEnum(this) > @intFromEnum(QueryStatus.pending) && @intFromEnum(this) < @intFromEnum(QueryStatus.success);
     }
 }
@@ -53,7 +53,7 @@ pub enum QueryStatus: u8 {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn getTarget(*this, globalObject: *jsc.JSGlobalObject, clean_target: bool): jsc.JSValue? {
+    pub fn getTarget(*_, globalObject: *jsc.JSGlobalObject, clean_target: bool): jsc.JSValue? {
         const thisValue = this.thisValue.tryGet() orelse return null;
         const target = js.targetGetCached(thisValue) orelse return null;
         if (clean_target) {
@@ -62,7 +62,7 @@ pub enum QueryStatus: u8 {
         return target;
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         if (statement := this.statement) {
             statement.deref();
         }
@@ -71,13 +71,13 @@ pub enum QueryStatus: u8 {
         bun.default_allocator.destroy(this);
     }
 
-    pub fn finalize(*this) {
+    pub fn finalize(*_) {
         debug("PostgresSQLQuery finalize", .{});
         this.thisValue.finalize();
         this.deref();
     }
 
-    pub fn onWriteFail(*this, pg_err: AnyPostgresError, globalObject: *jsc.JSGlobalObject, queries_array: JSValue) {
+    pub fn onWriteFail(*_, pg_err: AnyPostgresError, globalObject: *jsc.JSGlobalObject, queries_array: JSValue) {
         this.ref();
         defer this.deref();
         this.status = .fail;
@@ -97,7 +97,7 @@ pub enum QueryStatus: u8 {
         event_loop.runCallback(function, globalObject, thisValue, &cb_args);
     }
 
-    pub fn onJSError(*this, err_val: JSValue, globalObject: *jsc.JSGlobalObject) {
+    pub fn onJSError(*_, err_val: JSValue, globalObject: *jsc.JSGlobalObject) {
         this.ref();
         defer this.deref();
         this.status = .fail;
@@ -115,7 +115,7 @@ pub enum QueryStatus: u8 {
         event_loop.runCallback(function, globalObject, thisValue, &cb_args);
     }
 
-    pub fn onError(*this, stmt_err: PostgresSQLStatement.Error, globalObject: *jsc.JSGlobalObject) {
+    pub fn onError(*_, stmt_err: PostgresSQLStatement.Error, globalObject: *jsc.JSGlobalObject) {
         const e = stmt_err.toJS(globalObject) catch return;
         this.onJSError(e, globalObject);
     }
@@ -137,7 +137,7 @@ pub enum QueryStatus: u8 {
         return pending_value;
     }
 
-    pub fn onResult(*this, command_tag_str: []const u8, globalObject: *jsc.JSGlobalObject, connection: jsc.JSValue, is_last: bool) {
+    pub fn onResult(*_, command_tag_str: []const u8, globalObject: *jsc.JSGlobalObject, connection: jsc.JSValue, is_last: bool) {
         this.ref();
         defer this.deref();
         if (is_last) {
@@ -174,12 +174,12 @@ pub enum QueryStatus: u8 {
     }
 
     pub static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*@This() {
-        _ = callframe;
+        * = callframe;
         return globalThis.throw("PostgresSQLQuery cannot be constructed directly", .{});
     }
 
-    pub fn estimatedSize(*this): usize {
-        _ = this;
+    pub fn estimatedSize(*_): usize {
+        const __unused_self = _; * = __unused_self;
         return @sizeOf(@This());
     }
 
@@ -245,22 +245,22 @@ pub enum QueryStatus: u8 {
         return this_value;
     }
 
-    pub fn doDone(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = globalObject;
-        _ = callframe;
+    pub fn doDone(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = globalObject;
+        * = callframe;
         this.flags.is_done = true;
         return .js_undefined;
     }
 
-    pub fn setPendingValueFromJS(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = this;
+    pub fn setPendingValueFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        const __unused_self = _; * = __unused_self;
         const result = callframe.argument(0);
         const thisValue = callframe.this();
         js.pendingValueSetCached(thisValue, globalObject, result);
         return .js_undefined;
     }
 
-    pub fn setModeFromJS(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    pub fn setModeFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         const js_mode = callframe.argument(0);
         if (js_mode.isEmptyOrUndefinedOrNull() || !js_mode.isNumber()) {
             return globalObject.throwInvalidArgumentType("setMode", "mode", "Number");
@@ -273,7 +273,7 @@ pub enum QueryStatus: u8 {
         return .js_undefined;
     }
 
-    pub fn doRun(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    pub fn doRun(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         let arguments = callframe.arguments();
         let connection = arguments[0].as(PostgresSQLConnection) orelse {
             return globalObject.throw("connection must be a PostgresSQLConnection", .{});
@@ -414,7 +414,7 @@ pub enum QueryStatus: u8 {
                     debug("prepareAndQueryWithSignature", .{});
                     PostgresRequest.prepareAndQueryWithSignature(globalObject, query_str.slice(), binding_value, PostgresSQLConnection.Writer, writer, &signature) catch |e| {
                         if (connection_entry_value != null) {
-                            _ = connection.statements.remove(signature_hash);
+                            * = connection.statements.remove(signature_hash);
                         }
                         signature.deinit();
                         if (stmt := this.statement) {
@@ -436,7 +436,7 @@ pub enum QueryStatus: u8 {
 
                     PostgresRequest.writeQuery(query_str.slice(), signature.prepared_statement_name, signature.fields, PostgresSQLConnection.Writer, writer) catch |e| {
                         if (connection_entry_value != null) {
-                            _ = connection.statements.remove(signature_hash);
+                            * = connection.statements.remove(signature_hash);
                         }
                         signature.deinit();
                         if (stmt := this.statement) {
@@ -451,7 +451,7 @@ pub enum QueryStatus: u8 {
                     };
                     writer.write(&protocol.Sync) catch |e| {
                         if (connection_entry_value != null) {
-                            _ = connection.statements.remove(signature_hash);
+                            * = connection.statements.remove(signature_hash);
                         }
                         signature.deinit();
                         if (!globalObject.hasException()) {
@@ -467,7 +467,7 @@ pub enum QueryStatus: u8 {
             {
                 let stmt = bun.default_allocator.create(PostgresSQLStatement) catch {
                     if (connection_entry_value != null) {
-                        _ = connection.statements.remove(signature_hash);
+                        * = connection.statements.remove(signature_hash);
                     }
                     this.deref();
                     return globalObject.throwOutOfMemory();
@@ -508,10 +508,10 @@ pub enum QueryStatus: u8 {
         return .js_undefined;
     }
 
-    pub fn doCancel(*this, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        _ = callframe;
-        _ = globalObject;
-        _ = this;
+    pub fn doCancel(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        * = callframe;
+        * = globalObject;
+        const __unused_self = _; * = __unused_self;
         return .js_undefined;
     }
 

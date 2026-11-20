@@ -7,7 +7,7 @@ pub union(enum) AuthenticationState {
     SASL: SASL,
     md5: void,
 
-    pub fn zero(*this) {
+    pub fn zero(*_) {
         switch (unsafe { this.* }) {
             .SASL => |*sasl| {
                 sasl.deinit();

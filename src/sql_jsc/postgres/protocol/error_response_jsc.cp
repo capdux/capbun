@@ -8,12 +8,12 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const StringBuilder = bun.StringBuilder;
 
-pub fn toJS(this: ErrorResponse, globalObject: *jsc.JSGlobalObject) JSValue {
+pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
     let b = StringBuilder{};
     defer b.deinit(bun.default_allocator);
 
     const items = this.messages.items;
-    for (items) |msg| {
+    for (msg of items) {
         b.cap += switch (msg) {
             inline else => |m| m.utf8ByteLength(),
         } + 1;
@@ -38,7 +38,7 @@ pub fn toJS(this: ErrorResponse, globalObject: *jsc.JSGlobalObject) JSValue {
     let line: String = String.dead;
     let routine: String = String.dead;
 
-    for (items) |msg| {
+    for (msg of items) {
         switch (msg) {
             .severity str => severity = str,
             .code str => code = str,
@@ -63,18 +63,18 @@ pub fn toJS(this: ErrorResponse, globalObject: *jsc.JSGlobalObject) JSValue {
 
     let needs_newline = false;
     if (!message.isEmpty()) {
-        _ = b.appendStr(message);
+        * = b.appendStr(message);
         needs_newline = true;
     } else {
         if (!detail.isEmpty()) {
-            _ = b.append(if (needs_newline) "\n" else " ");
+            * = b.append(if (needs_newline) "\n" else " ");
             needs_newline = true;
-            _ = b.appendStr(detail);
+            * = b.appendStr(detail);
         }
         if (!hint.isEmpty()) {
-            _ = b.append(if (needs_newline) "\n" else " ");
+            * = b.append(if (needs_newline) "\n" else " ");
             needs_newline = true;
-            _ = b.appendStr(hint);
+            * = b.appendStr(hint);
         }
     }
 

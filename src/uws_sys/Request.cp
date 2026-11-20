@@ -3,7 +3,7 @@ import bun from "bun";
 @c {
     fn uws_req_is_ancient(res: *Request): bool;
     fn uws_req_get_yield(res: *Request): bool;
-    fn uws_req_set_yield(res: *Request, yield: bool): void;
+    fn uws_req_set_yield(res: *Request, yield: bool);
     fn uws_req_get_url(res: *Request, dest: *[*]u8!): usize;
     fn uws_req_get_method(res: *Request, dest: *[*]u8!): usize;
     fn uws_req_get_header(res: *Request, lower_case_header: [*]const u8!, lower_case_header_length: usize, dest: *[*]u8!): usize;
@@ -15,35 +15,35 @@ export enum AnyRequest {
     h1(*Request),
     h3(*bun.uws.H3.Request),
 
-    pub fn header(this, header_name: string): string? {
+    pub fn header(header_name: string): string? {
         return switch (this) {
             .h1(r) => r.header(header_name),
             .h3(r) => r.header(header_name),
         };
     }
 
-    pub fn method(this): string {
+    pub fn method(): string {
         return switch (this) {
             .h1(r) => r.method(),
             .h3(r) => r.method(),
         };
     }
 
-    pub fn url(this): string {
+    pub fn url(): string {
         return switch (this) {
             .h1(r) => r.url(),
             .h3(r) => r.url(),
         };
     }
 
-    pub fn setYield(this, y: bool): void {
+    pub fn setYield(y: bool) {
         switch (this) {
             .h1(r) => r.setYield(y),
             .h3(r) => r.setYield(y),
         };
     }
 
-    pub fn dateForHeader(this, header_name: string): !u64? {
+    pub fn dateForHeader(header_name: string): !u64? {
         return switch (this) {
             .h1(r) => r.dateForHeader(header_name)?,
             .h3(r) => r.dateForHeader(header_name)?,
@@ -52,31 +52,31 @@ export enum AnyRequest {
 }
 
 export @opaque class Request {
-    pub fn isAncient(*this): bool {
+    pub fn isAncient(*_): bool {
         return uws_req_is_ancient(this);
     }
 
-    pub fn getYield(*this): bool {
+    pub fn getYield(*_): bool {
         return uws_req_get_yield(this);
     }
 
-    pub fn setYield(*this, yield: bool): void {
+    pub fn setYield(*_, yield: bool) {
         uws_req_set_yield(this, yield);
     }
 
-    pub fn url(*this): string {
+    pub fn url(*_): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_url(this, &ptr);
         return ptr[0..len];
     }
 
-    pub fn method(*this): string {
+    pub fn method(*_): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_method(this, &ptr);
         return ptr[0..len];
     }
 
-    pub fn header(*this, name: string): string? {
+    pub fn header(*_, name: string): string? {
         bun.assert(bun.strings.isLower(name[0]));
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_header(this, name.ptr, name.len, &ptr);
@@ -84,7 +84,7 @@ export @opaque class Request {
         return ptr[0..len];
     }
 
-    pub fn dateForHeader(*this, name: string): !u64? {
+    pub fn dateForHeader(*_, name: string): !u64? {
         let value = this.header(name);
         if (value == null) return null;
         let string_val = bun.String.init(value.?);
@@ -96,13 +96,13 @@ export @opaque class Request {
         return null;
     }
 
-    pub fn query(*this, name: string): string {
+    pub fn query(*_, name: string): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_query(this, name.ptr, name.len, &ptr);
         return ptr[0..len];
     }
 
-    pub fn parameter(*this, index: u16): string {
+    pub fn parameter(*_, index: u16): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_parameter(this, index, &ptr);
         return ptr[0..len];

@@ -8,18 +8,33 @@ import { Loop } from "./Loop.cp";
 import { SocketKind } from "./SocketKind.cp";
 import { us_socket_t } from "./us_socket_t.cp";
 
+pub type OnOpenFn = @c fn (*us_socket_t, i32, [*]u8!, i32): (*us_socket_t)?;
+pub type OptOnOpenFn = OnOpenFn?;
+pub type OnDataFn = @c fn (*us_socket_t, [*]u8!, i32): (*us_socket_t)?;
+pub type OptOnDataFn = OnDataFn?;
+pub type OnFdFn = @c fn (*us_socket_t, i32): (*us_socket_t)?;
+pub type OptOnFdFn = OnFdFn?;
+pub type OnSockFn = @c fn (*us_socket_t): (*us_socket_t)?;
+pub type OptOnSockFn = OnSockFn?;
+pub type OnCloseFn = @c fn (*us_socket_t, i32, *!?): (*us_socket_t)?;
+pub type OptOnCloseFn = OnCloseFn?;
+pub type OnConnectingErrFn = @c fn (*ConnectingSocket, i32): (*ConnectingSocket)?;
+pub type OptOnConnectingErrFn = OnConnectingErrFn?;
+pub type OnHandshakeFn = @c fn (*us_socket_t, i32, bun.uws.us_bun_verify_error_t, *!?);
+pub type OptOnHandshakeFn = OnHandshakeFn?;
+
 export class VTable {
-    on_open: ?@c fn (*us_socket_t, i32, [*]u8!, i32): *us_socket_t!? = null,
-    on_data: ?@c fn (*us_socket_t, [*]u8!, i32): *us_socket_t!? = null,
-    on_fd: ?@c fn (*us_socket_t, i32): *us_socket_t!? = null,
-    on_writable: ?@c fn (*us_socket_t): *us_socket_t!? = null,
-    on_close: ?@c fn (*us_socket_t, i32, *!?): *us_socket_t!? = null,
-    on_timeout: ?@c fn (*us_socket_t): *us_socket_t!? = null,
-    on_long_timeout: ?@c fn (*us_socket_t): *us_socket_t!? = null,
-    on_end: ?@c fn (*us_socket_t): *us_socket_t!? = null,
-    on_connect_error: ?@c fn (*us_socket_t, i32): *us_socket_t!? = null,
-    on_connecting_error: ?@c fn (*ConnectingSocket, i32): *ConnectingSocket!? = null,
-    on_handshake: ?@c fn (*us_socket_t, i32, bun.uws.us_bun_verify_error_t, *!?): void = null,
+    on_open: OptOnOpenFn = null,
+    on_data: OptOnDataFn = null,
+    on_fd: OptOnFdFn = null,
+    on_writable: OptOnSockFn = null,
+    on_close: OptOnCloseFn = null,
+    on_timeout: OptOnSockFn = null,
+    on_long_timeout: OptOnSockFn = null,
+    on_end: OptOnSockFn = null,
+    on_connect_error: OptOnFdFn = null,
+    on_connecting_error: OptOnConnectingErrFn = null,
+    on_handshake: OptOnHandshakeFn = null,
 }
 
 pub const ConnectResult = union(enum) {
@@ -29,18 +44,18 @@ pub const ConnectResult = union(enum) {
 };
 
 @c {
-    fn us_socket_group_init(g: *SocketGroup, loop: *Loop, vt: ?*const VTable, owner: *!?): void;
-    fn us_socket_group_deinit(g: *SocketGroup): void;
-    fn us_socket_group_close_all(g: *SocketGroup): void;
+    fn us_socket_group_init(g: *SocketGroup, loop: *Loop, vt: *const VTable?, owner: *!?);
+    fn us_socket_group_deinit(g: *SocketGroup);
+    fn us_socket_group_close_all(g: *SocketGroup);
     fn us_socket_group_timestamp(g: *SocketGroup): u16;
     fn us_socket_group_loop(g: *SocketGroup): *Loop;
-    fn us_socket_group_next(g: *SocketGroup): ?*SocketGroup;
-    fn us_socket_group_listen(g: *SocketGroup, kind: u8, ssl_ctx: ?*bun.uws.SslCtx, host: cstr?, port: i32, options: i32, ext_size: i32, err: *i32): ?*ListenSocket;
-    fn us_socket_group_listen_unix(g: *SocketGroup, kind: u8, ssl_ctx: ?*bun.uws.SslCtx, path: [*]const u8!, pathlen: usize, options: i32, ext_size: i32, err: *i32): ?*ListenSocket;
-    fn us_socket_group_connect(g: *SocketGroup, kind: u8, ssl_ctx: ?*bun.uws.SslCtx, host: cstr, port: i32, options: i32, ext_size: i32, dns_resolved: *i32): *!?;
-    fn us_socket_group_connect_unix(g: *SocketGroup, kind: u8, ssl_ctx: ?*bun.uws.SslCtx, path: [*]const u8!, pathlen: usize, options: i32, ext_size: i32): ?*us_socket_t;
-    fn us_socket_from_fd(g: *SocketGroup, kind: u8, ssl_ctx: ?*bun.uws.SslCtx, ext_size: i32, fd: i32, ipc: i32): ?*us_socket_t;
-    fn us_socket_pair(g: *SocketGroup, kind: u8, ext_size: i32, fds: *i32[2]): ?*us_socket_t;
+    fn us_socket_group_next(g: *SocketGroup): *SocketGroup?;
+    fn us_socket_group_listen(g: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx?, host: cstr?, port: i32, options: i32, ext_size: i32, err: *i32): *ListenSocket?;
+    fn us_socket_group_listen_unix(g: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx?, path: [*]const u8!, pathlen: usize, options: i32, ext_size: i32, err: *i32): *ListenSocket?;
+    fn us_socket_group_connect(g: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx?, host: cstr, port: i32, options: i32, ext_size: i32, dns_resolved: *i32): *!?;
+    fn us_socket_group_connect_unix(g: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx?, path: [*]const u8!, pathlen: usize, options: i32, ext_size: i32): *us_socket_t?;
+    fn us_socket_from_fd(g: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx?, ext_size: i32, fd: i32, ipc: i32): *us_socket_t?;
+    fn us_socket_pair(g: *SocketGroup, kind: u8, ext_size: i32, fds: *i32[2]): *us_socket_t?;
 }
 
 export @extern class SocketGroup {
@@ -59,41 +74,41 @@ export @extern class SocketGroup {
     long_timestamp: u8 = 0,
     linked: u8 = 0,
 
-    pub fn init(*this, loop_: *Loop, vt: ?*const VTable, owner_ptr: *!?): void {
+    pub fn init(*_, loop_: *Loop, vt: *const VTable?, owner_ptr: *!?) {
         us_socket_group_init(this, loop_, vt, owner_ptr);
     }
 
-    pub fn release(*this): void {
+    pub fn release(*_) {
         this.deinit();
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         us_socket_group_deinit(this);
     }
 
-    pub fn closeAll(*this): void {
+    pub fn closeAll(*_) {
         us_socket_group_close_all(this);
     }
 
-    pub fn getLoop(this): *Loop {
-        return this.loop.?;
+    pub fn getLoop(): *Loop {
+        return _.loop.?;
     }
 
-    pub fn owner(this, @comptime T: type): *T {
+    pub fn owner(@comptime T: type): *T {
         unsafe {
             return this.#ext.? as *T;
         }
     }
 
-    pub fn isEmpty(this): bool {
-        return this.head_sockets == null &&
-            this.head_connecting_sockets == null &&
-            this.head_listen_sockets == null &&
-            this.low_prio_count == 0;
+    pub fn isEmpty(): bool {
+        return _.head_sockets == null &&
+            _.head_connecting_sockets == null &&
+            _.head_listen_sockets == null &&
+            _.low_prio_count == 0;
     }
 
     pub fn listen(
-        *this,
+        *_,
         kind: SocketKind,
         ssl_ctx: *bun.uws.SslCtx?,
         host: cstr?,
@@ -106,7 +121,7 @@ export @extern class SocketGroup {
     }
 
     pub fn listenUnix(
-        *this,
+        *_,
         kind: SocketKind,
         ssl_ctx: *bun.uws.SslCtx?,
         path: string,
@@ -118,7 +133,7 @@ export @extern class SocketGroup {
     }
 
     pub fn connect(
-        *this,
+        *_,
         kind: SocketKind,
         ssl_ctx: *bun.uws.SslCtx?,
         host: cstr,
@@ -137,7 +152,7 @@ export @extern class SocketGroup {
     }
 
     pub fn connectUnix(
-        *this,
+        *_,
         kind: SocketKind,
         ssl_ctx: *bun.uws.SslCtx?,
         path: string,
@@ -148,7 +163,7 @@ export @extern class SocketGroup {
     }
 
     pub fn fromFd(
-        *this,
+        *_,
         kind: SocketKind,
         ssl_ctx: *bun.uws.SslCtx?,
         socket_ext_size: i32,
@@ -162,11 +177,11 @@ export @extern class SocketGroup {
         return us_socket_from_fd(this, kind as u8, ssl_ctx, socket_ext_size, fd.native(), ipc_int);
     }
 
-    pub fn pair(*this, kind: SocketKind, ext_size: i32, fds: *i32[2]): *us_socket_t? {
+    pub fn pair(*_, kind: SocketKind, ext_size: i32, fds: *i32[2]): *us_socket_t? {
         return us_socket_pair(this, kind as u8, ext_size, fds);
     }
 
-    pub fn nextInLoop(*this): *SocketGroup? {
+    pub fn nextInLoop(*_): *SocketGroup? {
         return us_socket_group_next(this);
     }
 }

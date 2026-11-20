@@ -16,27 +16,27 @@ export enum State : u8 {
     HTTP_CONNECTION_CLOSE = 16,
     HTTP_WROTE_CONTENT_LENGTH_HEADER = 32,
 
-    pub fn isResponsePending(this): bool {
+    pub fn isResponsePending(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_RESPONSE_PENDING)) != 0;
     }
 
-    pub fn hasWrittenContentLengthHeader(this): bool {
+    pub fn hasWrittenContentLengthHeader(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_WROTE_CONTENT_LENGTH_HEADER)) != 0;
     }
 
-    pub fn isHttpEndCalled(this): bool {
+    pub fn isHttpEndCalled(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_END_CALLED)) != 0;
     }
 
-    pub fn isHttpWriteCalled(this): bool {
+    pub fn isHttpWriteCalled(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_WRITE_CALLED)) != 0;
     }
 
-    pub fn isHttpStatusCalled(this): bool {
+    pub fn isHttpStatusCalled(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_STATUS_CALLED)) != 0;
     }
 
-    pub fn isHttpConnectionClose(this): bool {
+    pub fn isHttpConnectionClose(): bool {
         return (@intFromEnum(this) & @intFromEnum(State.HTTP_CONNECTION_CLOSE)) != 0;
     }
 }
@@ -49,43 +49,43 @@ export enum WriteResult {
 export @opaque class uws_res {}
 
 @c {
-    fn uws_res_mark_wrote_content_length_header(ssl: i32, res: *uws_res): void;
-    fn uws_res_write_mark(ssl: i32, res: *uws_res): void;
-    fn us_socket_mark_needs_more_not_ssl(socket: *uws_res?!): void;
+    fn uws_res_mark_wrote_content_length_header(ssl: i32, res: *uws_res);
+    fn uws_res_write_mark(ssl: i32, res: *uws_res);
+    fn us_socket_mark_needs_more_not_ssl(socket: *uws_res?!);
     fn uws_res_state(ssl: i32, res: *const uws_res): State;
     fn uws_res_is_connect_request(ssl: i32, res: *uws_res): bool;
     fn uws_res_get_remote_address_info(res: *uws_res, dest: *[*c]const u8, port: *i32, is_ipv6: *bool): usize;
-    fn uws_res_uncork(ssl: i32, res: *uws_res): void;
-    fn uws_res_end(ssl: i32, res: *uws_res, data: [*]const u8!, length: usize, close_conn: bool): void;
-    fn uws_res_flush_headers(ssl: i32, res: *uws_res, flushImmediately: bool): void;
+    fn uws_res_uncork(ssl: i32, res: *uws_res);
+    fn uws_res_end(ssl: i32, res: *uws_res, data: [*]const u8!, length: usize, close_conn: bool);
+    fn uws_res_flush_headers(ssl: i32, res: *uws_res, flushImmediately: bool);
     fn uws_res_is_corked(ssl: i32, res: *uws_res): bool;
     fn uws_res_get_socket_data(ssl: i32, res: *uws_res): *!?;
-    fn uws_res_pause(ssl: i32, res: *uws_res): void;
-    fn uws_res_resume(ssl: i32, res: *uws_res): void;
-    fn uws_res_write_continue(ssl: i32, res: *uws_res): void;
-    fn uws_res_write_status(ssl: i32, res: *uws_res, status: [*]const u8!, length: usize): void;
-    fn uws_res_write_header(ssl: i32, res: *uws_res, key: [*]const u8!, key_length: usize, value: [*]const u8!, value_length: usize): void;
-    fn uws_res_write_header_int(ssl: i32, res: *uws_res, key: [*]const u8!, key_length: usize, value: u64): void;
-    fn uws_res_end_without_body(ssl: i32, res: *uws_res, close_connection: bool): void;
-    fn uws_res_end_sendfile(ssl: i32, res: *uws_res, write_offset: u64, close_connection: bool): void;
-    fn uws_res_timeout(ssl: i32, res: *uws_res, timeout: u8): void;
-    fn uws_res_reset_timeout(ssl: i32, res: *uws_res): void;
+    fn uws_res_pause(ssl: i32, res: *uws_res);
+    fn uws_res_resume(ssl: i32, res: *uws_res);
+    fn uws_res_write_continue(ssl: i32, res: *uws_res);
+    fn uws_res_write_status(ssl: i32, res: *uws_res, status: [*]const u8!, length: usize);
+    fn uws_res_write_header(ssl: i32, res: *uws_res, key: [*]const u8!, key_length: usize, value: [*]const u8!, value_length: usize);
+    fn uws_res_write_header_int(ssl: i32, res: *uws_res, key: [*]const u8!, key_length: usize, value: u64);
+    fn uws_res_end_without_body(ssl: i32, res: *uws_res, close_connection: bool);
+    fn uws_res_end_sendfile(ssl: i32, res: *uws_res, write_offset: u64, close_connection: bool);
+    fn uws_res_timeout(ssl: i32, res: *uws_res, timeout: u8);
+    fn uws_res_reset_timeout(ssl: i32, res: *uws_res);
     fn uws_res_get_buffered_amount(ssl: i32, res: *uws_res): u64;
     fn uws_res_write(ssl: i32, res: *uws_res, data: [*]const u8?!, length: *usize): bool;
     fn uws_res_get_write_offset(ssl: i32, res: *uws_res): u64;
-    fn uws_res_override_write_offset(ssl: i32, res: *uws_res, off: u64): void;
+    fn uws_res_override_write_offset(ssl: i32, res: *uws_res, off: u64);
     fn uws_res_has_responded(ssl: i32, res: *uws_res): bool;
-    fn uws_res_on_writable(ssl: i32, res: *uws_res, handler: ResWritableHandler, user_data: *!?): void;
-    fn uws_res_clear_on_writable(ssl: i32, res: *uws_res): void;
-    fn uws_res_on_aborted(ssl: i32, res: *uws_res, handler: ResVoidHandler, optional_data: *!?): void;
-    fn uws_res_on_timeout(ssl: i32, res: *uws_res, handler: ResVoidHandler, optional_data: *!?): void;
+    fn uws_res_on_writable(ssl: i32, res: *uws_res, handler: ResWritableHandler, user_data: *!?);
+    fn uws_res_clear_on_writable(ssl: i32, res: *uws_res);
+    fn uws_res_on_aborted(ssl: i32, res: *uws_res, handler: ResVoidHandler, optional_data: *!?);
+    fn uws_res_on_timeout(ssl: i32, res: *uws_res, handler: ResVoidHandler, optional_data: *!?);
     fn uws_res_try_end(ssl: i32, res: *uws_res, data: [*]const u8?!, length: usize, total: usize, close: bool): bool;
-    fn uws_res_end_stream(ssl: i32, res: *uws_res, close_connection: bool): void;
-    fn uws_res_prepare_for_sendfile(ssl: i32, res: *uws_res): void;
+    fn uws_res_end_stream(ssl: i32, res: *uws_res, close_connection: bool);
+    fn uws_res_prepare_for_sendfile(ssl: i32, res: *uws_res);
     fn uws_res_get_native_handle(ssl: i32, res: *uws_res): *bun.uws.Socket;
-    fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: *!?): void;
+    fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: *!?);
     fn uws_res_upgrade(ssl: i32, res: *uws_res, data: *!?, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: *bun.uws.WebSocketUpgradeContext): *bun.uws.Socket;
-    fn uws_res_cork(ssl: i32, res: *uws_res, ctx: *!?, corker: ResCorkHandler): void;
+    fn uws_res_cork(ssl: i32, res: *uws_res, ctx: *!?, corker: ResCorkHandler);
 }
 
 pub fn NewResponse(comptime ssl_flag: i32): type {
@@ -332,7 +332,7 @@ export enum AnyResponse {
     SSL(*ResponseTLS),
     H3(*H3Response),
 
-    pub fn assertSSL(this): *ResponseTLS {
+    pub fn assertSSL(): *ResponseTLS {
         return switch (this) {
             .SSL(resp) => resp,
             .TCP => bun.Output.panic("Expected SSL response, got TCP response"),
@@ -340,7 +340,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn assertNoSSL(this): *ResponseTCP {
+    pub fn assertNoSSL(): *ResponseTCP {
         return switch (this) {
             .SSL => bun.Output.panic("Expected TCP response, got SSL response"),
             .TCP(resp) => resp,
@@ -348,7 +348,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn markNeedsMore(this): void {
+    pub fn markNeedsMore() {
         switch (this) {
             .TCP(r) => r.markNeedsMore(),
             .SSL(r) => r.markNeedsMore(),
@@ -356,7 +356,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn writeMark(this): void {
+    pub fn writeMark() {
         switch (this) {
             .TCP(r) => r.writeMark(),
             .SSL(r) => r.writeMark(),
@@ -364,7 +364,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn markWroteContentLengthHeader(this): void {
+    pub fn markWroteContentLengthHeader() {
         switch (this) {
             .TCP(r) => r.markWroteContentLengthHeader(),
             .SSL(r) => r.markWroteContentLengthHeader(),
@@ -372,7 +372,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn flushHeaders(this, immediate: bool): void {
+    pub fn flushHeaders(immediate: bool) {
         switch (this) {
             .TCP(r) => r.flushHeaders(immediate),
             .SSL(r) => r.flushHeaders(immediate),
@@ -380,7 +380,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn isCorked(this): bool {
+    pub fn isCorked(): bool {
         return switch (this) {
             .TCP(r) => r.isCorked(),
             .SSL(r) => r.isCorked(),
@@ -388,7 +388,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn uncork(this): void {
+    pub fn uncork() {
         switch (this) {
             .TCP(r) => r.uncork(),
             .SSL(r) => r.uncork(),
@@ -396,7 +396,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn getWriteOffset(this): u64 {
+    pub fn getWriteOffset(): u64 {
         return switch (this) {
             .TCP(r) => r.getWriteOffset(),
             .SSL(r) => r.getWriteOffset(),
@@ -404,7 +404,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn getBufferedAmount(this): u64 {
+    pub fn getBufferedAmount(): u64 {
         return switch (this) {
             .TCP(r) => r.getBufferedAmount(),
             .SSL(r) => r.getBufferedAmount(),
@@ -412,7 +412,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn writeContinue(this): void {
+    pub fn writeContinue() {
         switch (this) {
             .TCP(r) => r.writeContinue(),
             .SSL(r) => r.writeContinue(),
@@ -420,7 +420,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn state(this): State {
+    pub fn state(): State {
         return switch (this) {
             .TCP(r) => r.state(),
             .SSL(r) => r.state(),
@@ -440,7 +440,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn socket(this): *uws_res {
+    pub fn socket(): *uws_res {
         return switch (this) {
             .H3 => bun.Output.panic("socket() is not available for HTTP/3 responses"),
             .TCP(r) => r.downcast(),
@@ -448,7 +448,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn getRemoteSocketInfo(this): ?bun.uws.SocketAddress {
+    pub fn getRemoteSocketInfo(): bun.uws.SocketAddress? {
         return switch (this) {
             .TCP(r) => r.getRemoteSocketInfo(),
             .SSL(r) => r.getRemoteSocketInfo(),
@@ -456,7 +456,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn getSocketData(this): *!? {
+    pub fn getSocketData(): *!? {
         return switch (this) {
             .TCP(r) => r.getSocketData(),
             .SSL(r) => r.getSocketData(),
@@ -464,7 +464,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn endSendFile(this, write_offset: u64, close_connection: bool): void {
+    pub fn endSendFile(write_offset: u64, close_connection: bool) {
         switch (this) {
             .TCP(r) => r.endSendFile(write_offset, close_connection),
             .SSL(r) => r.endSendFile(write_offset, close_connection),
@@ -472,7 +472,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn timeout(this, seconds: u8): void {
+    pub fn timeout(seconds: u8) {
         switch (this) {
             .TCP(r) => r.timeout(seconds),
             .SSL(r) => r.timeout(seconds),
@@ -480,7 +480,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn writeStatus(this, status: string): void {
+    pub fn writeStatus(status: string) {
         switch (this) {
             .TCP(r) => r.writeStatus(status),
             .SSL(r) => r.writeStatus(status),
@@ -488,7 +488,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn writeHeader(this, key: string, value: string): void {
+    pub fn writeHeader(key: string, value: string) {
         switch (this) {
             .TCP(r) => r.writeHeader(key, value),
             .SSL(r) => r.writeHeader(key, value),
@@ -496,7 +496,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn write(this, data: string): WriteResult {
+    pub fn write(data: string): WriteResult {
         return switch (this) {
             .TCP(r) => r.write(data),
             .SSL(r) => r.write(data),
@@ -504,7 +504,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn end(this, data: string, close_connection: bool): void {
+    pub fn end(data: string, close_connection: bool) {
         switch (this) {
             .TCP(r) => r.end(data, close_connection),
             .SSL(r) => r.end(data, close_connection),
@@ -512,7 +512,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn shouldCloseConnection(this): bool {
+    pub fn shouldCloseConnection(): bool {
         return switch (this) {
             .TCP(r) => r.shouldCloseConnection(),
             .SSL(r) => r.shouldCloseConnection(),
@@ -520,7 +520,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn tryEnd(this, data: string, total_size: usize, close_connection: bool): bool {
+    pub fn tryEnd(data: string, total_size: usize, close_connection: bool): bool {
         return switch (this) {
             .TCP(r) => r.tryEnd(data, total_size, close_connection),
             .SSL(r) => r.tryEnd(data, total_size, close_connection),
@@ -528,7 +528,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn pause(this): void {
+    pub fn pause() {
         switch (this) {
             .TCP(r) => r.pause(),
             .SSL(r) => r.pause(),
@@ -536,7 +536,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn resumeResponse(this): void {
+    pub fn resumeResponse() {
         switch (this) {
             .TCP(r) => r.resumeResponse(),
             .SSL(r) => r.resumeResponse(),
@@ -544,7 +544,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn writeHeaderInt(this, key: string, value: u64): void {
+    pub fn writeHeaderInt(key: string, value: u64) {
         switch (this) {
             .TCP(r) => r.writeHeaderInt(key, value),
             .SSL(r) => r.writeHeaderInt(key, value),
@@ -552,7 +552,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn endWithoutBody(this, close_connection: bool): void {
+    pub fn endWithoutBody(close_connection: bool) {
         switch (this) {
             .TCP(r) => r.endWithoutBody(close_connection),
             .SSL(r) => r.endWithoutBody(close_connection),
@@ -560,7 +560,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn forceClose(this): void {
+    pub fn forceClose() {
         switch (this) {
             .TCP(r) => r.endWithoutBody(true),
             .SSL(r) => r.endWithoutBody(true),
@@ -568,7 +568,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn getNativeHandle(this): bun.FD {
+    pub fn getNativeHandle(): bun.FD {
         return switch (this) {
             .H3 => bun.invalid_fd,
             .TCP(r) => r.getNativeHandle(),
@@ -576,7 +576,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn prepareForSendfile(this): void {
+    pub fn prepareForSendfile() {
         switch (this) {
             .TCP(r) => r.prepareForSendfile(),
             .SSL(r) => r.prepareForSendfile(),
@@ -584,7 +584,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn clearAborted(this): void {
+    pub fn clearAborted() {
         switch (this) {
             .TCP(r) => r.clearAborted(),
             .SSL(r) => r.clearAborted(),
@@ -592,7 +592,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn clearTimeout(this): void {
+    pub fn clearTimeout() {
         switch (this) {
             .TCP(r) => r.clearTimeout(),
             .SSL(r) => r.clearTimeout(),
@@ -600,7 +600,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn clearOnWritable(this): void {
+    pub fn clearOnWritable() {
         switch (this) {
             .TCP(r) => r.clearOnWritable(),
             .SSL(r) => r.clearOnWritable(),
@@ -608,7 +608,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn clearOnData(this): void {
+    pub fn clearOnData() {
         switch (this) {
             .TCP(r) => r.clearOnData(),
             .SSL(r) => r.clearOnData(),
@@ -616,7 +616,7 @@ export enum AnyResponse {
         }
     }
 
-    pub fn isConnectRequest(this): bool {
+    pub fn isConnectRequest(): bool {
         return switch (this) {
             .TCP(r) => r.isConnectRequest(),
             .SSL(r) => r.isConnectRequest(),
@@ -624,7 +624,7 @@ export enum AnyResponse {
         };
     }
 
-    pub fn endStream(this, close_connection: bool): void {
+    pub fn endStream(close_connection: bool) {
         switch (this) {
             .TCP(r) => r.endStream(close_connection),
             .SSL(r) => r.endStream(close_connection),

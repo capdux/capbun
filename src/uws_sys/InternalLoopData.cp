@@ -9,6 +9,8 @@ import { us_socket_t } from "./us_socket_t.cp";
 export @opaque class us_internal_async {}
 
 const LIBUS_RECV_BUFFER_LENGTH: usize = 524288;
+pub type LoopCbFn = @c fn (*Loop?);
+pub type OptLoopCb = LoopCbFn?;
 
 export @extern class InternalLoopData {
     sweep_timer: *Timer? = null,
@@ -22,8 +24,8 @@ export @extern class InternalLoopData {
     recv_buf: [*]u8!,
     send_buf: [*]u8!,
     ssl_data: *!? = null,
-    pre_cb: ?@c fn (?*Loop): void = null,
-    post_cb: ?@c fn (?*Loop): void = null,
+    pre_cb: OptLoopCb = null,
+    post_cb: OptLoopCb = null,
     closed_udp_head: *udp.Socket? = null,
     closed_head: *us_socket_t? = null,
     low_prio_head: *us_socket_t? = null,
@@ -37,15 +39,15 @@ export @extern class InternalLoopData {
     jsc_vm: *bun.jsc.VM? = null,
     tick_depth: i32 = 0,
 
-    pub fn recvSlice(*this): u8[] {
+    pub fn recvSlice(*_): u8[] {
         return this.recv_buf[0..LIBUS_RECV_BUFFER_LENGTH];
     }
 
-    pub fn shouldEnableDateHeaderTimer(this): bool {
-        return this.sweep_timer_count > 0;
+    pub fn shouldEnableDateHeaderTimer(): bool {
+        return _.sweep_timer_count > 0;
     }
 
-    pub fn setParentEventLoop(*this, parent: anytype): void {
+    pub fn setParentEventLoop(*_, parent: anytype) {
         switch (parent) {
             .js => |ptr| {
                 this.parent_tag = 1;
@@ -62,7 +64,7 @@ export @extern class InternalLoopData {
         }
     }
 
-    pub fn getParent(*this): bun.jsc.EventLoopHandle {
+    pub fn getParent(*_): bun.jsc.EventLoopHandle {
         let parent = this.parent_ptr ?? bun.Output.panic("Parent loop not set - pointer is null");
         return switch (this.parent_tag) {
             1 => bun.jsc.EventLoopHandle { js = unsafe { parent as *bun.jsc.EventLoop } },

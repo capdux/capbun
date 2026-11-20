@@ -11,7 +11,7 @@ pub const MySQLConnection = MySQLConnectionMod;
 pub const MySQLContext = MySQLContextMod;
 pub const MySQLQuery = MySQLQueryMod;
 
-pub fn createBinding(globalObject: *jsc.JSGlobalObject) JSValue {
+pub fn createBinding(globalObject: *jsc.JSGlobalObject): JSValue {
     const binding = JSValue.createEmptyObjectWithNullPrototype(globalObject);
     binding.put(globalObject, ZigString.static("MySQLConnection"), MySQLConnection.js.getConstructor(globalObject));
     binding.put(globalObject, ZigString.static("init"), jsc.JSFunction.create(globalObject, "init", MySQLContext.init, 0, {}));

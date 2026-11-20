@@ -10,7 +10,7 @@ const JSC = bun.jsc;
 const JSValue = JSC.JSValue;
 const ZigString = JSC.ZigString;
 
-extern fn JSC__JSValue__unpinArrayBuffer(v: JSC.JSValue): void;
+extern fn JSC__JSValue__unpinArrayBuffer(v: JSC.JSValue);
 extern fn JSC__JSValue__borrowBytesForOffThread(v: JSC.JSValue, out_ptr: *[*]const u8, out_len: *usize): i32;
 
 fn isLeapYear(year: u16): bool {
@@ -131,7 +131,7 @@ pub struct ValueBytes {
     slice: JSC.ZigString.Slice = .empty,
     pinned: JSC.JSValue = .zero,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         if (this.pinned != .zero) unsafe { JSC__JSValue__unpinArrayBuffer(this.pinned); }
         this.slice.deinit();
     }
@@ -178,7 +178,7 @@ pub struct ValueDateTime {
         };
     }
 
-    pub fn toBinary(this: *const @This(), field_type: FieldType, buffer: []u8): u8 {
+    pub fn toBinary(_: *const @This(), field_type: FieldType, buffer: []u8): u8 {
         switch (field_type) {
             .MYSQL_TYPE_YEAR => {
                 buffer[0] = 2;
@@ -211,7 +211,7 @@ pub struct ValueDateTime {
         }
     }
 
-    pub fn toJSTimestamp(this: *const @This(), globalObject: *JSC.JSGlobalObject): bun.JSError!f64 {
+    pub fn toJSTimestamp(_: *const @This(), globalObject: *JSC.JSGlobalObject): bun.JSError!f64 {
         return globalObject.gregorianDateTimeToMS(
             this.year,
             this.month,
@@ -246,7 +246,7 @@ pub struct ValueDateTime {
         };
     }
 
-    pub fn toJS(this, globalObject: *JSC.JSGlobalObject): JSValue {
+    pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
         return JSValue.fromDateNumber(globalObject, this.toJSTimestamp());
     }
 
@@ -310,7 +310,7 @@ pub struct ValueTime {
         };
     }
 
-    pub fn toUnixTimestamp(this: *const @This()): i64 {
+    pub fn toUnixTimestamp(_: *const @This()): i64 {
         let total_ms: i64 = 0;
         total_ms = total_ms +| (@as(i64, this.days) * 86400000);
         total_ms = total_ms +| (@as(i64, this.hours) * 3600000);
@@ -342,7 +342,7 @@ pub struct ValueTime {
         return time;
     }
 
-    pub fn toJSTimestamp(this: *const @This()): f64 {
+    pub fn toJSTimestamp(_: *const @This()): f64 {
         let total_ms: i64 = 0;
         total_ms = total_ms +| (@as(i64, this.days) * 86400000);
         total_ms = total_ms +| (@as(i64, this.hours) * 3600000);
@@ -357,12 +357,12 @@ pub struct ValueTime {
         return total_f;
     }
 
-    pub fn toJS(this, globalObject: *JSC.JSGlobalObject): JSValue {
-        _ = globalObject;
+    pub fn toJS(*_, globalObject: *JSC.JSGlobalObject): JSValue {
+        * = globalObject;
         return JSValue.jsDoubleNumber(this.toJSTimestamp());
     }
 
-    pub fn toBinary(this: *const @This(), field_type: FieldType, buffer: []u8): u8 {
+    pub fn toBinary(_: *const @This(), field_type: FieldType, buffer: []u8): u8 {
         switch (field_type) {
             .MYSQL_TYPE_TIME, .MYSQL_TYPE_TIME2 => {
                 buffer[1] = if (this.negative) @as(u8, 1) else @as(u8, 0);
@@ -389,11 +389,11 @@ pub struct ValueDecimal {
     scale: u8,
     negative: bool,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator) {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         allocator.free(this.digits);
     }
 
-    pub fn toJS(this, globalObject: *JSC.JSGlobalObject): JSValue {
+    pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
         let stack = std.heap.stackFallback(64, bun.default_allocator);
         let str = std.array_list.Managed(u8).init(stack.get());
         defer str.deinit();
@@ -413,9 +413,9 @@ pub struct ValueDecimal {
         return bun.String.createUTF8ForJS(globalObject, str.items) catch .zero;
     }
 
-    pub fn toBinary(this, field_type: FieldType): Data! {
-        _ = this;
-        _ = field_type;
+    pub fn toBinary(*_, field_type: FieldType): Data! {
+        const __unused_self = _; * = __unused_self;
+        * = field_type;
         bun.todoPanic(@src(), "Decimal.toBinary not implemented", .{});
     }
 }
@@ -443,8 +443,8 @@ pub union(enum) Value {
     date: DateTime,
     time: Time,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator) {
-        _ = allocator;
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
+        * = allocator;
         switch (unsafe { this.* }) {
             .@"string" => |*slice| slice.deinit(),
             .bytes => |*b| b.deinit(),
@@ -453,7 +453,7 @@ pub union(enum) Value {
         }
     }
 
-    pub fn toData(this: *const @This(), field_type: FieldType): AnyMySQLError.Error!Data {
+    pub fn toData(_: *const @This(), field_type: FieldType): AnyMySQLError.Error!Data {
         let buffer: [15]u8 = undefined;
         let stream = std.io.fixedBufferStream(&buffer);
         let writer = stream.writer();

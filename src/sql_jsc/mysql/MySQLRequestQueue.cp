@@ -14,25 +14,25 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
     #waiting_to_prepare: bool = false,
     #is_ready_for_query: bool = true,
 
-    pub inline fn canExecuteQuery(this: *const @This(), connection: *const MySQLConnection): bool {
+    pub inline fn canExecuteQuery(_: *const @This(), connection: *const MySQLConnection): bool {
         return connection.isAbleToWrite() &&
             this.#is_ready_for_query &&
             this.#nonpipelinable_requests == 0 &&
             this.#pipelined_requests == 0;
     }
 
-    pub inline fn canPrepareQuery(this: *const @This(), connection: *const MySQLConnection): bool {
+    pub inline fn canPrepareQuery(_: *const @This(), connection: *const MySQLConnection): bool {
         return connection.isAbleToWrite() &&
             this.#is_ready_for_query &&
             !this.#waiting_to_prepare &&
             this.#pipelined_requests == 0;
     }
 
-    pub inline fn markAsReadyForQuery(*this) {
+    pub inline fn markAsReadyForQuery(*_) {
         this.#is_ready_for_query = true;
     }
 
-    pub inline fn markAsPrepared(*this) {
+    pub inline fn markAsPrepared(*_) {
         this.#waiting_to_prepare = false;
         if (request := this.current()) {
             debug("markAsPrepared markAsPrepared", .{});
@@ -40,7 +40,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         }
     }
 
-    pub inline fn canPipeline(*this, connection: *MySQLConnection): bool {
+    pub inline fn canPipeline(*_, connection: *MySQLConnection): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
@@ -52,7 +52,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
             connection.isAbleToWrite();
     }
 
-    pub fn markCurrentRequestAsFinished(*this, item: *JSMySQLQuery) {
+    pub fn markCurrentRequestAsFinished(*_, item: *JSMySQLQuery) {
         this.#waiting_to_prepare = false;
         if (item.isBeingPrepared()) {
             debug("markCurrentRequestAsFinished markAsPrepared", .{});
@@ -66,7 +66,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         }
     }
 
-    pub fn advance(*this, connection: *MySQLConnection) {
+    pub fn advance(*_, connection: *MySQLConnection) {
         let offset: usize = 0;
         defer {
             while (this.#requests.readableLength() > 0) {
@@ -152,11 +152,11 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         return MySQLRequestQueue{ #requests: Queue.init(bun.default_allocator) };
     }
 
-    pub fn isEmpty(*this): bool {
+    pub fn isEmpty(*_): bool {
         return this.#requests.readableLength() == 0;
     }
 
-    pub fn add(*this, request: *JSMySQLQuery) {
+    pub fn add(*_, request: *JSMySQLQuery) {
         debug("add", .{});
         if (request.isBeingPrepared()) {
             this.#is_ready_for_query = false;
@@ -174,7 +174,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         bun.handleOom(this.#requests.writeItem(request));
     }
 
-    pub inline fn current(this: *const @This()): (*JSMySQLQuery)? {
+    pub inline fn current(_: *const @This()): (*JSMySQLQuery)? {
         if (this.#requests.readableLength() == 0) {
             return null;
         }
@@ -182,7 +182,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         return this.#requests.peekItem(0);
     }
 
-    pub fn clean(*this, reason: JSValue?, queries_array: JSValue) {
+    pub fn clean(*_, reason: JSValue?, queries_array: JSValue) {
         let requests = this.#requests;
         this.#requests = Queue.init(bun.default_allocator);
         this.#pipelined_requests = 0;
@@ -203,7 +203,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         }
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         for (request of this.#requests.readableSlice(0)) {
             this.#requests.discard(1);
             request.markAsFailed();
