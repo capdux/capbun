@@ -1,3 +1,4 @@
+import bun from "bun";
 import {
     default_allocator,
     assert,
@@ -34,8 +35,8 @@ const X509 = api.bun.x509;
 const FetchHeaders = webcore.FetchHeaders;
 const SSLConfig = api.server.ServerConfig.SSLConfig;
 
-const FetchRedirect = http.FetchRedirect;
-const Headers = http.Headers;
+const FetchRedirect = bun.http.FetchRedirect;
+const Headers = bun.http.Headers;
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSPromise = jsc.JSPromise;

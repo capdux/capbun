@@ -112,7 +112,7 @@ pub fn init(handler: *WebSocketServer.Handler, data_value: jsc.JSValue, signal: 
         return ws_obj;
 }
 
-pub fn memoryCost(self: ServerWebSocket) usize {
+pub fn memoryCost(self: *ServerWebSocket) usize {
         if (self.#flags.closed) {
             return @sizeOf(ServerWebSocket);
         }
@@ -603,7 +603,7 @@ pub fn cork(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: 
             return globalThis.throwInvalidArgumentTypeValue("cork", "callback", callback);
         }
         if (self.isClosed()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         var corker = Corker{ .globalObject = globalThis, .this_value = this_value, .callback = callback };
         _ = &corker;
@@ -811,11 +811,11 @@ _ = log("sendBinary() dropped ({d} bytes)", .{ buffer.len });
 }
 
 pub fn ping(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        return self.sendPing(self, globalThis, callframe, "ping", .ping);
+        return self.sendPing(globalThis, callframe, "ping", .ping);
 }
 
 pub fn pong(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        return self.sendPing(self, globalThis, callframe, "pong", .pong);
+        return self.sendPing(globalThis, callframe, "pong", .pong);
 }
 
 pub inline fn sendPing(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, comptime name: []const u8, comptime opcode: uws.Opcode) bun.JSError!JSValue {
@@ -917,7 +917,7 @@ pub fn close(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe:
         const args = callframe.arguments_old(2);
         _ = log("close()", .{});
         if (self.isClosed()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const code = brk: {
         if (((args.ptr[0] == .zero) or args.ptr[0].isUndefined())) {
@@ -940,17 +940,17 @@ pub fn close(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe:
         }
         self.#flags.closed = true;
         _ = self.websocket().end(code, message_value.slice());
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn terminate(self: *ServerWebSocket, _: *jsc.JSGlobalObject, _: *jsc.CallFrame, _: jsc.JSValue) bun.JSError!JSValue {
         _ = log("terminate()", .{});
         if (self.isClosed()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         self.#flags.closed = true;
         _ = self.websocket().close();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getBinaryType(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject) bun.JSError!JSValue {
@@ -991,7 +991,7 @@ pub fn subscribe(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callfr
             return globalThis.throw("subscribe requires at least 1 argument", .{});
         }
         if (self.isClosed()) {
-            return error.true;
+            return JSValue.true;
         }
         if ((!args.ptr[0].isString())) {
             return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
@@ -1013,7 +1013,7 @@ pub fn unsubscribe(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, call
             return globalThis.throw("unsubscribe requires at least 1 argument", .{});
         }
         if (self.isClosed()) {
-            return error.true;
+            return JSValue.true;
         }
         if ((!args.ptr[0].isString())) {
             return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
@@ -1035,7 +1035,7 @@ pub fn isSubscribed(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, cal
             return globalThis.throw("isSubscribed requires at least 1 argument", .{});
         }
         if (self.isClosed()) {
-            return error.false;
+            return JSValue.false;
         }
         if ((!args.ptr[0].isString())) {
             return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
@@ -1060,7 +1060,7 @@ pub fn getSubscriptions(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject)
 
 pub fn getRemoteAddress(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject) bun.JSError!JSValue {
         if (self.isClosed()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         var buf: [64]u8 = std.mem.zeroes([64]u8);
         _ = &buf;
@@ -1071,7 +1071,7 @@ pub fn getRemoteAddress(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject)
 4 => std.net.Address.initIp4((address_bytes[0..4]).*, 0),
 16 => std.net.Address.initIp6((address_bytes[0..16]).*, 0, 0, 0),
 else => {
-return error.js_undefined;
+return JSValue.js_undefined;
 },
 });
         const text = ((bun.fmt.formatIp(address, (&text_buf))) catch unreachable);

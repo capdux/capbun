@@ -14,6 +14,7 @@ import bun from "bun";
 import { Request } from "./Request.cp";
 import { uws_res } from "./Response.cp";
 import { uws_app_t } from "./App.cp";
+import uws_jsc from "../runtime/socket/uws_jsc.zig";
 
 export @opaque class RawWebSocket {
     pub fn memoryCost(*_, ssl_flag: i32): usize {
@@ -28,25 +29,25 @@ export @opaque class RawWebSocket {
 @c {
     fn uws_ws_memory_cost(ssl: i32, ws: *RawWebSocket): usize;
     fn uws_ws(ssl: i32, app: *uws_app_t, ctx: *!, pattern: [*]const u8!, pattern_len: usize, id: usize, behavior: *const WebSocketBehavior);
-    fn uws_ws_get_user_data(ssl: i32, ws: *RawWebSocket?!): *!?;
-    fn uws_ws_close(ssl: i32, ws: *RawWebSocket?!);
-    fn uws_ws_send(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode): bun.uws.SendStatus;
-    fn uws_ws_send_with_options(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool, fin: bool): bun.uws.SendStatus;
-    fn uws_ws_send_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
-    fn uws_ws_send_first_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
-    fn uws_ws_send_first_fragment_with_opcode(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool): bun.uws.SendStatus;
-    fn uws_ws_send_last_fragment(ssl: i32, ws: *RawWebSocket?!, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
-    fn uws_ws_end(ssl: i32, ws: *RawWebSocket?!, code: i32, message: [*c]const u8, length: usize);
-    fn uws_ws_cork(ssl: i32, ws: *RawWebSocket?!, handler: CorkCallback, user_data: *!?);
-    fn uws_ws_subscribe(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
-    fn uws_ws_unsubscribe(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
-    fn uws_ws_is_subscribed(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, length: usize): bool;
-    fn uws_ws_iterate_topics(ssl: i32, ws: *RawWebSocket?!, callback: TopicCallback, user_data: *!?);
-    fn uws_ws_publish(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize): bool;
-    fn uws_ws_publish_with_options(ssl: i32, ws: *RawWebSocket?!, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize, opcode: bun.uws.Opcode, compress: bool): bool;
-    fn uws_ws_get_buffered_amount(ssl: i32, ws: *RawWebSocket?!): usize;
-    fn uws_ws_get_remote_address(ssl: i32, ws: *RawWebSocket?!, dest: *[*c]u8): usize;
-    fn uws_ws_get_remote_address_as_text(ssl: i32, ws: *RawWebSocket?!, dest: *[*c]u8): usize;
+    fn uws_ws_get_user_data(ssl: i32, ws: (*RawWebSocket)?): *!?;
+    fn uws_ws_close(ssl: i32, ws: (*RawWebSocket)?);
+    fn uws_ws_send(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode): bun.uws.SendStatus;
+    fn uws_ws_send_with_options(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool, fin: bool): bun.uws.SendStatus;
+    fn uws_ws_send_fragment(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
+    fn uws_ws_send_first_fragment(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
+    fn uws_ws_send_first_fragment_with_opcode(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode, compress: bool): bun.uws.SendStatus;
+    fn uws_ws_send_last_fragment(ssl: i32, ws: (*RawWebSocket)?, message: [*c]const u8, length: usize, compress: bool): bun.uws.SendStatus;
+    fn uws_ws_end(ssl: i32, ws: (*RawWebSocket)?, code: i32, message: [*c]const u8, length: usize);
+    fn uws_ws_cork(ssl: i32, ws: (*RawWebSocket)?, handler: CorkCallback, user_data: *!?);
+    fn uws_ws_subscribe(ssl: i32, ws: (*RawWebSocket)?, topic: [*]const u8!, length: usize): bool;
+    fn uws_ws_unsubscribe(ssl: i32, ws: (*RawWebSocket)?, topic: [*]const u8!, length: usize): bool;
+    fn uws_ws_is_subscribed(ssl: i32, ws: (*RawWebSocket)?, topic: [*]const u8!, length: usize): bool;
+    fn uws_ws_iterate_topics(ssl: i32, ws: (*RawWebSocket)?, callback: TopicCallback, user_data: *!?);
+    fn uws_ws_publish(ssl: i32, ws: (*RawWebSocket)?, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize): bool;
+    fn uws_ws_publish_with_options(ssl: i32, ws: (*RawWebSocket)?, topic: [*]const u8!, topic_length: usize, message: [*]const u8!, message_length: usize, opcode: bun.uws.Opcode, compress: bool): bool;
+    fn uws_ws_get_buffered_amount(ssl: i32, ws: (*RawWebSocket)?): usize;
+    fn uws_ws_get_remote_address(ssl: i32, ws: (*RawWebSocket)?, dest: *[*c]u8): usize;
+    fn uws_ws_get_remote_address_as_text(ssl: i32, ws: (*RawWebSocket)?, dest: *[*c]u8): usize;
 }
 
 pub fn WebSocket(comptime ssl_flag: i32): type { return struct {
@@ -204,6 +205,8 @@ export enum AnyWebSocket {
             .tcp(w) => w.isSubscribed(topic),
         };
     }
+
+    pub const getTopicsAsJSArray = uws_jsc.anyWebSocketGetTopicsAsJSArray;
 
     pub fn publish(topic: string, message: string, opcode: bun.uws.Opcode, compress: bool): bool {
         return switch (this) {

@@ -72,9 +72,6 @@ const fmt = @import("bun").fmt;
 const debugAssert = @import("bun").debugAssert;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
-const Managed = @import("std:array_list").Managed;
-const as = @import("std:array_list").as;
-const ManagedList = @import("std:array_list").ManagedList;
 pub const TextEncoderStreamEncoderPrepend = struct {
     bytes: [4]u8,
     len: u8,
@@ -232,6 +229,7 @@ pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const @"new" = TrivialNew(TextEncoderStreamEncoder);
+const ManagedList = std.array_list.Managed;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSUint8Array = jsc.JSUint8Array;
 const JSValue = jsc.JSValue;

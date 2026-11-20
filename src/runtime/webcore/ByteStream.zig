@@ -76,7 +76,7 @@ pub const ByteStream = @This();
 
 buffer: std.array_list.Managed(u8) = .{ .allocator = default_allocator, .items = empty_u8_slice[0..0], .capacity = 0 },
 has_received_last_chunk: bool = false,
-pending: streams.Result.Pending = .{ .result = .{ .done = .{} } },
+pending: streams.Result.Pending = .{ .result = .done },
 done: bool = false,
 pending_buffer: []u8 = empty_u8_slice[0..0],
 pending_value: jsc.Strong.Optional = .empty,
@@ -154,7 +154,7 @@ pub fn onData(self: *ByteStream, stream: streams.Result, allocator: std.mem.Allo
                 {
                     _ = self.buffer.clearAndFree();
                     _ = self.pending.result.deinit();
-                    self.pending.result = .{ .done = .{} };
+                    self.pending.result = .done;
                     self.buffer_action = null;
                 }
                 }
@@ -217,7 +217,7 @@ pub fn onData(self: *ByteStream, stream: streams.Result, allocator: std.mem.Allo
                     if ((stream == .err)) {
                         self.pending.result = .{ .err = stream.err };
                     } else {
-                        self.pending.result = .{ .done = .{} };
+                        self.pending.result = .done;
                     }
                 } else {
                     self.pending.result = .{ .into_array_and_done = .{ .value = self.value(), .len = @as(Blob.SizeType, @truncate(to_copy.len)) } };
@@ -323,7 +323,7 @@ pub fn onPull(self: *ByteStream, buffer: []u8, view: JSValue) streams.Result {
             return .{ .into_array = .{ .value = view, .len = @as(Blob.SizeType, @truncate(to_write)) } };
         }
         if (self.has_received_last_chunk) {
-            return .{ .done = .{} };
+            return .done;
         }
         self.pending_buffer = buffer;
         _ = self.setValue(view);
@@ -341,7 +341,7 @@ pub fn onCancel(self: *ByteStream) void {
         if ((view != JSValue.zero)) {
             self.pending_buffer = empty_u8_slice[0..0];
             _ = self.pending.result.deinit();
-            self.pending.result = .{ .done = .{} };
+            self.pending.result = .done;
             _ = self.pending.run();
         }
         if (self.buffer_action) |*action| {
@@ -366,7 +366,7 @@ pub fn deinit(self: *ByteStream) void {
             self.done = true;
             self.pending_buffer = empty_u8_slice[0..0];
             _ = self.pending.result.deinit();
-            self.pending.result = .{ .done = .{} };
+            self.pending.result = .done;
             if (((self.pending.state == .pending) and (self.pending.future == .promise))) {
                 _ = self.pending.runOnNextTick();
             } else {
@@ -393,7 +393,7 @@ pub fn toAnyBlob(self: *ByteStream) ?Blob.Any {
             self.buffer = .{ .allocator = default_allocator, .items = empty_u8_slice[0..0], .capacity = 0 };
             self.done = true;
             _ = self.pending.result.deinit();
-            self.pending.result = .{ .done = .{} };
+            self.pending.result = .done;
             self.parent().is_closed = true;
             return .{ .InternalBlob = .{ .bytes = saved_buf, .was_string = false } };
         }
@@ -429,7 +429,7 @@ pub fn toBufferedValue(self: *ByteStream, globalThis: *JSGlobalObject, action: s
 }
 pub const Source = webcore.ReadableStream.NewSource(ByteStream, "Bytes", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
 pub const tag = webcore.ReadableStream.Tag.Bytes;
-var empty_u8_slice: [0]u8 = &.{};
+var empty_u8_slice: [0]u8 = undefined;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;

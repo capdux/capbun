@@ -3234,7 +3234,8 @@ pub struct Resolver {
                 return globalThis.throwInvalidArguments("Invalid address family", .{});
             }
 
-            const addressString = try (try triple.getIndex(globalThis, 1)).toBunString(globalThis);
+            const addressVal = triple.getIndex(globalThis, 1)?;
+            const addressString = addressVal.toBunString(globalThis)?;
             defer addressString.deref();
 
             const addressSlice = try addressString.toOwnedSlice(allocator);

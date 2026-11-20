@@ -2,13 +2,15 @@ import {
     default_allocator,
     copy,
     csprng,
-    String as BunString,
+    String,
     JSError,
     jsc,
 } from "bun";
 import { BoringSSL } from "bun:boringssl";
 import { time } from "std";
 import { UUID, UUID5, UUID7 } from "../../jsc/uuid";
+
+const BunString = String;
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;

@@ -61,168 +61,165 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const handleOom = @import("bun").handleOom;
 const assert = @import("bun").assert;
 const ByteList = @import("bun").ByteList;
 const sys = @import("bun").sys;
 const webcore = @import("bun").webcore;
 const jsc = @import("bun").jsc;
-const Allocator = @import("std:mem").Allocator;
-const mem = @import("std").mem;
-pub const ArrayBufferSink = struct {
-    bytes: ByteList,
-    allocator: Allocator,
-    done: bool = false,
-    signal: Signal = .{},
-    next: ?Sink = null,
-    streaming: bool = false,
-    as_uint8array: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.done = false; self_ptr.signal = .{}; self_ptr.next = null; self_ptr.streaming = false; self_ptr.as_uint8array = false; return self_ptr; }
+pub const ArrayBufferSink = @This();
+
+bytes: ByteList,
+allocator: Allocator,
+done: bool = false,
+signal: Signal = .{},
+next: ?Sink = null,
+streaming: bool = false,
+as_uint8array: bool = false,
 
 pub fn connect(self: *ArrayBufferSink, signal: Signal) void {
-            _ = assert((self.reader == null));
-            self.signal = signal;
-    }
+        _ = assert((self.reader == null));
+        self.signal = signal;
+}
 
 pub fn start(self: *ArrayBufferSink, stream_start: streams.Start) sys.Maybe(void) {
-            _ = self.bytes.clearRetainingCapacity();
-            switch (stream_start) {
+        _ = self.bytes.clearRetainingCapacity();
+        switch (stream_start) {
 .ArrayBufferSink => |config| {
 if ((config.chunk_size > 0)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.bytes.ensureTotalCapacityPrecise(self.allocator, config.chunk_size)) catch |__ce_0| { _ = &__ce_0; return .{ .err = Syscall.Error.oom }; }); });
-            }
-            self.as_uint8array = config.as_uint8array;
-            self.streaming = config.stream;
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.bytes.ensureTotalCapacityPrecise(self.allocator, config.chunk_size)) catch |__ce_0| { _ = &__ce_0; return .{ .err = Syscall.Error.oom }; }); });
+        }
+        self.as_uint8array = config.as_uint8array;
+        self.streaming = config.stream;
 },
 else => {
 
 },
 }
-            self.done = false;
-            _ = self.signal.start();
-            return .success;
-    }
+        self.done = false;
+        _ = self.signal.start();
+        return .success;
+}
 
 pub fn flush(self: *ArrayBufferSink) sys.Maybe(void) {
-        _ = self;
-            return .success;
-    }
+    _ = self;
+        return .success;
+}
 
 pub fn flushFromJS(self: *ArrayBufferSink, globalThis: *JSGlobalObject, wait: bool) sys.Maybe(JSValue) {
-            if (self.streaming) {
-                const value: JSValue = (switch (self.as_uint8array) {
+        if (self.streaming) {
+            const value: JSValue = (switch (self.as_uint8array) {
 true => (blk_catch_1: { break :blk_catch_1 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .Uint8Array)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); }),
 false => (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .ArrayBuffer)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); }),
 else => unreachable,
 });
-                self.bytes.len = 0;
-                if (wait) {
-                }
-                return .{ .result = value };
+            self.bytes.len = 0;
+            if (wait) {
             }
-            return .{ .result = JSValue.jsNumber(0) };
-    }
+            return .{ .result = value };
+        }
+        return .{ .result = JSValue.jsNumber(0) };
+}
 
 pub fn finalize(self: *ArrayBufferSink) void {
-            _ = self.destroy();
-    }
+        _ = self.destroy();
+}
 
 pub fn init(allocator: Allocator, next: ?Sink) !*ArrayBufferSink {
-            return bun.new(ArrayBufferSink, .{ .bytes = ByteList.empty, .allocator = allocator, .next = next });
-    }
+        return bun.new(ArrayBufferSink, .{ .bytes = ByteList.empty, .allocator = allocator, .next = next });
+}
 
 pub fn construct(self: *ArrayBufferSink, allocator: Allocator) void {
-            self.* = ArrayBufferSink{ .bytes = ByteList{  }, .allocator = allocator, .next = null };
-    }
+        self.* = ArrayBufferSink{ .bytes = ByteList{  }, .allocator = allocator, .next = null };
+}
 
 pub fn write(self: *ArrayBufferSink, data: streams.Result) streams.Result.Writable {
-            if (self.next) |*next| {
-                _ = &next;
-                return (next.*).writeBytes(data);
-            }
-            const len = (blk_catch_3: { break :blk_catch_3 ((self.bytes.write(self.allocator, data.slice())) catch |__ce_3| { _ = &__ce_3; return .{ .err = Syscall.Error.oom }; }); });
-            _ = self.signal.ready(null, null);
-            return .{ .owned = len };
-    }
+        if (self.next) |*next| {
+            _ = &next;
+            return (next.*).writeBytes(data);
+        }
+        const len = (blk_catch_3: { break :blk_catch_3 ((self.bytes.write(self.allocator, data.slice())) catch |__ce_3| { _ = &__ce_3; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
+        return .{ .owned = len };
+}
 
 pub fn writeLatin1(self: *ArrayBufferSink, data: streams.Result) streams.Result.Writable {
-            if (self.next) |*next| {
-                _ = &next;
-                return (next.*).writeLatin1(data);
-            }
-            const len = (blk_catch_4: { break :blk_catch_4 ((self.bytes.writeLatin1(self.allocator, data.slice())) catch |__ce_4| { _ = &__ce_4; return .{ .err = Syscall.Error.oom }; }); });
-            _ = self.signal.ready(null, null);
-            return .{ .owned = len };
-    }
+        if (self.next) |*next| {
+            _ = &next;
+            return (next.*).writeLatin1(data);
+        }
+        const len = (blk_catch_4: { break :blk_catch_4 ((self.bytes.writeLatin1(self.allocator, data.slice())) catch |__ce_4| { _ = &__ce_4; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
+        return .{ .owned = len };
+}
 
 pub fn writeUTF16(self: *ArrayBufferSink, data: streams.Result) streams.Result.Writable {
-            if (self.next) |*next| {
-                _ = &next;
-                return (next.*).writeUTF16(data);
-            }
-            const u16_slice = mem.bytesAsSlice(u16, data.slice());
-            const len = (blk_catch_5: { break :blk_catch_5 ((self.bytes.writeUTF16(self.allocator, u16_slice)) catch |__ce_5| { _ = &__ce_5; return .{ .err = Syscall.Error.oom }; }); });
-            _ = self.signal.ready(null, null);
-            return .{ .owned = len };
-    }
+        if (self.next) |*next| {
+            _ = &next;
+            return (next.*).writeUTF16(data);
+        }
+        const u16_slice = mem.bytesAsSlice(u16, data.slice());
+        const len = (blk_catch_5: { break :blk_catch_5 ((self.bytes.writeUTF16(self.allocator, u16_slice)) catch |__ce_5| { _ = &__ce_5; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
+        return .{ .owned = len };
+}
 
 pub fn end(self: *ArrayBufferSink, err: ?Syscall.Error) sys.Maybe(void) {
-            if (self.next) |*next| {
-                _ = &next;
-                return (next.*).end(err);
-            }
-            _ = self.signal.close(err);
-            return .success;
-    }
+        if (self.next) |*next| {
+            _ = &next;
+            return (next.*).end(err);
+        }
+        _ = self.signal.close(err);
+        return .success;
+}
 
 pub fn destroy(self: *ArrayBufferSink) void {
-            _ = self.bytes.deinit(self.allocator);
-            _ = bun.destroy(self);
-    }
+        _ = self.bytes.deinit(self.allocator);
+        _ = bun.destroy(self);
+}
 
 pub fn toJS(self: *ArrayBufferSink, globalThis: *JSGlobalObject, as_uint8array: bool) JSValue {
-            if (self.streaming) {
-                const value: JSValue = (switch (as_uint8array) {
+        if (self.streaming) {
+            const value: JSValue = (switch (as_uint8array) {
 true => jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .Uint8Array),
 false => jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .ArrayBuffer),
 else => unreachable,
 });
-                self.bytes.len = 0;
-                return value;
-            }
-            defer {
-            self.bytes = ByteList.empty;
-            }
-            return ArrayBuffer.fromBytes(handleOom(self.bytes.toOwnedSlice(self.allocator)), (if (as_uint8array) .Uint8Array else .ArrayBuffer)).toJS(globalThis, null);
-    }
+            self.bytes.len = 0;
+            return value;
+        }
+        defer {
+        self.bytes = ByteList.empty;
+        }
+        return ArrayBuffer.fromBytes(handleOom(self.bytes.toOwnedSlice(self.allocator)), (if (as_uint8array) .Uint8Array else .ArrayBuffer)).toJS(globalThis, null);
+}
 
 pub fn endFromJS(self: *ArrayBufferSink, _: *JSGlobalObject) sys.Maybe(ArrayBuffer) {
-            if (self.done) {
-                return .{ .result = ArrayBuffer.fromBytes(empty_ab_bytes[0..0], .ArrayBuffer) };
-            }
-            _ = assert((self.next == null));
-            self.done = true;
-            _ = self.signal.close(null);
-            defer {
-            self.bytes = ByteList.empty;
-            }
-            return .{ .result = ArrayBuffer.fromBytes(handleOom(self.bytes.toOwnedSlice(self.allocator)), (if (self.as_uint8array) .Uint8Array else .ArrayBuffer)) };
-    }
+        if (self.done) {
+            return .{ .result = ArrayBuffer.fromBytes(empty_ab_bytes[0..0], .ArrayBuffer) };
+        }
+        _ = assert((self.next == null));
+        self.done = true;
+        _ = self.signal.close(null);
+        defer {
+        self.bytes = ByteList.empty;
+        }
+        return .{ .result = ArrayBuffer.fromBytes(handleOom(self.bytes.toOwnedSlice(self.allocator)), (if (self.as_uint8array) .Uint8Array else .ArrayBuffer)) };
+}
 
 pub fn sink(self: *ArrayBufferSink) Sink {
-            return Sink.init(self);
-    }
+        return Sink.init(self);
+}
 
-pub fn memoryCost(self: *const ArrayBufferSink) usize {
-            return self.bytes.cap;
-    }
-    pub const JSSink = webcore.Sink.JSSink(ArrayBufferSink, "ArrayBufferSink");
-    pub const writeBytes = write;
-};
-
-var empty_ab_bytes: [0]u8 = &.{};
-const bun = @import("bun");
+pub fn memoryCost(self: ArrayBufferSink) usize {
+        return self.bytes.cap;
+}
+pub const JSSink = webcore.Sink.JSSink(ArrayBufferSink, "ArrayBufferSink");
+pub const writeBytes = write;
+var empty_ab_bytes: [0]u8 = undefined;
+const Allocator = std.mem.Allocator;
+const mem = std.mem;
 const Syscall = sys;
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;

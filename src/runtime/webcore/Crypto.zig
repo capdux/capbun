@@ -59,8 +59,6 @@ const default_allocator = @import("bun").default_allocator;
 const copy = @import("bun").copy;
 const csprng = @import("bun").csprng;
 const String = @import("bun").String;
-const as = @import("bun").as;
-const BunString = @import("bun").BunString;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
 const BoringSSL = @import("bun:boringssl").BoringSSL;
@@ -144,6 +142,7 @@ pub const js = jsc.Codegen.JSCrypto;
 pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
+const BunString = String;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 

@@ -54,6 +54,15 @@ export class LoopHandler {
     }
 }
 
+type OpaquePtr = *!;
+pub const PosixEventType = switch (bun.Environment.os) {
+    .linux => std.os.linux.epoll_event,
+    .mac => std.posix.system.kevent64_s,
+    .freebsd => std.c.Kevent,
+    .windows => OpaquePtr,
+    .wasm => @compileError("Unsupported OS"),
+};
+
 export @extern class PosixLoop {
     @align(16) internal_loop_data: InternalLoopData,
     num_polls: i32 = 0,
@@ -62,7 +71,7 @@ export @extern class PosixLoop {
     fd: i32 = 0,
     active: u32 = 0,
     pending_wakeups: u32 = 0,
-    @align(16) ready_polls: bun.EpollEvent[1024],
+    @align(16) ready_polls: [1024]PosixEventType,
 
     pub fn uncork(*_) {
         uws_res_clear_corked_socket(this as *Loop);

@@ -206,80 +206,80 @@ pub struct BunObject {
         }
 
         // --- Lazy property callbacks ---
-        @export(&BunObject.Archive, { name: lazyPropertyCallbackName("Archive") });
-        @export(&BunObject.CryptoHasher, { name: lazyPropertyCallbackName("CryptoHasher") });
-        @export(&BunObject.CSRF, { name: lazyPropertyCallbackName("CSRF") });
-        @export(&BunObject.FFI, { name: lazyPropertyCallbackName("FFI") });
-        @export(&BunObject.FileSystemRouter, { name: lazyPropertyCallbackName("FileSystemRouter") });
-        @export(&BunObject.MD4, { name: lazyPropertyCallbackName("MD4") });
-        @export(&BunObject.MD5, { name: lazyPropertyCallbackName("MD5") });
-        @export(&BunObject.SHA1, { name: lazyPropertyCallbackName("SHA1") });
-        @export(&BunObject.SHA224, { name: lazyPropertyCallbackName("SHA224") });
-        @export(&BunObject.SHA256, { name: lazyPropertyCallbackName("SHA256") });
-        @export(&BunObject.SHA384, { name: lazyPropertyCallbackName("SHA384") });
-        @export(&BunObject.SHA512, { name: lazyPropertyCallbackName("SHA512") });
-        @export(&BunObject.SHA512_256, { name: lazyPropertyCallbackName("SHA512_256") });
-        @export(&BunObject.JSONC, { name: lazyPropertyCallbackName("JSONC") });
-        @export(&BunObject.markdown, { name: lazyPropertyCallbackName("markdown") });
-        @export(&BunObject.TOML, { name: lazyPropertyCallbackName("TOML") });
-        @export(&BunObject.JSON5, { name: lazyPropertyCallbackName("JSON5") });
-        @export(&BunObject.YAML, { name: lazyPropertyCallbackName("YAML") });
-        @export(&BunObject.Glob, { name: lazyPropertyCallbackName("Glob") });
-        @export(&BunObject.Image, { name: lazyPropertyCallbackName("Image") });
-        @export(&BunObject.Transpiler, { name: lazyPropertyCallbackName("Transpiler") });
-        @export(&BunObject.argv, { name: lazyPropertyCallbackName("argv") });
-        @export(&BunObject.cron, { name: lazyPropertyCallbackName("cron") });
-        @export(&BunObject.cwd, { name: lazyPropertyCallbackName("cwd") });
-        @export(&BunObject.enableANSIColors, { name: lazyPropertyCallbackName("enableANSIColors") });
-        @export(&BunObject.hash, { name: lazyPropertyCallbackName("hash") });
-        @export(&BunObject.inspect, { name: lazyPropertyCallbackName("inspect") });
-        @export(&BunObject.origin, { name: lazyPropertyCallbackName("origin") });
-        @export(&BunObject.unsafe, { name: lazyPropertyCallbackName("unsafe") });
-        @export(&BunObject.semver, { name: lazyPropertyCallbackName("semver") });
-        @export(&BunObject.embeddedFiles, { name: lazyPropertyCallbackName("embeddedFiles") });
-        @export(&BunObject.S3Client, { name: lazyPropertyCallbackName("S3Client") });
-        @export(&BunObject.s3, { name: lazyPropertyCallbackName("s3") });
-        @export(&BunObject.ValkeyClient, { name: lazyPropertyCallbackName("ValkeyClient") });
-        @export(&BunObject.valkey, { name: lazyPropertyCallbackName("valkey") });
-        @export(&BunObject.Terminal, { name: lazyPropertyCallbackName("Terminal") });
+        @export(&@field(BunObject, "Archive"), { name: lazyPropertyCallbackName("Archive") });
+        @export(&@field(BunObject, "CryptoHasher"), { name: lazyPropertyCallbackName("CryptoHasher") });
+        @export(&@field(BunObject, "CSRF"), { name: lazyPropertyCallbackName("CSRF") });
+        @export(&@field(BunObject, "FFI"), { name: lazyPropertyCallbackName("FFI") });
+        @export(&@field(BunObject, "FileSystemRouter"), { name: lazyPropertyCallbackName("FileSystemRouter") });
+        @export(&@field(BunObject, "MD4"), { name: lazyPropertyCallbackName("MD4") });
+        @export(&@field(BunObject, "MD5"), { name: lazyPropertyCallbackName("MD5") });
+        @export(&@field(BunObject, "SHA1"), { name: lazyPropertyCallbackName("SHA1") });
+        @export(&@field(BunObject, "SHA224"), { name: lazyPropertyCallbackName("SHA224") });
+        @export(&@field(BunObject, "SHA256"), { name: lazyPropertyCallbackName("SHA256") });
+        @export(&@field(BunObject, "SHA384"), { name: lazyPropertyCallbackName("SHA384") });
+        @export(&@field(BunObject, "SHA512"), { name: lazyPropertyCallbackName("SHA512") });
+        @export(&@field(BunObject, "SHA512_256"), { name: lazyPropertyCallbackName("SHA512_256") });
+        @export(&@field(BunObject, "JSONC"), { name: lazyPropertyCallbackName("JSONC") });
+        @export(&@field(BunObject, "markdown"), { name: lazyPropertyCallbackName("markdown") });
+        @export(&@field(BunObject, "TOML"), { name: lazyPropertyCallbackName("TOML") });
+        @export(&@field(BunObject, "JSON5"), { name: lazyPropertyCallbackName("JSON5") });
+        @export(&@field(BunObject, "YAML"), { name: lazyPropertyCallbackName("YAML") });
+        @export(&@field(BunObject, "Glob"), { name: lazyPropertyCallbackName("Glob") });
+        @export(&@field(BunObject, "Image"), { name: lazyPropertyCallbackName("Image") });
+        @export(&@field(BunObject, "Transpiler"), { name: lazyPropertyCallbackName("Transpiler") });
+        @export(&@field(BunObject, "argv"), { name: lazyPropertyCallbackName("argv") });
+        @export(&@field(BunObject, "cron"), { name: lazyPropertyCallbackName("cron") });
+        @export(&@field(BunObject, "cwd"), { name: lazyPropertyCallbackName("cwd") });
+        @export(&@field(BunObject, "enableANSIColors"), { name: lazyPropertyCallbackName("enableANSIColors") });
+        @export(&@field(BunObject, "hash"), { name: lazyPropertyCallbackName("hash") });
+        @export(&@field(BunObject, "inspect"), { name: lazyPropertyCallbackName("inspect") });
+        @export(&@field(BunObject, "origin"), { name: lazyPropertyCallbackName("origin") });
+        @export(&@field(BunObject, "unsafe"), { name: lazyPropertyCallbackName("unsafe") });
+        @export(&@field(BunObject, "semver"), { name: lazyPropertyCallbackName("semver") });
+        @export(&@field(BunObject, "embeddedFiles"), { name: lazyPropertyCallbackName("embeddedFiles") });
+        @export(&@field(BunObject, "S3Client"), { name: lazyPropertyCallbackName("S3Client") });
+        @export(&@field(BunObject, "s3"), { name: lazyPropertyCallbackName("s3") });
+        @export(&@field(BunObject, "ValkeyClient"), { name: lazyPropertyCallbackName("ValkeyClient") });
+        @export(&@field(BunObject, "valkey"), { name: lazyPropertyCallbackName("valkey") });
+        @export(&@field(BunObject, "Terminal"), { name: lazyPropertyCallbackName("Terminal") });
         // --- Lazy property callbacks ---
 
         // --- Callbacks ---
-        @export(&BunObject.allocUnsafe, { name: callbackName("allocUnsafe") });
-        @export(&BunObject.build, { name: callbackName("build") });
-        @export(&BunObject.color, { name: callbackName("color") });
-        @export(&BunObject.connect, { name: callbackName("connect") });
-        @export(&BunObject.createParsedShellScript, { name: callbackName("createParsedShellScript") });
-        @export(&BunObject.createShellInterpreter, { name: callbackName("createShellInterpreter") });
-        @export(&BunObject.deflateSync, { name: callbackName("deflateSync") });
-        @export(&BunObject.file, { name: callbackName("file") });
-        @export(&BunObject.gunzipSync, { name: callbackName("gunzipSync") });
-        @export(&BunObject.gzipSync, { name: callbackName("gzipSync") });
-        @export(&BunObject.indexOfLine, { name: callbackName("indexOfLine") });
-        @export(&BunObject.inflateSync, { name: callbackName("inflateSync") });
-        @export(&BunObject.jest, { name: callbackName("jest") });
-        @export(&BunObject.listen, { name: callbackName("listen") });
-        @export(&BunObject.mmap, { name: callbackName("mmap") });
-        @export(&BunObject.nanoseconds, { name: callbackName("nanoseconds") });
-        @export(&BunObject.openInEditor, { name: callbackName("openInEditor") });
-        @export(&BunObject.registerMacro, { name: callbackName("registerMacro") });
-        @export(&BunObject.resolve, { name: callbackName("resolve") });
-        @export(&BunObject.resolveSync, { name: callbackName("resolveSync") });
-        @export(&BunObject.serve, { name: callbackName("serve") });
-        @export(&BunObject.sha, { name: callbackName("sha") });
-        @export(&BunObject.shellEscape, { name: callbackName("shellEscape") });
-        @export(&BunObject.shrink, { name: callbackName("shrink") });
-        @export(&BunObject.stringWidth, { name: callbackName("stringWidth") });
-        @export(&BunObject.sleepSync, { name: callbackName("sleepSync") });
-        @export(&BunObject.spawn, { name: callbackName("spawn") });
-        @export(&BunObject.spawnSync, { name: callbackName("spawnSync") });
-        @export(&BunObject.udpSocket, { name: callbackName("udpSocket") });
-        @export(&BunObject.which, { name: callbackName("which") });
-        @export(&BunObject.write, { name: callbackName("write") });
-        @export(&BunObject.zstdCompressSync, { name: callbackName("zstdCompressSync") });
-        @export(&BunObject.zstdDecompressSync, { name: callbackName("zstdDecompressSync") });
-        @export(&BunObject.zstdCompress, { name: callbackName("zstdCompress") });
-        @export(&BunObject.zstdDecompress, { name: callbackName("zstdDecompress") });
+        @export(&@field(BunObject, "allocUnsafe"), { name: callbackName("allocUnsafe") });
+        @export(&@field(BunObject, "build"), { name: callbackName("build") });
+        @export(&@field(BunObject, "color"), { name: callbackName("color") });
+        @export(&@field(BunObject, "connect"), { name: callbackName("connect") });
+        @export(&@field(BunObject, "createParsedShellScript"), { name: callbackName("createParsedShellScript") });
+        @export(&@field(BunObject, "createShellInterpreter"), { name: callbackName("createShellInterpreter") });
+        @export(&@field(BunObject, "deflateSync"), { name: callbackName("deflateSync") });
+        @export(&@field(BunObject, "file"), { name: callbackName("file") });
+        @export(&@field(BunObject, "gunzipSync"), { name: callbackName("gunzipSync") });
+        @export(&@field(BunObject, "gzipSync"), { name: callbackName("gzipSync") });
+        @export(&@field(BunObject, "indexOfLine"), { name: callbackName("indexOfLine") });
+        @export(&@field(BunObject, "inflateSync"), { name: callbackName("inflateSync") });
+        @export(&@field(BunObject, "jest"), { name: callbackName("jest") });
+        @export(&@field(BunObject, "listen"), { name: callbackName("listen") });
+        @export(&@field(BunObject, "mmap"), { name: callbackName("mmap") });
+        @export(&@field(BunObject, "nanoseconds"), { name: callbackName("nanoseconds") });
+        @export(&@field(BunObject, "openInEditor"), { name: callbackName("openInEditor") });
+        @export(&@field(BunObject, "registerMacro"), { name: callbackName("registerMacro") });
+        @export(&@field(BunObject, "resolve"), { name: callbackName("resolve") });
+        @export(&@field(BunObject, "resolveSync"), { name: callbackName("resolveSync") });
+        @export(&@field(BunObject, "serve"), { name: callbackName("serve") });
+        @export(&@field(BunObject, "sha"), { name: callbackName("sha") });
+        @export(&@field(BunObject, "shellEscape"), { name: callbackName("shellEscape") });
+        @export(&@field(BunObject, "shrink"), { name: callbackName("shrink") });
+        @export(&@field(BunObject, "stringWidth"), { name: callbackName("stringWidth") });
+        @export(&@field(BunObject, "sleepSync"), { name: callbackName("sleepSync") });
+        @export(&@field(BunObject, "spawn"), { name: callbackName("spawn") });
+        @export(&@field(BunObject, "spawnSync"), { name: callbackName("spawnSync") });
+        @export(&@field(BunObject, "udpSocket"), { name: callbackName("udpSocket") });
+        @export(&@field(BunObject, "which"), { name: callbackName("which") });
+        @export(&@field(BunObject, "write"), { name: callbackName("write") });
+        @export(&@field(BunObject, "zstdCompressSync"), { name: callbackName("zstdCompressSync") });
+        @export(&@field(BunObject, "zstdDecompressSync"), { name: callbackName("zstdDecompressSync") });
+        @export(&@field(BunObject, "zstdCompress"), { name: callbackName("zstdCompress") });
+        @export(&@field(BunObject, "zstdDecompress"), { name: callbackName("zstdDecompress") });
         // --- Callbacks ---
 
         // --- LazyProperty initializers ---
@@ -289,11 +289,11 @@ pub struct BunObject {
         // --- LazyProperty initializers ---
 
         // --- Getters ---
-        @export(&BunObject.main, { name: "BunObject_getter_main" });
+        @export(&@field(BunObject, "main"), { name: "BunObject_getter_main" });
         // --- Getters ---
 
         // --- Setters ---
-        @export(&BunObject.setMain, { name: "BunObject_setter_main" });
+        @export(&@field(BunObject, "setMain"), { name: "BunObject_setter_main" });
         // --- Setters ---
     }
 }

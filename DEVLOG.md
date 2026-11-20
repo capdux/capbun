@@ -1383,3 +1383,5 @@
 - **[2026-11-20] Wave 5 `RefPtr(T)` 惰性求值根因**：`src/ptr/ref_count.cp` 中 `@FieldType(T, "ref_count")` 移回 `return struct` 内部避免与队列自引用形成循环依赖；`src/runtime/node/types.cp` 按值只读方法 `switch (_.*)` 修正为 `switch (_)`。
 
 - **[2026-11-20] Wave 6 Batch B 典型修复**：`MaxHeapAllocator` 升级 `@root struct` 导出 `isInstance`；`wyhash` 3 个超 `i64::MAX` 的 `u64` 素数改位移构造；`ls`/`touch`/`ErrorPacket` 可选切片/数组加括号 `([]const u8)?`/`([5]u8)?`；`ConsoleObject`/`fmt` 剩余 `writer.print(..., [])` 改 `.{}`；`workaround_missing_symbols` 补 `@callconv("c")`；`url` `**bool?` 改 `(*bool)?`。
+
+- **[2026-11-20] Wave 6 Batch A 典型修复**：`ArrayBufferSink` 升级 `@root struct` 导出根级 `JSSink`；`ServerWebSocket`/`SecureContext` 修正 `memoryCost` 接收者 `*_` 与错误联合返回 `JSValue.*` 显式限定；`BunObject` 用 `@export(&@field(BunObject, ...))` 避开 `&UpperCase`；`SocketAddress`/`TextDecoder` 拆解元组解构避开 `CpUnpackElemType(?anyopaque)`。

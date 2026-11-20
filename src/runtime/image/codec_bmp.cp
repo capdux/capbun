@@ -84,7 +84,8 @@ pub fn parseHeader(b: []const u8): codecs.Error!Header {
         if (m != 0) {
             // Contiguous-run check: m >> ctz(m) must be 2^k - 1. The +1 wraps
             // for the all-ones mask we're rejecting, hence `+%`.
-            const run = m >> @intCast(@ctz(m));
+            const sh: u5 = @intCast(@ctz(m));
+            const run = m >> sh;
             if ((run & (run +% 1)) != 0 || @popCount(m) > 8) return error.DecodeFailed;
         }
     }

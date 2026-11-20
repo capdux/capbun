@@ -54,8 +54,7 @@ pub const S3Stat = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn constructor(self: *S3Stat, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*S3Stat {
-        _ = self;
+pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*S3Stat {
             return globalThis.throwInvalidArguments("S3Stat is not constructable", .{});
     }
 

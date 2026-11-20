@@ -113,18 +113,109 @@ return JSValue.js_undefined;
 }
     }
 
-pub fn fromJS(self: *Start, globalThis: *JSGlobalObject, value: JSValue) JSError!*Start {
-        _ = self;
+pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) JSError!@This() {
             if ((value.isEmptyOrUndefinedOrNull() or (!value.isObject()))) {
-                return .{ .empty = .{} };
+                return Start.empty;
             }
-            if (value.get(globalThis, "chunkSize")) |chunkSize| {
+            if (try value.get(globalThis, "chunkSize")) |chunkSize| {
                 _ = &chunkSize;
                 if (chunkSize.isNumber()) {
                     return .{ .chunk_size = @as(Blob.SizeType, @intCast(@as(i52, @truncate(chunkSize.toInt64())))) };
                 }
             }
-            return .{ .empty = .{} };
+            return Start.empty;
+    }
+
+pub fn fromJSWithTag(globalThis: *JSGlobalObject, value: JSValue, comptime tag: StartTag) JSError!@This() {
+            if ((value.isEmptyOrUndefinedOrNull() or (!value.isObject()))) {
+                return Start.empty;
+            }
+            if (comptime (tag == .ArrayBufferSink)) {
+                var as_uint8array = false;
+                _ = &as_uint8array;
+                var stream = false;
+                _ = &stream;
+                var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
+                _ = &chunk_size;
+                var empty = true;
+                _ = &empty;
+                if (try value.getOwn(globalThis, "asUint8Array")) |val| {
+                    _ = &val;
+                    if (val.isBoolean()) {
+                        as_uint8array = val.toBoolean();
+                        empty = false;
+                    }
+                }
+                if (try value.fastGet(globalThis, .stream)) |val| {
+                    _ = &val;
+                    if (val.isBoolean()) {
+                        stream = val.toBoolean();
+                        empty = false;
+                    }
+                }
+                if (try value.fastGet(globalThis, .highWaterMark)) |chunkSize| {
+                    _ = &chunkSize;
+                    if (chunkSize.isNumber()) {
+                        empty = false;
+                        chunk_size = @as(Blob.SizeType, @intCast(@max(0, @as(i51, @truncate(chunkSize.toInt64())))));
+                    }
+                }
+                if ((!empty)) {
+                    return .{ .ArrayBufferSink = .{ .chunk_size = chunk_size, .as_uint8array = as_uint8array, .stream = stream } };
+                }
+            } else {
+                if (comptime (tag == .FileSink)) {
+                    var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
+                    _ = &chunk_size;
+                    if (try value.fastGet(globalThis, .highWaterMark)) |chunkSize| {
+                        _ = &chunkSize;
+                        if (chunkSize.isNumber()) {
+                            chunk_size = @as(Blob.SizeType, @intCast(@max(0, @as(i51, @truncate(chunkSize.toInt64())))));
+                        }
+                    }
+                    if (try value.fastGet(globalThis, .path)) |path| {
+                        _ = &path;
+                        if ((!path.isString())) {
+                            return .{ .err = sys.Error{ .errno = @intFromEnum(bun.sys.SystemErrno.EINVAL), .syscall = .write } };
+                        }
+                        return .{ .FileSink = .{ .chunk_size = chunk_size, .input_path = .{ .path = try path.toSlice(globalThis, globalThis.bunVM().allocator) } } };
+                    } else {
+                        if (try value.getTruthy(globalThis, "fd")) |fd_value| {
+                            _ = &fd_value;
+                            if ((!fd_value.isAnyInt())) {
+                                return .{ .err = sys.Error{ .errno = @intFromEnum(bun.sys.SystemErrno.EBADF), .syscall = .write } };
+                            }
+                            if (bun.FD.fromJS(fd_value)) |fd| {
+                                _ = &fd;
+                                return .{ .FileSink = .{ .chunk_size = chunk_size, .input_path = .{ .fd = fd } } };
+                            } else {
+                                return .{ .err = sys.Error{ .errno = @intFromEnum(bun.sys.SystemErrno.EBADF), .syscall = .write } };
+                            }
+                        }
+                    }
+                    return .{ .FileSink = .{ .input_path = .{ .fd = bun.invalid_fd }, .chunk_size = chunk_size } };
+                } else {
+                    if (comptime ((((tag == .NetworkSink) or (tag == .HTTPSResponseSink)) or (tag == .HTTPResponseSink)) or (tag == .H3ResponseSink))) {
+                        var empty = true;
+                        _ = &empty;
+                        var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(2048)) else @as(Blob.SizeType, 2048));
+                        _ = &chunk_size;
+                        if (try value.fastGet(globalThis, .highWaterMark)) |chunkSize| {
+                            _ = &chunkSize;
+                            if (chunkSize.isNumber()) {
+                                empty = false;
+                                chunk_size = @as(Blob.SizeType, @intCast(@max(256, @as(i51, @truncate(chunkSize.toInt64())))));
+                            }
+                        }
+                        if ((!empty)) {
+                            return .{ .chunk_size = chunk_size };
+                        }
+                    } else {
+                        _ = @compileError("Unsupported tag");
+                    }
+                }
+            }
+            return Start.empty;
     }
     pub const Tag = StartTag;
 };
@@ -263,10 +354,10 @@ _ = (blk_catch_3: { break :blk_catch_3 ((promise.resolve(globalThis, result.toJS
 }
     }
 
-pub fn toJS(self: *const ResultWritable, globalThis: *JSGlobalObject) JSValue {
-            switch (self) {
-.err => |err| {
-return JSPromise.rejectedPromise(globalThis, (blk_catch_4: { break :blk_catch_4 ((err.toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return JSValue.zero; }); })).toJS();
+pub fn toJS(self: *ResultWritable, globalThis: *JSGlobalObject) JSValue {
+            switch (self.*) {
+.err => |e| {
+return JSPromise.rejectedPromise(globalThis, (blk_catch_4: { break :blk_catch_4 ((e.toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return JSValue.zero; }); })).toJS();
 },
 .owned => |len| {
 return JSValue.jsNumber(len);
@@ -356,9 +447,9 @@ _ = owned.clearAndFree(default_allocator);
 .owned_and_done => |*owned_and_done| {
 _ = owned_and_done.clearAndFree(default_allocator);
 },
-.err => |err| {
-if ((err == .JSValue)) {
-                _ = error.JSValue.unprotect();
+.err => |e| {
+if ((e == .JSValue)) {
+                _ = e.JSValue.unprotect();
             }
 },
 else => {
@@ -521,13 +612,6 @@ return JSValue.false;
 pub const Signal = struct {
     ptr: ?*anyopaque = null,
     vtable: ?*const SignalVTable = null,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ptr = null; self_ptr.vtable = null; return self_ptr; }
-
-pub fn init(self: *Signal, ptr: ?*anyopaque, vtable: ?*const SignalVTable) void {
-            self.ptr = ptr;
-            self.vtable = vtable;
-    }
 
 pub fn clear(self: *Signal) void {
             self.ptr = null;
@@ -562,7 +646,7 @@ pub fn start(self: *Signal) void {
 
 pub const NetworkSink = struct {
     task: ?*bun.S3.MultiPartUpload = null,
-    signal: *Signal = .{},
+    signal: Signal = .{},
     globalThis: *JSGlobalObject = undefined,
     highWaterMark: Blob.SizeType = 2048,
     flushPromise: JSPromise.Strong = .{},
@@ -573,7 +657,7 @@ pub const NetworkSink = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.task = null; self_ptr.signal = .{}; self_ptr.globalThis = undefined; self_ptr.highWaterMark = 2048; self_ptr.flushPromise = .{}; self_ptr.endPromise = .{}; self_ptr.ended = false; self_ptr.done = false; self_ptr.cancel = false; return self_ptr; }
 
-pub fn init(self: *NetworkSink, task: ?*bun.S3.MultiPartUpload, signal: *Signal, globalThis: *JSGlobalObject, highWaterMark: Blob.SizeType, flushPromise: JSPromise.Strong, endPromise: JSPromise.Strong, ended: bool, done: bool, cancel: bool) void {
+pub fn init(self: *NetworkSink, task: ?*bun.S3.MultiPartUpload, signal: Signal, globalThis: *JSGlobalObject, highWaterMark: Blob.SizeType, flushPromise: JSPromise.Strong, endPromise: JSPromise.Strong, ended: bool, done: bool, cancel: bool) void {
         var __signal_moved = false; _ = &__signal_moved;
         defer if (!__signal_moved) { const __T = @TypeOf(signal); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = signal.release() catch {}; } else { signal.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = signal; _drop_val.release(); } };
         var __highWaterMark_moved = false; _ = &__highWaterMark_moved;
@@ -584,7 +668,6 @@ pub fn init(self: *NetworkSink, task: ?*bun.S3.MultiPartUpload, signal: *Signal,
         defer if (!__endPromise_moved) { const __T = @TypeOf(endPromise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = endPromise.release() catch {}; } else { endPromise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = endPromise; _drop_val.release(); } };
             self.task = task;
             self.signal = signal;
-            __signal_moved = true;
             self.globalThis = globalThis;
             self.highWaterMark = highWaterMark;
             self.flushPromise = flushPromise;
@@ -613,7 +696,7 @@ else => {
             return .success;
     }
 
-pub fn connect(self: *NetworkSink, signal: *Signal) void {
+pub fn connect(self: *NetworkSink, signal: Signal) void {
             self.signal = signal;
     }
 
@@ -804,7 +887,7 @@ _ = promise.deinit();
 },
 }
     }
-    const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
+    pub const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
 };
 
 pub const ReadResult = union(enum) {
@@ -990,7 +1073,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool) type {
     wrote: Blob.SizeType = 0,
     allocator: std.mem.Allocator,
     done: bool = false,
-    signal: *Signal = .{},
+    signal: Signal = .{},
     pending_flush: ?*jsc.JSPromise = null,
     wrote_at_start_of_flush: Blob.SizeType = 0,
     globalThis: *JSGlobalObject = undefined,
@@ -1003,7 +1086,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool) type {
     ctx: ?*anyopaque = null,
     auto_flusher: WebCore.AutoFlusher = .{},
 
-pub fn connect(self: *@This(), signal: *Signal) void {
+pub fn connect(self: *@This(), signal: Signal) void {
             self.signal = signal;
     }
 
@@ -1059,7 +1142,7 @@ pub fn sendWithoutAutoFlusher(self: *@This(), buf: []const u8) bool {
                 } else {
                     if ((self.res != null)) {
                         self.has_backpressure = true;
-                        _ = res.onWritable((&@This()), onWritable, self);
+                        _ = res.onWritable(self, onWritable);
                     }
                 }
                 return success;
@@ -1263,7 +1346,7 @@ pub fn writeLatin1(self: *@This(), data: Result) Result.Writable {
             if (((self.res == null) or self.res.?.hasResponded())) {
                 _ = self.signal.close(null);
                 _ = self.markDone();
-                return .{ .done = .{} };
+                return .done;
             }
             const bytes = data.slice();
             const len = @as(Blob.SizeType, @truncate(bytes.len));
@@ -1304,7 +1387,7 @@ pub fn writeUTF16(self: *@This(), data: Result) Result.Writable {
             if (((self.res == null) or self.res.?.hasResponded())) {
                 _ = self.signal.close(null);
                 _ = self.markDone();
-                return .{ .done = .{} };
+                return .done;
             }
             const bytes = data.slice();
             _ = log("writeUTF16({d})", .{ bytes.len });

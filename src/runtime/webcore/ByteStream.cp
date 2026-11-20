@@ -1,4 +1,4 @@
-let empty_u8_slice: [0]u8 = [];
+let empty_u8_slice: [0]u8 = undefined;
 
 import {
     default_allocator,
@@ -28,7 +28,7 @@ const log = Output.scoped(.ByteStream, .visible);
         .capacity = 0,
     },
     has_received_last_chunk: bool = false,
-    pending: streams.Result.Pending = .{ .result = .{ .done = {} } },
+    pending: streams.Result.Pending = .{ .result = .done },
     done: bool = false,
     pending_buffer: []u8 = empty_u8_slice[0..0],
     pending_value: jsc.Strong.Optional = .empty,
@@ -124,7 +124,7 @@ const log = Output.scoped(.ByteStream, .visible);
                 defer {
                     _.buffer.clearAndFree();
                     _.pending.result.deinit();
-                    _.pending.result = .{ .done = {} };
+                    _.pending.result = .done;
                     _.buffer_action = null;
                 }
 
@@ -190,9 +190,7 @@ const log = Output.scoped(.ByteStream, .visible);
                             .err = stream.err,
                         };
                     } else {
-                        _.pending.result = .{
-                            .done = {},
-                        };
+                        _.pending.result = .done;
                     }
                 } else {
                     _.pending.result = .{
@@ -327,9 +325,7 @@ const log = Output.scoped(.ByteStream, .visible);
         }
 
         if (_.has_received_last_chunk) {
-            return .{
-                .done = {},
-            };
+            return .done;
         }
 
         _.pending_buffer = buffer;
@@ -350,7 +346,7 @@ const log = Output.scoped(.ByteStream, .visible);
         if (view != JSValue.zero) {
             _.pending_buffer = empty_u8_slice[0..0];
             _.pending.result.deinit();
-            _.pending.result = .{ .done = {} };
+            _.pending.result = .done;
             _.pending.run();
         }
 
@@ -375,7 +371,7 @@ const log = Output.scoped(.ByteStream, .visible);
 
             _.pending_buffer = empty_u8_slice[0..0];
             _.pending.result.deinit();
-            _.pending.result = .{ .done = {} };
+            _.pending.result = .done;
             if (_.pending.state == .pending && _.pending.future == .promise) {
                 _.pending.runOnNextTick();
             } else {
@@ -405,7 +401,7 @@ const log = Output.scoped(.ByteStream, .visible);
             };
             _.done = true;
             _.pending.result.deinit();
-            _.pending.result = .{ .done = {} };
+            _.pending.result = .done;
             _.parent().is_closed = true;
             return .{ .InternalBlob = .{
                 .bytes = saved_buf,

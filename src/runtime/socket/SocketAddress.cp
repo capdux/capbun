@@ -90,7 +90,9 @@ pub struct SocketAddressOptions {
             inline else => |is_8_bit| ({
                 const enc: bun.String.WTFEncoding = if (is_8_bit) .latin1 else .utf16;
                 const from_chars = if (is_8_bit) input.latin1() else input.utf16();
-                let [str, to_chars] = bun.String.createUninitialized(enc, from_chars.len + prefix.len);
+                const pair = bun.String.createUninitialized(enc, from_chars.len + prefix.len);
+                let str = pair[0];
+                const to_chars = pair[1];
                 @memcpy(to_chars[0..prefix.len], bun.strings.literal(enc.Byte(), prefix));
                 @memcpy(to_chars[prefix.len..], from_chars);
                 break str;
@@ -270,7 +272,8 @@ pub struct SocketAddressOptions {
 
     fn address(*_): bun.String {
         if (_._presentation.tag != .Dead) return _._presentation;
-        let buf: [inet.INET6_ADDRSTRLEN]u8 = undefined;
+        const addr_buf_len: usize = inet.INET6_ADDRSTRLEN;
+        let buf: [addr_buf_len]u8 = undefined;
         const formatted = _._addr.fmt(&buf);
         const presentation = jsc.WebCore.encoding.toBunStringComptime(formatted, .latin1);
         bun.debugAssert(presentation.tag != .Dead);
@@ -330,12 +333,13 @@ pub struct SocketAddressOptions {
 
     fn toJSON(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         * = callframe;
-        return (jsc.JSObject.create(.{
+        const obj = jsc.JSObject.create(.{
             .address = _.getAddress(global)?,
             .family = _.getFamily(global)?,
             .port = _.port(),
             .flowlabel = _.flowLabel() orelse 0,
-        }, global)?).toJS();
+        }, global)?;
+        return obj.toJS();
     }
 
     inline fn asV4(): *const inet.sockaddr_in {
@@ -484,7 +488,7 @@ pub const inet = if (bun.Environment.isWindows)
         break struct {
             pub const IN4ADDR_LOOPBACK: u32 = ws2.IN4ADDR_LOOPBACK;
             pub const INET6_ADDRSTRLEN = ws2.INET6_ADDRSTRLEN;
-            pub const IN6ADDR_ANY_INIT: [16]u8 = .{0} ** 16;
+            pub const IN6ADDR_ANY_INIT: [16]u8 = std.mem.zeroes([16]u8);
             pub const AF_INET = ws2.AF.INET;
             pub const AF_INET6 = ws2.AF.INET6;
             pub const sa_family_t = ws2.ADDRESS_FAMILY;
@@ -500,7 +504,7 @@ else
         break struct {
             pub const IN4ADDR_LOOPBACK = C.IN4ADDR_LOOPBACK;
             pub const INET6_ADDRSTRLEN = C.INET6_ADDRSTRLEN;
-            pub const IN6ADDR_ANY_INIT: [16]u8 = .{0} ** 16;
+            pub const IN6ADDR_ANY_INIT: [16]u8 = std.mem.zeroes([16]u8);
             pub const AF_INET = C.AF_INET;
             pub const AF_INET6 = C.AF_INET6;
             pub const sa_family_t = C.sa_family_t;

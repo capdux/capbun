@@ -48,7 +48,7 @@ pub const StartTag = enum {
     done,
 };
 
-export union(enum) Start {
+pub union(enum) Start {
     empty: void,
     err: sys.Error,
     chunk_size: Blob.SizeType,
@@ -75,22 +75,147 @@ export union(enum) Start {
         }
     }
 
-    pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue): JSError!Start {
+    pub static fn fromJS(globalThis: *JSGlobalObject, value: JSValue): JSError!@This() {
         if (value.isEmptyOrUndefinedOrNull() or !value.isObject()) {
-            return .{ .empty = {} };
+            return Start.empty;
         }
-        if (chunkSize := value.get(globalThis, "chunkSize")) {
+        if (chunkSize := value.get(globalThis, "chunkSize")?) {
             if (chunkSize.isNumber()) {
                 return .{ .chunk_size = @as(Blob.SizeType, @intCast(@as(i52, @truncate(chunkSize.toInt64())))) };
             }
         }
-        return .{ .empty = {} };
+        return Start.empty;
+    }
+
+    pub static fn fromJSWithTag(
+        globalThis: *JSGlobalObject,
+        value: JSValue,
+        comptime tag: StartTag,
+    ): JSError!@This() {
+        if (value.isEmptyOrUndefinedOrNull() || !value.isObject()) {
+            return Start.empty;
+        }
+
+        if (comptime tag == .ArrayBufferSink) {
+            let as_uint8array = false;
+            let stream = false;
+            let chunk_size: Blob.SizeType = @as(Blob.SizeType, 0);
+            let empty = true;
+
+            if (val := value.getOwn(globalThis, "asUint8Array")?) {
+                if (val.isBoolean()) {
+                    as_uint8array = val.toBoolean();
+                    empty = false;
+                }
+            }
+
+            if (val := value.fastGet(globalThis, .stream)?) {
+                if (val.isBoolean()) {
+                    stream = val.toBoolean();
+                    empty = false;
+                }
+            }
+
+            if (chunkSize := value.fastGet(globalThis, .highWaterMark)?) {
+                if (chunkSize.isNumber()) {
+                    empty = false;
+                    chunk_size = @as(Blob.SizeType, @intCast(@max(0, @as(i51, @truncate(chunkSize.toInt64())))));
+                }
+            }
+
+            if (!empty) {
+                return .{
+                    .ArrayBufferSink = .{
+                        .chunk_size = chunk_size,
+                        .as_uint8array = as_uint8array,
+                        .stream = stream,
+                    },
+                };
+            }
+        } else if (comptime tag == .FileSink) {
+            let chunk_size: Blob.SizeType = @as(Blob.SizeType, 0);
+
+            if (chunkSize := value.fastGet(globalThis, .highWaterMark)?) {
+                if (chunkSize.isNumber())
+                    chunk_size = @as(Blob.SizeType, @intCast(@max(0, @as(i51, @truncate(chunkSize.toInt64())))));
+            }
+
+            if (path := value.fastGet(globalThis, .path)?) {
+                if (!path.isString()) {
+                    return .{
+                        .err = sys.Error{
+                            errno: @intFromEnum(bun.sys.SystemErrno.EINVAL),
+                            syscall: .write,
+                        },
+                    };
+                }
+
+                return .{
+                    .FileSink = .{
+                        .chunk_size = chunk_size,
+                        .input_path = .{
+                            .path = path.toSlice(globalThis, globalThis.bunVM().allocator)?,
+                        },
+                    },
+                };
+            } else if (fd_value := value.getTruthy(globalThis, "fd")?) {
+                if (!fd_value.isAnyInt()) {
+                    return .{
+                        .err = sys.Error{
+                            errno: @intFromEnum(bun.sys.SystemErrno.EBADF),
+                            syscall: .write,
+                        },
+                    };
+                }
+
+                if (fd := bun.FD.fromJS(fd_value)) {
+                    return .{
+                        .FileSink = .{
+                            .chunk_size = chunk_size,
+                            .input_path = .{ .fd = fd },
+                        },
+                    };
+                } else {
+                    return .{
+                        .err = sys.Error{
+                            errno: @intFromEnum(bun.sys.SystemErrno.EBADF),
+                            syscall: .write,
+                        },
+                    };
+                }
+            }
+
+            return .{
+                .FileSink = .{
+                    .input_path = .{ .fd = bun.invalid_fd },
+                    .chunk_size = chunk_size,
+                },
+            };
+        } else if (comptime tag == .NetworkSink || tag == .HTTPSResponseSink || tag == .HTTPResponseSink || tag == .H3ResponseSink) {
+            let empty = true;
+            let chunk_size: Blob.SizeType = @as(Blob.SizeType, 2048);
+
+            if (chunkSize := value.fastGet(globalThis, .highWaterMark)?) {
+                if (chunkSize.isNumber()) {
+                    empty = false;
+                    chunk_size = @as(Blob.SizeType, @intCast(@max(256, @as(i51, @truncate(chunkSize.toInt64())))));
+                }
+            }
+
+            if (!empty) {
+                return .{ .chunk_size = chunk_size };
+            }
+        } else {
+            @compileError("Unsupported tag");
+        }
+
+        return Start.empty;
     }
 }
 
 pub const WasStrong = enum { Strong, Weak };
 
-export union(enum) ResultStreamError {
+pub union(enum) ResultStreamError {
     Error: sys.Error,
     AbortReason: CommonAbortReason,
     JSValue: JSValue,
@@ -202,7 +327,7 @@ pub struct WritablePending {
     }
 }
 
-export union(enum) ResultWritable {
+pub union(enum) ResultWritable {
     pending: *WritablePending,
     err: sys.Error,
     done: void,
@@ -215,8 +340,8 @@ export union(enum) ResultWritable {
 
     pub const Pending = WritablePending;
 
-    pub fn isDone(_: &ResultWritable): bool {
-        switch (this.*) {
+    pub fn isDone(): bool {
+        switch (_.*) {
             .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => return true,
             else => return false,
         }
@@ -237,9 +362,9 @@ export union(enum) ResultWritable {
         }
     }
 
-    pub fn toJS(_: ResultWritable, globalThis: *JSGlobalObject): JSValue {
-        switch (this) {
-            .err => |err| return JSPromise.rejectedPromise(globalThis, err.toJS(globalThis) catch return JSValue.zero).toJS(),
+    pub fn toJS(globalThis: *JSGlobalObject): JSValue {
+        switch (_.*) {
+            .err => |e| return JSPromise.rejectedPromise(globalThis, e.toJS(globalThis) catch return JSValue.zero).toJS(),
             .owned => |len| return JSValue.jsNumber(len),
             .owned_and_done => |len| return JSValue.jsNumber(len),
             .temporary_and_done => |len| return JSValue.jsNumber(len),
@@ -327,9 +452,9 @@ export union(enum) Result {
         switch (this.*) {
             .owned => |*owned| owned.clearAndFree(default_allocator),
             .owned_and_done => |*owned_and_done| owned_and_done.clearAndFree(default_allocator),
-            .err => |err| {
-                if (err == .JSValue) {
-                    err.JSValue.unprotect();
+            .err => |e| {
+                if (e == .JSValue) {
+                    e.JSValue.unprotect();
                 }
             },
             else => {},
@@ -478,7 +603,7 @@ pub const SignalVTable = struct {
     }
 };
 
-export class Signal {
+pub struct Signal {
     ptr: *!? = null;
     vtable: (*const SignalVTable)? = null;
 
@@ -740,7 +865,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
                     this.handleWrote(this.end_len);
                 } else if (this.res != null) {
                     this.has_backpressure = true;
-                    res.onWritable(*@This(), onWritable, this);
+                    res.onWritable(this, onWritable);
                 }
                 return success;
             }
@@ -917,7 +1042,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             if (this.res == null || this.res.?.hasResponded()) {
                 this.signal.close(null);
                 this.markDone();
-                return .{ .done = {} };
+                return .done;
             }
             const bytes = data.slice();
             const len = @as(Blob.SizeType, @truncate(bytes.len));
@@ -953,7 +1078,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             if (this.res == null || this.res.?.hasResponded()) {
                 this.signal.close(null);
                 this.markDone();
-                return .{ .done = {} };
+                return .done;
             }
             const bytes = data.slice();
             log("writeUTF16({d})", .{bytes.len});
@@ -1142,7 +1267,7 @@ pub union(enum) BufferAction {
     bytes: jsc.JSPromise.Strong,
     json: jsc.JSPromise.Strong,
 
-    const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
+    pub const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
 
     fn fulfill(*_, global: *JSGlobalObject, blob: *AnyBlob): bun.JSTerminated!void {
         return blob.wrap(.{ .normal = _.swap() }, global, _.*);

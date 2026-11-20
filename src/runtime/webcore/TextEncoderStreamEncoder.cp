@@ -11,7 +11,8 @@ import {
     JSError,
     jsc,
 } from "bun";
-import { Managed as ManagedList } from "std:array_list";
+
+const ManagedList = std.array_list.Managed;
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSUint8Array = jsc.JSUint8Array;

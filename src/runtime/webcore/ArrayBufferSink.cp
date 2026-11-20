@@ -1,4 +1,5 @@
-let empty_ab_bytes: [0]u8 = [];
+let empty_ab_bytes: [0]u8 = undefined;
+import bun from "bun";
 import {
     handleOom,
     assert,
@@ -7,10 +8,9 @@ import {
     webcore,
     jsc,
 } from "bun";
-import { Allocator } from "std:mem";
-import { mem } from "std";
-const bun = @import("bun");
 
+const Allocator = std.mem.Allocator;
+const mem = std.mem;
 const Syscall = sys;
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -19,7 +19,7 @@ const Sink = webcore.Sink;
 const streams = webcore.streams;
 const Signal = webcore.streams.Signal;
 
-export class ArrayBufferSink {
+@root struct ArrayBufferSink {
     pub const JSSink = webcore.Sink.JSSink(ArrayBufferSink, "ArrayBufferSink");
 
     bytes: ByteList;

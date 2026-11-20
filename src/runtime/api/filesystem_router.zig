@@ -560,7 +560,11 @@ pub fn getScriptSrcString(origin: []const u8, comptime Writer: type, writer: Wri
             }
     }
 
-pub fn getFilePath(self: *MatchedRoute, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn getFilePath(self: *MatchedRoute, globalThis: *jsc.JSGlobalObject) JSValue {
+            return ZigString.init(self.route.file_path).withEncoding().toJS(globalThis);
+    }
+
+pub fn getScriptSrc(self: *MatchedRoute, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             var stream = std.io.fixedBufferStream((&buf));

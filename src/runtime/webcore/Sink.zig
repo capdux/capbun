@@ -390,7 +390,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
             _,
         };
         const fromJSExtern = @extern(
-            *const *const fn(value: JSValue) callconv(.c) FromJSResult,
+            *const fn(value: JSValue) callconv(.c) FromJSResult,
             .{ .name = abi_name ++ "__fromJS" },
         );
 

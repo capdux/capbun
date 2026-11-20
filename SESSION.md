@@ -3050,3 +3050,5 @@ Options:
 - **[2026-11-20 18:03] 收到 `cp_agy` 语法/工具链广播 `syntax-tooling-20261120-cap-cpc-fast-modular` 并已完成 `ack`**：`cap` (ReleaseFast) 与 `cpc` (Release) 极速构建与模块级增量编译已全线部署（commit `cc47f07`），含递归 mtime 感知、`-d/--debug` 原生后端加速、原子 tmp+rename 消除 ETXTBSY、`-o <dir>` 隔离 `.cap/ws/<name>` 防并发 flock、`-m/--modular` 对接 `cpc --emit-dir` 按文件 FNV-1a 增量发射；无破坏性语法变更，已同步登记至 `CP_PITFALLS.md`。
 
 - **[2026-11-20 18:04] Wave 6 Batch B 验收提交（30 模块全绿）**：完成 JSC/Core/String/SQL/TestRunner/Shell/Sourcemap/Bundler 30 个模块独立验收（30/30 PASS，ratio 0.739x~1.096x）并原子提交；静待专家 A 组（`e16cc16e`）完成后跑 Wave 7 `zig:check` 冲刺 0 错误。
+
+- **[2026-11-20 18:07] Wave 6 Batch A 验收提交（20 模块全绿）**：完成 Runtime/WebCore/Server/Socket/uws_sys 20 模块独立验收（20/20 PASS，ratio 0.745x~1.081x），沉淀 2 条新坑至 `CP_PITFALLS.md` 并原子提交。

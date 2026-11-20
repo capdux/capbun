@@ -593,6 +593,15 @@ pub struct MatchedRoute {
     fn getFilePath(
         *_,
         globalThis: *jsc.JSGlobalObject,
+    ): JSValue {
+        return ZigString.init(_.route.file_path)
+            .withEncoding()
+            .toJS(globalThis);
+    }
+
+    fn getScriptSrc(
+        *_,
+        globalThis: *jsc.JSGlobalObject,
     ): jsc.JSValue {
         let buf: bun.PathBuffer = undefined;
         let stream = std.io.fixedBufferStream(&buf);

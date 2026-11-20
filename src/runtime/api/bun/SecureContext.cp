@@ -133,7 +133,7 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         bun.destroy(_);
     }
 
-    pub fn memoryCost(): usize {
+    pub fn memoryCost(*_): usize {
         return @sizeOf(SecureContext) + _.extra_memory;
     }
 

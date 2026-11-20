@@ -77,7 +77,7 @@ static fn init(handler: *WebSocketServer.Handler, data_value: jsc.JSValue, signa
     return ws_obj;
 }
 
-fn memoryCost(): usize {
+fn memoryCost(*_): usize {
     if (_.#flags.closed) {
         return @sizeOf(ServerWebSocket);
     }
@@ -710,7 +710,7 @@ fn cork(
     }
 
     if (_.isClosed()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     let corker = Corker{
@@ -966,7 +966,7 @@ fn ping(
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
 ): JSValue ! bun.JSError {
-    return sendPing(this, globalThis, callframe, "ping", .ping);
+    return _.sendPing(globalThis, callframe, "ping", .ping);
 }
 
 fn pong(
@@ -974,7 +974,7 @@ fn pong(
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
 ): JSValue ! bun.JSError {
-    return sendPing(this, globalThis, callframe, "pong", .pong);
+    return _.sendPing(globalThis, callframe, "pong", .pong);
 }
 
 inline fn sendPing(
@@ -1097,7 +1097,7 @@ fn close(
     log("close()", .{});
 
     if (_.isClosed()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const code = brk: {
@@ -1122,7 +1122,7 @@ fn close(
 
     _.#flags.closed = true;
     _.websocket().end(code, message_value.slice());
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 fn terminate(
@@ -1134,13 +1134,13 @@ fn terminate(
     log("terminate()", .{});
 
     if (_.isClosed()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     _.#flags.closed = true;
     _.websocket().close();
 
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 fn getBinaryType(
@@ -1198,7 +1198,7 @@ fn subscribe(
     }
 
     if (_.isClosed()) {
-        return .true;
+        return JSValue.true;
     }
 
     if (!args.ptr[0].isString()) {
@@ -1221,7 +1221,7 @@ fn unsubscribe(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     }
 
     if (_.isClosed()) {
-        return .true;
+        return JSValue.true;
     }
 
     if (!args.ptr[0].isString()) {
@@ -1248,7 +1248,7 @@ fn isSubscribed(
     }
 
     if (_.isClosed()) {
-        return .false;
+        return JSValue.false;
     }
 
     if (!args.ptr[0].isString()) {
@@ -1282,7 +1282,7 @@ fn getRemoteAddress(
     globalThis: *jsc.JSGlobalObject,
 ): JSValue ! bun.JSError {
     if (_.isClosed()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     let buf: [64]u8 = std.mem.zeroes([64]u8);
@@ -1292,7 +1292,7 @@ fn getRemoteAddress(
     const address: std.net.Address = switch (address_bytes.len) {
         4 => std.net.Address.initIp4(address_bytes[0..4].*, 0),
         16 => std.net.Address.initIp6(address_bytes[0..16].*, 0, 0, 0),
-        else => return .js_undefined,
+        else => return JSValue.js_undefined,
     };
 
     const text = bun.fmt.formatIp(address, &text_buf) catch unreachable;

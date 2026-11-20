@@ -16,11 +16,11 @@ export class S3Stat {
     contentType: bun.String;
     lastModified: f64;
 
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*S3Stat {
+    pub static fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*S3Stat {
         return globalThis.throwInvalidArguments("S3Stat is not constructable", .{});
     }
 
-    pub fn init(
+    pub static fn init(
         size: u64,
         etag: []const u8,
         contentType: []const u8,

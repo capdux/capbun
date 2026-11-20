@@ -3140,7 +3140,10 @@ pub fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 if (((family != 4) and (family != 6))) {
                     return globalThis.throwInvalidArguments("Invalid address family", .{});
                 }
-                const addressString = try try triple.getIndex(globalThis, 1).toBunString(globalThis);
+                const addressVal = try triple.getIndex(globalThis, 1);
+                var __addressVal_moved = false; _ = &__addressVal_moved;
+                defer if (!__addressVal_moved) { const __T = @TypeOf(addressVal); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = addressVal.release() catch {}; } else { addressVal.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = addressVal; _drop_val.release(); } };
+                const addressString = try addressVal.toBunString(globalThis);
                 var __addressString_moved = false; _ = &__addressString_moved;
                 defer if (!__addressString_moved) { const __T = @TypeOf(addressString); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = addressString.release() catch {}; } else { addressString.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = addressString; _drop_val.release(); } };
                 defer {

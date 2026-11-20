@@ -259,7 +259,9 @@ pub struct Buffered {
 
                 if (decode_result := maybe_decode_result) {
                     if (deinit_input) default_allocator.free(input);
-                    const [decoded, leftover, leftover_len] = decode_result;
+                    const decoded = decode_result[0];
+                    const leftover = decode_result[1];
+                    const leftover_len = decode_result[2];
                     assert(_.buffered.len == 0);
                     if (!flush) {
                         if (leftover_len != 0) {
@@ -281,7 +283,9 @@ pub struct Buffered {
                 else
                     buffer_slice;
 
-                const [decoded, saw_error] = _.decodeUTF16(input, false, flush)?;
+                const res_le = _.decodeUTF16(input, false, flush)?;
+                const decoded = res_le[0];
+                const saw_error = res_le[1];
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
@@ -302,7 +306,9 @@ pub struct Buffered {
                 else
                     buffer_slice;
 
-                const [decoded, saw_error] = _.decodeUTF16(input, true, flush)?;
+                const res_be = _.decodeUTF16(input, true, flush)?;
+                const decoded = res_be[0];
+                const saw_error = res_be[1];
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
