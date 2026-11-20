@@ -13,9 +13,1101 @@ import * as StoreMod from "./blob/Store.zig";
 import * as read_file_mod from "./blob/read_file.zig";
 import * as write_file_mod from "./blob/write_file.zig";
 import * as copy_file_mod from "./blob/copy_file.zig";
+import Archive from "../api/Archive.zig";
 
 const BlobStore = StoreMod.Store;
+const S3 = bun.S3;
+const StringJoiner = bun.StringJoiner;
+const invalid_fd = bun.invalid_fd;
+const io = bun.io;
+const libuv = bun.windows.libuv;
+const MimeType = http.MimeType;
+const PathOrBlob = jsc.Node.PathOrBlob;
+const Request = jsc.WebCore.Request;
+const Response = jsc.WebCore.Response;
+const WriteFilePromise = write_file_mod.WriteFilePromise;
+const WriteFileWaitFromLockedValueTask = write_file_mod.WriteFileWaitFromLockedValueTask;
 const debug = Output.scoped(.Blob, .visible);
+const write_permissions = 0o664;
+
+type WriteFilePromisePtr = *WriteFilePromise;
+type OpaquePtr = *!;
+
+pub enum Retry {
+    @"continue",
+    fail,
+    no,
+}
+
+pub struct WriteFileOptions {
+    mkdirp_if_not_exists: bool? = null,
+    extra_options: JSValue? = null,
+    mode: bun.Mode? = null,
+}
+
+pub struct FileStreamWrapper {
+    promise: jsc.JSPromise.Strong,
+    readable_stream_ref: jsc.WebCore.ReadableStream.Strong,
+    sink: *jsc.WebCore.FileSink,
+
+    pub const new = bun.TrivialNew(@This());
+
+    fn deinit(*_) {
+        _.promise.deinit();
+        _.readable_stream_ref.deinit();
+        _.sink.deref();
+        bun.destroy(_);
+    }
+}
+
+pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
+    let args = callframe.arguments_old(2);
+    let wrapper = args.ptr[args.len - 1].asPromisePtr(FileStreamWrapper);
+    defer wrapper.deinit();
+    let strong = wrapper.readable_stream_ref;
+    defer strong.deinit();
+    wrapper.readable_stream_ref = .{};
+    if (stream := strong.get(globalThis)) {
+        stream.done(globalThis);
+    }
+    wrapper.promise.resolve(globalThis, JSValue.jsNumber(0))?;
+    return .js_undefined;
+}
+
+pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
+    const args = callframe.arguments_old(2);
+    let wrapper = args.ptr[args.len - 1].asPromisePtr(FileStreamWrapper);
+    defer wrapper.sink.deref();
+    const err_val = args.ptr[0];
+
+    let strong = wrapper.readable_stream_ref;
+    defer strong.deinit();
+    wrapper.readable_stream_ref = .{};
+
+    wrapper.promise.reject(globalThis, err_val)?;
+
+    if (stream := strong.get(globalThis)) {
+        stream.cancel(globalThis);
+    }
+    return .js_undefined;
+}
+
+comptime {
+    const jsonResolveRequestStream = jsc.toJSHostFn(onFileStreamResolveRequestStream);
+    @export(&jsonResolveRequestStream, .{ .name = "Bun__FileStreamWrapper__onResolveRequestStream" });
+    const jsonRejectRequestStream = jsc.toJSHostFn(onFileStreamRejectRequestStream);
+    @export(&jsonRejectRequestStream, .{ .name = "Bun__FileStreamWrapper__onRejectRequestStream" });
+}
+
+pub noinline fn mkdirIfNotExists(ctx: auto, e: bun.sys.Error, path_string: [:0]const u8, err_path: []const u8): Retry {
+    if (e.getErrno() == .NOENT && ctx.mkdirp_if_not_exists) {
+        if (dirname := std.fs.path.dirname(path_string)) {
+            let node_fs: jsc.Node.fs.NodeFS = .{};
+            switch (node_fs.mkdirRecursive(.{
+                .path = .{ .string = bun.PathString.init(dirname) },
+                .recursive = true,
+                .always_return_none = true,
+            })) {
+                .result => {
+                    ctx.mkdirp_if_not_exists = false;
+                    return .@"continue";
+                },
+                .err e2 => {
+                    if (comptime @hasField(@TypeOf(ctx.*), "errno")) {
+                        ctx.errno = bun.errnoToZigErr(e2.errno);
+                    }
+                    ctx.system_error = e.withPath(err_path).toSystemError();
+                    if (comptime @hasField(@TypeOf(ctx.*), "opened_fd")) {
+                        ctx.opened_fd = invalid_fd;
+                    }
+                    return .fail;
+                },
+            }
+        }
+    }
+    return .no;
+}
+
+fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob: *Blob, options: WriteFileOptions): JSValue ! JSError {
+    const destination_store = destination_blob.store.?;
+    defer destination_blob.detach();
+
+    switch (destination_store.data) {
+        .file file => {
+            const node_fs = ctx.bunVM().nodeFS();
+            let result = node_fs.truncate(.{
+                .path = file.pathlike,
+                .len = 0,
+                .flags = bun.O.CREAT,
+            }, .sync);
+
+            if (result == .err) {
+                let cur_errno = result.err.getErrno();
+                let was_eperm = false;
+                if (cur_errno == .PERM) {
+                    was_eperm = true;
+                    result.err.errno = @intCast(@intFromEnum(bun.sys.E.NOENT));
+                    cur_errno = .NOENT;
+                }
+                if (cur_errno == .NOENT && options.mkdirp_if_not_exists != false) {
+                    let dirpath_opt: ([]const u8)? = null;
+                    switch (file.pathlike) {
+                        .path p => {
+                            dirpath_opt = std.fs.path.dirname(p.slice());
+                        },
+                        .fd => {
+                            if (was_eperm) result.err.errno = @intCast(@intFromEnum(bun.sys.E.PERM));
+                        },
+                    }
+                    if (dirpath := dirpath_opt) {
+                        const mkdir_result = node_fs.mkdirRecursive(.{
+                            .path = .{ .string = bun.PathString.init(dirpath) },
+                            .recursive = true,
+                            .always_return_none = true,
+                        });
+                        if (mkdir_result == .err) {
+                            result.err = mkdir_result.err;
+                        } else {
+                            let buf: bun.PathBuffer = undefined;
+                            const mode: bun.Mode = options.mode ?? jsc.Node.fs.default_permission;
+                            while (true) {
+                                const open_res = bun.sys.open(file.pathlike.path.sliceZ(&buf), bun.O.CREAT | bun.O.TRUNC, mode);
+                                switch (open_res) {
+                                    .err e => {
+                                        if (e.getErrno() == .INTR) continue;
+                                        result.err = open_res.err;
+                                        break;
+                                    },
+                                    .result fd => {
+                                        fd.close();
+                                        return JSPromise.resolvedPromiseValue(ctx, .jsNumber(0));
+                                    },
+                                }
+                            }
+                        }
+                    }
+                }
+
+                result.err = result.err.withPathLike(file.pathlike);
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, result.toJS(ctx)?);
+            }
+        },
+        .s3 => |*s3| {
+            let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
+            };
+            defer aws_options.deinit();
+
+            const Wrapper = struct {
+                promise: jsc.JSPromise.Strong,
+                store: *BlobStore,
+                global: *JSGlobalObject,
+
+                pub const new = bun.TrivialNew(@This());
+
+                static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
+                    const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
+                    defer w.deinit();
+                    switch (result) {
+                        .success => w.promise.resolve(w.global, .jsNumber(0))?,
+                        .failure e => {
+                            w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
+                        },
+                    }
+                }
+
+                fn deinit(*_) {
+                    _.promise.deinit();
+                    _.store.deref();
+                    bun.destroy(_);
+                }
+            };
+
+            const promise = jsc.JSPromise.Strong.init(ctx);
+            const promise_value = promise.value();
+            let proxy_url: ([]const u8)? = null;
+            if (p := ctx.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                proxy_url = p.href;
+            }
+            destination_store.ref();
+            S3.upload(
+                &aws_options.credentials,
+                s3.path(),
+                "",
+                destination_blob.contentTypeOrMimeType(),
+                aws_options.content_disposition,
+                aws_options.content_encoding,
+                aws_options.acl,
+                proxy_url,
+                aws_options.storage_class,
+                aws_options.request_payer,
+                Wrapper.resolve,
+                Wrapper.new(.{
+                    .promise = promise,
+                    .store = destination_store,
+                    .global = ctx,
+                }),
+            )?;
+            return promise_value;
+        },
+        .bytes => {},
+    }
+
+    return JSPromise.resolvedPromiseValue(ctx, JSValue.jsNumber(0));
+}
+
+pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, destination_blob: *Blob, options: WriteFileOptions): JSValue ! JSError {
+    const destination_store = destination_blob.store ?? Output.panic("Destination blob is detached", .{});
+    const destination_type = std.meta.activeTag(destination_store.data);
+
+    if (Environment.isDebug) {
+        bun.assertf(destination_type != .bytes, "Cannot write to a Blob backed by a Buffer or TypedArray. This is a bug in the caller. Please report it to the Bun team.", .{});
+    }
+
+    const source_store_opt = source_blob.store;
+    if (source_store_opt == null) {
+        return writeFileWithEmptySourceToDestination(ctx, destination_blob, options);
+    }
+    const source_store = source_store_opt.?;
+    const source_type = std.meta.activeTag(source_store.data);
+
+    if (destination_type == .file && source_type == .bytes) {
+        let write_file_promise = bun.new(WriteFilePromise, .{
+            .globalThis = ctx,
+        });
+
+        if (comptime Environment.isWindows) {
+            let promise = JSPromise.create(ctx);
+            const promise_value = promise.asValue(ctx);
+            promise_value.ensureStillAlive();
+            write_file_promise.promise.strong.set(ctx, promise_value);
+            * = write_file_mod.WriteFileWindows.create(
+                ctx.bunVM().eventLoop(),
+                destination_blob.*,
+                source_blob.*,
+                WriteFilePromisePtr,
+                write_file_promise,
+                &WriteFilePromise.run,
+                options.mkdirp_if_not_exists ?? true,
+            ) catch |e| {
+                if (e == error.JSTerminated) return error.JSTerminated;
+            };
+            return promise_value;
+        }
+
+        const file_copier = write_file_mod.WriteFile.create(
+            destination_blob.*,
+            source_blob.*,
+            WriteFilePromisePtr,
+            write_file_promise,
+            WriteFilePromise.run,
+            options.mkdirp_if_not_exists ?? true,
+        ) catch unreachable;
+        let task = write_file_mod.WriteFileTask.createOnJSThread(bun.default_allocator, ctx, file_copier);
+        let promise = JSPromise.create(ctx);
+        const promise_value = promise.asValue(ctx);
+        write_file_promise.promise.strong.set(ctx, promise_value);
+        promise_value.ensureStillAlive();
+        task.schedule();
+        return promise_value;
+    } else if (destination_type == .file && source_type == .file) {
+        if (comptime Environment.isWindows) {
+            return copy_file_mod.CopyFileWindows.init(
+                destination_store,
+                source_store,
+                ctx.bunVM().eventLoop(),
+                options.mkdirp_if_not_exists ?? true,
+                destination_blob.size,
+                options.mode,
+            );
+        }
+        let file_copier = copy_file_mod.CopyFile.create(
+            bun.default_allocator,
+            destination_store,
+            source_store,
+            destination_blob.offset,
+            destination_blob.size,
+            ctx,
+            options.mkdirp_if_not_exists ?? true,
+            options.mode,
+        );
+        file_copier.schedule();
+        return file_copier.promise.value();
+    } else if (destination_type == .file && source_type == .s3) {
+        const s3 = &source_store.data.s3;
+        const stream_val = jsc.WebCore.ReadableStream.fromBlobCopyRef(
+            ctx,
+            source_blob,
+            @truncate(s3.options.partSize),
+        )?;
+        if (stream := jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)?) {
+            return destination_blob.pipeReadableStreamToBlob(ctx, stream, options.extra_options);
+        } else {
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.createErrorInstance("Failed to stream bytes from s3 bucket", .{}));
+        }
+    } else if (destination_type == .bytes && source_type == .bytes) {
+        const cloned = Blob.new(source_blob.dupe());
+        return JSPromise.resolvedPromiseValue(ctx, cloned.toJS(ctx));
+    } else if (destination_type == .bytes && (source_type == .file || source_type == .s3)) {
+        const blob_value = source_blob.getSliceFrom(ctx, 0, 0, "", false);
+        return JSPromise.resolvedPromiseValue(ctx, blob_value);
+    } else if (destination_type == .s3) {
+        const s3 = &destination_store.data.s3;
+        let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
+        };
+        defer aws_options.deinit();
+        let proxy_url: ([]const u8)? = null;
+        if (p := ctx.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+            proxy_url = p.href;
+        }
+        switch (source_store.data) {
+            .bytes bytes => {
+                if (bytes.len > S3.MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
+                    const stream_val = jsc.WebCore.ReadableStream.fromBlobCopyRef(
+                        ctx,
+                        source_blob,
+                        @truncate(s3.options.partSize),
+                    )?;
+                    if (stream := jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)?) {
+                        return S3.uploadStream(
+                            (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                            s3.path(),
+                            stream,
+                            ctx,
+                            aws_options.options,
+                            aws_options.acl,
+                            aws_options.storage_class,
+                            destination_blob.contentTypeOrMimeType(),
+                            aws_options.content_disposition,
+                            aws_options.content_encoding,
+                            proxy_url,
+                            aws_options.request_payer,
+                            null,
+                            undefined,
+                        );
+                    } else {
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.createErrorInstance("Failed to stream bytes to s3 bucket", .{}));
+                    }
+                } else {
+                    const Wrapper = struct {
+                        store: *BlobStore,
+                        promise: jsc.JSPromise.Strong,
+                        global: *JSGlobalObject,
+
+                        pub const new = bun.TrivialNew(@This());
+
+                        static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
+                            const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
+                            defer w.deinit();
+                            switch (result) {
+                                .success => w.promise.resolve(w.global, .jsNumber(w.store.data.bytes.len))?,
+                                .failure e => {
+                                    w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
+                                },
+                            }
+                        }
+
+                        fn deinit(*_) {
+                            _.promise.deinit();
+                            _.store.deref();
+                        }
+                    };
+                    source_store.ref();
+                    const promise = jsc.JSPromise.Strong.init(ctx);
+                    const promise_value = promise.value();
+
+                    S3.upload(
+                        &aws_options.credentials,
+                        s3.path(),
+                        bytes.slice(),
+                        destination_blob.contentTypeOrMimeType(),
+                        aws_options.content_disposition,
+                        aws_options.content_encoding,
+                        aws_options.acl,
+                        proxy_url,
+                        aws_options.storage_class,
+                        aws_options.request_payer,
+                        Wrapper.resolve,
+                        Wrapper.new(.{
+                            .store = source_store,
+                            .promise = promise,
+                            .global = ctx,
+                        }),
+                    )?;
+                    return promise_value;
+                }
+            },
+            .file, .s3 => {
+                const stream_val = jsc.WebCore.ReadableStream.fromBlobCopyRef(
+                    ctx,
+                    source_blob,
+                    @truncate(s3.options.partSize),
+                )?;
+                if (stream := jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)?) {
+                    return S3.uploadStream(
+                        (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                        s3.path(),
+                        stream,
+                        ctx,
+                        s3.options,
+                        aws_options.acl,
+                        aws_options.storage_class,
+                        destination_blob.contentTypeOrMimeType(),
+                        aws_options.content_disposition,
+                        aws_options.content_encoding,
+                        proxy_url,
+                        aws_options.request_payer,
+                        null,
+                        undefined,
+                    );
+                } else {
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.createErrorInstance("Failed to stream bytes to s3 bucket", .{}));
+                }
+            },
+        }
+    }
+
+    unreachable;
+}
+
+fn writeStringToFileFast(
+    globalThis: *JSGlobalObject,
+    pathlike: jsc.Node.PathOrFileDescriptor,
+    str: bun.String,
+    needs_async: *bool,
+    comptime needs_open: bool,
+): JSValue {
+    const fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
+        let file_path: bun.PathBuffer = undefined;
+        switch (bun.sys.open(
+            pathlike.path.sliceZ(&file_path),
+            bun.O.WRONLY | bun.O.CREAT | bun.O.NONBLOCK,
+            write_permissions,
+        )) {
+            .result res => {
+                break :brk res;
+            },
+            .err e => {
+                if (e.getErrno() == .NOENT) {
+                    needs_async.* = true;
+                    return .zero;
+                }
+
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(
+                    globalThis,
+                    e.withPath(pathlike.path.slice()).toJS(globalThis) catch return .zero,
+                );
+            },
+        }
+    };
+
+    let truncate = needs_open || str.isEmpty();
+    const jsc_vm = globalThis.bunVM();
+    let written: usize = 0;
+
+    defer {
+        if (truncate) {
+            * = fd.truncate(@intCast(written));
+        }
+        if (needs_open) {
+            fd.close();
+        }
+    }
+    if (!str.isEmpty()) {
+        let decoded = str.toUTF8(jsc_vm.allocator);
+        defer decoded.deinit();
+
+        let remain = decoded.slice();
+        while (remain.len > 0) {
+            const result = bun.sys.write(fd, remain);
+            switch (result) {
+                .result res => {
+                    written += res;
+                    remain = remain[res..];
+                    if (res == 0) break;
+                },
+                .err e => {
+                    truncate = false;
+                    if (e.getErrno() == .AGAIN) {
+                        needs_async.* = true;
+                        return .zero;
+                    }
+                    if (comptime !needs_open) {
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis) catch return .zero);
+                    }
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(
+                        globalThis,
+                        e.withPath(pathlike.path.slice()).toJS(globalThis) catch return .zero,
+                    );
+                },
+            }
+        }
+    }
+
+    return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
+}
+
+fn writeBytesToFileFast(
+    globalThis: *JSGlobalObject,
+    pathlike: jsc.Node.PathOrFileDescriptor,
+    bytes: []const u8,
+    needs_async: *bool,
+    comptime needs_open: bool,
+): JSValue {
+    const fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
+        let file_path: bun.PathBuffer = undefined;
+        switch (bun.sys.open(
+            pathlike.path.sliceZ(&file_path),
+            if (!Environment.isWindows)
+                bun.O.WRONLY | bun.O.CREAT | bun.O.NONBLOCK
+            else
+                bun.O.WRONLY | bun.O.CREAT,
+            write_permissions,
+        )) {
+            .result res => {
+                break :brk res;
+            },
+            .err e => {
+                if (!Environment.isWindows) {
+                    if (e.getErrno() == .NOENT) {
+                        needs_async.* = true;
+                        return .zero;
+                    }
+                }
+
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(
+                    globalThis,
+                    e.withPath(pathlike.path.slice()).toJS(globalThis) catch return .zero,
+                );
+            },
+        }
+    };
+
+    const truncate = needs_open || bytes.len == 0;
+    let written: usize = 0;
+    defer if (needs_open) fd.close();
+
+    let remain = bytes;
+    const end = remain.ptr + remain.len;
+
+    while (remain.ptr != end) {
+        const result = bun.sys.write(fd, remain);
+        switch (result) {
+            .result res => {
+                written += res;
+                remain = remain[res..];
+                if (res == 0) break;
+            },
+            .err e => {
+                if (!Environment.isWindows) {
+                    if (e.getErrno() == .AGAIN) {
+                        needs_async.* = true;
+                        return .zero;
+                    }
+                }
+                if (comptime !needs_open) {
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(
+                        globalThis,
+                        e.toJS(globalThis) catch return .zero,
+                    );
+                }
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(
+                    globalThis,
+                    e.withPath(pathlike.path.slice()).toJS(globalThis) catch return .zero,
+                );
+            },
+        }
+    }
+
+    if (truncate) {
+        if (Environment.isWindows) {
+            * = std.os.windows.kernel32.SetEndOfFile(fd.cast());
+        } else {
+            * = bun.sys.ftruncate(fd, @as(i64, @intCast(written)));
+        }
+    }
+
+    return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
+}
+
+pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob, data: JSValue, options: WriteFileOptions): JSValue ! JSError {
+    if (data.isEmptyOrUndefinedOrNull()) {
+        return globalThis.throwInvalidArguments("Bun.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
+    }
+    let path_or_blob = path_or_blob_.*;
+    if (path_or_blob == .blob) {
+        const blob_store_opt = path_or_blob.blob.store;
+        if (blob_store_opt == null) {
+            return globalThis.throwInvalidArguments("Blob is detached", .{});
+        }
+        const blob_store = blob_store_opt.?;
+        bun.assertWithLocation(blob_store.data != .bytes, @src());
+        if (blob_store.data == .file) {
+            blob_store.data.file.last_modified = jsc.init_timestamp;
+        }
+    }
+
+    const input_store: (*BlobStore)? = if (path_or_blob == .blob) path_or_blob.blob.store else null;
+    if (st := input_store) st.ref();
+    defer if (st := input_store) st.deref();
+
+    let needs_async = false;
+
+    if (mkdir := options.mkdirp_if_not_exists) {
+        if (mkdir &&
+            path_or_blob == .blob &&
+            path_or_blob.blob.store != null &&
+            path_or_blob.blob.store.?.data == .file &&
+            path_or_blob.blob.store.?.data.file.pathlike == .fd)
+        {
+            return globalThis.throwInvalidArguments("Cannot create a directory for a file descriptor", .{});
+        }
+    }
+
+    if (comptime !Environment.isWindows) {
+        if (path_or_blob == .path ||
+            (path_or_blob.blob.offset == 0 && !path_or_blob.blob.isS3() &&
+                !(path_or_blob.blob.store != null &&
+                    path_or_blob.blob.store.?.data == .file &&
+                    path_or_blob.blob.store.?.data.file.mode != 0 &&
+                    bun.isRegularFile(path_or_blob.blob.store.?.data.file.mode))))
+        {
+            if (data.isString()) {
+                const len = data.getLength(globalThis)?;
+
+                if (len < 256 * 1024) {
+                    const str = data.toBunString(globalThis)?;
+                    defer str.deref();
+
+                    const pathlike: jsc.Node.PathOrFileDescriptor = if (path_or_blob == .path)
+                        path_or_blob.path
+                    else
+                        path_or_blob.blob.store.?.data.file.pathlike;
+
+                    if (pathlike == .path) {
+                        const result = writeStringToFileFast(
+                            globalThis,
+                            pathlike,
+                            str,
+                            &needs_async,
+                            true,
+                        );
+                        if (!needs_async) {
+                            return result;
+                        }
+                    } else {
+                        const result = writeStringToFileFast(
+                            globalThis,
+                            pathlike,
+                            str,
+                            &needs_async,
+                            false,
+                        );
+                        if (!needs_async) {
+                            return result;
+                        }
+                    }
+                }
+            } else if (buffer_view := data.asArrayBuffer(globalThis)) {
+                if (buffer_view.byte_len < 256 * 1024) {
+                    const pathlike: jsc.Node.PathOrFileDescriptor = if (path_or_blob == .path)
+                        path_or_blob.path
+                    else
+                        path_or_blob.blob.store.?.data.file.pathlike;
+
+                    if (pathlike == .path) {
+                        const result = writeBytesToFileFast(
+                            globalThis,
+                            pathlike,
+                            buffer_view.byteSlice(),
+                            &needs_async,
+                            true,
+                        );
+
+                        if (!needs_async) {
+                            return result;
+                        }
+                    } else {
+                        const result = writeBytesToFileFast(
+                            globalThis,
+                            pathlike,
+                            buffer_view.byteSlice(),
+                            &needs_async,
+                            false,
+                        );
+
+                        if (!needs_async) {
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let destination_blob: Blob = if (path_or_blob == .path) brk: {
+        const new_blob = Blob.findOrCreateFileFromPath(&path_or_blob_.path, globalThis, true);
+        if (new_blob.store == null) {
+            return globalThis.throwInvalidArguments("Writing to an empty blob is not implemented yet", .{});
+        }
+        break :brk new_blob;
+    } else path_or_blob.blob.dupe();
+
+    if (bun.Environment.allow_assert && path_or_blob == .blob) {
+        bun.unsafeAssert(path_or_blob.blob.store != null);
+    }
+
+    let source_blob: Blob = brk: {
+        if (response := data.as(Response)) {
+            const bodyValue = response.getBodyValue();
+            switch (bodyValue.*) {
+                .WTFStringImpl,
+                .InternalBlob,
+                .Used,
+                .Empty,
+                .Blob,
+                .Null => {
+                    break :brk bodyValue.use();
+                },
+                .Error => |*err_ref| {
+                    destination_blob.detach();
+                    * = bodyValue.use();
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
+                },
+                .Locked => {
+                    if (destination_blob.isS3()) {
+                        const s3 = &destination_blob.store.?.data.s3;
+                        let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
+                        defer aws_options.deinit();
+                        * = bodyValue.toReadableStream(globalThis)?;
+
+                        if (readable := response.getBodyReadableStream(globalThis) ?? bodyValue.Locked.readable.get(globalThis)) {
+                            if (readable.isDisturbed(globalThis)) {
+                                destination_blob.detach();
+                                return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                            }
+                            let proxy_url: ([]const u8)? = null;
+                            if (p := globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                                proxy_url = p.href;
+                            }
+
+                            return S3.uploadStream(
+                                (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                                s3.path(),
+                                readable,
+                                globalThis,
+                                aws_options.options,
+                                aws_options.acl,
+                                aws_options.storage_class,
+                                destination_blob.contentTypeOrMimeType(),
+                                aws_options.content_disposition,
+                                aws_options.content_encoding,
+                                proxy_url,
+                                aws_options.request_payer,
+                                null,
+                                undefined,
+                            );
+                        }
+                        destination_blob.detach();
+                        return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                    }
+                    let task = bun.new(WriteFileWaitFromLockedValueTask, .{
+                        .globalThis = globalThis,
+                        .file_blob = destination_blob,
+                        .promise = jsc.JSPromise.Strong.init(globalThis),
+                        .mkdirp_if_not_exists = options.mkdirp_if_not_exists ?? true,
+                    });
+                    bodyValue.Locked.task = task;
+                    bodyValue.Locked.onReceiveValue = WriteFileWaitFromLockedValueTask.thenWrap;
+                    return task.promise.value();
+                },
+            }
+        }
+
+        if (request := data.as(Request)) {
+            const bodyValue = request.getBodyValue();
+            switch (bodyValue.*) {
+                .WTFStringImpl,
+                .InternalBlob,
+                .Used,
+                .Empty,
+                .Blob,
+                .Null => {
+                    break :brk bodyValue.use();
+                },
+                .Error => |*err_ref| {
+                    destination_blob.detach();
+                    * = bodyValue.use();
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
+                },
+                .Locked locked => {
+                    if (destination_blob.isS3()) {
+                        const s3 = &destination_blob.store.?.data.s3;
+                        let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
+                        defer aws_options.deinit();
+                        * = bodyValue.toReadableStream(globalThis)?;
+                        if (readable := request.getBodyReadableStream(globalThis) ?? locked.readable.get(globalThis)) {
+                            if (readable.isDisturbed(globalThis)) {
+                                destination_blob.detach();
+                                return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                            }
+                            let proxy_url: ([]const u8)? = null;
+                            if (p := globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                                proxy_url = p.href;
+                            }
+                            return S3.uploadStream(
+                                (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                                s3.path(),
+                                readable,
+                                globalThis,
+                                aws_options.options,
+                                aws_options.acl,
+                                aws_options.storage_class,
+                                destination_blob.contentTypeOrMimeType(),
+                                aws_options.content_disposition,
+                                aws_options.content_encoding,
+                                proxy_url,
+                                aws_options.request_payer,
+                                null,
+                                undefined,
+                            );
+                        }
+                        destination_blob.detach();
+                        return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                    }
+                    let task = bun.new(WriteFileWaitFromLockedValueTask, .{
+                        .globalThis = globalThis,
+                        .file_blob = destination_blob,
+                        .promise = jsc.JSPromise.Strong.init(globalThis),
+                        .mkdirp_if_not_exists = options.mkdirp_if_not_exists ?? true,
+                    });
+
+                    bodyValue.Locked.task = task;
+                    bodyValue.Locked.onReceiveValue = WriteFileWaitFromLockedValueTask.thenWrap;
+
+                    return task.promise.value();
+                },
+            }
+        }
+
+        if (archive := data.as(Archive)) {
+            archive.store.ref();
+            break :brk Blob.initWithStore(archive.store, globalThis);
+        }
+
+        break :brk Blob.get(
+            globalThis,
+            data,
+            false,
+            false,
+        )?;
+    };
+    defer source_blob.detach();
+
+    const destination_store = destination_blob.store;
+    if (store := destination_store) {
+        store.ref();
+    }
+
+    defer {
+        if (store := destination_store) {
+            store.deref();
+        }
+    }
+
+    return writeFileWithSourceDestination(globalThis, &source_blob, &destination_blob, options);
+}
+
+fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *Blob): void ! JSError {
+    const store_opt = blob.store;
+    if (store_opt == null) {
+        return globalThis.throw("Cannot write to a detached Blob", .{});
+    }
+    const store = store_opt.?;
+    if (store.data == .bytes) {
+        return globalThis.throwInvalidArguments("Cannot write to a Blob backed by bytes, which are always read-only", .{});
+    }
+}
+
+pub fn FileOpener(comptime This: type): type {
+    return struct {
+        context: *This,
+
+        const State = @This();
+
+        const __opener_flags = bun.O.NONBLOCK | bun.O.CLOEXEC;
+
+        const open_flags_ = if (@hasDecl(This, "open_flags"))
+            This.open_flags | __opener_flags
+        else
+            bun.O.RDONLY | __opener_flags;
+
+        const OpenCallback = *const fn (*This, bun.FD) void;
+
+        static fn getFdByOpening(ctx: *This, comptime Callback: OpenCallback) {
+            let buf: bun.PathBuffer = undefined;
+            let path_string = if (@hasField(This, "file_store"))
+                ctx.file_store.pathlike.path
+            else
+                ctx.file_blob.store.?.data.file.pathlike.path;
+
+            const path = path_string.sliceZ(&buf);
+
+            if (Environment.isWindows) {
+                const WrappedCallback = struct {
+                    static fn callback(req: *libuv.fs_t) callconv(.c) {
+                        let target: *This = unsafe { @ptrCast(@alignCast(req.data.?)) };
+                        {
+                            defer req.deinit();
+                            if (errEnum := req.result.errEnum()) {
+                                let path_string_2 = if (@hasField(This, "file_store"))
+                                    target.file_store.pathlike.path
+                                else
+                                    target.file_blob.store.?.data.file.pathlike.path;
+                                target.errno = bun.errnoToZigErr(errEnum);
+                                target.system_error = bun.sys.Error.fromCode(errEnum, .open)
+                                    .withPath(path_string_2.slice())
+                                    .toSystemError();
+                                target.opened_fd = invalid_fd;
+                            } else {
+                                target.opened_fd = req.result.toFD();
+                            }
+                        }
+                        Callback(target, target.opened_fd);
+                    }
+                };
+
+                const rc = libuv.uv_fs_open(
+                    ctx.loop,
+                    &ctx.req,
+                    path,
+                    open_flags_,
+                    jsc.Node.fs.default_permission,
+                    &WrappedCallback.callback,
+                );
+                if (errno := rc.errEnum()) {
+                    ctx.errno = bun.errnoToZigErr(errno);
+                    ctx.system_error = bun.sys.Error.fromCode(errno, .open).withPath(path_string.slice()).toSystemError();
+                    ctx.opened_fd = invalid_fd;
+                    Callback(ctx, invalid_fd);
+                }
+                ctx.req.data = @ptrCast(ctx);
+                return;
+            }
+
+            while (true) {
+                ctx.opened_fd = switch (bun.sys.open(path, open_flags_, jsc.Node.fs.default_permission)) {
+                    .result fd => fd,
+                    .err e => {
+                        if (comptime @hasField(This, "mkdirp_if_not_exists")) {
+                            if (e.errno == @intFromEnum(bun.sys.E.NOENT)) {
+                                switch (mkdirIfNotExists(ctx, e, path, path_string.slice())) {
+                                    .@"continue" => continue,
+                                    .fail => {
+                                        ctx.opened_fd = invalid_fd;
+                                        break;
+                                    },
+                                    .no => {},
+                                }
+                            }
+                        }
+
+                        ctx.errno = bun.errnoToZigErr(e.errno);
+                        ctx.system_error = e.withPath(path_string.slice()).toSystemError();
+                        ctx.opened_fd = invalid_fd;
+                        break;
+                    },
+                };
+                break;
+            }
+
+            Callback(ctx, ctx.opened_fd);
+        }
+
+        static fn getFd(ctx: *This, comptime Callback: OpenCallback) {
+            if (ctx.opened_fd != invalid_fd) {
+                Callback(ctx, ctx.opened_fd);
+                return;
+            }
+
+            if (@hasField(This, "file_store")) {
+                const pathlike = ctx.file_store.pathlike;
+                if (pathlike == .fd) {
+                    ctx.opened_fd = pathlike.fd;
+                    Callback(ctx, ctx.opened_fd);
+                    return;
+                }
+            } else {
+                const pathlike = ctx.file_blob.store.?.data.file.pathlike;
+                if (pathlike == .fd) {
+                    ctx.opened_fd = pathlike.fd;
+                    Callback(ctx, ctx.opened_fd);
+                    return;
+                }
+            }
+
+            getFdByOpening(ctx, Callback);
+        }
+    };
+}
+
+pub fn FileCloser(comptime This: type): type {
+    return struct {
+        static fn scheduleClose(request: *io.Request): io.Action {
+            let ctx: *This = @alignCast(@fieldParentPtr("io_request", request));
+            return io.Action{
+                .close = .{
+                    .ctx = ctx,
+                    .fd = ctx.opened_fd,
+                    .onDone = @ptrCast(&onIORequestClosed),
+                    .poll = &ctx.io_poll,
+                    .tag = This.io_tag,
+                },
+            };
+        }
+
+        static fn onIORequestClosed(ctx: *This) {
+            ctx.io_poll.flags.remove(.was_ever_registered);
+            ctx.task = .{ .callback = &onCloseIORequest };
+            bun.jsc.WorkPool.schedule(&ctx.task);
+        }
+
+        static fn onCloseIORequest(task: *jsc.WorkPoolTask) {
+            debug("onCloseIORequest()", .{});
+            let ctx: *This = @alignCast(@fieldParentPtr("task", task));
+            ctx.close_after_io = false;
+            ctx.update();
+        }
+
+        static fn doClose(ctx: *This, is_allowed_to_close_fd: bool): bool {
+            if (@hasField(This, "io_request")) {
+                if (ctx.close_after_io) {
+                    ctx.state.store(BlobClosingState.closing, .seq_cst);
+
+                    @atomicStore(@TypeOf(ctx.io_request.callback), &ctx.io_request.callback, &scheduleClose, .seq_cst);
+                    if (!ctx.io_request.scheduled)
+                        io.Loop.get().schedule(&ctx.io_request);
+                    return true;
+                }
+            }
+
+            if (is_allowed_to_close_fd &&
+                ctx.opened_fd != invalid_fd &&
+                ctx.opened_fd.stdioTag() == null)
+            {
+                if (comptime Environment.isWindows) {
+                    bun.Async.Closer.close(ctx.opened_fd, ctx.loop);
+                } else {
+                    * = ctx.opened_fd.closeAllowingBadFileDescriptor(null);
+                }
+                ctx.opened_fd = invalid_fd;
+            }
+
+            return false;
+        }
+    };
+}
 
 pub type BlobSizeType = u52;
 
@@ -638,9 +1730,611 @@ pub struct BlobExternalSharedDescriptor {
         return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
     }
 
+    static fn initWithAllASCII(bytes: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject, is_all_ascii: bool): Blob {
+        let store: (*BlobStore)? = null;
+        if (bytes.len > 0) {
+            store = BlobStore.init(bytes, allocator);
+            store.?.is_all_ascii = is_all_ascii;
+        }
+        return Blob{
+            size: @as(SizeType, @truncate(bytes.len)),
+            store: store,
+            content_type: "",
+            globalThis: globalThis,
+            charset: .fromBool(is_all_ascii),
+        };
+    }
+
+    static fn createWithBytesAndAllocator(
+        bytes: []u8,
+        allocator: std.mem.Allocator,
+        globalThis: *JSGlobalObject,
+        was_string: bool,
+    ): Blob {
+        return Blob{
+            size: @as(SizeType, @truncate(bytes.len)),
+            store: if (bytes.len > 0) BlobStore.init(bytes, allocator) else null,
+            content_type: if (was_string) MimeType.text.value else "",
+            globalThis: globalThis,
+        };
+    }
+
+    static fn tryCreate(
+        bytes_: []const u8,
+        allocator_: std.mem.Allocator,
+        globalThis: *JSGlobalObject,
+        was_string: bool,
+    ): Blob! {
+        if (comptime Environment.isLinux) {
+            if (bun.linux.MemFdAllocator.shouldUse(bytes_)) {
+                switch (bun.linux.MemFdAllocator.create(bytes_)) {
+                    .err => {},
+                    .result result => {
+                        const store = BlobStore.new(.{
+                            .data = .{
+                                .bytes = result,
+                            },
+                            .allocator = bun.default_allocator,
+                            .ref_count = std.atomic.Value(u32).init(1),
+                        });
+                        let blob = Blob.initWithStore(store, globalThis);
+                        if (was_string && blob.content_type.len == 0) {
+                            blob.content_type = MimeType.text.value;
+                        }
+                        return blob;
+                    },
+                }
+            }
+        }
+
+        return Blob.createWithBytesAndAllocator(allocator_.dupe(u8, bytes_)?, allocator_, globalThis, was_string);
+    }
+
+    fn setNotHeapAllocated(*_) {
+        _.ref_count = .init(0);
+    }
+
+    fn transfer(*_) {
+        _.store = null;
+    }
+
+    static fn get(
+        global: *JSGlobalObject,
+        arg: JSValue,
+        comptime move_flag: bool,
+        comptime require_array: bool,
+    ): Blob ! JSError {
+        return Blob.fromJSWithoutDeferGC(global, arg, move_flag, require_array);
+    }
+
+    static fn fromJSWithoutDeferGC(
+        global: *JSGlobalObject,
+        arg: JSValue,
+        comptime move_flag: bool,
+        comptime require_array: bool,
+    ): Blob ! JSError {
+        let current = arg;
+        if (current.isUndefinedOrNull()) {
+            return Blob{ globalThis: global };
+        }
+
+        let top_value = current;
+        let might_only_be_one_thing = false;
+        arg.ensureStillAlive();
+        defer arg.ensureStillAlive();
+        let fail_if_top_value_is_not_typed_array_like = false;
+        switch (current.jsTypeLoose()) {
+            .Array, .DerivedArray => {
+                let top_iter = jsc.JSArrayIterator.init(current, global)?;
+                might_only_be_one_thing = top_iter.len == 1;
+                if (top_iter.len == 0) {
+                    return Blob{ globalThis: global };
+                }
+                if (might_only_be_one_thing) {
+                    const next_opt = top_iter.next()?;
+                    top_value = next_opt.?;
+                }
+            },
+            else => {
+                might_only_be_one_thing = true;
+                if (require_array) {
+                    fail_if_top_value_is_not_typed_array_like = true;
+                }
+            },
+        }
+
+        if (might_only_be_one_thing || !move_flag) {
+            switch (top_value.jsTypeLoose()) {
+                .Cell,
+                .NumberObject,
+                .String,
+                .StringObject,
+                .DerivedStringObject => {
+                    if (!fail_if_top_value_is_not_typed_array_like) {
+                        let str = top_value.toBunString(global)?;
+                        defer str.deref();
+                        const res_tuple = str.toOwnedSliceReturningAllASCII(bun.default_allocator)?;
+                        const bytes = @field(res_tuple, "0");
+                        const ascii = @field(res_tuple, "1");
+                        return Blob.initWithAllASCII(bytes, bun.default_allocator, global, ascii);
+                    }
+                },
+
+                .ArrayBuffer,
+                .Int8Array,
+                .Uint8Array,
+                .Uint8ClampedArray,
+                .Int16Array,
+                .Uint16Array,
+                .Int32Array,
+                .Uint32Array,
+                .Float16Array,
+                .Float32Array,
+                .Float64Array,
+                .BigInt64Array,
+                .BigUint64Array,
+                .DataView => {
+                    return Blob.tryCreate(top_value.asArrayBuffer(global).?.byteSlice(), bun.default_allocator, global, false);
+                },
+
+                .DOMWrapper => {
+                    if (!fail_if_top_value_is_not_typed_array_like) {
+                        if (blob := top_value.as(Blob)) {
+                            if (comptime move_flag) {
+                                let _blob = blob.*;
+                                _blob.setNotHeapAllocated();
+                                _blob.name = blob.name.dupeRef();
+                                if (blob.content_type_allocated) {
+                                    _blob.content_type = bun.handleOom(bun.default_allocator.dupe(u8, blob.content_type));
+                                }
+                                blob.transfer();
+                                return _blob;
+                            } else {
+                                return blob.dupe();
+                            }
+                        } else if (build := top_value.as(jsc.API.BuildArtifact)) {
+                            return build.blob.dupe();
+                        } else {
+                            const sliced = current.toSliceClone(global)?;
+                            if (allocator := sliced.allocator.get()) {
+                                return Blob.initWithAllASCII(@constCast(sliced.slice()), allocator, global, false);
+                            }
+                        }
+                    }
+                },
+
+                else => {},
+            }
+
+            if (fail_if_top_value_is_not_typed_array_like) {
+                return global.throwInvalidArguments("new Blob() expects an Array", .{});
+            }
+        }
+
+        let stack_allocator = std.heap.stackFallback(1024, bun.default_allocator);
+        const stack_mem_all = stack_allocator.get();
+        let stack = std.array_list.Managed(JSValue).init(stack_mem_all);
+        let joiner = StringJoiner{ .allocator = stack_mem_all };
+        let could_have_non_ascii = false;
+
+        defer if (stack_allocator.fixed_buffer_allocator.end_index >= 1024) stack.deinit();
+
+        while (true) {
+            switch (current.jsTypeLoose()) {
+                .NumberObject,
+                .String,
+                .StringObject,
+                .DerivedStringObject => {
+                    let sliced = current.toSlice(global, bun.default_allocator)?;
+                    const allocator = sliced.allocator.get();
+                    could_have_non_ascii = could_have_non_ascii || !sliced.allocator.isWTFAllocator();
+                    joiner.push(sliced.slice(), allocator);
+                },
+
+                .Array, .DerivedArray => {
+                    let iter = jsc.JSArrayIterator.init(current, global)?;
+                    stack.ensureUnusedCapacity(iter.len)?;
+                    let any_arrays = false;
+                    while (item := iter.next()?) {
+                        if (item.isUndefinedOrNull()) continue;
+
+                        if (!any_arrays) {
+                            switch (item.jsTypeLoose()) {
+                                .NumberObject,
+                                .Cell,
+                                .String,
+                                .StringObject,
+                                .DerivedStringObject => {
+                                    let sliced = item.toSlice(global, bun.default_allocator)?;
+                                    const allocator = sliced.allocator.get();
+                                    could_have_non_ascii = could_have_non_ascii || !sliced.allocator.isWTFAllocator();
+                                    joiner.push(sliced.slice(), allocator);
+                                    continue;
+                                },
+                                .ArrayBuffer,
+                                .Int8Array,
+                                .Uint8Array,
+                                .Uint8ClampedArray,
+                                .Int16Array,
+                                .Uint16Array,
+                                .Int32Array,
+                                .Uint32Array,
+                                .Float16Array,
+                                .Float32Array,
+                                .Float64Array,
+                                .BigInt64Array,
+                                .BigUint64Array,
+                                .DataView => {
+                                    could_have_non_ascii = true;
+                                    let buf = item.asArrayBuffer(global).?;
+                                    joiner.pushStatic(buf.byteSlice());
+                                    continue;
+                                },
+                                .Array, .DerivedArray => {
+                                    any_arrays = true;
+                                    could_have_non_ascii = true;
+                                    break;
+                                },
+
+                                .DOMWrapper => {
+                                    if (blob := item.as(Blob)) {
+                                        could_have_non_ascii = could_have_non_ascii || blob.charset != .all_ascii;
+                                        joiner.pushStatic(blob.sharedView());
+                                        continue;
+                                    } else {
+                                        const sliced = current.toSliceClone(global)?;
+                                        const allocator = sliced.allocator.get();
+                                        could_have_non_ascii = could_have_non_ascii || allocator != null;
+                                        joiner.push(sliced.slice(), allocator);
+                                    }
+                                },
+                                else => {},
+                            }
+                        }
+
+                        stack.appendAssumeCapacity(item);
+                    }
+                },
+
+                .DOMWrapper => {
+                    if (blob := current.as(Blob)) {
+                        could_have_non_ascii = could_have_non_ascii || blob.charset != .all_ascii;
+                        joiner.pushStatic(blob.sharedView());
+                    } else {
+                        const sliced = current.toSliceClone(global)?;
+                        const allocator = sliced.allocator.get();
+                        could_have_non_ascii = could_have_non_ascii || allocator != null;
+                        joiner.push(sliced.slice(), allocator);
+                    }
+                },
+
+                .ArrayBuffer,
+                .Int8Array,
+                .Uint8Array,
+                .Uint8ClampedArray,
+                .Int16Array,
+                .Uint16Array,
+                .Int32Array,
+                .Uint32Array,
+                .Float16Array,
+                .Float32Array,
+                .Float64Array,
+                .BigInt64Array,
+                .BigUint64Array,
+                .DataView => {
+                    let buf = current.asArrayBuffer(global).?;
+                    joiner.pushStatic(buf.slice());
+                    could_have_non_ascii = true;
+                },
+
+                else => {
+                    let sliced = current.toSlice(global, bun.default_allocator)?;
+                    if (global.hasException()) {
+                        const end_result = joiner.done(bun.default_allocator)?;
+                        bun.default_allocator.free(end_result);
+                        return error.JSError;
+                    }
+                    could_have_non_ascii = could_have_non_ascii || !sliced.allocator.isWTFAllocator();
+                    joiner.push(sliced.slice(), sliced.allocator.get());
+                },
+            }
+            if (next_item := stack.pop()) {
+                current = next_item;
+            } else {
+                break;
+            }
+        }
+
+        const joined = joiner.done(bun.default_allocator)?;
+
+        if (!could_have_non_ascii) {
+            return Blob.initWithAllASCII(joined, bun.default_allocator, global, true);
+        }
+        return Blob.init(joined, bun.default_allocator, global);
+    }
+
+    fn getSliceFrom(*_, globalThis: *JSGlobalObject, relativeStart: i64, relativeEnd: i64, content_type: []const u8, content_type_was_allocated: bool): JSValue {
+        const offset = _.offset +| @as(SizeType, @intCast(relativeStart));
+        const len = @as(SizeType, @intCast(@max(relativeEnd -| relativeStart, 0)));
+
+        let blob = _.dupe();
+        blob.offset = offset;
+        blob.size = len;
+
+        if (blob.content_type_allocated) {
+            bun.default_allocator.free(blob.content_type);
+        }
+
+        if (content_type.len == 0 && _.content_type.len > 0 && !_.content_type_allocated) {
+            blob.content_type = _.content_type;
+        } else {
+            blob.content_type = content_type;
+        }
+        blob.content_type_allocated = content_type_was_allocated;
+        blob.content_type_was_set = _.content_type_was_set || content_type_was_allocated;
+
+        let blob_ = Blob.new(blob);
+        return blob_.toJS(globalThis);
+    }
+
+    fn pipeReadableStreamToBlob(*_, globalThis: *JSGlobalObject, readable_stream: jsc.WebCore.ReadableStream, extra_options: JSValue?): JSValue ! JSError {
+        const store_opt = _.store;
+        if (store_opt == null) {
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Blob is detached", .{}));
+        }
+        let store = store_opt.?;
+
+        if (_.isS3()) {
+            const s3 = &_.store.?.data.s3;
+            let aws_options = s3.getCredentialsWithOptions(extra_options, globalThis) catch |e| {
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e));
+            };
+            defer aws_options.deinit();
+
+            const path = s3.path();
+            let proxy_url: ([]const u8)? = null;
+            if (p := globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                proxy_url = p.href;
+            }
+
+            return S3.uploadStream(
+                (if (extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                path,
+                readable_stream,
+                globalThis,
+                aws_options.options,
+                aws_options.acl,
+                aws_options.storage_class,
+                _.contentTypeOrMimeType(),
+                aws_options.content_disposition,
+                aws_options.content_encoding,
+                proxy_url,
+                aws_options.request_payer,
+                null,
+                undefined,
+            );
+        }
+
+        if (store.data != .file) {
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Blob is read-only", .{}));
+        }
+
+        const file_sink = brk_sink: {
+            if (Environment.isWindows) {
+                const pathlike = store.data.file.pathlike;
+                const fd: bun.FD = if (pathlike == .fd) pathlike.fd else brk: {
+                    let file_path: bun.PathBuffer = undefined;
+                    const path = pathlike.path.sliceZ(&file_path);
+                    switch (bun.sys.open(
+                        path,
+                        bun.O.WRONLY | bun.O.CREAT | bun.O.NONBLOCK,
+                        write_permissions,
+                    )) {
+                        .result result => {
+                            break :brk result;
+                        },
+                        .err e => {
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.withPath(path).toJS(globalThis)?);
+                        },
+                    }
+                };
+
+                const is_stdout_or_stderr = brk: {
+                    if (pathlike != .fd) {
+                        break :brk false;
+                    }
+
+                    if (rare := globalThis.bunVM().rare_data) {
+                        if (store == rare.stdout_store) {
+                            break :brk true;
+                        }
+
+                        if (store == rare.stderr_store) {
+                            break :brk true;
+                        }
+                    }
+
+                    if (tag := fd.stdioTag()) {
+                        break :brk switch (tag) {
+                            .std_out, .std_err => true,
+                            else => false,
+                        };
+                    }
+                    break :brk false;
+                };
+                let sink = jsc.WebCore.FileSink.init(fd, _.globalThis.bunVM().eventLoop());
+                sink.writer.owns_fd = pathlike != .fd;
+
+                if (is_stdout_or_stderr) {
+                    switch (sink.writer.startSync(fd, false)) {
+                        .err e => {
+                            sink.deref();
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis)?);
+                        },
+                        else => {},
+                    }
+                } else {
+                    switch (sink.writer.start(fd, true)) {
+                        .err e => {
+                            sink.deref();
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis)?);
+                        },
+                        else => {},
+                    }
+                }
+
+                break :brk_sink sink;
+            }
+
+            let sink = jsc.WebCore.FileSink.init(bun.invalid_fd, _.globalThis.bunVM().eventLoop());
+
+            const input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
+                if (store.data.file.pathlike == .fd) {
+                    break :brk .{ .fd = store.data.file.pathlike.fd };
+                } else {
+                    break :brk .{
+                        .path = bun.handleOom(ZigString.Slice.initDupe(
+                            bun.default_allocator,
+                            store.data.file.pathlike.path.slice(),
+                        )),
+                    };
+                }
+            };
+            defer input_path.deinit();
+
+            const stream_start: jsc.WebCore.streams.Start = .{
+                .FileSink = .{
+                    .input_path = input_path,
+                },
+            };
+
+            switch (sink.start(stream_start)) {
+                .err e => {
+                    sink.deref();
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis)?);
+                },
+                else => {},
+            }
+            break :brk_sink sink;
+        };
+        let signal = &file_sink.signal;
+
+        signal.* = jsc.WebCore.FileSink.JSSink.SinkSignal.init(.zero);
+        signal.clear();
+        bun.assert(signal.isDead());
+
+        const assignment_result: JSValue = jsc.WebCore.FileSink.JSSink.assignToStream(
+            globalThis,
+            readable_stream.value,
+            file_sink,
+            unsafe { @as(*OpaquePtr, &signal.ptr) },
+        );
+
+        assignment_result.ensureStillAlive();
+        bun.assert(!signal.isDead());
+
+        if (e := assignment_result.toError()) {
+            file_sink.deref();
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e);
+        }
+
+        if (!assignment_result.isEmptyOrUndefinedOrNull()) {
+            globalThis.bunVM().drainMicrotasks();
+
+            assignment_result.ensureStillAlive();
+            if (promise := assignment_result.asAnyPromise()) {
+                switch (promise.status()) {
+                    .pending => {
+                        const wrapper = FileStreamWrapper.new(.{
+                            .promise = jsc.JSPromise.Strong.init(globalThis),
+                            .readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable_stream, globalThis),
+                            .sink = file_sink,
+                        });
+                        const promise_value = wrapper.promise.value();
+
+                        assignment_result.then(
+                            globalThis,
+                            wrapper,
+                            onFileStreamResolveRequestStream,
+                            onFileStreamRejectRequestStream,
+                        )?;
+                        return promise_value;
+                    },
+                    .fulfilled => {
+                        file_sink.deref();
+                        readable_stream.done(globalThis);
+                        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+                    },
+                    .rejected => {
+                        file_sink.deref();
+                        readable_stream.cancel(globalThis);
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise.result(globalThis.vm()));
+                    },
+                }
+            } else {
+                file_sink.deref();
+                readable_stream.cancel(globalThis);
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, assignment_result);
+            }
+        }
+        file_sink.deref();
+
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+    }
+
     static fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
-        * = callframe;
-        return globalThis.throw("Blob.writeFile not yet ported", .{});
+        const arguments = callframe.arguments();
+        let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
+        defer args.deinit();
+
+        let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
+        defer {
+            if (path_or_blob == .path) {
+                path_or_blob.path.deinit();
+            }
+        }
+        if (path_or_blob == .blob) {
+            validateWritableBlob(globalThis, &path_or_blob.blob)?;
+        }
+
+        const data_opt = args.nextEat();
+        if (data_opt == null) {
+            return globalThis.throwInvalidArguments("Bun.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
+        }
+        const data = data_opt.?;
+
+        let mkdirp_if_not_exists: bool? = null;
+        let mode: bun.Mode? = null;
+        const options = args.nextEat();
+        if (options_object := options) {
+            if (options_object.isObject()) {
+                if (create_directory := options_object.getTruthy(globalThis, "createPath")?) {
+                    if (!create_directory.isBoolean()) {
+                        return globalThis.throwInvalidArgumentType("write", "options.createPath", "boolean");
+                    }
+                    mkdirp_if_not_exists = create_directory.toBoolean();
+                }
+                if (mode_value := options_object.get(globalThis, "mode")?) {
+                    if (!mode_value.isEmptyOrUndefinedOrNull()) {
+                        if (!mode_value.isNumber()) {
+                            return globalThis.throwInvalidArgumentType("write", "options.mode", "number");
+                        }
+                        const mode_int = mode_value.toInt64();
+                        if (mode_int < 0 || mode_int > 0o777) {
+                            return globalThis.throwRangeError(mode_int, .{ .field_name = "mode", .min = 0, .max = 0o777 });
+                        }
+                        mode = @intCast(mode_int);
+                    }
+                }
+            } else if (!options_object.isEmptyOrUndefinedOrNull()) {
+                return globalThis.throwInvalidArgumentType("write", "options", "object");
+            }
+        }
+        return writeFileInternal(globalThis, &path_or_blob, data, .{
+            .mkdirp_if_not_exists = mkdirp_if_not_exists,
+            .extra_options = options,
+            .mode = mode,
+        });
     }
 }
 

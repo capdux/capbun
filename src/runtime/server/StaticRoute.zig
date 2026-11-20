@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -41,8 +42,8 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_eq(a: anytype, b: anytype) bool {
     const Ta = @TypeOf(a); const Tb = @TypeOf(b);
     if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
@@ -58,9 +59,378 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const bun = @import("bun");
+pub const bun = @import("bun");
+pub const InitFromBytesOptions = struct {
+    server: ?AnyServer,
+    mime_type: ?*const bun.http.MimeType = null,
+    status_code: u16 = 200,
+    headers: ?*jsc.WebCore.FetchHeaders = null,
+};
+
+pub const StaticRoute = @This();
+
+ref_count: RefCount = .init(),
+server: ?AnyServer = null,
+status_code: u16,
+blob: AnyBlob,
+cached_blob_size: u64,
+has_content_disposition: bool = false,
+headers: Headers = .{ .allocator = bun.default_allocator },
+
+pub fn initFromAnyBlob(blob: *const AnyBlob, options: InitFromBytesOptions) *StaticRoute {
+        var headers = bun.handleOom(Headers.from(options.headers, bun.default_allocator, .{ .body = blob }));
+        _ = &headers;
+        if ((headers.getContentType() == null)) {
+            if (options.mime_type) |mime_type| {
+                _ = &mime_type;
+                _ = bun.handleOom(headers.append("Content-Type", (if (@typeInfo(@TypeOf(mime_type)) == .@"enum") @intFromEnum(mime_type) else mime_type.value)));
+            } else {
+                if (blob.hasContentTypeFromUser()) {
+                    _ = bun.handleOom(headers.append("Content-Type", blob.contentType()));
+                }
+            }
+        }
+        if ((headers.get("etag") == null)) {
+            if ((blob.slice().len > 0)) {
+                _ = bun.handleOom(ETag.appendToHeaders(blob.slice(), (&headers)));
+            }
+        }
+        return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob.*, .cached_blob_size = blob.size(), .has_content_disposition = false, .headers = headers, .server = options.server, .status_code = options.status_code });
+}
+
+pub fn sendBlobThenDeinit(resp: AnyResponse, blob: *const AnyBlob, options: InitFromBytesOptions) void {
+        const temp_route = StaticRoute.initFromAnyBlob(blob, options);
+        defer {
+        _ = temp_route.deref();
+        }
+        _ = temp_route.on(resp);
+}
+
+pub fn deinit(self: *StaticRoute) void {
+        _ = self.blob.detach();
+        _ = self.headers.deinit();
+        _ = bun.destroy(self);
+}
+
+pub fn clone(self: *StaticRoute, globalThis: *jsc.JSGlobalObject) !*StaticRoute {
+        var blob = self.blob.toBlob(globalThis);
+        _ = &blob;
+        self.blob = .{ .Blob = blob };
+        return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = .{ .Blob = blob.dupe() }, .cached_blob_size = self.cached_blob_size, .has_content_disposition = self.has_content_disposition, .headers = try self.headers.clone(), .server = self.server, .status_code = self.status_code });
+}
+
+pub fn memoryCost(self: StaticRoute) usize {
+        return ((@sizeOf(StaticRoute) + self.blob.memoryCost()) + self.headers.memoryCost());
+}
+
+pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSError!?*StaticRoute {
+        if (argument.as(jsc.WebCore.Response)) |response| {
+            _ = &response;
+            const bodyValue = response.getBodyValue();
+            const was_string = bodyValue.wasString();
+            _ = bodyValue.toBlobIfPossible();
+            const blob: AnyBlob = brk: {
+            break :brk (switch (bodyValue.*) {
+.Used => {
+return globalThis.throwInvalidArguments("Response body has already been used", .{});
+},
+.Null, .Empty => break :brk .{ .InternalBlob = .{ .bytes = std.array_list.Managed(u8).init(bun.default_allocator) } },
+.Blob, .InternalBlob, .WTFStringImpl => {
+{
+                if (((bodyValue.* == .Blob) and bodyValue.Blob.needsToReadFile())) {
+                    return globalThis.throwTODO("TODO: support Bun.file(path) in static routes");
+                }
+                var blob = bodyValue.use();
+                _ = &blob;
+                blob.globalThis = globalThis;
+                _ = bun.assertf((!blob.isHeapAllocated()), "expected blob not to be heap-allocated", .{});
+                bodyValue.* = .{ .Blob = blob.dupe() };
+                break :brk .{ .Blob = blob };
+            }
+},
+else => {
+return globalThis.throwInvalidArguments("Body must be fully buffered before it can be used in a static route. Consider calling new Response(await response.blob()) to buffer the body.", .{});
+},
+});
+
+};
+            var has_content_disposition = false;
+            _ = &has_content_disposition;
+            if (response.getInitHeaders()) |hdrs| {
+                _ = &hdrs;
+                has_content_disposition = hdrs.fastHas(.ContentDisposition);
+                _ = hdrs.fastRemove(.TransferEncoding);
+                _ = hdrs.fastRemove(.ContentLength);
+            }
+            var headers: Headers = .{ .allocator = bun.default_allocator };
+            _ = &headers;
+            if (response.getInitHeaders()) |h| {
+                _ = &h;
+                headers = (blk_catch_0: { break :blk_catch_0 ((Headers.from(h, bun.default_allocator, .{ .body = (&blob) })) catch |__ce_0| { _ = &__ce_0; _ = blob.detach();
+                return globalThis.throwOutOfMemory(); }); });
+            }
+            if ((was_string and (headers.getContentType() == null))) {
+                _ = bun.handleOom(headers.append("Content-Type", bun.http.MimeType.Table.@"text/plain; charset=utf-8".slice()));
+            }
+            if ((headers.get("etag") == null)) {
+                if ((blob.slice().len > 0)) {
+                    _ = try ETag.appendToHeaders(blob.slice(), (&headers));
+                }
+            }
+            return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob, .cached_blob_size = blob.size(), .has_content_disposition = has_content_disposition, .headers = headers, .server = null, .status_code = response.statusCode() });
+        }
+        return null;
+}
+
+pub fn onHEADRequest(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        if ((self.status_code == 200)) {
+            if (self.render304NotModifiedIfNoneMatch(req, resp)) {
+                return;
+            }
+        }
+        _ = req.setYield(false);
+        _ = self.onHEAD(resp);
+}
+
+pub fn onHEAD(self: *StaticRoute, resp: AnyResponse) void {
+        _ = bun.debugAssert((self.server != null));
+        _ = self.ref();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onPendingRequest();
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        _ = resp.corked(renderMetadataAndEnd, .{ self, resp });
+        _ = self.onResponseComplete(resp);
+}
+
+pub fn renderMetadataAndEnd(self: *StaticRoute, resp: AnyResponse) void {
+        _ = self.renderMetadata(resp);
+        _ = resp.writeHeaderInt("Content-Length", self.cached_blob_size);
+        _ = resp.endWithoutBody(resp.shouldCloseConnection());
+}
+
+pub fn onRequest(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        const method = ((bun.http.Method.find(req.method())) orelse (.GET));
+        if ((method == .GET)) {
+            _ = self.onGET(req, resp);
+        } else {
+            if ((method == .HEAD)) {
+                _ = self.onHEADRequest(req, resp);
+            } else {
+                _ = req.setYield(false);
+                _ = self.on(resp);
+            }
+        }
+}
+
+pub fn onGET(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        if ((self.status_code == 200)) {
+            if (self.render304NotModifiedIfNoneMatch(req, resp)) {
+                return;
+            }
+        }
+        _ = req.setYield(false);
+        _ = self.on(resp);
+}
+
+pub fn on(self: *StaticRoute, resp: AnyResponse) void {
+        _ = bun.debugAssert((self.server != null));
+        _ = self.ref();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onPendingRequest();
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        var finished = false;
+        _ = &finished;
+        _ = self.doRenderBlob(resp, (&finished));
+        if (finished) {
+            _ = self.onResponseComplete(resp);
+            return;
+        }
+        _ = self.toAsync(resp);
+}
+
+pub fn toAsync(self: *StaticRoute, resp: AnyResponse) void {
+        _ = resp.onAborted(*StaticRoute, onAborted, self);
+        _ = resp.onWritable(*StaticRoute, onWritable, self);
+}
+
+pub fn onAborted(self: *StaticRoute, resp: AnyResponse) void {
+        _ = self.onResponseComplete(resp);
+}
+
+pub fn onResponseComplete(self: *StaticRoute, resp: AnyResponse) void {
+        _ = resp.clearAborted();
+        _ = resp.clearOnWritable();
+        _ = resp.clearTimeout();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onStaticRequestComplete();
+        }
+        _ = self.deref();
+}
+
+pub fn doRenderBlob(self: *StaticRoute, resp: AnyResponse, did_finish: *bool) void {
+        if ((self.blob.fastSize() < (16384 - 1024))) {
+            _ = resp.corked(doRenderBlobCorked, .{ self, resp, did_finish });
+        } else {
+            _ = self.doRenderBlobCorked(resp, did_finish);
+        }
+}
+
+pub fn doRenderBlobCorked(self: *StaticRoute, resp: AnyResponse, did_finish: *bool) void {
+        _ = self.renderMetadata(resp);
+        _ = self.renderBytes(resp, did_finish);
+}
+
+pub fn onWritable(self: *StaticRoute, write_offset: u64, resp: AnyResponse) bool {
+        if (self.server) |server| {
+            _ = &server;
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        if ((!self.onWritableBytes(write_offset, resp))) {
+            return false;
+        }
+        _ = self.onResponseComplete(resp);
+        return true;
+}
+
+pub fn onWritableBytes(self: *StaticRoute, write_offset: u64, resp: AnyResponse) bool {
+        const blob = self.blob;
+        const all_bytes = blob.slice();
+        const bytes = all_bytes[@min(all_bytes.len, write_offset)..];
+        return resp.tryEnd(bytes, all_bytes.len, resp.shouldCloseConnection());
+}
+
+pub fn doWriteStatus(self: *StaticRoute, status: u16, resp: AnyResponse) void {
+    _ = self;
+        switch (resp) {
+.SSL => |r| {
+_ = writeStatus(true, r, status);
+},
+.TCP => |r| {
+_ = writeStatus(false, r, status);
+},
+.H3 => |r| {
+var b: [16]u8 = undefined;
+        _ = &b;
+        _ = r.writeStatus(((std.fmt.bufPrint((&b), "{d}", .{ status })) catch unreachable));
+},
+}
+}
+
+pub fn writeHeadersTo(headers: *Headers, server: ?AnyServer, comptime is_h3: bool, s: anytype) void {
+        const entries = headers.entries.slice();
+        const names: []const api.StringPointer = entries.items(.name);
+        const values: []const api.StringPointer = entries.items(.value);
+        const buf = headers.buf.items;
+        var i: usize = 0;
+        _ = &i;
+        while ((i < names.len)) : (i = (i + 1)) {
+            _ = s.writeHeader(names[@as(usize, @intCast(i))].slice(buf), values[@as(usize, @intCast(i))].slice(buf));
+        }
+        if (comptime (!is_h3)) {
+            if (server) |srv| {
+                _ = &srv;
+                if (srv.h3AltSvc()) |alt| {
+                    _ = &alt;
+                    _ = s.writeHeader("alt-svc", alt);
+                }
+            }
+        }
+}
+
+pub fn doWriteHeaders(self: *StaticRoute, resp: AnyResponse) void {
+        switch (resp) {
+.SSL => |s| {
+_ = StaticRoute.writeHeadersTo((&self.headers), self.server, false, s);
+},
+.TCP => |s| {
+_ = StaticRoute.writeHeadersTo((&self.headers), self.server, false, s);
+},
+.H3 => |s| {
+_ = StaticRoute.writeHeadersTo((&self.headers), self.server, true, s);
+},
+}
+}
+
+pub fn renderBytes(self: *StaticRoute, resp: AnyResponse, did_finish: *bool) void {
+        did_finish.* = self.onWritableBytes(0, resp);
+}
+
+pub fn renderMetadata(self: *StaticRoute, resp: AnyResponse) void {
+        var status = self.status_code;
+        _ = &status;
+        const size = self.cached_blob_size;
+        if ((((status == 200) and (size == 0)) and (!self.blob.isDetached()))) {
+            status = 204;
+        }
+        _ = self.doWriteStatus(status, resp);
+        _ = self.doWriteHeaders(resp);
+}
+
+pub fn onWithMethod(self: *StaticRoute, method: bun.http.Method, resp: AnyResponse) void {
+        switch (method) {
+.GET => {
+_ = self.on(resp);
+},
+.HEAD => {
+_ = self.onHEAD(resp);
+},
+else => {
+_ = self.doWriteStatus(405, resp);
+        _ = resp.endWithoutBody(resp.shouldCloseConnection());
+},
+}
+}
+
+pub fn render304NotModifiedIfNoneMatch(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) bool {
+        const if_none_match_opt = req.header("if-none-match");
+        if ((if_none_match_opt == null)) {
+            return false;
+        }
+        const if_none_match = if_none_match_opt.?;
+        const etag_opt = self.headers.get("etag");
+        if ((etag_opt == null)) {
+            return false;
+        }
+        const etag = etag_opt.?;
+        if (((if_none_match.len == 0) or (etag.len == 0))) {
+            return false;
+        }
+        if ((!ETag.ifNoneMatch(etag, if_none_match))) {
+            return false;
+        }
+        _ = req.setYield(false);
+        _ = self.ref();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onPendingRequest();
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        _ = self.doWriteStatus(304, resp);
+        _ = self.doWriteHeaders(resp);
+        _ = resp.endWithoutBody(resp.shouldCloseConnection());
+        _ = self.onResponseComplete(resp);
+        return true;
+}
+const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
+pub const ref = RefCount.ref;
+pub const deref = RefCount.deref;
 const jsc = bun.jsc;
 const api = bun.schema.api;
 const AnyServer = jsc.API.AnyServer;
@@ -70,271 +440,3 @@ const ETag = bun.http.ETag;
 const Headers = bun.http.Headers;
 const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
-pub const StaticRoute = struct {
-    ref_count: RefCount,
-    server: ?AnyServer = null,
-    status_code: u16,
-    blob: AnyBlob,
-    cached_blob_size: u64,
-    has_content_disposition: bool = false,
-    headers: Headers = .{ .allocator = bun.default_allocator },
-
-pub fn initFromAnyBlob(blob: *const AnyBlob, options: InitFromBytesOptions) *StaticRoute {
-            var headers = bun.handleOom(Headers.from(options.headers, bun.default_allocator, .{ .body = blob }));
-            _ = &headers;
-            if ((headers.getContentType() == null)) {
-                if (options.mime_type) |mime_type| {
-                    _ = &mime_type;
-                    _ = bun.handleOom(headers.append("Content-Type", (if (@typeInfo(@TypeOf(mime_type)) == .@"enum") @intFromEnum(mime_type) else mime_type.value)));
-                } else {
-                    if (blob.hasContentTypeFromUser()) {
-                        _ = bun.handleOom(headers.append("Content-Type", blob.contentType()));
-                    }
-                }
-            }
-            if ((headers.get("etag") == null)) {
-                if ((blob.slice().len > 0)) {
-                    _ = bun.handleOom(ETag.appendToHeaders(blob.slice(), (&headers)));
-                }
-            }
-            return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob.*, .cached_blob_size = blob.size(), .has_content_disposition = false, .headers = headers, .server = options.server, .status_code = options.status_code });
-    }
-
-pub fn sendBlobThenDeinit(resp: AnyResponse, blob: *const AnyBlob, options: InitFromBytesOptions) void {
-            const temp_route = StaticRoute.initFromAnyBlob(blob, options);
-            defer {
-            _ = temp_route.deref();
-            }
-            _ = temp_route.on(resp);
-    }
-
-pub fn deinit(self: *@This()) void {
-            _ = self.blob.detach();
-            _ = self.headers.deinit();
-            _ = bun.destroy(self);
-    }
-
-pub fn clone(self: *@This(), globalThis: *jsc.JSGlobalObject) !*StaticRoute {
-            var blob = self.blob.toBlob(globalThis);
-            _ = &blob;
-            self.blob = .{ .Blob = blob };
-            return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = .{ .Blob = blob.dupe() }, .cached_blob_size = self.cached_blob_size, .has_content_disposition = self.has_content_disposition, .headers = try self.headers.clone(), .server = self.server, .status_code = self.status_code });
-    }
-
-pub fn memoryCost(self: *const @This()) usize {
-            return ((@sizeOf(StaticRoute) + self.blob.memoryCost()) + self.headers.memoryCost());
-    }
-
-pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSError!?*StaticRoute {
-            if (argument.as(jsc.WebCore.Response)) |response| {
-                _ = &response;
-                const bodyValue = response.getBodyValue();
-                const was_string = bodyValue.wasString();
-                _ = bodyValue.toBlobIfPossible();
-                const blob: AnyBlob = brk: {
-                break :brk (switch (bodyValue.*) {
-.Used => {
-return globalThis.throwInvalidArguments("Response body has already been used", .{});
-},
-.Null, .Empty => break :brk .{ .InternalBlob = .{ .bytes = std.array_list.Managed(u8).init(bun.default_allocator) } },
-.Blob, .InternalBlob, .WTFStringImpl => {
-{
-                    if (((bodyValue.* == .Blob) and bodyValue.Blob.needsToReadFile())) {
-                        return globalThis.throwTODO("TODO: support Bun.file(path) in static routes");
-                    }
-                    var blob = bodyValue.use();
-                    _ = &blob;
-                    blob.globalThis = globalThis;
-                    _ = bun.assertf((!blob.isHeapAllocated()), "expected blob not to be heap-allocated", .{});
-                    bodyValue.* = .{ .Blob = blob.dupe() };
-                    break :brk .{ .Blob = blob };
-                }
-},
-else => {
-return globalThis.throwInvalidArguments("Body must be fully buffered before it can be used in a static route. Consider calling new Response(await response.blob()) to buffer the body.", .{});
-},
-});
-
-};
-                var has_content_disposition = false;
-                _ = &has_content_disposition;
-                if (response.getInitHeaders()) |headers| {
-                    _ = &headers;
-                    has_content_disposition = headers.fastHas(.ContentDisposition);
-                    _ = headers.fastRemove(.TransferEncoding);
-                    _ = headers.fastRemove(.ContentLength);
-                }
-                var headers: Headers = .{ .allocator = bun.default_allocator };
-                _ = &headers;
-                if (response.getInitHeaders()) |h| {
-                    _ = &h;
-                    headers = (blk_catch_0: { break :blk_catch_0 ((Headers.from(h, bun.default_allocator, .{ .body = (&blob) })) catch |__ce_0| { _ = &__ce_0; _ = blob.detach();
-                    _ = globalThis.throwOutOfMemory();
-                    return error.JSError; }); });
-                }
-                if ((was_string and (headers.getContentType() == null))) {
-                    _ = bun.handleOom(headers.append("Content-Type", bun.http.MimeType.Table.@"text/plain; charset=utf-8".slice()));
-                }
-                if ((headers.get("etag") == null)) {
-                    if ((blob.slice().len > 0)) {
-                        _ = try ETag.appendToHeaders(blob.slice(), (&headers));
-                    }
-                }
-                return bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob, .cached_blob_size = blob.size(), .has_content_disposition = has_content_disposition, .headers = headers, .server = null, .status_code = response.statusCode() });
-            }
-            return null;
-    }
-
-pub fn onHEADRequest(self: *@This(), req: uws.AnyRequest, resp: AnyResponse) void {
-            if ((self.status_code == 200)) {
-                if (self.render304NotModifiedIfNoneMatch(req, resp)) {
-                    return;
-                }
-            }
-            _ = req.setYield(false);
-            _ = self.onHEAD(resp);
-    }
-
-pub fn onHEAD(self: *@This(), resp: AnyResponse) void {
-            _ = bun.debugAssert((self.server != null));
-            _ = self.ref();
-            if (self.server) |server| {
-                _ = &server;
-                _ = server.onPendingRequest();
-                _ = resp.timeout(server.config().idleTimeout);
-            }
-            _ = resp.corked(renderMetadataAndEnd, .{ self, resp });
-            _ = self.onResponseComplete(resp);
-    }
-
-pub fn renderMetadataAndEnd(self: *@This(), resp: AnyResponse) void {
-            _ = self.renderMetadata(resp);
-            _ = resp.writeHeaderInt("Content-Length", self.cached_blob_size);
-            _ = resp.endWithoutBody(resp.shouldCloseConnection());
-    }
-
-pub fn onRequest(self: *@This(), req: uws.AnyRequest, resp: AnyResponse) void {
-            const method = ((bun.http.Method.find(req.method())) orelse (.GET));
-            if ((method == .GET)) {
-                _ = self.onGET(req, resp);
-            } else {
-                if ((method == .HEAD)) {
-                    _ = self.onHEADRequest(req, resp);
-                } else {
-                    _ = req.setYield(false);
-                    _ = self.on(resp);
-                }
-            }
-    }
-
-pub fn onGET(self: *@This(), req: uws.AnyRequest, resp: AnyResponse) void {
-            if ((self.status_code == 200)) {
-                if (self.render304NotModifiedIfNoneMatch(req, resp)) {
-                    return;
-                }
-            }
-            _ = req.setYield(false);
-            _ = self.on(resp);
-    }
-
-pub fn on(self: *@This(), resp: AnyResponse) void {
-            _ = bun.debugAssert((self.server != null));
-            _ = self.ref();
-            if (self.server) |server| {
-                _ = &server;
-                _ = server.onPendingRequest();
-                _ = resp.timeout(server.config().idleTimeout);
-            }
-            var finished = false;
-            _ = &finished;
-            _ = self.doRenderBlob(resp, (&finished));
-            if (finished) {
-                _ = self.onResponseComplete(resp);
-                return;
-            }
-            _ = self.toAsync(resp);
-    }
-
-pub fn toAsync(self: *@This(), resp: AnyResponse) void {
-            _ = resp.onAborted(*StaticRoute, onAborted, self);
-            _ = resp.onWritable(*StaticRoute, onWritable, self);
-    }
-
-pub fn onAborted(self: *@This(), resp: AnyResponse) void {
-            _ = self.onResponseComplete(resp);
-    }
-
-pub fn onResponseComplete(self: *@This(), resp: AnyResponse) void {
-            _ = resp.clearAborted();
-            _ = resp.clearOnWritable();
-            _ = resp.clearTimeout();
-            if (self.server) |server| {
-                _ = &server;
-                _ = server.onStaticRequestComplete();
-            }
-            _ = self.deref();
-    }
-
-pub fn doRenderBlob(self: *@This(), resp: AnyResponse, did_finish: *bool) void {
-            if ((self.blob.fastSize() < (16384 - 1024))) {
-                _ = resp.corked(doRenderBlobCorked, .{ self, resp, did_finish });
-            } else {
-                _ = self.doRenderBlobCorked(resp, did_finish);
-            }
-    }
-
-pub fn doRenderBlobCorked(self: *@This(), resp: AnyResponse, did_finish: *bool) void {
-            _ = self.renderMetadata(resp);
-            _ = self.renderBytes(resp, did_finish);
-    }
-
-pub fn onWritable(self: *@This(), write_offset: u64, resp: AnyResponse) bool {
-            if (self.server) |server| {
-                _ = &server;
-                _ = resp.timeout(server.config().idleTimeout);
-            }
-            if ((!self.onWritableBytes(write_offset, resp))) {
-                return false;
-            }
-            _ = self.onResponseComplete(resp);
-            return true;
-    }
-
-pub fn onWritableBytes(self: *@This(), write_offset: u64, resp: AnyResponse) bool {
-            const blob = self.blob;
-            const all_bytes = blob.slice();
-            const bytes = all_bytes[@min(all_bytes.len, write_offset)..];
-            return resp.tryEnd(bytes, all_bytes.len, resp.shouldCloseConnection());
-    }
-
-pub fn doWriteStatus(self: *@This(), _: *StaticRoute, status: u16, resp: AnyResponse) void {
-        _ = self;
-            switch (resp) {
-.SSL => |r| {
-_ = writeStatus(true, r, status);
-},
-.TCP => |r| {
-_ = writeStatus(false, r, status);
-},
-.H3 => |r| {
-var b: [16]u8 = undefined;
-            _ = &b;
-            _ = r.writeStatus(((std.fmt.bufPrint((&b), "{d}", .{ status })) catch unreachable));
-},
-}
-    }
-
-pub fn doWriteHeaders(self: *@This(), resp: AnyResponse) void {
-        _ = self;
-        _ = resp;
-    }
-    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
-    pub const InitFromBytesOptions = struct {
-        server: ?AnyServer,
-        mime_type: ?*const bun.http.MimeType = null,
-        status_code: u16 = 200,
-        headers: ?*jsc.WebCore.FetchHeaders = null,
-    };
-};

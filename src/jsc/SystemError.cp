@@ -24,7 +24,7 @@ const JSValue = jsc.JSValue;
 
     pub fn Maybe(comptime Result: type): type {
         return union(enum) {
-            e: SystemError,
+            @"err": SystemError,
             result: Result,
         };
     }

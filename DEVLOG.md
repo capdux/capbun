@@ -1429,3 +1429,5 @@
 - **[2026-11-20] Wave 14 Batch E 修复要点**：`napi.cp` 7 处回调改 `@c fn (...)` 消除双层 `*const`；`logger`/`streams` 用 `@field` 替代元组解构消除 `CpUnpackElemType`；`ReadableStream`/`quic/Context` 用顶层指针别名保留 `*?*T` 二级指针。
 
 - **[2026-11-20] Wave 14 Batch D+F 核心修复**：`AnyTask`/`AnyTaskWithExtraContext`/`FileSink` 升级 `@root struct` 打通根导出；`SignalCode` 6 个枚举函数补 `static fn`；`cron.cp` 与 `lifecycle_script_runner.cp` mixin 回调补 `static fn` 显式接源指针，彻底消除 `PipeReader` 签名不匹配；`uws_sys/WebSocket.cp` 补回 `publishWithOptions`。
+
+- **[2026-11-20] Wave 14 收官**：110 个模块全部落地，语义分析已穿透至最终主干运行时层（`server`/`RequestContext`/`CryptoHasher`/`AutoFlusher`/`VirtualMachine`/`DevServer`）。
