@@ -1,1771 +1,81 @@
-pub fn VisitExpr(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-        const allow_macros = P.allow_macros;
-        const BinaryExpressionVisitor = P.BinaryExpressionVisitor;
-        const jsx_transform_type = P.jsx_transform_type;
-        const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
-
-        // public for JSNode.JSXWriter usage
-        pub inline fn visitExpr(noalias p: *P, expr: Expr) Expr {
-            if (only_scan_imports_and_do_not_visit) {
-                @compileError("only_scan_imports_and_do_not_visit must not run this.");
-            }
-
-            // hopefully this gets tailed
-            return p.visitExprInOut(expr, .{});
-        }
-
-        pub fn visitExprInOut(p: *P, expr: Expr, in: ExprIn) Expr {
-            if (in.assign_target != .none and !p.isValidAssignmentTarget(expr)) {
-                p.log.addError(p.source, expr.loc, "Invalid assignment target") catch unreachable;
-            }
-
-            return switch (@as(Expr.Tag, expr.data)) {
-                inline else => |tag| if (comptime @hasDecl(visitors, @tagName(tag)))
-                    @field(visitors, @tagName(tag))(p, expr, in)
-                else
-                    expr,
-            };
-        }
-
-        const visitors = struct {
-            pub fn e_new_target(_: *P, expr: Expr, _: ExprIn) Expr {
-                // this error is not necessary and it is causing breakages
-                // if (!p.fn_only_data_visit.is_new_target_allowed) {
-                //     p.log.addRangeError(p.source, target.range, "Cannot use \"new.target\" here") catch unreachable;
-                // }
-                return expr;
-            }
-            pub fn e_string(_: *P, expr: Expr, _: ExprIn) Expr {
-                // If you're using this, you're probably not using 0-prefixed legacy octal notation
-                // if e.LegacyOctalLoc.Start > 0 {
-                return expr;
-            }
-            pub fn e_number(_: *P, expr: Expr, _: ExprIn) Expr {
-                // idc about legacy octal loc
-                return expr;
-            }
-            pub fn e_this(p: *P, expr: Expr, _: ExprIn) Expr {
-                if (p.valueForThis(expr.loc)) |exp| {
-                    return exp;
-                }
-
-                //                 // Capture "this" inside arrow functions that will be lowered into normal
-                // // function expressions for older language environments
-                // if p.fnOrArrowDataVisit.isArrow && p.options.unsupportedJSFeatures.Has(compat.Arrow) && p.fnOnlyDataVisit.isThisNested {
-                //     return js_ast.Expr{Loc: expr.Loc, Data: &js_ast.EIdentifier{Ref: p.captureThis()}}, exprOut{}
-                // }
-                return expr;
-            }
-            pub fn e_import_meta(p: *P, expr: Expr, in: ExprIn) Expr {
-                // TODO: delete import.meta might not work
-                const is_delete_target = p.delete_target == .e_import_meta;
-
-                if (p.define.dots.get("meta")) |meta| {
-                    for (meta) |define| {
-                        // TODO: clean up how we do define matches
-                        if (p.isDotDefineMatch(expr, define.parts)) {
-                            // Substitute user-specified defines
-                            return p.valueForDefine(expr.loc, in.assign_target, is_delete_target, &define.data);
-                        }
-                    }
-                }
-
-                return expr;
-            }
-            pub fn e_spread(p: *P, expr: Expr, _: ExprIn) Expr {
-                const exp = expr.data.e_spread;
-                exp.value = p.visitExpr(exp.value);
-                return expr;
-            }
-            pub fn e_identifier(p: *P, expr: Expr, in: ExprIn) Expr {
-                var e_ = expr.data.e_identifier;
-                const is_delete_target = @as(Expr.Tag, p.delete_target) == .e_identifier and e_.ref.eql(p.delete_target.e_identifier.ref);
-
-                const name = p.loadNameFromRef(e_.ref);
-                if (p.isStrictMode() and js_lexer.StrictModeReservedWords.has(name)) {
-                    p.markStrictModeFeature(.reserved_word, js_lexer.rangeOfIdentifier(p.source, expr.loc), name) catch unreachable;
-                }
-
-                const result = p.findSymbol(expr.loc, name) catch unreachable;
-
-                e_.must_keep_due_to_with_stmt = result.is_inside_with_scope;
-                e_.ref = result.ref;
-
-                // Handle assigning to a constant
-                if (in.assign_target != .none) {
-                    if (p.symbols.items[result.ref.innerIndex()].kind == .constant) { // TODO: silence this for runtime transpiler
-                        const r = js_lexer.rangeOfIdentifier(p.source, expr.loc);
-                        var notes = p.allocator.alloc(logger.Data, 1) catch unreachable;
-                        notes[0] = logger.Data{
-                            .text = std.fmt.allocPrint(p.allocator, "The symbol \"{s}\" was declared a constant here:", .{name}) catch unreachable,
-                            .location = logger.Location.initOrNull(p.source, js_lexer.rangeOfIdentifier(p.source, result.declare_loc.?)),
-                        };
-
-                        const is_error = p.const_values.contains(result.ref) or p.options.bundle;
-                        switch (is_error) {
-                            true => p.log.addRangeErrorFmtWithNotes(
-                                p.source,
-                                r,
-                                p.allocator,
-                                notes,
-                                "Cannot assign to \"{s}\" because it is a constant",
-                                .{name},
-                            ) catch unreachable,
-
-                            false => p.log.addRangeErrorFmtWithNotes(
-                                p.source,
-                                r,
-                                p.allocator,
-                                notes,
-                                "This assignment will throw because \"{s}\" is a constant",
-                                .{name},
-                            ) catch unreachable,
-                        }
-                    } else if (p.exports_ref.eql(e_.ref)) {
-                        // Assigning to `exports` in a CommonJS module must be tracked to undo the
-                        // `module.exports` -> `exports` optimization.
-                        p.commonjs_module_exports_assigned_deoptimized = true;
-                    }
-
-                    p.symbols.items[result.ref.innerIndex()].has_been_assigned_to = true;
-                }
-
-                var original_name: ?string = null;
-
-                // Substitute user-specified defines for unbound symbols
-                if (p.symbols.items[e_.ref.innerIndex()].kind == .unbound and !result.is_inside_with_scope and !is_delete_target) {
-                    if (p.define.forIdentifier(name)) |def| {
-                        if (!def.valueless()) {
-                            const newvalue = p.valueForDefine(expr.loc, in.assign_target, is_delete_target, def);
-
-                            // Don't substitute an identifier for a non-identifier if this is an
-                            // assignment target, since it'll cause a syntax error
-                            if (@as(Expr.Tag, newvalue.data) == .e_identifier or in.assign_target == .none) {
-                                p.ignoreUsage(e_.ref);
-                                return newvalue;
-                            }
-
-                            original_name = def.original_name();
-                        }
-
-                        // Copy the side effect flags over in case this expression is unused
-                        if (def.can_be_removed_if_unused()) {
-                            e_.can_be_removed_if_unused = true;
-                        }
-                        if (def.call_can_be_unwrapped_if_unused() == .if_unused and !p.options.ignore_dce_annotations) {
-                            e_.call_can_be_unwrapped_if_unused = true;
-                        }
-
-                        // If the user passed --drop=console, drop all property accesses to console.
-                        if (def.method_call_must_be_replaced_with_undefined() and in.property_access_for_method_call_maybe_should_replace_with_undefined and in.assign_target == .none) {
-                            p.method_call_must_be_replaced_with_undefined = true;
-                        }
-                    }
-
-                    // Substitute uncalled "require" for the require target
-                    if (p.require_ref.eql(e_.ref) and !p.isSourceRuntime()) {
-                        // mark a reference to __require only if this is not about to be used for a call target
-                        if (!(p.call_target == .e_identifier and
-                            expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)) and
-                            p.options.features.allow_runtime)
-                        {
-                            p.recordUsageOfRuntimeRequire();
-                        }
-
-                        return p.valueForRequire(expr.loc);
-                    }
-                }
-
-                return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{
-                    .assign_target = in.assign_target,
-                    .is_delete_target = is_delete_target,
-                    .is_call_target = @as(Expr.Tag, p.call_target) == .e_identifier and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref),
-                    .was_originally_identifier = true,
-                });
-            }
-            pub fn e_jsx_element(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_jsx_element;
-                switch (comptime jsx_transform_type) {
-                    .react => {
-                        const tag: Expr = tagger: {
-                            if (e_.tag) |_tag| {
-                                break :tagger p.visitExpr(_tag);
-                            } else {
-                                if (p.options.jsx.runtime == .classic) {
-                                    break :tagger p.jsxStringsToMemberExpression(expr.loc, p.options.jsx.fragment) catch unreachable;
-                                }
-
-                                break :tagger p.jsxImport(.Fragment, expr.loc);
-                            }
-                        };
-
-                        const all_props: []G.Property = e_.properties.slice();
-                        for (all_props) |*property| {
-                            if (property.kind != .spread) {
-                                property.key = p.visitExpr(property.key.?);
-                            }
-
-                            if (property.value != null) {
-                                property.value = p.visitExpr(property.value.?);
-                            }
-
-                            if (property.initializer != null) {
-                                property.initializer = p.visitExpr(property.initializer.?);
-                            }
-                        }
-
-                        const runtime = if (p.options.jsx.runtime == .automatic) options.JSX.Runtime.automatic else options.JSX.Runtime.classic;
-                        const is_key_after_spread = e_.flags.contains(.is_key_after_spread);
-                        const children_count = e_.children.len;
-
-                        // TODO: maybe we should split these into two different AST Nodes
-                        // That would reduce the amount of allocations a little
-                        if (runtime == .classic or is_key_after_spread) {
-                            // Arguments to createElement()
-                            var args = bun.BabyList(Expr).initCapacity(
-                                p.allocator,
-                                2 + children_count,
-                            ) catch |err| bun.handleOom(err);
-                            args.appendAssumeCapacity(tag);
-
-                            const num_props = e_.properties.len;
-                            if (num_props > 0) {
-                                const props = p.allocator.alloc(G.Property, num_props) catch unreachable;
-                                bun.copy(G.Property, props, e_.properties.slice());
-                                args.appendAssumeCapacity(p.newExpr(
-                                    E.Object{ .properties = G.Property.List.fromOwnedSlice(props) },
-                                    expr.loc,
-                                ));
-                            } else {
-                                args.appendAssumeCapacity(p.newExpr(E.Null{}, expr.loc));
-                            }
-
-                            const children_elements = e_.children.slice()[0..children_count];
-                            for (children_elements) |child| {
-                                const arg = p.visitExpr(child);
-                                if (arg.data != .e_missing) {
-                                    args.appendAssumeCapacity(arg);
-                                }
-                            }
-
-                            const target = p.jsxStringsToMemberExpression(expr.loc, p.options.jsx.factory) catch unreachable;
-
-                            // Call createElement()
-                            return p.newExpr(E.Call{
-                                .target = if (runtime == .classic) target else p.jsxImport(.createElement, expr.loc),
-                                .args = args,
-                                // Enable tree shaking
-                                .can_be_unwrapped_if_unused = if (!p.options.ignore_dce_annotations and !p.options.jsx.side_effects) .if_unused else .never,
-                                .close_paren_loc = e_.close_tag_loc,
-                            }, expr.loc);
-                        }
-                        // function jsxDEV(type, config, maybeKey, source, self) {
-                        else if (runtime == .automatic) {
-                            // --- These must be done in all cases --
-                            const allocator = p.allocator;
-                            var props = &e_.properties;
-
-                            const maybe_key_value: ?ExprNodeIndex =
-                                if (e_.key_prop_index > -1) props.orderedRemove(@intCast(e_.key_prop_index)).value else null;
-
-                            // arguments needs to be like
-                            // {
-                            //    ...props,
-                            //    children: [el1, el2]
-                            // }
-
-                            {
-                                var last_child: u32 = 0;
-                                const children = e_.children.slice()[0..children_count];
-                                for (children) |child| {
-                                    e_.children.ptr[last_child] = p.visitExpr(child);
-                                    // if tree-shaking removes the element, we must also remove it here.
-                                    last_child += @as(u32, @intCast(@intFromBool(e_.children.ptr[last_child].data != .e_missing)));
-                                }
-                                e_.children.len = last_child;
-                            }
-
-                            const children_key = Expr{ .data = jsxChildrenKeyData, .loc = expr.loc };
-
-                            // Optimization: if the only non-child prop is a spread object
-                            // we can just pass the object as the first argument
-                            // this goes as deep as there are spreads
-                            // <div {{...{...{...{...foo}}}}} />
-                            // ->
-                            // <div {{...foo}} />
-                            // jsx("div", {...foo})
-                            while (props.len == 1 and props.at(0).kind == .spread and props.at(0).value.?.data == .e_object) {
-                                props = &props.at(0).value.?.data.e_object.properties;
-                            }
-
-                            // Typescript defines static jsx as children.len > 1 or single spread
-                            // https://github.com/microsoft/TypeScript/blob/d4fbc9b57d9aa7d02faac9b1e9bb7b37c687f6e9/src/compiler/transformers/jsx.ts#L340
-                            const is_static_jsx = e_.children.len > 1 or (e_.children.len == 1 and e_.children.ptr[0].data == .e_spread);
-
-                            if (is_static_jsx) {
-                                props.append(allocator, G.Property{
-                                    .key = children_key,
-                                    .value = p.newExpr(E.Array{
-                                        .items = e_.children,
-                                        .is_single_line = e_.children.len < 2,
-                                    }, e_.close_tag_loc),
-                                }) catch |err| bun.handleOom(err);
-                            } else if (e_.children.len == 1) {
-                                props.append(allocator, G.Property{
-                                    .key = children_key,
-                                    .value = e_.children.ptr[0],
-                                }) catch |err| bun.handleOom(err);
-                            }
-
-                            // Either:
-                            // jsxDEV(type, arguments, key, isStaticChildren, source, self)
-                            // jsx(type, arguments, key)
-                            const args = p.allocator.alloc(Expr, if (p.options.jsx.development) @as(usize, 6) else @as(usize, 2) + @as(usize, @intFromBool(maybe_key_value != null))) catch unreachable;
-                            args[0] = tag;
-
-                            args[1] = p.newExpr(E.Object{
-                                .properties = props.*,
-                            }, expr.loc);
-
-                            if (maybe_key_value) |key| {
-                                args[2] = key;
-                            } else if (p.options.jsx.development) {
-                                // if (maybeKey !== undefined)
-                                args[2] = Expr{
-                                    .loc = expr.loc,
-                                    .data = .{
-                                        .e_undefined = E.Undefined{},
-                                    },
-                                };
-                            }
-
-                            if (p.options.jsx.development) {
-                                // is the return type of the first child an array?
-                                // It's dynamic
-                                // Else, it's static
-                                args[3] = Expr{
-                                    .loc = expr.loc,
-                                    .data = .{
-                                        .e_boolean = .{
-                                            .value = is_static_jsx,
-                                        },
-                                    },
-                                };
-
-                                args[4] = p.newExpr(E.Undefined{}, expr.loc);
-                                args[5] = Expr{ .data = Prefill.Data.This, .loc = expr.loc };
-                            }
-
-                            return p.newExpr(E.Call{
-                                .target = p.jsxImportAutomatic(expr.loc, is_static_jsx),
-                                .args = ExprNodeList.fromOwnedSlice(args),
-                                // Enable tree shaking
-                                .can_be_unwrapped_if_unused = if (!p.options.ignore_dce_annotations and !p.options.jsx.side_effects) .if_unused else .never,
-                                .was_jsx_element = true,
-                                .close_paren_loc = e_.close_tag_loc,
-                            }, expr.loc);
-                        } else {
-                            unreachable;
-                        }
-                    },
-                    else => unreachable,
-                }
-                return expr;
-            }
-            pub fn e_template(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_template;
-                if (e_.tag) |tag| {
-                    e_.tag = p.visitExpr(tag);
-
-                    if (comptime allow_macros) {
-                        const ref = switch (e_.tag.?.data) {
-                            .e_import_identifier => |ident| ident.ref,
-                            .e_dot => |dot| if (dot.target.data == .e_identifier) dot.target.data.e_identifier.ref else null,
-                            else => null,
-                        };
-
-                        if (ref != null and !p.options.features.is_macro_runtime) {
-                            if (p.macro.refs.get(ref.?)) |macro_ref_data| {
-                                p.ignoreUsage(ref.?);
-                                if (p.is_control_flow_dead) {
-                                    return p.newExpr(E.Undefined{}, e_.tag.?.loc);
-                                }
-
-                                // this ordering incase someone wants to use a macro in a node_module conditionally
-                                if (p.options.features.no_macros) {
-                                    p.log.addError(p.source, tag.loc, "Macros are disabled") catch unreachable;
-                                    return p.newExpr(E.Undefined{}, e_.tag.?.loc);
-                                }
-
-                                if (p.source.path.isNodeModule()) {
-                                    p.log.addError(p.source, expr.loc, "For security reasons, macros cannot be run from node_modules.") catch unreachable;
-                                    return p.newExpr(E.Undefined{}, expr.loc);
-                                }
-
-                                p.macro_call_count += 1;
-                                const name = macro_ref_data.name orelse e_.tag.?.data.e_dot.name;
-                                const record = &p.import_records.items[macro_ref_data.import_record_id];
-                                // We must visit it to convert inline_identifiers and record usage
-                                const macro_result = (p.options.macro_context.call(
-                                    record.path.text,
-                                    p.source.path.sourceDir(),
-                                    p.log,
-                                    p.source,
-                                    record.range,
-                                    expr,
-                                    name,
-                                ) catch return expr);
-
-                                if (macro_result.data != .e_template) {
-                                    return p.visitExpr(macro_result);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                for (e_.parts) |*part| {
-                    part.value = p.visitExpr(part.value);
-                }
-
-                // When mangling, inline string values into the template literal. Note that
-                // it may no longer be a template literal after this point (it may turn into
-                // a plain string literal instead).
-                if (p.should_fold_typescript_constant_expressions or p.options.features.inlining) {
-                    return e_.fold(p.allocator, expr.loc);
-                }
-                return expr;
-            }
-            pub fn e_binary(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_binary;
-
-                // The handling of binary expressions is convoluted because we're using
-                // iteration on the heap instead of recursion on the call stack to avoid
-                // stack overflow for deeply-nested ASTs.
-                var v = BinaryExpressionVisitor{
-                    .e = e_,
-                    .loc = expr.loc,
-                    .in = in,
-                    .left_in = ExprIn{},
-                };
-
-                // Everything uses a single stack to reduce allocation overhead. This stack
-                // should almost always be very small, and almost all visits should reuse
-                // existing memory without allocating anything.
-                const stack_bottom = p.binary_expression_stack.items.len;
-
-                var current = Expr{ .data = .{ .e_binary = e_ }, .loc = v.loc };
-
-                // Iterate down into the AST along the left node of the binary operation.
-                // Continue iterating until we encounter something that's not a binary node.
-
-                while (true) {
-                    if (v.checkAndPrepare(p)) |out| {
-                        current = out;
-                        break;
-                    }
-
-                    // Grab the arguments to our nested "visitExprInOut" call for the left
-                    // node. We only care about deeply-nested left nodes because most binary
-                    // operators in JavaScript are left-associative and the problematic edge
-                    // cases we're trying to avoid crashing on have lots of left-associative
-                    // binary operators chained together without parentheses (e.g. "1+2+...").
-                    const left = v.e.left;
-                    const left_in = v.left_in;
-
-                    const left_binary: ?*E.Binary = if (left.data == .e_binary) left.data.e_binary else null;
-
-                    // Stop iterating if iteration doesn't apply to the left node. This checks
-                    // the assignment target because "visitExprInOut" has additional behavior
-                    // in that case that we don't want to miss (before the top-level "switch"
-                    // statement).
-                    if (left_binary == null or left_in.assign_target != .none) {
-                        v.e.left = p.visitExprInOut(left, left_in);
-                        current = v.visitRightAndFinish(p);
-                        break;
-                    }
-
-                    // Note that we only append to the stack (and therefore allocate memory
-                    // on the heap) when there are nested binary expressions. A single binary
-                    // expression doesn't add anything to the stack.
-                    bun.handleOom(p.binary_expression_stack.append(v));
-                    v = BinaryExpressionVisitor{
-                        .e = left_binary.?,
-                        .loc = left.loc,
-                        .in = left_in,
-                        .left_in = .{},
-                    };
-                }
-
-                // Process all binary operations from the deepest-visited node back toward
-                // our original top-level binary operation.
-                while (p.binary_expression_stack.items.len > stack_bottom) {
-                    v = p.binary_expression_stack.pop().?;
-                    v.e.left = current;
-                    current = v.visitRightAndFinish(p);
-                }
-
-                return current;
-            }
-            pub fn e_index(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_index;
-                const is_call_target = p.call_target == .e_index and expr.data.e_index == p.call_target.e_index;
-                const is_delete_target = p.delete_target == .e_index and expr.data.e_index == p.delete_target.e_index;
-
-                // "a['b']" => "a.b"
-                if (p.options.features.minify_syntax and
-                    e_.index.data == .e_string and
-                    e_.index.data.e_string.isUTF8() and
-                    e_.index.data.e_string.isIdentifier(p.allocator))
-                {
-                    const dot = p.newExpr(
-                        E.Dot{
-                            .name = e_.index.data.e_string.slice(p.allocator),
-                            .name_loc = e_.index.loc,
-                            .target = e_.target,
-                            .optional_chain = e_.optional_chain,
-                        },
-                        expr.loc,
-                    );
-
-                    if (is_call_target) {
-                        p.call_target = dot.data;
-                    }
-
-                    if (is_delete_target) {
-                        p.delete_target = dot.data;
-                    }
-
-                    return p.visitExprInOut(dot, in);
-                }
-
-                const target_visited = p.visitExprInOut(e_.target, ExprIn{
-                    .has_chain_parent = e_.optional_chain == .continuation,
-                });
-                e_.target = target_visited;
-
-                switch (e_.index.data) {
-                    .e_private_identifier => |_private| {
-                        var private = _private;
-                        const name = p.loadNameFromRef(private.ref);
-                        const result = p.findSymbol(e_.index.loc, name) catch unreachable;
-                        private.ref = result.ref;
-
-                        // Unlike regular identifiers, there are no unbound private identifiers
-                        const kind: Symbol.Kind = p.symbols.items[result.ref.innerIndex()].kind;
-                        var r: logger.Range = undefined;
-                        if (!Symbol.isKindPrivate(kind)) {
-                            r = logger.Range{ .loc = e_.index.loc, .len = @as(i32, @intCast(name.len)) };
-                            p.log.addRangeErrorFmt(p.source, r, p.allocator, "Private name \"{s}\" must be declared in an enclosing class", .{name}) catch unreachable;
-                        } else {
-                            if (in.assign_target != .none and (kind == .private_method or kind == .private_static_method)) {
-                                r = logger.Range{ .loc = e_.index.loc, .len = @as(i32, @intCast(name.len)) };
-                                p.log.addRangeWarningFmt(p.source, r, p.allocator, "Writing to read-only method \"{s}\" will throw", .{name}) catch unreachable;
-                            } else if (in.assign_target != .none and (kind == .private_get or kind == .private_static_get)) {
-                                r = logger.Range{ .loc = e_.index.loc, .len = @as(i32, @intCast(name.len)) };
-                                p.log.addRangeWarningFmt(p.source, r, p.allocator, "Writing to getter-only property \"{s}\" will throw", .{name}) catch unreachable;
-                            } else if (in.assign_target != .replace and (kind == .private_set or kind == .private_static_set)) {
-                                r = logger.Range{ .loc = e_.index.loc, .len = @as(i32, @intCast(name.len)) };
-                                p.log.addRangeWarningFmt(p.source, r, p.allocator, "Reading from setter-only property \"{s}\" will throw", .{name}) catch unreachable;
-                            }
-                        }
-
-                        e_.index = .{ .data = .{ .e_private_identifier = private }, .loc = e_.index.loc };
-                    },
-                    else => {
-                        const index = p.visitExpr(e_.index);
-                        e_.index = index;
-
-                        const unwrapped = e_.index.unwrapInlined();
-                        if (unwrapped.data == .e_string and
-                            unwrapped.data.e_string.isUTF8())
-                        {
-                            // "a['b' + '']" => "a.b"
-                            // "enum A { B = 'b' }; a[A.B]" => "a.b"
-                            if (p.options.features.minify_syntax and
-                                unwrapped.data.e_string.isIdentifier(p.allocator))
-                            {
-                                const dot = p.newExpr(
-                                    E.Dot{
-                                        .name = unwrapped.data.e_string.slice(p.allocator),
-                                        .name_loc = unwrapped.loc,
-                                        .target = e_.target,
-                                        .optional_chain = e_.optional_chain,
-                                    },
-                                    expr.loc,
-                                );
-
-                                if (is_call_target) {
-                                    p.call_target = dot.data;
-                                }
-
-                                if (is_delete_target) {
-                                    p.delete_target = dot.data;
-                                }
-
-                                // don't call visitExprInOut on `dot` because we've already visited `target` above!
-                                return dot;
-                            }
-
-                            // Handle property rewrites to ensure things
-                            // like .e_import_identifier tracking works
-                            // Reminder that this can only be done after
-                            // `target` is visited.
-                            if (p.maybeRewritePropertyAccess(
-                                expr.loc,
-                                e_.target,
-                                unwrapped.data.e_string.data,
-                                unwrapped.loc,
-                                .{
-                                    .is_call_target = is_call_target,
-                                    // .is_template_tag = is_template_tag,
-                                    .is_delete_target = is_delete_target,
-                                    .assign_target = in.assign_target,
-                                },
-                            )) |rewrite| {
-                                return rewrite;
-                            }
-                        }
-                    },
-                }
-
-                const target = e_.target.unwrapInlined();
-                const index = e_.index.unwrapInlined();
-
-                if (p.options.features.minify_syntax) {
-                    if (index.data.as(.e_number)) |number| {
-                        if (number.value >= 0 and
-                            number.value < @as(f64, @as(comptime_float, std.math.maxInt(usize))) and
-                            @mod(number.value, 1) == 0)
-                        {
-                            // "foo"[2] -> "o"
-                            if (target.data.as(.e_string)) |str| {
-                                if (str.isUTF8()) {
-                                    const literal = str.slice(p.allocator);
-                                    const num: usize = index.data.e_number.toUsize();
-                                    if (Environment.allow_assert) {
-                                        bun.assert(bun.strings.isAllASCII(literal));
-                                    }
-                                    if (num < literal.len) {
-                                        return p.newExpr(E.String{ .data = literal[num .. num + 1] }, expr.loc);
-                                    }
-                                }
-                            } else if (target.data.as(.e_array)) |array| {
-                                // [x][0] -> x
-                                if (array.items.len == 1 and number.value == 0) {
-                                    const inlined = target.data.e_array.items.at(0).*;
-                                    if (inlined.canBeInlinedFromPropertyAccess())
-                                        return inlined;
-                                }
-
-                                // ['a', 'b', 'c'][1] -> 'b'
-                                const int: usize = @intFromFloat(number.value);
-                                if (int < array.items.len and p.exprCanBeRemovedIfUnused(&target)) {
-                                    const inlined = target.data.e_array.items.at(int).*;
-                                    // ['a', , 'c'][1] -> undefined
-                                    if (inlined.data == .e_missing) return p.newExpr(E.Undefined{}, inlined.loc);
-                                    if (Environment.allow_assert) assert(inlined.canBeInlinedFromPropertyAccess());
-                                    return inlined;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Create an error for assigning to an import namespace when bundling. Even
-                // though this is a run-time error, we make it a compile-time error when
-                // bundling because scope hoisting means these will no longer be run-time
-                // errors.
-                if ((in.assign_target != .none or is_delete_target) and
-                    @as(Expr.Tag, e_.target.data) == .e_identifier and
-                    p.symbols.items[e_.target.data.e_identifier.ref.innerIndex()].kind == .import)
-                {
-                    const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
-                    p.log.addRangeErrorFmt(
-                        p.source,
-                        r,
-                        p.allocator,
-                        "Cannot assign to property on import \"{s}\"",
-                        .{p.symbols.items[e_.target.data.e_identifier.ref.innerIndex()].original_name},
-                    ) catch unreachable;
-                }
-
-                return p.newExpr(e_, expr.loc);
-            }
-            pub fn e_unary(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_unary;
-                switch (e_.op) {
-                    .un_typeof => {
-                        const id_before = e_.value.data == .e_identifier;
-                        e_.value = p.visitExprInOut(e_.value, ExprIn{ .assign_target = e_.op.unaryAssignTarget() });
-                        const id_after = e_.value.data == .e_identifier;
-
-                        // The expression "typeof (0, x)" must not become "typeof x" if "x"
-                        // is unbound because that could suppress a ReferenceError from "x"
-                        if (!id_before and id_after and p.symbols.items[e_.value.data.e_identifier.ref.innerIndex()].kind == .unbound) {
-                            e_.value = Expr.joinWithComma(
-                                Expr{ .loc = e_.value.loc, .data = Prefill.Data.Zero },
-                                e_.value,
-                                p.allocator,
-                            );
-                        }
-
-                        if (e_.value.data == .e_require_call_target) {
-                            p.ignoreUsageOfRuntimeRequire();
-                            return p.newExpr(E.String{ .data = "function" }, expr.loc);
-                        }
-
-                        if (SideEffects.typeof(e_.value.data)) |typeof| {
-                            return p.newExpr(E.String{ .data = typeof }, expr.loc);
-                        }
-                    },
-                    .un_delete => {
-                        e_.value = p.visitExprInOut(e_.value, ExprIn{ .has_chain_parent = true });
-                    },
-                    else => {
-                        e_.value = p.visitExprInOut(e_.value, ExprIn{ .assign_target = e_.op.unaryAssignTarget() });
-
-                        // Post-process the unary expression
-                        switch (e_.op) {
-                            .un_not => {
-                                if (p.options.features.minify_syntax)
-                                    e_.value = SideEffects.simplifyBoolean(p, e_.value);
-
-                                const side_effects = SideEffects.toBoolean(p, e_.value.data);
-                                if (side_effects.ok) {
-                                    return p.newExpr(E.Boolean{ .value = !side_effects.value }, expr.loc);
-                                }
-
-                                if (p.options.features.minify_syntax) {
-                                    if (e_.value.maybeSimplifyNot(p.allocator)) |exp| {
-                                        return exp;
-                                    }
-                                    if (e_.value.data == .e_import_meta_main) {
-                                        e_.value.data.e_import_meta_main.inverted = !e_.value.data.e_import_meta_main.inverted;
-                                        return e_.value;
-                                    }
-                                }
-                            },
-                            .un_cpl => {
-                                if (p.should_fold_typescript_constant_expressions) {
-                                    if (SideEffects.toNumber(e_.value.data)) |value| {
-                                        return p.newExpr(E.Number{
-                                            .value = @floatFromInt(~floatToInt32(value)),
-                                        }, expr.loc);
-                                    }
-                                }
-                            },
-                            .un_void => {
-                                if (p.exprCanBeRemovedIfUnused(&e_.value)) {
-                                    return p.newExpr(E.Undefined{}, e_.value.loc);
-                                }
-                            },
-                            .un_pos => {
-                                if (SideEffects.toNumber(e_.value.data)) |num| {
-                                    return p.newExpr(E.Number{ .value = num }, expr.loc);
-                                }
-                            },
-                            .un_neg => {
-                                if (SideEffects.toNumber(e_.value.data)) |num| {
-                                    return p.newExpr(E.Number{ .value = -num }, expr.loc);
-                                }
-                            },
-
-                            ////////////////////////////////////////////////////////////////////////////////
-
-                            .un_pre_dec => {
-                                // TODO: private fields
-                            },
-                            .un_pre_inc => {
-                                // TODO: private fields
-                            },
-                            .un_post_dec => {
-                                // TODO: private fields
-                            },
-                            .un_post_inc => {
-                                // TODO: private fields
-                            },
-                            else => {},
-                        }
-
-                        if (p.options.features.minify_syntax) {
-                            // "-(a, b)" => "a, -b"
-                            if (switch (e_.op) {
-                                .un_delete, .un_typeof => false,
-                                else => true,
-                            }) {
-                                switch (e_.value.data) {
-                                    .e_binary => |comma| {
-                                        if (comma.op == .bin_comma) {
-                                            return Expr.joinWithComma(
-                                                comma.left,
-                                                p.newExpr(
-                                                    E.Unary{
-                                                        .op = e_.op,
-                                                        .value = comma.right,
-                                                        .flags = e_.flags,
-                                                    },
-                                                    comma.right.loc,
-                                                ),
-                                                p.allocator,
-                                            );
-                                        }
-                                    },
-                                    else => {},
-                                }
-                            }
-                        }
-                    },
-                }
-                return expr;
-            }
-            pub fn e_dot(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_dot;
-                const is_delete_target = @as(Expr.Tag, p.delete_target) == .e_dot and expr.data.e_dot == p.delete_target.e_dot;
-                const is_call_target = @as(Expr.Tag, p.call_target) == .e_dot and expr.data.e_dot == p.call_target.e_dot;
-
-                if (p.define.dots.get(e_.name)) |parts| {
-                    for (parts) |*define| {
-                        if (p.isDotDefineMatch(expr, define.parts)) {
-                            if (in.assign_target == .none) {
-                                // Substitute user-specified defines
-                                if (!define.data.valueless()) {
-                                    return p.valueForDefine(expr.loc, in.assign_target, is_delete_target, &define.data);
-                                }
-
-                                if (define.data.method_call_must_be_replaced_with_undefined() and in.property_access_for_method_call_maybe_should_replace_with_undefined) {
-                                    p.method_call_must_be_replaced_with_undefined = true;
-                                }
-                            }
-
-                            // Copy the side effect flags over in case this expression is unused
-                            if (define.data.can_be_removed_if_unused()) {
-                                e_.can_be_removed_if_unused = true;
-                            }
-
-                            if (define.data.call_can_be_unwrapped_if_unused() != .never and !p.options.ignore_dce_annotations) {
-                                e_.call_can_be_unwrapped_if_unused = define.data.call_can_be_unwrapped_if_unused();
-                            }
-
-                            break;
-                        }
-                    }
-                }
-
-                // Track ".then().catch()" chains
-                if (is_call_target and @as(Expr.Tag, p.then_catch_chain.next_target) == .e_dot and p.then_catch_chain.next_target.e_dot == expr.data.e_dot) {
-                    if (strings.eqlComptime(e_.name, "catch")) {
-                        p.then_catch_chain = ThenCatchChain{
-                            .next_target = e_.target.data,
-                            .has_catch = true,
-                        };
-                    } else if (strings.eqlComptime(e_.name, "then")) {
-                        p.then_catch_chain = ThenCatchChain{
-                            .next_target = e_.target.data,
-                            .has_catch = p.then_catch_chain.has_catch or p.then_catch_chain.has_multiple_args,
-                        };
-                    }
-                }
-
-                e_.target = p.visitExprInOut(e_.target, .{
-                    .property_access_for_method_call_maybe_should_replace_with_undefined = in.property_access_for_method_call_maybe_should_replace_with_undefined,
-                });
-
-                // 'require.resolve' -> .e_require_resolve_call_target
-                if (e_.target.data == .e_require_call_target and
-                    strings.eqlComptime(e_.name, "resolve"))
-                {
-                    // we do not need to call p.recordUsageOfRuntimeRequire(); because `require`
-                    // was not a call target. even if the call target is `require.resolve`, it should be set.
-                    return .{
-                        .data = .{
-                            .e_require_resolve_call_target = {},
-                        },
-                        .loc = expr.loc,
-                    };
-                }
-
-                if (e_.optional_chain == null) {
-                    if (p.maybeRewritePropertyAccess(
-                        expr.loc,
-                        e_.target,
-                        e_.name,
-                        e_.name_loc,
-                        .{
-                            .is_call_target = is_call_target,
-                            .assign_target = in.assign_target,
-                            .is_delete_target = is_delete_target,
-                            // .is_template_tag = p.template_tag != null,
-                        },
-                    )) |_expr| {
-                        return _expr;
-                    }
-
-                    if (comptime allow_macros) {
-                        if (!p.options.features.is_macro_runtime) {
-                            if (p.macro_call_count > 0 and e_.target.data == .e_object and e_.target.data.e_object.was_originally_macro) {
-                                if (e_.target.get(e_.name)) |obj| {
-                                    return obj;
-                                }
-                            }
-                        }
-                    }
-                }
-                return expr;
-            }
-            pub fn e_if(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_if;
-                const is_call_target = @as(Expr.Data, p.call_target) == .e_if and expr.data.e_if == p.call_target.e_if;
-
-                const prev_in_branch = p.in_branch_condition;
-                p.in_branch_condition = true;
-                e_.test_ = p.visitExpr(e_.test_);
-                p.in_branch_condition = prev_in_branch;
-
-                e_.test_ = SideEffects.simplifyBoolean(p, e_.test_);
-
-                const side_effects = SideEffects.toBoolean(p, e_.test_.data);
-
-                if (!side_effects.ok) {
-                    e_.yes = p.visitExpr(e_.yes);
-                    e_.no = p.visitExpr(e_.no);
-                } else {
-                    // Mark the control flow as dead if the branch is never taken
-                    if (side_effects.value) {
-                        // "true ? live : dead"
-                        e_.yes = p.visitExpr(e_.yes);
-                        const old = p.is_control_flow_dead;
-                        p.is_control_flow_dead = true;
-                        e_.no = p.visitExpr(e_.no);
-                        p.is_control_flow_dead = old;
-
-                        if (side_effects.side_effects == .could_have_side_effects) {
-                            return Expr.joinWithComma(SideEffects.simplifyUnusedExpr(p, e_.test_) orelse p.newExpr(E.Missing{}, e_.test_.loc), e_.yes, p.allocator);
-                        }
-
-                        // "(1 ? fn : 2)()" => "fn()"
-                        // "(1 ? this.fn : 2)" => "this.fn"
-                        // "(1 ? this.fn : 2)()" => "(0, this.fn)()"
-                        if (is_call_target and e_.yes.hasValueForThisInCall()) {
-                            return p.newExpr(E.Number{ .value = 0 }, e_.test_.loc).joinWithComma(e_.yes, p.allocator);
-                        }
-
-                        return e_.yes;
-                    } else {
-                        // "false ? dead : live"
-                        const old = p.is_control_flow_dead;
-                        p.is_control_flow_dead = true;
-                        e_.yes = p.visitExpr(e_.yes);
-                        p.is_control_flow_dead = old;
-                        e_.no = p.visitExpr(e_.no);
-
-                        // "(a, false) ? b : c" => "a, c"
-                        if (side_effects.side_effects == .could_have_side_effects) {
-                            return Expr.joinWithComma(SideEffects.simplifyUnusedExpr(p, e_.test_) orelse p.newExpr(E.Missing{}, e_.test_.loc), e_.no, p.allocator);
-                        }
-
-                        // "(1 ? fn : 2)()" => "fn()"
-                        // "(1 ? this.fn : 2)" => "this.fn"
-                        // "(1 ? this.fn : 2)()" => "(0, this.fn)()"
-                        if (is_call_target and e_.no.hasValueForThisInCall()) {
-                            return p.newExpr(E.Number{ .value = 0 }, e_.test_.loc).joinWithComma(e_.no, p.allocator);
-                        }
-                        return e_.no;
-                    }
-                }
-                return expr;
-            }
-            pub fn e_await(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_await;
-                p.await_target = e_.value.data;
-                e_.value = p.visitExpr(e_.value);
-                return expr;
-            }
-            pub fn e_yield(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_yield;
-                if (e_.value) |val| {
-                    e_.value = p.visitExpr(val);
-                }
-                return expr;
-            }
-            pub fn e_array(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_array;
-                if (in.assign_target != .none) {
-                    p.maybeCommaSpreadError(e_.comma_after_spread);
-                }
-                const items = e_.items.slice();
-                var spread_item_count: usize = 0;
-                for (items) |*item| {
-                    switch (item.data) {
-                        .e_missing => {},
-                        .e_spread => |spread| {
-                            spread.value = p.visitExprInOut(spread.value, ExprIn{ .assign_target = in.assign_target });
-
-                            spread_item_count += if (spread.value.data == .e_array)
-                                @as(usize, spread.value.data.e_array.items.len)
-                            else
-                                0;
-                        },
-                        .e_binary => |e2| {
-                            if (in.assign_target != .none and e2.op == .bin_assign) {
-                                const was_anonymous_named_expr = e2.right.isAnonymousNamed();
-                                // Propagate name for anonymous decorated class expressions
-                                if (was_anonymous_named_expr and e2.right.data == .e_class and
-                                    e2.right.data.e_class.should_lower_standard_decorators and
-                                    @as(Expr.Tag, e2.left.data) == .e_identifier)
-                                {
-                                    p.decorator_class_name = p.loadNameFromRef(e2.left.data.e_identifier.ref);
-                                }
-                                e2.left = p.visitExprInOut(e2.left, ExprIn{ .assign_target = .replace });
-                                e2.right = p.visitExpr(e2.right);
-                                p.decorator_class_name = null;
-
-                                if (@as(Expr.Tag, e2.left.data) == .e_identifier) {
-                                    e2.right = p.maybeKeepExprSymbolName(
-                                        e2.right,
-                                        p.symbols.items[e2.left.data.e_identifier.ref.innerIndex()].original_name,
-                                        was_anonymous_named_expr,
-                                    );
-                                }
-                            } else {
-                                item.* = p.visitExprInOut(item.*, ExprIn{ .assign_target = in.assign_target });
-                            }
-                        },
-                        else => {
-                            item.* = p.visitExprInOut(item.*, ExprIn{ .assign_target = in.assign_target });
-                        },
-                    }
-                }
-
-                // "[1, ...[2, 3], 4]" => "[1, 2, 3, 4]"
-                if (p.options.features.minify_syntax and spread_item_count > 0 and in.assign_target == .none) {
-                    e_.items = e_.inlineSpreadOfArrayLiterals(p.allocator, spread_item_count) catch e_.items;
-                }
-                return expr;
-            }
-            pub fn e_object(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_object;
-                if (in.assign_target != .none) {
-                    p.maybeCommaSpreadError(e_.comma_after_spread);
-                }
-
-                var has_spread = false;
-                var has_proto = false;
-                for (e_.properties.slice()) |*property| {
-                    if (property.kind != .spread) {
-                        property.key = p.visitExpr(property.key orelse Output.panic("Expected property key", .{}));
-                        const key = property.key.?;
-                        // Forbid duplicate "__proto__" properties according to the specification
-                        if (!property.flags.contains(.is_computed) and
-                            !property.flags.contains(.was_shorthand) and
-                            !property.flags.contains(.is_method) and
-                            in.assign_target == .none and
-                            key.data.isStringValue() and
-                            strings.eqlComptime(
-                                // __proto__ is utf8, assume it lives in refs
-                                key.data.e_string.slice(p.allocator),
-                                "__proto__",
-                            ))
-                        {
-                            if (has_proto) {
-                                const r = js_lexer.rangeOfIdentifier(p.source, key.loc);
-                                p.log.addRangeError(p.source, r, "Cannot specify the \"__proto__\" property more than once per object") catch unreachable;
-                            }
-                            has_proto = true;
-                        }
-                    } else {
-                        has_spread = true;
-                    }
-
-                    // Extract the initializer for expressions like "({ a: b = c } = d)"
-                    if (in.assign_target != .none and property.initializer == null and property.value != null) {
-                        switch (property.value.?.data) {
-                            .e_binary => |bin| {
-                                if (bin.op == .bin_assign) {
-                                    property.initializer = bin.right;
-                                    property.value = bin.left;
-                                }
-                            },
-                            else => {},
-                        }
-                    }
-
-                    if (property.value != null) {
-                        // Propagate name from property key for decorated anonymous class expressions
-                        // e.g., { Foo: @dec class {} } should give the class .name = "Foo"
-                        if (in.assign_target == .none and
-                            property.value.?.data == .e_class and
-                            property.value.?.data.e_class.should_lower_standard_decorators and
-                            property.value.?.data.e_class.class_name == null and
-                            property.key != null and
-                            property.key.?.data == .e_string)
-                        {
-                            p.decorator_class_name = property.key.?.data.e_string.string(p.allocator) catch null;
-                        }
-                        property.value = p.visitExprInOut(property.value.?, ExprIn{ .assign_target = in.assign_target });
-                        p.decorator_class_name = null;
-                    }
-
-                    if (property.initializer != null) {
-                        const was_anonymous_named_expr = property.initializer.?.isAnonymousNamed();
-                        if (was_anonymous_named_expr and property.initializer.?.data == .e_class and
-                            property.initializer.?.data.e_class.should_lower_standard_decorators)
-                        {
-                            if (property.value) |val| {
-                                if (@as(Expr.Tag, val.data) == .e_identifier) {
-                                    p.decorator_class_name = p.loadNameFromRef(val.data.e_identifier.ref);
-                                }
-                            }
-                        }
-                        property.initializer = p.visitExpr(property.initializer.?);
-                        p.decorator_class_name = null;
-
-                        if (property.value) |val| {
-                            if (@as(Expr.Tag, val.data) == .e_identifier) {
-                                property.initializer = p.maybeKeepExprSymbolName(
-                                    property.initializer orelse unreachable,
-                                    p.symbols.items[val.data.e_identifier.ref.innerIndex()].original_name,
-                                    was_anonymous_named_expr,
-                                );
-                            }
-                        }
-                    }
-                }
-                return expr;
-            }
-            pub fn e_import(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_import;
-                // We want to forcefully fold constants inside of imports
-                // even when minification is disabled, so that if we have an
-                // import based on a string template, it does not cause a
-                // bundle error. This is especially relevant for bundling NAPI
-                // modules with 'bun build --compile':
-                //
-                // const binding = await import(`./${process.platform}-${process.arch}.node`);
-                //
-                const prev_should_fold_typescript_constant_expressions = true;
-                defer p.should_fold_typescript_constant_expressions = prev_should_fold_typescript_constant_expressions;
-                p.should_fold_typescript_constant_expressions = true;
-
-                e_.expr = p.visitExpr(e_.expr);
-                e_.options = p.visitExpr(e_.options);
-
-                // Import transposition is able to duplicate the options structure, so
-                // only perform it if the expression is side effect free.
-                //
-                // TODO: make this more like esbuild by emitting warnings that explain
-                // why this import was not analyzed. (see esbuild 'unsupported-dynamic-import')
-                if (p.exprCanBeRemovedIfUnused(&e_.options)) {
-                    const state = TransposeState{
-                        .is_await_target = if (p.await_target) |await_target|
-                            await_target == .e_import and await_target.e_import == e_
-                        else
-                            false,
-
-                        .is_then_catch_target = p.then_catch_chain.has_catch and
-                            p.then_catch_chain.next_target == .e_import and
-                            expr.data.e_import == p.then_catch_chain.next_target.e_import,
-
-                        .import_options = e_.options,
-
-                        .loc = e_.expr.loc,
-                        .import_loader = e_.importRecordLoader(),
-                    };
-
-                    return p.import_transposer.maybeTransposeIf(e_.expr, &state);
-                }
-                return expr;
-            }
-            pub fn e_call(p: *P, expr: Expr, in: ExprIn) Expr {
-                const e_ = expr.data.e_call;
-                p.call_target = e_.target.data;
-
-                p.then_catch_chain = ThenCatchChain{
-                    .next_target = e_.target.data,
-                    .has_multiple_args = e_.args.len >= 2,
-                    .has_catch = @as(Expr.Tag, p.then_catch_chain.next_target) == .e_call and p.then_catch_chain.next_target.e_call == expr.data.e_call and p.then_catch_chain.has_catch,
-                };
-
-                const target_was_identifier_before_visit = e_.target.data == .e_identifier;
-                e_.target = p.visitExprInOut(e_.target, .{
-                    .has_chain_parent = e_.optional_chain == .continuation,
-                    .property_access_for_method_call_maybe_should_replace_with_undefined = true,
-                });
-
-                // Copy the call side effect flag over if this is a known target
-                switch (e_.target.data) {
-                    .e_identifier => |ident| {
-                        if (ident.call_can_be_unwrapped_if_unused and e_.can_be_unwrapped_if_unused == .never)
-                            e_.can_be_unwrapped_if_unused = .if_unused;
-
-                        // Detect if this is a direct eval. Note that "(1 ? eval : 0)(x)" will
-                        // become "eval(x)" after we visit the target due to dead code elimination,
-                        // but that doesn't mean it should become a direct eval.
-                        //
-                        // Note that "eval?.(x)" is considered an indirect eval. There was debate
-                        // about this after everyone implemented it as a direct eval, but the
-                        // language committee said it was indirect and everyone had to change it:
-                        // https://github.com/tc39/ecma262/issues/2062.
-                        if (e_.optional_chain == null and
-                            target_was_identifier_before_visit and
-                            strings.eqlComptime(
-                                p.symbols.items[e_.target.data.e_identifier.ref.inner_index].original_name,
-                                "eval",
-                            ))
-                        {
-                            e_.is_direct_eval = true;
-
-                            // Pessimistically assume that if this looks like a CommonJS module
-                            // (e.g. no "export" keywords), a direct call to "eval" means that
-                            // code could potentially access "module" or "exports".
-                            if (p.options.bundle and !p.is_file_considered_to_have_esm_exports) {
-                                p.recordUsage(p.module_ref);
-                                p.recordUsage(p.exports_ref);
-                            }
-
-                            var scope_iter: ?*js_ast.Scope = p.current_scope;
-                            while (scope_iter) |scope| : (scope_iter = scope.parent) {
-                                scope.contains_direct_eval = true;
-                            }
-
-                            // TODO: Log a build note for this like esbuild does
-                        }
-                    },
-                    .e_dot => |dot| {
-                        if (dot.call_can_be_unwrapped_if_unused != .never and e_.can_be_unwrapped_if_unused == .never) {
-                            e_.can_be_unwrapped_if_unused = dot.call_can_be_unwrapped_if_unused;
-                        }
-                    },
-                    else => {},
-                }
-
-                const is_macro_ref: bool = if (comptime allow_macros) brk: {
-                    const possible_macro_ref = switch (e_.target.data) {
-                        .e_import_identifier => |ident| ident.ref,
-                        .e_dot => |dot| if (dot.target.data == .e_identifier)
-                            dot.target.data.e_identifier.ref
-                        else
-                            null,
-                        else => null,
-                    };
-
-                    break :brk possible_macro_ref != null and p.macro.refs.contains(possible_macro_ref.?);
-                } else false;
-
-                {
-                    const old_ce = p.options.ignore_dce_annotations;
-                    defer p.options.ignore_dce_annotations = old_ce;
-                    const old_should_fold_typescript_constant_expressions = p.should_fold_typescript_constant_expressions;
-                    defer p.should_fold_typescript_constant_expressions = old_should_fold_typescript_constant_expressions;
-                    const old_is_control_flow_dead = p.is_control_flow_dead;
-
-                    // We want to forcefully fold constants inside of
-                    // certain calls even when minification is disabled, so
-                    // that if we have an import based on a string template,
-                    // it does not cause a bundle error. This is relevant for
-                    // macros, as they require constant known values, but also
-                    // for `require` and `require.resolve`, as they go through
-                    // the module resolver.
-                    if (is_macro_ref or
-                        e_.target.data == .e_require_call_target or
-                        e_.target.data == .e_require_resolve_call_target)
-                    {
-                        p.options.ignore_dce_annotations = true;
-                        p.should_fold_typescript_constant_expressions = true;
-                    }
-
-                    // When a value is targeted by `--drop`, it will be removed.
-                    // The HMR APIs in `import.meta.hot` are implicitly dropped when HMR is disabled.
-                    var method_call_should_be_replaced_with_undefined = p.method_call_must_be_replaced_with_undefined;
-                    if (method_call_should_be_replaced_with_undefined) {
-                        p.method_call_must_be_replaced_with_undefined = false;
-                        switch (e_.target.data) {
-                            // If we're removing this call, don't count any arguments as symbol uses
-                            .e_index, .e_dot, .e_identifier => {
-                                p.is_control_flow_dead = true;
-                            },
-                            // Special case from `import.meta.hot.*` functions.
-                            .e_undefined => {
-                                p.is_control_flow_dead = true;
-                            },
-                            else => {
-                                method_call_should_be_replaced_with_undefined = false;
-                            },
-                        }
-                    }
-
-                    for (e_.args.slice()) |*arg| {
-                        arg.* = p.visitExpr(arg.*);
-                    }
-
-                    if (method_call_should_be_replaced_with_undefined) {
-                        p.is_control_flow_dead = old_is_control_flow_dead;
-                        return .{ .data = .{ .e_undefined = .{} }, .loc = expr.loc };
-                    }
-                }
-
-                // Handle `feature("FLAG_NAME")` calls from `import { feature } from "bun:bundle"`
-                // Check if the bundler_feature_flag_ref is set before calling the function
-                // to avoid stack memory usage from copying values back and forth.
-                if (p.bundler_feature_flag_ref.isValid()) {
-                    if (maybeReplaceBundlerFeatureCall(p, e_, expr.loc)) |result| {
-                        return result;
-                    }
-                }
-
-                if (e_.target.data == .e_require_call_target) {
-                    e_.can_be_unwrapped_if_unused = .never;
-
-                    // Heuristic: omit warnings inside try/catch blocks because presumably
-                    // the try/catch statement is there to handle the potential run-time
-                    // error from the unbundled require() call failing.
-                    if (e_.args.len == 1) {
-                        const first = e_.args.slice()[0];
-                        const state = TransposeState{
-                            .is_require_immediately_assigned_to_decl = in.is_immediately_assigned_to_decl and
-                                first.data == .e_string,
-                        };
-                        switch (first.data) {
-                            .e_string => {
-                                // require(FOO) => require(FOO)
-                                return p.transposeRequire(first, &state);
-                            },
-                            .e_if => {
-                                // require(FOO  ? '123' : '456') => FOO ? require('123') : require('456')
-                                // This makes static analysis later easier
-                                return p.require_transposer.transposeKnownToBeIf(first, &state);
-                            },
-                            else => {},
-                        }
-                    }
-
-                    // Ignore calls to require() if the control flow is provably
-                    // dead here. We don't want to spend time scanning the required files
-                    // if they will never be used.
-                    if (p.is_control_flow_dead) {
-                        return p.newExpr(E.Null{}, expr.loc);
-                    }
-
-                    if (p.options.warn_about_unbundled_modules) {
-                        const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
-                        p.log.addRangeDebug(p.source, r, "This call to \"require\" will not be bundled because it has multiple arguments") catch unreachable;
-                    }
-
-                    if (e_.args.len >= 1) {
-                        bun.handleOom(p.checkDynamicSpecifier(e_.args.slice()[0], e_.target.loc, "require()"));
-                    }
-
-                    if (p.options.features.allow_runtime) {
-                        p.recordUsageOfRuntimeRequire();
-                    }
-
-                    return expr;
-                } else if (e_.target.data == .e_require_resolve_call_target) {
-                    // Ignore calls to require.resolve() if the control flow is provably
-                    // dead here. We don't want to spend time scanning the required files
-                    // if they will never be used.
-                    if (p.is_control_flow_dead) {
-                        return p.newExpr(E.Null{}, expr.loc);
-                    }
-
-                    if (e_.args.len == 1) {
-                        const first = e_.args.slice()[0];
-                        switch (first.data) {
-                            .e_string => {
-                                // require.resolve(FOO) => require.resolve(FOO)
-                                // (this will register dependencies)
-                                return p.transposeRequireResolveKnownString(first);
-                            },
-                            .e_if => {
-                                // require.resolve(FOO  ? '123' : '456')
-                                //  =>
-                                // FOO ? require.resolve('123') : require.resolve('456')
-                                // This makes static analysis later easier
-                                return p.require_resolve_transposer.transposeKnownToBeIf(first, e_.target);
-                            },
-                            else => {},
-                        }
-                    }
-
-                    if (e_.args.len >= 1) {
-                        bun.handleOom(p.checkDynamicSpecifier(e_.args.slice()[0], e_.target.loc, "require.resolve()"));
-                    }
-
-                    return expr;
-                } else if (e_.target.data.as(.e_special)) |special|
-                    switch (special) {
-                        .hot_accept => {
-                            p.handleImportMetaHotAcceptCall(e_);
-                            // After validating that the import.meta.hot
-                            // code is correct, discard the entire
-                            // expression in production.
-                            if (!p.options.features.hot_module_reloading)
-                                return .{ .data = .e_undefined, .loc = expr.loc };
-                        },
-                        else => {},
-                    };
-
-                if (comptime allow_macros) {
-                    if (is_macro_ref and !p.options.features.is_macro_runtime) {
-                        const ref = switch (e_.target.data) {
-                            .e_import_identifier => |ident| ident.ref,
-                            .e_dot => |dot| dot.target.data.e_identifier.ref,
-                            else => unreachable,
-                        };
-
-                        const macro_ref_data = p.macro.refs.get(ref).?;
-                        p.ignoreUsage(ref);
-                        if (p.is_control_flow_dead) {
-                            return p.newExpr(E.Undefined{}, e_.target.loc);
-                        }
-
-                        if (p.options.features.no_macros) {
-                            p.log.addError(p.source, expr.loc, "Macros are disabled") catch unreachable;
-                            return p.newExpr(E.Undefined{}, expr.loc);
-                        }
-
-                        if (p.source.path.isNodeModule()) {
-                            p.log.addError(p.source, expr.loc, "For security reasons, macros cannot be run from node_modules.") catch unreachable;
-                            return p.newExpr(E.Undefined{}, expr.loc);
-                        }
-
-                        const name = macro_ref_data.name orelse e_.target.data.e_dot.name;
-                        const record = &p.import_records.items[macro_ref_data.import_record_id];
-                        const copied = Expr{ .loc = expr.loc, .data = .{ .e_call = e_ } };
-                        const start_error_count = p.log.msgs.items.len;
-                        p.macro_call_count += 1;
-                        const macro_result = p.options.macro_context.call(
-                            record.path.text,
-                            p.source.path.sourceDir(),
-                            p.log,
-                            p.source,
-                            record.range,
-                            copied,
-                            name,
-                        ) catch |err| {
-                            if (err == error.MacroFailed) {
-                                if (p.log.msgs.items.len == start_error_count) {
-                                    p.log.addError(p.source, expr.loc, "macro threw exception") catch unreachable;
-                                }
-                            } else {
-                                p.log.addErrorFmt(p.source, expr.loc, p.allocator, "\"{s}\" error in macro", .{@errorName(err)}) catch unreachable;
-                            }
-                            return expr;
-                        };
-
-                        if (macro_result.data != .e_call) {
-                            return p.visitExpr(macro_result);
-                        }
-                    }
-                }
-
-                // In fast refresh, any function call that looks like a hook (/^use[A-Z]/) is a
-                // hook, even if it is not the value of `SExpr` or `SLocal`. It can be anywhere
-                // in the function call. This makes sense for some weird situations with `useCallback`,
-                // where it is not assigned to a variable.
-                //
-                // When we see a hook call, we need to hash it, and then mark a flag so that if
-                // it is assigned to a variable, that variable also get's hashed.
-                if (p.options.features.react_fast_refresh or p.options.features.server_components.isServerSide()) try_record_hook: {
-                    const original_name = switch (e_.target.data) {
-                        inline .e_identifier,
-                        .e_import_identifier,
-                        .e_commonjs_export_identifier,
-                        => |id| p.symbols.items[id.ref.innerIndex()].original_name,
-                        .e_dot => |dot| dot.name,
-                        else => break :try_record_hook,
-                    };
-                    if (!ReactRefresh.isHookName(original_name)) break :try_record_hook;
-                    if (p.options.features.react_fast_refresh) {
-                        p.handleReactRefreshHookCall(e_, original_name);
-                    } else if (
-                    // If we're here it means we're in server component.
-                    // Error if the user is using the `useState` hook as it
-                    // is disallowed in server components.
-                    //
-                    // We're also specifically checking that the target is
-                    // `.e_import_identifier`.
-                    //
-                    // Why? Because we *don't* want to check for uses of
-                    // `useState` _inside_ React, and we know React uses
-                    // commonjs so it will never be `.e_import_identifier`.
-                    check_for_usestate: {
-                        if (e_.target.data == .e_import_identifier) break :check_for_usestate true;
-                        // Also check for `React.useState(...)`
-                        if (e_.target.data == .e_dot and e_.target.data.e_dot.target.data == .e_import_identifier) {
-                            const id = e_.target.data.e_dot.target.data.e_import_identifier;
-                            const name = p.symbols.items[id.ref.innerIndex()].original_name;
-                            break :check_for_usestate bun.strings.eqlComptime(name, "React");
-                        }
-                        break :check_for_usestate false;
-                    }) {
-                        bun.assert(p.options.features.server_components.isServerSide());
-                        if (!bun.strings.startsWith(p.source.path.pretty, "node_modules") and
-                            bun.strings.eqlComptime(original_name, "useState"))
-                        {
-                            p.log.addError(
-                                p.source,
-                                expr.loc,
-                                std.fmt.allocPrint(
-                                    p.allocator,
-                                    "\"useState\" is not available in a server component. If you need interactivity, consider converting part of this to a Client Component (by adding `\"use client\";` to the top of the file).",
-                                    .{},
-                                ) catch |err| bun.handleOom(err),
-                            ) catch |err| bun.handleOom(err);
-                        }
-                    }
-                }
-
-                // Implement constant folding for 'string'.charCodeAt(n)
-                if (e_.args.len == 1) if (e_.target.data.as(.e_dot)) |dot| {
-                    if (dot.target.data == .e_string and
-                        dot.target.data.e_string.isUTF8() and
-                        bun.strings.eqlComptime(dot.name, "charCodeAt"))
-                    {
-                        const str = dot.target.data.e_string.data;
-                        const arg1 = e_.args.at(0).unwrapInlined();
-                        if (arg1.data == .e_number) {
-                            const float = arg1.data.e_number.value;
-                            if (@mod(float, 1) == 0 and
-                                float < @as(f64, @floatFromInt(str.len)) and
-                                float >= 0)
-                            {
-                                const char = str[@intFromFloat(float)];
-                                if (char < 0x80) {
-                                    return p.newExpr(E.Number{
-                                        .value = @floatFromInt(char),
-                                    }, expr.loc);
-                                }
-                            }
-                        }
-                    }
-                };
-
-                return expr;
-            }
-            pub fn e_new(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_new;
-                e_.target = p.visitExpr(e_.target);
-
-                for (e_.args.slice()) |*arg| {
-                    arg.* = p.visitExpr(arg.*);
-                }
-
-                if (p.options.features.minify_syntax) {
-                    if (KnownGlobal.minifyGlobalConstructor(p.allocator, e_, p.symbols.items, expr.loc, p.options.features.minify_whitespace)) |minified| {
-                        return minified;
-                    }
-                }
-                return expr;
-            }
-            pub fn e_arrow(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_arrow;
-                if (p.is_revisit_for_substitution) {
-                    return expr;
-                }
-
-                const old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_visit);
-                p.fn_or_arrow_data_visit = FnOrArrowDataVisit{
-                    .is_arrow = true,
-                    .is_async = e_.is_async,
-                };
-
-                // Mark if we're inside an async arrow function. This value should be true
-                // even if we're inside multiple arrow functions and the closest inclosing
-                // arrow function isn't async, as long as at least one enclosing arrow
-                // function within the current enclosing function is async.
-                const old_inside_async_arrow_fn = p.fn_only_data_visit.is_inside_async_arrow_fn;
-                p.fn_only_data_visit.is_inside_async_arrow_fn = e_.is_async or p.fn_only_data_visit.is_inside_async_arrow_fn;
-
-                p.pushScopeForVisitPass(.function_args, expr.loc) catch unreachable;
-                const dupe = p.allocator.dupe(Stmt, e_.body.stmts) catch unreachable;
-
-                p.visitArgs(e_.args, VisitArgsOpts{
-                    .has_rest_arg = e_.has_rest_arg,
-                    .body = dupe,
-                    .is_unique_formal_parameters = true,
-                });
-                p.pushScopeForVisitPass(.function_body, e_.body.loc) catch unreachable;
-
-                var react_hook_data: ?ReactRefresh.HookContext = null;
-                const prev = p.react_refresh.hook_ctx_storage;
-                defer p.react_refresh.hook_ctx_storage = prev;
-                p.react_refresh.hook_ctx_storage = &react_hook_data;
-
-                var stmts_list = ListManaged(Stmt).fromOwnedSlice(p.allocator, dupe);
-                var temp_opts = PrependTempRefsOpts{ .kind = .fn_body };
-                p.visitStmtsAndPrependTempRefs(&stmts_list, &temp_opts) catch unreachable;
-                p.allocator.free(e_.body.stmts);
-                e_.body.stmts = stmts_list.items;
-                p.popScope();
-                p.popScope();
-
-                p.fn_only_data_visit.is_inside_async_arrow_fn = old_inside_async_arrow_fn;
-                p.fn_or_arrow_data_visit = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_visit), &old_fn_or_arrow_data);
-
-                if (react_hook_data) |*hook| try_mark_hook: {
-                    const stmts = p.nearest_stmt_list orelse break :try_mark_hook;
-                    bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
-
-                    p.handleReactRefreshPostVisitFunctionBody(&stmts_list, hook);
-                    e_.body.stmts = stmts_list.items;
-
-                    return p.getReactRefreshHookSignalInit(hook, expr);
-                }
-                return expr;
-            }
-            pub fn e_function(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_function;
-                if (p.is_revisit_for_substitution) {
-                    return expr;
-                }
-
-                var react_hook_data: ?ReactRefresh.HookContext = null;
-                const prev = p.react_refresh.hook_ctx_storage;
-                defer p.react_refresh.hook_ctx_storage = prev;
-                p.react_refresh.hook_ctx_storage = &react_hook_data;
-
-                e_.func = p.visitFunc(e_.func, expr.loc);
-
-                // Remove unused function names when minifying (only when bundling is enabled)
-                // unless --keep-names is specified
-                if (p.options.features.minify_syntax and p.options.bundle and
-                    !p.options.features.minify_keep_names and
-                    !p.current_scope.contains_direct_eval and
-                    e_.func.name != null and
-                    e_.func.name.?.ref != null and
-                    p.symbols.items[e_.func.name.?.ref.?.innerIndex()].use_count_estimate == 0)
-                {
-                    e_.func.name = null;
-                }
-
-                var final_expr = expr;
-
-                if (react_hook_data) |*hook| try_mark_hook: {
-                    const stmts = p.nearest_stmt_list orelse break :try_mark_hook;
-                    bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
-                    final_expr = p.getReactRefreshHookSignalInit(hook, expr);
-                }
-
-                if (e_.func.name) |name| {
-                    final_expr = p.keepExprSymbolName(final_expr, p.symbols.items[name.ref.?.innerIndex()].original_name);
-                }
-
-                return final_expr;
-            }
-            pub fn e_class(p: *P, expr: Expr, _: ExprIn) Expr {
-                const e_ = expr.data.e_class;
-                if (p.is_revisit_for_substitution) {
-                    return expr;
-                }
-
-                // Save name from assignment context before visiting (nested visits may overwrite it)
-                const decorator_name_from_context = p.decorator_class_name;
-                p.decorator_class_name = null;
-
-                _ = p.visitClass(expr.loc, e_, Ref.None);
-
-                // Lower standard decorators for class expressions
-                if (e_.should_lower_standard_decorators) {
-                    return p.lowerStandardDecoratorsExpr(e_, expr.loc, decorator_name_from_context);
-                }
-
-                // Remove unused class names when minifying (only when bundling is enabled)
-                // unless --keep-names is specified
-                if (p.options.features.minify_syntax and p.options.bundle and
-                    !p.options.features.minify_keep_names and
-                    !p.current_scope.contains_direct_eval and
-                    e_.class_name != null and
-                    e_.class_name.?.ref != null and
-                    p.symbols.items[e_.class_name.?.ref.?.innerIndex()].use_count_estimate == 0)
-                {
-                    e_.class_name = null;
-                }
-
-                return expr;
-            }
-
-            /// Handles `feature("FLAG_NAME")` calls from `import { feature } from "bun:bundle"`.
-            /// This enables statically analyzable dead-code elimination through feature gating.
-            ///
-            /// When a feature flag is enabled via `--feature=FLAG_NAME`, `feature("FLAG_NAME")`
-            /// is replaced with `true`, otherwise it's replaced with `false`. This allows
-            /// bundlers to eliminate dead code branches at build time.
-            ///
-            /// Returns the replacement expression if this is a feature() call, or null otherwise.
-            /// Note: Caller must check `p.bundler_feature_flag_ref.isValid()` before calling.
-            fn maybeReplaceBundlerFeatureCall(p: *P, e_: *E.Call, loc: logger.Loc) ?Expr {
-                // Check if the target is the `feature` function from "bun:bundle"
-                // It could be e_identifier (for unbound) or e_import_identifier (for imports)
-                const target_ref: ?Ref = switch (e_.target.data) {
-                    .e_identifier => |ident| ident.ref,
-                    .e_import_identifier => |ident| ident.ref,
-                    else => null,
-                };
-
-                if (target_ref == null or !target_ref.?.eql(p.bundler_feature_flag_ref)) {
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
+const std = @import("std");
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
                     return null;
                 }
-
-                // If control flow is dead, just return false without validation errors
-                if (p.is_control_flow_dead) {
-                    return p.newExpr(E.Boolean{ .value = false }, loc);
-                }
-
-                // Validate: exactly one argument required
-                if (e_.args.len != 1) {
-                    p.log.addError(p.source, loc, "feature() requires exactly one string argument") catch unreachable;
-                    return p.newExpr(E.Boolean{ .value = false }, loc);
-                }
-
-                const arg = e_.args.slice()[0];
-
-                // Validate: argument must be a string literal
-                if (arg.data != .e_string) {
-                    p.log.addError(p.source, arg.loc, "feature() argument must be a string literal") catch unreachable;
-                    return p.newExpr(E.Boolean{ .value = false }, loc);
-                }
-
-                // Check if the feature flag is enabled
-                // Use the underlying string data directly without allocation.
-                // Feature flag names should be ASCII identifiers, so UTF-16 is unexpected.
-                const flag_string = arg.data.e_string;
-                if (flag_string.is_utf16) {
-                    p.log.addError(p.source, arg.loc, "feature() flag name must be an ASCII string") catch unreachable;
-                    return p.newExpr(E.Boolean{ .value = false }, loc);
-                }
-
-                // feature() can only be used directly in an if statement or ternary condition
-                if (!p.in_branch_condition) {
-                    p.log.addError(p.source, loc, "feature() from \"bun:bundle\" can only be used directly in an if statement or ternary condition") catch unreachable;
-                    return p.newExpr(E.Boolean{ .value = false }, loc);
-                }
-
-                const is_enabled = p.options.features.bundler_feature_flags.map.contains(flag_string.data);
-                return .{ .data = .{ .e_branch_boolean = .{ .value = is_enabled } }, .loc = loc };
             }
-        };
-    };
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-var jsxChildrenKeyData = Expr.Data{ .e_string = &Prefill.String.Children };
-
+pub const bun = @import("bun");
 const string = []const u8;
-
-const bun = @import("bun");
+var jsxChildrenKeyData = Expr.Data{ .e_string = *const Prefill.String.Children };
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
 const js_lexer = bun.js_lexer;
 const logger = bun.logger;
 const strings = bun.strings;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const E = js_ast.E;
@@ -1775,10 +85,8 @@ const ExprNodeList = js_ast.ExprNodeList;
 const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
 const Symbol = js_ast.Symbol;
-
 const G = js_ast.G;
 const Property = G.Property;
-
 const js_parser = bun.js_parser;
 const ExprIn = js_parser.ExprIn;
 const FnOrArrowDataVisit = js_parser.FnOrArrowDataVisit;
@@ -1795,7 +103,1242 @@ const TransposeState = js_parser.TransposeState;
 const VisitArgsOpts = js_parser.VisitArgsOpts;
 const floatToInt32 = js_parser.floatToInt32;
 const options = js_parser.options;
-
-const std = @import("std");
 const List = std.ArrayListUnmanaged;
 const ListManaged = std.array_list.Managed;
+
+pub fn VisitExpr(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn visitExpr(p: *P, expr: Expr) Expr {
+            if (only_scan_imports_and_do_not_visit) {
+                _ = @compileError("only_scan_imports_and_do_not_visit must not run this.");
+            }
+            return p.visitExprInOut(expr, .{});
+    }
+
+pub fn visitExprInOut(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            if (((expr_in.assign_target != .none) and (!p.isValidAssignmentTarget(expr)))) {
+                _ = ((p.log.addError(p.source, expr.loc, "Invalid assignment target")) catch unreachable);
+            }
+            switch ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(expr.data)) else @as(Expr.Tag, expr.data))) {
+inline else => |tag| {
+if (comptime @hasDecl(visitors, @tagName(tag))) {
+                return @field(visitors, @tagName(tag))(p, expr, expr_in);
+            }
+            return expr;
+},
+}
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const allow_macros = P.allow_macros;
+    const BinaryExpressionVisitor = P.BinaryExpressionVisitor;
+    const jsx_transform_type = P.jsx_transform_type;
+    const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+    const visitors = VisitExprVisitors(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+};
+}
+
+pub fn VisitExprVisitors(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn e_new_target(unused_p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_p;
+        _ = unused_in;
+            return expr;
+    }
+
+pub fn e_string(unused_p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_p;
+        _ = unused_in;
+            return expr;
+    }
+
+pub fn e_number(unused_p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_p;
+        _ = unused_in;
+            return expr;
+    }
+
+pub fn e_this(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            if (p.valueForThis(expr.loc)) |exp| {
+                _ = &exp;
+                return exp;
+            }
+            return expr;
+    }
+
+pub fn e_import_meta(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const is_delete_target = (p.delete_target == .e_import_meta);
+            if (p.define.dots.get("meta")) |meta_defines| {
+                _ = &meta_defines;
+                for (cp_iter_slice(meta_defines)) |define| {
+                    _ = &define;
+                    if (p.isDotDefineMatch(expr, define.parts)) {
+                        return p.valueForDefine(expr.loc, expr_in.assign_target, is_delete_target, (&define.data));
+                    }
+                }
+            }
+            return expr;
+    }
+
+pub fn e_spread(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const exp = expr.data.e_spread;
+            (if (@typeInfo(@TypeOf(exp)) == .@"enum") @intFromEnum(exp) else exp.value) = p.visitExpr((if (@typeInfo(@TypeOf(exp)) == .@"enum") @intFromEnum(exp) else exp.value));
+            return expr;
+    }
+
+pub fn e_identifier(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            var e_ = expr.data.e_identifier;
+            _ = &e_;
+            const is_delete_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.delete_target)) else @as(Expr.Tag, p.delete_target)) == .e_identifier) and e_.ref.eql(p.delete_target.e_identifier.ref));
+            const name = p.loadNameFromRef(e_.ref);
+            if ((p.isStrictMode() and js_lexer.StrictModeReservedWords.has(name))) {
+                _ = ((p.markStrictModeFeature(.reserved_word, js_lexer.rangeOfIdentifier(p.source, expr.loc), name)) catch unreachable);
+            }
+            const result = ((p.findSymbol(expr.loc, name)) catch unreachable);
+            e_.must_keep_due_to_with_stmt = result.is_inside_with_scope;
+            e_.ref = result.ref;
+            if ((expr_in.assign_target != .none)) {
+                if ((p.symbols.items[@as(usize, @intCast(result.ref.innerIndex()))].kind == .constant)) {
+                    const r = js_lexer.rangeOfIdentifier(p.source, expr.loc);
+                    var notes = ((p.allocator.alloc(logger.Data, 1)) catch unreachable);
+                    _ = &notes;
+                    notes[cp_cast_int(usize, 0)] = logger.Data{ .text = ((std.fmt.allocPrint(p.allocator, "The symbol \"{s}\" was declared a constant here:", .{ name })) catch unreachable), .location = logger.Location.initOrNull(p.source, js_lexer.rangeOfIdentifier(p.source, result.declare_loc.?)) };
+                    const is_error = (p.const_values.contains(result.ref) or p.options.bundle);
+                    switch (is_error) {
+true => {
+_ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "Cannot assign to \"{s}\" because it is a constant", .{ name })) catch unreachable);
+},
+false => {
+_ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "This assignment will throw because \"{s}\" is a constant", .{ name })) catch unreachable);
+},
+else => unreachable,
+}
+                } else {
+                    if (p.exports_ref.eql(e_.ref)) {
+                        p.commonjs_module_exports_assigned_deoptimized = true;
+                    }
+                }
+                p.symbols.items[@as(usize, @intCast(result.ref.innerIndex()))].has_been_assigned_to = true;
+            }
+            var original_name: ?[]const u8 = null;
+            _ = &original_name;
+            if ((((p.symbols.items[@as(usize, @intCast(e_.ref.innerIndex()))].kind == .unbound) and (!result.is_inside_with_scope)) and (!is_delete_target))) {
+                if (p.define.forIdentifier(name)) |def| {
+                    _ = &def;
+                    if ((!def.valueless())) {
+                        const newvalue = p.valueForDefine(expr.loc, expr_in.assign_target, is_delete_target, def);
+                        if ((((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(newvalue.data)) else @as(Expr.Tag, newvalue.data)) == .e_identifier) or (expr_in.assign_target == .none))) {
+                            _ = p.ignoreUsage(e_.ref);
+                            return newvalue;
+                        }
+                        original_name = def.original_name();
+                    }
+                    if (def.can_be_removed_if_unused()) {
+                        e_.can_be_removed_if_unused = true;
+                    }
+                    if (((def.call_can_be_unwrapped_if_unused() == .if_unused) and (!p.options.ignore_dce_annotations))) {
+                        e_.call_can_be_unwrapped_if_unused = true;
+                    }
+                    if (((def.method_call_must_be_replaced_with_undefined() and expr_in.property_access_for_method_call_maybe_should_replace_with_undefined) and (expr_in.assign_target == .none))) {
+                        p.method_call_must_be_replaced_with_undefined = true;
+                    }
+                }
+                if ((p.require_ref.eql(e_.ref) and (!p.isSourceRuntime()))) {
+                    if (((!((p.call_target == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref))) and p.options.features.allow_runtime)) {
+                        _ = p.recordUsageOfRuntimeRequire();
+                    }
+                    return p.valueForRequire(expr.loc);
+                }
+            }
+            return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{ .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)), .was_originally_identifier = true });
+    }
+
+pub fn e_jsx_element(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_jsx_element;
+            switch ((comptime jsx_transform_type)) {
+.react => {
+const tag: Expr = tagger: {
+            if (e_.tag) |_tag| {
+                _ = &_tag;
+                break :tagger p.visitExpr(_tag);
+            } else {
+                if ((p.options.jsx.runtime == .classic)) {
+                    break :tagger ((p.jsxStringsToMemberExpression(expr.loc, p.options.jsx.fragment)) catch unreachable);
+                }
+                break :tagger p.jsxImport(.Fragment, expr.loc);
+            }
+};
+            const all_props: []G.Property = e_.properties.slice();
+            for (cp_mut_slice(&all_props)) |*property| {
+                _ = &property;
+                if (((property.*).kind != .spread)) {
+                    (property.*).key = p.visitExpr((property.*).key.?);
+                }
+                if (((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) {
+                    (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = p.visitExpr((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?);
+                }
+                if (((property.*).initializer != null)) {
+                    (property.*).initializer = p.visitExpr((property.*).initializer.?);
+                }
+            }
+            const runtime = (if ((p.options.jsx.runtime == .automatic)) options.JSX.Runtime.automatic else options.JSX.Runtime.classic);
+            const is_key_after_spread = e_.flags.contains(.is_key_after_spread);
+            const children_count = e_.children.len;
+            if (((runtime == .classic) or is_key_after_spread)) {
+                var args = (blk_catch_7: { break :blk_catch_7 ((bun.BabyList(Expr).initCapacity(p.allocator, (2 + children_count))) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
+                _ = &args;
+                _ = args.appendAssumeCapacity(tag);
+                const num_props = e_.properties.len;
+                if ((num_props > 0)) {
+                    const props = ((p.allocator.alloc(G.Property, num_props)) catch unreachable);
+                    _ = bun.copy(G.Property, props, e_.properties.slice());
+                    _ = args.appendAssumeCapacity(p.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(props) }, expr.loc));
+                } else {
+                    _ = args.appendAssumeCapacity(p.newExpr(E.Null, expr.loc));
+                }
+                const children_elements = e_.children.slice()[0..children_count];
+                for (cp_iter_slice(children_elements)) |child| {
+                    _ = &child;
+                    const arg = p.visitExpr(child);
+                    if ((arg.data != .e_missing)) {
+                        _ = args.appendAssumeCapacity(arg);
+                    }
+                }
+                const target = ((p.jsxStringsToMemberExpression(expr.loc, p.options.jsx.factory)) catch unreachable);
+                return p.newExpr(E.Call{ .target = (if ((runtime == .classic)) target else p.jsxImport(.createElement, expr.loc)), .args = args, .can_be_unwrapped_if_unused = (if (((!p.options.ignore_dce_annotations) and (!p.options.jsx.side_effects))) .if_unused else .never), .close_paren_loc = e_.close_tag_loc }, expr.loc);
+            } else {
+                if ((runtime == .automatic)) {
+                    const allocator = p.allocator;
+                    var props = (&e_.properties);
+                    _ = &props;
+                    const maybe_key_value: ?ExprNodeIndex = (if ((e_.key_prop_index > -1)) (if (@typeInfo(@TypeOf(props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index))))) == .@"enum") @intFromEnum(props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index)))) else props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index))).value) else null);
+                    {
+                        var last_child: u32 = 0;
+                        _ = &last_child;
+                        const children = e_.children.slice()[0..children_count];
+                        for (cp_iter_slice(children)) |child| {
+                            _ = &child;
+                            e_.children.ptr[cp_cast_int(usize, last_child)] = p.visitExpr(child);
+                            last_child = (last_child + (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) else cp_cast_int(i32, @intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) else cp_cast_int(i32, @intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))) else cp_cast_int(i32, @intFromBool((e_.children.ptr[@as(usize, @intCast(last_child))].data != .e_missing)))))));
+                        }
+                        e_.children.len = last_child;
+                    }
+                    const children_key = Expr{ .data = jsxChildrenKeyData, .loc = expr.loc };
+                    while ((((props.len == 1) and (props.at(0).kind == .spread)) and ((if (@typeInfo(@TypeOf(props.at(0))) == .@"enum") @intFromEnum(props.at(0)) else props.at(0).value).?.data == .e_object))) {
+                        props = (&(if (@typeInfo(@TypeOf(props.at(0))) == .@"enum") @intFromEnum(props.at(0)) else props.at(0).value).?.data.e_object.properties);
+                    }
+                    const is_static_jsx = ((e_.children.len > 1) or ((e_.children.len == 1) and (e_.children.ptr[0].data == .e_spread)));
+                    if (is_static_jsx) {
+                        _ = (blk_catch_10: { break :blk_catch_10 ((props.append(allocator, G.Property{ .key = children_key, .value = p.newExpr(E.Array{ .items = e_.children, .is_single_line = (e_.children.len < 2) }, e_.close_tag_loc) })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                    } else {
+                        if ((e_.children.len == 1)) {
+                            _ = (blk_catch_11: { break :blk_catch_11 ((props.append(allocator, G.Property{ .key = children_key, .value = e_.children.ptr[0] })) catch |e| { _ = &e; break :blk_catch_11 bun.handleOom(e); }); });
+                        }
+                    }
+                    const args = ((p.allocator.alloc(Expr, (if (p.options.jsx.development) (if (comptime @typeInfo(@TypeOf(6)) == .@"enum") cp_cast_int(usize, @intFromEnum(6)) else cp_cast_int(usize, 6)) else ((if (comptime @typeInfo(@TypeOf(2)) == .@"enum") cp_cast_int(usize, @intFromEnum(2)) else cp_cast_int(usize, 2)) + (if (comptime @typeInfo(@TypeOf(@intFromBool((maybe_key_value != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((maybe_key_value != null)))) else cp_cast_int(usize, @intFromBool((maybe_key_value != null)))))))) catch unreachable);
+                    args[cp_cast_int(usize, 0)] = tag;
+                    args[cp_cast_int(usize, 1)] = p.newExpr(E.Object{ .properties = props.* }, expr.loc);
+                    if (maybe_key_value) |key| {
+                        _ = &key;
+                        args[cp_cast_int(usize, 2)] = key;
+                    } else {
+                        if (p.options.jsx.development) {
+                            args[cp_cast_int(usize, 2)] = Expr{ .loc = expr.loc, .data = .{ .e_undefined = E.Undefined } };
+                        }
+                    }
+                    if (p.options.jsx.development) {
+                        args[cp_cast_int(usize, 3)] = Expr{ .loc = expr.loc, .data = .{ .e_boolean = .{ .value = is_static_jsx } } };
+                        args[cp_cast_int(usize, 4)] = p.newExpr(E.Undefined, expr.loc);
+                        args[cp_cast_int(usize, 5)] = Expr{ .data = Prefill.Data.This, .loc = expr.loc };
+                    }
+                    return p.newExpr(E.Call{ .target = p.jsxImportAutomatic(expr.loc, is_static_jsx), .args = ExprNodeList.fromOwnedSlice(args), .can_be_unwrapped_if_unused = (if (((!p.options.ignore_dce_annotations) and (!p.options.jsx.side_effects))) .if_unused else .never), .was_jsx_element = true, .close_paren_loc = e_.close_tag_loc }, expr.loc);
+                } else {
+                    _ = unreachable;
+                }
+            }
+},
+else => {
+_ = unreachable;
+},
+}
+            return expr;
+    }
+
+pub fn e_template(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_template;
+            if (e_.tag) |tag| {
+                _ = &tag;
+                e_.tag = p.visitExpr(tag);
+                if (comptime allow_macros) {
+                    const sym_ref = (switch (e_.tag.?.data) {
+.e_import_identifier => |ident| ident.ref,
+.e_dot => |dot| (if ((dot.target.data == .e_identifier)) dot.target.data.e_identifier.ref else null),
+else => null,
+});
+                    if (((sym_ref != null) and (!p.options.features.is_macro_runtime))) {
+                        if (p.@"macro".refs.get(sym_ref.?)) |macro_ref_data| {
+                            _ = &macro_ref_data;
+                            _ = p.ignoreUsage(sym_ref.?);
+                            if (p.is_control_flow_dead) {
+                                return p.newExpr(E.Undefined, e_.tag.?.loc);
+                            }
+                            if (p.options.features.no_macros) {
+                                _ = ((p.log.addError(p.source, tag.loc, "Macros are disabled")) catch unreachable);
+                                return p.newExpr(E.Undefined, e_.tag.?.loc);
+                            }
+                            if (p.source.path.isNodeModule()) {
+                                _ = ((p.log.addError(p.source, expr.loc, "For security reasons, macros cannot be run from node_modules.")) catch unreachable);
+                                return p.newExpr(E.Undefined, expr.loc);
+                            }
+                            p.macro_call_count = (p.macro_call_count + 1);
+                            const name = (((if (@typeInfo(@TypeOf(macro_ref_data)) == .@"enum" or @typeInfo(@TypeOf(macro_ref_data)) == .@"union") @tagName(macro_ref_data) else macro_ref_data.name)) orelse ((if (@typeInfo(@TypeOf(e_.tag.?.data.e_dot)) == .@"enum" or @typeInfo(@TypeOf(e_.tag.?.data.e_dot)) == .@"union") @tagName(e_.tag.?.data.e_dot) else e_.tag.?.data.e_dot.name)));
+                            const record = (&p.import_records.items[@as(usize, @intCast(macro_ref_data.import_record_id))]);
+                            const macro_result = (blk_catch_15: { break :blk_catch_15 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, expr, name)) catch |__ce_15| { _ = &__ce_15; return expr; }); });
+                            if ((macro_result.data != .e_template)) {
+                                return p.visitExpr(macro_result);
+                            }
+                        }
+                    }
+                }
+            }
+            for (cp_mut_slice(&e_.parts)) |*part| {
+                _ = &part;
+                (if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value) = p.visitExpr((if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value));
+            }
+            if ((p.should_fold_typescript_constant_expressions or p.options.features.inlining)) {
+                return e_.fold(p.allocator, expr.loc);
+            }
+            return expr;
+    }
+
+pub fn e_binary(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_binary;
+            var v = BinaryExpressionVisitor{ .e = e_, .loc = expr.loc, .@"in" = expr_in, .left_in = ExprIn{  } };
+            _ = &v;
+            const stack_bottom = p.binary_expression_stack.items.len;
+            var current = Expr{ .data = .{ .e_binary = e_ }, .loc = v.loc };
+            _ = &current;
+            while (true) {
+                if (v.checkAndPrepare(p)) |out| {
+                    _ = &out;
+                    current = out;
+                    break;
+                }
+                const left = v.e.left;
+                const left_in = v.left_in;
+                const left_binary: ?*E.Binary = (if ((left.data == .e_binary)) left.data.e_binary else null);
+                if (((left_binary == null) or (left_in.assign_target != .none))) {
+                    v.e.left = p.visitExprInOut(left, left_in);
+                    current = v.visitRightAndFinish(p);
+                    break;
+                }
+                _ = bun.handleOom(p.binary_expression_stack.append(v));
+                v = BinaryExpressionVisitor{ .e = left_binary.?, .loc = left.loc, .@"in" = left_in, .left_in = .{} };
+            }
+            while ((p.binary_expression_stack.items.len > stack_bottom)) {
+                v = (p.binary_expression_stack.pop()).?;
+                v.e.left = current;
+                current = v.visitRightAndFinish(p);
+            }
+            return current;
+    }
+
+pub fn e_index(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_index;
+            const is_call_target = ((p.call_target == .e_index) and (expr.data.e_index == p.call_target.e_index));
+            const is_delete_target = ((p.delete_target == .e_index) and (expr.data.e_index == p.delete_target.e_index));
+            if ((((p.options.features.minify_syntax and (e_.index.data == .e_string)) and e_.index.data.e_string.isUTF8()) and e_.index.data.e_string.isIdentifier(p.allocator))) {
+                const dot = p.newExpr(E.Dot{ .name = e_.index.data.e_string.slice(p.allocator), .name_loc = e_.index.loc, .target = e_.target, .optional_chain = e_.optional_chain }, expr.loc);
+                if (is_call_target) {
+                    p.call_target = dot.data;
+                }
+                if (is_delete_target) {
+                    p.delete_target = dot.data;
+                }
+                return p.visitExprInOut(dot, expr_in);
+            }
+            const target_visited = p.visitExprInOut(e_.target, ExprIn{ .has_chain_parent = (e_.optional_chain == .continuation) });
+            e_.target = target_visited;
+            switch (e_.index.data) {
+.e_private_identifier => |_private| {
+var priv_id = _private;
+            _ = &priv_id;
+            const name = p.loadNameFromRef(priv_id.ref);
+            const result = ((p.findSymbol(e_.index.loc, name)) catch unreachable);
+            priv_id.ref = result.ref;
+            const kind: Symbol.Kind = p.symbols.items[@as(usize, @intCast(result.ref.innerIndex()))].kind;
+            var r: logger.Range = undefined;
+            _ = &r;
+            if ((!Symbol.isKindPrivate(kind))) {
+                r = logger.Range{ .loc = e_.index.loc, .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) };
+                _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Private name \"{s}\" must be declared in an enclosing class", .{ name })) catch unreachable);
+            } else {
+                if (((expr_in.assign_target != .none) and ((kind == .private_method) or (kind == .private_static_method)))) {
+                    r = logger.Range{ .loc = e_.index.loc, .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) };
+                    _ = ((p.log.addRangeWarningFmt(p.source, r, p.allocator, "Writing to read-only method \"{s}\" will throw", .{ name })) catch unreachable);
+                } else {
+                    if (((expr_in.assign_target != .none) and ((kind == .private_get) or (kind == .private_static_get)))) {
+                        r = logger.Range{ .loc = e_.index.loc, .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) };
+                        _ = ((p.log.addRangeWarningFmt(p.source, r, p.allocator, "Writing to getter-only property \"{s}\" will throw", .{ name })) catch unreachable);
+                    } else {
+                        if (((expr_in.assign_target != .replace) and ((kind == .private_set) or (kind == .private_static_set)))) {
+                            r = logger.Range{ .loc = e_.index.loc, .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(name.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(name.len)) else cp_cast_int(i32, name.len)))) };
+                            _ = ((p.log.addRangeWarningFmt(p.source, r, p.allocator, "Reading from setter-only property \"{s}\" will throw", .{ name })) catch unreachable);
+                        }
+                    }
+                }
+            }
+            e_.index = .{ .data = .{ .e_private_identifier = priv_id }, .loc = e_.index.loc };
+},
+else => {
+const index = p.visitExpr(e_.index);
+            e_.index = index;
+            const unwrapped = e_.index.unwrapInlined();
+            if (((unwrapped.data == .e_string) and unwrapped.data.e_string.isUTF8())) {
+                if ((p.options.features.minify_syntax and unwrapped.data.e_string.isIdentifier(p.allocator))) {
+                    const dot = p.newExpr(E.Dot{ .name = unwrapped.data.e_string.slice(p.allocator), .name_loc = unwrapped.loc, .target = e_.target, .optional_chain = e_.optional_chain }, expr.loc);
+                    if (is_call_target) {
+                        p.call_target = dot.data;
+                    }
+                    if (is_delete_target) {
+                        p.delete_target = dot.data;
+                    }
+                    return dot;
+                }
+                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, unwrapped.data.e_string.data, unwrapped.loc, .{ .is_call_target = is_call_target, .is_delete_target = is_delete_target, .assign_target = expr_in.assign_target })) |rewrite| {
+                    _ = &rewrite;
+                    return rewrite;
+                }
+            }
+},
+}
+            const target = e_.target.unwrapInlined();
+            const index = e_.index.unwrapInlined();
+            if (p.options.features.minify_syntax) {
+                if (index.data.@"as"(.e_number)) |number| {
+                    _ = &number;
+                    if (((((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) >= 0) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) < @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum") @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize))))))) and (@mod((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value), 1) == 0))) {
+                        if (target.data.@"as"(.e_string)) |str| {
+                            _ = &str;
+                            if (str.isUTF8()) {
+                                const literal = str.slice(p.allocator);
+                                const num: usize = index.data.e_number.toUsize();
+                                if (Environment.allow_assert) {
+                                    _ = bun.assert(bun.strings.isAllASCII(literal));
+                                }
+                                if ((num < literal.len)) {
+                                    return p.newExpr(E.String{ .data = literal[num..(num + 1)] }, expr.loc);
+                                }
+                            }
+                        } else {
+                            if (target.data.@"as"(.e_array)) |array| {
+                                _ = &array;
+                                if (((array.items.len == 1) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) == 0))) {
+                                    const inlined = (target.data.e_array.items.at(0)).*;
+                                    if (inlined.canBeInlinedFromPropertyAccess()) {
+                                        return inlined;
+                                    }
+                                }
+                                const int: usize = @intFromFloat((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value));
+                                if (((int < array.items.len) and p.exprCanBeRemovedIfUnused((&target)))) {
+                                    const inlined = (target.data.e_array.items.at(int)).*;
+                                    if ((inlined.data == .e_missing)) {
+                                        return p.newExpr(E.Undefined, inlined.loc);
+                                    }
+                                    if (Environment.allow_assert) {
+                                        _ = assert(inlined.canBeInlinedFromPropertyAccess());
+                                    }
+                                    return inlined;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (((((expr_in.assign_target != .none) or is_delete_target) and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e_.target.data)) else @as(Expr.Tag, e_.target.data)) == .e_identifier)) and (p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].kind == .@"import"))) {
+                const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
+                _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot assign to property on import \"{s}\"", .{ p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].original_name })) catch unreachable);
+            }
+            return p.newExpr(e_, expr.loc);
+    }
+
+pub fn e_unary(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_unary;
+            switch (e_.op) {
+.un_typeof => {
+const id_before = ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data == .e_identifier);
+            (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .assign_target = e_.op.unaryAssignTarget() });
+            const id_after = ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data == .e_identifier);
+            if ((((!id_before) and id_after) and (p.symbols.items[@as(usize, @intCast((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data.e_identifier.ref.innerIndex()))].kind == .unbound))) {
+                (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = Expr.joinWithComma(Expr{ .loc = (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).loc, .data = Prefill.Data.Zero }, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), p.allocator);
+            }
+            if (((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data == .e_require_call_target)) {
+                _ = p.ignoreUsageOfRuntimeRequire();
+                return p.newExpr(E.String{ .data = "function" }, expr.loc);
+            }
+            if (SideEffects.typeof((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data)) |typeof| {
+                _ = &typeof;
+                return p.newExpr(E.String{ .data = typeof }, expr.loc);
+            }
+},
+.un_delete => {
+(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .has_chain_parent = true });
+},
+else => {
+(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .assign_target = e_.op.unaryAssignTarget() });
+            switch (e_.op) {
+.un_not => {
+if (p.options.features.minify_syntax) {
+                (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = SideEffects.simplifyBoolean(p, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value));
+            }
+            const side_effects = SideEffects.toBoolean(p, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data);
+            if (side_effects.ok) {
+                return p.newExpr(E.Boolean{ .value = (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)) }, expr.loc);
+            }
+            if (p.options.features.minify_syntax) {
+                if ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).maybeSimplifyNot(p.allocator)) |exp| {
+                    _ = &exp;
+                    return exp;
+                }
+                if (((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data == .e_import_meta_main)) {
+                    (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data.e_import_meta_main.inverted = (!(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data.e_import_meta_main.inverted);
+                    return (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value);
+                }
+            }
+},
+.un_cpl => {
+if (p.should_fold_typescript_constant_expressions) {
+                if (SideEffects.toNumber((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data)) |value| {
+                    _ = &value;
+                    return p.newExpr(E.Number{ .value = @floatFromInt((~floatToInt32(value))) }, expr.loc);
+                }
+            }
+},
+.un_void => {
+if (p.exprCanBeRemovedIfUnused((&(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value)))) {
+                return p.newExpr(E.Undefined, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).loc);
+            }
+},
+.un_pos => {
+if (SideEffects.toNumber((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data)) |num| {
+                _ = &num;
+                return p.newExpr(E.Number{ .value = num }, expr.loc);
+            }
+},
+.un_neg => {
+if (SideEffects.toNumber((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data)) |num| {
+                _ = &num;
+                return p.newExpr(E.Number{ .value = (0 - num) }, expr.loc);
+            }
+},
+.un_pre_dec => {
+
+},
+.un_pre_inc => {
+
+},
+.un_post_dec => {
+
+},
+.un_post_inc => {
+
+},
+else => {
+
+},
+}
+            if (p.options.features.minify_syntax) {
+                if ((switch (e_.op) {
+.un_delete, .un_typeof => false,
+else => true,
+})) {
+                    switch ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data) {
+.e_binary => |comma| {
+if ((comma.op == .bin_comma)) {
+                        return Expr.joinWithComma(comma.left, p.newExpr(E.Unary{ .op = e_.op, .value = comma.right, .flags = e_.flags }, comma.right.loc), p.allocator);
+                    }
+},
+else => {
+
+},
+}
+                }
+            }
+},
+}
+            return expr;
+    }
+
+pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_dot;
+            const is_delete_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.delete_target)) else @as(Expr.Tag, p.delete_target)) == .e_dot) and (expr.data.e_dot == p.delete_target.e_dot));
+            const is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_dot) and (expr.data.e_dot == p.call_target.e_dot));
+            if (p.define.dots.get((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name))) |parts| {
+                _ = &parts;
+                for (cp_mut_slice(&parts)) |*define| {
+                    _ = &define;
+                    if (p.isDotDefineMatch(expr, (define.*).parts)) {
+                        if ((expr_in.assign_target == .none)) {
+                            if ((!(define.*).data.valueless())) {
+                                return p.valueForDefine(expr.loc, expr_in.assign_target, is_delete_target, (&(define.*).data));
+                            }
+                            if (((define.*).data.method_call_must_be_replaced_with_undefined() and expr_in.property_access_for_method_call_maybe_should_replace_with_undefined)) {
+                                p.method_call_must_be_replaced_with_undefined = true;
+                            }
+                        }
+                        if ((define.*).data.can_be_removed_if_unused()) {
+                            e_.can_be_removed_if_unused = true;
+                        }
+                        if ((((define.*).data.call_can_be_unwrapped_if_unused() != .never) and (!p.options.ignore_dce_annotations))) {
+                            e_.call_can_be_unwrapped_if_unused = (define.*).data.call_can_be_unwrapped_if_unused();
+                        }
+                        break;
+                    }
+                }
+            }
+            if (((is_call_target and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.then_catch_chain.next_target)) else @as(Expr.Tag, p.then_catch_chain.next_target)) == .e_dot)) and (p.then_catch_chain.next_target.e_dot == expr.data.e_dot))) {
+                if (strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "catch")) {
+                    p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_catch = true };
+                } else {
+                    if (strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "then")) {
+                        p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_catch = (p.then_catch_chain.has_catch or p.then_catch_chain.has_multiple_args) };
+                    }
+                }
+            }
+            e_.target = p.visitExprInOut(e_.target, .{ .property_access_for_method_call_maybe_should_replace_with_undefined = expr_in.property_access_for_method_call_maybe_should_replace_with_undefined });
+            if (((e_.target.data == .e_require_call_target) and strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "resolve"))) {
+                return .{ .data = .{ .e_require_resolve_call_target = .{} }, .loc = expr.loc };
+            }
+            if ((e_.optional_chain == null)) {
+                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, (if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), e_.name_loc, .{ .is_call_target = is_call_target, .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target })) |_expr| {
+                    _ = &_expr;
+                    return _expr;
+                }
+                if (comptime allow_macros) {
+                    if ((!p.options.features.is_macro_runtime)) {
+                        if ((((p.macro_call_count > 0) and (e_.target.data == .e_object)) and e_.target.data.e_object.was_originally_macro)) {
+                            if (e_.target.get((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name))) |obj| {
+                                _ = &obj;
+                                return obj;
+                            }
+                        }
+                    }
+                }
+            }
+            return expr;
+    }
+
+pub fn e_if(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_if;
+            const is_call_target = (((if (comptime @typeInfo(Expr.Data) == .@"enum") @as(Expr.Data, @enumFromInt(p.call_target)) else @as(Expr.Data, p.call_target)) == .e_if) and (expr.data.e_if == p.call_target.e_if));
+            const prev_in_branch = p.in_branch_condition;
+            p.in_branch_condition = true;
+            e_.test_ = p.visitExpr(e_.test_);
+            p.in_branch_condition = prev_in_branch;
+            e_.test_ = SideEffects.simplifyBoolean(p, e_.test_);
+            const side_effects = SideEffects.toBoolean(p, e_.test_.data);
+            if ((!side_effects.ok)) {
+                e_.yes = p.visitExpr(e_.yes);
+                e_.no = p.visitExpr(e_.no);
+            } else {
+                if ((if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)) {
+                    e_.yes = p.visitExpr(e_.yes);
+                    const old = p.is_control_flow_dead;
+                    p.is_control_flow_dead = true;
+                    e_.no = p.visitExpr(e_.no);
+                    p.is_control_flow_dead = old;
+                    if ((side_effects.side_effects == .could_have_side_effects)) {
+                        return Expr.joinWithComma(((SideEffects.simplifyUnusedExpr(p, e_.test_)) orelse (p.newExpr(E.Missing, e_.test_.loc))), e_.yes, p.allocator);
+                    }
+                    if ((is_call_target and e_.yes.hasValueForThisInCall())) {
+                        return p.newExpr(E.Number{ .value = 0 }, e_.test_.loc).joinWithComma(e_.yes, p.allocator);
+                    }
+                    return e_.yes;
+                } else {
+                    const old = p.is_control_flow_dead;
+                    p.is_control_flow_dead = true;
+                    e_.yes = p.visitExpr(e_.yes);
+                    p.is_control_flow_dead = old;
+                    e_.no = p.visitExpr(e_.no);
+                    if ((side_effects.side_effects == .could_have_side_effects)) {
+                        return Expr.joinWithComma(((SideEffects.simplifyUnusedExpr(p, e_.test_)) orelse (p.newExpr(E.Missing, e_.test_.loc))), e_.no, p.allocator);
+                    }
+                    if ((is_call_target and e_.no.hasValueForThisInCall())) {
+                        return p.newExpr(E.Number{ .value = 0 }, e_.test_.loc).joinWithComma(e_.no, p.allocator);
+                    }
+                    return e_.no;
+                }
+            }
+            return expr;
+    }
+
+pub fn e_await(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_await;
+            p.await_target = (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data;
+            (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExpr((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value));
+            return expr;
+    }
+
+pub fn e_yield(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_yield;
+            if ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value)) |val| {
+                _ = &val;
+                (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExpr(val);
+            }
+            return expr;
+    }
+
+pub fn e_array(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_array;
+            if ((expr_in.assign_target != .none)) {
+                _ = p.maybeCommaSpreadError(e_.comma_after_spread);
+            }
+            const items = e_.items.slice();
+            var spread_item_count: usize = 0;
+            _ = &spread_item_count;
+            for (cp_mut_slice(&items)) |*item| {
+                _ = &item;
+                switch ((item.*).data) {
+.e_missing => {
+
+},
+.e_spread => |spread| {
+(if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value), ExprIn{ .assign_target = expr_in.assign_target });
+                spread_item_count = (spread_item_count + (if (((if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value).data == .e_array)) (if (comptime @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value).data.e_array.items.len)) == .@"enum") cp_cast_int(usize, @intFromEnum((if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value).data.e_array.items.len)) else cp_cast_int(usize, (if (@typeInfo(@TypeOf(spread)) == .@"enum") @intFromEnum(spread) else spread.value).data.e_array.items.len)) else 0));
+},
+.e_binary => |e2| {
+if (((expr_in.assign_target != .none) and (e2.op == .bin_assign))) {
+                    const was_anonymous_named_expr = e2.right.isAnonymousNamed();
+                    if ((((was_anonymous_named_expr and (e2.right.data == .e_class)) and e2.right.data.e_class.should_lower_standard_decorators) and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e2.left.data)) else @as(Expr.Tag, e2.left.data)) == .e_identifier))) {
+                        p.decorator_class_name = p.loadNameFromRef(e2.left.data.e_identifier.ref);
+                    }
+                    e2.left = p.visitExprInOut(e2.left, ExprIn{ .assign_target = .replace });
+                    e2.right = p.visitExpr(e2.right);
+                    p.decorator_class_name = null;
+                    if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e2.left.data)) else @as(Expr.Tag, e2.left.data)) == .e_identifier)) {
+                        e2.right = p.maybeKeepExprSymbolName(e2.right, p.symbols.items[@as(usize, @intCast(e2.left.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+                    }
+                } else {
+                    (item.*).* = p.visitExprInOut((item.*).*, ExprIn{ .assign_target = expr_in.assign_target });
+                }
+},
+else => {
+(item.*).* = p.visitExprInOut((item.*).*, ExprIn{ .assign_target = expr_in.assign_target });
+},
+}
+            }
+            if (((p.options.features.minify_syntax and (spread_item_count > 0)) and (expr_in.assign_target == .none))) {
+                e_.items = (blk_catch_22: { break :blk_catch_22 ((e_.inlineSpreadOfArrayLiterals(p.allocator, spread_item_count)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 e_.items; }); });
+            }
+            return expr;
+    }
+
+pub fn e_object(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_object;
+            if ((expr_in.assign_target != .none)) {
+                _ = p.maybeCommaSpreadError(e_.comma_after_spread);
+            }
+            var has_spread = false;
+            _ = &has_spread;
+            var has_proto = false;
+            _ = &has_proto;
+            for (cp_mut_slice(&e_.properties.slice())) |*property| {
+                _ = &property;
+                if (((property.*).kind != .spread)) {
+                    (property.*).key = p.visitExpr((((property.*).key) orelse (Output.panic("Expected property key", .{}))));
+                    const key = (property.*).key.?;
+                    if (((((((!(property.*).flags.contains(.is_computed)) and (!(property.*).flags.contains(.was_shorthand))) and (!(property.*).flags.contains(.is_method))) and (expr_in.assign_target == .none)) and key.data.isStringValue()) and strings.eqlComptime(key.data.e_string.slice(p.allocator), "__proto__"))) {
+                        if (has_proto) {
+                            const r = js_lexer.rangeOfIdentifier(p.source, key.loc);
+                            _ = ((p.log.addRangeError(p.source, r, "Cannot specify the \"__proto__\" property more than once per object")) catch unreachable);
+                        }
+                        has_proto = true;
+                    }
+                } else {
+                    has_spread = true;
+                }
+                if ((((expr_in.assign_target != .none) and ((property.*).initializer == null)) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null))) {
+                    switch ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data) {
+.e_binary => |bin| {
+if ((bin.op == .bin_assign)) {
+                        (property.*).initializer = bin.right;
+                        (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = bin.left;
+                    }
+},
+else => {
+
+},
+}
+                }
+                if (((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) {
+                    if (((((((expr_in.assign_target == .none) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_class)) and (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_class.should_lower_standard_decorators) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_class.class_name == null)) and ((property.*).key != null)) and ((property.*).key.?.data == .e_string))) {
+                        p.decorator_class_name = (blk_catch_24: { break :blk_catch_24 (((property.*).key.?.data.e_string.string(p.allocator)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 null; }); });
+                    }
+                    (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = p.visitExprInOut((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?, ExprIn{ .assign_target = expr_in.assign_target });
+                    p.decorator_class_name = null;
+                }
+                if (((property.*).initializer != null)) {
+                    const was_anonymous_named_expr = (property.*).initializer.?.isAnonymousNamed();
+                    if (((was_anonymous_named_expr and ((property.*).initializer.?.data == .e_class)) and (property.*).initializer.?.data.e_class.should_lower_standard_decorators)) {
+                        if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |val| {
+                            _ = &val;
+                            if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(val.data)) else @as(Expr.Tag, val.data)) == .e_identifier)) {
+                                p.decorator_class_name = p.loadNameFromRef(val.data.e_identifier.ref);
+                            }
+                        }
+                    }
+                    (property.*).initializer = p.visitExpr((property.*).initializer.?);
+                    p.decorator_class_name = null;
+                    if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |val| {
+                        _ = &val;
+                        if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(val.data)) else @as(Expr.Tag, val.data)) == .e_identifier)) {
+                            (property.*).initializer = p.maybeKeepExprSymbolName((((property.*).initializer) orelse (unreachable)), p.symbols.items[@as(usize, @intCast(val.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+                        }
+                    }
+                }
+            }
+            return expr;
+    }
+
+pub fn e_import(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_import;
+            const prev_should_fold_typescript_constant_expressions = true;
+            defer {
+            p.should_fold_typescript_constant_expressions = prev_should_fold_typescript_constant_expressions;
+            }
+            p.should_fold_typescript_constant_expressions = true;
+            e_.expr = p.visitExpr(e_.expr);
+            e_.options = p.visitExpr(e_.options);
+            if (p.exprCanBeRemovedIfUnused((&e_.options))) {
+                var is_await_target = false;
+                _ = &is_await_target;
+                if (p.await_target) |await_target| {
+                    _ = &await_target;
+                    is_await_target = ((await_target == .e_import) and (await_target.e_import == e_));
+                }
+                const state = TransposeState{ .is_await_target = is_await_target, .is_then_catch_target = ((p.then_catch_chain.has_catch and (p.then_catch_chain.next_target == .e_import)) and (expr.data.e_import == p.then_catch_chain.next_target.e_import)), .import_options = e_.options, .loc = e_.expr.loc, .import_loader = e_.importRecordLoader() };
+                return p.import_transposer.maybeTransposeIf(e_.expr, (&state));
+            }
+            return expr;
+    }
+
+pub fn e_call(p: *P, expr: Expr, expr_in: ExprIn) Expr {
+            const e_ = expr.data.e_call;
+            p.call_target = e_.target.data;
+            p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_multiple_args = (e_.args.len >= 2), .has_catch = ((((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.then_catch_chain.next_target)) else @as(Expr.Tag, p.then_catch_chain.next_target)) == .e_call) and (p.then_catch_chain.next_target.e_call == expr.data.e_call)) and p.then_catch_chain.has_catch) };
+            const target_was_identifier_before_visit = (e_.target.data == .e_identifier);
+            e_.target = p.visitExprInOut(e_.target, .{ .has_chain_parent = (e_.optional_chain == .continuation), .property_access_for_method_call_maybe_should_replace_with_undefined = true });
+            switch (e_.target.data) {
+.e_identifier => |ident| {
+if ((ident.call_can_be_unwrapped_if_unused and (e_.can_be_unwrapped_if_unused == .never))) {
+                e_.can_be_unwrapped_if_unused = .if_unused;
+            }
+            if ((((e_.optional_chain == null) and target_was_identifier_before_visit) and strings.eqlComptime(p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.inner_index))].original_name, "eval"))) {
+                e_.is_direct_eval = true;
+                if ((p.options.bundle and (!p.is_file_considered_to_have_esm_exports))) {
+                    _ = p.recordUsage(p.module_ref);
+                    _ = p.recordUsage(p.exports_ref);
+                }
+                var scope_iter: ?*js_ast.Scope = p.current_scope;
+                _ = &scope_iter;
+                while (scope_iter) |scope| : (scope_iter = scope.parent) {
+                    scope.contains_direct_eval = true;
+                }
+            }
+},
+.e_dot => |dot| {
+if (((dot.call_can_be_unwrapped_if_unused != .never) and (e_.can_be_unwrapped_if_unused == .never))) {
+                e_.can_be_unwrapped_if_unused = dot.call_can_be_unwrapped_if_unused;
+            }
+},
+else => {
+
+},
+}
+            const is_macro_ref: bool = (if (comptime allow_macros) brk: {
+            const possible_macro_ref = (switch (e_.target.data) {
+.e_import_identifier => |ident| ident.ref,
+.e_dot => |dot| (if ((dot.target.data == .e_identifier)) dot.target.data.e_identifier.ref else null),
+else => null,
+});
+            break :brk ((possible_macro_ref != null) and p.@"macro".refs.contains(possible_macro_ref.?));
+} else false);
+            {
+                const old_ce = p.options.ignore_dce_annotations;
+                defer {
+                p.options.ignore_dce_annotations = old_ce;
+                }
+                const old_should_fold_typescript_constant_expressions = p.should_fold_typescript_constant_expressions;
+                defer {
+                p.should_fold_typescript_constant_expressions = old_should_fold_typescript_constant_expressions;
+                }
+                const old_is_control_flow_dead = p.is_control_flow_dead;
+                if (((is_macro_ref or (e_.target.data == .e_require_call_target)) or (e_.target.data == .e_require_resolve_call_target))) {
+                    p.options.ignore_dce_annotations = true;
+                    p.should_fold_typescript_constant_expressions = true;
+                }
+                var method_call_should_be_replaced_with_undefined = p.method_call_must_be_replaced_with_undefined;
+                _ = &method_call_should_be_replaced_with_undefined;
+                if (method_call_should_be_replaced_with_undefined) {
+                    p.method_call_must_be_replaced_with_undefined = false;
+                    switch (e_.target.data) {
+.e_index, .e_dot, .e_identifier => {
+p.is_control_flow_dead = true;
+},
+.e_undefined => {
+p.is_control_flow_dead = true;
+},
+else => {
+method_call_should_be_replaced_with_undefined = false;
+},
+}
+                }
+                for (cp_mut_slice(&e_.args.slice())) |*arg| {
+                    _ = &arg;
+                    (arg.*).* = p.visitExpr((arg.*).*);
+                }
+                if (method_call_should_be_replaced_with_undefined) {
+                    p.is_control_flow_dead = old_is_control_flow_dead;
+                    return .{ .data = .{ .e_undefined = .{} }, .loc = expr.loc };
+                }
+            }
+            if (p.bundler_feature_flag_ref.isValid()) {
+                if (maybeReplaceBundlerFeatureCall(p, e_, expr.loc)) |result| {
+                    _ = &result;
+                    return result;
+                }
+            }
+            if ((e_.target.data == .e_require_call_target)) {
+                e_.can_be_unwrapped_if_unused = .never;
+                if ((e_.args.len == 1)) {
+                    const first = e_.args.slice()[0];
+                    const state = TransposeState{ .is_require_immediately_assigned_to_decl = (expr_in.is_immediately_assigned_to_decl and (first.data == .e_string)) };
+                    switch (first.data) {
+.e_string => {
+return p.transposeRequire(first, (&state));
+},
+.e_if => {
+return p.require_transposer.transposeKnownToBeIf(first, (&state));
+},
+else => {
+
+},
+}
+                }
+                if (p.is_control_flow_dead) {
+                    return p.newExpr(E.Null, expr.loc);
+                }
+                if (p.options.warn_about_unbundled_modules) {
+                    const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
+                    _ = ((p.log.addRangeDebug(p.source, r, "This call to \"require\" will not be bundled because it has multiple arguments")) catch unreachable);
+                }
+                if ((e_.args.len >= 1)) {
+                    _ = bun.handleOom(p.checkDynamicSpecifier(e_.args.slice()[0], e_.target.loc, "require()"));
+                }
+                if (p.options.features.allow_runtime) {
+                    _ = p.recordUsageOfRuntimeRequire();
+                }
+                return expr;
+            } else {
+                if ((e_.target.data == .e_require_resolve_call_target)) {
+                    if (p.is_control_flow_dead) {
+                        return p.newExpr(E.Null, expr.loc);
+                    }
+                    if ((e_.args.len == 1)) {
+                        const first = e_.args.slice()[0];
+                        switch (first.data) {
+.e_string => {
+return p.transposeRequireResolveKnownString(first);
+},
+.e_if => {
+return p.require_resolve_transposer.transposeKnownToBeIf(first, e_.target);
+},
+else => {
+
+},
+}
+                    }
+                    if ((e_.args.len >= 1)) {
+                        _ = bun.handleOom(p.checkDynamicSpecifier(e_.args.slice()[0], e_.target.loc, "require.resolve()"));
+                    }
+                    return expr;
+                } else {
+                    if (e_.target.data.@"as"(.e_special)) |special| {
+                        _ = &special;
+                        switch (special) {
+.hot_accept => {
+_ = p.handleImportMetaHotAcceptCall(e_);
+                        if ((!p.options.features.hot_module_reloading)) {
+                            return .{ .data = .e_undefined, .loc = expr.loc };
+                        }
+},
+else => {
+
+},
+}
+                    }
+                }
+            }
+            if (comptime allow_macros) {
+                if ((is_macro_ref and (!p.options.features.is_macro_runtime))) {
+                    const sym_ref = (switch (e_.target.data) {
+.e_import_identifier => |ident| ident.ref,
+.e_dot => |dot| dot.target.data.e_identifier.ref,
+else => unreachable,
+});
+                    const macro_ref_data = (p.@"macro".refs.get(sym_ref)).?;
+                    _ = p.ignoreUsage(sym_ref);
+                    if (p.is_control_flow_dead) {
+                        return p.newExpr(E.Undefined, e_.target.loc);
+                    }
+                    if (p.options.features.no_macros) {
+                        _ = ((p.log.addError(p.source, expr.loc, "Macros are disabled")) catch unreachable);
+                        return p.newExpr(E.Undefined, expr.loc);
+                    }
+                    if (p.source.path.isNodeModule()) {
+                        _ = ((p.log.addError(p.source, expr.loc, "For security reasons, macros cannot be run from node_modules.")) catch unreachable);
+                        return p.newExpr(E.Undefined, expr.loc);
+                    }
+                    const name = (((if (@typeInfo(@TypeOf(macro_ref_data)) == .@"enum" or @typeInfo(@TypeOf(macro_ref_data)) == .@"union") @tagName(macro_ref_data) else macro_ref_data.name)) orelse ((if (@typeInfo(@TypeOf(e_.target.data.e_dot)) == .@"enum" or @typeInfo(@TypeOf(e_.target.data.e_dot)) == .@"union") @tagName(e_.target.data.e_dot) else e_.target.data.e_dot.name)));
+                    const record = (&p.import_records.items[@as(usize, @intCast(macro_ref_data.import_record_id))]);
+                    const copied = Expr{ .loc = expr.loc, .data = .{ .e_call = e_ } };
+                    const start_error_count = p.log.msgs.items.len;
+                    p.macro_call_count = (p.macro_call_count + 1);
+                    const macro_result = (blk_catch_28: { break :blk_catch_28 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, copied, name)) catch |e| { _ = &e; if ((e == error.MacroFailed)) {
+                        if ((p.log.msgs.items.len == start_error_count)) {
+                            _ = ((p.log.addError(p.source, expr.loc, "macro threw exception")) catch unreachable);
+                        }
+                    } else {
+                        _ = ((p.log.addErrorFmt(p.source, expr.loc, p.allocator, "\"{s}\" error in macro", .{ @errorName(e) })) catch unreachable);
+                    }
+                    return expr; }); });
+                    if ((macro_result.data != .e_call)) {
+                        return p.visitExpr(macro_result);
+                    }
+                }
+            }
+            if ((p.options.features.react_fast_refresh or p.options.features.server_components.isServerSide())) {
+                _ = try_record_hook: {
+                const original_name = (switch (e_.target.data) {
+inline .e_identifier, .e_import_identifier, .e_commonjs_export_identifier => |id| p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))].original_name,
+.e_dot => |dot| (if (@typeInfo(@TypeOf(dot)) == .@"enum" or @typeInfo(@TypeOf(dot)) == .@"union") @tagName(dot) else dot.name),
+else => break :try_record_hook,
+});
+                if ((!ReactRefresh.isHookName(original_name))) {
+                    break :try_record_hook;
+                }
+                if (p.options.features.react_fast_refresh) {
+                    _ = p.handleReactRefreshHookCall(e_, original_name);
+                } else {
+                    if (check_for_usestate: {
+                    if ((e_.target.data == .e_import_identifier)) {
+                        break :check_for_usestate true;
+                    }
+                    if (((e_.target.data == .e_dot) and (e_.target.data.e_dot.target.data == .e_import_identifier))) {
+                        const id = e_.target.data.e_dot.target.data.e_import_identifier;
+                        const name = p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))].original_name;
+                        break :check_for_usestate bun.strings.eqlComptime(name, "React");
+                    }
+                    break :check_for_usestate false;
+}) {
+                        _ = bun.assert(p.options.features.server_components.isServerSide());
+                        if (((!bun.strings.startsWith(p.source.path.pretty, "node_modules")) and bun.strings.eqlComptime(original_name, "useState"))) {
+                            _ = (blk_catch_32: { break :blk_catch_32 ((p.log.addError(p.source, expr.loc, (blk_catch_31: { break :blk_catch_31 ((std.fmt.allocPrint(p.allocator, "\"useState\" is not available in a server component. If you need interactivity, consider converting part of this to a Client Component (by adding `\"use client\";` to the top of the file).", .{})) catch |e| { _ = &e; break :blk_catch_31 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_32 bun.handleOom(e); }); });
+                        }
+                    }
+                }
+};
+            }
+            if ((e_.args.len == 1)) {
+                if (e_.target.data.@"as"(.e_dot)) |dot| {
+                    _ = &dot;
+                    if ((((dot.target.data == .e_string) and dot.target.data.e_string.isUTF8()) and bun.strings.eqlComptime((if (@typeInfo(@TypeOf(dot)) == .@"enum" or @typeInfo(@TypeOf(dot)) == .@"union") @tagName(dot) else dot.name), "charCodeAt"))) {
+                        const str = dot.target.data.e_string.data;
+                        const arg1 = e_.args.at(0).unwrapInlined();
+                        if ((arg1.data == .e_number)) {
+                            const float = (if (@typeInfo(@TypeOf(arg1.data.e_number)) == .@"enum") @intFromEnum(arg1.data.e_number) else arg1.data.e_number.value);
+                            if ((((@mod(float, 1) == 0) and (float < @as(f64, @floatFromInt(str.len)))) and (float >= 0))) {
+                                const idx: usize = @intFromFloat(float);
+                                const char = str[@as(usize, @intCast(idx))];
+                                if ((char < 128)) {
+                                    return p.newExpr(E.Number{ .value = @floatFromInt(char) }, expr.loc);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return expr;
+    }
+
+pub fn e_new(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_new;
+            e_.target = p.visitExpr(e_.target);
+            for (cp_mut_slice(&e_.args.slice())) |*arg| {
+                _ = &arg;
+                (arg.*).* = p.visitExpr((arg.*).*);
+            }
+            if (p.options.features.minify_syntax) {
+                if (KnownGlobal.minifyGlobalConstructor(p.allocator, e_, p.symbols.items, expr.loc, p.options.features.minify_whitespace)) |minified| {
+                    _ = &minified;
+                    return minified;
+                }
+            }
+            return expr;
+    }
+
+pub fn e_arrow(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_arrow;
+            if (p.is_revisit_for_substitution) {
+                return expr;
+            }
+            const old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_visit);
+            p.fn_or_arrow_data_visit = FnOrArrowDataVisit{ .is_arrow = true, .is_async = e_.is_async };
+            const old_inside_async_arrow_fn = p.fn_only_data_visit.is_inside_async_arrow_fn;
+            p.fn_only_data_visit.is_inside_async_arrow_fn = (e_.is_async or p.fn_only_data_visit.is_inside_async_arrow_fn);
+            _ = ((p.pushScopeForVisitPass(.function_args, expr.loc)) catch unreachable);
+            const dupe = ((p.allocator.dupe(Stmt, e_.body.stmts)) catch unreachable);
+            _ = p.visitArgs(e_.args, VisitArgsOpts{ .has_rest_arg = e_.has_rest_arg, .body = dupe, .is_unique_formal_parameters = true });
+            _ = ((p.pushScopeForVisitPass(.function_body, e_.body.loc)) catch unreachable);
+            var react_hook_data: ?ReactRefresh.HookContext = null;
+            _ = &react_hook_data;
+            const prev = p.react_refresh.hook_ctx_storage;
+            defer {
+            p.react_refresh.hook_ctx_storage = prev;
+            }
+            p.react_refresh.hook_ctx_storage = (&react_hook_data);
+            var stmts_list = ListManaged(Stmt).fromOwnedSlice(p.allocator, dupe);
+            _ = &stmts_list;
+            var temp_opts = PrependTempRefsOpts{ .kind = .fn_body };
+            _ = &temp_opts;
+            _ = ((p.visitStmtsAndPrependTempRefs((&stmts_list), (&temp_opts))) catch unreachable);
+            _ = p.allocator.free(e_.body.stmts);
+            e_.body.stmts = stmts_list.items;
+            _ = p.popScope();
+            _ = p.popScope();
+            p.fn_only_data_visit.is_inside_async_arrow_fn = old_inside_async_arrow_fn;
+            p.fn_or_arrow_data_visit = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_visit), (&old_fn_or_arrow_data));
+            if (react_hook_data) |*hook| {
+                _ = &hook;
+                _ = try_mark_hook: {
+                if ((p.nearest_stmt_list == null)) {
+                    break :try_mark_hook;
+                }
+                const stmts = p.nearest_stmt_list.?;
+                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb)));
+                _ = p.handleReactRefreshPostVisitFunctionBody((&stmts_list), (hook.*));
+                e_.body.stmts = stmts_list.items;
+                return p.getReactRefreshHookSignalInit((hook.*), expr);
+};
+            }
+            return expr;
+    }
+
+pub fn e_function(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_function;
+            if (p.is_revisit_for_substitution) {
+                return expr;
+            }
+            var react_hook_data: ?ReactRefresh.HookContext = null;
+            _ = &react_hook_data;
+            const prev = p.react_refresh.hook_ctx_storage;
+            defer {
+            p.react_refresh.hook_ctx_storage = prev;
+            }
+            p.react_refresh.hook_ctx_storage = (&react_hook_data);
+            e_.func = p.visitFunc(e_.func, expr.loc);
+            if (((((((p.options.features.minify_syntax and p.options.bundle) and (!p.options.features.minify_keep_names)) and (!p.current_scope.contains_direct_eval)) and ((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name) != null)) and ((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name).?.ref != null)) and (p.symbols.items[@as(usize, @intCast((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name).?.ref.?.innerIndex()))].use_count_estimate == 0))) {
+                (if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name) = null;
+            }
+            var final_expr = expr;
+            _ = &final_expr;
+            if (react_hook_data) |*hook| {
+                _ = &hook;
+                _ = try_mark_hook: {
+                if ((p.nearest_stmt_list == null)) {
+                    break :try_mark_hook;
+                }
+                const stmts = p.nearest_stmt_list.?;
+                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb)));
+                final_expr = p.getReactRefreshHookSignalInit((hook.*), expr);
+                break :try_mark_hook;
+};
+            }
+            if ((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name)) |name| {
+                _ = &name;
+                final_expr = p.keepExprSymbolName(final_expr, p.symbols.items[@as(usize, @intCast(name.ref.?.innerIndex()))].original_name);
+            }
+            return final_expr;
+    }
+
+pub fn e_class(p: *P, expr: Expr, unused_in: ExprIn) Expr {
+        _ = unused_in;
+            const e_ = expr.data.e_class;
+            if (p.is_revisit_for_substitution) {
+                return expr;
+            }
+            const decorator_name_from_context = p.decorator_class_name;
+            p.decorator_class_name = null;
+            _ = p.visitClass(expr.loc, e_, Ref.None);
+            if (e_.should_lower_standard_decorators) {
+                return p.lowerStandardDecoratorsExpr(e_, expr.loc, decorator_name_from_context);
+            }
+            if (((((((p.options.features.minify_syntax and p.options.bundle) and (!p.options.features.minify_keep_names)) and (!p.current_scope.contains_direct_eval)) and (e_.class_name != null)) and (e_.class_name.?.ref != null)) and (p.symbols.items[@as(usize, @intCast(e_.class_name.?.ref.?.innerIndex()))].use_count_estimate == 0))) {
+                e_.class_name = null;
+            }
+            return expr;
+    }
+
+pub fn maybeReplaceBundlerFeatureCall(p: *P, e_: *E.Call, loc: logger.Loc) ?Expr {
+            const target_ref: ?Ref = (switch (e_.target.data) {
+.e_identifier => |ident| ident.ref,
+.e_import_identifier => |ident| ident.ref,
+else => null,
+});
+            if (((target_ref == null) or (!target_ref.?.eql(p.bundler_feature_flag_ref)))) {
+                return null;
+            }
+            if (p.is_control_flow_dead) {
+                return p.newExpr(E.Boolean{ .value = false }, loc);
+            }
+            if ((e_.args.len != 1)) {
+                _ = ((p.log.addError(p.source, loc, "feature() requires exactly one string argument")) catch unreachable);
+                return p.newExpr(E.Boolean{ .value = false }, loc);
+            }
+            const arg = e_.args.slice()[0];
+            if ((arg.data != .e_string)) {
+                _ = ((p.log.addError(p.source, arg.loc, "feature() argument must be a string literal")) catch unreachable);
+                return p.newExpr(E.Boolean{ .value = false }, loc);
+            }
+            const flag_string = arg.data.e_string;
+            if (flag_string.is_utf16) {
+                _ = ((p.log.addError(p.source, arg.loc, "feature() flag name must be an ASCII string")) catch unreachable);
+                return p.newExpr(E.Boolean{ .value = false }, loc);
+            }
+            if ((!p.in_branch_condition)) {
+                _ = ((p.log.addError(p.source, loc, "feature() from \"bun:bundle\" can only be used directly in an if statement or ternary condition")) catch unreachable);
+                return p.newExpr(E.Boolean{ .value = false }, loc);
+            }
+            const is_enabled = p.options.features.bundler_feature_flags.map.contains(flag_string.data);
+            return .{ .data = .{ .e_branch_boolean = .{ .value = is_enabled } }, .loc = loc };
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+    const allow_macros = P.allow_macros;
+    const BinaryExpressionVisitor = P.BinaryExpressionVisitor;
+    const jsx_transform_type = P.jsx_transform_type;
+    const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
+};
+}

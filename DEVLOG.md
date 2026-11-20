@@ -1215,3 +1215,6 @@
 
 ### 2026-11-20 03:24:04 UTC - src/js_parser/ 顶层模块迁移经验
 - 发现 `const x: T = @intFromFloat/@bitCast(...)` 被静默丢弃并写入 `CP_PITFALLS.md`；`src/js_parser/` 顶层仅余 `lexer.zig`。
+
+### 2026-11-20 03:29:13 UTC - js_parser/ast 遍历器与装饰器降级经验
+- 将 `visitStmt`/`visitExpr` 内嵌 `visitors = struct` 提升为顶层工厂，统一 `static fn` 并修复 `?? break/return` 与标签块赋值，膨胀率 1.010x~1.023x。

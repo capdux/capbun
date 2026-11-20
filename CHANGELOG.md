@@ -1485,3 +1485,6 @@
 
 ### 2026-11-20 03:24:04 UTC - src/js_parser/ 4 顶层核心模块迁移入库
 - 完成：`runtime.cp` (1.015x), `js_parser.cp` (1.007x), `lexer_tables.cp` (1.000x), `parser.cp` (1.039x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:29:13 UTC - src/js_parser/ast/ 4 核心遍历与降级模块迁移入库
+- 完成：`lowerDecorators.cp` (1.023x), `visitStmt.cp` (1.012x), `Parser.cp` (1.011x), `visitExpr.cp` (1.010x)，4 项硬门禁全 PASS。

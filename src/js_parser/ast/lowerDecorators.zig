@@ -1,1479 +1,146 @@
-/// Lowering for TC39 standard ES decorators.
-/// Extracted from P.zig to reduce duplication via shared helpers.
-pub fn LowerDecorators(
-    comptime parser_feature__typescript: bool,
-    comptime parser_feature__jsx: JSXTransformType,
-    comptime parser_feature__scan_only: bool,
-) type {
-    return struct {
-        const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-
-        // ── Types ────────────────────────────────────────────
-
-        const PrivateLoweredInfo = struct {
-            storage_ref: Ref,
-            method_fn_ref: ?Ref = null,
-            getter_fn_ref: ?Ref = null,
-            setter_fn_ref: ?Ref = null,
-            accessor_desc_ref: ?Ref = null,
-        };
-
-        const PrivateLoweredMap = std.AutoHashMapUnmanaged(u32, PrivateLoweredInfo);
-
-        const StdDecMode = union(enum) {
-            stmt,
-            expr: struct {
-                class: *G.Class,
-                loc: logger.Loc,
-                name_from_context: ?[]const u8 = null,
-            },
-        };
-
-        const FieldInitEntry = struct {
-            prop: Property,
-            is_private: bool,
-            is_accessor: bool,
-        };
-
-        const StaticElement = struct {
-            kind: enum { block, field_or_accessor },
-            index: usize,
-        };
-
-        // ── Expression builder helpers ───────────────────────
-
-        /// recordUsage + E.Identifier in one call.
-        inline fn useRef(p: *P, ref: Ref, l: logger.Loc) Expr {
-            p.recordUsage(ref);
-            return p.newExpr(E.Identifier{ .ref = ref }, l);
-        }
-
-        /// Allocate args + callRuntime in one call.
-        fn callRt(p: *P, l: logger.Loc, comptime name: []const u8, args: []const Expr) Expr {
-            const a = bun.handleOom(p.allocator.alloc(Expr, args.len));
-            @memcpy(a, args);
-            return p.callRuntime(l, name, a);
-        }
-
-        /// newSymbol + scope.generated.append in one call.
-        fn newSym(p: *P, kind: Symbol.Kind, name: []const u8) Ref {
-            const ref = p.newSymbol(kind, name) catch unreachable;
-            bun.handleOom(p.current_scope.generated.append(p.allocator, ref));
-            return ref;
-        }
-
-        /// Single var declaration statement.
-        fn varDecl(p: *P, ref: Ref, value: ?Expr, l: logger.Loc) Stmt {
-            const decls = bun.handleOom(p.allocator.alloc(G.Decl, 1));
-            decls[0] = .{ .binding = p.b(B.Identifier{ .ref = ref }, l), .value = value };
-            return p.s(S.Local{ .decls = Decl.List.fromOwnedSlice(decls) }, l);
-        }
-
-        /// Two-variable declaration statement.
-        fn varDecl2(p: *P, r1: Ref, v1: ?Expr, r2: Ref, v2: ?Expr, l: logger.Loc) Stmt {
-            const decls = bun.handleOom(p.allocator.alloc(G.Decl, 2));
-            decls[0] = .{ .binding = p.b(B.Identifier{ .ref = r1 }, l), .value = v1 };
-            decls[1] = .{ .binding = p.b(B.Identifier{ .ref = r2 }, l), .value = v2 };
-            return p.s(S.Local{ .decls = Decl.List.fromOwnedSlice(decls) }, l);
-        }
-
-        /// recordUsage + Expr.assign.
-        fn assignTo(p: *P, ref: Ref, value: Expr, l: logger.Loc) Expr {
-            p.recordUsage(ref);
-            return Expr.assign(p.newExpr(E.Identifier{ .ref = ref }, l), value);
-        }
-
-        /// new WeakMap() expression.
-        fn newWeakMapExpr(p: *P, l: logger.Loc) Expr {
-            return p.newExpr(E.New{
-                .target = p.newExpr(E.Identifier{ .ref = (p.findSymbol(l, "WeakMap") catch unreachable).ref }, l),
-                .args = ExprNodeList.empty,
-                .close_parens_loc = l,
-            }, l);
-        }
-
-        /// new WeakSet() expression.
-        fn newWeakSetExpr(p: *P, l: logger.Loc) Expr {
-            return p.newExpr(E.New{
-                .target = p.newExpr(E.Identifier{ .ref = (p.findSymbol(l, "WeakSet") catch unreachable).ref }, l),
-                .args = ExprNodeList.empty,
-                .close_parens_loc = l,
-            }, l);
-        }
-
-        /// Create a static block property from a single expression.
-        fn makeStaticBlock(p: *P, expr: Expr, l: logger.Loc) Property {
-            const stmts = bun.handleOom(p.allocator.alloc(Stmt, 1));
-            stmts[0] = p.s(S.SExpr{ .value = expr }, l);
-            const sb = bun.handleOom(p.allocator.create(G.ClassStaticBlock));
-            sb.* = .{ .loc = l, .stmts = bun.BabyList(Stmt).fromOwnedSlice(stmts) };
-            return .{ .kind = .class_static_block, .class_static_block = sb };
-        }
-
-        /// Build property access: target.name or target[key].
-        fn memberTarget(p: *P, target_expr: Expr, prop: Property) Expr {
-            const key_expr = prop.key.?;
-            if (prop.flags.contains(.is_computed) or key_expr.data == .e_number) {
-                return p.newExpr(E.Index{ .target = target_expr, .index = key_expr }, key_expr.loc);
-            } else if (key_expr.data == .e_string) {
-                return p.newExpr(E.Dot{
-                    .target = target_expr,
-                    .name = key_expr.data.e_string.data,
-                    .name_loc = key_expr.loc,
-                }, key_expr.loc);
-            } else {
-                return p.newExpr(E.Index{ .target = target_expr, .index = key_expr }, key_expr.loc);
-            }
-        }
-
-        fn initFlag(idx: usize) f64 {
-            return @floatFromInt((4 + 2 * idx) << 1);
-        }
-
-        fn extraInitFlag(idx: usize) f64 {
-            return @floatFromInt(((5 + 2 * idx) << 1) | 1);
-        }
-
-        /// Emit __privateAdd for a given storage ref. Appends to constructor or static blocks.
-        fn emitPrivateAdd(
-            p: *P,
-            is_static: bool,
-            storage_ref: Ref,
-            value: ?Expr,
-            loc: logger.Loc,
-            constructor_inject: *ListManaged(Stmt),
-            static_blocks: *ListManaged(Property),
-        ) void {
-            const target = p.newExpr(E.This{}, loc);
-            if (value) |v| {
-                const call = callRt(p, loc, "__privateAdd", &[_]Expr{ target, useRef(p, storage_ref, loc), v });
-                if (is_static) {
-                    static_blocks.append(makeStaticBlock(p, call, loc)) catch unreachable;
-                } else {
-                    constructor_inject.append(p.s(S.SExpr{ .value = call }, loc)) catch unreachable;
-                }
-            } else {
-                const call = callRt(p, loc, "__privateAdd", &[_]Expr{ target, useRef(p, storage_ref, loc) });
-                if (is_static) {
-                    static_blocks.append(makeStaticBlock(p, call, loc)) catch unreachable;
-                } else {
-                    constructor_inject.append(p.s(S.SExpr{ .value = call }, loc)) catch unreachable;
-                }
-            }
-        }
-
-        /// Get the method kind code (1=method, 2=getter, 3=setter).
-        fn methodKind(prop: *const Property) u8 {
-            return switch (prop.kind) {
-                .get => 2,
-                .set => 3,
-                else => 1,
-            };
-        }
-
-        /// Get fn variable suffix for a given kind code.
-        fn fnSuffix(k: u8) []const u8 {
-            return if (k == 2) "_get" else if (k == 3) "_set" else "_fn";
-        }
-
-        // ── Generic tree rewriter ────────────────────────────
-
-        const RewriteKind = union(enum) {
-            replace_ref: struct { old: Ref, new: Ref },
-            replace_this: struct { ref: Ref, loc: logger.Loc },
-        };
-
-        fn rewriteExpr(p: *P, expr: *Expr, kind: RewriteKind) void {
-            switch (kind) {
-                .replace_ref => |r| {
-                    if (expr.data == .e_identifier and expr.data.e_identifier.ref.eql(r.old)) {
-                        p.recordUsage(r.new);
-                        expr.data = .{ .e_identifier = .{ .ref = r.new } };
-                        return;
-                    }
-                },
-                .replace_this => |r| {
-                    if (expr.data == .e_this) {
-                        expr.* = useRef(p, r.ref, r.loc);
-                        return;
-                    }
-                },
-            }
-            switch (expr.data) {
-                .e_binary => |e| {
-                    rewriteExpr(p, &e.left, kind);
-                    rewriteExpr(p, &e.right, kind);
-                },
-                .e_call => |e| {
-                    rewriteExpr(p, &e.target, kind);
-                    for (e.args.slice()) |*a| rewriteExpr(p, a, kind);
-                },
-                .e_new => |e| {
-                    rewriteExpr(p, &e.target, kind);
-                    for (e.args.slice()) |*a| rewriteExpr(p, a, kind);
-                },
-                .e_index => |e| {
-                    rewriteExpr(p, &e.target, kind);
-                    rewriteExpr(p, &e.index, kind);
-                },
-                .e_dot => |e| rewriteExpr(p, &e.target, kind),
-                .e_spread => |e| rewriteExpr(p, &e.value, kind),
-                .e_unary => |e| rewriteExpr(p, &e.value, kind),
-                .e_if => |e| {
-                    rewriteExpr(p, &e.test_, kind);
-                    rewriteExpr(p, &e.yes, kind);
-                    rewriteExpr(p, &e.no, kind);
-                },
-                .e_array => |e| {
-                    for (e.items.slice()) |*item| rewriteExpr(p, item, kind);
-                },
-                .e_object => |e| {
-                    for (e.properties.slice()) |*prop| {
-                        if (prop.value) |*v| rewriteExpr(p, v, kind);
-                        if (prop.initializer) |*ini| rewriteExpr(p, ini, kind);
-                    }
-                },
-                .e_template => |e| {
-                    if (e.tag) |*t| rewriteExpr(p, t, kind);
-                    for (e.parts) |*part| rewriteExpr(p, &part.value, kind);
-                },
-                .e_arrow => |e| rewriteStmts(p, e.body.stmts, kind),
-                .e_function => |e| {
-                    switch (kind) {
-                        .replace_this => {},
-                        .replace_ref => {
-                            if (e.func.body.stmts.len > 0)
-                                rewriteStmts(p, e.func.body.stmts, kind);
-                        },
-                    }
-                },
-                .e_class => {},
-                else => {},
-            }
-        }
-
-        fn rewriteStmts(p: *P, stmts: []Stmt, kind: RewriteKind) void {
-            for (stmts) |*cur_stmt| {
-                switch (cur_stmt.data) {
-                    .s_expr => |sexpr| {
-                        var val = sexpr.value;
-                        rewriteExpr(p, &val, kind);
-                        cur_stmt.* = p.s(S.SExpr{
-                            .value = val,
-                            .does_not_affect_tree_shaking = sexpr.does_not_affect_tree_shaking,
-                        }, cur_stmt.loc);
-                    },
-                    .s_local => |local| {
-                        for (local.decls.slice()) |*decl| {
-                            if (decl.value) |*v| rewriteExpr(p, v, kind);
-                        }
-                    },
-                    .s_return => |ret| {
-                        if (ret.value) |*v| rewriteExpr(p, v, kind);
-                    },
-                    .s_throw => |data| rewriteExpr(p, &data.value, kind),
-                    .s_if => |data| {
-                        rewriteExpr(p, &data.test_, kind);
-                        rewriteStmts(p, (&data.yes)[0..1], kind);
-                        if (data.no) |*no| rewriteStmts(p, no[0..1], kind);
-                    },
-                    .s_block => |data| rewriteStmts(p, data.stmts, kind),
-                    .s_for => |data| {
-                        if (data.init) |*fi| rewriteStmts(p, fi[0..1], kind);
-                        if (data.test_) |*t| rewriteExpr(p, t, kind);
-                        if (data.update) |*u| rewriteExpr(p, u, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    .s_for_in => |data| {
-                        rewriteExpr(p, &data.value, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    .s_for_of => |data| {
-                        rewriteExpr(p, &data.value, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    .s_while => |data| {
-                        rewriteExpr(p, &data.test_, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    .s_do_while => |data| {
-                        rewriteExpr(p, &data.test_, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    .s_switch => |data| {
-                        rewriteExpr(p, &data.test_, kind);
-                        for (data.cases) |*case| {
-                            if (case.value) |*v| rewriteExpr(p, v, kind);
-                            rewriteStmts(p, case.body, kind);
-                        }
-                    },
-                    .s_try => |data| {
-                        rewriteStmts(p, data.body, kind);
-                        if (data.catch_) |c| rewriteStmts(p, c.body, kind);
-                        if (data.finally) |f| rewriteStmts(p, f.stmts, kind);
-                    },
-                    .s_label => |data| rewriteStmts(p, (&data.stmt)[0..1], kind),
-                    .s_with => |data| {
-                        rewriteExpr(p, &data.value, kind);
-                        rewriteStmts(p, (&data.body)[0..1], kind);
-                    },
-                    else => {},
-                }
-            }
-        }
-
-        // ── Private access rewriting ─────────────────────────
-
-        fn privateGetExpr(p: *P, obj: Expr, info: PrivateLoweredInfo, l: logger.Loc) Expr {
-            if (info.accessor_desc_ref) |desc_ref| {
-                return callRt(p, l, "__privateGet", &[_]Expr{
-                    obj,
-                    useRef(p, info.storage_ref, l),
-                    p.newExpr(E.Dot{ .target = useRef(p, desc_ref, l), .name = "get", .name_loc = l }, l),
-                });
-            } else if (info.getter_fn_ref) |fn_ref| {
-                return callRt(p, l, "__privateGet", &[_]Expr{ obj, useRef(p, info.storage_ref, l), useRef(p, fn_ref, l) });
-            } else if (info.method_fn_ref) |fn_ref| {
-                return callRt(p, l, "__privateMethod", &[_]Expr{ obj, useRef(p, info.storage_ref, l), useRef(p, fn_ref, l) });
-            } else {
-                return callRt(p, l, "__privateGet", &[_]Expr{ obj, useRef(p, info.storage_ref, l) });
-            }
-        }
-
-        fn privateSetExpr(p: *P, obj: Expr, info: PrivateLoweredInfo, val: Expr, l: logger.Loc) Expr {
-            if (info.accessor_desc_ref) |desc_ref| {
-                return callRt(p, l, "__privateSet", &[_]Expr{
-                    obj,
-                    useRef(p, info.storage_ref, l),
-                    val,
-                    p.newExpr(E.Dot{ .target = useRef(p, desc_ref, l), .name = "set", .name_loc = l }, l),
-                });
-            } else if (info.setter_fn_ref) |fn_ref| {
-                return callRt(p, l, "__privateSet", &[_]Expr{ obj, useRef(p, info.storage_ref, l), val, useRef(p, fn_ref, l) });
-            } else {
-                return callRt(p, l, "__privateSet", &[_]Expr{ obj, useRef(p, info.storage_ref, l), val });
-            }
-        }
-
-        fn rewritePrivateAccessesInExpr(p: *P, expr: *Expr, map: *const PrivateLoweredMap) void {
-            switch (expr.data) {
-                .e_index => |e| {
-                    rewritePrivateAccessesInExpr(p, &e.target, map);
-                    if (e.index.data == .e_private_identifier) {
-                        if (map.get(e.index.data.e_private_identifier.ref.innerIndex())) |info| {
-                            expr.* = privateGetExpr(p, e.target, info, expr.loc);
-                            return;
-                        }
-                    }
-                    rewritePrivateAccessesInExpr(p, &e.index, map);
-                },
-                .e_binary => |e| {
-                    if (e.op == .bin_assign and e.left.data == .e_index) {
-                        if (e.left.data.e_index.index.data == .e_private_identifier) {
-                            if (map.get(e.left.data.e_index.index.data.e_private_identifier.ref.innerIndex())) |info| {
-                                rewritePrivateAccessesInExpr(p, &e.left.data.e_index.target, map);
-                                rewritePrivateAccessesInExpr(p, &e.right, map);
-                                expr.* = privateSetExpr(p, e.left.data.e_index.target, info, e.right, expr.loc);
-                                return;
-                            }
-                        }
-                    }
-                    if (e.op == .bin_in and e.left.data == .e_private_identifier) {
-                        if (map.get(e.left.data.e_private_identifier.ref.innerIndex())) |info| {
-                            rewritePrivateAccessesInExpr(p, &e.right, map);
-                            expr.* = callRt(p, expr.loc, "__privateIn", &[_]Expr{
-                                useRef(p, info.storage_ref, expr.loc),
-                                e.right,
-                            });
-                            return;
-                        }
-                    }
-                    rewritePrivateAccessesInExpr(p, &e.left, map);
-                    rewritePrivateAccessesInExpr(p, &e.right, map);
-                },
-                .e_call => |e| {
-                    if (e.target.data == .e_index) {
-                        if (e.target.data.e_index.index.data == .e_private_identifier) {
-                            if (map.get(e.target.data.e_index.index.data.e_private_identifier.ref.innerIndex())) |info| {
-                                rewritePrivateAccessesInExpr(p, &e.target.data.e_index.target, map);
-                                const obj_expr = e.target.data.e_index.target;
-                                const private_access = privateGetExpr(p, obj_expr, info, expr.loc);
-                                const call_target = p.newExpr(E.Dot{
-                                    .target = private_access,
-                                    .name = "call",
-                                    .name_loc = expr.loc,
-                                }, expr.loc);
-                                const orig_args = e.args.slice();
-                                const new_args = bun.handleOom(p.allocator.alloc(Expr, 1 + orig_args.len));
-                                new_args[0] = obj_expr;
-                                for (orig_args, 0..) |*arg, ai| {
-                                    rewritePrivateAccessesInExpr(p, arg, map);
-                                    new_args[1 + ai] = arg.*;
-                                }
-                                e.target = call_target;
-                                e.args = ExprNodeList.fromOwnedSlice(new_args);
-                                return;
-                            }
-                        }
-                    }
-                    rewritePrivateAccessesInExpr(p, &e.target, map);
-                    for (e.args.slice()) |*arg| rewritePrivateAccessesInExpr(p, arg, map);
-                },
-                .e_unary => |e| rewritePrivateAccessesInExpr(p, &e.value, map),
-                .e_dot => |e| rewritePrivateAccessesInExpr(p, &e.target, map),
-                .e_spread => |e| rewritePrivateAccessesInExpr(p, &e.value, map),
-                .e_if => |e| {
-                    rewritePrivateAccessesInExpr(p, &e.test_, map);
-                    rewritePrivateAccessesInExpr(p, &e.yes, map);
-                    rewritePrivateAccessesInExpr(p, &e.no, map);
-                },
-                .e_await => |e| rewritePrivateAccessesInExpr(p, &e.value, map),
-                .e_yield => |e| {
-                    if (e.value) |*v| rewritePrivateAccessesInExpr(p, v, map);
-                },
-                .e_new => |e| {
-                    rewritePrivateAccessesInExpr(p, &e.target, map);
-                    for (e.args.slice()) |*arg| rewritePrivateAccessesInExpr(p, arg, map);
-                },
-                .e_array => |e| {
-                    for (e.items.slice()) |*item| rewritePrivateAccessesInExpr(p, item, map);
-                },
-                .e_object => |e| {
-                    for (e.properties.slice()) |*prop| {
-                        if (prop.value) |*v| rewritePrivateAccessesInExpr(p, v, map);
-                        if (prop.initializer) |*ini| rewritePrivateAccessesInExpr(p, ini, map);
-                    }
-                },
-                .e_template => |e| {
-                    if (e.tag) |*t| rewritePrivateAccessesInExpr(p, t, map);
-                    for (e.parts) |*part| rewritePrivateAccessesInExpr(p, &part.value, map);
-                },
-                .e_function => |e| rewritePrivateAccessesInStmts(p, e.func.body.stmts, map),
-                .e_arrow => |e| rewritePrivateAccessesInStmts(p, e.body.stmts, map),
-                else => {},
-            }
-        }
-
-        fn rewritePrivateAccessesInStmts(p: *P, stmts: []Stmt, map: *const PrivateLoweredMap) void {
-            for (stmts) |*stmt_item| {
-                switch (stmt_item.data) {
-                    .s_expr => |data| rewritePrivateAccessesInExpr(p, &data.value, map),
-                    .s_return => |data| {
-                        if (data.value) |*v| rewritePrivateAccessesInExpr(p, v, map);
-                    },
-                    .s_throw => |data| rewritePrivateAccessesInExpr(p, &data.value, map),
-                    .s_local => |data| {
-                        for (data.decls.slice()) |*decl| {
-                            if (decl.value) |*v| rewritePrivateAccessesInExpr(p, v, map);
-                        }
-                    },
-                    .s_if => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.test_, map);
-                        rewritePrivateAccessesInStmts(p, (&data.yes)[0..1], map);
-                        if (data.no) |*no| rewritePrivateAccessesInStmts(p, no[0..1], map);
-                    },
-                    .s_block => |data| rewritePrivateAccessesInStmts(p, data.stmts, map),
-                    .s_for => |data| {
-                        if (data.init) |*fi| rewritePrivateAccessesInStmts(p, fi[0..1], map);
-                        if (data.test_) |*t| rewritePrivateAccessesInExpr(p, t, map);
-                        if (data.update) |*u| rewritePrivateAccessesInExpr(p, u, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    .s_for_in => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.value, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    .s_for_of => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.value, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    .s_while => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.test_, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    .s_do_while => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.test_, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    .s_switch => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.test_, map);
-                        for (data.cases) |*case| {
-                            if (case.value) |*v| rewritePrivateAccessesInExpr(p, v, map);
-                            rewritePrivateAccessesInStmts(p, case.body, map);
-                        }
-                    },
-                    .s_try => |data| {
-                        rewritePrivateAccessesInStmts(p, data.body, map);
-                        if (data.catch_) |c| rewritePrivateAccessesInStmts(p, c.body, map);
-                        if (data.finally) |f| rewritePrivateAccessesInStmts(p, f.stmts, map);
-                    },
-                    .s_label => |data| rewritePrivateAccessesInStmts(p, (&data.stmt)[0..1], map),
-                    .s_with => |data| {
-                        rewritePrivateAccessesInExpr(p, &data.value, map);
-                        rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
-                    },
-                    else => {},
-                }
-            }
-        }
-
-        // ── Public API ───────────────────────────────────────
-
-        pub fn lowerStandardDecoratorsStmt(p: *P, stmt: Stmt) []Stmt {
-            return lowerImpl(p, stmt, .stmt);
-        }
-
-        pub fn lowerStandardDecoratorsExpr(p: *P, class: *G.Class, l: logger.Loc, name_from_context: ?[]const u8) Expr {
-            const result = lowerImpl(p, Stmt.empty(), .{ .expr = .{
-                .class = class,
-                .loc = l,
-                .name_from_context = name_from_context,
-            } });
-            if (result.len == 0) return p.newExpr(E.Missing{}, l);
-            return result[0].data.s_expr.value;
-        }
-
-        // ── Core lowering ────────────────────────────────────
-
-        fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
-            const is_expr = mode == .expr;
-            var class = switch (mode) {
-                .stmt => &stmt.data.s_class.class,
-                .expr => |e| e.class,
-            };
-            const loc = switch (mode) {
-                .stmt => stmt.loc,
-                .expr => |e| e.loc,
-            };
-            const name_from_context: ?[]const u8 = switch (mode) {
-                .expr => |e| e.name_from_context,
-                .stmt => null,
-            };
-
-            // ── Phase 1: Setup ───────────────────────────────
-            var class_name_ref: Ref = undefined;
-            var class_name_loc: logger.Loc = undefined;
-            var expr_class_ref: ?Ref = null;
-            var expr_class_is_anonymous = false;
-            var expr_var_decls = ListManaged(G.Decl).init(p.allocator);
-
-            if (is_expr) {
-                expr_class_ref = newSym(p, .other, "_class");
-                expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = expr_class_ref.? }, loc) }) catch unreachable;
-                if (class.class_name) |cn| {
-                    class_name_ref = cn.ref.?;
-                    class_name_loc = cn.loc;
-                } else {
-                    class_name_ref = expr_class_ref.?;
-                    class_name_loc = loc;
-                    expr_class_is_anonymous = true;
-                    if (name_from_context) |name| {
-                        class.class_name = .{ .ref = newSym(p, .other, name), .loc = loc };
-                    }
-                }
-            } else {
-                class_name_ref = class.class_name.?.ref.?;
-                class_name_loc = class.class_name.?.loc;
-            }
-
-            var inner_class_ref: Ref = class_name_ref;
-            if (!is_expr) {
-                const cns = p.symbols.items[class_name_ref.innerIndex()].original_name;
-                inner_class_ref = newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}", .{cns}) catch unreachable);
-            }
-
-            const class_decorators = class.ts_decorators;
-            class.ts_decorators = .{};
-
-            const init_ref = newSym(p, .other, "_init");
-            if (is_expr) {
-                expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = init_ref }, loc) }) catch unreachable;
-            }
-
-            var base_ref: ?Ref = null;
-            if (class.extends != null) {
-                base_ref = newSym(p, .other, "_base");
-                if (is_expr) {
-                    expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = base_ref.? }, loc) }) catch unreachable;
-                }
-            }
-
-            // ── Phase 2: Pre-evaluate decorators/keys ────────
-            var dec_counter: usize = 0;
-            var class_dec_ref: ?Ref = null;
-            var class_dec_stmt: Stmt = Stmt.empty();
-            var class_dec_assign_expr: ?Expr = null;
-            if (class_decorators.len > 0) {
-                dec_counter += 1;
-                class_dec_ref = newSym(p, .other, "_dec");
-                const arr = p.newExpr(E.Array{ .items = class_decorators }, loc);
-                if (is_expr) {
-                    expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = class_dec_ref.? }, loc) }) catch unreachable;
-                    class_dec_assign_expr = assignTo(p, class_dec_ref.?, arr, loc);
-                } else {
-                    class_dec_stmt = varDecl(p, class_dec_ref.?, arr, loc);
-                }
-            }
-
-            var prop_dec_refs = std.AutoHashMapUnmanaged(usize, Ref){};
-            var computed_key_refs = std.AutoHashMapUnmanaged(usize, Ref){};
-            var pre_eval_stmts = ListManaged(Stmt).init(p.allocator);
-            var computed_key_counter: usize = 0;
-
-            for (class.properties, 0..) |*prop, prop_idx| {
-                if (prop.kind == .class_static_block) continue;
-                if (prop.ts_decorators.len > 0) {
-                    dec_counter += 1;
-                    const dec_name = if (dec_counter == 1)
-                        "_dec"
-                    else
-                        std.fmt.allocPrint(p.allocator, "_dec{d}", .{dec_counter}) catch unreachable;
-                    const dec_ref = newSym(p, .other, dec_name);
-                    prop_dec_refs.put(p.allocator, prop_idx, dec_ref) catch unreachable;
-                    if (is_expr) {
-                        expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = dec_ref }, loc) }) catch unreachable;
-                    }
-                    pre_eval_stmts.append(varDecl(p, dec_ref, p.newExpr(E.Array{ .items = prop.ts_decorators }, loc), loc)) catch unreachable;
-                }
-                if (prop.flags.contains(.is_computed) and prop.key != null and prop.ts_decorators.len > 0) {
-                    computed_key_counter += 1;
-                    const key_name = if (computed_key_counter == 1)
-                        "_computedKey"
-                    else
-                        std.fmt.allocPrint(p.allocator, "_computedKey{d}", .{computed_key_counter}) catch unreachable;
-                    const key_ref = newSym(p, .other, key_name);
-                    computed_key_refs.put(p.allocator, prop_idx, key_ref) catch unreachable;
-                    if (is_expr) {
-                        expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = key_ref }, loc) }) catch unreachable;
-                    }
-                    pre_eval_stmts.append(varDecl(p, key_ref, prop.key.?, loc)) catch unreachable;
-                    prop.key = useRef(p, key_ref, prop.key.?.loc);
-                }
-            }
-
-            // Replace class name refs in pre-eval expressions for inner binding
-            {
-                const replacement_ref = if (is_expr) (expr_class_ref orelse class_name_ref) else inner_class_ref;
-                if (!replacement_ref.eql(class_name_ref)) {
-                    const rk: RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new = replacement_ref } };
-                    for (pre_eval_stmts.items) |*pre_stmt| {
-                        if (pre_stmt.data == .s_local) {
-                            for (pre_stmt.data.s_local.decls.slice()) |*decl| {
-                                if (decl.value) |*v| rewriteExpr(p, v, rk);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // For named class expressions: swap to expr_class_ref for suffix ops
-            var original_class_name_for_decorator: ?[]const u8 = null;
-            if (is_expr and !expr_class_is_anonymous and expr_class_ref != null) {
-                original_class_name_for_decorator = p.symbols.items[class_name_ref.innerIndex()].original_name;
-                class_name_ref = expr_class_ref.?;
-                class_name_loc = loc;
-            }
-
-            // ── Phase 3: __decoratorStart + base decls ───────
-            const init_start_expr: Expr = brk: {
-                const base_expr = if (base_ref) |br|
-                    p.newExpr(E.Identifier{ .ref = br }, loc)
-                else
-                    p.newExpr(E.Undefined{}, loc);
-                break :brk callRt(p, loc, "__decoratorStart", &[_]Expr{base_expr});
-            };
-
-            var base_decl_stmt: Stmt = Stmt.empty();
-            if (!is_expr) {
-                if (base_ref) |br| base_decl_stmt = varDecl(p, br, class.extends, loc);
-            }
-
-            const base_assign_expr: ?Expr = if (is_expr and base_ref != null)
-                assignTo(p, base_ref.?, class.extends.?, loc)
-            else
-                null;
-
-            if (base_ref) |br| class.extends = useRef(p, br, loc);
-
-            const init_decl_stmt: Stmt = if (!is_expr)
-                varDecl(p, init_ref, init_start_expr, loc)
-            else
-                Stmt.empty();
-
-            // ── Phase 4: Property loop ───────────────────────
-            var suffix_exprs = ListManaged(Expr).init(p.allocator);
-            var constructor_inject_stmts = ListManaged(Stmt).init(p.allocator);
-            var new_properties = ListManaged(Property).init(p.allocator);
-            var static_non_field_elements = ListManaged(Expr).init(p.allocator);
-            var instance_non_field_elements = ListManaged(Expr).init(p.allocator);
-            var has_static_private_methods = false;
-            var has_instance_private_methods = false;
-            var static_field_decorate = ListManaged(Expr).init(p.allocator);
-            var instance_field_decorate = ListManaged(Expr).init(p.allocator);
-            var static_accessor_count: usize = 0;
-            var instance_accessor_count: usize = 0;
-            var static_init_entries = ListManaged(FieldInitEntry).init(p.allocator);
-            var instance_init_entries = ListManaged(FieldInitEntry).init(p.allocator);
-            var static_element_order = ListManaged(StaticElement).init(p.allocator);
-            var extracted_static_blocks = ListManaged(*G.ClassStaticBlock).init(p.allocator);
-            var prefix_stmts = ListManaged(Stmt).init(p.allocator);
-            var private_lowered_map = PrivateLoweredMap{};
-            var accessor_storage_counter: usize = 0;
-            var emitted_private_adds = std.AutoHashMapUnmanaged(u32, void){};
-            var static_private_add_blocks = ListManaged(Property).init(p.allocator);
-
-            // Pre-scan: determine if all private members need lowering
-            var lower_all_private = false;
-            {
-                var has_any_private = false;
-                var has_any_decorated = false;
-                for (class.properties) |cprop| {
-                    if (cprop.kind == .class_static_block) continue;
-                    if (cprop.ts_decorators.len > 0) {
-                        has_any_decorated = true;
-                        if (cprop.key != null and cprop.key.?.data == .e_private_identifier) {
-                            lower_all_private = true;
-                            break;
-                        }
-                    }
-                    if (cprop.key != null and cprop.key.?.data == .e_private_identifier) {
-                        has_any_private = true;
-                    }
-                }
-                if (!lower_all_private and has_any_private and has_any_decorated)
-                    lower_all_private = true;
-            }
-
-            for (class.properties, 0..) |*prop, prop_idx| {
-                if (prop.ts_decorators.len == 0) {
-                    // ── Non-decorated property ──
-                    if (lower_all_private and prop.key != null and
-                        prop.key.?.data == .e_private_identifier and prop.kind != .class_static_block and
-                        prop.kind != .auto_accessor)
-                    {
-                        const nk_expr = prop.key.?;
-                        const npriv_orig = p.symbols.items[nk_expr.data.e_private_identifier.ref.innerIndex()].original_name;
-                        const npriv_inner = nk_expr.data.e_private_identifier.ref.innerIndex();
-
-                        if (prop.flags.contains(.is_method)) {
-                            // Non-decorated private method/getter/setter → WeakSet + fn extraction
-                            const nk = methodKind(prop);
-                            const existing = private_lowered_map.get(npriv_inner);
-                            const ws_ref = if (existing) |ex| ex.storage_ref else brk: {
-                                break :brk newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}", .{npriv_orig[1..]}) catch unreachable);
-                            };
-                            const fn_nm = std.fmt.allocPrint(p.allocator, "_{s}{s}", .{ npriv_orig[1..], fnSuffix(nk) }) catch unreachable;
-                            const fn_ref = newSym(p, .other, fn_nm);
-
-                            var new_info = if (existing) |ex| ex else PrivateLoweredInfo{ .storage_ref = ws_ref };
-                            if (nk == 1) new_info.method_fn_ref = fn_ref else if (nk == 2) new_info.getter_fn_ref = fn_ref else new_info.setter_fn_ref = fn_ref;
-                            private_lowered_map.put(p.allocator, npriv_inner, new_info) catch unreachable;
-
-                            if (existing == null) {
-                                prefix_stmts.append(varDecl2(p, ws_ref, newWeakSetExpr(p, loc), fn_ref, null, loc)) catch unreachable;
-                            } else {
-                                prefix_stmts.append(varDecl(p, fn_ref, null, loc)) catch unreachable;
-                            }
-
-                            // Assign function: _fn = function() { ... }
-                            prefix_stmts.append(p.s(S.SExpr{
-                                .value = assignTo(p, fn_ref, if (prop.value) |v| v else p.newExpr(E.Undefined{}, loc), loc),
-                            }, loc)) catch unreachable;
-
-                            // __privateAdd (once per name)
-                            if (!emitted_private_adds.contains(npriv_inner)) {
-                                emitted_private_adds.put(p.allocator, npriv_inner, {}) catch unreachable;
-                                emitPrivateAdd(p, prop.flags.contains(.is_static), ws_ref, null, loc, &constructor_inject_stmts, &static_private_add_blocks);
-                            }
-                            continue;
-                        } else {
-                            // Non-decorated private field → WeakMap
-                            const wm_nm = std.fmt.allocPrint(p.allocator, "_{s}", .{npriv_orig[1..]}) catch unreachable;
-                            const wm_ref = newSym(p, .other, wm_nm);
-                            private_lowered_map.put(p.allocator, npriv_inner, .{ .storage_ref = wm_ref }) catch unreachable;
-                            prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc)) catch unreachable;
-
-                            const init_val = if (prop.initializer) |iv| iv else p.newExpr(E.Undefined{}, loc);
-                            if (!prop.flags.contains(.is_static)) {
-                                constructor_inject_stmts.append(p.s(S.SExpr{
-                                    .value = callRt(p, loc, "__privateAdd", &[_]Expr{
-                                        p.newExpr(E.This{}, loc),
-                                        useRef(p, wm_ref, loc),
-                                        init_val,
-                                    }),
-                                }, loc)) catch unreachable;
-                            } else {
-                                static_private_add_blocks.append(makeStaticBlock(
-                                    p,
-                                    callRt(p, loc, "__privateAdd", &[_]Expr{
-                                        p.newExpr(E.This{}, loc),
-                                        useRef(p, wm_ref, loc),
-                                        init_val,
-                                    }),
-                                    loc,
-                                )) catch unreachable;
-                            }
-                            continue;
-                        }
-                    }
-                    // Undecorated auto-accessor → WeakMap + getter/setter
-                    if (prop.kind == .auto_accessor) {
-                        const accessor_name = brk: {
-                            if (prop.key.?.data == .e_string)
-                                break :brk std.fmt.allocPrint(p.allocator, "_{s}", .{prop.key.?.data.e_string.data}) catch unreachable;
-                            const name = std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{accessor_storage_counter}) catch unreachable;
-                            accessor_storage_counter += 1;
-                            break :brk name;
-                        };
-                        const wm_ref = newSym(p, .other, accessor_name);
-                        prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc)) catch unreachable;
-
-                        // Getter: get foo() { return __privateGet(this, _foo); }
-                        const get_body = bun.handleOom(p.allocator.alloc(Stmt, 1));
-                        get_body[0] = p.s(S.Return{ .value = callRt(p, loc, "__privateGet", &[_]Expr{
-                            p.newExpr(E.This{}, loc),
-                            useRef(p, wm_ref, loc),
-                        }) }, loc);
-                        const get_fn = bun.handleOom(p.allocator.create(G.Fn));
-                        get_fn.* = .{ .body = .{ .stmts = get_body, .loc = loc } };
-
-                        // Setter: set foo(v) { __privateSet(this, _foo, v); }
-                        const setter_param_ref = newSym(p, .other, "v");
-                        const set_body = bun.handleOom(p.allocator.alloc(Stmt, 1));
-                        set_body[0] = p.s(S.SExpr{ .value = callRt(p, loc, "__privateSet", &[_]Expr{
-                            p.newExpr(E.This{}, loc),
-                            useRef(p, wm_ref, loc),
-                            useRef(p, setter_param_ref, loc),
-                        }) }, loc);
-                        const setter_fn_args = bun.handleOom(p.allocator.alloc(G.Arg, 1));
-                        setter_fn_args[0] = .{ .binding = p.b(B.Identifier{ .ref = setter_param_ref }, loc) };
-                        const set_fn = bun.handleOom(p.allocator.create(G.Fn));
-                        set_fn.* = .{ .args = setter_fn_args, .body = .{ .stmts = set_body, .loc = loc } };
-
-                        var getter_flags = prop.flags;
-                        getter_flags.insert(.is_method);
-                        new_properties.append(.{
-                            .key = prop.key,
-                            .value = p.newExpr(E.Function{ .func = get_fn.* }, loc),
-                            .kind = .get,
-                            .flags = getter_flags,
-                        }) catch unreachable;
-                        new_properties.append(.{
-                            .key = prop.key,
-                            .value = p.newExpr(E.Function{ .func = set_fn.* }, loc),
-                            .kind = .set,
-                            .flags = getter_flags,
-                        }) catch unreachable;
-
-                        const init_val = if (prop.initializer) |iv| iv else p.newExpr(E.Undefined{}, loc);
-                        if (!prop.flags.contains(.is_static)) {
-                            constructor_inject_stmts.append(p.s(S.SExpr{
-                                .value = callRt(p, loc, "__privateAdd", &[_]Expr{
-                                    p.newExpr(E.This{}, loc),
-                                    useRef(p, wm_ref, loc),
-                                    init_val,
-                                }),
-                            }, loc)) catch unreachable;
-                        } else {
-                            suffix_exprs.append(callRt(p, loc, "__privateAdd", &[_]Expr{
-                                useRef(p, class_name_ref, class_name_loc),
-                                useRef(p, wm_ref, loc),
-                                init_val,
-                            })) catch unreachable;
-                        }
-                        continue;
-                    }
-                    // Static blocks → extract to suffix
-                    if (prop.kind == .class_static_block) {
-                        if (prop.class_static_block) |sb| {
-                            static_element_order.append(.{ .kind = .block, .index = extracted_static_blocks.items.len }) catch unreachable;
-                            extracted_static_blocks.append(sb) catch unreachable;
-                        }
-                        continue;
-                    }
-                    new_properties.append(prop.*) catch unreachable;
-                    continue;
-                }
-
-                // ── Decorated property ──
-                var flags: f64 = 0;
-                if (prop.flags.contains(.is_method)) {
-                    flags = switch (prop.kind) {
-                        .get => 2,
-                        .set => 3,
-                        else => 1,
-                    };
-                } else {
-                    flags = switch (prop.kind) {
-                        .auto_accessor => 4,
-                        else => 5,
-                    };
-                }
-                if (prop.flags.contains(.is_static)) flags += 8;
-                const is_private = prop.key.?.data == .e_private_identifier;
-                if (is_private) flags += 16;
-
-                const decorator_array = if (prop_dec_refs.get(prop_idx)) |dec_ref|
-                    useRef(p, dec_ref, loc)
-                else
-                    p.newExpr(E.Array{ .items = prop.ts_decorators }, loc);
-
-                const key_expr = prop.key.?;
-                const k = @as(u8, @intFromFloat(flags)) & 7;
-
-                var dec_arg_count: usize = 5;
-                var private_storage_ref: ?Ref = null;
-                var private_extra_ref: ?Ref = null;
-                var private_method_fn_ref: ?Ref = null;
-
-                if (is_private) {
-                    const private_orig = p.symbols.items[key_expr.data.e_private_identifier.ref.innerIndex()].original_name;
-                    const priv_inner = key_expr.data.e_private_identifier.ref.innerIndex();
-
-                    if (k >= 1 and k <= 3) {
-                        // Decorated private method/getter/setter → WeakSet
-                        const existing = private_lowered_map.get(priv_inner);
-                        const ws_ref = if (existing) |ex| ex.storage_ref else newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}", .{private_orig[1..]}) catch unreachable);
-                        private_storage_ref = ws_ref;
-                        const fn_ref = newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}{s}", .{ private_orig[1..], fnSuffix(k) }) catch unreachable);
-                        private_method_fn_ref = fn_ref;
-
-                        var new_info = if (existing) |ex| ex else PrivateLoweredInfo{ .storage_ref = ws_ref };
-                        if (k == 1) new_info.method_fn_ref = fn_ref else if (k == 2) new_info.getter_fn_ref = fn_ref else new_info.setter_fn_ref = fn_ref;
-                        private_lowered_map.put(p.allocator, priv_inner, new_info) catch unreachable;
-
-                        if (existing == null) {
-                            prefix_stmts.append(varDecl2(p, ws_ref, newWeakSetExpr(p, loc), fn_ref, null, loc)) catch unreachable;
-                        } else {
-                            prefix_stmts.append(varDecl(p, fn_ref, null, loc)) catch unreachable;
-                        }
-                        dec_arg_count = 6;
-                    } else if (k == 5) {
-                        // Decorated private field → WeakMap
-                        const wm_ref = newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}", .{private_orig[1..]}) catch unreachable);
-                        private_storage_ref = wm_ref;
-                        private_lowered_map.put(p.allocator, priv_inner, .{ .storage_ref = wm_ref }) catch unreachable;
-                        prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc)) catch unreachable;
-                        dec_arg_count = 5;
-                    } else if (k == 4) {
-                        // Decorated private auto-accessor → WeakMap + descriptor
-                        const wm_ref = newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}", .{private_orig[1..]}) catch unreachable);
-                        private_storage_ref = wm_ref;
-                        const acc_ref = newSym(p, .other, std.fmt.allocPrint(p.allocator, "_{s}_acc", .{private_orig[1..]}) catch unreachable);
-                        private_method_fn_ref = acc_ref;
-                        private_lowered_map.put(p.allocator, priv_inner, .{
-                            .storage_ref = wm_ref,
-                            .accessor_desc_ref = acc_ref,
-                        }) catch unreachable;
-                        prefix_stmts.append(varDecl2(p, wm_ref, newWeakMapExpr(p, loc), acc_ref, null, loc)) catch unreachable;
-                        dec_arg_count = 6;
-                    }
-                } else if (k == 4) {
-                    // Decorated public auto-accessor → WeakMap
-                    const accessor_name = brk: {
-                        if (key_expr.data == .e_string)
-                            break :brk std.fmt.allocPrint(p.allocator, "_{s}", .{key_expr.data.e_string.data}) catch unreachable;
-                        const name = std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{accessor_storage_counter}) catch unreachable;
-                        accessor_storage_counter += 1;
-                        break :brk name;
-                    };
-                    const wm_ref = newSym(p, .other, accessor_name);
-                    private_extra_ref = wm_ref;
-                    prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc)) catch unreachable;
-                    dec_arg_count = 6;
-                }
-
-                // Build __decorateElement args
-                const target_ref = if (is_expr and expr_class_ref != null) expr_class_ref.? else class_name_ref;
-                const dec_args = bun.handleOom(p.allocator.alloc(Expr, dec_arg_count));
-                dec_args[0] = p.newExpr(E.Identifier{ .ref = init_ref }, loc);
-                dec_args[1] = p.newExpr(E.Number{ .value = flags }, loc);
-                dec_args[2] = if (is_private)
-                    p.newExpr(E.String{ .data = p.symbols.items[key_expr.data.e_private_identifier.ref.innerIndex()].original_name }, loc)
-                else
-                    key_expr;
-                dec_args[3] = decorator_array;
-
-                if (is_private and private_storage_ref != null) {
-                    dec_args[4] = useRef(p, private_storage_ref.?, loc);
-                    if (dec_arg_count == 6) {
-                        if (k >= 1 and k <= 3) {
-                            dec_args[5] = if (prop.value) |v| v else p.newExpr(E.Undefined{}, loc);
-                        } else if (k == 4) {
-                            dec_args[5] = useRef(p, private_storage_ref.?, loc);
-                        } else {
-                            dec_args[5] = p.newExpr(E.Undefined{}, loc);
-                        }
-                    }
-                } else {
-                    p.recordUsage(target_ref);
-                    dec_args[4] = p.newExpr(E.Identifier{ .ref = target_ref }, class_name_loc);
-                    if (dec_arg_count == 6) {
-                        if (private_extra_ref) |extra_ref| {
-                            dec_args[5] = useRef(p, extra_ref, loc);
-                        } else {
-                            dec_args[5] = p.newExpr(E.Undefined{}, loc);
-                        }
-                    }
-                }
-
-                const raw_element = p.callRuntime(loc, "__decorateElement", dec_args);
-                const element = if (private_method_fn_ref) |fn_ref|
-                    assignTo(p, fn_ref, raw_element, loc)
-                else
-                    raw_element;
-
-                // Categorize the element
-                if (k >= 4) {
-                    // Field (k=5) or accessor (k=4) — remove from class body
-                    var prop_copy = prop.*;
-                    prop_copy.ts_decorators = .{};
-                    if (is_private) {
-                        if (private_storage_ref) |ps_ref|
-                            prop_copy.key = p.newExpr(E.Identifier{ .ref = ps_ref }, loc);
-                    }
-                    if (private_extra_ref) |pe_ref|
-                        prop_copy.value = p.newExpr(E.Identifier{ .ref = pe_ref }, loc);
-
-                    const is_accessor = (k == 4);
-                    const init_entry = FieldInitEntry{ .prop = prop_copy, .is_private = is_private, .is_accessor = is_accessor };
-
-                    if (prop.flags.contains(.is_static)) {
-                        if (is_accessor) {
-                            static_non_field_elements.append(element) catch unreachable;
-                            static_accessor_count += 1;
-                        } else {
-                            static_field_decorate.append(element) catch unreachable;
-                        }
-                        static_element_order.append(.{ .kind = .field_or_accessor, .index = static_init_entries.items.len }) catch unreachable;
-                        static_init_entries.append(init_entry) catch unreachable;
-                    } else {
-                        if (is_accessor) {
-                            instance_non_field_elements.append(element) catch unreachable;
-                            instance_accessor_count += 1;
-                        } else {
-                            instance_field_decorate.append(element) catch unreachable;
-                        }
-                        instance_init_entries.append(init_entry) catch unreachable;
-                    }
-                } else if (is_private and private_storage_ref != null) {
-                    // Private method/getter/setter — remove from class body
-                    const priv_inner2 = key_expr.data.e_private_identifier.ref.innerIndex();
-                    if (!emitted_private_adds.contains(priv_inner2)) {
-                        emitted_private_adds.put(p.allocator, priv_inner2, {}) catch unreachable;
-                        emitPrivateAdd(p, prop.flags.contains(.is_static), private_storage_ref.?, null, loc, &constructor_inject_stmts, &static_private_add_blocks);
-                    }
-                    if (prop.flags.contains(.is_static)) {
-                        static_non_field_elements.append(element) catch unreachable;
-                        has_static_private_methods = true;
-                    } else {
-                        instance_non_field_elements.append(element) catch unreachable;
-                        has_instance_private_methods = true;
-                    }
-                } else {
-                    // Public method/getter/setter — keep in class body
-                    var new_prop = prop.*;
-                    new_prop.ts_decorators = .{};
-                    new_properties.append(new_prop) catch unreachable;
-                    if (prop.flags.contains(.is_static)) {
-                        static_non_field_elements.append(element) catch unreachable;
-                    } else {
-                        instance_non_field_elements.append(element) catch unreachable;
-                    }
-                }
-            }
-
-            // ── Phase 5: Rewrite private accesses ────────────
-            if (private_lowered_map.count() > 0) {
-                for (new_properties.items) |*nprop| {
-                    if (nprop.value) |*v| rewritePrivateAccessesInExpr(p, v, &private_lowered_map);
-                    if (nprop.class_static_block) |sb|
-                        rewritePrivateAccessesInStmts(p, sb.stmts.slice(), &private_lowered_map);
-                }
-                for (instance_init_entries.items) |*entry| {
-                    if (entry.prop.initializer) |*ini| rewritePrivateAccessesInExpr(p, ini, &private_lowered_map);
-                }
-                for (static_init_entries.items) |*entry| {
-                    if (entry.prop.initializer) |*ini| rewritePrivateAccessesInExpr(p, ini, &private_lowered_map);
-                }
-                for (extracted_static_blocks.items) |sb|
-                    rewritePrivateAccessesInStmts(p, sb.stmts.slice(), &private_lowered_map);
-                for (static_non_field_elements.items) |*elem| rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (instance_non_field_elements.items) |*elem| rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (static_field_decorate.items) |*elem| rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                for (instance_field_decorate.items) |*elem| rewritePrivateAccessesInExpr(p, elem, &private_lowered_map);
-                rewritePrivateAccessesInStmts(p, pre_eval_stmts.items, &private_lowered_map);
-                rewritePrivateAccessesInStmts(p, prefix_stmts.items, &private_lowered_map);
-            }
-
-            // ── Phase 6: Emit suffix ─────────────────────────
-            const static_field_count = static_field_decorate.items.len;
-            const total_accessor_count = static_accessor_count + instance_accessor_count;
-            const static_field_base_idx = total_accessor_count;
-            const instance_accessor_base_idx = static_accessor_count;
-            const instance_field_base_idx = total_accessor_count + static_field_count;
-
-            // 1-4: __decorateElement calls in spec order
-            suffix_exprs.appendSlice(static_non_field_elements.items) catch unreachable;
-            suffix_exprs.appendSlice(instance_non_field_elements.items) catch unreachable;
-            suffix_exprs.appendSlice(static_field_decorate.items) catch unreachable;
-            suffix_exprs.appendSlice(instance_field_decorate.items) catch unreachable;
-
-            // 5: Class decorator
-            if (class_decorators.len > 0) {
-                p.recordUsage(class_name_ref);
-                const class_name_str: []const u8 = if (original_class_name_for_decorator) |name|
-                    name
-                else if (is_expr and expr_class_is_anonymous)
-                    (name_from_context orelse "")
-                else
-                    p.symbols.items[class_name_ref.innerIndex()].original_name;
-
-                const cls_dec_args = bun.handleOom(p.allocator.alloc(Expr, 5));
-                cls_dec_args[0] = p.newExpr(E.Identifier{ .ref = init_ref }, loc);
-                cls_dec_args[1] = p.newExpr(E.Number{ .value = 0 }, loc);
-                cls_dec_args[2] = p.newExpr(E.String{ .data = class_name_str }, loc);
-                cls_dec_args[3] = if (class_dec_ref) |cdr| useRef(p, cdr, loc) else p.newExpr(E.Array{ .items = class_decorators }, loc);
-                cls_dec_args[4] = if (is_expr)
-                    useRef(p, expr_class_ref.?, loc)
-                else
-                    p.newExpr(E.Identifier{ .ref = class_name_ref }, class_name_loc);
-
-                suffix_exprs.append(assignTo(p, class_name_ref, p.callRuntime(loc, "__decorateElement", cls_dec_args), class_name_loc)) catch unreachable;
-            }
-
-            // 6: Static method extra initializers
-            if (static_non_field_elements.items.len > 0 or has_static_private_methods) {
-                suffix_exprs.append(callRt(p, loc, "__runInitializers", &[_]Expr{
-                    useRef(p, init_ref, loc),
-                    p.newExpr(E.Number{ .value = 3 }, loc),
-                    useRef(p, class_name_ref, class_name_loc),
-                })) catch unreachable;
-            }
-
-            // 7: Static elements in source order
-            {
-                var s_accessor_idx: usize = 0;
-                var s_field_idx: usize = 0;
-                for (static_element_order.items) |elem| {
-                    switch (elem.kind) {
-                        .block => {
-                            const sb = extracted_static_blocks.items[elem.index];
-                            const stmts_slice = sb.stmts.slice();
-                            rewriteStmts(p, stmts_slice, .{ .replace_this = .{ .ref = class_name_ref, .loc = class_name_loc } });
-
-                            // Check if all statements are simple expressions
-                            const all_exprs = blk: {
-                                for (stmts_slice) |sb_stmt| {
-                                    if (sb_stmt.data != .s_expr) break :blk false;
-                                }
-                                break :blk true;
-                            };
-
-                            if (all_exprs) {
-                                for (stmts_slice) |sb_stmt| {
-                                    suffix_exprs.append(sb_stmt.data.s_expr.value) catch unreachable;
-                                }
-                            } else {
-                                // Wrap in IIFE to preserve non-expression statements
-                                const iife_body = p.newExpr(E.Arrow{
-                                    .body = .{ .loc = loc, .stmts = stmts_slice },
-                                    .is_async = false,
-                                }, loc);
-                                suffix_exprs.append(p.newExpr(E.Call{
-                                    .target = iife_body,
-                                    .args = ExprNodeList.empty,
-                                }, loc)) catch unreachable;
-                            }
-                        },
-                        .field_or_accessor => {
-                            const entry = static_init_entries.items[elem.index];
-                            const field_idx: usize = if (entry.is_accessor) brk: {
-                                const idx = s_accessor_idx;
-                                s_accessor_idx += 1;
-                                break :brk idx;
-                            } else brk: {
-                                const idx = static_field_base_idx + s_field_idx;
-                                s_field_idx += 1;
-                                break :brk idx;
-                            };
-
-                            const run_args_count: usize = if (entry.prop.initializer != null) 4 else 3;
-                            const run_args = bun.handleOom(p.allocator.alloc(Expr, run_args_count));
-                            run_args[0] = useRef(p, init_ref, loc);
-                            run_args[1] = p.newExpr(E.Number{ .value = initFlag(field_idx) }, loc);
-                            run_args[2] = useRef(p, class_name_ref, class_name_loc);
-                            if (entry.prop.initializer) |init_val| run_args[3] = init_val;
-                            const run_init_call = p.callRuntime(loc, "__runInitializers", run_args);
-
-                            if (entry.is_accessor or entry.is_private) {
-                                const wm_ref_expr = if (entry.is_accessor and !entry.is_private)
-                                    entry.prop.value.?
-                                else
-                                    entry.prop.key.?;
-                                suffix_exprs.append(callRt(p, loc, "__privateAdd", &[_]Expr{
-                                    useRef(p, class_name_ref, class_name_loc),
-                                    wm_ref_expr,
-                                    run_init_call,
-                                })) catch unreachable;
-                            } else {
-                                const assign_target = memberTarget(p, useRef(p, class_name_ref, class_name_loc), entry.prop);
-                                suffix_exprs.append(Expr.assign(assign_target, run_init_call)) catch unreachable;
-                            }
-
-                            // Extra initializer
-                            suffix_exprs.append(callRt(p, loc, "__runInitializers", &[_]Expr{
-                                useRef(p, init_ref, loc),
-                                p.newExpr(E.Number{ .value = extraInitFlag(field_idx) }, loc),
-                                useRef(p, class_name_ref, class_name_loc),
-                            })) catch unreachable;
-                        },
-                    }
-                }
-            }
-
-            // 8: Class extra initializers
-            if (class_decorators.len > 0) {
-                suffix_exprs.append(callRt(p, loc, "__runInitializers", &[_]Expr{
-                    useRef(p, init_ref, loc),
-                    p.newExpr(E.Number{ .value = 1 }, loc),
-                    useRef(p, class_name_ref, class_name_loc),
-                })) catch unreachable;
-            }
-
-            // 9: __decoratorMetadata
-            suffix_exprs.append(callRt(p, loc, "__decoratorMetadata", &[_]Expr{
-                useRef(p, init_ref, loc),
-                useRef(p, class_name_ref, class_name_loc),
-            })) catch unreachable;
-
-            // ── Phase 7: Constructor injection ───────────────
-            if (instance_non_field_elements.items.len > 0 or has_instance_private_methods) {
-                constructor_inject_stmts.append(p.s(S.SExpr{
-                    .value = callRt(p, loc, "__runInitializers", &[_]Expr{
-                        useRef(p, init_ref, loc),
-                        p.newExpr(E.Number{ .value = 5 }, loc),
-                        p.newExpr(E.This{}, loc),
-                    }),
-                }, loc)) catch unreachable;
-            }
-
-            // Instance field/accessor init + extra-init
-            {
-                var i_accessor_idx: usize = 0;
-                var i_field_idx: usize = 0;
-                for (instance_init_entries.items) |entry| {
-                    const field_idx: usize = if (entry.is_accessor) brk: {
-                        const idx = instance_accessor_base_idx + i_accessor_idx;
-                        i_accessor_idx += 1;
-                        break :brk idx;
-                    } else brk: {
-                        const idx = instance_field_base_idx + i_field_idx;
-                        i_field_idx += 1;
-                        break :brk idx;
-                    };
-
-                    const run_args_count: usize = if (entry.prop.initializer != null) 4 else 3;
-                    const run_args = bun.handleOom(p.allocator.alloc(Expr, run_args_count));
-                    run_args[0] = useRef(p, init_ref, loc);
-                    run_args[1] = p.newExpr(E.Number{ .value = initFlag(field_idx) }, loc);
-                    run_args[2] = p.newExpr(E.This{}, loc);
-                    if (entry.prop.initializer) |init_val| run_args[3] = init_val;
-                    const run_init_call = p.callRuntime(loc, "__runInitializers", run_args);
-
-                    if (entry.is_accessor or entry.is_private) {
-                        const wm_ref_expr = if (entry.is_accessor and !entry.is_private)
-                            entry.prop.value.?
-                        else
-                            entry.prop.key.?;
-                        constructor_inject_stmts.append(p.s(S.SExpr{
-                            .value = callRt(p, loc, "__privateAdd", &[_]Expr{
-                                p.newExpr(E.This{}, loc),
-                                wm_ref_expr,
-                                run_init_call,
-                            }),
-                        }, loc)) catch unreachable;
-                    } else {
-                        constructor_inject_stmts.append(
-                            Stmt.assign(memberTarget(p, p.newExpr(E.This{}, loc), entry.prop), run_init_call),
-                        ) catch unreachable;
-                    }
-
-                    // Extra initializer
-                    constructor_inject_stmts.append(p.s(S.SExpr{
-                        .value = callRt(p, loc, "__runInitializers", &[_]Expr{
-                            useRef(p, init_ref, loc),
-                            p.newExpr(E.Number{ .value = extraInitFlag(field_idx) }, loc),
-                            p.newExpr(E.This{}, loc),
-                        }),
-                    }, loc)) catch unreachable;
-                }
-            }
-
-            // Inject into constructor
-            if (constructor_inject_stmts.items.len > 0) {
-                var found_constructor = false;
-                for (new_properties.items) |*nprop| {
-                    if (nprop.flags.contains(.is_method) and nprop.key != null and
-                        nprop.key.?.data == .e_string and nprop.key.?.data.e_string.eqlComptime("constructor"))
-                    {
-                        const func = nprop.value.?.data.e_function;
-                        var body_stmts = ListManaged(Stmt).fromOwnedSlice(p.allocator, func.func.body.stmts);
-                        var super_index: ?usize = null;
-                        for (body_stmts.items, 0..) |item, index| {
-                            if (item.data != .s_expr) continue;
-                            if (item.data.s_expr.value.data != .e_call) continue;
-                            if (item.data.s_expr.value.data.e_call.target.data != .e_super) continue;
-                            super_index = index;
-                            break;
-                        }
-                        const insert_at = if (super_index) |j| j + 1 else 0;
-                        body_stmts.insertSlice(insert_at, constructor_inject_stmts.items) catch unreachable;
-                        func.func.body.stmts = body_stmts.items;
-                        found_constructor = true;
-                        break;
-                    }
-                }
-
-                if (!found_constructor) {
-                    var ctor_stmts = ListManaged(Stmt).init(p.allocator);
-                    if (class.extends != null) {
-                        const target = p.newExpr(E.Super{}, loc);
-                        const args_ref = newSym(p, .unbound, arguments_str);
-                        const spread = p.newExpr(E.Spread{ .value = p.newExpr(E.Identifier{ .ref = args_ref }, loc) }, loc);
-                        const call_args = bun.handleOom(ExprNodeList.initOne(p.allocator, spread));
-                        ctor_stmts.append(
-                            p.s(S.SExpr{ .value = p.newExpr(E.Call{ .target = target, .args = call_args }, loc) }, loc),
-                        ) catch unreachable;
-                    }
-                    ctor_stmts.appendSlice(constructor_inject_stmts.items) catch unreachable;
-                    new_properties.insert(0, G.Property{
-                        .flags = Flags.Property.init(.{ .is_method = true }),
-                        .key = p.newExpr(E.String{ .data = "constructor" }, loc),
-                        .value = p.newExpr(E.Function{ .func = G.Fn{
-                            .name = null,
-                            .open_parens_loc = logger.Loc.Empty,
-                            .args = &[_]Arg{},
-                            .body = .{ .loc = loc, .stmts = ctor_stmts.items },
-                            .flags = Flags.Function.init(.{}),
-                        } }, loc),
-                    }) catch unreachable;
-                }
-            }
-
-            // Static private __privateAdd blocks at beginning
-            if (static_private_add_blocks.items.len > 0) {
-                new_properties.insertSlice(0, static_private_add_blocks.items) catch unreachable;
-            }
-
-            class.properties = new_properties.items;
-            class.has_decorators = false;
-            class.should_lower_standard_decorators = false;
-
-            // ── Phase 8: Assemble output ─────────────────────
-            if (is_expr) {
-                var comma_parts = ListManaged(Expr).init(p.allocator);
-                if (class_dec_assign_expr) |cda| comma_parts.append(cda) catch unreachable;
-                if (base_assign_expr) |ba| comma_parts.append(ba) catch unreachable;
-
-                // Convert S.Local decls to comma assignments
-                const appendDeclsAsAssigns = struct {
-                    fn f(parts: *ListManaged(Expr), var_decls: *ListManaged(G.Decl), stmts_list: []const Stmt, parser: *P, l: logger.Loc) void {
-                        for (stmts_list) |pstmt| {
-                            if (pstmt.data == .s_expr) {
-                                parts.append(pstmt.data.s_expr.value) catch unreachable;
-                            } else if (pstmt.data == .s_local) {
-                                for (pstmt.data.s_local.decls.slice()) |decl_item| {
-                                    const ref = decl_item.binding.data.b_identifier.ref;
-                                    var_decls.append(.{ .binding = parser.b(B.Identifier{ .ref = ref }, l) }) catch unreachable;
-                                    if (decl_item.value) |val| {
-                                        parser.recordUsage(ref);
-                                        parts.append(
-                                            Expr.assign(parser.newExpr(E.Identifier{ .ref = ref }, l), val),
-                                        ) catch unreachable;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }.f;
-
-                appendDeclsAsAssigns(&comma_parts, &expr_var_decls, pre_eval_stmts.items, p, loc);
-                appendDeclsAsAssigns(&comma_parts, &expr_var_decls, prefix_stmts.items, p, loc);
-
-                // _init = __decoratorStart(...)
-                comma_parts.append(assignTo(p, init_ref, init_start_expr, loc)) catch unreachable;
-
-                // _class = class { ... }
-                comma_parts.append(assignTo(p, expr_class_ref.?, p.newExpr(class.*, loc), loc)) catch unreachable;
-
-                comma_parts.appendSlice(suffix_exprs.items) catch unreachable;
-
-                // Final value
-                const final_ref = if (class_decorators.len > 0) class_name_ref else expr_class_ref.?;
-                comma_parts.append(useRef(p, final_ref, loc)) catch unreachable;
-
-                // Build comma chain
-                var result = comma_parts.items[0];
-                for (comma_parts.items[1..]) |part| {
-                    result = p.newExpr(E.Binary{
-                        .op = .bin_comma,
-                        .left = result,
-                        .right = part,
-                    }, loc);
-                }
-
-                // Emit var declarations
-                if (expr_var_decls.items.len > 0) {
-                    const var_decl_stmt = p.s(S.Local{
-                        .decls = Decl.List.fromOwnedSlice(expr_var_decls.items),
-                    }, loc);
-                    if (p.nearest_stmt_list) |stmt_list| {
-                        stmt_list.append(var_decl_stmt) catch unreachable;
-                    }
-                }
-
-                var out = ListManaged(Stmt).initCapacity(p.allocator, 1) catch unreachable;
-                out.appendAssumeCapacity(p.s(S.SExpr{ .value = result }, loc));
-                return out.items;
-            }
-
-            // Statement mode
-            var out = ListManaged(Stmt).initCapacity(p.allocator, prefix_stmts.items.len + pre_eval_stmts.items.len + 5 + suffix_exprs.items.len) catch unreachable;
-            if (class_dec_stmt.data != .s_empty) out.append(class_dec_stmt) catch unreachable;
-            if (base_decl_stmt.data != .s_empty) out.append(base_decl_stmt) catch unreachable;
-            out.appendSlice(pre_eval_stmts.items) catch unreachable;
-            out.appendSlice(prefix_stmts.items) catch unreachable;
-            out.appendAssumeCapacity(init_decl_stmt);
-            out.appendAssumeCapacity(stmt);
-            for (suffix_exprs.items) |expr| {
-                out.append(p.s(S.SExpr{ .value = expr }, expr.loc)) catch unreachable;
-            }
-            // Inner class binding: let _Foo = Foo
-            if (!inner_class_ref.eql(class_name_ref)) {
-                p.recordUsage(class_name_ref);
-                const inner_decls = bun.handleOom(p.allocator.alloc(G.Decl, 1));
-                inner_decls[0] = .{
-                    .binding = p.b(B.Identifier{ .ref = inner_class_ref }, loc),
-                    .value = p.newExpr(E.Identifier{ .ref = class_name_ref }, class_name_loc),
-                };
-                out.append(p.s(S.Local{
-                    .kind = .k_let,
-                    .decls = Decl.List.fromOwnedSlice(inner_decls),
-                }, loc)) catch unreachable;
-            }
-
-            return out.items;
-        }
-    };
-}
-
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
+const string = []const u8;
+
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const bun = @import("bun");
+pub const StaticElementKind = enum {
+    block,
+    field_or_accessor,
+    pub fn get(s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), s); }
+    pub fn has(s: []const u8) bool { return std.meta.stringToEnum(@This(), s) != null; }
+    pub fn fromName(s: []const u8) ?@This() { return get(s); }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+};
+
+pub const PrivateLoweredInfo = struct {
+    storage_ref: Ref,
+    method_fn_ref: ?Ref = null,
+    getter_fn_ref: ?Ref = null,
+    setter_fn_ref: ?Ref = null,
+    accessor_desc_ref: ?Ref = null,
+};
+
+pub const StdDecModeExpr = struct {
+    cls: *G.Class,
+    loc: logger.Loc,
+    name_from_context: ?[]const u8 = null,
+};
+
+pub const StdDecMode = union(enum) {
+    stmt: void,
+    expr: StdDecModeExpr,
+};
+
+pub const FieldInitEntry = struct {
+    prop: Property,
+    is_private: bool,
+    is_accessor: bool,
+};
+
+pub const StaticElement = struct {
+    kind: StaticElementKind,
+    index: usize,
+};
+
+pub const RewriteReplaceRef = struct {
+    old: Ref,
+    new_ref: Ref,
+};
+
+pub const RewriteReplaceThis = struct {
+    sym_ref: Ref,
+    loc: logger.Loc,
+};
+
+pub const RewriteKind = union(enum) {
+    replace_ref: RewriteReplaceRef,
+    replace_this: RewriteReplaceThis,
+};
+
+const PrivateLoweredMap = std.AutoHashMapUnmanaged(u32, PrivateLoweredInfo);
 const ListManaged = std.array_list.Managed;
-
-const bun = @import("bun");
 const logger = bun.logger;
-
 const js_ast = bun.ast;
 const B = js_ast.B;
 const E = js_ast.E;
@@ -1483,13 +150,1512 @@ const Flags = js_ast.Flags;
 const S = js_ast.S;
 const Stmt = js_ast.Stmt;
 const Symbol = js_ast.Symbol;
-
 const G = js_ast.G;
 const Arg = G.Arg;
 const Decl = G.Decl;
 const Property = G.Property;
-
 const js_parser = bun.js_parser;
 const JSXTransformType = js_parser.JSXTransformType;
 const Ref = js_parser.Ref;
 const arguments_str = js_parser.arguments_str;
+
+pub fn LowerDecorators(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
+
+pub fn useRef(p: *P, sym_ref: Ref, l: logger.Loc) Expr {
+            _ = p.recordUsage(sym_ref);
+            return p.newExpr(E.Identifier{ .ref = sym_ref }, l);
+    }
+
+pub fn callRt(p: *P, l: logger.Loc, comptime name: []const u8, args: []const Expr) Expr {
+            const a = bun.handleOom(p.allocator.alloc(Expr, args.len));
+            _ = @memcpy(a, args);
+            return p.callRuntime(l, name, a);
+    }
+
+pub fn newSym(p: *P, kind: Symbol.Kind, name: []const u8) Ref {
+            const sym_ref = ((p.newSymbol(kind, name)) catch unreachable);
+            _ = bun.handleOom(p.current_scope.generated.append(p.allocator, sym_ref));
+            return sym_ref;
+    }
+
+pub fn varDecl(p: *P, sym_ref: Ref, value: ?Expr, l: logger.Loc) Stmt {
+            var decls = bun.handleOom(p.allocator.alloc(G.Decl, 1));
+            _ = &decls;
+            decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = sym_ref }, l), .value = value };
+            return p.s(S.Local{ .decls = Decl.List.fromOwnedSlice(decls) }, l);
+    }
+
+pub fn varDecl2(p: *P, r1: Ref, v1: ?Expr, r2: Ref, v2: ?Expr, l: logger.Loc) Stmt {
+            var decls = bun.handleOom(p.allocator.alloc(G.Decl, 2));
+            _ = &decls;
+            decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = r1 }, l), .value = v1 };
+            decls[cp_cast_int(usize, 1)] = .{ .binding = p.b(B.Identifier{ .ref = r2 }, l), .value = v2 };
+            return p.s(S.Local{ .decls = Decl.List.fromOwnedSlice(decls) }, l);
+    }
+
+pub fn assignTo(p: *P, sym_ref: Ref, value: Expr, l: logger.Loc) Expr {
+            _ = p.recordUsage(sym_ref);
+            return Expr.assign(p.newExpr(E.Identifier{ .ref = sym_ref }, l), value);
+    }
+
+pub fn newWeakMapExpr(p: *P, l: logger.Loc) Expr {
+            return p.newExpr(E.New{ .target = p.newExpr(E.Identifier{ .ref = ((p.findSymbol(l, "WeakMap")) catch unreachable).ref }, l), .args = ExprNodeList.empty, .close_parens_loc = l }, l);
+    }
+
+pub fn newWeakSetExpr(p: *P, l: logger.Loc) Expr {
+            return p.newExpr(E.New{ .target = p.newExpr(E.Identifier{ .ref = ((p.findSymbol(l, "WeakSet")) catch unreachable).ref }, l), .args = ExprNodeList.empty, .close_parens_loc = l }, l);
+    }
+
+pub fn makeStaticBlock(p: *P, expr: Expr, l: logger.Loc) Property {
+            const stmts = bun.handleOom(p.allocator.alloc(Stmt, 1));
+            stmts[cp_cast_int(usize, 0)] = p.s(S.SExpr{ .value = expr }, l);
+            const sb = bun.handleOom(p.allocator.create(G.ClassStaticBlock));
+            sb.* = .{ .loc = l, .stmts = bun.BabyList(Stmt).fromOwnedSlice(stmts) };
+            return .{ .kind = .class_static_block, .class_static_block = sb };
+    }
+
+pub fn memberTarget(p: *P, target_expr: Expr, prop: Property) Expr {
+            const key_expr = prop.key.?;
+            if ((prop.flags.contains(.is_computed) or (key_expr.data == .e_number))) {
+                return p.newExpr(E.Index{ .target = target_expr, .index = key_expr }, key_expr.loc);
+            } else {
+                if ((key_expr.data == .e_string)) {
+                    return p.newExpr(E.Dot{ .target = target_expr, .name = key_expr.data.e_string.data, .name_loc = key_expr.loc }, key_expr.loc);
+                } else {
+                    return p.newExpr(E.Index{ .target = target_expr, .index = key_expr }, key_expr.loc);
+                }
+            }
+    }
+
+pub fn initFlag(idx: usize) f64 {
+            return @floatFromInt(cp_shl((4 + (2 * idx)), 1));
+    }
+
+pub fn extraInitFlag(idx: usize) f64 {
+            return @floatFromInt((cp_shl((5 + (2 * idx)), 1) | 1));
+    }
+
+pub fn emitPrivateAdd(p: *P, is_static: bool, storage_ref: Ref, value: ?Expr, loc: logger.Loc, constructor_inject: *ListManaged(Stmt), static_blocks: *ListManaged(Property)) void {
+            const target = p.newExpr(E.This, loc);
+            if (value) |v| {
+                _ = &v;
+                const call = callRt(p, loc, "__privateAdd", (&.{ target, useRef(p, storage_ref, loc), v }));
+                if (is_static) {
+                    _ = ((static_blocks.append(makeStaticBlock(p, call, loc))) catch unreachable);
+                } else {
+                    _ = ((constructor_inject.append(p.s(S.SExpr{ .value = call }, loc))) catch unreachable);
+                }
+            } else {
+                const call = callRt(p, loc, "__privateAdd", (&.{ target, useRef(p, storage_ref, loc) }));
+                if (is_static) {
+                    _ = ((static_blocks.append(makeStaticBlock(p, call, loc))) catch unreachable);
+                } else {
+                    _ = ((constructor_inject.append(p.s(S.SExpr{ .value = call }, loc))) catch unreachable);
+                }
+            }
+    }
+
+pub fn methodKind(prop: *const Property) u8 {
+            return (switch (prop.kind) {
+.get => 2,
+.set => 3,
+else => 1,
+});
+    }
+
+pub fn fnSuffix(k: u8) []const u8 {
+            return (if ((k == 2)) "_get" else (if ((k == 3)) "_set" else "_fn"));
+    }
+
+pub fn rewriteExpr(p: *P, expr: *Expr, kind: *RewriteKind) void {
+            switch (kind) {
+.replace_ref => |r| {
+if (((expr.data == .e_identifier) and expr.data.e_identifier.ref.eql(r.old))) {
+                _ = p.recordUsage(r.new_ref);
+                expr.data = .{ .e_identifier = .{ .ref = r.new_ref } };
+                return;
+            }
+},
+.replace_this => |r| {
+if ((expr.data == .e_this)) {
+                expr.* = useRef(p, r.ref, r.loc);
+                return;
+            }
+},
+}
+            switch (expr.data) {
+.e_binary => |e| {
+_ = rewriteExpr(p, (&e.left), kind);
+            _ = rewriteExpr(p, (&e.right), kind);
+},
+.e_call => |e| {
+_ = rewriteExpr(p, (&e.target), kind);
+            for (cp_mut_slice(&e.args.slice())) |*a| {
+                _ = &a;
+                _ = rewriteExpr(p, (a.*), kind);
+            }
+},
+.e_new => |e| {
+_ = rewriteExpr(p, (&e.target), kind);
+            for (cp_mut_slice(&e.args.slice())) |*a| {
+                _ = &a;
+                _ = rewriteExpr(p, (a.*), kind);
+            }
+},
+.e_index => |e| {
+_ = rewriteExpr(p, (&e.target), kind);
+            _ = rewriteExpr(p, (&e.index), kind);
+},
+.e_dot => |e| {
+_ = rewriteExpr(p, (&e.target), kind);
+},
+.e_spread => |e| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), kind);
+},
+.e_unary => |e| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), kind);
+},
+.e_if => |e| {
+_ = rewriteExpr(p, (&e.test_), kind);
+            _ = rewriteExpr(p, (&e.yes), kind);
+            _ = rewriteExpr(p, (&e.no), kind);
+},
+.e_array => |e| {
+for (cp_mut_slice(&e.items.slice())) |*item| {
+                _ = &item;
+                _ = rewriteExpr(p, (item.*), kind);
+            }
+},
+.e_object => |e| {
+for (cp_mut_slice(&e.properties.slice())) |*prop| {
+                _ = &prop;
+                if ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value)) |*v| {
+                    _ = &v;
+                    _ = rewriteExpr(p, (v.*), kind);
+                }
+                if ((prop.*).initializer) |*ini| {
+                    _ = &ini;
+                    _ = rewriteExpr(p, (ini.*), kind);
+                }
+            }
+},
+.e_template => |e| {
+if (e.tag) |*t| {
+                _ = &t;
+                _ = rewriteExpr(p, (t.*), kind);
+            }
+            for (cp_mut_slice(&e.parts)) |*part| {
+                _ = &part;
+                _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value)), kind);
+            }
+},
+.e_arrow => |e| {
+_ = rewriteStmts(p, e.body.stmts, kind);
+},
+.e_function => |e| {
+switch (kind) {
+.replace_this => {
+
+},
+.replace_ref => {
+if ((e.func.body.stmts.len > 0)) {
+                _ = rewriteStmts(p, e.func.body.stmts, kind);
+            }
+},
+}
+},
+.e_class => {
+
+},
+else => {
+
+},
+}
+    }
+
+pub fn rewriteStmts(p: *P, stmts: []Stmt, kind: *RewriteKind) void {
+            for (cp_mut_slice(&stmts)) |*cur_stmt| {
+                _ = &cur_stmt;
+                switch ((cur_stmt.*).data) {
+.s_expr => |sexpr| {
+var val = (if (@typeInfo(@TypeOf(sexpr)) == .@"enum") @intFromEnum(sexpr) else sexpr.value);
+                _ = &val;
+                _ = rewriteExpr(p, (&val), kind);
+                (cur_stmt.*).* = p.s(S.SExpr{ .value = val, .does_not_affect_tree_shaking = sexpr.does_not_affect_tree_shaking }, (cur_stmt.*).loc);
+},
+.s_local => |local| {
+for (cp_mut_slice(&local.decls.slice())) |*decl| {
+                    _ = &decl;
+                    if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
+                        _ = &v;
+                        _ = rewriteExpr(p, (v.*), kind);
+                    }
+                }
+},
+.s_return => |ret| {
+if ((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value)) |*v| {
+                    _ = &v;
+                    _ = rewriteExpr(p, (v.*), kind);
+                }
+},
+.s_throw => |data| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), kind);
+},
+.s_if => |data| {
+_ = rewriteExpr(p, (&data.test_), kind);
+                _ = rewriteStmts(p, (&data.yes)[0..1], kind);
+                if (data.no) |*no| {
+                    _ = &no;
+                    _ = rewriteStmts(p, (no.*)[0..1], kind);
+                }
+},
+.s_block => |data| {
+_ = rewriteStmts(p, data.stmts, kind);
+},
+.s_for => |data| {
+if (data.init) |*fi| {
+                    _ = &fi;
+                    _ = rewriteStmts(p, (fi.*)[0..1], kind);
+                }
+                if (data.test_) |*t| {
+                    _ = &t;
+                    _ = rewriteExpr(p, (t.*), kind);
+                }
+                if (data.update) |*u| {
+                    _ = &u;
+                    _ = rewriteExpr(p, (u.*), kind);
+                }
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+.s_for_in => |data| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), kind);
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+.s_for_of => |data| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), kind);
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+.s_while => |data| {
+_ = rewriteExpr(p, (&data.test_), kind);
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+.s_do_while => |data| {
+_ = rewriteExpr(p, (&data.test_), kind);
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+.s_switch => |data| {
+_ = rewriteExpr(p, (&data.test_), kind);
+                for (cp_mut_slice(&data.cases)) |*case| {
+                    _ = &case;
+                    if ((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value)) |*v| {
+                        _ = &v;
+                        _ = rewriteExpr(p, (v.*), kind);
+                    }
+                    _ = rewriteStmts(p, (case.*).body, kind);
+                }
+},
+.s_try => |data| {
+_ = rewriteStmts(p, data.body, kind);
+                if (data.catch_) |c| {
+                    _ = &c;
+                    _ = rewriteStmts(p, c.body, kind);
+                }
+                if (data.finally) |f| {
+                    _ = &f;
+                    _ = rewriteStmts(p, f.stmts, kind);
+                }
+},
+.s_label => |data| {
+_ = rewriteStmts(p, (&data.stmt)[0..1], kind);
+},
+.s_with => |data| {
+_ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), kind);
+                _ = rewriteStmts(p, (&data.body)[0..1], kind);
+},
+else => {
+
+},
+}
+            }
+    }
+
+pub fn privateGetExpr(p: *P, obj: Expr, info: PrivateLoweredInfo, l: logger.Loc) Expr {
+            if (info.accessor_desc_ref) |desc_ref| {
+                _ = &desc_ref;
+                return callRt(p, l, "__privateGet", (&.{ obj, useRef(p, info.storage_ref, l), p.newExpr(E.Dot{ .target = useRef(p, desc_ref, l), .name = "get", .name_loc = l }, l) }));
+            } else {
+                if (info.getter_fn_ref) |fn_ref| {
+                    _ = &fn_ref;
+                    return callRt(p, l, "__privateGet", (&.{ obj, useRef(p, info.storage_ref, l), useRef(p, fn_ref, l) }));
+                } else {
+                    if (info.method_fn_ref) |fn_ref| {
+                        _ = &fn_ref;
+                        return callRt(p, l, "__privateMethod", (&.{ obj, useRef(p, info.storage_ref, l), useRef(p, fn_ref, l) }));
+                    } else {
+                        return callRt(p, l, "__privateGet", (&.{ obj, useRef(p, info.storage_ref, l) }));
+                    }
+                }
+            }
+    }
+
+pub fn privateSetExpr(p: *P, obj: Expr, info: PrivateLoweredInfo, val: Expr, l: logger.Loc) Expr {
+            if (info.accessor_desc_ref) |desc_ref| {
+                _ = &desc_ref;
+                return callRt(p, l, "__privateSet", (&.{ obj, useRef(p, info.storage_ref, l), val, p.newExpr(E.Dot{ .target = useRef(p, desc_ref, l), .name = "set", .name_loc = l }, l) }));
+            } else {
+                if (info.setter_fn_ref) |fn_ref| {
+                    _ = &fn_ref;
+                    return callRt(p, l, "__privateSet", (&.{ obj, useRef(p, info.storage_ref, l), val, useRef(p, fn_ref, l) }));
+                } else {
+                    return callRt(p, l, "__privateSet", (&.{ obj, useRef(p, info.storage_ref, l), val }));
+                }
+            }
+    }
+
+pub fn rewritePrivateAccessesInExpr(p: *P, expr: *Expr, map: *const PrivateLoweredMap) void {
+            switch (expr.data) {
+.e_index => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&e.target), map);
+            if ((e.index.data == .e_private_identifier)) {
+                if (map.get(e.index.data.e_private_identifier.ref.innerIndex())) |info| {
+                    _ = &info;
+                    expr.* = privateGetExpr(p, e.target, info, expr.loc);
+                    return;
+                }
+            }
+            _ = rewritePrivateAccessesInExpr(p, (&e.index), map);
+},
+.e_binary => |e| {
+if (((e.op == .bin_assign) and (e.left.data == .e_index))) {
+                if ((e.left.data.e_index.index.data == .e_private_identifier)) {
+                    if (map.get(e.left.data.e_index.index.data.e_private_identifier.ref.innerIndex())) |info| {
+                        _ = &info;
+                        _ = rewritePrivateAccessesInExpr(p, (&e.left.data.e_index.target), map);
+                        _ = rewritePrivateAccessesInExpr(p, (&e.right), map);
+                        expr.* = privateSetExpr(p, e.left.data.e_index.target, info, e.right, expr.loc);
+                        return;
+                    }
+                }
+            }
+            if (((e.op == .bin_in) and (e.left.data == .e_private_identifier))) {
+                if (map.get(e.left.data.e_private_identifier.ref.innerIndex())) |info| {
+                    _ = &info;
+                    _ = rewritePrivateAccessesInExpr(p, (&e.right), map);
+                    expr.* = callRt(p, expr.loc, "__privateIn", (&.{ useRef(p, info.storage_ref, expr.loc), e.right }));
+                    return;
+                }
+            }
+            _ = rewritePrivateAccessesInExpr(p, (&e.left), map);
+            _ = rewritePrivateAccessesInExpr(p, (&e.right), map);
+},
+.e_call => |e| {
+if ((e.target.data == .e_index)) {
+                if ((e.target.data.e_index.index.data == .e_private_identifier)) {
+                    if (map.get(e.target.data.e_index.index.data.e_private_identifier.ref.innerIndex())) |info| {
+                        _ = &info;
+                        _ = rewritePrivateAccessesInExpr(p, (&e.target.data.e_index.target), map);
+                        const obj_expr = e.target.data.e_index.target;
+                        const private_access = privateGetExpr(p, obj_expr, info, expr.loc);
+                        const call_target = p.newExpr(E.Dot{ .target = private_access, .name = "call", .name_loc = expr.loc }, expr.loc);
+                        const orig_args = e.args.slice();
+                        const new_args = bun.handleOom(p.allocator.alloc(Expr, (1 + orig_args.len)));
+                        new_args[cp_cast_int(usize, 0)] = obj_expr;
+                        var ai: usize = 0;
+                        _ = &ai;
+                        while ((ai < orig_args.len)) : (ai = (ai + 1)) {
+                            const arg = (&orig_args[@as(usize, @intCast(ai))]);
+                            _ = rewritePrivateAccessesInExpr(p, arg, map);
+                            new_args[cp_cast_int(usize, (1 + ai))] = arg.*;
+                        }
+                        e.target = call_target;
+                        e.args = ExprNodeList.fromOwnedSlice(new_args);
+                        return;
+                    }
+                }
+            }
+            _ = rewritePrivateAccessesInExpr(p, (&e.target), map);
+            for (cp_mut_slice(&e.args.slice())) |*arg| {
+                _ = &arg;
+                _ = rewritePrivateAccessesInExpr(p, (arg.*), map);
+            }
+},
+.e_unary => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), map);
+},
+.e_dot => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&e.target), map);
+},
+.e_spread => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), map);
+},
+.e_if => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&e.test_), map);
+            _ = rewritePrivateAccessesInExpr(p, (&e.yes), map);
+            _ = rewritePrivateAccessesInExpr(p, (&e.no), map);
+},
+.e_await => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)), map);
+},
+.e_yield => |e| {
+if ((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)) |*v| {
+                _ = &v;
+                _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+            }
+},
+.e_new => |e| {
+_ = rewritePrivateAccessesInExpr(p, (&e.target), map);
+            for (cp_mut_slice(&e.args.slice())) |*arg| {
+                _ = &arg;
+                _ = rewritePrivateAccessesInExpr(p, (arg.*), map);
+            }
+},
+.e_array => |e| {
+for (cp_mut_slice(&e.items.slice())) |*item| {
+                _ = &item;
+                _ = rewritePrivateAccessesInExpr(p, (item.*), map);
+            }
+},
+.e_object => |e| {
+for (cp_mut_slice(&e.properties.slice())) |*prop| {
+                _ = &prop;
+                if ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value)) |*v| {
+                    _ = &v;
+                    _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                }
+                if ((prop.*).initializer) |*ini| {
+                    _ = &ini;
+                    _ = rewritePrivateAccessesInExpr(p, (ini.*), map);
+                }
+            }
+},
+.e_template => |e| {
+if (e.tag) |*t| {
+                _ = &t;
+                _ = rewritePrivateAccessesInExpr(p, (t.*), map);
+            }
+            for (cp_mut_slice(&e.parts)) |*part| {
+                _ = &part;
+                _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value)), map);
+            }
+},
+.e_function => |e| {
+_ = rewritePrivateAccessesInStmts(p, e.func.body.stmts, map);
+},
+.e_arrow => |e| {
+_ = rewritePrivateAccessesInStmts(p, e.body.stmts, map);
+},
+else => {
+
+},
+}
+    }
+
+pub fn rewritePrivateAccessesInStmts(p: *P, stmts: []Stmt, map: *const PrivateLoweredMap) void {
+            for (cp_mut_slice(&stmts)) |*stmt_item| {
+                _ = &stmt_item;
+                switch ((stmt_item.*).data) {
+.s_expr => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
+},
+.s_return => |data| {
+if ((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)) |*v| {
+                    _ = &v;
+                    _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                }
+},
+.s_throw => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
+},
+.s_local => |data| {
+for (cp_mut_slice(&data.decls.slice())) |*decl| {
+                    _ = &decl;
+                    if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
+                        _ = &v;
+                        _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                    }
+                }
+},
+.s_if => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.yes)[0..1], map);
+                if (data.no) |*no| {
+                    _ = &no;
+                    _ = rewritePrivateAccessesInStmts(p, (no.*)[0..1], map);
+                }
+},
+.s_block => |data| {
+_ = rewritePrivateAccessesInStmts(p, data.stmts, map);
+},
+.s_for => |data| {
+if (data.init) |*fi| {
+                    _ = &fi;
+                    _ = rewritePrivateAccessesInStmts(p, (fi.*)[0..1], map);
+                }
+                if (data.test_) |*t| {
+                    _ = &t;
+                    _ = rewritePrivateAccessesInExpr(p, (t.*), map);
+                }
+                if (data.update) |*u| {
+                    _ = &u;
+                    _ = rewritePrivateAccessesInExpr(p, (u.*), map);
+                }
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+.s_for_in => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+.s_for_of => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+.s_while => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+.s_do_while => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+.s_switch => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
+                for (cp_mut_slice(&data.cases)) |*case| {
+                    _ = &case;
+                    if ((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value)) |*v| {
+                        _ = &v;
+                        _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                    }
+                    _ = rewritePrivateAccessesInStmts(p, (case.*).body, map);
+                }
+},
+.s_try => |data| {
+_ = rewritePrivateAccessesInStmts(p, data.body, map);
+                if (data.catch_) |c| {
+                    _ = &c;
+                    _ = rewritePrivateAccessesInStmts(p, c.body, map);
+                }
+                if (data.finally) |f| {
+                    _ = &f;
+                    _ = rewritePrivateAccessesInStmts(p, f.stmts, map);
+                }
+},
+.s_label => |data| {
+_ = rewritePrivateAccessesInStmts(p, (&data.stmt)[0..1], map);
+},
+.s_with => |data| {
+_ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)), map);
+                _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
+},
+else => {
+
+},
+}
+            }
+    }
+
+pub fn lowerStandardDecoratorsStmt(p: *P, stmt: Stmt) []Stmt {
+            return lowerImpl(p, stmt, .stmt);
+    }
+
+pub fn lowerStandardDecoratorsExpr(p: *P, cls: *G.Class, l: logger.Loc, name_from_context: ?[]const u8) Expr {
+            const result = lowerImpl(p, Stmt.empty(), .{ .expr = .{ .class = cls, .loc = l, .name_from_context = name_from_context } });
+            if ((result.len == 0)) {
+                return p.newExpr(E.Missing, l);
+            }
+            return (if (@typeInfo(@TypeOf(result[0].data.s_expr)) == .@"enum") @intFromEnum(result[0].data.s_expr) else result[0].data.s_expr.value);
+    }
+
+pub fn lowerImpl(p: *P, stmt: Stmt, mode: *StdDecMode) []Stmt {
+            const is_expr = (mode == .expr);
+            var cls = (switch (mode) {
+.stmt => (&stmt.data.s_class.class),
+.expr => |e| e.class,
+});
+            _ = &cls;
+            const loc = (switch (mode) {
+.stmt => stmt.loc,
+.expr => |e| e.loc,
+});
+            const name_from_context: ?[]const u8 = (switch (mode) {
+.expr => |e| e.name_from_context,
+.stmt => null,
+});
+            var class_name_ref: Ref = undefined;
+            _ = &class_name_ref;
+            var class_name_loc: logger.Loc = undefined;
+            _ = &class_name_loc;
+            var expr_class_ref: ?Ref = null;
+            _ = &expr_class_ref;
+            var expr_class_is_anonymous = false;
+            _ = &expr_class_is_anonymous;
+            var expr_var_decls = ListManaged(G.Decl).init(p.allocator);
+            _ = &expr_var_decls;
+            if (is_expr) {
+                expr_class_ref = newSym(p, .other, "_class");
+                _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = expr_class_ref.? }, loc) })) catch unreachable);
+                if (cls.class_name) |cn| {
+                    _ = &cn;
+                    class_name_ref = cn.ref.?;
+                    class_name_loc = cn.loc;
+                } else {
+                    class_name_ref = expr_class_ref.?;
+                    class_name_loc = loc;
+                    expr_class_is_anonymous = true;
+                    if (name_from_context) |name| {
+                        _ = &name;
+                        cls.class_name = .{ .ref = newSym(p, .other, name), .loc = loc };
+                    }
+                }
+            } else {
+                class_name_ref = cls.class_name.?.ref.?;
+                class_name_loc = cls.class_name.?.loc;
+            }
+            var inner_class_ref: Ref = class_name_ref;
+            _ = &inner_class_ref;
+            if ((!is_expr)) {
+                const cns = p.symbols.items[@as(usize, @intCast(class_name_ref.innerIndex()))].original_name;
+                inner_class_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}", .{ cns })) catch unreachable));
+            }
+            const class_decorators = cls.ts_decorators;
+            cls.ts_decorators = .{};
+            const init_ref = newSym(p, .other, "_init");
+            if (is_expr) {
+                _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = init_ref }, loc) })) catch unreachable);
+            }
+            var base_ref: ?Ref = null;
+            _ = &base_ref;
+            if ((cls.@"extends" != null)) {
+                base_ref = newSym(p, .other, "_base");
+                if (is_expr) {
+                    _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = base_ref.? }, loc) })) catch unreachable);
+                }
+            }
+            var dec_counter: usize = 0;
+            _ = &dec_counter;
+            var class_dec_ref: ?Ref = null;
+            _ = &class_dec_ref;
+            var class_dec_stmt: Stmt = Stmt.empty();
+            _ = &class_dec_stmt;
+            var class_dec_assign_expr: ?Expr = null;
+            _ = &class_dec_assign_expr;
+            if ((class_decorators.len > 0)) {
+                dec_counter = (dec_counter + 1);
+                class_dec_ref = newSym(p, .other, "_dec");
+                const arr = p.newExpr(E.Array{ .items = class_decorators }, loc);
+                if (is_expr) {
+                    _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = class_dec_ref.? }, loc) })) catch unreachable);
+                    class_dec_assign_expr = assignTo(p, class_dec_ref.?, arr, loc);
+                } else {
+                    class_dec_stmt = varDecl(p, class_dec_ref.?, arr, loc);
+                }
+            }
+            var prop_dec_refs = std.AutoHashMapUnmanaged(usize, Ref);
+            _ = &prop_dec_refs;
+            {
+            }
+            var computed_key_refs = std.AutoHashMapUnmanaged(usize, Ref);
+            _ = &computed_key_refs;
+            {
+            }
+            var pre_eval_stmts = ListManaged(Stmt).init(p.allocator);
+            _ = &pre_eval_stmts;
+            var computed_key_counter: usize = 0;
+            _ = &computed_key_counter;
+            var prop_idx: usize = 0;
+            _ = &prop_idx;
+            while ((prop_idx < cls.properties.len)) : (prop_idx = (prop_idx + 1)) {
+                const prop = (&cls.properties[@as(usize, @intCast(prop_idx))]);
+                if ((prop.kind == .class_static_block)) {
+                    continue;
+                }
+                if ((prop.ts_decorators.len > 0)) {
+                    dec_counter = (dec_counter + 1);
+                    const dec_name = (if ((dec_counter == 1)) "_dec" else ((std.fmt.allocPrint(p.allocator, "_dec{d}", .{ dec_counter })) catch unreachable));
+                    const dec_ref = newSym(p, .other, dec_name);
+                    _ = ((prop_dec_refs.put(p.allocator, prop_idx, dec_ref)) catch unreachable);
+                    if (is_expr) {
+                        _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = dec_ref }, loc) })) catch unreachable);
+                    }
+                    _ = ((pre_eval_stmts.append(varDecl(p, dec_ref, p.newExpr(E.Array{ .items = prop.ts_decorators }, loc), loc))) catch unreachable);
+                }
+                if (((prop.flags.contains(.is_computed) and (prop.key != null)) and (prop.ts_decorators.len > 0))) {
+                    computed_key_counter = (computed_key_counter + 1);
+                    const key_name = (if ((computed_key_counter == 1)) "_computedKey" else ((std.fmt.allocPrint(p.allocator, "_computedKey{d}", .{ computed_key_counter })) catch unreachable));
+                    const key_ref = newSym(p, .other, key_name);
+                    _ = ((computed_key_refs.put(p.allocator, prop_idx, key_ref)) catch unreachable);
+                    if (is_expr) {
+                        _ = ((expr_var_decls.append(.{ .binding = p.b(B.Identifier{ .ref = key_ref }, loc) })) catch unreachable);
+                    }
+                    _ = ((pre_eval_stmts.append(varDecl(p, key_ref, prop.key.?, loc))) catch unreachable);
+                    prop.key = useRef(p, key_ref, prop.key.?.loc);
+                }
+            }
+            {
+                const replacement_ref = (if (is_expr) ((expr_class_ref) orelse (class_name_ref)) else inner_class_ref);
+                if ((!replacement_ref.eql(class_name_ref))) {
+                    const rk: *RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new = replacement_ref } };
+                    for (pre_eval_stmts.items) |*pre_stmt| {
+                        _ = &pre_stmt;
+                        if (((pre_stmt.*).data == .s_local)) {
+                            for (cp_mut_slice(&(pre_stmt.*).data.s_local.decls.slice())) |*decl| {
+                                _ = &decl;
+                                if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
+                                    _ = &v;
+                                    _ = rewriteExpr(p, (v.*), rk);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            var original_class_name_for_decorator: ?[]const u8 = null;
+            _ = &original_class_name_for_decorator;
+            if (((is_expr and (!expr_class_is_anonymous)) and (expr_class_ref != null))) {
+                original_class_name_for_decorator = p.symbols.items[@as(usize, @intCast(class_name_ref.innerIndex()))].original_name;
+                class_name_ref = expr_class_ref.?;
+                class_name_loc = loc;
+            }
+            const init_start_expr: Expr = brk: {
+            var base_expr = p.newExpr(E.Undefined, loc);
+            _ = &base_expr;
+            if (base_ref) |br| {
+                _ = &br;
+                base_expr = p.newExpr(E.Identifier{ .ref = br }, loc);
+            }
+            break :brk callRt(p, loc, "__decoratorStart", (&.{ base_expr }));
+};
+            var base_decl_stmt: Stmt = Stmt.empty();
+            _ = &base_decl_stmt;
+            if ((!is_expr)) {
+                if (base_ref) |br| {
+                    _ = &br;
+                    base_decl_stmt = varDecl(p, br, cls.@"extends", loc);
+                }
+            }
+            const base_assign_expr: ?Expr = (if ((is_expr and (base_ref != null))) assignTo(p, base_ref.?, cls.@"extends".?, loc) else null);
+            if (base_ref) |br| {
+                _ = &br;
+                cls.@"extends" = useRef(p, br, loc);
+            }
+            const init_decl_stmt: Stmt = (if ((!is_expr)) varDecl(p, init_ref, init_start_expr, loc) else Stmt.empty());
+            var suffix_exprs = ListManaged(Expr).init(p.allocator);
+            _ = &suffix_exprs;
+            var constructor_inject_stmts = ListManaged(Stmt).init(p.allocator);
+            _ = &constructor_inject_stmts;
+            var new_properties = ListManaged(Property).init(p.allocator);
+            _ = &new_properties;
+            var static_non_field_elements = ListManaged(Expr).init(p.allocator);
+            _ = &static_non_field_elements;
+            var instance_non_field_elements = ListManaged(Expr).init(p.allocator);
+            _ = &instance_non_field_elements;
+            var has_static_private_methods = false;
+            _ = &has_static_private_methods;
+            var has_instance_private_methods = false;
+            _ = &has_instance_private_methods;
+            var static_field_decorate = ListManaged(Expr).init(p.allocator);
+            _ = &static_field_decorate;
+            var instance_field_decorate = ListManaged(Expr).init(p.allocator);
+            _ = &instance_field_decorate;
+            var static_accessor_count: usize = 0;
+            _ = &static_accessor_count;
+            var instance_accessor_count: usize = 0;
+            _ = &instance_accessor_count;
+            var static_init_entries = ListManaged(FieldInitEntry).init(p.allocator);
+            _ = &static_init_entries;
+            var instance_init_entries = ListManaged(FieldInitEntry).init(p.allocator);
+            _ = &instance_init_entries;
+            var static_element_order = ListManaged(StaticElement).init(p.allocator);
+            _ = &static_element_order;
+            var extracted_static_blocks = ListManaged(*G.ClassStaticBlock).init(p.allocator);
+            _ = &extracted_static_blocks;
+            var prefix_stmts = ListManaged(Stmt).init(p.allocator);
+            _ = &prefix_stmts;
+            var private_lowered_map = PrivateLoweredMap{  };
+            _ = &private_lowered_map;
+            var accessor_storage_counter: usize = 0;
+            _ = &accessor_storage_counter;
+            var emitted_private_adds = std.AutoHashMapUnmanaged(u32, void);
+            _ = &emitted_private_adds;
+            {
+            }
+            var static_private_add_blocks = ListManaged(Property).init(p.allocator);
+            _ = &static_private_add_blocks;
+            var lower_all_private = false;
+            _ = &lower_all_private;
+            {
+                var has_any_private = false;
+                _ = &has_any_private;
+                var has_any_decorated = false;
+                _ = &has_any_decorated;
+                for (cp_iter_slice(cls.properties)) |cprop| {
+                    _ = &cprop;
+                    if ((cprop.kind == .class_static_block)) {
+                        continue;
+                    }
+                    if ((cprop.ts_decorators.len > 0)) {
+                        has_any_decorated = true;
+                        if (((cprop.key != null) and (cprop.key.?.data == .e_private_identifier))) {
+                            lower_all_private = true;
+                            break;
+                        }
+                    }
+                    if (((cprop.key != null) and (cprop.key.?.data == .e_private_identifier))) {
+                        has_any_private = true;
+                    }
+                }
+                if ((((!lower_all_private) and has_any_private) and has_any_decorated)) {
+                    lower_all_private = true;
+                }
+            }
+            prop_idx = 0;
+            while ((prop_idx < cls.properties.len)) : (prop_idx = (prop_idx + 1)) {
+                const prop = (&cls.properties[@as(usize, @intCast(prop_idx))]);
+                if ((prop.ts_decorators.len == 0)) {
+                    if (((((lower_all_private and (prop.key != null)) and (prop.key.?.data == .e_private_identifier)) and (prop.kind != .class_static_block)) and (prop.kind != .auto_accessor))) {
+                        const nk_expr = prop.key.?;
+                        const npriv_orig = p.symbols.items[@as(usize, @intCast(nk_expr.data.e_private_identifier.ref.innerIndex()))].original_name;
+                        const npriv_inner = nk_expr.data.e_private_identifier.ref.innerIndex();
+                        if (prop.flags.contains(.is_method)) {
+                            const nk = methodKind(prop);
+                            const existing = private_lowered_map.get(npriv_inner);
+                            var ws_ref: Ref = undefined;
+                            _ = &ws_ref;
+                            if (existing) |ex| {
+                                _ = &ex;
+                                ws_ref = ex.storage_ref;
+                            } else {
+                                ws_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}", .{ npriv_orig[1..] })) catch unreachable));
+                            }
+                            const fn_nm = ((std.fmt.allocPrint(p.allocator, "_{s}{s}", .{ npriv_orig[1..], fnSuffix(nk) })) catch unreachable);
+                            const fn_ref = newSym(p, .other, fn_nm);
+                            var new_info = ((existing) orelse (PrivateLoweredInfo{ .storage_ref = ws_ref }));
+                            _ = &new_info;
+                            if ((nk == 1)) {
+                                new_info.method_fn_ref = fn_ref;
+                            } else {
+                                if ((nk == 2)) {
+                                    new_info.getter_fn_ref = fn_ref;
+                                } else {
+                                    new_info.setter_fn_ref = fn_ref;
+                                }
+                            }
+                            _ = ((private_lowered_map.put(p.allocator, npriv_inner, new_info)) catch unreachable);
+                            if ((existing == null)) {
+                                _ = ((prefix_stmts.append(varDecl2(p, ws_ref, newWeakSetExpr(p, loc), fn_ref, null, loc))) catch unreachable);
+                            } else {
+                                _ = ((prefix_stmts.append(varDecl(p, fn_ref, null, loc))) catch unreachable);
+                            }
+                            _ = ((prefix_stmts.append(p.s(S.SExpr{ .value = assignTo(p, fn_ref, (((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value)) orelse (p.newExpr(E.Undefined, loc))), loc) }, loc))) catch unreachable);
+                            if ((!emitted_private_adds.contains(npriv_inner))) {
+                                _ = ((emitted_private_adds.put(p.allocator, npriv_inner, .{})) catch unreachable);
+                                _ = emitPrivateAdd(p, prop.flags.contains(.is_static), ws_ref, null, loc, (&constructor_inject_stmts), (&static_private_add_blocks));
+                            }
+                            continue;
+                        } else {
+                            const wm_nm = ((std.fmt.allocPrint(p.allocator, "_{s}", .{ npriv_orig[1..] })) catch unreachable);
+                            const wm_ref = newSym(p, .other, wm_nm);
+                            _ = ((private_lowered_map.put(p.allocator, npriv_inner, .{ .storage_ref = wm_ref })) catch unreachable);
+                            _ = ((prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc))) catch unreachable);
+                            const init_val = ((prop.initializer) orelse (p.newExpr(E.Undefined, loc)));
+                            if ((!prop.flags.contains(.is_static))) {
+                                _ = ((constructor_inject_stmts.append(p.s(S.SExpr{ .value = callRt(p, loc, "__privateAdd", (&.{ p.newExpr(E.This, loc), useRef(p, wm_ref, loc), init_val })) }, loc))) catch unreachable);
+                            } else {
+                                _ = ((static_private_add_blocks.append(makeStaticBlock(p, callRt(p, loc, "__privateAdd", (&.{ p.newExpr(E.This, loc), useRef(p, wm_ref, loc), init_val })), loc))) catch unreachable);
+                            }
+                            continue;
+                        }
+                    }
+                    if ((prop.kind == .auto_accessor)) {
+                        const accessor_name = brk: {
+                        if ((prop.key.?.data == .e_string)) {
+                            break :brk ((std.fmt.allocPrint(p.allocator, "_{s}", .{ prop.key.?.data.e_string.data })) catch unreachable);
+                        }
+                        const name = ((std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{ accessor_storage_counter })) catch unreachable);
+                        accessor_storage_counter = (accessor_storage_counter + 1);
+                        break :brk name;
+};
+                        const wm_ref = newSym(p, .other, accessor_name);
+                        _ = ((prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc))) catch unreachable);
+                        var get_body = bun.handleOom(p.allocator.alloc(Stmt, 1));
+                        _ = &get_body;
+                        get_body[cp_cast_int(usize, 0)] = p.s(S.Return{ .value = callRt(p, loc, "__privateGet", (&.{ p.newExpr(E.This, loc), useRef(p, wm_ref, loc) })) }, loc);
+                        const get_fn = bun.handleOom(p.allocator.create(G.Fn));
+                        get_fn.* = .{ .body = .{ .stmts = get_body, .loc = loc } };
+                        const setter_param_ref = newSym(p, .other, "v");
+                        var set_body = bun.handleOom(p.allocator.alloc(Stmt, 1));
+                        _ = &set_body;
+                        set_body[cp_cast_int(usize, 0)] = p.s(S.SExpr{ .value = callRt(p, loc, "__privateSet", (&.{ p.newExpr(E.This, loc), useRef(p, wm_ref, loc), useRef(p, setter_param_ref, loc) })) }, loc);
+                        var setter_fn_args = bun.handleOom(p.allocator.alloc(G.Arg, 1));
+                        _ = &setter_fn_args;
+                        setter_fn_args[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = setter_param_ref }, loc) };
+                        const set_fn = bun.handleOom(p.allocator.create(G.Fn));
+                        set_fn.* = .{ .args = setter_fn_args, .body = .{ .stmts = set_body, .loc = loc } };
+                        var getter_flags = prop.flags;
+                        _ = &getter_flags;
+                        _ = getter_flags.insert(.is_method);
+                        _ = ((new_properties.append(.{ .key = prop.key, .value = p.newExpr(E.Function{ .func = get_fn.* }, loc), .kind = .get, .flags = getter_flags })) catch unreachable);
+                        _ = ((new_properties.append(.{ .key = prop.key, .value = p.newExpr(E.Function{ .func = set_fn.* }, loc), .kind = .set, .flags = getter_flags })) catch unreachable);
+                        const init_val = ((prop.initializer) orelse (p.newExpr(E.Undefined, loc)));
+                        if ((!prop.flags.contains(.is_static))) {
+                            _ = ((constructor_inject_stmts.append(p.s(S.SExpr{ .value = callRt(p, loc, "__privateAdd", (&.{ p.newExpr(E.This, loc), useRef(p, wm_ref, loc), init_val })) }, loc))) catch unreachable);
+                        } else {
+                            _ = ((suffix_exprs.append(callRt(p, loc, "__privateAdd", (&.{ useRef(p, class_name_ref, class_name_loc), useRef(p, wm_ref, loc), init_val })))) catch unreachable);
+                        }
+                        continue;
+                    }
+                    if ((prop.kind == .class_static_block)) {
+                        if (prop.class_static_block) |sb| {
+                            _ = &sb;
+                            _ = ((static_element_order.append(.{ .kind = .block, .index = extracted_static_blocks.items.len })) catch unreachable);
+                            _ = ((extracted_static_blocks.append(sb)) catch unreachable);
+                        }
+                        continue;
+                    }
+                    _ = ((new_properties.append(prop.*)) catch unreachable);
+                    continue;
+                }
+                var flags: f64 = 0;
+                _ = &flags;
+                if (prop.flags.contains(.is_method)) {
+                    flags = (switch (prop.kind) {
+.get => 2,
+.set => 3,
+else => 1,
+});
+                } else {
+                    flags = (switch (prop.kind) {
+.auto_accessor => 4,
+else => 5,
+});
+                }
+                if (prop.flags.contains(.is_static)) {
+                    flags = (flags + 8);
+                }
+                const is_private = (prop.key.?.data == .e_private_identifier);
+                if (is_private) {
+                    flags = (flags + 16);
+                }
+                var decorator_array = p.newExpr(E.Array{ .items = prop.ts_decorators }, loc);
+                _ = &decorator_array;
+                if (prop_dec_refs.get(prop_idx)) |dec_ref| {
+                    _ = &dec_ref;
+                    decorator_array = useRef(p, dec_ref, loc);
+                }
+                const key_expr = prop.key.?;
+                const k = (@as(u8, @intFromFloat(flags)) & 7);
+                var dec_arg_count: usize = 5;
+                _ = &dec_arg_count;
+                var private_storage_ref: ?Ref = null;
+                _ = &private_storage_ref;
+                var private_extra_ref: ?Ref = null;
+                _ = &private_extra_ref;
+                var private_method_fn_ref: ?Ref = null;
+                _ = &private_method_fn_ref;
+                if (is_private) {
+                    const private_orig = p.symbols.items[@as(usize, @intCast(key_expr.data.e_private_identifier.ref.innerIndex()))].original_name;
+                    const priv_inner = key_expr.data.e_private_identifier.ref.innerIndex();
+                    if (((k >= 1) and (k <= 3))) {
+                        const existing = private_lowered_map.get(priv_inner);
+                        var ws_ref: Ref = undefined;
+                        _ = &ws_ref;
+                        if (existing) |ex| {
+                            _ = &ex;
+                            ws_ref = ex.storage_ref;
+                        } else {
+                            ws_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}", .{ private_orig[1..] })) catch unreachable));
+                        }
+                        private_storage_ref = ws_ref;
+                        const fn_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}{s}", .{ private_orig[1..], fnSuffix(k) })) catch unreachable));
+                        private_method_fn_ref = fn_ref;
+                        var new_info = ((existing) orelse (PrivateLoweredInfo{ .storage_ref = ws_ref }));
+                        _ = &new_info;
+                        if ((k == 1)) {
+                            new_info.method_fn_ref = fn_ref;
+                        } else {
+                            if ((k == 2)) {
+                                new_info.getter_fn_ref = fn_ref;
+                            } else {
+                                new_info.setter_fn_ref = fn_ref;
+                            }
+                        }
+                        _ = ((private_lowered_map.put(p.allocator, priv_inner, new_info)) catch unreachable);
+                        if ((existing == null)) {
+                            _ = ((prefix_stmts.append(varDecl2(p, ws_ref, newWeakSetExpr(p, loc), fn_ref, null, loc))) catch unreachable);
+                        } else {
+                            _ = ((prefix_stmts.append(varDecl(p, fn_ref, null, loc))) catch unreachable);
+                        }
+                        dec_arg_count = 6;
+                    } else {
+                        if ((k == 5)) {
+                            const wm_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}", .{ private_orig[1..] })) catch unreachable));
+                            private_storage_ref = wm_ref;
+                            _ = ((private_lowered_map.put(p.allocator, priv_inner, .{ .storage_ref = wm_ref })) catch unreachable);
+                            _ = ((prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc))) catch unreachable);
+                            dec_arg_count = 5;
+                        } else {
+                            if ((k == 4)) {
+                                const wm_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}", .{ private_orig[1..] })) catch unreachable));
+                                private_storage_ref = wm_ref;
+                                const acc_ref = newSym(p, .other, ((std.fmt.allocPrint(p.allocator, "_{s}_acc", .{ private_orig[1..] })) catch unreachable));
+                                private_method_fn_ref = acc_ref;
+                                _ = ((private_lowered_map.put(p.allocator, priv_inner, .{ .storage_ref = wm_ref, .accessor_desc_ref = acc_ref })) catch unreachable);
+                                _ = ((prefix_stmts.append(varDecl2(p, wm_ref, newWeakMapExpr(p, loc), acc_ref, null, loc))) catch unreachable);
+                                dec_arg_count = 6;
+                            }
+                        }
+                    }
+                } else {
+                    if ((k == 4)) {
+                        const accessor_name = brk: {
+                        if ((key_expr.data == .e_string)) {
+                            break :brk ((std.fmt.allocPrint(p.allocator, "_{s}", .{ key_expr.data.e_string.data })) catch unreachable);
+                        }
+                        const name = ((std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{ accessor_storage_counter })) catch unreachable);
+                        accessor_storage_counter = (accessor_storage_counter + 1);
+                        break :brk name;
+};
+                        const wm_ref = newSym(p, .other, accessor_name);
+                        private_extra_ref = wm_ref;
+                        _ = ((prefix_stmts.append(varDecl(p, wm_ref, newWeakMapExpr(p, loc), loc))) catch unreachable);
+                        dec_arg_count = 6;
+                    }
+                }
+                const target_ref = (if ((is_expr and (expr_class_ref != null))) expr_class_ref.? else class_name_ref);
+                var dec_args = bun.handleOom(p.allocator.alloc(Expr, dec_arg_count));
+                _ = &dec_args;
+                dec_args[cp_cast_int(usize, 0)] = p.newExpr(E.Identifier{ .ref = init_ref }, loc);
+                dec_args[cp_cast_int(usize, 1)] = p.newExpr(E.Number{ .value = flags }, loc);
+                dec_args[cp_cast_int(usize, 2)] = (if (is_private) p.newExpr(E.String{ .data = p.symbols.items[@as(usize, @intCast(key_expr.data.e_private_identifier.ref.innerIndex()))].original_name }, loc) else key_expr);
+                dec_args[cp_cast_int(usize, 3)] = decorator_array;
+                if ((is_private and (private_storage_ref != null))) {
+                    dec_args[cp_cast_int(usize, 4)] = useRef(p, private_storage_ref.?, loc);
+                    if ((dec_arg_count == 6)) {
+                        if (((k >= 1) and (k <= 3))) {
+                            dec_args[cp_cast_int(usize, 5)] = (((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value)) orelse (p.newExpr(E.Undefined, loc)));
+                        } else {
+                            if ((k == 4)) {
+                                dec_args[cp_cast_int(usize, 5)] = useRef(p, private_storage_ref.?, loc);
+                            } else {
+                                dec_args[cp_cast_int(usize, 5)] = p.newExpr(E.Undefined, loc);
+                            }
+                        }
+                    }
+                } else {
+                    _ = p.recordUsage(target_ref);
+                    dec_args[cp_cast_int(usize, 4)] = p.newExpr(E.Identifier{ .ref = target_ref }, class_name_loc);
+                    if ((dec_arg_count == 6)) {
+                        if (private_extra_ref) |extra_ref| {
+                            _ = &extra_ref;
+                            dec_args[cp_cast_int(usize, 5)] = useRef(p, extra_ref, loc);
+                        } else {
+                            dec_args[cp_cast_int(usize, 5)] = p.newExpr(E.Undefined, loc);
+                        }
+                    }
+                }
+                const raw_element = p.callRuntime(loc, "__decorateElement", dec_args);
+                var element = raw_element;
+                _ = &element;
+                if (private_method_fn_ref) |fn_ref| {
+                    _ = &fn_ref;
+                    element = assignTo(p, fn_ref, raw_element, loc);
+                }
+                if ((k >= 4)) {
+                    var prop_copy = prop.*;
+                    _ = &prop_copy;
+                    prop_copy.ts_decorators = .{};
+                    if (is_private) {
+                        if (private_storage_ref) |ps_ref| {
+                            _ = &ps_ref;
+                            prop_copy.key = p.newExpr(E.Identifier{ .ref = ps_ref }, loc);
+                        }
+                    }
+                    if (private_extra_ref) |pe_ref| {
+                        _ = &pe_ref;
+                        (if (@typeInfo(@TypeOf(prop_copy)) == .@"enum") @intFromEnum(prop_copy) else prop_copy.value) = p.newExpr(E.Identifier{ .ref = pe_ref }, loc);
+                    }
+                    const is_accessor = (k == 4);
+                    const init_entry = FieldInitEntry{ .prop = prop_copy, .is_private = is_private, .is_accessor = is_accessor };
+                    if (prop.flags.contains(.is_static)) {
+                        if (is_accessor) {
+                            _ = ((static_non_field_elements.append(element)) catch unreachable);
+                            static_accessor_count = (static_accessor_count + 1);
+                        } else {
+                            _ = ((static_field_decorate.append(element)) catch unreachable);
+                        }
+                        _ = ((static_element_order.append(.{ .kind = .field_or_accessor, .index = static_init_entries.items.len })) catch unreachable);
+                        _ = ((static_init_entries.append(init_entry)) catch unreachable);
+                    } else {
+                        if (is_accessor) {
+                            _ = ((instance_non_field_elements.append(element)) catch unreachable);
+                            instance_accessor_count = (instance_accessor_count + 1);
+                        } else {
+                            _ = ((instance_field_decorate.append(element)) catch unreachable);
+                        }
+                        _ = ((instance_init_entries.append(init_entry)) catch unreachable);
+                    }
+                } else {
+                    if ((is_private and (private_storage_ref != null))) {
+                        const priv_inner2 = key_expr.data.e_private_identifier.ref.innerIndex();
+                        if ((!emitted_private_adds.contains(priv_inner2))) {
+                            _ = ((emitted_private_adds.put(p.allocator, priv_inner2, .{})) catch unreachable);
+                            _ = emitPrivateAdd(p, prop.flags.contains(.is_static), private_storage_ref.?, null, loc, (&constructor_inject_stmts), (&static_private_add_blocks));
+                        }
+                        if (prop.flags.contains(.is_static)) {
+                            _ = ((static_non_field_elements.append(element)) catch unreachable);
+                            has_static_private_methods = true;
+                        } else {
+                            _ = ((instance_non_field_elements.append(element)) catch unreachable);
+                            has_instance_private_methods = true;
+                        }
+                    } else {
+                        var new_prop = prop.*;
+                        _ = &new_prop;
+                        new_prop.ts_decorators = .{};
+                        _ = ((new_properties.append(new_prop)) catch unreachable);
+                        if (prop.flags.contains(.is_static)) {
+                            _ = ((static_non_field_elements.append(element)) catch unreachable);
+                        } else {
+                            _ = ((instance_non_field_elements.append(element)) catch unreachable);
+                        }
+                    }
+                }
+            }
+            if ((private_lowered_map.count() > 0)) {
+                for (new_properties.items) |*nprop| {
+                    _ = &nprop;
+                    if ((if (@typeInfo(@TypeOf((nprop.*))) == .@"enum") @intFromEnum((nprop.*)) else (nprop.*).value)) |*v| {
+                        _ = &v;
+                        _ = rewritePrivateAccessesInExpr(p, (v.*), (&private_lowered_map));
+                    }
+                    if ((nprop.*).class_static_block) |sb| {
+                        _ = &sb;
+                        _ = rewritePrivateAccessesInStmts(p, sb.stmts.slice(), (&private_lowered_map));
+                    }
+                }
+                for (instance_init_entries.items) |*entry| {
+                    _ = &entry;
+                    if ((entry.*).prop.initializer) |*ini| {
+                        _ = &ini;
+                        _ = rewritePrivateAccessesInExpr(p, (ini.*), (&private_lowered_map));
+                    }
+                }
+                for (static_init_entries.items) |*entry| {
+                    _ = &entry;
+                    if ((entry.*).prop.initializer) |*ini| {
+                        _ = &ini;
+                        _ = rewritePrivateAccessesInExpr(p, (ini.*), (&private_lowered_map));
+                    }
+                }
+                for (extracted_static_blocks.items) |sb| {
+                    _ = &sb;
+                    _ = rewritePrivateAccessesInStmts(p, sb.stmts.slice(), (&private_lowered_map));
+                }
+                for (static_non_field_elements.items) |*elem| {
+                    _ = &elem;
+                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                }
+                for (instance_non_field_elements.items) |*elem| {
+                    _ = &elem;
+                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                }
+                for (static_field_decorate.items) |*elem| {
+                    _ = &elem;
+                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                }
+                for (instance_field_decorate.items) |*elem| {
+                    _ = &elem;
+                    _ = rewritePrivateAccessesInExpr(p, (elem.*), (&private_lowered_map));
+                }
+                _ = rewritePrivateAccessesInStmts(p, pre_eval_stmts.items, (&private_lowered_map));
+                _ = rewritePrivateAccessesInStmts(p, prefix_stmts.items, (&private_lowered_map));
+            }
+            const static_field_count = static_field_decorate.items.len;
+            const total_accessor_count = (static_accessor_count + instance_accessor_count);
+            const static_field_base_idx = total_accessor_count;
+            const instance_accessor_base_idx = static_accessor_count;
+            const instance_field_base_idx = (total_accessor_count + static_field_count);
+            _ = ((suffix_exprs.appendSlice(static_non_field_elements.items)) catch unreachable);
+            _ = ((suffix_exprs.appendSlice(instance_non_field_elements.items)) catch unreachable);
+            _ = ((suffix_exprs.appendSlice(static_field_decorate.items)) catch unreachable);
+            _ = ((suffix_exprs.appendSlice(instance_field_decorate.items)) catch unreachable);
+            if ((class_decorators.len > 0)) {
+                _ = p.recordUsage(class_name_ref);
+                var class_name_str: []const u8 = p.symbols.items[@as(usize, @intCast(class_name_ref.innerIndex()))].original_name;
+                _ = &class_name_str;
+                if (original_class_name_for_decorator) |name| {
+                    _ = &name;
+                    class_name_str = name;
+                } else {
+                    if ((is_expr and expr_class_is_anonymous)) {
+                        if (class_name_str == null) { class_name_str = ""; }
+                    }
+                }
+                var cls_dec_args = bun.handleOom(p.allocator.alloc(Expr, 5));
+                _ = &cls_dec_args;
+                cls_dec_args[cp_cast_int(usize, 0)] = p.newExpr(E.Identifier{ .ref = init_ref }, loc);
+                cls_dec_args[cp_cast_int(usize, 1)] = p.newExpr(E.Number{ .value = 0 }, loc);
+                cls_dec_args[cp_cast_int(usize, 2)] = p.newExpr(E.String{ .data = class_name_str }, loc);
+                if (class_dec_ref) |cdr| {
+                    _ = &cdr;
+                    cls_dec_args[cp_cast_int(usize, 3)] = useRef(p, cdr, loc);
+                } else {
+                    cls_dec_args[cp_cast_int(usize, 3)] = p.newExpr(E.Array{ .items = class_decorators }, loc);
+                }
+                cls_dec_args[cp_cast_int(usize, 4)] = (if (is_expr) useRef(p, expr_class_ref.?, loc) else p.newExpr(E.Identifier{ .ref = class_name_ref }, class_name_loc));
+                _ = ((suffix_exprs.append(assignTo(p, class_name_ref, p.callRuntime(loc, "__decorateElement", cls_dec_args), class_name_loc))) catch unreachable);
+            }
+            if (((static_non_field_elements.items.len > 0) or has_static_private_methods)) {
+                _ = ((suffix_exprs.append(callRt(p, loc, "__runInitializers", (&.{ useRef(p, init_ref, loc), p.newExpr(E.Number{ .value = 3 }, loc), useRef(p, class_name_ref, class_name_loc) })))) catch unreachable);
+            }
+            {
+                var s_accessor_idx: usize = 0;
+                _ = &s_accessor_idx;
+                var s_field_idx: usize = 0;
+                _ = &s_field_idx;
+                for (static_element_order.items) |elem| {
+                    _ = &elem;
+                    switch (elem.kind) {
+.block => {
+const sb = extracted_static_blocks.items[@as(usize, @intCast(elem.index))];
+                    const stmts_slice = sb.stmts.slice();
+                    _ = rewriteStmts(p, stmts_slice, .{ .replace_this = .{ .ref = class_name_ref, .loc = class_name_loc } });
+                    const all_exprs = blk: {
+                    for (cp_iter_slice(stmts_slice)) |sb_stmt| {
+                        _ = &sb_stmt;
+                        if ((sb_stmt.data != .s_expr)) {
+                            break :blk false;
+                        }
+                    }
+                    break :blk true;
+};
+                    if (all_exprs) {
+                        for (cp_iter_slice(stmts_slice)) |sb_stmt| {
+                            _ = &sb_stmt;
+                            _ = ((suffix_exprs.append((if (@typeInfo(@TypeOf(sb_stmt.data.s_expr)) == .@"enum") @intFromEnum(sb_stmt.data.s_expr) else sb_stmt.data.s_expr.value))) catch unreachable);
+                        }
+                    } else {
+                        const iife_body = p.newExpr(E.Arrow{ .body = .{ .loc = loc, .stmts = stmts_slice }, .is_async = false }, loc);
+                        _ = ((suffix_exprs.append(p.newExpr(E.Call{ .target = iife_body, .args = ExprNodeList.empty }, loc))) catch unreachable);
+                    }
+},
+.field_or_accessor => {
+const entry = static_init_entries.items[@as(usize, @intCast(elem.index))];
+                    const field_idx: usize = (if (entry.is_accessor) brk: {
+                    const idx = s_accessor_idx;
+                    s_accessor_idx = (s_accessor_idx + 1);
+                    break :brk idx;
+} else brk: {
+                    const idx = (static_field_base_idx + s_field_idx);
+                    s_field_idx = (s_field_idx + 1);
+                    break :brk idx;
+});
+                    const run_args_count: usize = (if ((entry.prop.initializer != null)) 4 else 3);
+                    const run_args = bun.handleOom(p.allocator.alloc(Expr, run_args_count));
+                    run_args[cp_cast_int(usize, 0)] = useRef(p, init_ref, loc);
+                    run_args[cp_cast_int(usize, 1)] = p.newExpr(E.Number{ .value = initFlag(field_idx) }, loc);
+                    run_args[cp_cast_int(usize, 2)] = useRef(p, class_name_ref, class_name_loc);
+                    if (entry.prop.initializer) |init_val| {
+                        _ = &init_val;
+                        run_args[cp_cast_int(usize, 3)] = init_val;
+                    }
+                    const run_init_call = p.callRuntime(loc, "__runInitializers", run_args);
+                    if ((entry.is_accessor or entry.is_private)) {
+                        const wm_ref_expr = (if ((entry.is_accessor and (!entry.is_private))) (if (@typeInfo(@TypeOf(entry.prop)) == .@"enum") @intFromEnum(entry.prop) else entry.prop.value).? else entry.prop.key.?);
+                        _ = ((suffix_exprs.append(callRt(p, loc, "__privateAdd", (&.{ useRef(p, class_name_ref, class_name_loc), wm_ref_expr, run_init_call })))) catch unreachable);
+                    } else {
+                        const assign_target = memberTarget(p, useRef(p, class_name_ref, class_name_loc), entry.prop);
+                        _ = ((suffix_exprs.append(Expr.assign(assign_target, run_init_call))) catch unreachable);
+                    }
+                    _ = ((suffix_exprs.append(callRt(p, loc, "__runInitializers", (&.{ useRef(p, init_ref, loc), p.newExpr(E.Number{ .value = extraInitFlag(field_idx) }, loc), useRef(p, class_name_ref, class_name_loc) })))) catch unreachable);
+},
+}
+                }
+            }
+            if ((class_decorators.len > 0)) {
+                _ = ((suffix_exprs.append(callRt(p, loc, "__runInitializers", (&.{ useRef(p, init_ref, loc), p.newExpr(E.Number{ .value = 1 }, loc), useRef(p, class_name_ref, class_name_loc) })))) catch unreachable);
+            }
+            _ = ((suffix_exprs.append(callRt(p, loc, "__decoratorMetadata", (&.{ useRef(p, init_ref, loc), useRef(p, class_name_ref, class_name_loc) })))) catch unreachable);
+            if (((instance_non_field_elements.items.len > 0) or has_instance_private_methods)) {
+                _ = ((constructor_inject_stmts.append(p.s(S.SExpr{ .value = callRt(p, loc, "__runInitializers", (&.{ useRef(p, init_ref, loc), p.newExpr(E.Number{ .value = 5 }, loc), p.newExpr(E.This, loc) })) }, loc))) catch unreachable);
+            }
+            {
+                var i_accessor_idx: usize = 0;
+                _ = &i_accessor_idx;
+                var i_field_idx: usize = 0;
+                _ = &i_field_idx;
+                for (instance_init_entries.items) |entry| {
+                    _ = &entry;
+                    const field_idx: usize = (if (entry.is_accessor) brk: {
+                    const idx = (instance_accessor_base_idx + i_accessor_idx);
+                    i_accessor_idx = (i_accessor_idx + 1);
+                    break :brk idx;
+} else brk: {
+                    const idx = (instance_field_base_idx + i_field_idx);
+                    i_field_idx = (i_field_idx + 1);
+                    break :brk idx;
+});
+                    const run_args_count: usize = (if ((entry.prop.initializer != null)) 4 else 3);
+                    const run_args = bun.handleOom(p.allocator.alloc(Expr, run_args_count));
+                    run_args[cp_cast_int(usize, 0)] = useRef(p, init_ref, loc);
+                    run_args[cp_cast_int(usize, 1)] = p.newExpr(E.Number{ .value = initFlag(field_idx) }, loc);
+                    run_args[cp_cast_int(usize, 2)] = p.newExpr(E.This, loc);
+                    if (entry.prop.initializer) |init_val| {
+                        _ = &init_val;
+                        run_args[cp_cast_int(usize, 3)] = init_val;
+                    }
+                    const run_init_call = p.callRuntime(loc, "__runInitializers", run_args);
+                    if ((entry.is_accessor or entry.is_private)) {
+                        const wm_ref_expr = (if ((entry.is_accessor and (!entry.is_private))) (if (@typeInfo(@TypeOf(entry.prop)) == .@"enum") @intFromEnum(entry.prop) else entry.prop.value).? else entry.prop.key.?);
+                        _ = ((constructor_inject_stmts.append(p.s(S.SExpr{ .value = callRt(p, loc, "__privateAdd", (&.{ p.newExpr(E.This, loc), wm_ref_expr, run_init_call })) }, loc))) catch unreachable);
+                    } else {
+                        _ = ((constructor_inject_stmts.append(Stmt.assign(memberTarget(p, p.newExpr(E.This, loc), entry.prop), run_init_call))) catch unreachable);
+                    }
+                    _ = ((constructor_inject_stmts.append(p.s(S.SExpr{ .value = callRt(p, loc, "__runInitializers", (&.{ useRef(p, init_ref, loc), p.newExpr(E.Number{ .value = extraInitFlag(field_idx) }, loc), p.newExpr(E.This, loc) })) }, loc))) catch unreachable);
+                }
+            }
+            if ((constructor_inject_stmts.items.len > 0)) {
+                var found_constructor = false;
+                _ = &found_constructor;
+                for (new_properties.items) |*nprop| {
+                    _ = &nprop;
+                    if (((((nprop.*).flags.contains(.is_method) and ((nprop.*).key != null)) and ((nprop.*).key.?.data == .e_string)) and (nprop.*).key.?.data.e_string.eqlComptime("constructor"))) {
+                        const func = (if (@typeInfo(@TypeOf((nprop.*))) == .@"enum") @intFromEnum((nprop.*)) else (nprop.*).value).?.data.e_function;
+                        var body_stmts = ListManaged(Stmt).fromOwnedSlice(p.allocator, func.func.body.stmts);
+                        _ = &body_stmts;
+                        var super_index: ?usize = null;
+                        _ = &super_index;
+                        var index: usize = 0;
+                        _ = &index;
+                        while ((index < body_stmts.items.len)) : (index = (index + 1)) {
+                            const item = body_stmts.items[@as(usize, @intCast(index))];
+                            if ((item.data != .s_expr)) {
+                                continue;
+                            }
+                            if (((if (@typeInfo(@TypeOf(item.data.s_expr)) == .@"enum") @intFromEnum(item.data.s_expr) else item.data.s_expr.value).data != .e_call)) {
+                                continue;
+                            }
+                            if (((if (@typeInfo(@TypeOf(item.data.s_expr)) == .@"enum") @intFromEnum(item.data.s_expr) else item.data.s_expr.value).data.e_call.target.data != .e_super)) {
+                                continue;
+                            }
+                            super_index = index;
+                            break;
+                        }
+                        var insert_at: usize = 0;
+                        _ = &insert_at;
+                        if (super_index) |j| {
+                            _ = &j;
+                            insert_at = (j + 1);
+                        }
+                        _ = ((body_stmts.insertSlice(insert_at, constructor_inject_stmts.items)) catch unreachable);
+                        func.func.body.stmts = body_stmts.items;
+                        found_constructor = true;
+                        break;
+                    }
+                }
+                if ((!found_constructor)) {
+                    var ctor_stmts = ListManaged(Stmt).init(p.allocator);
+                    _ = &ctor_stmts;
+                    if ((cls.@"extends" != null)) {
+                        const target = p.newExpr(E.Super, loc);
+                        const args_ref = newSym(p, .unbound, arguments_str);
+                        const spread = p.newExpr(E.Spread{ .value = p.newExpr(E.Identifier{ .ref = args_ref }, loc) }, loc);
+                        const call_args = bun.handleOom(ExprNodeList.initOne(p.allocator, spread));
+                        _ = ((ctor_stmts.append(p.s(S.SExpr{ .value = p.newExpr(E.Call{ .target = target, .args = call_args }, loc) }, loc))) catch unreachable);
+                    }
+                    _ = ((ctor_stmts.appendSlice(constructor_inject_stmts.items)) catch unreachable);
+                    _ = ((new_properties.insert(0, G.Property{ .flags = Flags.Property.init(.{ .is_method = true }), .key = p.newExpr(E.String{ .data = "constructor" }, loc), .value = p.newExpr(E.Function{ .func = G.Fn{ .name = null, .open_parens_loc = logger.Loc.Empty, .args = &.{}, .body = .{ .loc = loc, .stmts = ctor_stmts.items }, .flags = Flags.Function.init(.{}) } }, loc) })) catch unreachable);
+                }
+            }
+            if ((static_private_add_blocks.items.len > 0)) {
+                _ = ((new_properties.insertSlice(0, static_private_add_blocks.items)) catch unreachable);
+            }
+            cls.properties = new_properties.items;
+            cls.has_decorators = false;
+            cls.should_lower_standard_decorators = false;
+            if (is_expr) {
+                var comma_parts = ListManaged(Expr).init(p.allocator);
+                _ = &comma_parts;
+                if (class_dec_assign_expr) |cda| {
+                    _ = &cda;
+                    _ = ((comma_parts.append(cda)) catch unreachable);
+                }
+                if (base_assign_expr) |ba| {
+                    _ = &ba;
+                    _ = ((comma_parts.append(ba)) catch unreachable);
+                }
+                _ = appendDeclsAsAssigns((&comma_parts), (&expr_var_decls), pre_eval_stmts.items, p, loc);
+                _ = appendDeclsAsAssigns((&comma_parts), (&expr_var_decls), prefix_stmts.items, p, loc);
+                _ = ((comma_parts.append(assignTo(p, init_ref, init_start_expr, loc))) catch unreachable);
+                _ = ((comma_parts.append(assignTo(p, expr_class_ref.?, p.newExpr(cls.*, loc), loc))) catch unreachable);
+                _ = ((comma_parts.appendSlice(suffix_exprs.items)) catch unreachable);
+                const final_ref = (if ((class_decorators.len > 0)) class_name_ref else expr_class_ref.?);
+                _ = ((comma_parts.append(useRef(p, final_ref, loc))) catch unreachable);
+                var result = comma_parts.items[0];
+                _ = &result;
+                for (cp_iter_slice(comma_parts.items[1..])) |part| {
+                    _ = &part;
+                    result = p.newExpr(E.Binary{ .op = .bin_comma, .left = result, .right = part }, loc);
+                }
+                if ((expr_var_decls.items.len > 0)) {
+                    const var_decl_stmt = p.s(S.Local{ .decls = Decl.List.fromOwnedSlice(expr_var_decls.items) }, loc);
+                    if (p.nearest_stmt_list) |stmt_list| {
+                        _ = &stmt_list;
+                        _ = ((stmt_list.append(var_decl_stmt)) catch unreachable);
+                    }
+                }
+                var out = ((ListManaged(Stmt).initCapacity(p.allocator, 1)) catch unreachable);
+                _ = &out;
+                _ = out.appendAssumeCapacity(p.s(S.SExpr{ .value = result }, loc));
+                return out.items;
+            }
+            var out = ((ListManaged(Stmt).initCapacity(p.allocator, (((prefix_stmts.items.len + pre_eval_stmts.items.len) + 5) + suffix_exprs.items.len))) catch unreachable);
+            _ = &out;
+            if ((class_dec_stmt.data != .s_empty)) {
+                _ = ((out.append(class_dec_stmt)) catch unreachable);
+            }
+            if ((base_decl_stmt.data != .s_empty)) {
+                _ = ((out.append(base_decl_stmt)) catch unreachable);
+            }
+            _ = ((out.appendSlice(pre_eval_stmts.items)) catch unreachable);
+            _ = ((out.appendSlice(prefix_stmts.items)) catch unreachable);
+            _ = out.appendAssumeCapacity(init_decl_stmt);
+            _ = out.appendAssumeCapacity(stmt);
+            for (suffix_exprs.items) |expr| {
+                _ = &expr;
+                _ = ((out.append(p.s(S.SExpr{ .value = expr }, expr.loc))) catch unreachable);
+            }
+            if ((!inner_class_ref.eql(class_name_ref))) {
+                _ = p.recordUsage(class_name_ref);
+                var inner_decls = bun.handleOom(p.allocator.alloc(G.Decl, 1));
+                _ = &inner_decls;
+                inner_decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = inner_class_ref }, loc), .value = p.newExpr(E.Identifier{ .ref = class_name_ref }, class_name_loc) };
+                _ = ((out.append(p.s(S.Local{ .kind = .k_let, .decls = Decl.List.fromOwnedSlice(inner_decls) }, loc))) catch unreachable);
+            }
+            return out.items;
+    }
+
+pub fn appendDeclsAsAssigns(parts: *ListManaged(Expr), var_decls: *ListManaged(G.Decl), stmts_list: []const Stmt, parser: *P, l: logger.Loc) void {
+            for (cp_iter_slice(stmts_list)) |pstmt| {
+                _ = &pstmt;
+                if ((pstmt.data == .s_expr)) {
+                    _ = ((parts.append((if (@typeInfo(@TypeOf(pstmt.data.s_expr)) == .@"enum") @intFromEnum(pstmt.data.s_expr) else pstmt.data.s_expr.value))) catch unreachable);
+                } else {
+                    if ((pstmt.data == .s_local)) {
+                        for (cp_iter_slice(pstmt.data.s_local.decls.slice())) |decl_item| {
+                            _ = &decl_item;
+                            const r = decl_item.binding.data.b_identifier.ref;
+                            _ = ((var_decls.append(.{ .binding = parser.b(B.Identifier{ .ref = r }, l) })) catch unreachable);
+                            if ((if (@typeInfo(@TypeOf(decl_item)) == .@"enum") @intFromEnum(decl_item) else decl_item.value)) |val| {
+                                _ = &val;
+                                _ = parser.recordUsage(r);
+                                _ = ((parts.append(Expr.assign(parser.newExpr(E.Identifier{ .ref = r }, l), val))) catch unreachable);
+                            }
+                        }
+                    }
+                }
+            }
+    }
+    const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
+};
+}
