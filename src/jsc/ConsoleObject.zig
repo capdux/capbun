@@ -1289,7 +1289,8 @@ const was_in_map = (if ((self.map_node != null)) self.map.remove(value) else fal
             defer {
             {
                 if (was_in_map) {
-                    _ = (blk_catch_9: { break :blk_catch_9 ((self.map.put(value, .{})) catch |__ce_9| { _ = &__ce_9;  }); });
+                    const empty_void: void = undefined;
+                    _ = (blk_catch_9: { break :blk_catch_9 ((self.map.put(value, empty_void)) catch |__ce_9| { _ = &__ce_9;  }); });
                 }
             }
             }

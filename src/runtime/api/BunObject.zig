@@ -788,7 +788,7 @@ pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
         vm: *jsc.VirtualMachine,
         output: []u8 = &.{},
         error_message: ?[]const u8 = null,
-        any_task: jsc.AnyTask = undefined,
+        any_task: jsc.AnyTask.AnyTask = undefined,
         poll: Async.KeepAlive = .{},
     
     pub fn runTask(task: *jsc.WorkPoolTask) void {
@@ -857,7 +857,7 @@ pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                 var job = ZstdJob.new(.{ .buffer = buffer, .is_compress = is_compress, .level = level, .vm = vm, .any_task = undefined });
                 _ = &job;
                 job.promise = jsc.JSPromise.Strong.init(globalThis);
-                job.any_task = jsc.AnyTask.New(@This(), (&runFromJS)).init(job);
+                job.any_task = jsc.AnyTask.AnyTask.New(@This(), (&runFromJS)).init(job);
                 _ = job.poll.ref(vm);
                 _ = jsc.WorkPool.schedule((&job.task));
                 return job;
@@ -1632,7 +1632,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
         _ = try jsc.API.ServerConfig.fromJS(globalObject, (&config), (&args), .{ .allow_bake_config = bun.FeatureFlags.bake(), .is_fetch_required = true, .has_user_routes = false });
         if (globalObject.hasException()) {
             _ = config.deinit();
-            return error.zero;
+            return JSValue.zero;
         }
         break :brk config;
 };
@@ -1924,7 +1924,8 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
         var valkey = (blk_catch_49: { break :blk_catch_49 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
-            _ = globalThis.throwError(e, "Failed to create Redis client");
+            if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
+            }
             return JSValue.zero;
         }
         return JSValue.zero; }); });
@@ -1932,7 +1933,8 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
         const as_js = valkey.toJS(globalThis);
         valkey.this_value = jsc.JSRef.initWeak(as_js);
         valkey._subscription_ctx = (blk_catch_50: { break :blk_catch_50 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
-            _ = globalThis.throwError(e, "Failed to create Redis client");
+            if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
+            }
             return JSValue.zero;
         }
         return JSValue.zero; }); });

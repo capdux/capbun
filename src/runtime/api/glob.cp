@@ -170,8 +170,8 @@ pub struct WalkTask {
 
     fn run(*_) {
         defer decrPendingActivityFlag(_.has_pending_activity);
-        const result = _.walker.walk() catch |e| {
-            _.e = WalkTaskErr{ unknown: e };
+        const result = _.walker.walk() catch |err_val| {
+            _.e = WalkTaskErr{ unknown: err_val };
             return;
         };
         switch (result) {
@@ -295,7 +295,8 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
             return globalThis.throw("Glob.constructor: first argument is not a string", {});
         }
 
-        const pat_str: []const u8 = ((pat_arg.toSliceClone(globalThis))?).slice();
+        const pat_slice = pat_arg.toSliceClone(globalThis)?;
+        const pat_str: []const u8 = pat_slice.slice();
 
         return bun.new(Glob, Glob{ pattern: pat_str });
     }
@@ -319,7 +320,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         defer arguments.deinit();
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
-        const globWalkerOpt = client.makeGlobWalker(globalThis, &arguments, "scan", alloc, &arena_alloc) catch |e| {
+        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scan", alloc, unsafe { &arena_alloc }) catch |e| {
             arena_alloc.deinit();
             return e;
         };
@@ -349,7 +350,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         defer arguments.deinit();
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
-        const globWalkerOpt = client.makeGlobWalker(globalThis, &arguments, "scanSync", alloc, &arena_alloc) catch |e| {
+        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scanSync", alloc, unsafe { &arena_alloc }) catch |e| {
             arena_alloc.deinit();
             return e;
         };

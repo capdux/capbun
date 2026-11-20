@@ -174,12 +174,12 @@ input_slice = try arg.toSlice(globalThis, bun.default_allocator);
                         seed = arg.toUInt64NoTruncate();
                     }
                 }
-                if (comptime bun.trait.isNumber(@TypeOf(function_args[0]))) {
-                    function_args[cp_cast_int(usize, 0)] = @as(@TypeOf(function_args[0]), @truncate(seed));
-                    function_args[cp_cast_int(usize, 1)] = input;
+                if (comptime bun.trait.isNumber(@TypeOf(@field(function_args, "0")))) {
+                    @field(function_args, "0") = @as(@TypeOf(@field(function_args,"0")), @truncate(seed));
+                    @field(function_args, "1") = input;
                 } else {
-                    function_args[cp_cast_int(usize, 0)] = input;
-                    function_args[cp_cast_int(usize, 1)] = @as(@TypeOf(function_args[1]), @truncate(seed));
+                    @field(function_args, "0") = input;
+                    @field(function_args, "1") = @as(@TypeOf(@field(function_args,"1")), @truncate(seed));
                 }
                 const value = @call(.auto, Function, function_args);
                 if ((@TypeOf(value) == u32)) {

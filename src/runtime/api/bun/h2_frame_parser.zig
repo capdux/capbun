@@ -67,9 +67,6 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-fn cp_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.indexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } for (__cp_slice, 0..) |__item, __idx| { if (cp_eq(__item, __needle)) return @intCast(__idx); } return -1; }
-fn cp_last_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } var __idx: usize = __cp_slice.len; while (__idx > 0) { __idx -= 1; if (cp_eq(__cp_slice[__idx], __needle)) return @intCast(__idx); } return -1; }
-fn cp_includes(__container: anytype, __needle: anytype) bool { return cp_index_of(__container, __needle) != -1; }
 const Message = anyopaque;
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
 pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
@@ -3171,7 +3168,8 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                 if (js_value.jsType().isArray()) {
                     var value_iter = try js_value.arrayIterator(globalObject);
                     _ = &value_iter;
-                    if (cp_index_of(SingleValueHeaders, validated_name)) |idx| {
+                    const svh_index_of = SingleValueHeaders.indexOf;
+                    if (svh_index_of(validated_name)) |idx| {
                         _ = &idx;
                         if (((value_iter.len > 1) or single_value_headers[@as(usize, @intCast(idx))])) {
                             const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{ validated_name });
@@ -3207,7 +3205,8 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                         return JSValue.js_undefined; }); });
                     }
                 } else {
-                    if (cp_index_of(SingleValueHeaders, validated_name)) |idx| {
+                    const svh_index_of = SingleValueHeaders.indexOf;
+                    if (svh_index_of(validated_name)) |idx| {
                         _ = &idx;
                         if (single_value_headers[@as(usize, @intCast(idx))]) {
                             const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{ validated_name });
@@ -3593,14 +3592,14 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     if ((!globalObject.hasException())) {
                                         return globalObject.ERR(.HTTP2_INVALID_PSEUDOHEADER, "\"{s}\" is an invalid pseudoheader or is used incorrectly", .{ name }).throw();
                                     }
-                                    return error.zero;
+                                    return jsc.JSValue.zero;
                                 }
                             } else {
                                 if ((!ValidRequestPseudoHeaders.has(validated_name))) {
                                     if ((!globalObject.hasException())) {
                                         return globalObject.ERR(.HTTP2_INVALID_PSEUDOHEADER, "\"{s}\" is an invalid pseudoheader or is used incorrectly", .{ name }).throw();
                                     }
-                                    return error.zero;
+                                    return jsc.JSValue.zero;
                                 }
                             }
                         } else {
@@ -3617,14 +3616,15 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                             _ = log("array header {s}", .{ name });
                             var value_iter = try js_value.arrayIterator(globalObject);
                             _ = &value_iter;
-                            if (cp_index_of(SingleValueHeaders, validated_name)) |idx| {
+                            const svh_index_of = SingleValueHeaders.indexOf;
+                            if (svh_index_of(validated_name)) |idx| {
                                 _ = &idx;
                                 if (((value_iter.len > 1) or single_value_headers[@as(usize, @intCast(idx))])) {
                                     if ((!globalObject.hasException())) {
                                         const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{ validated_name });
                                         return globalObject.throwValue(exception);
                                     }
-                                    return error.zero;
+                                    return jsc.JSValue.zero;
                                 }
                                 single_value_headers[cp_cast_int(usize, idx)] = true;
                             }
@@ -3633,7 +3633,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     if ((!globalObject.hasException())) {
                                         return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw();
                                     }
-                                    return error.zero;
+                                    return jsc.JSValue.zero;
                                 }
                                 const value_str = (blk_catch_43: { break :blk_catch_43 ((item.toJSString(globalObject)) catch |__ce_43| { _ = &__ce_43; _ = globalObject.clearException();
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw(); }); });
@@ -3666,7 +3666,8 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                         } else {
                             if ((!js_value.isEmptyOrUndefinedOrNull())) {
                                 _ = log("single header {s}", .{ name });
-                                if (cp_index_of(SingleValueHeaders, validated_name)) |idx| {
+                                const svh_index_of = SingleValueHeaders.indexOf;
+                                if (svh_index_of(validated_name)) |idx| {
                                     _ = &idx;
                                     if (single_value_headers[@as(usize, @intCast(idx))]) {
                                         const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{ validated_name });

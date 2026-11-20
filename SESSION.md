@@ -3088,3 +3088,5 @@ Options:
 - **[2026-11-20 20:01] Wave 13 清零 A+B 组 + Sink/Timer 验收提交（24 模块全绿）**：完成 CSS/HTTP/quic/picohttp 12 模块、Node/Sys/Shell/YAML/AST/BoringSSL 10 模块及 `Sink.cp`/`Timer.cp` 2 项上游修复的独立验收并原子提交，即将执行全仓 `bun run zig:check` 终极复检。
 
 - **[2026-11-20 20:14] Wave 14 Batch C 验收提交（13 模块全绿）**：完成 `yaml`/`bun`/`Timer`/`FileReader`/`FormData`/`pretty_format`/`HTTPContext`/`http`/`websocket_client`/`lifecycle_script_runner`/`lexer`/`patch`/`bit_set` 13 模块独立验收（13/13 PASS，ratio 0.844x~1.024x）并原子提交；静待 A/B 组完成后跑 Wave 15 `zig:check`。
+
+- **[2026-11-20 20:17] Wave 14 Batch A 验收提交（核心 14 模块全绿，覆盖 ~226 错）**：完成 `node_fs_binding`/`host_fn`/`node_crypto_binding`/`node_fs`/`dns`/`HashObject`/`JSTranspiler`/`BunObject`/`glob`/`Archive`/`h2_frame_parser`/`bindgen`/`ConsoleObject`/`JSGlobalObject` 14 模块独立验收（14/14 PASS，ratio 0.937x~1.070x），沉淀 3 条黄金规则至 `CP_PITFALLS.md` 并原子提交。

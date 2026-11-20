@@ -438,9 +438,11 @@ type UnalignedStatFS = *align(1) bun.StatFS;
 pub const AsyncCpTask = NewAsyncCpTask(false);
 pub const ShellAsyncCpTask = NewAsyncCpTask(true);
 
+type ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
+
 pub fn NewAsyncCpTask(comptime is_shell: bool): type {
     const ShellTask = bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
-    const ShellTaskT = if (is_shell) *ShellTask else u0;
+    const ShellTaskT = if (is_shell) ShellCpTaskPtr else u0;
     const RefT = if (!is_shell) bun.Async.KeepAlive else struct {};
     return struct {
         promise: jsc.JSPromise.Strong = {},
@@ -1366,7 +1368,7 @@ pub struct Arguments {
         buffers: jsc.Node.VectorArrayBuffer,
         position: u52? = 0,
 
-        fn deinit(_: *const @This()) void {}
+        fn deinit() {}
 
         static fn deinitAndUnprotect(this: *const @This()) {
             this.buffers.value.unprotect();
@@ -1481,13 +1483,13 @@ pub struct Arguments {
                 return throwInvalidFdError(ctx, fd_value);
             };
 
-            const len: jsc.WebCore.Blob.SizeType = i32(@max(try jsc.Node.validators.validateInteger(
+            const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(jsc.Node.validators.validateInteger(
                 ctx,
                 arguments.next() ?? jsc.JSValue.jsNumber(0),
                 "len",
                 std.math.minInt(i52),
                 std.math.maxInt(jsc.WebCore.Blob.SizeType),
-            ), 0));
+            )?, 0)));
 
             return FTruncate{ fd: fd, len: len };
         }
@@ -1517,7 +1519,8 @@ pub struct Arguments {
             errdefer path.deinit();
 
             const uid: uid_t = brk: {
-                const uid_value = arguments.next() ?? return ctx.throwInvalidArguments("uid is required", {});
+                let uid_value: jsc.JSValue = undefined;
+                if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
 
                 arguments.eat();
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
@@ -1538,7 +1541,7 @@ pub struct Arguments {
         uid: uid_t,
         gid: gid_t,
 
-        fn deinit(_: @This()) void {}
+        fn deinit() {}
 
         fn toThreadSafe(_: *const @This()) void {}
 
@@ -1549,7 +1552,8 @@ pub struct Arguments {
             };
 
             const uid: uid_t = brk: {
-                const uid_value = arguments.next() ?? return ctx.throwInvalidArguments("uid is required", {});
+                let uid_value: jsc.JSValue = undefined;
+                if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
 
                 arguments.eat();
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
@@ -1652,7 +1656,7 @@ pub struct Arguments {
         fd: FD,
         mode: Mode = 0x777,
 
-        fn deinit(_: *const @This()) void {}
+        fn deinit() {}
 
         fn toThreadSafe(_: *const @This()) void {}
 
@@ -1766,7 +1770,7 @@ pub struct Arguments {
         fd: FD,
         big_int: bool = false,
 
-        fn deinit(_: @This()) void {}
+        fn deinit() {}
 
         fn toThreadSafe(_: *@This()) void {}
 
@@ -1899,10 +1903,11 @@ pub struct Arguments {
                 break :link_type .unspecified;
             };
 
+            const empty_link_type: void = undefined;
             return Symlink{
                 target_path: old_path,
                 new_path: new_path,
-                link_type: if (Environment.isWindows) link_type,
+                link_type: if (comptime Environment.isWindows) link_type else empty_link_type,
             };
         }
     };
@@ -2083,7 +2088,7 @@ pub struct Arguments {
                     }
 
                     if (delay := val.get(ctx, "retryDelay")?) {
-                        retry_delay = i32(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint)));
+                        retry_delay = @as(c_uint, @intCast(jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))?));
                     }
 
                     if (retries := val.get(ctx, "maxRetries")?) {
@@ -2148,11 +2153,11 @@ pub struct Arguments {
                     }
 
                     if (mode_ := val.get(ctx, "mode")?) {
-                        mode = jsc.Node.modeFromJS(ctx, mode_) ?? mode?;
+                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
                     }
                 }
                 if (val.isNumber() || val.isString()) {
-                    mode = jsc.Node.modeFromJS(ctx, val) ?? mode?;
+                    if (m := jsc.Node.modeFromJS(ctx, val)?) { mode = m; }
                 }
             }
 
@@ -2286,7 +2291,7 @@ pub struct Arguments {
     pub const Close = struct {
         fd: FD,
 
-        fn deinit(_: Close) void {}
+        fn deinit() {}
         fn toThreadSafe(_: Close) void {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Close {
@@ -2330,11 +2335,11 @@ pub struct Arguments {
 
                 if (val.isObject()) {
                     if (flags_ := val.getTruthy(ctx, "flags")?) {
-                        flags = FileSystemFlags.fromJS(ctx, flags_) ?? flags?;
+                        if (f := FileSystemFlags.fromJS(ctx, flags_)?) { flags = f; }
                     }
 
                     if (mode_ := val.getTruthy(ctx, "mode")?) {
-                        mode = jsc.Node.modeFromJS(ctx, mode_) ?? mode?;
+                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
                     }
                 } else if (val != .zero) {
                     if (!val.isUndefinedOrNull()) {
@@ -2370,7 +2375,7 @@ pub struct Arguments {
         atime: TimeLike,
         mtime: TimeLike,
 
-        fn deinit(_: Futimes) void {}
+        fn deinit() {}
 
         static fn toThreadSafe(self: *const @This()) {
             * = self;
@@ -2499,7 +2504,7 @@ pub struct Arguments {
                         // fs.write(fd, buffer[, offset[, length[, position]]], callback)
                         .buffer => {
                             if (current.isUndefinedOrNull() || current.isFunction()) break :parse;
-                            args.offset = i32(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991));
+                            args.offset = @as(u64, @intCast(jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)?));
                             arguments.eat();
                             if (next_cur := arguments.next()) {
                                 current = next_cur;
@@ -2553,7 +2558,7 @@ pub struct Arguments {
         length: u64,
         position: ReadPosition? = null,
 
-        fn deinit(_: Read) void {}
+        fn deinit() {}
 
         fn toThreadSafe() {
             _.buffer.buffer.value.protect();
@@ -2574,11 +2579,10 @@ pub struct Arguments {
             };
 
             //  validateBuffer(buffer);
-            const buffer_value = arguments.nextEat() ??
-                // theoretically impossible, argument has been passed already
-                return ctx.throwInvalidArguments("buffer is required", {});
-            const buffer: jsc.MarkedArrayBuffer = Buffer.fromJS(ctx, buffer_value) ??
-                return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
+            let buffer_value: jsc.JSValue = undefined;
+            if (v := arguments.nextEat()) { buffer_value = v; } else { return ctx.throwInvalidArguments("buffer is required", {}); }
+            let buffer: jsc.MarkedArrayBuffer = undefined;
+            if (b := Buffer.fromJS(ctx, buffer_value)) { buffer = b; } else { return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value); }
 
             const offset_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
             // if (offset == null) {
@@ -2737,9 +2741,11 @@ pub struct Arguments {
                     encoding = getEncoding(arg, ctx, encoding)?;
 
                     if (flag_ := arg.getTruthy(ctx, "flag")?) {
-                        flag = try FileSystemFlags.fromJS(ctx, flag_) ?? {
+                        if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
+                            flag = f;
+                        } else {
                             return ctx.throwInvalidArguments("Invalid flag", {});
-                        };
+                        }
                     }
 
                     if (value := arg.getTruthy(ctx, "signal")?) {
@@ -2840,13 +2846,15 @@ pub struct Arguments {
                     encoding = getEncoding(arg, ctx, encoding)?;
 
                     if (flag_ := arg.getTruthy(ctx, "flag")?) {
-                        flag = try FileSystemFlags.fromJS(ctx, flag_) ?? {
+                        if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
+                            flag = f;
+                        } else {
                             return ctx.throwInvalidArguments("Invalid flag", {});
-                        };
+                        }
                     }
 
                     if (mode_ := arg.getTruthy(ctx, "mode")?) {
-                        mode = jsc.Node.modeFromJS(ctx, mode_) ?? mode?;
+                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
                     }
 
                     if (value := arg.getTruthy(ctx, "signal")?) {
@@ -3012,7 +3020,7 @@ pub struct Arguments {
     pub const FdataSync = struct {
         fd: FD,
 
-        fn deinit(_: FdataSync) void {}
+        fn deinit() {}
         static fn toThreadSafe(self: *const @This()) {
             * = self;
         }

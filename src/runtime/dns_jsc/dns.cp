@@ -975,7 +975,7 @@ pub fn CAresLookup(comptime cares_type: type, comptime type_name: []const u8): t
         next: ?*@This() = null,
         name: string,
 
-        pub fn new(data: @This()): *@This() {
+        static fn new(data: @This()): *@This() {
             bun.assert(data.allocated);
             return bun.new(@This(), data);
         }

@@ -22,7 +22,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
     return struct {
         vm: *jsc.VirtualMachine,
         task: jsc.WorkPoolTask,
-        any_task: jsc.AnyTask,
+        any_task: jsc.AnyTask.AnyTask,
         poll: Async.KeepAlive = .{},
         callback: jsc.Strong.Optional,
 
@@ -31,14 +31,14 @@ fn ExternCryptoJob(comptime name: []const u8): type {
         const Ctx = opaque {
             const ctx_name = name ++ "Ctx";
 
-            pub const runTask = @extern(*const fn (*Ctx, *JSGlobalObject) callconv(.c) void, .{ .name = "Bun__" ++ ctx_name ++ "__runTask" }).*;
+            pub const runTask = @extern(@typeInfo(*const fn (*Ctx, *JSGlobalObject) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runTask" }).*;
 
             pub fn runFromJS(ctx: *Ctx, global: *JSGlobalObject, callback: JSValue): bun.JSError!void {
-                const __runFromJS = @extern(*const fn (*Ctx, *JSGlobalObject, JSValue) callconv(.c) void, .{ .name = "Bun__" ++ ctx_name ++ "__runFromJS" }).*;
+                const __runFromJS = @extern(@typeInfo(*const fn (*Ctx, *JSGlobalObject, JSValue) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runFromJS" }).*;
                 return bun.jsc.fromJSHostCallGeneric(global, @src(), __runFromJS, .{ ctx, global, callback });
             }
 
-            pub const deinit = @extern(*const fn (*Ctx) callconv(.c) void, .{ .name = "Bun__" ++ ctx_name ++ "__deinit" }).*;
+            pub const deinit = @extern(@typeInfo(*const fn (*Ctx) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__deinit" }).*;
         };
 
         pub fn create(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) *@This() {
@@ -52,7 +52,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
                 .ctx = ctx,
                 .callback = .create(callback, global),
             });
-            job.any_task = jsc.AnyTask.New(@This(), &runFromJS).init(job);
+            job.any_task = jsc.AnyTask.AnyTask.New(@This(), &runFromJS).init(job);
             return job;
         }
 

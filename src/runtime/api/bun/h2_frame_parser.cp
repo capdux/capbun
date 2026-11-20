@@ -3770,7 +3770,8 @@ pub struct H2FrameParser {
                 // https://github.com/oven-sh/bun/issues/8940
                 let value_iter = js_value.arrayIterator(globalObject)?;
 
-                if (idx := SingleValueHeaders.indexOf(validated_name)) {
+                const svh_index_of = SingleValueHeaders.indexOf;
+                if (idx := svh_index_of(validated_name)) {
                     if (value_iter.len > 1 || single_value_headers[idx]) {
                         const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{validated_name});
                         return globalObject.throwValue(exception);
@@ -3817,7 +3818,8 @@ pub struct H2FrameParser {
                     };
                 }
             } else {
-                if (idx := SingleValueHeaders.indexOf(validated_name)) {
+                const svh_index_of = SingleValueHeaders.indexOf;
+                if (idx := svh_index_of(validated_name)) {
                     if (single_value_headers[idx]) {
                         const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{validated_name});
                         return globalObject.throwValue(exception);
@@ -4258,14 +4260,14 @@ pub struct H2FrameParser {
                             if (!globalObject.hasException()) {
                                 return globalObject.ERR(.HTTP2_INVALID_PSEUDOHEADER, "\"{s}\" is an invalid pseudoheader or is used incorrectly", .{name}).throw();
                             }
-                            return .zero;
+                            return jsc.JSValue.zero;
                         }
                     } else {
                         if (!ValidRequestPseudoHeaders.has(validated_name)) {
                             if (!globalObject.hasException()) {
                                 return globalObject.ERR(.HTTP2_INVALID_PSEUDOHEADER, "\"{s}\" is an invalid pseudoheader or is used incorrectly", .{name}).throw();
                             }
-                            return .zero;
+                            return jsc.JSValue.zero;
                         }
                     }
                 } else if (ignore_pseudo_headers == 0) {
@@ -4283,13 +4285,14 @@ pub struct H2FrameParser {
                     // https://github.com/oven-sh/bun/issues/8940
                     let value_iter = js_value.arrayIterator(globalObject)?;
 
-                    if (idx := SingleValueHeaders.indexOf(validated_name)) {
+                    const svh_index_of = SingleValueHeaders.indexOf;
+                if (idx := svh_index_of(validated_name)) {
                         if (value_iter.len > 1 || single_value_headers[idx]) {
                             if (!globalObject.hasException()) {
                                 const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{validated_name});
                                 return globalObject.throwValue(exception);
                             }
-                            return .zero;
+                            return jsc.JSValue.zero;
                         }
                         single_value_headers[idx] = true;
                     }
@@ -4299,7 +4302,7 @@ pub struct H2FrameParser {
                             if (!globalObject.hasException()) {
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name}).throw();
                             }
-                            return .zero;
+                            return jsc.JSValue.zero;
                         }
 
                         const value_str = item.toJSString(globalObject) catch {
@@ -4335,7 +4338,8 @@ pub struct H2FrameParser {
                     }
                 } else if (!js_value.isEmptyOrUndefinedOrNull()) {
                     log("single header {s}", .{name});
-                    if (idx := SingleValueHeaders.indexOf(validated_name)) {
+                    const svh_index_of = SingleValueHeaders.indexOf;
+                if (idx := svh_index_of(validated_name)) {
                         if (single_value_headers[idx]) {
                             const exception = globalObject.toTypeError(.HTTP2_HEADER_SINGLE_VALUE, "Header field \"{s}\" must only have a single value", .{validated_name});
                             return globalObject.throwValue(exception);

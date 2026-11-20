@@ -206,7 +206,7 @@ pub fn runSync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: 
             }
             }
             if (globalObject.hasException()) {
-                return error.zero;
+                return jsc.JSValue.zero;
             }
             var result = function((&binding.node_fs), args, .sync);
             _ = &result;

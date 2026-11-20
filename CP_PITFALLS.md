@@ -121,3 +121,6 @@
 - **`@export(&Obj.UpperField, ...)` 误解析**：即使 `Obj` 为小写，成员首字母大写也会被误解析为 `*const Obj.UpperField`；改用 `@export(&@field(Obj, "UpperField"), ...)`。
 - **元组解构 `CpUnpackElemType` 陷阱**：`--lib` 模式下 `const [a, b] = expr;` 若触发 `CpUnpackElemType` 会因 `?Message` (`?anyopaque`) 报 Zig 语义错；改用 `const pair = expr; const a = pair[0]; const b = pair[1];`。
 - **二级指针 `**T` 形参防压平**：`cpc` 会将函数形参中的 `**T` 压平为 `*T`；声明顶层 `type TPtr = *T;`，形参写作 `p: *TPtr` 即可正确生成 `**T`。
+- **元组按索引访问/赋值 comptime 失败**：`t[i] = v` / `t[0]` 会被插入 `cp_cast_int(usize, ...)` 导致 comptime 失败；改用 `@field(t, "0")` 或 `@field(t, std.fmt.comptimePrint("{d}", .{ i }))`。
+- **局部对象取址 `&local` 防剥离**：实参或字段赋值中的 `&local` 若被剥离 `&`，包裹 `unsafe { &local }` 可稳定保留取址。
+- **纯错误集返回值（非错误联合）丢弃**：如 `throwOutOfMemory()` / `throwError()` 返回 `bun.JSError` 时不可用 `catch {}` 或 `* =`，应写 `if (call() == error.JSError) {}`。

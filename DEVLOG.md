@@ -1421,3 +1421,5 @@
 - **[2026-11-20] Wave 13 清零收官修复要点**：`sys.cp` 用 `@TypeOf(empty_cstr_slice.ptr)` 保留 `[*:0]const u8` 同步修复 `node_fs.statx`；`Sink.cp` 传 `detachPtrExtern.*` 消除 `std/meta.zig:906`；`Timer.cp` `setTimeout`/`setInterval` 补 `static` 消除 `host_fn` 参数错；`yaml.cp` `Indent`/`Pos`/`Line` 枚举补 `static fn`；`E.cp` 显式字段初始化消除 `Expr.init` 类型错。
 
 - **[2026-11-20] Wave 14 Batch C 修复要点**：`Timer.cp` `clearTimer`/`getNextID` 补 `static`；`FormData.cp` 恢复 `@export` 绑定 `toJSHostFn`；`yaml.cp` 26 处 `unexpectedToken()` 改 `return error.UnexpectedToken` 并修复字面换行分支；`lifecycle_script_runner.cp` 局部变量避开字段遮蔽。
+
+- **[2026-11-20] Wave 14 Batch A 核心修复**：`node_fs_binding` 消除 77 处 `error.zero`；`host_fn` 33 处与 `HashObject` 改 `@field(args, comptimePrint)` 消除 65 处 comptime 错；`node_crypto_binding` 改 `AnyTask.AnyTask.New` 与 `@typeInfo(...).pointer.child` 消除 22 处错；`bindgen.cp` 改为只读构造 `@Type(.{ .@"union" = ... })`。

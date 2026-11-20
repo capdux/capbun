@@ -864,8 +864,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         buffers: jsc.Node.VectorArrayBuffer,
         position: ?u52 = 0,
     
-    pub fn deinit(self: *const @This()) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn deinitAndUnprotect(self: *const @This()) void {
@@ -968,7 +967,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
                 return throwInvalidFdError(ctx, fd_value);
     });
-                const len: jsc.WebCore.Blob.SizeType = (if (comptime @typeInfo(@TypeOf(@max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0))) else cp_cast_int(i32, @max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0)));
+                const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0)));
                 return FTruncate{ .fd = fd, .len = len };
         }
     };
@@ -997,7 +996,14 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = path.deinit();
                 }
                 const uid: uid_t = brk: {
-                const uid_value = ((arguments.next()) orelse { return .{ .ok = ctx.throwInvalidArguments("uid is required", .{}) }; });
+                var uid_value: jsc.JSValue = undefined;
+                _ = &uid_value;
+                if (arguments.next()) |v| {
+                    _ = &v;
+                    uid_value = v;
+                } else {
+                    return ctx.throwInvalidArguments("uid is required", .{});
+                }
                 _ = arguments.eat();
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
     };
@@ -1014,8 +1020,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         uid: uid_t,
         gid: gid_t,
     
-    pub fn deinit(self: @This()) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1028,7 +1033,14 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 return throwInvalidFdError(ctx, fd_value);
     });
                 const uid: uid_t = brk: {
-                const uid_value = ((arguments.next()) orelse { return .{ .ok = ctx.throwInvalidArguments("uid is required", .{}) }; });
+                var uid_value: jsc.JSValue = undefined;
+                _ = &uid_value;
+                if (arguments.next()) |v| {
+                    _ = &v;
+                    uid_value = v;
+                } else {
+                    return ctx.throwInvalidArguments("uid is required", .{});
+                }
                 _ = arguments.eat();
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
     };
@@ -1117,8 +1129,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         fd: FD,
         mode: Mode = 1911,
     
-    pub fn deinit(self: *const @This()) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1236,8 +1247,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         fd: FD,
         big_int: bool = false,
     
-    pub fn deinit(self: @This()) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: *@This()) void {
@@ -1365,7 +1375,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 }
                 break :link_type .unspecified;
     };
-                return Symlink{ .target_path = old_path, .new_path = new_path, .link_type = (if (Environment.isWindows) link_type else null) };
+                const empty_link_type: void = undefined;
+                return Symlink{ .target_path = old_path, .new_path = new_path, .link_type = (if (comptime Environment.isWindows) link_type else empty_link_type) };
         }
         const LinkType = enum {
                     unspecified,
@@ -1540,7 +1551,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                         }
                         if (try val.get(ctx, "retryDelay")) |delay| {
                             _ = &delay;
-                            retry_delay = (if (comptime @typeInfo(@TypeOf(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint)))) == .@"enum") cp_cast_int(i32, @intFromEnum(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint)))) else cp_cast_int(i32, try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))));
+                            retry_delay = @as(c_uint, @intCast(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))));
                         }
                         if (try val.get(ctx, "maxRetries")) |retries| {
                             _ = &retries;
@@ -1594,11 +1605,17 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                         }
                         if (try val.get(ctx, "mode")) |mode_| {
                             _ = &mode_;
-                            if (mode == null) { mode = try mode; }
+                            if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
+                                _ = &m;
+                                mode = m;
+                            }
                         }
                     }
                     if ((val.isNumber() or val.isString())) {
-                        if (mode == null) { mode = try mode; }
+                        if (try jsc.Node.modeFromJS(ctx, val)) |m| {
+                            _ = &m;
+                            mode = m;
+                        }
                     }
                 }
                 return Mkdir{ .path = path, .recursive = recursive, .mode = mode };
@@ -1713,8 +1730,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
     pub const Close = struct {
         fd: FD,
     
-    pub fn deinit(self: @This(), _: Close) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: @This(), _: Close) void {
@@ -1763,11 +1779,17 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                     if (val.isObject()) {
                         if (try val.getTruthy(ctx, "flags")) |flags_| {
                             _ = &flags_;
-                            if (flags == null) { flags = try flags; }
+                            if (try FileSystemFlags.fromJS(ctx, flags_)) |f| {
+                                _ = &f;
+                                flags = f;
+                            }
                         }
                         if (try val.getTruthy(ctx, "mode")) |mode_| {
                             _ = &mode_;
-                            if (mode == null) { mode = try mode; }
+                            if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
+                                _ = &m;
+                                mode = m;
+                            }
                         }
                     } else {
                         if ((val != .zero)) {
@@ -1790,8 +1812,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         atime: TimeLike,
         mtime: TimeLike,
     
-    pub fn deinit(self: @This(), _: Futimes) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1890,7 +1911,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                         if ((current.isUndefinedOrNull() or current.isFunction())) {
                             break :parse;
                         }
-                        args.offset = (if (comptime @typeInfo(@TypeOf(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991))) == .@"enum") cp_cast_int(i32, @intFromEnum(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991))) else cp_cast_int(i32, try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)));
+                        args.offset = @as(u64, @intCast(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)));
                         _ = arguments.eat();
                         if (arguments.next()) |next_cur| {
                             _ = &next_cur;
@@ -1943,8 +1964,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         length: u64,
         position: ?ReadPosition = null,
     
-    pub fn deinit(self: @This(), _: Read) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: @This()) void {
@@ -1960,8 +1980,22 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
                 return throwInvalidFdError(ctx, fd_value);
     });
-                const buffer_value = ((arguments.nextEat()) orelse { return .{ .ok = ctx.throwInvalidArguments("buffer is required", .{}) }; });
-                const buffer: jsc.MarkedArrayBuffer = ((Buffer.fromJS(ctx, buffer_value)) orelse { return .{ .ok = ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value) }; });
+                var buffer_value: jsc.JSValue = undefined;
+                _ = &buffer_value;
+                if (arguments.nextEat()) |v| {
+                    _ = &v;
+                    buffer_value = v;
+                } else {
+                    return ctx.throwInvalidArguments("buffer is required", .{});
+                }
+                var buffer: jsc.MarkedArrayBuffer = undefined;
+                _ = &buffer;
+                if (Buffer.fromJS(ctx, buffer_value)) |b| {
+                    _ = &b;
+                    buffer = b;
+                } else {
+                    return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
+                }
                 const offset_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
                 const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else (if (comptime @typeInfo(@TypeOf(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))) == .@"enum") cp_cast_int(i32, @intFromEnum(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))) else cp_cast_int(i32, try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))));
                 var length_float: f64 = 0;
@@ -2081,9 +2115,12 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                             encoding = try getEncoding(arg, ctx, encoding);
                             if (try arg.getTruthy(ctx, "flag")) |flag_| {
                                 _ = &flag_;
-                                if (flag == null) { flag = ({
-                                return ctx.throwInvalidArguments("Invalid flag", .{});
-    }); }
+                                if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
+                                    _ = &f;
+                                    flag = f;
+                                } else {
+                                    return ctx.throwInvalidArguments("Invalid flag", .{});
+                                }
                             }
                             if (try arg.getTruthy(ctx, "signal")) |value| {
                                 _ = &value;
@@ -2184,13 +2221,19 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                             encoding = try getEncoding(arg, ctx, encoding);
                             if (try arg.getTruthy(ctx, "flag")) |flag_| {
                                 _ = &flag_;
-                                if (flag == null) { flag = ({
-                                return ctx.throwInvalidArguments("Invalid flag", .{});
-    }); }
+                                if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
+                                    _ = &f;
+                                    flag = f;
+                                } else {
+                                    return ctx.throwInvalidArguments("Invalid flag", .{});
+                                }
                             }
                             if (try arg.getTruthy(ctx, "mode")) |mode_| {
                                 _ = &mode_;
-                                if (mode == null) { mode = try mode; }
+                                if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
+                                    _ = &m;
+                                    mode = m;
+                                }
                             }
                             if (try arg.getTruthy(ctx, "signal")) |value| {
                                 _ = &value;
@@ -2338,8 +2381,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
     pub const FdataSync = struct {
         fd: FD,
     
-    pub fn deinit(self: @This(), _: FdataSync) void {
-            _ = self;
+    pub fn deinit() void {
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -5507,6 +5549,7 @@ pub fn closeAll(items: []ZigDeleteTreeStackItem) void {
 };
 
 const UnalignedStatFS = *align(1) bun.StatFS;
+const ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
 pub const Binding = @import("./node_fs_binding.zig").Binding;
 pub const Watcher = @import("./node_fs_watcher.zig").FSWatcher;
 pub const StatWatcher = @import("./node_fs_stat_watcher.zig").StatWatcher;
@@ -5578,7 +5621,7 @@ const system = std.posix.system;
 
 pub fn NewAsyncCpTask(comptime is_shell: bool) type {
         const ShellTask = bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
-        const ShellTaskT = (if (is_shell) (&ShellTask) else u0);
+        const ShellTaskT = (if (is_shell) ShellCpTaskPtr else u0);
         const RefT = (if ((!is_shell)) bun.Async.KeepAlive else struct {
 });
         return struct {

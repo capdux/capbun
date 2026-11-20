@@ -163,7 +163,7 @@ pub struct Config {
 
         if (loader := object.get(globalThis, "loader")?) {
             if (resolved := Loader.fromJS(globalThis, loader)?) {
-                if (!resolved.isJavaScriptLike()) {
+                if (!resolved.isJavaScriptLike(resolved)) {
                     return globalThis.throwInvalidArguments("only JavaScript-like loaders supported for now", .{});
                 }
 
@@ -534,7 +534,7 @@ pub struct TransformTask {
             loader: _.loader,
             jsx: jsx,
             path: source.path,
-            virtual_source: &source,
+            virtual_source: unsafe { &source },
             replace_exports: _.replace_exports,
             experimental_decorators: if (_.tsconfig != null) _.tsconfig.?.experimental_decorators else false,
             emit_decorator_metadata: if (_.tsconfig != null) _.tsconfig.?.emit_decorator_metadata else false,
@@ -847,11 +847,12 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     }
 
     const log = &config.log;
+    const vm = jsc.VirtualMachine.get();
     client.transpiler = Transpiler.Transpiler.init(
         bun.default_allocator,
         log,
         config.transform,
-        jsc.VirtualMachine.get().transpiler.env,
+        vm.transpiler.env,
     ) catch |e| {
         if (log.warnings + log.errors > 0) {
             return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to create transpiler")?);
@@ -948,7 +949,7 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
     };
 
     if (globalThis.hasException()) {
-        return .zero;
+        return jsc.JSValue.zero;
     }
 
     let arena_ = MimallocArena.init();
@@ -1027,7 +1028,7 @@ pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callfra
         loader ?? client.config.default_loader,
     );
     task.schedule();
-    return task.promise.value();
+    return jsc.JSPromise.Strong.value(task.promise);
 }
 
 
@@ -1101,7 +1102,7 @@ pub fn transformSync(
     _.transpiler.macro_context = null;
     let log = logger.Log.init(arena_.backingAllocator());
     log.level = _.config.log.level;
-    _.transpiler.setLog(&log);
+    _.transpiler.setLog(unsafe { &log });
 
     defer {
         _.transpiler = prev_bundler;
@@ -1164,7 +1165,7 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
         if (!globalThis.hasException()) {
             return globalThis.throwInvalidArgumentType("scanImports", "code", "string or Uint8Array");
         }
-        return .zero;
+        return jsc.JSValue.zero;
     };
     args.eat();
     defer code_holder.deinit();

@@ -33,7 +33,7 @@ fn countFilesInArchive(data: []const u8): u32 {
 
     let count: u32 = 0;
     let entry: *libarchive.lib.Archive.Entry = undefined;
-    while (archive.readNextHeader(&entry) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry }) == .ok) {
         if (entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular)) {
             count += 1;
         }
@@ -156,7 +156,7 @@ fn extractToDiskFiltered(
     let count: u32 = 0;
     let entry: *lib.Archive.Entry = undefined;
 
-    while (archive.readNextHeader(&entry) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry }) == .ok) {
         const pathname = entry.pathnameUtf8();
 
         // Validate path safety (reject absolute paths, path traversal)
@@ -424,7 +424,7 @@ struct BlobContext {
     const Result = union(enum) {
         compressed: []u8,
         uncompressed: void,
-        @"err": Err,
+        @"err": anyerror,
     };
 
     store: *jsc.WebCore.Blob.Store,
@@ -491,7 +491,7 @@ struct WriteContext {
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
     const Result = union(enum) {
         success: void,
-        @"err": Err,
+        @"err": anyerror,
         sys_err: bun.sys.Error,
     };
     const Data = union(enum) {
@@ -631,7 +631,7 @@ struct FilesContext {
         errdefer freeEntries(&entries);
 
         let entry: *lib.Archive.Entry = undefined;
-        while (archive.readNextHeader(&entry) == .ok) {
+        while (archive.readNextHeader(unsafe { &entry }) == .ok) {
             if (entry.filetype() != @intFromEnum(lib.FileType.regular)) continue;
 
             const pathname = entry.pathnameUtf8();

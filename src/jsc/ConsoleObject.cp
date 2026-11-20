@@ -2374,7 +2374,8 @@ pub struct Formatter {
                 const was_in_map = if (_.map_node != null) _.map.remove(value) else false;
                 defer {
                     if (was_in_map) {
-                        * = _.map.put(value, {}) catch {};
+                        const empty_void: void = undefined;
+                        * = _.map.put(value, empty_void) catch {};
                     }
                 }
 

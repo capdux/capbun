@@ -130,11 +130,15 @@ pub fn ExternTaggedUnion(comptime field_types: []const type): type {
 }
 
 fn ExternUnion(comptime field_types: []const type): type {
-    let info = @typeInfo(bun.@"meta".TaggedUnion(field_types));
-    info.@"union".tag_type = null;
-    info.@"union".layout = .@"extern";
-    info.@"union".decls = [];
-    return @Type(info);
+    const info = @typeInfo(bun.@"meta".TaggedUnion(field_types));
+    return @Type(.{
+        .@"union" = .{
+            .layout = .@"extern",
+            .tag_type = null,
+            .fields = info.@"union".fields,
+            .decls = &.{},
+        },
+    });
 }
 
 pub fn BindgenArray(comptime Child: type): type {

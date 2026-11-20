@@ -1114,7 +1114,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 
         if (globalObject.hasException()) {
             config.deinit();
-            return .zero;
+            return JSValue.zero;
         }
 
         break :brk config;
@@ -1426,7 +1426,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
     let valkey = jsc.API.Valkey.createNoJsNoPubsub(globalThis, &.{ .js_undefined }) catch |e| {
         if (e != error.JSError) {
-            * = globalThis.throwError(e, "Failed to create Redis client");
+            if (globalThis.throwError(e, "Failed to create Redis client") == error.JSError) {}
             return JSValue.zero;
         }
         return JSValue.zero;
@@ -1437,7 +1437,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
     valkey.this_value = jsc.JSRef.initWeak(as_js);
     valkey._subscription_ctx = SubscriptionCtx.init(valkey) catch |e| {
         if (e != error.JSError) {
-            * = globalThis.throwError(e, "Failed to create Redis client");
+            if (globalThis.throwError(e, "Failed to create Redis client") == error.JSError) {}
             return JSValue.zero;
         }
         return JSValue.zero;
@@ -2048,7 +2048,7 @@ pub struct JSZstd {
         vm: *jsc.VirtualMachine,
         output: []u8 = [],
         error_message: ([]const u8)? = null,
-        any_task: jsc.AnyTask = undefined,
+        any_task: jsc.AnyTask.AnyTask = undefined,
         poll: Async.KeepAlive = {},
 
         pub const new = bun.TrivialNew(@This());
@@ -2136,7 +2136,7 @@ pub struct JSZstd {
             });
 
             job.promise = jsc.JSPromise.Strong.init(globalThis);
-            job.any_task = jsc.AnyTask.New(@This(), &runFromJS).init(job);
+            job.any_task = jsc.AnyTask.AnyTask.New(@This(), &runFromJS).init(job);
             job.poll.ref(vm);
             jsc.WorkPool.schedule(&job.task);
 

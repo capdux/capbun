@@ -29,7 +29,7 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
                 args.deinit();
 
             if (globalObject.hasException()) {
-                return .zero;
+                return jsc.JSValue.zero;
             }
 
             let result = function(&binding.node_fs, args, .sync);
