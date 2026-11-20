@@ -78,7 +78,7 @@ pub fn runTasks(
         ptask.runFromMainThread(manager, log_level)?;
         if (ptask.callback == .apply) {
             if (ptask.callback.apply.logger.errors == 0) {
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
+                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{}))) {
                     if (task_id := ptask.callback.apply.task_id) {
                         * = task_id; // autofix
 
@@ -217,7 +217,7 @@ pub fn runTasks(
                     // Handle non-retry-able errors.
                     const e = task.response.fail ?? error.HTTPError;
 
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
+                    if ((@TypeOf(callbacks.onPackageManifestError) != void && @TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{}))) {
                         callbacks.onPackageManifestError(
                             extract_ctx,
                             name.slice(),
@@ -263,7 +263,7 @@ pub fn runTasks(
                 const response = metadata.response;
 
                 if (response.status_code > 399) {
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
+                    if ((@TypeOf(callbacks.onPackageManifestError) != void && @TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{}))) {
                         const e: PackageManifestError = switch (response.status_code) {
                             400 => error.PackageManifestHTTP400,
                             401 => error.PackageManifestHTTP401,
@@ -446,7 +446,7 @@ pub fn runTasks(
                     const is_required = manager.isNetworkTaskRequired(task.task_id);
                     * = manager.network_dedupe_map.remove(task.task_id);
 
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
+                    if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         if (Ctx == *Store.Installer) {
                             callbacks.onPackageDownloadError(
                                 extract_ctx,
@@ -529,7 +529,7 @@ pub fn runTasks(
                     const is_required = manager.isNetworkTaskRequired(task.task_id);
                     * = manager.network_dedupe_map.remove(task.task_id);
 
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
+                    if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         const e = switch (response.status_code) {
                             400 => error.TarballHTTP400,
                             401 => error.TarballHTTP401,
@@ -647,7 +647,7 @@ pub fn runTasks(
                     const name = task.request.package_manifest.name;
                     const e = task.err ?? error.Failed;
 
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
+                    if ((@TypeOf(callbacks.onPackageManifestError) != void && @TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{}))) {
                         callbacks.onPackageManifestError(
                             extract_ctx,
                             name.slice(),
@@ -721,7 +721,7 @@ pub fn runTasks(
                     // `local_tarball` tasks (they never populate the map).
                     * = manager.network_dedupe_map.remove(task.id);
 
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void) {
+                    if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         const fail_url = switch (task.tag) {
                             .extract => task.request.extract.network.url_buf,
                             .local_tarball => task.request.local_tarball.tarball.url.slice(),
@@ -774,7 +774,7 @@ pub fn runTasks(
                 manager.extracted_count += 1;
                 bun.analytics.Features.extracted_packages += 1;
 
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
+                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{}))) {
                     switch (Ctx) {
                         *PackageInstaller => {
                             extract_ctx.fixCachedLockfilePackageSlices();
@@ -805,7 +805,7 @@ pub fn runTasks(
 
                         defer {
                             dependency_list.deinit(manager.allocator);
-                            if (comptime @TypeOf(callbacks) != void && @TypeOf(callbacks.onResolve) != void) {
+                            if (comptime @TypeOf(callbacks) != void && (@TypeOf(callbacks.onResolve) != void && @TypeOf(callbacks.onResolve) != @TypeOf(.{}))) {
                                 if (any_root) {
                                     callbacks.onResolve(extract_ctx);
                                 }
@@ -870,14 +870,14 @@ pub fn runTasks(
                 if (task.status == .fail) {
                     const e = task.err ?? error.Failed;
 
-                    if (@TypeOf(callbacks.onPackageManifestError) != void) {
+                    if ((@TypeOf(callbacks.onPackageManifestError) != void && @TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{}))) {
                         callbacks.onPackageManifestError(
                             extract_ctx,
                             name,
                             e,
                             url,
                         );
-                    } else if (@TypeOf(callbacks.onPackageDownloadError) != void && Ctx == *Store.Installer) {
+                    } else if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{})) && Ctx == *Store.Installer) {
                         // The isolated installer queued its entry contexts
                         // under `checkout_id`, not `clone_id`. A failed clone
                         // never reaches checkout, so drain every waiting
@@ -945,7 +945,7 @@ pub fn runTasks(
                     continue;
                 }
 
-                if (comptime @TypeOf(callbacks.onExtract) != void && Ctx == *PackageInstaller) {
+                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{})) && Ctx == *PackageInstaller) {
                     // Installing!
                     // this dependency might be something other than a git dependency! only need the name and
                     // behavior, use the resolution from the task.
@@ -1005,7 +1005,7 @@ pub fn runTasks(
                 if (task.status == .fail) {
                     const e = task.err ?? error.Failed;
 
-                    if (@TypeOf(callbacks.onPackageDownloadError) != void && Ctx == *Store.Installer) {
+                    if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{})) && Ctx == *Store.Installer) {
                         callbacks.onPackageDownloadError(
                             extract_ctx,
                             task.id,
@@ -1030,7 +1030,7 @@ pub fn runTasks(
                     continue;
                 }
 
-                if (comptime @TypeOf(callbacks.onExtract) != void) {
+                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{}))) {
                     // We've populated the cache, package already exists in memory. Call the package installer callback
                     // and don't enqueue dependencies
                     switch (Ctx) {
@@ -1070,7 +1070,7 @@ pub fn runTasks(
 
                         defer {
                             dependency_list.deinit(manager.allocator);
-                            if (comptime @TypeOf(callbacks) != void && @TypeOf(callbacks.onResolve) != void) {
+                            if (comptime @TypeOf(callbacks) != void && (@TypeOf(callbacks.onResolve) != void && @TypeOf(callbacks.onResolve) != @TypeOf(.{}))) {
                                 if (any_root) {
                                     callbacks.onResolve(extract_ctx);
                                 }
@@ -1092,7 +1092,7 @@ pub fn runTasks(
                             }
                         }
 
-                        if (@TypeOf(callbacks.onExtract) != void) {
+                        if ((@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{}))) {
                             @compileError("ctx should be void");
                         }
                     }

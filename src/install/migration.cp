@@ -1011,7 +1011,8 @@ pub fn migrateNPMLockfile(
                                             res = Resolution.init(.{ folder: string_buf.append(dep_resolved)? });
                                         },
                                         .workspace => {
-                                            let input = (string_buf.append(dep_resolved)?).sliced(string_buf.bytes.items);
+                                            const appended = string_buf.append(dep_resolved)?;
+                                            let input = appended.sliced(string_buf.bytes.items);
                                             if (strings.hasPrefixComptime(input.slice, "workspace:")) {
                                                 input = input.sub(input.slice["workspace:".len..]);
                                             }

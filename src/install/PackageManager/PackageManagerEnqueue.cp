@@ -437,9 +437,7 @@ pub fn enqueueDependencyToRoot(
     }
 
     if (resolution_id == invalid_package_id) {
-        return {
-            not_found: {},
-        };
+        return .not_found;
     }
 
     return {

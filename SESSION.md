@@ -21,3 +21,4 @@
 - **[2026-11-21 00:58] `css/properties/properties_generated.cp` 新版 `cpc` 重编提交**：使用新版 `cpc` 重新生成 `properties_generated.zig` 并通过 4 项门禁（PASS，ratio 1.14x），修复旧版 `cpc` 误生成 `*PropertyId`/`*Property` 问题。
 - **[2026-11-21 00:59] Wave 33 C 组验收提交（18 模块全绿）**：完成 `bun`、`Install`（还原 `ResolutionTag` 枚举值等）、`CLI`、`Runtime`、`subproc`、`DataCell`、`AsyncModule`、`resolve_path` 18 模块独立验收（18/18 PASS，4 项门禁全绿）并原子提交；静待 B 组（`3214dcfb`）完成即跑 Wave 34 `zig:check`。
 - **[2026-11-21 01:00] Wave 33 B 组验收提交（18 模块全绿，Wave 33 清仓）**：完成 Bundler/LinkerContext/JSParser(`P.Ctx.next` 连带解封 `js_parser.cp`)/Renamer/JSON 18 模块独立验收（18/18 PASS，ratio 0.899x~1.051x，`json.cp` 原无备份除外）并原子提交；随即运行 Wave 34 全仓 `bun run zig:check`。
+- **[2026-11-21 01:06] Wave 34 C 组验收提交（11 模块全绿）**：完成 Runtime/Install(`runTasks` 兼容 `@TypeOf(.{})` 等)/JSC(`AsyncModule`)/Shell(`subproc`) 11 模块独立验收（11/11 PASS，4 项门禁全绿，ratio 0.987x~1.108x）并原子提交；静待 A/B 组完成。

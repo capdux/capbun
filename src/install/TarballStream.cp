@@ -860,12 +860,11 @@ fn populateResult(client: *TarballStream, task: *Task) {
     }
 
     if (PackageManager.verbose_install) {
-        const verb_args = .{
+        Output.prettyErrorln("[{s}] Streamed {f} tarball → {d} entries<r>", .{
             name,
             bun.fmt.size(client.bytes_received, {}),
             client.entry_count,
-        };
-        Output.prettyErrorln("[{s}] Streamed {f} tarball → {d} entries<r>", verb_args);
+        });
         Output.flush();
     }
 

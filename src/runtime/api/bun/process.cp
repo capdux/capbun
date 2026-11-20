@@ -269,10 +269,10 @@ pub struct Process {
                 if (posix.has_exited) {
                     let rusage = std.mem.zeroes(Rusage);
                     const waitpid_result = PosixSpawn.wait4(posix.pid, 0, &rusage);
-                    break :brk Status.@"from"(posix.pid, &waitpid_result) ?? Status{ running: {} };
+                    break :brk Status.@"from"(posix.pid, &waitpid_result) ?? Status.running;
                 }
 
-                break :brk Status{ running: {} };
+                break :brk Status.running;
             },
         });
     }

@@ -1621,7 +1621,7 @@ pub fn parseIntoBinaryLockfile(
             const bundled_expr = maybe_info_obj.get("bundled") orelse continue;
             const bundled = bundled_expr.asBool() orelse continue;
             if (!bundled) continue;
-            bundled_pkgs.put(pkg_path, {})?;
+            bundled_pkgs.put(pkg_path, undefined)?;
         }
 
         for (prop of pkgs_expr.data.e_object.properties.slice()) {

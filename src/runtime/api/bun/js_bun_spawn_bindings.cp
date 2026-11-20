@@ -677,9 +677,9 @@ pub fn spawnMaybeSync(
         globalThis: globalThis,
         process: process,
         pid_rusage: null,
-        stdin: Writable{ .ignore = {} },
-        stdout: Readable{ .ignore = {} },
-        stderr: Readable{ .ignore = {} },
+        stdin: .ignore,
+        stdout: .ignore,
+        stderr: .ignore,
         stdio_pipes: .{},
         ipc_data: null,
         flags: Subprocess.Flags{
@@ -727,9 +727,9 @@ pub fn spawnMaybeSync(
         // so that if `Writable.init()` fails the catch block doesn't have to
         // tear down unstarted `PipeReader`s (whose `deinit()` asserts
         // `isDone()`).
-        stdin: Writable{ .ignore = {} },
-        stdout: Readable{ .ignore = {} },
-        stderr: Readable{ .ignore = {} },
+        stdin: .ignore,
+        stdout: .ignore,
+        stderr: .ignore,
         // 1. JavaScript.
         // 2. Process.
         ref_count: .initExactRefs(2),

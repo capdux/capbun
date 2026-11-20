@@ -399,8 +399,7 @@ else => {
                 }
             }
             if (PackageManager.verbose_install) {
-                const q_args: struct { *anyopaque } = .{ bun.fmt.quote(self.package_name) };
-                _ = Output.prettyErrorln("<r><d>[Scripts]<r> Finished scripts for <b>{f}<r>", q_args);
+                _ = Output.prettyErrorln("<r><d>[Scripts]<r> Finished scripts for <b>{f}<r>", .{ bun.fmt.quote(self.package_name) });
             }
             if (self.ctx) |ctx| {
                 _ = &ctx;

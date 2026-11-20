@@ -253,9 +253,9 @@ pub fn initPosix(posix: PosixSpawnResult, event_loop: anytype, sync_: bool) *Pro
                 var rusage = std.mem.zeroes(Rusage);
                 _ = &rusage;
                 const waitpid_result = PosixSpawn.wait4(posix.pid, 0, (&rusage));
-                break :brk ((Status.@"from"(posix.pid, (&waitpid_result))) orelse (Status{ .running = .{} }));
+                break :brk ((Status.@"from"(posix.pid, (&waitpid_result))) orelse (Status.running));
             }
-            break :brk Status{ .running = .{} };
+            break :brk Status.running;
 } });
     }
 

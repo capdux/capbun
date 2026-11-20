@@ -581,49 +581,49 @@ pub struct AsyncModule {
 
         const res_fmt = result.resolution.fmt(vm.packageManager().lockfile.buffers.string_bytes.items, .@"any");
 
-        const msg: []u8 = if (result.err == error.TarballHTTP400)
+        const msg: []u8 = if (result.e == error.TarballHTTP400)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 400 downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP401)
+        else if (result.e == error.TarballHTTP401)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 401 downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP402)
+        else if (result.e == error.TarballHTTP402)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 402 downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP403)
+        else if (result.e == error.TarballHTTP403)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 403 downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP404)
+        else if (result.e == error.TarballHTTP404)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 404 downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP4xx)
+        else if (result.e == error.TarballHTTP4xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 4xx downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballHTTP5xx)
+        else if (result.e == error.TarballHTTP5xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 5xx downloading package '{s}@{f}'",
                 .{ result.name, res_fmt },
             )?
-        else if (result.err == error.TarballFailedToExtract)
+        else if (result.e == error.TarballFailedToExtract)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "Failed to extract tarball for package '{s}@{f}'",
@@ -634,14 +634,14 @@ pub struct AsyncModule {
                 bun.default_allocator,
                 "{s} downloading package '{s}@{f}'",
                 .{ 
-                    bun.asByteSlice(@errorName(result.err)),
+                    bun.asByteSlice(@errorName(result.e)),
                     result.name,
                     result.resolution.fmt(vm.packageManager().lockfile.buffers.string_bytes.items, .@"any"),
                 },
             )?;
         defer bun.default_allocator.free(msg);
 
-        const name: []const u8 = switch (result.err) {
+        const name: []const u8 = switch (result.e) {
             error.TarballFailedToExtract => "PackageExtractionError",
             error.TarballHTTP403 => "TarballForbiddenError",
             error.TarballHTTP404 => "TarballNotFoundError",

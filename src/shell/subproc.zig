@@ -509,7 +509,7 @@ pub fn abortAfterFailedStart(self: *ShellSubprocess) void {
             _ = self.deinit();
     }
 
-pub fn spawnAsync(event_loop: jsc.EventLoopHandle, shellio: *ShellIO, spawn_args_: SpawnArgs, out: *@This(), notify_caller_process_already_exited: *bool) bun.shell.Result(void) {
+pub fn spawnAsync(event_loop: jsc.EventLoopHandle, shellio: *ShellIO, spawn_args_: SpawnArgs, out: *SelfPtr, notify_caller_process_already_exited: *bool) bun.shell.Result(void) {
             var arena_ = bun.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_;
             defer {

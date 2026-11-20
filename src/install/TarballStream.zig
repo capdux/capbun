@@ -872,8 +872,7 @@ else => {
 },
 }
         if (PackageManager.verbose_install) {
-            const verb_args: struct { *anyopaque, *anyopaque, u32 } = .{ name, bun.fmt.size(client.bytes_received, .{}), client.entry_count };
-            _ = Output.prettyErrorln("[{s}] Streamed {f} tarball → {d} entries<r>", verb_args);
+            _ = Output.prettyErrorln("[{s}] Streamed {f} tarball → {d} entries<r>", .{ name, bun.fmt.size(client.bytes_received, .{}), client.entry_count });
             _ = Output.flush();
         }
         task.data = .{ .extract = result };

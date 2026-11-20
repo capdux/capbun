@@ -938,7 +938,8 @@ res = Resolution.init(.{ .folder = try string_buf.append(dep_resolved) });
 res = Resolution.init(.{ .folder = try string_buf.append(dep_resolved) });
 },
 .workspace => {
-var input = try string_buf.append(dep_resolved).sliced(string_buf.bytes.items);
+const appended = try string_buf.append(dep_resolved);
+                                        var input = appended.sliced(string_buf.bytes.items);
                                         _ = &input;
                                         if (strings.hasPrefixComptime(input.slice, "workspace:")) {
                                             input = input.sub(input.slice["workspace:".len..]);

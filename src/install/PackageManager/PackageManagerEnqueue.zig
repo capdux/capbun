@@ -363,7 +363,7 @@ pub fn isDone(closure: *@This()) bool {
             resolution_id = mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
         }
         if ((resolution_id == invalid_package_id)) {
-            return .{ .not_found = .{} };
+            return .not_found;
         }
         return .{ .resolution = .{ .resolution = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(resolution_id))], .package_id = resolution_id } };
 }

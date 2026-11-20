@@ -124,7 +124,7 @@ pub const CacheFolderResolver = struct {
 pub fn resolve(self: CacheFolderResolver, comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) !Resolution {
         _ = _unused_builder;
         _ = _unused_expr;
-            return Resolution{ .tag = Resolution.Tag.npm, .value = Resolution.Value{ .npm = Resolution.Npm{ .version = self.version, .url = cp_string_from("") } } };
+            return Resolution{ .tag = Resolution.Tag.npm, .value = Resolution.Value{ .npm = .{ .version = self.version, .url = cp_string_from("") } } };
     }
 
 pub fn count(self: CacheFolderResolver, comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) void {

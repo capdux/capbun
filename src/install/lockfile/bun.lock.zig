@@ -1292,7 +1292,7 @@ else => {
                 if ((!bundled)) {
                     continue;
                 }
-                _ = try bundled_pkgs.put(pkg_path, .{});
+                _ = try bundled_pkgs.put(pkg_path, undefined);
             }
             for (cp_iter_slice(pkgs_expr.data.e_object.properties.slice())) |prop| {
                 _ = &prop;

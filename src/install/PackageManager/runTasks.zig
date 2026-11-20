@@ -147,7 +147,7 @@ pub fn runTasks(manager: *PackageManager, comptime Ctx: type, extract_ctx: Ctx, 
             _ = try ptask.runFromMainThread(manager, log_level);
             if ((ptask.callback == .apply)) {
                 if ((ptask.callback.apply.logger.errors == 0)) {
-                    if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+                    if (comptime ((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{})))) {
                         if (ptask.callback.apply.task_id) |task_id| {
                             _ = &task_id;
                             _ = &task_id;
@@ -249,7 +249,7 @@ const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@Typ
             }
             if ((task.response.metadata == null)) {
                 const e = ((task.response.fail) orelse (error.HTTPError));
-                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
                     _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.url_buf);
                 } else {
                     const fmt: []const u8 = "{s} downloading package manifest <b>{s}<r>";
@@ -275,7 +275,7 @@ const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@Typ
             const metadata = task.response.metadata.?;
             const response = metadata.response;
             if ((response.status_code > 399)) {
-                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
                     const e: PackageManifestError = (switch (response.status_code) {
 400 => error.PackageManifestHTTP400,
 401 => error.PackageManifestHTTP401,
@@ -369,7 +369,7 @@ _ = bun.debugAssert((!task.streaming_committed));
                 const e = ((task.response.fail) orelse (error.TarballFailedToDownload));
                 const is_required = manager.isNetworkTaskRequired(task.task_id);
                 _ = manager.network_dedupe_map.remove(task.task_id);
-                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{})))) {
                     if ((Ctx == *Store.Installer)) {
                         _ = callbacks.onPackageDownloadError(extract_ctx, task.task_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), (&extract.resolution), e, task.url_buf);
                     } else {
@@ -408,7 +408,7 @@ _ = bun.debugAssert((!task.streaming_committed));
             if ((response.status_code > 399)) {
                 const is_required = manager.isNetworkTaskRequired(task.task_id);
                 _ = manager.network_dedupe_map.remove(task.task_id);
-                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{})))) {
                     const e = (switch (response.status_code) {
 400 => error.TarballHTTP400,
 401 => error.TarballHTTP401,
@@ -496,7 +496,7 @@ defer {
             if ((task.status == .fail)) {
                 const name = (if (@typeInfo(@TypeOf(task.request.package_manifest)) == .@"enum" or @typeInfo(@TypeOf(task.request.package_manifest)) == .@"union") @tagName(task.request.package_manifest) else task.request.package_manifest.name);
                 const e = ((task.err) orelse (error.Failed));
-                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
                     _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.request.package_manifest.network.url_buf);
                 } else {
                     _ = (blk_catch_11: { break :blk_catch_11 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} parsing package manifest for <b>{s}<r>", .{ @errorName(e), name.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_11 bun.handleOom(oom_err); }); });
@@ -545,7 +545,7 @@ else => unreachable,
             if ((task.status == .fail)) {
                 const e = ((task.err) orelse (error.TarballFailedToExtract));
                 _ = manager.network_dedupe_map.remove(task.id);
-                if ((@TypeOf(callbacks.onPackageDownloadError) != void)) {
+                if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{})))) {
                     const fail_url = (switch (task.tag) {
 .extract => task.request.extract.network.url_buf,
 .local_tarball => task.request.local_tarball.tarball.url.slice(),
@@ -569,7 +569,7 @@ else => unreachable,
             }
             manager.extracted_count = (manager.extracted_count + 1);
             bun.analytics.Features.extracted_packages = (bun.analytics.Features.extracted_packages + 1);
-            if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+            if (comptime ((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{})))) {
                 if (Ctx == *PackageInstaller) {
 _ = extract_ctx.fixCachedLockfilePackageSlices();
                 _ = callbacks.onExtract(extract_ctx, task.id, dependency_id, (&task.data.extract), log_level);
@@ -591,7 +591,7 @@ _ = @compileError("unexpected context type");
                         defer {
                         {
                             _ = dependency_list.deinit(manager.allocator);
-                            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
+                            if (comptime ((@TypeOf(callbacks) != void) and ((@TypeOf(callbacks.onResolve) != void) and (@TypeOf(callbacks.onResolve) != @TypeOf(.{}))))) {
                                 if (any_root) {
                                     _ = callbacks.onResolve(extract_ctx);
                                 }
@@ -651,10 +651,10 @@ const clone = (&task.request.git_clone);
             _ = ((manager.git_repositories.put(manager.allocator, task.id, repo_fd)) catch unreachable);
             if ((task.status == .fail)) {
                 const e = ((task.err) orelse (error.Failed));
-                if ((@TypeOf(callbacks.onPackageManifestError) != void)) {
+                if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
                     _ = callbacks.onPackageManifestError(extract_ctx, name, e, url);
                 } else {
-                    if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (Ctx == *Store.Installer))) {
+                    if ((((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) and (Ctx == *Store.Installer))) {
                         var drained_any = false;
                         _ = &drained_any;
                         if (manager.task_queue.fetchRemove(task.id)) |removed| {
@@ -696,7 +696,7 @@ else => continue,
                 }
                 continue;
             }
-            if (comptime ((@TypeOf(callbacks.onExtract) != void) and (Ctx == *PackageInstaller))) {
+            if (comptime (((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{}))) and (Ctx == *PackageInstaller))) {
                 const dep_id = clone.dep_id;
                 const dep = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
                 const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(manager.lockfile.buffers.string_bytes.items);
@@ -730,14 +730,14 @@ const git_checkout = (&task.request.git_checkout);
             _ = &package_id;
             if ((task.status == .fail)) {
                 const e = ((task.err) orelse (error.Failed));
-                if (((@TypeOf(callbacks.onPackageDownloadError) != void) and (Ctx == *Store.Installer))) {
+                if ((((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) and (Ctx == *Store.Installer))) {
                     _ = callbacks.onPackageDownloadError(extract_ctx, task.id, alias.slice(), resolution, e, manager.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git.repo)));
                 } else {
                     _ = (blk_catch_16: { break :blk_catch_16 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} checking out repository for <b>{s}<r>", .{ @errorName(e), alias.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_16 bun.handleOom(oom_err); }); });
                 }
                 continue;
             }
-            if (comptime (@TypeOf(callbacks.onExtract) != void)) {
+            if (comptime ((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{})))) {
                 if (Ctx == *PackageInstaller) {
 _ = extract_ctx.fixCachedLockfilePackageSlices();
                 _ = callbacks.onExtract(extract_ctx, task.id, git_checkout.dependency_id, (&task.data.git_checkout), log_level);
@@ -759,7 +759,7 @@ _ = @compileError("unexpected context type");
                         defer {
                         {
                             _ = dependency_list.deinit(manager.allocator);
-                            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
+                            if (comptime ((@TypeOf(callbacks) != void) and ((@TypeOf(callbacks.onResolve) != void) and (@TypeOf(callbacks.onResolve) != @TypeOf(.{}))))) {
                                 if (any_root) {
                                     _ = callbacks.onResolve(extract_ctx);
                                 }
@@ -781,7 +781,7 @@ _ = ((dependency_list_entry.value_ptr.append(manager.allocator, dep)) catch unre
 },
 }
                         }
-                        if ((@TypeOf(callbacks.onExtract) != void)) {
+                        if (((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{})))) {
                             _ = @compileError("ctx should be void");
                         }
                     }

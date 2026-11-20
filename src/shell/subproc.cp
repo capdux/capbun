@@ -891,7 +891,7 @@ pub struct ShellSubprocess {
         // We have to use an out pointer because this function may invoke callbacks that expect a
         // fully initialized parent object. Writing to this out pointer may be the last step needed
         // to initialize the object.
-        out: **@This(),
+        out: *SelfPtr,
         notify_caller_process_already_exited: *bool,
     ): bun.shell.Result(void) {
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);

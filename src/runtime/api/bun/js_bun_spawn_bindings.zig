@@ -703,7 +703,7 @@ else => {
 });
         _ = &spawned;
         const process = spawned.toProcess(loop_handle, is_sync);
-        var subprocess = bun.new(Subprocess, Subprocess{ .ref_count = .init(), .globalThis = globalThis, .process = process, .pid_rusage = null, .stdin = Writable{ .ignore = .{} }, .stdout = Readable{ .ignore = .{} }, .stderr = Readable{ .ignore = .{} }, .stdio_pipes = .{}, .ipc_data = null, .flags = Subprocess.Flags{ .is_sync = is_sync }, .killSignal = undefined });
+        var subprocess = bun.new(Subprocess, Subprocess{ .ref_count = .init(), .globalThis = globalThis, .process = process, .pid_rusage = null, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore, .stdio_pipes = .{}, .ipc_data = null, .flags = Subprocess.Flags{ .is_sync = is_sync }, .killSignal = undefined });
         _ = &subprocess;
         const posix_ipc_fd = (if (((Environment.isPosix and (!is_sync)) and (maybe_ipc_mode != null))) spawned.extra_pipes.items[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf(ipc_channel)) == .@"enum") cp_cast_int(i32, @intFromEnum(ipc_channel)) else cp_cast_int(i32, ipc_channel))))].fd() else bun.invalid_fd);
         _ = MaxBuf.createForSubprocess(subprocess, (&subprocess.stderr_maxbuf), maxBuffer);
@@ -726,7 +726,7 @@ else => {
                 terminal_val = info.terminal;
             }
         }
-        subprocess.* = Subprocess{ .globalThis = globalThis, .process = process, .pid_rusage = null, .stdin = Writable{ .ignore = .{} }, .stdout = Readable{ .ignore = .{} }, .stderr = Readable{ .ignore = .{} }, .ref_count = .initExactRefs(2), .stdio_pipes = spawned.extra_pipes.moveToUnmanaged(), .ipc_data = ipc_data_val, .flags = Subprocess.Flags{ .is_sync = is_sync }, .killSignal = killSignal, .stderr_maxbuf = subprocess.stderr_maxbuf, .stdout_maxbuf = subprocess.stdout_maxbuf, .terminal = terminal_val };
+        subprocess.* = Subprocess{ .globalThis = globalThis, .process = process, .pid_rusage = null, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore, .ref_count = .initExactRefs(2), .stdio_pipes = spawned.extra_pipes.moveToUnmanaged(), .ipc_data = ipc_data_val, .flags = Subprocess.Flags{ .is_sync = is_sync }, .killSignal = killSignal, .stderr_maxbuf = subprocess.stderr_maxbuf, .stdout_maxbuf = subprocess.stdout_maxbuf, .terminal = terminal_val };
         subprocess.stdin = (blk_catch_5: { break :blk_catch_5 ((Writable.init((&stdio[0]), event_loop, subprocess, spawned.stdin, (&promise_for_stream))) catch |e| { _ = &e; if (Environment.isPosix) {
             if (spawned.stdout) |fd| {
                 _ = &fd;

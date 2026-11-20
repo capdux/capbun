@@ -425,8 +425,7 @@ pub struct LifecycleScriptSubprocess {
                 }
 
                 if (PackageManager.verbose_install) {
-                    const q_args = .{ bun.fmt.quote(_.package_name) };
-                    Output.prettyErrorln("<r><d>[Scripts]<r> Finished scripts for <b>{f}<r>", q_args);
+                    Output.prettyErrorln("<r><d>[Scripts]<r> Finished scripts for <b>{f}<r>", .{ bun.fmt.quote(_.package_name) });
                 }
 
                 if (ctx := _.ctx) {
