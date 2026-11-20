@@ -289,7 +289,7 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
                     to_clone.appendAssumeCapacity(Dependency.toExternal(dep));
                 }
 
-                writeArray(StreamType, stream, Writer, writer, []Dependency.External, to_clone.items)?;
+                writeArray(StreamType, stream, Writer, writer, @TypeOf(to_clone.items), to_clone.items)?;
             } else {
                 const list = @field(buffers, name);
                 const items = list.items;

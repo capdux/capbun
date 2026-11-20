@@ -103,7 +103,7 @@ pub const Opts = struct {
 };
 
 pub const ParseOptsState = struct {
-    args_slice: []const [*:0]u8,
+    args_slice: []const [*:0]const u8,
     idx: u32 = 0,
     state: ParseOptsSubState = .normal,
 };
@@ -113,7 +113,7 @@ pub const WaitingTasksState = struct {
 };
 
 pub const ExecState = struct {
-    filepath_args: []const [*:0]u8,
+    filepath_args: []const [*:0]const u8,
     total_tasks: usize,
     e: ?Syscall.Error = null,
     lock: bun.Mutex = bun.Mutex{  },

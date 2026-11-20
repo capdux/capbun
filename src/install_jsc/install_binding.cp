@@ -41,7 +41,7 @@ pub struct bun_install_js_bindings {
 
         const manager = globalObject.bunVM().transpiler.resolver.getPackageManager();
 
-        const load_result: Lockfile.LoadResult = lockfile.loadFromDir(.fromStdDir(dir), manager, allocator, &log, true);
+        const load_result: Lockfile.LoadResult = lockfile.loadFromDir(.fromStdDir(dir), manager, allocator, unsafe { &log }, true);
 
         switch (load_result) {
             .err => |e| {

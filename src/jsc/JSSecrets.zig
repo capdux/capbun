@@ -76,5 +76,6 @@ pub export fn Bun__Secrets__scheduleJob(global: *jsc.JSGlobalObject, options: *S
 }
 
 pub fn fixDeadCodeElimination() void {
-        _ = std.mem.doNotOptimizeAway(*const Bun__Secrets__scheduleJob);
+        const f = Bun__Secrets__scheduleJob;
+        _ = std.mem.doNotOptimizeAway((&f));
 }

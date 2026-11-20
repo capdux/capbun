@@ -197,6 +197,18 @@ pub fn onClose(self: *DuplexUpgradeContext) void {
             _ = self.deinitInNextTick();
     }
 
+pub fn startUpgradeTLS(self: *DuplexUpgradeContext, is_client: bool) anyerror!void {
+            if (self.owned_ctx) |ctx| {
+                _ = &ctx;
+                self.owned_ctx = null;
+                return self.upgrade.startTLSWithCTX(ctx, is_client);
+            }
+            if (self.ssl_config) |config| {
+                _ = &config;
+                return self.upgrade.startTLS(config, is_client);
+            }
+    }
+
 pub fn runEvent(self: *DuplexUpgradeContext) void {
             switch (self.task_event) {
 .StartTLS => {
@@ -206,19 +218,7 @@ if ((self.tls == null)) {
             }
             _ = log("DuplexUpgradeContext.startTLS mode={s}", .{ @tagName(self.mode) });
             const is_client = (self.mode == .client);
-            var started: anyerror!void = .{ .ok = undefined };
-            _ = &started;
-            if (self.owned_ctx) |ctx| {
-                _ = &ctx;
-                self.owned_ctx = null;
-                started = self.upgrade.startTLSWithCTX(ctx, is_client);
-            } else {
-                if (self.ssl_config) |config| {
-                    _ = &config;
-                    started = self.upgrade.startTLS(config, is_client);
-                }
-            }
-            _ = (blk_catch_3: { break :blk_catch_3 ((started) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.startUpgradeTLS(is_client)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                 _ = bun.outOfMemory();
             } else {
                 const errno = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
@@ -1921,9 +1921,13 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
             return globalObject.throw("Expected options object", .{});
         }
-        const socket_obj = try ((opts.get(globalObject, "socket")) orelse {
-        return globalObject.throw("Expected \"socket\" option", .{});
-});
+        const socket_obj_opt = try opts.get(globalObject, "socket");
+        var __socket_obj_opt_moved = false; _ = &__socket_obj_opt_moved;
+        defer if (!__socket_obj_opt_moved) { const __T = @TypeOf(socket_obj_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket_obj_opt.release() catch {}; } else { socket_obj_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket_obj_opt; _drop_val.release(); } };
+        if ((socket_obj_opt == null)) {
+            return globalObject.throw("Expected \"socket\" option", .{});
+        }
+        const socket_obj = socket_obj_opt.?;
         var __socket_obj_moved = false; _ = &__socket_obj_moved;
         defer if (!__socket_obj_moved) { const __T = @TypeOf(socket_obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket_obj.release() catch {}; } else { socket_obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket_obj; _drop_val.release(); } };
         var is_server = false;
@@ -1997,9 +2001,11 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         }
         var socket_config: ?*jsc.API.ServerConfig.SSLConfig = null;
         _ = &socket_config;
-        if (ssl_opts) |*ssl_cfg_ref| {
-            _ = &ssl_cfg_ref;
-            socket_config = bun.cast(OptSSLConfig, (ssl_cfg_ref.*));
+        if ((ssl_opts != null)) {
+            socket_config = bun.cast(OptSSLConfig, (blk: {
+            break :blk (&ssl_opts.?);
+
+}));
         }
         var default_data = JSValue.zero;
         var __default_data_moved = false; _ = &__default_data_moved;

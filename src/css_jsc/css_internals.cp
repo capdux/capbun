@@ -111,7 +111,8 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, @
         bun.bundle_v2.Index.invalid,
     )) {
         .result => |ret| {
-            let [stylesheet, extra]: [bun.css.StyleSheet(bun.css.DefaultAtRule), bun.css.StyleSheet(bun.css.DefaultAtRule).Extra] = ret;
+            let stylesheet = ret[0];
+            let extra = ret[1];
             let minify_options: bun.css.MinifyOptions = bun.css.MinifyOptions.default();
             minify_options.targets.browsers = browsers;
             switch (stylesheet.minify(alloc, minify_options, &extra)) {

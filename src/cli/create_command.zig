@@ -81,8 +81,7 @@ pub const ExampleTag = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn fromFileExtension(self: ExampleTag, extension: []const u8) ?ExampleTag {
-        _ = self;
+pub fn fromFileExtension(extension: []const u8) ?ExampleTag {
             return ExtensionTagMap.get(extension);
     }
     
@@ -142,7 +141,7 @@ pub fn parse(ctx: Command.Context) !CreateOptions {
             Output.is_verbose = Output.isVerbose();
             var diag = clap.Diagnostic{  };
             _ = &diag;
-            var args = (blk_catch_0: { break :blk_catch_0 ((clap.parse(clap.Help, *const params, .{ .diagnostic = (&diag), .allocator = ctx.allocator })) catch |e| { _ = &e; _ = (blk_catch_1: { break :blk_catch_1 ((diag.report(Output.errorWriter(), e)) catch |__ce_1| { _ = &__ce_1;  }); });
+            var args = (blk_catch_0: { break :blk_catch_0 ((clap.parse(clap.Help, (&CreateOptions.params), .{ .diagnostic = (&diag), .allocator = ctx.allocator })) catch |e| { _ = &e; _ = (blk_catch_1: { break :blk_catch_1 ((diag.report(Output.errorWriter(), e)) catch |__ce_1| { _ = &__ce_1;  }); });
             return e; }); });
             _ = &args;
             var opts = CreateOptions{ .positionals = args.positionals() };
@@ -168,6 +167,852 @@ pub fn parse(ctx: Command.Context) !CreateOptions {
             clap.parseParam("--open                         On finish, start bun & open in-browser") catch unreachable,
             clap.parseParam("<POS>...                       ") catch unreachable,
         };
+};
+
+pub const ExtractInfoResult = struct {
+    example_tag: Example.Tag,
+    template: []const u8,
+};
+
+pub const CreateCommand = struct {
+
+pub fn exec(ctx: Command.Context, example_tag: Example.Tag, template: []const u8) !void {
+            @branchHint(.cold);
+            _ = Global.configureAllocator(.{ .long_running = false });
+            _ = HTTP.HTTPThread.init(&.{});
+            var create_options = try CreateOptions.parse(ctx);
+            _ = &create_options;
+            const positionals = create_options.positionals;
+            if ((positionals.len == 0)) {
+                return try CreateListExamplesCommand.exec(ctx);
+            }
+            var filesystem = try fs.FileSystem.init(null);
+            _ = &filesystem;
+            var env_loader: DotEnv.Loader = brk: {
+            const map = try ctx.allocator.create(DotEnv.Map);
+            map.* = DotEnv.Map.init(ctx.allocator);
+            break :brk DotEnv.Loader.init(map, ctx.allocator);
+};
+            _ = &env_loader;
+            _ = try env_loader.loadProcess();
+            const dirname: []const u8 = brk: {
+            if ((positionals.len == 1)) {
+                break :brk std.fs.path.basename(template);
+            }
+            break :brk positionals[1];
+};
+            const destination = try filesystem.dirname_store.append(string, resolve_path.joinAbs(filesystem.top_level_dir, .loose, dirname));
+            var progress = Progress{  };
+            _ = &progress;
+            progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
+            var node = (switch (example_tag) {
+.jslike_file => progress.start(try ProgressBuf.print("Analyzing {s}", .{ template }), 0),
+else => progress.start(try ProgressBuf.print("Loading {s}", .{ template }), 0),
+});
+            _ = &node;
+            if ((env_loader.map.get("ALACRITTY_LOG") != null)) {
+                progress.refresh_rate_ns = (std.time.ns_per_ms * 8);
+            }
+            defer {
+            {
+                _ = progress.refresh();
+            }
+            }
+            var package_json_contents: MutableString = undefined;
+            _ = &package_json_contents;
+            var package_json_file: ?std.fs.File = null;
+            _ = &package_json_file;
+            if ((example_tag != .local_folder)) {
+                if (create_options.verbose) {
+                    _ = Output.prettyErrorln("Downloading as {s}\n", .{ @tagName(example_tag) });
+                }
+            }
+            switch (example_tag) {
+.jslike_file => {
+return try runOnEntryPoint(ctx, example_tag, template, (&progress), node);
+},
+.github_repository, .official => {
+const tarball_bytes: MutableString = (switch (example_tag) {
+.official => (blk_catch_2: { break :blk_catch_2 ((Example.fetch(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_2 @as(MutableString, (switch (e) {
+error.HTTPForbidden, error.ExampleNotFound => {
+{
+                _ = node.end();
+                _ = progress.refresh();
+                _ = Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found. Here are templates you can use:\n\n", .{ template });
+                _ = Output.flush();
+                const examples = try Example.fetchAllLocalAndRemote(ctx, null, (&env_loader), filesystem);
+                _ = Example.print(examples.items, dirname);
+                _ = Global.exit(1);
+            }
+},
+else => {
+{
+                _ = node.end();
+                _ = progress.refresh();
+                _ = Output.prettyErrorln("\n\n", .{});
+                return e;
+            }
+},
+})); }); }),
+.github_repository => (blk_catch_3: { break :blk_catch_3 ((Example.fetchFromGitHub(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_3 @as(MutableString, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .HTTPForbidden)) {  _ = node.end();
+            _ = progress.refresh();
+            _ = Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
+            break :__sw_blk_1 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .GitHubRepositoryNotFound)) {  _ = node.end();
+            _ = progress.refresh();
+            _ = Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found on GitHub. Here are templates you can use:\n\n", .{ template });
+            _ = Output.flush();
+            const examples = try Example.fetchAllLocalAndRemote(ctx, null, (&env_loader), filesystem);
+            _ = Example.print(examples.items, dirname);
+            break :__sw_blk_1 cp_val(Global.crash()); } } {  _ = node.end();
+            _ = progress.refresh();
+            _ = Output.prettyErrorln("\n\n", .{});
+            return e; }  unreachable; })); }); }),
+else => unreachable,
+});
+            (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = try ProgressBuf.print("Decompressing {s}", .{ template });
+            _ = node.setCompletedItems(0);
+            _ = node.setEstimatedTotalItems(0);
+            _ = progress.refresh();
+            const file_buf = try ctx.allocator.alloc(u8, 16384);
+            var tarball_buf_list = std.ArrayListUnmanaged(u8).fromOwnedSlice(file_buf);
+            _ = &tarball_buf_list;
+            var gunzip = try Zlib.ZlibReaderArrayList.init(tarball_bytes.list.items, (&tarball_buf_list), ctx.allocator);
+            _ = &gunzip;
+            defer {
+            _ = gunzip.deinit();
+            }
+            _ = try gunzip.readAll(true);
+            (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = try ProgressBuf.print("Extracting {s}", .{ template });
+            _ = node.setCompletedItems(0);
+            _ = node.setEstimatedTotalItems(0);
+            _ = progress.refresh();
+            var pluckers: [1]Archiver.Plucker = (if ((!create_options.skip_package_json)) .{ try Archiver.Plucker.init((comptime strings.literal(bun.OSPathChar, "package.json")), 2048, ctx.allocator) } else .{ (if (comptime @typeInfo(Archiver.Plucker) == .@"enum") @as(Archiver.Plucker, @enumFromInt(undefined)) else @as(Archiver.Plucker, undefined)) });
+            _ = &pluckers;
+            var archive_context = Archiver.Context{ .pluckers = pluckers[0..(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@intFromBool((!create_options.skip_package_json)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((!create_options.skip_package_json)))) else cp_cast_int(i32, @intFromBool((!create_options.skip_package_json)))))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(@intFromBool((!create_options.skip_package_json)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((!create_options.skip_package_json)))) else cp_cast_int(i32, @intFromBool((!create_options.skip_package_json)))))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(@intFromBool((!create_options.skip_package_json)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((!create_options.skip_package_json)))) else cp_cast_int(i32, @intFromBool((!create_options.skip_package_json))))))], .all_files = undefined, .overwrite_list = bun.StringArrayHashMap(void).init(ctx.allocator) };
+            _ = &archive_context;
+            if ((!create_options.overwrite)) {
+                _ = try Archiver.getOverwritingFileList(tarball_buf_list.items, destination, (&archive_context), @TypeOf(filesystem.dirname_store), filesystem.dirname_store, 1);
+                inline for (never_conflict) |never_conflict_path| {
+                    _ = archive_context.overwrite_list.swapRemove(never_conflict_path);
+                }
+                if ((archive_context.overwrite_list.count() > 0)) {
+                    _ = node.end();
+                    _ = progress.refresh();
+                    _ = Output.prettyErrorln("<r>\n<red>error<r><d>: <r>The directory <b><blue>{s}<r>/ contains files that could conflict:\n\n", .{ std.fs.path.basename(destination) });
+                    for (cp_iter_slice(archive_context.overwrite_list.keys())) |path| {
+                        _ = &path;
+                        if (strings.endsWith(path, std.fs.path.sep_str)) {
+                            _ = Output.prettyError("<r>  <blue>{s}<r>", .{ path[0..(@max(path.len, 1) - 1)] });
+                            _ = Output.prettyErrorln(std.fs.path.sep_str, .{});
+                        } else {
+                            _ = Output.prettyErrorln("<r>  {s}", .{ path });
+                        }
+                    }
+                    _ = Output.prettyErrorln("<r>\n<d>To download {s} anyway, use --force<r>", .{ template });
+                    _ = Global.exit(1);
+                }
+            }
+            const empty_extract_ctx: void = undefined;
+            _ = try Archiver.extractToDisk(tarball_buf_list.items, destination, (&archive_context), void, empty_extract_ctx, .{ .depth_to_skip = 1 });
+            if ((!create_options.skip_package_json)) {
+                const plucker = pluckers[0];
+                if ((plucker.found and plucker.fd.isValid())) {
+                    (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = "Updating package.json";
+                    _ = progress.refresh();
+                    package_json_contents = plucker.contents;
+                    package_json_file = plucker.fd.stdFile();
+                }
+            }
+},
+.local_folder => {
+var template_parts: [1][]const u8 = .{ template };
+            _ = &template_parts;
+            (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = "Copying files";
+            _ = progress.refresh();
+            const abs_template_path = filesystem.abs((&template_parts));
+            const template_dir = (blk_catch_4: { break :blk_catch_4 ((std.fs.openDirAbsolute(abs_template_path, .{ .iterate = true })) catch |e| { _ = &e; _ = node.end();
+            _ = progress.refresh();
+            _ = Output.prettyErrorln("<r><red>{s}<r>: opening dir {s}", .{ @errorName(e), template });
+            break :blk_catch_4 Global.exit(1); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((std.fs.deleteTreeAbsolute(destination)) catch |__ce_5| { _ = &__ce_5;  }); });
+            const destination_dir__ = (blk_catch_6: { break :blk_catch_6 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
+            _ = progress.refresh();
+            _ = Output.prettyErrorln("<r><red>{s}<r>: creating dir {s}", .{ @errorName(e), destination });
+            break :blk_catch_6 Global.exit(1); }); });
+            var destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
+            _ = &destination_buf;
+            const dst_without_trailing_slash: if (Environment.isWindows) []const u8 else void = (if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination) else @as(void, undefined));
+            if (comptime Environment.isWindows) {
+                _ = strings.copyU8IntoU16((&destination_buf), dst_without_trailing_slash);
+                destination_buf[cp_cast_int(usize, dst_without_trailing_slash.len)] = std.fs.path.sep;
+            }
+            var template_path_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
+            _ = &template_path_buf;
+            const src_without_trailing_slash: if (Environment.isWindows) []const u8 else void = (if (comptime Environment.isWindows) strings.withoutTrailingSlash(abs_template_path) else @as(void, undefined));
+            if (comptime Environment.isWindows) {
+                _ = strings.copyU8IntoU16((&template_path_buf), src_without_trailing_slash);
+                template_path_buf[cp_cast_int(usize, src_without_trailing_slash.len)] = std.fs.path.sep;
+            }
+            const destination_dir = destination_dir__;
+            const Walker = @import("../sys/walker_skippable.zig");
+            var walker_ = try Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs);
+            _ = &walker_;
+            defer {
+            _ = walker_.deinit();
+            }
+            const FileCopier = struct {
+
+pub fn copy(destination_dir_: std.fs.Dir, walker: *Walker, node_: *Progress.Node, progress_: *Progress, dst_base_len: if (Environment.isWindows) usize else void, dst_buf: if (Environment.isWindows) *bun.WPathBuffer else void, src_base_len: if (Environment.isWindows) usize else void, src_buf: if (Environment.isWindows) *bun.WPathBuffer else void) !void {
+            while (try walker.next().unwrap()) |entry| {
+                if (comptime Environment.isWindows) {
+                    if (((entry.kind != .file) and (entry.kind != .directory))) {
+                        continue;
+                    }
+                    _ = @memcpy(dst_buf[dst_base_len..][0..entry.path.len], entry.path);
+                    dst_buf[cp_cast_int(usize, (dst_base_len + entry.path.len))] = 0;
+                    const dst = dst_buf[0..(dst_base_len + entry.path.len) :0];
+                    _ = @memcpy(src_buf[src_base_len..][0..entry.path.len], entry.path);
+                    src_buf[cp_cast_int(usize, (src_base_len + entry.path.len))] = 0;
+                    const src = src_buf[0..(src_base_len + entry.path.len) :0];
+                    switch (entry.kind) {
+.directory => {
+if ((bun.windows.CreateDirectoryExW(src.ptr, dst.ptr, null) == 0)) {
+                        _ = (blk_catch_0: { break :blk_catch_0 ((bun.MakePath.makePath(u16, destination_dir_, entry.path)) catch |__ce_0| { _ = &__ce_0;  }); });
+                    }
+},
+.file => {
+defer {
+                    _ = node_.completeOne();
+                    }
+                    if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) == bun.windows.FALSE)) {
+                        if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
+                            _ = &entry_dirname;
+                            _ = (blk_catch_1: { break :blk_catch_1 ((bun.MakePath.makePath(u16, destination_dir_, entry_dirname)) catch |__ce_1| { _ = &__ce_1;  }); });
+                            if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) != bun.windows.FALSE)) {
+                                continue;
+                            }
+                        }
+                        if (bun.windows.Win32Error.get().toSystemErrno()) |e| {
+                            _ = &e;
+                            _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                        } else {
+                            _ = Output.errGeneric("failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                        }
+                        _ = node_.end();
+                        _ = progress_.refresh();
+                        _ = Global.crash();
+                    }
+},
+else => {
+_ = unreachable;
+},
+}
+                    continue;
+                }
+                if ((entry.kind != .file)) {
+                    continue;
+                }
+                var outfile = bun.FD.fromStdFile((blk_catch_2: { break :blk_catch_2 ((destination_dir_.createFile(entry.path, .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 brk: {
+                if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
+                    _ = &entry_dirname;
+                    _ = (blk_catch_3: { break :blk_catch_3 ((bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname)) catch |__ce_3| { _ = &__ce_3;  }); });
+                }
+                break :brk (blk_catch_4: { break :blk_catch_4 ((destination_dir_.createFile(entry.path, .{})) catch |e| { _ = &e; _ = node_.end();
+                _ = progress_.refresh();
+                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                break :blk_catch_4 Global.crash(); }); });
+}; }); }));
+                _ = &outfile;
+                defer {
+                _ = outfile.close();
+                }
+                defer {
+                _ = node_.completeOne();
+                }
+                const infile = try entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap();
+                defer {
+                _ = infile.close();
+                }
+                switch (infile.stat()) {
+.err => {
+
+},
+.result => |stat| {
+_ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_cast_int(usize, @intFromEnum(stat.mode)) else cp_cast_int(usize, stat.mode)));
+},
+}
+                _ = (blk_catch_5: { break :blk_catch_5 ((CopyFile.copyFile(infile, outfile).unwrap()) catch |e| { _ = &e; _ = node_.end();
+                _ = progress_.refresh();
+                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                break :blk_catch_5 Global.crash(); }); });
+            }
+    }
+};
+            _ = try FileCopier.copy(destination_dir, (&walker_), node, (&progress), (if (comptime Environment.isWindows) (dst_without_trailing_slash.len + 1) else @as(void, undefined)), (if (comptime Environment.isWindows) (&destination_buf) else @as(void, undefined)), (if (comptime Environment.isWindows) (src_without_trailing_slash.len + 1) else @as(void, undefined)), (if (comptime Environment.isWindows) (&template_path_buf) else @as(void, undefined)));
+            package_json_file = (blk_catch_7: { break :blk_catch_7 ((destination_dir.openFile("package.json", .{ .mode = .read_write })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); });
+            _ = read_package_json: {
+            if (package_json_file) |pkg| {
+                _ = &pkg;
+                const size = brk: {
+                if (comptime Environment.isWindows) {
+                    break :brk try pkg.getEndPos();
+                }
+                var stat_ok = true;
+                _ = &stat_ok;
+                const stat = (blk_catch_8: { break :blk_catch_8 ((pkg.stat()) catch |e| { _ = &e; _ = node.end();
+                _ = progress.refresh();
+                package_json_file = null;
+                _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
+                stat_ok = false;
+                break :blk_catch_8 std.mem.zeroes(std.fs.File.Stat); }); });
+                if ((!stat_ok)) {
+                    break :read_package_json;
+                }
+                if (((stat.kind != .file) or (stat.size == 0))) {
+                    package_json_file = null;
+                    _ = node.end();
+                    _ = progress.refresh();
+                    break :read_package_json;
+                }
+                break :brk stat.size;
+};
+                package_json_contents = try MutableString.init(ctx.allocator, size);
+                _ = package_json_contents.list.expandToCapacity();
+                const prev_file_pos = (if (comptime Environment.isWindows) try pkg.getPos() else 0);
+                var pread_ok = true;
+                _ = &pread_ok;
+                _ = (blk_catch_9: { break :blk_catch_9 ((pkg.preadAll(package_json_contents.list.items, 0)) catch |e| { _ = &e; package_json_file = null;
+                _ = node.end();
+                _ = progress.refresh();
+                _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
+                pread_ok = false;
+                break :blk_catch_9 0; }); });
+                if ((!pread_ok)) {
+                    break :read_package_json;
+                }
+                if (comptime Environment.isWindows) {
+                    _ = try pkg.seekTo(prev_file_pos);
+                }
+                _ = (blk_catch_10: { break :blk_catch_10 ((std.posix.ftruncate(pkg.handle, 0)) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = initializeStore();
+            }
+};
+},
+else => {
+_ = unreachable;
+},
+}
+            _ = node.end();
+            _ = progress.refresh();
+            const is_nextjs = false;
+            const is_create_react_app = false;
+            const create_react_app_entry_point_path: []const u8 = "";
+            var preinstall_tasks: std.ArrayListUnmanaged(string) = .empty;
+            _ = &preinstall_tasks;
+            var postinstall_tasks: std.ArrayListUnmanaged(string) = .empty;
+            _ = &postinstall_tasks;
+            var has_dependencies: bool = false;
+            _ = &has_dependencies;
+            const PATH = ((env_loader.map.get("PATH")) orelse (""));
+            {
+                var parent_dir = try std.fs.openDirAbsolute(destination, .{});
+                _ = &parent_dir;
+                defer {
+                _ = parent_dir.close();
+                }
+                if (comptime Environment.isWindows) {
+                    _ = (blk_catch_11: { break :blk_catch_11 ((parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{})) catch |__ce_11| { _ = &__ce_11;  }); });
+                } else {
+                    _ = (blk_catch_12: { break :blk_catch_12 ((std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0)) catch |__ce_12| { _ = &__ce_12;  }); });
+                }
+                _ = (blk_catch_13: { break :blk_catch_13 ((std.posix.unlinkat(parent_dir.fd, "gitignore", 0)) catch |__ce_13| { _ = &__ce_13;  }); });
+                _ = (blk_catch_14: { break :blk_catch_14 ((std.posix.unlinkat(parent_dir.fd, ".npmignore", 0)) catch |__ce_14| { _ = &__ce_14;  }); });
+            }
+            var start_command: []const u8 = "bun dev";
+            _ = &start_command;
+            _ = process_package_json: {
+            if (create_options.skip_package_json) {
+                package_json_file = null;
+            }
+            if ((package_json_file != null)) {
+                _ = initializeStore();
+                const source = (&logger.Source.initPathString("package.json", package_json_contents.list.items));
+                var parse_ok = true;
+                _ = &parse_ok;
+                var package_json_expr = (blk_catch_15: { break :blk_catch_15 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |__ce_15| { _ = &__ce_15; package_json_file = null;
+                parse_ok = false;
+                break :blk_catch_15 undefined; }); });
+                _ = &package_json_expr;
+                if ((!parse_ok)) {
+                    break :process_package_json;
+                }
+                if ((package_json_expr.data != .e_object)) {
+                    package_json_file = null;
+                    break :process_package_json;
+                }
+                var properties_list = std.array_list.Managed(js_ast.G.Property).fromOwnedSlice(default_allocator, package_json_expr.data.e_object.properties.slice());
+                _ = &properties_list;
+                if ((ctx.log.errors > 0)) {
+                    _ = try ctx.log.print(Output.errorWriter());
+                    package_json_file = null;
+                    break :process_package_json;
+                }
+                if (package_json_expr.asProperty("name")) |name_expr| {
+                    _ = &name_expr;
+                    if ((name_expr.expr.data == .e_string)) {
+                        const basename = std.fs.path.basename(destination);
+                        name_expr.expr.data.e_string.data = @constCast(basename);
+                    }
+                }
+                var dev_dependencies: ?js_ast.Expr = null;
+                _ = &dev_dependencies;
+                var dependencies: ?js_ast.Expr = null;
+                _ = &dependencies;
+                if (package_json_expr.asProperty("devDependencies")) |q| {
+                    _ = &q;
+                    const property = q.expr;
+                    if (((property.data == .e_object) and (property.data.e_object.properties.len > 0))) {
+                        if ((property.data.e_object.properties.len > 0)) {
+                            has_dependencies = true;
+                            dev_dependencies = q.expr;
+                        }
+                    }
+                }
+                if (package_json_expr.asProperty("dependencies")) |q| {
+                    _ = &q;
+                    const property = q.expr;
+                    if (((property.data == .e_object) and (property.data.e_object.properties.len > 0))) {
+                        if ((property.data.e_object.properties.len > 0)) {
+                            has_dependencies = true;
+                            dependencies = q.expr;
+                        }
+                    }
+                }
+                const E = js_ast.E;
+                _ = &E;
+                const InjectionPrefill = CreateInjectionPrefill;
+                InjectionPrefill.bun_macro_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous(InjectionPrefill.bun_macro_relay_properties[0..]);
+                InjectionPrefill.bun_macros_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&InjectionPrefill.bun_macros_relay_object_properties));
+                InjectionPrefill.bun_macros_relay_only_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&InjectionPrefill.bun_macros_relay_only_object_properties));
+                package_json_expr.data.e_object.is_single_line = false;
+                package_json_expr.data.e_object.properties = js_ast.G.Property.List.moveFromList((&properties_list));
+                {
+                    var i: usize = 0;
+                    _ = &i;
+                    var property_i: usize = 0;
+                    _ = &property_i;
+                    while ((i < package_json_expr.data.e_object.properties.len)) : (i = (i + 1)) {
+                        const property: js_ast.G.Property = package_json_expr.data.e_object.properties.ptr[@as(usize, @intCast(i))];
+                        const key = (property.key.?.asString(ctx.allocator)).?;
+                        if (strings.eqlComptime(key, "scripts")) {
+                            if (((if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).?.data == .e_object)) {
+                                var scripts_properties = (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).?.data.e_object.properties.slice();
+                                _ = &scripts_properties;
+                                var script_property_i: usize = 0;
+                                _ = &script_property_i;
+                                var script_property_out_i: usize = 0;
+                                _ = &script_property_out_i;
+                                while ((script_property_i < scripts_properties.len)) : (script_property_i = (script_property_i + 1)) {
+                                    const script = (if (@typeInfo(@TypeOf(scripts_properties[@as(usize, @intCast(script_property_i))])) == .@"enum") @intFromEnum(scripts_properties[@as(usize, @intCast(script_property_i))]) else scripts_properties[@as(usize, @intCast(script_property_i))].value).?.data.e_string.data;
+                                    if (((strings.contains(script, "react-scripts start") or strings.contains(script, "next dev")) or strings.contains(script, "react-scripts eject"))) {
+                                        if (create_options.verbose) {
+                                            _ = Output.prettyErrorln("<r><d>[package.json] Pruned unnecessary script: {s}<r>", .{ script });
+                                        }
+                                        continue;
+                                    }
+                                    if (strings.contains(script, "react-scripts build")) {
+                                        (if (@typeInfo(@TypeOf(scripts_properties[@as(usize, @intCast(script_property_i))])) == .@"enum") @intFromEnum(scripts_properties[@as(usize, @intCast(script_property_i))]) else scripts_properties[@as(usize, @intCast(script_property_i))].value) = InjectionPrefill.npx_react_scripts_build;
+                                    }
+                                    scripts_properties[cp_cast_int(usize, script_property_out_i)] = scripts_properties[@as(usize, @intCast(script_property_i))];
+                                    script_property_out_i = (script_property_out_i + 1);
+                                }
+                                (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).?.data.e_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous(scripts_properties[0..script_property_out_i]);
+                            }
+                        }
+                        if (((key.len == 0) or (!strings.eqlComptime(key, "bun-create")))) {
+                            package_json_expr.data.e_object.properties.ptr[cp_cast_int(usize, property_i)] = property;
+                            property_i = (property_i + 1);
+                            continue;
+                        }
+                        var value = (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).?;
+                        _ = &value;
+                        if (value.asProperty("postinstall")) |postinstall| {
+                            _ = &postinstall;
+                            switch (postinstall.expr.data) {
+.e_string => |single_task| {
+_ = try postinstall_tasks.append(ctx.allocator, try single_task.string(ctx.allocator));
+},
+.e_array => |tasks| {
+const items = tasks.slice();
+                            for (cp_iter_slice(items)) |task| {
+                                _ = &task;
+                                if (task.asString(ctx.allocator)) |task_entry| {
+                                    _ = &task_entry;
+                                    _ = try postinstall_tasks.append(ctx.allocator, task_entry);
+                                }
+                            }
+},
+else => {
+
+},
+}
+                        }
+                        if (value.asProperty("preinstall")) |preinstall| {
+                            _ = &preinstall;
+                            switch (preinstall.expr.data) {
+.e_string => |single_task| {
+_ = try preinstall_tasks.append(ctx.allocator, try single_task.string(ctx.allocator));
+},
+.e_array => |tasks| {
+for (cp_iter_slice(tasks.items.slice())) |task| {
+                                _ = &task;
+                                if (task.asString(ctx.allocator)) |task_entry| {
+                                    _ = &task_entry;
+                                    _ = try preinstall_tasks.append(ctx.allocator, task_entry);
+                                }
+                            }
+},
+else => {
+
+},
+}
+                        }
+                        if (value.asProperty("start")) |start| {
+                            _ = &start;
+                            if (start.expr.asString(ctx.allocator)) |start_str| {
+                                _ = &start_str;
+                                if ((start_str.len > 0)) {
+                                    start_command = start_str;
+                                }
+                            }
+                        }
+                    }
+                    _ = package_json_expr.data.e_object.properties.shrinkRetainingCapacity(property_i);
+                }
+                const file: bun.FD = .fromStdFile(package_json_file.?);
+                var buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
+                _ = &buffer_writer;
+                buffer_writer.append_newline = true;
+                var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
+                _ = &package_json_writer;
+                var write_ok = true;
+                _ = &write_ok;
+                _ = (blk_catch_16: { break :blk_catch_16 ((JSPrinter.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), package_json_expr, source, .{ .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                package_json_file = null;
+                write_ok = false;
+                break :blk_catch_16 (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)); }); });
+                if ((!write_ok)) {
+                    break :process_package_json;
+                }
+                const written = package_json_writer.ctx.getWritten();
+                const void_ok: void = undefined;
+                _ = (blk_catch_17: { break :blk_catch_17 ((bun.sys.File.writeAll(.{ .handle = file }, written).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                package_json_file = null;
+                write_ok = false;
+                break :blk_catch_17 void_ok; }); });
+                if ((!write_ok)) {
+                    break :process_package_json;
+                }
+                _ = (blk_catch_18: { break :blk_catch_18 ((file.truncate((if (comptime @typeInfo(@TypeOf(written.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(written.len)) else cp_cast_int(i32, written.len))).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                package_json_file = null;
+                write_ok = false;
+                break :blk_catch_18 void_ok; }); });
+                if ((!write_ok)) {
+                    break :process_package_json;
+                }
+            }
+};
+            if (create_options.verbose) {
+                _ = Output.prettyErrorln("Has dependencies? {d}", .{ @intFromBool(has_dependencies) });
+            }
+            var npm_client_: ?NPMClient = null;
+            _ = &npm_client_;
+            create_options.skip_install = (create_options.skip_install or (!has_dependencies));
+            if ((!create_options.skip_git)) {
+                if ((!create_options.skip_install)) {
+                    _ = GitHandler.spawn(destination, PATH, create_options.verbose);
+                } else {
+                    if (create_options.verbose) {
+                        create_options.skip_git = (blk_catch_19: { break :blk_catch_19 ((GitHandler.run(destination, PATH, true)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 @as(bool, false); }); });
+                    } else {
+                        create_options.skip_git = (blk_catch_20: { break :blk_catch_20 ((GitHandler.run(destination, PATH, false)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 @as(bool, false); }); });
+                    }
+                }
+            }
+            if ((!create_options.skip_install)) {
+                npm_client_ = NPMClient{ .tag = .bun, .bin = try bun.selfExePath() };
+            }
+            if (((npm_client_ != null) and (preinstall_tasks.items.len > 0))) {
+                for (preinstall_tasks.items) |task| {
+                    _ = &task;
+                    _ = execTask(ctx.allocator, task, destination, PATH, npm_client_.?);
+                }
+            }
+            if (npm_client_) |npm_client| {
+                _ = &npm_client;
+                const start_time = std.time.nanoTimestamp();
+                const install_args: []const []const u8 = (&.{ npm_client.bin, "install" });
+                _ = Output.flush();
+                _ = Output.pretty("\n<r><d>$ <b><cyan>{s}<r><d> install", .{ @tagName(npm_client.tag) });
+                if ((install_args.len > 2)) {
+                    for (cp_iter_slice(install_args[2..])) |arg| {
+                        _ = &arg;
+                        _ = Output.pretty(" ", .{});
+                        _ = Output.pretty("{s}", .{ arg });
+                    }
+                }
+                _ = Output.pretty("<r>\n", .{});
+                _ = Output.flush();
+                defer {
+                {
+                    _ = Output.printErrorln("\n", .{});
+                    _ = Output.printStartEnd(start_time, std.time.nanoTimestamp());
+                    _ = Output.prettyError(" <r><d>{s} install<r>\n", .{ @tagName(npm_client.tag) });
+                    _ = Output.flush();
+                    _ = Output.print("\n", .{});
+                    _ = Output.flush();
+                }
+                }
+                const process = try bun.spawnSync((&.{ .argv = install_args, .envp = null, .cwd = destination, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }));
+                _ = try process.unwrap();
+            }
+            if ((postinstall_tasks.items.len > 0)) {
+                for (postinstall_tasks.items) |task| {
+                    _ = &task;
+                    _ = execTask(ctx.allocator, task, destination, PATH, npm_client_);
+                }
+            }
+            if (((!create_options.skip_install) and (!create_options.skip_git))) {
+                create_options.skip_git = (!GitHandler.wait());
+            }
+            _ = Output.printError("\n", .{});
+            _ = Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
+            _ = Output.prettyErrorln(" <r><d>bun create {s}<r>", .{ template });
+            _ = Output.flush();
+            _ = Output.pretty("\n<d>Come hang out in bun's Discord: https://bun.com/discord<r>\n", .{});
+            if ((!create_options.skip_install)) {
+                _ = Output.pretty("\n<r><d>-----<r>\n", .{});
+                _ = Output.flush();
+            }
+            if (((!create_options.skip_git) and (!create_options.skip_install))) {
+                _ = Output.pretty("\n<d>A local git repository was created for you and dependencies were installed automatically.<r>\n", .{});
+            } else {
+                if ((!create_options.skip_git)) {
+                    _ = Output.pretty("\n<d>A local git repository was created for you.<r>\n", .{});
+                } else {
+                    if ((!create_options.skip_install)) {
+                        _ = Output.pretty("\n<d>Dependencies were installed automatically.<r>\n", .{});
+                    }
+                }
+            }
+            if ((example_tag == .github_repository)) {
+                var display_name = template;
+                _ = &display_name;
+                if (std.mem.indexOfScalar(u8, display_name, 47)) |first_slash| {
+                    _ = &first_slash;
+                    if (std.mem.indexOfScalar(u8, display_name[(first_slash + 1)..], 47)) |second_slash| {
+                        _ = &second_slash;
+                        display_name = template[0..((first_slash + 1) + second_slash)];
+                    }
+                }
+                _ = Output.pretty("\n<b><green>Success!<r> <b>{s}<r> loaded into <b>{s}<r>\n", .{ display_name, std.fs.path.basename(destination) });
+            } else {
+                _ = Output.pretty("\n<b>Created <green>{s}<r> project successfully\n", .{ std.fs.path.basename(template) });
+            }
+            if (is_nextjs) {
+                _ = Output.pretty("\n<r><d>#<r> When dependencies change, run this to update node_modules.bun:\n\n  <b><cyan>bun bun --use next<r>\n", .{});
+            } else {
+                if (is_create_react_app) {
+                    _ = Output.pretty("\n<r><d>#<r> When dependencies change, run this to update node_modules.bun:\n\n  <b><cyan>bun bun {s}<r>\n", .{ create_react_app_entry_point_path });
+                }
+            }
+            const rel_destination = filesystem.relativeTo(destination);
+            const is_empty_destination = (rel_destination.len == 0);
+            if (is_empty_destination) {
+                _ = Output.pretty("\n<d>#<r><b> To get started, run:<r>\n\n  <b><cyan>{s}<r>\n\n", .{ start_command });
+            } else {
+                _ = Output.pretty("\n<d>#<r><b> To get started, run:<r>\n\n  <b><cyan>cd {s}<r>\n  <b><cyan>{s}<r>\n\n", .{ rel_destination, start_command });
+            }
+            _ = Output.flush();
+            if (create_options.open) {
+                if (which((&bun_path_buf), PATH, destination, "bun")) |bin| {
+                    _ = &bin;
+                    const argv: []const []const u8 = (&.{ bun.asByteSlice(bin) });
+                    var child = std.process.Child.init(argv, ctx.allocator);
+                    _ = &child;
+                    child.cwd = destination;
+                    child.stdin_behavior = .Inherit;
+                    child.stdout_behavior = .Inherit;
+                    child.stderr_behavior = .Inherit;
+                    const open = @import("./open.zig");
+                    _ = open.openURL("http://localhost:3000/");
+                    _ = try child.spawn();
+                    _ = (blk_catch_21: { break :blk_catch_21 ((child.wait()) catch |__ce_21| { _ = &__ce_21;  }); });
+                }
+            }
+    }
+
+pub fn runOnEntryPoint(ctx: Command.Context, example_tag: Example.Tag, entry_point: []const u8, progress: *Progress, node: *Progress.Node) !void {
+            const Analyzer = struct {
+    ctx: Command.Context,
+    example_tag: Example.Tag,
+    entry_point: []const u8,
+    node: *Progress.Node,
+    progress: *Progress,
+
+pub fn onAnalyze(self: *@This(), result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result) anyerror!void {
+            _ = self.node.end();
+            _ = try SourceFileProjectGenerator.generate(self.ctx, self.example_tag, self.entry_point, result);
+    }
+};
+            var analyzer = Analyzer{ .ctx = ctx, .example_tag = example_tag, .entry_point = entry_point, .progress = progress, .node = node };
+            _ = &analyzer;
+            var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{ .ctx = (&analyzer), .entry_points = (&.{ analyzer.entry_point }), .onFetch = @ptrCast((&Analyzer.onAnalyze)) };
+            _ = &fetcher;
+            const build_exec = bun.cli.BuildCommand.exec;
+            _ = try build_exec(bun.cli.Command.get(), (&fetcher));
+    }
+
+pub fn extractInfo(ctx: Command.Context) !ExtractInfoResult {
+            var example_tag = Example.Tag.unknown;
+            _ = &example_tag;
+            var filesystem = try fs.FileSystem.init(null);
+            _ = &filesystem;
+            const create_options = try CreateOptions.parse(ctx);
+            const positionals = create_options.positionals;
+            if ((positionals.len == 0)) {
+                _ = bun.cli.Command.Tag.printHelp(.CreateCommand, false);
+                _ = Global.crash();
+            }
+            var env_loader: DotEnv.Loader = brk: {
+            const map = try ctx.allocator.create(DotEnv.Map);
+            map.* = DotEnv.Map.init(ctx.allocator);
+            break :brk DotEnv.Loader.init(map, ctx.allocator);
+};
+            _ = &env_loader;
+            _ = try env_loader.loadProcess();
+            const template = brk: {
+            var positional = positionals[0];
+            _ = &positional;
+            _ = outer: {
+            var parts: [2][]const u8 = .{ filesystem.top_level_dir, positional };
+            _ = &parts;
+            const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+            home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
+            const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
+            if (bun.path.hasAnyIllegalChars(outdir_path_)) {
+                break :outer;
+            }
+            if (bun.FD.cwd().existsAtType(outdir_path_).asValue()) |exists_at_type| {
+                _ = &exists_at_type;
+                if ((exists_at_type == .file)) {
+                    const extension = std.fs.path.extension(positional);
+                    if (Example.Tag.fromFileExtension(extension)) |tag| {
+                        _ = &tag;
+                        example_tag = tag;
+                        break :brk bun.handleOom(bun.default_allocator.dupe(u8, outdir_path));
+                    } else {
+                        if (((extension.len > 0) and (!strings.eqlComptime(extension, ".js")))) {
+                            _ = Output.warn("bun create [local file] only supports .jsx and .tsx files currently", .{});
+                        }
+                    }
+                }
+            }
+};
+            if ((!std.fs.path.isAbsolute(positional))) {
+                _ = outer: {
+                if (env_loader.map.get("BUN_CREATE_DIR")) |home_dir| {
+                    _ = &home_dir;
+                    var parts: [2][]const u8 = .{ home_dir, positional };
+                    _ = &parts;
+                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                    home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
+                    const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
+                    if (bun.path.hasAnyIllegalChars(outdir_path_)) {
+                        break :outer;
+                    }
+                    if (bun.FD.cwd().directoryExistsAt(outdir_path_).isTrue()) {
+                        example_tag = Example.Tag.local_folder;
+                        break :brk outdir_path;
+                    }
+                }
+};
+                _ = outer: {
+                var parts: [3][]const u8 = .{ filesystem.top_level_dir, BUN_CREATE_DIR, positional };
+                _ = &parts;
+                const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
+                const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
+                if (bun.path.hasAnyIllegalChars(outdir_path_)) {
+                    break :outer;
+                }
+                if (bun.FD.cwd().directoryExistsAt(outdir_path_).isTrue()) {
+                    example_tag = Example.Tag.local_folder;
+                    break :brk outdir_path;
+                }
+};
+                _ = outer: {
+                if (env_loader.map.get("HOME")) |home_dir| {
+                    _ = &home_dir;
+                    var parts: [3][]const u8 = .{ home_dir, BUN_CREATE_DIR, positional };
+                    _ = &parts;
+                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                    home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
+                    const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
+                    if (bun.path.hasAnyIllegalChars(outdir_path_)) {
+                        break :outer;
+                    }
+                    if (bun.FD.cwd().directoryExistsAt(outdir_path_).isTrue()) {
+                        example_tag = Example.Tag.local_folder;
+                        break :brk outdir_path;
+                    }
+                }
+};
+                if (std.fs.path.isAbsolute(positional)) {
+                    example_tag = Example.Tag.local_folder;
+                    break :brk positional;
+                }
+                var repo_begin: usize = std.math.maxInt(usize);
+                _ = &repo_begin;
+                if (strings.startsWith(positional, "github.com/")) {
+                    repo_begin = "github.com/".len;
+                }
+                if (strings.startsWith(positional, "https://github.com/")) {
+                    repo_begin = "https://github.com/".len;
+                }
+                if (((repo_begin == std.math.maxInt(usize)) and (positional[0] != 47))) {
+                    if (std.mem.indexOfScalar(u8, positional, 47)) |first_slash_index| {
+                        _ = &first_slash_index;
+                        if (std.mem.indexOfScalar(u8, positional, 47)) |last_slash_index| {
+                            _ = &last_slash_index;
+                            if ((((first_slash_index == last_slash_index) and (positional[last_slash_index..].len > 0)) and (last_slash_index > 0))) {
+                                repo_begin = 0;
+                            }
+                        }
+                    }
+                }
+                if ((repo_begin != std.math.maxInt(usize))) {
+                    const remainder = positional[repo_begin..];
+                    if (std.mem.indexOfScalar(u8, remainder, 47)) |i| {
+                        _ = &i;
+                        if (((i > 0) and (remainder[(i + 1)..].len > 0))) {
+                            if (std.mem.indexOfScalar(u8, remainder[(i + 1)..], 47)) |last_slash| {
+                                _ = &last_slash;
+                                example_tag = Example.Tag.github_repository;
+                                break :brk std.mem.trim(u8, remainder[0..((i + 1) + last_slash)], "# \r\t");
+                            } else {
+                                example_tag = Example.Tag.github_repository;
+                                break :brk std.mem.trim(u8, remainder, "# \r\t");
+                            }
+                        }
+                    }
+                }
+            }
+            example_tag = Example.Tag.official;
+            break :brk positional;
+};
+            return .{ .example_tag = example_tag, .template = template };
+    }
 };
 
 pub const DownloadedExample = struct {
@@ -202,34 +1047,34 @@ pub fn fetchAllLocalAndRemote(ctx: Command.Context, node: ?*Progress.Node, env_l
             var examples = std.array_list.Managed(Example).fromOwnedSlice(ctx.allocator, remote_examples);
             _ = &examples;
             {
-                var folders = .{ bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir() };
+                var folders: [3]std.fs.Dir = .{ bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir() };
                 _ = &folders;
                 if (env_loader.map.get("BUN_CREATE_DIR")) |home_dir| {
                     _ = &home_dir;
-                    var parts: []*anyopaque = .{ home_dir };
+                    var parts: [1][]const u8 = .{ home_dir };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 0)] = (blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 0)] = (blk_catch_23: { break :blk_catch_23 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 bun.invalid_fd.stdDir(); }); });
                 }
                 {
-                    var parts = .{ filesystem.top_level_dir, BUN_CREATE_DIR };
+                    var parts: [2][]const u8 = .{ filesystem.top_level_dir, BUN_CREATE_DIR };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 1)] = (blk_catch_4: { break :blk_catch_4 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 1)] = (blk_catch_24: { break :blk_catch_24 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 bun.invalid_fd.stdDir(); }); });
                 }
                 if (env_loader.map.get(bun.env_var.HOME.key())) |home_dir| {
                     _ = &home_dir;
-                    var parts: []*anyopaque = .{ home_dir, BUN_CREATE_DIR };
+                    var parts: [2][]const u8 = .{ home_dir, BUN_CREATE_DIR };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 2)] = (blk_catch_5: { break :blk_catch_5 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 2)] = (blk_catch_25: { break :blk_catch_25 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 bun.invalid_fd.stdDir(); }); });
                 }
                 for (cp_iter_slice(folders)) |folder| {
                     _ = &folder;
                     if ((folder.fd != bun.invalid_fd.cast())) {
                         var iter = folder.iterate();
                         _ = &iter;
-                        loop: while ((blk_catch_6: { break :blk_catch_6 ((iter.next()) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) |entry_| {
+                        loop: while ((blk_catch_26: { break :blk_catch_26 ((iter.next()) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 null; }); })) |entry_| {
                             const entry: std.fs.Dir.Entry = entry_;
                             switch (entry.kind) {
 .directory => {
@@ -243,7 +1088,7 @@ inline for (skip_dirs) |skip_dir| {
                             _ = bun.copy(u8, home_dir_buf[((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1)..], "package.json");
                             home_dir_buf[cp_cast_int(usize, (((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len))] = 0;
                             const path: [:0]u8 = home_dir_buf[0..(((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len) :0];
-                            _ = (blk_catch_7: { break :blk_catch_7 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_7| { _ = &__ce_7; continue; }); });
+                            _ = (blk_catch_27: { break :blk_catch_27 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_27| { _ = &__ce_27; continue; }); });
                             _ = try examples.append(Example{ .name = try filesystem.filename_store.append(@TypeOf((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), .version = "", .local = true, .description = "" });
                             continue :loop;
 },
@@ -286,7 +1131,7 @@ pub fn fetchFromGitHub(ctx: Command.Context, env_loader: *DotEnv.Loader, name: [
                 _ = &access_token;
                 if ((access_token.len > 0)) {
                     headers_buf = try std.fmt.allocPrint(ctx.allocator, "AuthorizationBearer {s}", .{ access_token });
-                    _ = try header_entries.append(ctx.allocator, .{ .name = .{ .offset = 0, .length = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("Authorization".len)) else cp_cast_int(i32, "Authorization".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("Authorization".len)) else cp_cast_int(i32, "Authorization".len)), .length = (if (comptime @typeInfo(@TypeOf((headers_buf.len - "Authorization".len))) == .@"enum") cp_cast_int(i32, @intFromEnum((headers_buf.len - "Authorization".len))) else cp_cast_int(i32, (headers_buf.len - "Authorization".len))) } });
+                    _ = try header_entries.append(ctx.allocator, .{ .name = .{ .offset = 0, .length = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Authorization".len)) else cp_cast_int(u32, "Authorization".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Authorization".len)) else cp_cast_int(u32, "Authorization".len)), .length = (if (comptime @typeInfo(@TypeOf((headers_buf.len - "Authorization".len))) == .@"enum") cp_cast_int(u32, @intFromEnum((headers_buf.len - "Authorization".len))) else cp_cast_int(u32, (headers_buf.len - "Authorization".len))) } });
                 }
             }
             const http_proxy: ?URL = env_loader.getHttpProxyFor(api_url);
@@ -394,7 +1239,7 @@ return error.HTTPError;
             _ = refresher.refresh();
             _ = initializeStore();
             const source = (&logger.Source.initPathString("package.json", mutable.list.items));
-            var expr = (blk_catch_10: { break :blk_catch_10 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
+            var expr = (blk_catch_30: { break :blk_catch_30 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
             _ = refresher.refresh();
             if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
@@ -462,16 +1307,16 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             if (Output.enable_ansi_colors_stdout) {
                 async_http.client.progress_node = progress_node;
             }
-            const response = (blk_catch_13: { break :blk_catch_13 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_13 (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
-            break :__sw_blk_4 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
-            break :__sw_blk_4 cp_val(Global.exit(1)); }  unreachable; }); }); });
+            const response = (blk_catch_33: { break :blk_catch_33 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+            break :__sw_blk_11 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
+            break :__sw_blk_11 cp_val(Global.exit(1)); }  unreachable; }); }); });
             if ((response.status_code != 200)) {
                 _ = Output.prettyErrorln("<r><red>{d}<r> fetching examples :( .{s}", .{ response.status_code, mutable.list.items });
                 _ = Global.exit(1);
             }
             _ = initializeStore();
             const source = (&logger.Source.initPathString("examples.json", mutable.list.items));
-            const examples_object = (blk_catch_14: { break :blk_catch_14 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
+            const examples_object = (blk_catch_34: { break :blk_catch_34 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
                 _ = Global.exit(1);
             } else {
@@ -492,8 +1337,8 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_5 = props.len;
-                        while (i < __end_5) : (i += 1) {
+                        const __end_12 = props.len;
+                        while (i < __end_12) : (i += 1) {
                             const property = props[@as(usize, @intCast(i))];
                             const name = property.key.?.data.e_string.data;
                             var final_name = name;
@@ -550,8 +1395,8 @@ pub const GitHandler = struct {
 
 pub fn spawn(destination: []const u8, PATH: []const u8, verbose: bool) void {
             git_success = std.atomic.Value(u32).init(0);
-            git_thread = (blk_catch_15: { break :blk_catch_15 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
-            break :blk_catch_15 Global.exit(1); }); });
+            git_thread = (blk_catch_35: { break :blk_catch_35 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
+            break :blk_catch_35 Global.exit(1); }); });
     }
 
 pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) void {
@@ -559,14 +1404,14 @@ pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) voi
             defer {
             _ = Output.flush();
             }
-            const outcome = (if (verbose) (blk_catch_16: { break :blk_catch_16 ((run(destination, PATH, true)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 @as(bool, false); }); }) else (blk_catch_17: { break :blk_catch_17 ((run(destination, PATH, false)) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 @as(bool, false); }); }));
+            const outcome = (if (verbose) (blk_catch_36: { break :blk_catch_36 ((run(destination, PATH, true)) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 @as(bool, false); }); }) else (blk_catch_37: { break :blk_catch_37 ((run(destination, PATH, false)) catch |__ce_37| { _ = &__ce_37; break :blk_catch_37 @as(bool, false); }); }));
             _ = git_success.store((if (outcome) 1 else 2), .release);
             _ = Futex.wake((&git_success), 1);
     }
 
 pub fn wait() bool {
             while ((git_success.load(.acquire) == 0)) {
-                _ = (blk_catch_18: { break :blk_catch_18 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_18| { _ = &__ce_18; continue; }); });
+                _ = (blk_catch_38: { break :blk_catch_38 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_38| { _ = &__ce_38; continue; }); });
             }
             const outcome = (git_success.load(.acquire) == 1);
             _ = git_thread.join();
@@ -577,12 +1422,15 @@ pub fn run(destination: []const u8, PATH: []const u8, comptime verbose: bool) !b
             const git_start = std.time.nanoTimestamp();
             if (which((&bun_path_buf), PATH, destination, "git")) |git| {
                 _ = &git;
-                const git_commands: struct { []const *anyopaque, []const *anyopaque, []const *anyopaque } = .{ (&.{ git, "init", "--quiet" }), (&.{ git, "add", destination, "--ignore-errors" }), (&.{ git, "commit", "-am", "Initial commit (via bun create)", "--quiet" }) };
+                const cmd_0: [3][]const u8 = .{ git, "init", "--quiet" };
+                const cmd_1: [4][]const u8 = .{ git, "add", destination, "--ignore-errors" };
+                const cmd_2: [5][]const u8 = .{ git, "commit", "-am", "Initial commit (via bun create)", "--quiet" };
+                const git_commands: [3][]const []const u8 = .{ (&cmd_0), (&cmd_1), (&cmd_2) };
                 if (comptime verbose) {
                     _ = Output.prettyErrorln("git backend: {s}", .{ git });
                 }
-                inline for ((comptime std.@"meta".fieldNames(@TypeOf(Commands)))) |command_field| {
-                    const command: []const []const u8 = @field(git_commands, command_field);
+                for (cp_iter_slice(git_commands)) |command| {
+                    _ = &command;
                     var process = std.process.Child.init(command, default_allocator);
                     _ = &process;
                     process.cwd = destination;
@@ -590,7 +1438,7 @@ pub fn run(destination: []const u8, PATH: []const u8, comptime verbose: bool) !b
                     process.stdout_behavior = .Inherit;
                     process.stderr_behavior = .Inherit;
                     _ = try process.spawnAndWait();
-                    _ = (blk_catch_19: { break :blk_catch_19 ((process.kill()) catch |__ce_19| { _ = &__ce_19;  }); });
+                    _ = (blk_catch_39: { break :blk_catch_39 ((process.kill()) catch |__ce_39| { _ = &__ce_39;  }); });
                 }
                 _ = Output.prettyError("\n", .{});
                 _ = Output.printStartEnd(git_start, std.time.nanoTimestamp());
@@ -614,6 +1462,197 @@ var progress_bufs: [2][1024]u8 = .{ @as([1024]u8, undefined), @as([1024]u8, unde
 var progress_buf_index: usize = 0;
 const BUN_CREATE_DIR = ".bun-create";
 var home_dir_buf: bun.PathBuffer = undefined;
+const CreateInjectionPrefill = struct {
+    const dependencies_string = "dependencies";
+    const dev_dependencies_string = "devDependencies";
+    const bun_string = "bun";
+    const macros_string = "macros";
+    const bun_macros_relay_path = "bun-macro-relay";
+
+    var dependencies_e_string = js_ast.E.String.init(dependencies_string);
+    var devDependencies_e_string = js_ast.E.String.init(dev_dependencies_string);
+    var bun_e_string = js_ast.E.String.init(bun_string);
+    var macros_e_string = js_ast.E.String.init(macros_string);
+    var react_relay_string = js_ast.E.String.init("react-relay");
+    var bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
+    var babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
+    var babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
+    var graphql_string = js_ast.E.String.init("graphql");
+
+    var npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
+
+    pub const npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = &npx_react_scripts_build_str }, .loc = logger.Loc.Empty };
+
+    var bun_macro_relay_properties: [1]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &graphql_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_string = &bun_macros_relay_path_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+
+    var bun_macro_relay_object = js_ast.E.Object{
+        .properties = undefined,
+    };
+
+    var bun_macros_relay_object_properties: [3]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &react_relay_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &babel_plugin_relay_macro,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &babel_plugin_relay_macro_js,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+
+    var bun_macros_relay_object = js_ast.E.Object{
+        .properties = undefined,
+    };
+
+    var bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
+    var bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &bun_macros_relay_only_object_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macros_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+    var bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
+
+    var bun_only_macros_string = js_ast.E.String.init("bun");
+    var bun_only_macros_relay_property = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_only_macros_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &bun_macros_relay_only_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    var bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
+    var bun_framework_next_version = js_ast.E.String.init("latest");
+    var bun_framework_next_property = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_framework_next_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_framework_next_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    var bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
+    var bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
+
+    var bun_macro_relay_dependency = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_macro_relay_dependency_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_macro_relay_dependency_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    var refresh_runtime_string = js_ast.E.String.init("react-refresh");
+    var refresh_runtime_version = js_ast.E.String.init("0.10.0");
+    var react_refresh_dependency = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &refresh_runtime_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &refresh_runtime_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    var dev_dependencies_key = js_ast.Expr{
+        .data = .{
+            .e_string = &devDependencies_e_string,
+        },
+        .loc = logger.Loc.Empty,
+    };
+    var dependencies_key = js_ast.Expr{
+        .data = .{ .e_string = &dependencies_e_string },
+        .loc = logger.Loc.Empty,
+    };
+
+    pub const bun_bun_for_nextjs_task: string = "bun bun --use next";
+};
 const Commands = .{ (&.{ "" }), (&.{ "" }), (&.{ "" }) };
 var example_url: URL = undefined;
 var app_name_buf: [512]u8 = undefined;
@@ -664,7 +1703,7 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         }
         const npm_args: usize = (if ((npm_client != null)) 2 else 0);
         const total = (count + npm_args);
-        var argv = (blk_catch_20: { break :blk_catch_20 ((allocator.alloc(string, total)) catch |__ce_20| { _ = &__ce_20; return; }); });
+        var argv = (blk_catch_40: { break :blk_catch_40 ((allocator.alloc(string, total)) catch |__ce_40| { _ = &__ce_40; return; }); });
         _ = &argv;
         if (npm_client) |client| {
             _ = &client;
@@ -687,8 +1726,8 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_6 = argv.len;
-            while (i < __end_6) : (i += 1) {
+            const __end_14 = argv.len;
+            while (i < __end_14) : (i += 1) {
                 const arg = argv[@as(usize, @intCast(i))];
                 if ((i > (argv.len - 1))) {
                     _ = Output.print(" {s} ", .{ arg });
@@ -704,5 +1743,5 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         defer {
         _ = Output.enableBuffering();
         }
-        _ = (blk_catch_21: { break :blk_catch_21 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |__ce_21| { _ = &__ce_21; return; }); });
+        _ = (blk_catch_41: { break :blk_catch_41 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_41| { _ = &__ce_41; return; }); });
 }

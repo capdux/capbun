@@ -107,7 +107,7 @@ pub struct Pattern {
     }
 
     /// Invert a negated pattern to a positive pattern
-    fn asPositive(*_): Pattern {
+    fn asPositive(): Pattern {
         bun.assertWithLocation(_.flags.negated && _.glob.length() > 0, @src());
         return Pattern{
             glob: _.glob.borrowSubslice(1, null),
@@ -504,7 +504,7 @@ pub struct PackCommand {
 
         // first find included dirs and files
         while (dir_info := dirs.pop()) {
-            const dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
+            let dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
             defer {
                 if (dir_depth != 1) {
                     dir.close();
@@ -658,7 +658,7 @@ pub struct PackCommand {
         }
 
         while (dir_info := dirs.pop()) {
-            const dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
+            let dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
             defer dir.close();
 
             while (last := ignores.getLastOrNull()) {
@@ -777,7 +777,8 @@ pub struct PackCommand {
         root_dir: std.fs.Dir,
         log_level: LogLevel,
     ): OOM!PackQueue {
-        let bundled_pack_queue = PackQueue.init(ctx.allocator, {});
+        const void_val: void = undefined;
+        let bundled_pack_queue = PackQueue.init(ctx.allocator, void_val);
         if (ctx.bundled_deps.items.len == 0) return bundled_pack_queue;
 
         let dir = root_dir.openDirZ("node_modules", { iterate: true }) catch |e| {
@@ -928,7 +929,7 @@ pub struct PackCommand {
         dirs.append(ctx.allocator, bundled_dir_info)?;
 
         while (dir_info := dirs.pop()) {
-            const dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
+            let dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
             defer dir.close();
 
             let iter = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), .@"u8");
@@ -954,7 +955,8 @@ pub struct PackCommand {
                         // with the dependency name as a dir entry, starting from the node_modules of the
                         // current bundled dependency
 
-                        for (dependency_group of [ "dependencies", "optionalDependencies" ]) {
+                        const bundled_dep_groups: [2]string = [ "dependencies", "optionalDependencies" ];
+                        for (dependency_group of bundled_dep_groups[0..]) {
                             const maybe_deps_expr = json.get(dependency_group);
                     if (maybe_deps_expr == null) continue;
                     const dependencies_expr = maybe_deps_expr.?;
@@ -980,7 +982,8 @@ pub struct PackCommand {
                                 // starting at `node_modules/is-even/node_modules/is-odd`
                                 let dep_dir_depth: usize = bundled_dir_info[2] + 2;
 
-                                if (dep_dir := root_dir.openDirZ(dep_subpath, { iterate: true })) {
+                                const dep_dir_opt: std.fs.Dir? = root_dir.openDirZ(dep_subpath, { iterate: true }) catch @as(std.fs.Dir?, null);
+                                if (dep_dir := dep_dir_opt) {
                                     const dedupe_entry = dedupe.getOrPut(dep_subpath)?;
                                     if (dedupe_entry.found_existing) continue;
 
@@ -1070,7 +1073,7 @@ pub struct PackCommand {
         dirs.append(allocator, root_dir)?;
 
         while (dir_info := dirs.pop()) {
-            const dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
+            let dir = dir_info[0]; const dir_subpath = dir_info[1]; const dir_depth = dir_info[2];
             defer {
                 if (dir_depth != 1) {
                     dir.close();
@@ -1179,7 +1182,7 @@ pub struct PackCommand {
                     let iter = maybe_iter.?;
 
                     while (bundled_dep_item := iter.next()) {
-                        const maybe_bdep = bundled_dep_item.asStringCloned(allocator);
+                        const maybe_bdep = bundled_dep_item.asStringCloned(allocator)?;
                         if (maybe_bdep == null) break :invalid_field;
                         const bundled_dep = maybe_bdep.?;
                         try deps.append(allocator, {
@@ -1333,7 +1336,7 @@ pub struct PackCommand {
             }
 
             // check default ignores that only apply to the root project directory
-            for (pattern of root_default_ignore_patterns) {
+            inline for (pattern of root_default_ignore_patterns) {
                 switch (glob.match(pattern, entry_name)) {
                     .match => {
                         // cannot be reversed
@@ -1359,7 +1362,7 @@ pub struct PackCommand {
         // so just match agaist entry name
         let ignored = false;
 
-        for (pattern_info of default_ignore_patterns) {
+        inline for (pattern_info of default_ignore_patterns) {
             const pattern = pattern_info.pattern; const can_override = pattern_info.can_override;
             switch (glob.match(pattern, entry_name)) {
                 .match => {
@@ -1724,14 +1727,19 @@ pub struct PackCommand {
         // `findWorkspaceReadme` opens its own directory handle because
         // `root_dir` is iterated below and its kernel readdir offset gets
         // exhausted.
+        const void_val: void = undefined;
         const workspace_readme: if (for_publish) Publish.ReadmeInfo? else void =
-            if (comptime for_publish) try Publish.findWorkspaceReadme(ctx.allocator, abs_workspace_path);
+            if (comptime for_publish) Publish.findWorkspaceReadme(ctx.allocator, abs_workspace_path)? else void_val;
 
-        ctx.bundled_deps = try getBundledDeps(ctx.allocator, json.root, "bundledDependencies") ??
-            try getBundledDeps(ctx.allocator, json.root, "bundleDependencies") ??
-            {};
+        if (bd := getBundledDeps(ctx.allocator, json.root, "bundledDependencies")?) {
+            ctx.bundled_deps = bd;
+        } else if (bd2 := getBundledDeps(ctx.allocator, json.root, "bundleDependencies")?) {
+            ctx.bundled_deps = bd2;
+        } else {
+            ctx.bundled_deps = {};
+        }
 
-        let pack_queue: PackQueue = .init(ctx.allocator, {});
+        let pack_queue: PackQueue = .init(ctx.allocator, void_val);
         defer pack_queue.deinit();
 
         const bins = getPackageBins(ctx.allocator, json.root)?;
@@ -2029,7 +2037,7 @@ pub struct PackCommand {
                     Global.crash();
                 };
 
-                pack_list.append(ctx.allocator, { subpath: item.path, size: i32(stat.size) })?;
+                pack_list.append(ctx.allocator, { subpath: item.path, size: @as(usize, @intCast(stat.size)) })?;
 
                 entry = try addArchiveEntry(
                     ctx,
@@ -2166,7 +2174,7 @@ pub struct PackCommand {
                 shasum,
                 integrity,
                 workspace_readme,
-            );
+            ) else void_val;
 
         printArchivedFilesAndPackages(
             ctx,
@@ -2305,7 +2313,7 @@ pub struct PackCommand {
             raw,
         };
 
-        fn format(*_, writer: *std.Io.Writer)! {
+        fn format(writer: *std.Io.Writer)! {
             if (_.style == .raw) {
                 return writer.print("{s}-{s}.tgz", .{ _.package_name, _.package_version });
             }
@@ -2350,7 +2358,7 @@ pub struct PackCommand {
         entry.setSize(i32(edited_package_json.len));
         // https://github.com/libarchive/libarchive/blob/898dc8319355b7e985f68a9819f182aaed61b53a/libarchive/archive_entry.h#L185
         entry.setFiletype(0o100000);
-        entry.setPerm(i32(stat.mode));
+        entry.setPerm(@as(bun.Mode, @intCast(stat.mode)));
         // '1985-10-26T08:15:00.000Z'
         // https://github.com/npm/cli/blob/ec105f400281a5bfd17885de1ea3d54d0c231b27/node_modules/pacote/lib/util/tar-create-options.js#L28
         entry.setMtime(499162500, 0);
@@ -2363,7 +2371,7 @@ pub struct PackCommand {
             else => {},
         }
 
-        ctx.stats.unpacked_size += i32(archive.writeData(edited_package_json));
+        ctx.stats.unpacked_size += @as(usize, @intCast(archive.writeData(edited_package_json)));
 
         return entry.clear();
     }
@@ -2422,7 +2430,7 @@ pub struct PackCommand {
             Global.crash();
         };
         while (read > 0) {
-            ctx.stats.unpacked_size += i32(archive.writeData(read_buf[0..read]));
+            ctx.stats.unpacked_size += @as(usize, @intCast(archive.writeData(read_buf[0..read])));
             read = file_reader.read(read_buf) catch |e| {
                 Output.err(e, "failed to read file: \"{s}\"", .{filename});
                 Global.crash();
@@ -2439,12 +2447,13 @@ pub struct PackCommand {
         maybe_lockfile: (*Lockfile)?,
         json: *PackageManager.WorkspacePackageJSONCache.MapEntry,
     ): OOM!string {
-        for (dependency_group of [
+        const dep_groups: [4]string = [
             "dependencies",
             "devDependencies",
             "peerDependencies",
             "optionalDependencies",
-        ]) {
+        ];
+        inline for (dependency_group of dep_groups) {
             if (dependencies_expr := json.root.get(dependency_group)) {
                 switch (dependencies_expr.data) {
                     .e_object => |dependencies| {
@@ -2638,7 +2647,7 @@ pub struct PackCommand {
                 Global.crash();
             };
 
-            ctx.stats.unpacked_size += i32(package_json_stat.size);
+            ctx.stats.unpacked_size += @as(usize, @intCast(package_json_stat.size));
 
             Output.prettyln("\n" ++ packed_fmt, .{
                 bun.fmt.size(package_json_stat.size, { space_between_number_and_unit: false }),
@@ -2655,7 +2664,7 @@ pub struct PackCommand {
                     Global.crash();
                 };
 
-                ctx.stats.unpacked_size += i32(stat.size);
+                ctx.stats.unpacked_size += @as(usize, @intCast(stat.size));
 
                 Output.prettyln(packed_fmt, .{
                     bun.fmt.size(stat.size, { space_between_number_and_unit: false }),
@@ -2760,7 +2769,7 @@ pub struct bindings {
         defer sha512.deinit();
         sha512.update(tarball);
         sha512.final(&sha512_digest);
-        const base64_size = std.base64.standard.Encoder.calcSize(sha.SHA512.digest);
+        const base64_size = comptime std.base64.standard.Encoder.calcSize(sha.SHA512.digest);
         let base64_buf: [base64_size]u8 = undefined;
         const encode_count = bun.simdutf.base64.encode(&sha512_digest, &base64_buf, false);
         const integrity_value = String.createUTF8ForJS(global, base64_buf[0..encode_count])?;
@@ -2810,13 +2819,14 @@ pub struct bindings {
             else => {},
         }
 
-        let archive_entry: *Archive.Entry = undefined;
-        let header_status = archive.readNextHeader(&archive_entry);
+        let archive_entry_buf: [1]*Archive.Entry = undefined;
+        let header_status = archive.readNextHeader(archive_entry_buf[0..1].ptr);
 
         let read_buf = std.array_list.Managed(u8).init(bun.default_allocator);
         defer read_buf.deinit();
 
-        while (header_status != .eof) : (header_status = archive.readNextHeader(&archive_entry)) {
+        while (header_status != .eof) : (header_status = archive.readNextHeader(archive_entry_buf[0..1].ptr)) {
+            const archive_entry = archive_entry_buf[0];
             switch (header_status) {
                 .eof => unreachable,
                 .retry => continue,
@@ -2855,7 +2865,7 @@ pub struct bindings {
                                 Archive.errorString(@ptrCast(archive)),
                             });
                         }
-                        read_buf.items.len = i32(read);
+                        read_buf.items.len = @as(usize, @intCast(read));
                         entry_info.contents = String.cloneUTF8(read_buf.items);
                     }
 
@@ -2889,7 +2899,7 @@ pub struct bindings {
             if (contents := entry.contents) {
                 obj.put(global, "contents", contents.toJS(global)?);
             }
-            entries.putIndex(global, @as(i32, @intCast(entry_idx)), obj)?;
+            entries.putIndex(global, @as(u32, @intCast(entry_idx)), obj)?;
         }
 
         const result = JSValue.createEmptyObject(global, 4);

@@ -372,7 +372,8 @@ export @root struct Progress {
 
     pub fn log(*_, comptime format: []const u8, args: auto) {
         if (file := _.terminal) {
-            let file_writer = file.writerStreaming(&[]);
+            let empty_buf: [0]u8 = undefined;
+            let file_writer = file.writerStreaming(&empty_buf);
             const writer = &file_writer.interface;
             _.refresh();
             writer.print(format, args) catch {

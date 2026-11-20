@@ -28,7 +28,7 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const NodePath = jsc.Node.path;
 
-export const log = Output.scoped(.Listener, .visible);
+pub const log = Output.scoped(.Listener, .visible);
 
 pub const ListenerType = union(enum) {
     uws: *uws.ListenSocket,
@@ -119,13 +119,15 @@ pub const ListenerType = union(enum) {
             const cached_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate(&cfg, &create_err);
             if (cached_ctx == null) {
                 if (create_err != .none) return global.throwValue(create_err.toJS(global));
-                return global.throwValue(bun.BoringSSL.ERR_toJS(global, BoringSSL.ERR_get_error()));
+                const get_err = BoringSSL.ERR_get_error;
+                return global.throwValue(bun.BoringSSL.ERR_toJS(global, get_err()));
             }
             sni_ctx = cached_ctx;
         } else {
             return JSValue.js_undefined;
         }
-        const final_sni_ctx = sni_ctx orelse return JSValue.js_undefined;
+        if (sni_ctx == null) return JSValue.js_undefined;
+        const final_sni_ctx = sni_ctx.?;
 
         ls.removeServerName(server_name);
         const ok = ls.addServerName(server_name, final_sni_ctx, null);

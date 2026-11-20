@@ -437,7 +437,7 @@ fn runGit(
         .envp = null,
         .windows = if (Environment.isWindows) .{
             .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get()),
-        } else null,
+        } else @as(void, undefined),
     }) catch |e| {
         Output.errGeneric("--changed: failed to spawn git: {s}", .{@errorName(e)});
         return GitResult{

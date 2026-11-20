@@ -8,8 +8,10 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
 pub fn fixDeadCodeElimination() {
-    std.mem.doNotOptimizeAway(&BakeResponseClass__constructForSSR);
-    std.mem.doNotOptimizeAway(&BakeResponseClass__constructRender);
+    const f1 = BakeResponseClass__constructForSSR;
+    std.mem.doNotOptimizeAway(&f1);
+    const f2 = BakeResponseClass__constructRender;
+    std.mem.doNotOptimizeAway(&f2);
 }
 
 @c
@@ -38,11 +40,11 @@ pub fn toJSForSSR(*_: *Response, globalObject: *JSGlobalObject, kind: SSRKind): 
 ): *!? {
     const res = constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this) catch |e| {
         if (e == error.OutOfMemory) {
-            globalObject.throwOutOfMemory() catch {};
+            if (globalObject.throwOutOfMemory() == error.JSError) {}
         }
         return null;
     };
-    return *res!?;
+    return res;
 }
 
 pub fn constructor(
@@ -107,7 +109,9 @@ pub fn constructRender(
     const arguments = callframe.argumentsAsArray(2);
     const vm = globalThis.bunVM();
 
-    const async_local_storage = (vm.getDevServerAsyncLocalStorage() ?) ?? return globalThis.throwInvalidArguments("Response.render() is only available in the Bun dev server", .{});
+    const async_local_storage_opt = vm.getDevServerAsyncLocalStorage() ?;
+    if (async_local_storage_opt == null) return globalThis.throwInvalidArguments("Response.render() is only available in the Bun dev server", .{});
+    const async_local_storage = async_local_storage_opt.?;
 
     assertStreamingDisabled(globalThis, async_local_storage, "Response.render") ?;
 

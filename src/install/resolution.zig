@@ -370,7 +370,7 @@ else => unreachable,
                 });
         const FromPnpmLockfileError = (OOM || error{InvalidPnpmLockfile});
         const StorePathFormatter = struct {
-            res: *const This,
+            res: This,
             string_buf: []const u8,
         
         pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {

@@ -14,7 +14,7 @@ pub struct CoordinatorAbortHandler {
     pub const should_abort = &abort_should_abort;
 
     @callconv("c")
-    fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: (*const void)?) {
+    fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: *!?) {
         abort_should_abort.store(true, .release);
     }
 
@@ -279,7 +279,15 @@ pub const Coordinator = struct {
             .file_done => {
                 let nums: [9]u32 = undefined;
                 for (&nums) |*n| n.* = rd.u32_();
-                const idx, const pass, const fail, const skip, const todo, const expectations, const skipped_label, const files, const unhandled = nums;
+                const idx = nums[0];
+                const pass = nums[1];
+                const fail = nums[2];
+                const skip = nums[3];
+                const todo = nums[4];
+                const expectations = nums[5];
+                const skipped_label = nums[6];
+                const files = nums[7];
+                const unhandled = nums[8];
 
                 _.flushCaptured(w);
 

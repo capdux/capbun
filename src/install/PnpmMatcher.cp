@@ -34,7 +34,7 @@ fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating): CreateMatcher
     buf.clearRetainingCapacity();
     const writer = &buf.writer;
 
-    let trimmed = strings.trim(raw, &strings.whitespace_chars);
+    let trimmed = strings.trim(raw, strings.whitespace_chars);
 
     let is_exclude = false;
     if (strings.startsWithChar(trimmed, '!')) {

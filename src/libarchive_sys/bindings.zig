@@ -550,7 +550,8 @@ pub fn deinit(self: *ArchiveIterator) ArchiveIteratorVoidResult {
             if (ArchiveIterator.isErrResult(self.archive.readFree())) {
                 return .{ .err = ArchiveIteratorErr{ .message = "failed to free archive read", .archive = self.archive } };
             }
-            return .{ .result = .{} };
+            const void_val: void = undefined;
+            return .{ .result = void_val };
     }
     pub const NextEntry = ArchiveIteratorNextEntry;
 };
@@ -785,13 +786,11 @@ pub fn writeAddFilterZstd(self: *Archive) ArchiveResult {
 
 pub fn writeSetFilterOption(self: *Archive, m: ?[:0]const u8, o: [:0]const u8, v: [:0]const u8) ArchiveResult {
             {
-                var m_ptr: ?[*c]const u8 = null;
-                _ = &m_ptr;
                 if (m) |mv| {
                     _ = &mv;
-                    m_ptr = mv.ptr;
+                    return archive_write_set_filter_option(self, mv.ptr, o.ptr, v.ptr);
                 }
-                return archive_write_set_filter_option(self, m_ptr, o.ptr, v.ptr);
+                return archive_write_set_filter_option(self, null, o.ptr, v.ptr);
             }
     }
 
@@ -1511,7 +1510,7 @@ extern "c" fn archive_write_add_filter_xz(a: *Archive) callconv(.c) ArchiveResul
 
 extern "c" fn archive_write_add_filter_zstd(a: *Archive) callconv(.c) ArchiveResult;
 
-extern "c" fn archive_write_set_filter_option(a: *Archive, m: ?[*c]const u8, o: [*c]const u8, v: [*c]const u8) callconv(.c) ArchiveResult;
+extern "c" fn archive_write_set_filter_option(a: *Archive, m: ?[*:0]const u8, o: [*c]const u8, v: [*c]const u8) callconv(.c) ArchiveResult;
 
 extern "c" fn archive_write_open_filename(a: *Archive, f: [*c]const u8) callconv(.c) ArchiveResult;
 

@@ -124,7 +124,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8) !void {
             } break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ENOENT)) {  return error.DoesNotExist; } } {  _ = log("Scanner.readDirWithName('{s}') -> {s}", .{ path, @errorName(root.err.original_err) }); break :__sw_blk_0; }  }
         }
         if ((!scanner.has_iterated)) {
-            if (((if (comptime @typeInfo(FileSystem.RealFS.EntriesOption.Tag) == .@"enum") @as(FileSystem.RealFS.EntriesOption.Tag, @enumFromInt(root.*)) else @as(FileSystem.RealFS.EntriesOption.Tag, root.*)) == .entries)) {
+            if ((root.* == .entries)) {
                 var iter = root.entries.data.iterator();
                 _ = &iter;
                 const fd = root.entries.fd;
@@ -210,7 +210,7 @@ pub fn matchesPathIgnorePattern(scanner: *Scanner, abs_path: []const u8) bool {
         const rel_path = bun.path.relative(scanner.fs.top_level_dir, abs_path);
         var buf: [4096]u8 = undefined;
         _ = &buf;
-        const rel_with_slash: []const ?u8 = (if ((((rel_path.len > 0) and ((rel_path.len + 1) <= buf.len)) and (rel_path[@as(usize, @intCast((rel_path.len - 1)))] != 47))) blk: {
+        const rel_with_slash: ?[]const u8 = (if ((((rel_path.len > 0) and ((rel_path.len + 1) <= buf.len)) and (rel_path[@as(usize, @intCast((rel_path.len - 1)))] != 47))) blk: {
         _ = @memcpy(buf[0..rel_path.len], rel_path);
         buf[cp_cast_int(usize, rel_path.len)] = 47;
         break :blk buf[0..(rel_path.len + 1)];

@@ -112,8 +112,9 @@ fn diffLines(
 fn diffListToJS(comptime T: type, global: *jsc.JSGlobalObject, diff_list: MyersDiff.DiffList(T)): bun.JSError!jsc.JSValue {
     let array = jsc.JSValue.createEmptyArray(global, diff_list.items.len)?;
     let i: usize = 0;
-    for (*line of diff_list.items) {
-        array.putIndex(global, @truncate(i), (jsc.JSObject.createNullProto(line.*, global)?).toJS())?;
+    for (line of diff_list.items) {
+        const obj = jsc.JSObject.createNullProto(line, global)?;
+        array.putIndex(global, @truncate(i), obj.toJS())?;
         i += 1;
     }
     return array;

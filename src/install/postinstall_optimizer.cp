@@ -152,11 +152,11 @@ pub enum PostinstallOptimizer {
     }
 
     static fn fromPackageJSON(list: *List, expr: *const ast.Expr, allocator: std.mem.Allocator)! {
-        if (*native_deps_expr := expr.get("nativeDependencies")) {
-            list.disable_default_native_binlinks = PostinstallOptimizer.fromStringArrayGroup(list, native_deps_expr, allocator, .native_binlink)?;
+        if (native_deps_expr := expr.get("nativeDependencies")) {
+            list.disable_default_native_binlinks = PostinstallOptimizer.fromStringArrayGroup(list, &native_deps_expr, allocator, .native_binlink)?;
         }
-        if (*ignored_scripts_expr := expr.get("ignoreScripts")) {
-            list.disable_default_ignore = PostinstallOptimizer.fromStringArrayGroup(list, ignored_scripts_expr, allocator, .ignore)?;
+        if (ignored_scripts_expr := expr.get("ignoreScripts")) {
+            list.disable_default_ignore = PostinstallOptimizer.fromStringArrayGroup(list, &ignored_scripts_expr, allocator, .ignore)?;
         }
     }
 

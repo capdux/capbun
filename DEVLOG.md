@@ -1453,3 +1453,9 @@
   - 区分内部 `pub const` 与 C ABI `export const`（类型别名/Slice/Zig 函数不可加 `export`），仅真实 C ABI 导出函数使用 `@export @c fn` / `@export @c static fn` / `export fn`，仅真实 C ABI 常量使用 `export const`；
   - `FetchTasklet` 内因结构体存在可空字段 `http: (*http.AsyncHTTP)?`，方法体内直接写 `http.AsyncHTTP` 会被 `cpc` 误判为可空字段解包 `(http).?.AsyncHTTP`，通过在模块顶层定义 `HttpAsyncHTTP = bun.http.AsyncHTTP` 等别名彻底消除阴影；
   - `bun.range` comptime 循环需补充 `@setEvalBranchQuota(100_000)` 防止 5000 分支上限溢出。
+
+- **[2026-11-21] 全仓 `zig:check` 收敛与效率固化经验**：
+  - `cpc` 不下沉 `struct` 内部 `let`/`pub const` 初始化器（如 `CreateInjectionPrefill`），此类静态结构体常量需保留 Zig 点语法或改写至函数作用域；
+  - `Type!void` 错位需写成 `: !Type`，`@as(EnumTag, union_val)` 会误插入 `@enumFromInt`，统一改用 `std.meta.activeTag(...)`；`?.` 仅用于可选链，错误联合先 `?` 解包再 `.unwrap()`；
+  - 多行 `\\` 字符串在函数多参中会被拆参，统一改 `\n` 单行；`Output.err` 必须传位置元组 `.{ x }`；`std.array_list.Managed([]u8)` 需用 `@TypeOf(empty_mut_str)` 避免 `[]u8` 被误判为 `&.{}`；
+  - 修复 `scripts/cpc_brief.py` 失败时返回退出码 1，结合全仓 `rg -n` 批量排雷打破“修 1 处等 40 秒”的洋葱循环。

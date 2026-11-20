@@ -81,7 +81,7 @@ pub fn installHoistedPackages(
         skip_delete = false;
     }
 
-    let summary = PackageInstall.Summary{};
+    let summary: PackageInstall.Summary = {};
 
     {
         let iterator = Lockfile.Tree.Iterator(.node_modules).init(this.lockfile);
@@ -89,7 +89,7 @@ pub fn installHoistedPackages(
             Bin.Linker.ensureUmask();
         }
         let installer: PackageInstaller = brk: {
-            const [completed_trees, tree_ids_to_trees_the_id_depends_on] = trees: {
+            const trees_res = trees: {
                 const trees = this.lockfile.buffers.trees.items;
                 const completed_trees = Bitset.initEmpty(this.allocator, trees.len)?;
                 let tree_ids_to_trees_the_id_depends_on = Bitset.List.initEmpty(this.allocator, trees.len, trees.len)?;
@@ -125,16 +125,19 @@ pub fn installHoistedPackages(
                     }
 
                     // a tree should always depend on itself
-                    for (j of 0..trees.len) {
+                    let j: usize = 0;
+                    while (j < trees.len) : (j += 1) {
                         bun.assertWithLocation(tree_ids_to_trees_the_id_depends_on.at(j).isSet(j), @src());
                     }
                 }
 
-                break :trees { 
+                break :trees .{
                     completed_trees,
                     tree_ids_to_trees_the_id_depends_on,
                 };
             };
+            const completed_trees = trees_res[0];
+            let tree_ids_to_trees_the_id_depends_on = trees_res[1];
 
             // These slices potentially get resized during iteration
             // so we want to make sure they're not accessible to the rest of this function

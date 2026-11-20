@@ -116,7 +116,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []PackageNameHash,
+                @TypeOf(lockfile.workspace_versions.keys()),
                 lockfile.workspace_versions.keys(),
             )?);
             (Lockfile.Buffers.writeArray(
@@ -124,7 +124,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []Semver.Version,
+                @TypeOf(lockfile.workspace_versions.values()),
                 lockfile.workspace_versions.values(),
             )?);
 
@@ -133,7 +133,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []PackageNameHash,
+                @TypeOf(lockfile.workspace_paths.keys()),
                 lockfile.workspace_paths.keys(),
             )?);
             (Lockfile.Buffers.writeArray(
@@ -141,7 +141,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []String,
+                @TypeOf(lockfile.workspace_paths.values()),
                 lockfile.workspace_paths.values(),
             )?);
         }
@@ -155,7 +155,7 @@ pub struct SerializerLoadResult {
                     stream,
                     @TypeOf(writer),
                     writer,
-                    []u32,
+                    @TypeOf(trusted_dependencies.keys()),
                     trusted_dependencies.keys(),
                 )?);
             } else {
@@ -171,7 +171,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []PackageNameHash,
+                @TypeOf(lockfile.overrides.map.keys()),
                 lockfile.overrides.map.keys(),
             )?);
             let external_overrides = (std.ArrayListUnmanaged(Dependency.External).initCapacity(z_allocator, lockfile.overrides.map.count())?);
@@ -187,7 +187,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []Dependency.External,
+                @TypeOf(external_overrides.items),
                 external_overrides.items,
             )?);
         }
@@ -201,7 +201,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []PackageNameAndVersionHash,
+                @TypeOf(lockfile.patched_dependencies.keys()),
                 lockfile.patched_dependencies.keys(),
             )?);
             (Lockfile.Buffers.writeArray(
@@ -209,7 +209,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []PatchedDep,
+                @TypeOf(lockfile.patched_dependencies.values()),
                 lockfile.patched_dependencies.values(),
             )?);
         }
@@ -221,7 +221,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []String,
+                @TypeOf(lockfile.catalogs.default.keys()),
                 lockfile.catalogs.default.keys(),
             )?);
 
@@ -238,7 +238,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []Dependency.External,
+                @TypeOf(external_deps_buf.items),
                 external_deps_buf.items,
             )?);
             external_deps_buf.clearRetainingCapacity();
@@ -248,7 +248,7 @@ pub struct SerializerLoadResult {
                 stream,
                 @TypeOf(writer),
                 writer,
-                []String,
+                @TypeOf(lockfile.catalogs.groups.keys()),
                 lockfile.catalogs.groups.keys(),
             )?);
 
@@ -258,7 +258,7 @@ pub struct SerializerLoadResult {
                     stream,
                     @TypeOf(writer),
                     writer,
-                    []String,
+                    @TypeOf(catalog_deps.keys()),
                     catalog_deps.keys(),
                 )?);
 
@@ -278,7 +278,7 @@ pub struct SerializerLoadResult {
                     stream,
                     @TypeOf(writer),
                     writer,
-                    []Dependency.External,
+                    @TypeOf(external_deps_buf.items),
                     external_deps_buf.items,
                 )?);
             }

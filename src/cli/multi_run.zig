@@ -391,7 +391,7 @@ return 1;
 
 pub const AbortHandler = struct {
 
-pub fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: ?*const void) callconv(.c) void {
+pub fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: ?*anyopaque) callconv(.c) void {
             _ = &sig;
             _ = &info;
             abort_should_abort = true;
@@ -618,7 +618,8 @@ pub fn run(ctx: Command.Context) !noreturn {
             }
             var filter_instance = try FilterArg.FilterSet.init(ctx.allocator, filters_to_use, cwd);
             _ = &filter_instance;
-            var patterns = std.array_list.Managed(&.{}, u8).init(ctx.allocator);
+            const empty_mut_str: []u8 = undefined;
+            var patterns = std.array_list.Managed(@TypeOf(empty_mut_str)).init(ctx.allocator);
             _ = &patterns;
             var root_buf: bun.PathBuffer = undefined;
             _ = &root_buf;
@@ -627,9 +628,8 @@ pub fn run(ctx: Command.Context) !noreturn {
             _ = &package_json_iter;
             var packages = std.array_list.Managed(FilteredPackage).init(ctx.allocator);
             _ = &packages;
-            while (try package_json_iter.next()) |candidate| {
-                const path = candidate.path;
-                const dirpath = bun.path.dirname(path);
+            while (try package_json_iter.next()) |path| {
+                const dirpath = bun.path.dirname(path, .auto);
                 if ((ctx.workspaces and strings.eql(path, resolve_root))) {
                     continue;
                 }
@@ -663,7 +663,8 @@ pub fn run(ctx: Command.Context) !noreturn {
                                 _ = try matches.append(key);
                             }
                         }
-                        _ = std.mem.sort(string, matches.items, .{}, lessThanString);
+                        const empty_sort_ctx: void = undefined;
+                        _ = std.mem.sort(string, matches.items, empty_sort_ctx, lessThanString);
                         for (matches.items) |matched_name| {
                             _ = &matched_name;
                             _ = try addScriptConfigs((&configs), (&group_infos), matched_name, pkg.scripts, ctx.allocator, pkg.dirpath, pkg.PATH, (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name));
@@ -719,7 +720,8 @@ pub fn run(ctx: Command.Context) !noreturn {
                                 _ = try matches.append(key);
                             }
                         }
-                        _ = std.mem.sort(string, matches.items, .{}, lessThanString);
+                        const empty_sort_ctx: void = undefined;
+                        _ = std.mem.sort(string, matches.items, empty_sort_ctx, lessThanString);
                         if ((matches.items.len == 0)) {
                             _ = Output.prettyErrorln("<r><red>error<r>: No scripts match pattern \"{s}\"", .{ raw_name });
                             _ = Global.exit(1);
@@ -764,7 +766,7 @@ pub fn run(ctx: Command.Context) !noreturn {
                     break;
                 }
             }
-            state.handles[cp_cast_int(usize, i)] = ProcessHandle{ .state = (&state), .config = config, .color_idx = color_idx, .options = .{ .stdin = .ignore, .stdout = (if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) }), .stderr = (if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) }), .cwd = config.cwd, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(event_loop) } else null), .stream = true } };
+            state.handles[cp_cast_int(usize, i)] = ProcessHandle{ .state = (&state), .config = config, .color_idx = color_idx, .options = .{ .stdin = .ignore, .stdout = (if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) }), .stderr = (if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) }), .cwd = config.cwd, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(event_loop) } else @as(void, undefined)), .stream = true } };
         }
         for (group_infos.items) |group| {
             _ = &group;
@@ -798,7 +800,7 @@ pub fn run(ctx: Command.Context) !noreturn {
         }
         _ = AbortHandler.install();
         while ((!state.isDone())) {
-            if ((AbortHandler.should_abort and (!state.aborted))) {
+            if ((AbortHandler.should_abort.* and (!state.aborted))) {
                 _ = AbortHandler.uninstall();
                 _ = state.abort();
             }

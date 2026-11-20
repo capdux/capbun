@@ -149,7 +149,7 @@ pub fn findPackageJson(allocator: std.mem.Allocator, cwd: []const u8) bun.OOM![]
             while (true) {
                 const package_json_path_z = bun.path.joinAbsStringBufZ(current_dir, (&path_buf), (&.{ "package.json" }), .auto);
                 if (bun.FD.cwd().existsAt(package_json_path_z)) {
-                    return bun.path.joinAbsString(allocator, current_dir, (&.{ "package.json" }), .auto);
+                    return try allocator.dupe(u8, bun.path.joinAbsString(current_dir, (&.{ "package.json" }), .auto));
                 }
                 const parent = bun.path.dirname(current_dir, .auto);
                 if (strings.eql(parent, current_dir)) {
@@ -202,8 +202,13 @@ pub fn execGet(ctx: Command.Context, pm: *PackageManager, args: []const []const 
             for (cp_iter_slice(args)) |key| {
                 _ = &key;
                 const val_res = getJsonValue(ctx.allocator, pkg.root, key, (if ((args.len > 1)) 4 else 2));
-                if ((blk_catch_2: { break :blk_catch_2 ((val_res) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 @as([]const u8, null); }); })) |value| {
-                    _ = &value;
+                var val_err: ?anyerror = null;
+                _ = &val_err;
+                const value = (blk_catch_2: { break :blk_catch_2 ((val_res) catch |e_val| { _ = &e_val; break :blk_catch_2 @as([]const u8, blk_e: {
+                val_err = e_val;
+                break :blk_e "";
+}); }); });
+                if ((val_err == null)) {
                     if ((args.len > 1)) {
                         if (strings.lastIndexOfChar(value, 125)) |last_index| {
                             _ = &last_index;
@@ -214,7 +219,7 @@ pub fn execGet(ctx: Command.Context, pm: *PackageManager, args: []const []const 
                     }
                     _ = try results.put(key, value);
                 } else {
-                    const e = (blk_catch_3: { break :blk_catch_3 ((val_res) catch |e_val| { _ = &e_val; break :blk_catch_3 @as([]const u8, e_val); }); });
+                    const e = val_err.?;
                     if ((e == error.InvalidPath)) {
                         if ((strings.indexOf(key, "[]") != null)) {
                             _ = Output.errGeneric("Empty brackets are not valid syntax for retrieving values.", .{});
@@ -322,13 +327,18 @@ pub fn execDelete(ctx: Command.Context, pm: *PackageManager, args: []const []con
             for (cp_iter_slice(args)) |key| {
                 _ = &key;
                 const del_res = deleteValue(ctx.allocator, (&root), key);
-                if ((blk_catch_4: { break :blk_catch_4 ((del_res) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 @as(bool, null); }); })) |deleted| {
-                    _ = &deleted;
+                var del_err: ?anyerror = null;
+                _ = &del_err;
+                const deleted = (blk_catch_3: { break :blk_catch_3 ((del_res) catch |e_val| { _ = &e_val; break :blk_catch_3 @as(bool, blk_e: {
+                del_err = e_val;
+                break :blk_e false;
+}); }); });
+                if ((del_err == null)) {
                     if (deleted) {
                         modified = true;
                     }
                 } else {
-                    const e = (blk_catch_5: { break :blk_catch_5 ((del_res) catch |e_val| { _ = &e_val; break :blk_catch_5 @as(bool, e_val); }); });
+                    const e = del_err.?;
                     if ((e != error.NotFound)) {
                         return e;
                     }
@@ -436,7 +446,7 @@ var buffer_writer = JSPrinter.BufferWriter.init(allocator);
                 _ = &indent;
                 scalar = indent;
             }
-            _ = (blk_catch_6: { break :blk_catch_6 ((JSPrinter.printJSON(@TypeOf((&printer)), (&printer), expr, (&logger.Source.initEmptyFile("expression.json")), .{ .mangled_props = null, .indent = .{ .scalar = scalar, .count = 0 } })) catch |e| { _ = &e; return e; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((JSPrinter.printJSON(@TypeOf((&printer)), (&printer), expr, (&logger.Source.initEmptyFile("expression.json")), .{ .mangled_props = null, .indent = .{ .scalar = scalar, .count = 0 } })) catch |e| { _ = &e; return e; }); });
             const written = printer.ctx.getWritten();
             return allocator.dupe(u8, written);
 },
@@ -481,7 +491,7 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                         if ((index_str.len == 0)) {
                             return error.InvalidPath;
                         }
-                        if ((blk_catch_7: { break :blk_catch_7 ((std.fmt.parseInt(usize, index_str, 10)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); })) |index| {
+                        if ((blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(usize, index_str, 10)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) |index| {
                             _ = &index;
                             if ((current.data != .e_array)) {
                                 return error.NotFound;
@@ -503,7 +513,7 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                         }
                     }
                 } else {
-                    if ((blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(usize, part, 10)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |index| {
+                    if ((blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(usize, part, 10)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) |index| {
                         _ = &index;
                         if ((current.data == .e_array)) {
                             if ((index >= current.data.e_array.items.len)) {
@@ -603,7 +613,7 @@ pub fn setValue(allocator: std.mem.Allocator, root: *js_ast.Expr, key: []const u
                 _ = try setNestedSimple(allocator, root, path_parts.items, value, parse_json);
                 return;
             }
-            var path_parts = (blk_catch_9: { break :blk_catch_9 ((parseKeyPath(allocator, key)) catch |e| { _ = &e; return e; }); });
+            var path_parts = (blk_catch_7: { break :blk_catch_7 ((parseKeyPath(allocator, key)) catch |e| { _ = &e; return e; }); });
             _ = &path_parts;
             defer {
             {
@@ -694,18 +704,18 @@ pub fn parseValue(allocator: std.mem.Allocator, value: []const u8, parse_json: b
                         }
                     }
                 }
-                if ((blk_catch_10: { break :blk_catch_10 ((std.fmt.parseInt(i64, value, 10)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 null; }); })) |int_val| {
+                if ((blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(i64, value, 10)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |int_val| {
                     _ = &int_val;
                     return js_ast.Expr.init(js_ast.E.Number, js_ast.E.Number{ .value = @as(f64, @floatFromInt(int_val)) }, logger.Loc.Empty);
                 }
-                if ((blk_catch_11: { break :blk_catch_11 ((std.fmt.parseFloat(f64, value)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |float_val| {
+                if ((blk_catch_9: { break :blk_catch_9 ((std.fmt.parseFloat(f64, value)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); })) |float_val| {
                     _ = &float_val;
                     return js_ast.Expr.init(js_ast.E.Number, js_ast.E.Number{ .value = float_val }, logger.Loc.Empty);
                 }
                 const temp_source = logger.Source.initPathString("package.json", value);
                 var temp_log = logger.Log.init(allocator);
                 _ = &temp_log;
-                if ((blk_catch_12: { break :blk_catch_12 ((bun.json.parsePackageJSONUTF8((&temp_source), (&temp_log), allocator)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); })) |json_expr| {
+                if ((blk_catch_10: { break :blk_catch_10 ((bun.json.parsePackageJSONUTF8((&temp_source), (&temp_log), allocator)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 null; }); })) |json_expr| {
                     _ = &json_expr;
                     return json_expr;
                 } else {
@@ -829,11 +839,11 @@ pub fn savePackageJson(allocator: std.mem.Allocator, path: []const u8, root: js_
             buffer_writer.append_newline = preserve_newline;
             var writer = JSPrinter.BufferPrinter.init(buffer_writer);
             _ = &writer;
-            _ = (blk_catch_13: { break :blk_catch_13 ((JSPrinter.printJSON(@TypeOf((&writer)), (&writer), root, (&pkg.source), .{ .indent = pkg.indentation, .mangled_props = null })) catch |e| { _ = &e; _ = Output.errGeneric("Failed to serialize package.json: {s}", .{ @errorName(e) });
-            break :blk_catch_13 Global.exit(1); }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((JSPrinter.printJSON(@TypeOf((&writer)), (&writer), root, (&pkg.source), .{ .indent = pkg.indentation, .mangled_props = null })) catch |e| { _ = &e; _ = Output.errGeneric("Failed to serialize package.json: {s}", .{ @errorName(e) });
+            break :blk_catch_11 Global.exit(1); }); });
             const content = writer.ctx.writtenWithoutTrailingZero();
-            _ = (blk_catch_14: { break :blk_catch_14 ((std.fs.cwd().writeFile(.{ .sub_path = path, .data = content })) catch |e| { _ = &e; _ = Output.errGeneric("Failed to write package.json: {s}", .{ @errorName(e) });
-            break :blk_catch_14 Global.exit(1); }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((std.fs.cwd().writeFile(.{ .sub_path = path, .data = content })) catch |e| { _ = &e; _ = Output.errGeneric("Failed to write package.json: {s}", .{ @errorName(e) });
+            break :blk_catch_12 Global.exit(1); }); });
     }
     pub const SubCommand = PmPkgSubCommand;
     pub const PackageJson = PmPackageJson;

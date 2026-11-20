@@ -27,8 +27,7 @@ pub inline fn isAlwaysStrictMode(self: Format) bool {
             return (self == Format.esm);
     }
 
-pub fn fromString(self: Format, slice: []const u8) ?Format {
-        _ = self;
+pub fn fromString(slice: []const u8) ?Format {
             return Map.getWithEql(slice, bun.strings.eqlComptime);
     }
     

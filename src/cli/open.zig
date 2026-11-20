@@ -443,7 +443,7 @@ pub fn openURL(url: stringZ) void {
         _ = &two_args;
         const args_buf: []const stringZ = (if (comptime Environment.isAndroid) (&am_args) else (&two_args));
         _ = maybe_fallback: {
-        break :maybe_fallback (switch ((blk_catch_7: { break :blk_catch_7 ((bun.spawnSync((&.{ .argv = args_buf, .envp = null, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |__ce_7| { _ = &__ce_7; break :maybe_fallback; }); })) {
+        break :maybe_fallback (switch ((blk_catch_7: { break :blk_catch_7 ((bun.spawnSync((&.{ .argv = args_buf, .envp = null, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_7| { _ = &__ce_7; break :maybe_fallback; }); })) {
 .result => |result| {
 if (result.isOK()) {
             return;

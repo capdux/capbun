@@ -610,7 +610,7 @@ pub struct UpdateInteractiveCommand {
         for (pkg_id of 0..pkg_resolutions.len) {
             const resolution = pkg_resolutions[pkg_id];
             if (resolution.tag != .workspace && resolution.tag != .root) continue;
-            workspace_pkg_ids.append(allocator, i32(pkg_id))?;
+            workspace_pkg_ids.append(allocator, @as(u32, @intCast(pkg_id)))?;
         }
 
         return workspace_pkg_ids.toOwnedSlice(allocator);
@@ -632,7 +632,7 @@ pub struct UpdateInteractiveCommand {
         for (pkg_id of 0..pkg_resolutions.len) {
             const resolution = pkg_resolutions[pkg_id];
             if (resolution.tag != .workspace && resolution.tag != .root) continue;
-            workspace_pkg_ids.append(allocator, i32(pkg_id))?;
+            workspace_pkg_ids.append(allocator, @as(u32, @intCast(pkg_id)))?;
         }
 
         let path_buf: bun.PathBuffer = undefined;
@@ -801,7 +801,8 @@ pub struct UpdateInteractiveCommand {
 
         for (workspace_pkg_id of workspace_pkg_ids) {
             const pkg_deps = pkg_dependencies[workspace_pkg_id];
-            for (dep_id of pkg_deps.begin()..pkg_deps.end()) {
+            let dep_id: u32 = pkg_deps.begin();
+            while (dep_id < pkg_deps.end()) : (dep_id += 1) {
                 const package_id = lockfile.buffers.resolutions.items[dep_id];
                 if (package_id == invalid_package_id) continue;
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
@@ -889,7 +890,7 @@ pub struct UpdateInteractiveCommand {
                     latest_version: allocator.dupe(u8, latest_version_buf)?,
                     update_version: allocator.dupe(u8, update_version_buf)?,
                     package_id: package_id,
-                    dep_id: i32(dep_id),
+                    dep_id: dep_id,
                     workspace_pkg_id: workspace_pkg_id,
                     dependency_type: dep_type,
                     workspace_name: allocator.dupe(u8, workspace_name)?,
@@ -908,7 +909,8 @@ pub struct UpdateInteractiveCommand {
         const grouped_result = groupCatalogDependencies(allocator, result)?;
 
         // Sort packages: dependencies first, then devDependencies, etc.
-        std.sort.pdq(OutdatedPackage, grouped_result, {}, OutdatedPackageSortCtx.lessThan);
+        const empty_ctx: void = undefined;
+        std.sort.pdq(OutdatedPackage, grouped_result, empty_ctx, OutdatedPackageSortCtx.lessThan);
 
         return grouped_result;
     }
@@ -1084,7 +1086,9 @@ pub struct UpdateInteractiveCommand {
             bun.windows.updateStdioModeFlags(.std_in, {
                 set: bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT,
                 unset: bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT,
-            }) catch null;
+            }) catch null
+        else
+            undefined;
 
         if (Environment.isPosix)
             * = bun.tty.setMode(0, .raw);
@@ -1294,7 +1298,8 @@ pub struct UpdateInteractiveCommand {
                 let packages_displayed: usize = 0;
 
                 // Only display packages within viewport
-                for (i of state.viewport_start..viewport_end) {
+                let i: usize = state.viewport_start;
+                while (i < viewport_end) : (i += 1) {
                     const pkg = &state.packages[i];
                     const selected = state.selected[i];
 
@@ -1696,8 +1701,9 @@ pub struct UpdateInteractiveCommand {
                 },
                 'i', 'I' => {
                     // Invert selection
-                    for (*sel of state.selected) {
-                        sel.* = !sel.*;
+                    let sel_idx: usize = 0;
+                    while (sel_idx < state.selected.len) : (sel_idx += 1) {
+                        state.selected[sel_idx] = !state.selected[sel_idx];
                     }
                     state.toggle_all = false; // Reset toggle_all mode
                 },
@@ -1874,7 +1880,8 @@ fn updateDefaultCatalog(
 )! {
     // Get or create the catalog object
     // First check if catalog is under workspaces.catalog
-    let catalog_obj = brk: {
+    let catalog_obj: E.Object = brk: {
+        const empty_obj: E.Object = {};
         if (workspaces_query := package_json.asProperty("workspaces")) {
             if (workspaces_query.expr.data == .e_object) {
                 if (catalog_query := workspaces_query.expr.asProperty("catalog")) {
@@ -1888,7 +1895,7 @@ fn updateDefaultCatalog(
             if (catalog_query.expr.data == .e_object)
                 break :brk catalog_query.expr.data.e_object.*;
         }
-        break :brk E.Object{};
+        break :brk empty_obj;
     };
 
     // Get original version to preserve prefix if it exists
@@ -1938,7 +1945,8 @@ fn updateNamedCatalog(
 
     // Get or create the catalogs object
     // First check if catalogs is under workspaces.catalogs (newer structure)
-    let catalogs_obj = brk: {
+    let catalogs_obj: E.Object = brk: {
+        const empty_obj: E.Object = {};
         if (workspaces_query := package_json.asProperty("workspaces")) {
             if (workspaces_query.expr.data == .e_object) {
                 if (catalogs_query := workspaces_query.expr.asProperty("catalogs")) {
@@ -1952,16 +1960,17 @@ fn updateNamedCatalog(
             if (catalogs_query.expr.data == .e_object)
                 break :brk catalogs_query.expr.data.e_object.*;
         }
-        break :brk E.Object{};
+        break :brk empty_obj;
     };
 
     // Get or create the specific catalog
-    let catalog_obj = brk: {
+    let catalog_obj: E.Object = brk: {
+        const empty_obj: E.Object = {};
         if (catalog_query := catalogs_obj.get(catalog_name)) {
             if (catalog_query.data == .e_object)
                 break :brk catalog_query.data.e_object.*;
         }
-        break :brk E.Object{};
+        break :brk empty_obj;
     };
 
     // Get original version to preserve prefix if it exists

@@ -8,8 +8,7 @@ pub const bun = @import("bun");
 pub const open = @import("./open.zig");
 pub const DiscordCommand = struct {
 
-pub fn exec(self: DiscordCommand, _: std.mem.Allocator) !void {
-        _ = self;
+pub fn exec(_: std.mem.Allocator) !void {
             _ = open.openURL(discord_url);
     }
     const discord_url = "https://bun.com/discord";

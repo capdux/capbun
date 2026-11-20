@@ -136,16 +136,16 @@ pub struct WorkerPipe {
                 new_process_group: true,
                 linux_pdeathsig: if (Environment.isLinux) std.posix.SIG.KILL else null,
             };
-            let sp_raw = (bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?)?;
+            let sp_raw = bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?;
             let spawned = sp_raw.unwrap()?;
             defer spawned.extra_pipes.deinit();
             _.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if (fd := spawned.stdout) {
-                let st = _.out.reader.start(fd, true)?;
+                let st = _.out.reader.start(fd, true);
                 st.unwrap()?;
             }
             if (fd := spawned.stderr) {
-                let st = _.err.reader.start(fd, true)?;
+                let st = _.err.reader.start(fd, true);
                 st.unwrap()?;
             }
             if (spawned.extra_pipes.items.len > 0) {
@@ -176,17 +176,17 @@ pub struct WorkerPipe {
                 windows: { loop: jsc.EventLoopHandle.init(coord.vm) },
                 stream: true,
             };
-            let sp_raw = (bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?)?;
+            let sp_raw = bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?;
             let spawned = sp_raw.unwrap()?;
             defer spawned.extra_pipes.deinit();
             _.process = spawned.toProcess(coord.vm.eventLoop(), false);
 
             if (spawned.stdout == .buffer) {
-                let st = _.out.reader.startWithPipe(spawned.stdout.buffer)?;
+                let st = _.out.reader.startWithPipe(spawned.stdout.buffer);
                 st.unwrap()?;
             }
             if (spawned.stderr == .buffer) {
-                let st = _.err.reader.startWithPipe(spawned.stderr.buffer)?;
+                let st = _.err.reader.startWithPipe(spawned.stderr.buffer);
                 st.unwrap()?;
             }
             if (!_.ipc.adoptPipe(coord.vm, ipc_pipe)) return error.ChannelAdoptFailed;

@@ -2410,7 +2410,7 @@ return .{ .err = e };
 }
 },
 .result => {
-return .{ .result = .{} };
+return .success;
 },
 }
 }

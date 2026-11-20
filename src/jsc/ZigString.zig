@@ -394,7 +394,8 @@ pub fn fromStringPointer(ptr: StringPointer, buf: []const u8, to: *ZigString) vo
     }
 
 pub fn sortDesc(slice_: []ZigString) void {
-            _ = std.sort.block(ZigString, slice_, .{}, cmpDesc);
+            const empty_sort_ctx: void = undefined;
+            _ = std.sort.block(ZigString, slice_, empty_sort_ctx, cmpDesc);
     }
 
 pub fn cmpDesc(_: void, a: ZigString, b: ZigString) bool {
@@ -402,7 +403,8 @@ pub fn cmpDesc(_: void, a: ZigString, b: ZigString) bool {
     }
 
 pub fn sortAsc(slice_: []ZigString) void {
-            _ = std.sort.block(ZigString, slice_, .{}, cmpAsc);
+            const empty_sort_ctx: void = undefined;
+            _ = std.sort.block(ZigString, slice_, empty_sort_ctx, cmpAsc);
     }
 
 pub fn cmpAsc(_: void, a: ZigString, b: ZigString) bool {

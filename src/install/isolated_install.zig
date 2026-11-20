@@ -67,6 +67,26 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -170,7 +190,8 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         for (cp_iter_slice(dependencies)) |dep| {
             _ = &dep;
             if (dep.behavior.isPeer()) {
-                _ = try peer_name_idx.put(lockfile.allocator, dep.name_hash, .{});
+                const void_val: void = undefined;
+                _ = try peer_name_idx.put(lockfile.allocator, dep.name_hash, void_val);
             }
         }
         const peer_name_count: u32 = @intCast(peer_name_idx.count());
@@ -221,20 +242,17 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 while (pkg_idx < __end_2) : (pkg_idx += 1) {
                     const pkg_id: PackageID = @intCast(pkg_idx);
                     const deps = pkg_dependency_slices[@as(usize, @intCast(pkg_id))];
-                    {
-                        var _dep_id: i32 = deps.begin();
-                        _ = &_dep_id;
-                        const __end_3 = deps.end();
-                        while (_dep_id < __end_3) : (_dep_id += 1) {
-                            const dep_id: DependencyID = @intCast(_dep_id);
-                            const dep = dependencies[@as(usize, @intCast(dep_id))];
-                            const bit = ((peer_name_idx.getIndex(dep.name_hash)) orelse continue);
-                            if (dep.behavior.isPeer()) {
-                                _ = own_peers.set(pkg_id, bit);
-                            } else {
-                                if ((!Tree.isFilteredDependencyOrWorkspace(dep_id, pkg_id, workspace_filters, install_root_dependencies, manager, lockfile))) {
-                                    _ = provides.set(pkg_id, bit);
-                                }
+                    var _dep_id: u32 = deps.begin();
+                    _ = &_dep_id;
+                    while ((_dep_id < deps.end())) : (_dep_id = (_dep_id + 1)) {
+                        const dep_id: DependencyID = @intCast(_dep_id);
+                        const dep = dependencies[@as(usize, @intCast(dep_id))];
+                        const bit = ((peer_name_idx.getIndex(dep.name_hash)) orelse continue);
+                        if (dep.behavior.isPeer()) {
+                            _ = own_peers.set(pkg_id, bit);
+                        } else {
+                            if ((!Tree.isFilteredDependencyOrWorkspace(dep_id, pkg_id, workspace_filters, install_root_dependencies, manager, lockfile))) {
+                                _ = provides.set(pkg_id, bit);
                             }
                         }
                     }
@@ -252,31 +270,28 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 {
                     var pkg_idx: i32 = 0;
                     _ = &pkg_idx;
-                    const __end_4 = lockfile.packages.len;
-                    while (pkg_idx < __end_4) : (pkg_idx += 1) {
+                    const __end_3 = lockfile.packages.len;
+                    while (pkg_idx < __end_3) : (pkg_idx += 1) {
                         const pkg_id: PackageID = @intCast(pkg_idx);
                         const deps = pkg_dependency_slices[@as(usize, @intCast(pkg_id))];
                         _ = scratch.copyInto(own_peers.at(pkg_id));
-                        {
-                            var _dep_id: i32 = deps.begin();
-                            _ = &_dep_id;
-                            const __end_5 = deps.end();
-                            while (_dep_id < __end_5) : (_dep_id += 1) {
-                                const dep_id: DependencyID = @intCast(_dep_id);
-                                const dep = dependencies[@as(usize, @intCast(dep_id))];
-                                if (dep.behavior.isPeer()) {
-                                    if (peer_name_idx.getIndex(dep.name_hash)) |bit| {
-                                        _ = &bit;
-                                        for (peer_targets[@as(usize, @intCast(bit))].items) |child| {
-                                            _ = &child;
-                                            _ = scratch.setUnion(leaking_peers.at(child));
-                                        }
+                        var _dep_id: u32 = deps.begin();
+                        _ = &_dep_id;
+                        while ((_dep_id < deps.end())) : (_dep_id = (_dep_id + 1)) {
+                            const dep_id: DependencyID = @intCast(_dep_id);
+                            const dep = dependencies[@as(usize, @intCast(dep_id))];
+                            if (dep.behavior.isPeer()) {
+                                if (peer_name_idx.getIndex(dep.name_hash)) |bit| {
+                                    _ = &bit;
+                                    for (peer_targets[@as(usize, @intCast(bit))].items) |child| {
+                                        _ = &child;
+                                        _ = scratch.setUnion(leaking_peers.at(child));
                                     }
-                                } else {
-                                    const res_pkg = resolutions[@as(usize, @intCast(dep_id))];
-                                    if ((res_pkg != invalid_package_id)) {
-                                        _ = scratch.setUnion(leaking_peers.at(res_pkg));
-                                    }
+                                }
+                            } else {
+                                const res_pkg = resolutions[@as(usize, @intCast(dep_id))];
+                                if ((res_pkg != invalid_package_id)) {
+                                    _ = scratch.setUnion(leaking_peers.at(res_pkg));
                                 }
                             }
                         }
@@ -305,30 +320,27 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         defer {
         _ = root_declares_workspace.deinit(lockfile.allocator);
         }
-        {
-            var _dep_idx: i32 = pkg_dependency_slices[0].begin();
-            _ = &_dep_idx;
-            const __end_7 = pkg_dependency_slices[0].end();
-            while (_dep_idx < __end_7) : (_dep_idx += 1) {
-                const dep_idx: DependencyID = @intCast(_dep_idx);
-                if ((!dependencies[@as(usize, @intCast(dep_idx))].behavior.isWorkspace())) {
-                    continue;
-                }
-                const res = resolutions[@as(usize, @intCast(dep_idx))];
-                if ((res == invalid_package_id)) {
-                    continue;
-                }
-                if (Tree.isFilteredDependencyOrWorkspace(dep_idx, 0, workspace_filters, install_root_dependencies, manager, lockfile)) {
-                    continue;
-                }
-                if (packages_to_install) |packages| {
-                    _ = &packages;
-                    if ((std.mem.indexOfScalar(PackageID, packages, res) == null)) {
-                        continue;
-                    }
-                }
-                _ = root_declares_workspace.set(res);
+        var _dep_idx: u32 = pkg_dependency_slices[0].begin();
+        _ = &_dep_idx;
+        while ((_dep_idx < pkg_dependency_slices[0].end())) : (_dep_idx = (_dep_idx + 1)) {
+            const dep_idx: DependencyID = @intCast(_dep_idx);
+            if ((!dependencies[@as(usize, @intCast(dep_idx))].behavior.isWorkspace())) {
+                continue;
             }
+            const res = resolutions[@as(usize, @intCast(dep_idx))];
+            if ((res == invalid_package_id)) {
+                continue;
+            }
+            if (Tree.isFilteredDependencyOrWorkspace(dep_idx, 0, workspace_filters, install_root_dependencies, manager, lockfile)) {
+                continue;
+            }
+            if (packages_to_install) |packages| {
+                _ = &packages;
+                if ((std.mem.indexOfScalar(PackageID, packages, res) == null)) {
+                    continue;
+                }
+            }
+            _ = root_declares_workspace.set(res);
         }
         var peer_dep_ids: std.array_list.Managed(DependencyID) = .init(lockfile.allocator);
         _ = &peer_dep_ids;
@@ -369,7 +381,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 curr_id = node_parent_ids[@as(usize, @intCast(curr_id.get()))];
             }
 };
-            const node_id: Store.Node.Id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(nodes.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(nodes.len)) else cp_cast_int(i32, nodes.len)) };
+            const node_id = Store.Node.Id.@"from"(@as(u32, @intCast(nodes.len)));
             const pkg_deps = pkg_dependency_slices[@as(usize, @intCast(entry.pkg_id))];
             var skip_dependencies = ((entry.pkg_id == 0) and (entry.dep_id != invalid_dependency_id));
             _ = &skip_dependencies;
@@ -484,14 +496,11 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             const queue_mark = node_queue.items.len;
             _ = dep_ids_sort_buf.clearRetainingCapacity();
             _ = try dep_ids_sort_buf.ensureUnusedCapacity(lockfile.allocator, pkg_deps.len);
-            {
-                var _dep_id: i32 = pkg_deps.begin();
-                _ = &_dep_id;
-                const __end_12 = pkg_deps.end();
-                while (_dep_id < __end_12) : (_dep_id += 1) {
-                    const dep_id: DependencyID = @intCast(_dep_id);
-                    _ = dep_ids_sort_buf.appendAssumeCapacity(dep_id);
-                }
+            var _dep_id: u32 = pkg_deps.begin();
+            _ = &_dep_id;
+            while ((_dep_id < pkg_deps.end())) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @intCast(_dep_id);
+                _ = dep_ids_sort_buf.appendAssumeCapacity(dep_id);
             }
             _ = std.sort.pdq(DependencyID, dep_ids_sort_buf.items, Lockfile.DepSorter{ .lockfile = lockfile }, Lockfile.DepSorter.isLessThan);
             _ = peer_dep_ids.clearRetainingCapacity();
@@ -638,7 +647,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         defer {
         _ = entry_queue.deinit();
         }
-        _ = try entry_queue.writeItem(.{ .node_id = .{ .@"from" = 0 }, .entry_parent_id = .invalid });
+        _ = try entry_queue.writeItem(.{ .node_id = Store.Node.Id.@"from"(0), .entry_parent_id = .invalid });
         var public_hoisted: bun.StringArrayHashMap(void) = .init(manager.allocator);
         _ = &public_hoisted;
         defer {
@@ -707,7 +716,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 _ = try res_fmt_buf.writer().print("{f}", .{ pkg_res.fmt(string_buf, .posix) });
                 _ = hasher.update(res_fmt_buf.items);
             }
-            break :peer_hash .{ .@"from" = hasher.final() };
+            break :peer_hash Store.Entry.PeerHash.@"from"(hasher.final());
 };
             const new_entry_dep_id = node_dep_ids[@as(usize, @intCast(entry.node_id.get()))];
             const new_entry_is_root = (new_entry_dep_id == invalid_dependency_id);
@@ -734,7 +743,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             }
 };
             const new_entry: Store.Entry = .{ .node_id = entry.node_id, .dependencies = new_entry_dependencies, .parents = new_entry_parents, .peer_hash = new_entry_peer_hash, .hoisted = hoisted };
-            const new_entry_id: Store.Entry.Id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(store.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(store.len)) else cp_cast_int(i32, store.len)) };
+            const new_entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(store.len)));
             _ = try store.append(lockfile.allocator, new_entry);
             if (entry.entry_parent_id.tryGet()) |entry_parent_id| {
                 _ = &entry_parent_id;
@@ -749,7 +758,8 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 if ((new_entry_dep_id != invalid_dependency_id)) {
                     if ((entry.entry_parent_id == .root)) {
                         const dep_name = (if (@typeInfo(@TypeOf(dependencies[@as(usize, @intCast(new_entry_dep_id))])) == .@"enum" or @typeInfo(@TypeOf(dependencies[@as(usize, @intCast(new_entry_dep_id))])) == .@"union") @tagName(dependencies[@as(usize, @intCast(new_entry_dep_id))]) else dependencies[@as(usize, @intCast(new_entry_dep_id))].name).slice(string_buf);
-                        _ = try public_hoisted.put(dep_name, .{});
+                        const void_val: void = undefined;
+                        _ = try public_hoisted.put(dep_name, void_val);
                     } else {
                         const dep_name = (if (@typeInfo(@TypeOf(dependencies[@as(usize, @intCast(new_entry_dep_id))])) == .@"enum" or @typeInfo(@TypeOf(dependencies[@as(usize, @intCast(new_entry_dep_id))])) == .@"union") @tagName(dependencies[@as(usize, @intCast(new_entry_dep_id))]) else dependencies[@as(usize, @intCast(new_entry_dep_id))].name).slice(string_buf);
                         if (manager.options.public_hoist_pattern) |public_hoist_pattern| {
@@ -813,12 +823,12 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         {
             var _root_id: i32 = 0;
             _ = &_root_id;
-            const __end_23 = store.entries.len;
-            while (_root_id < __end_23) : (_root_id += 1) {
+            const __end_19 = store.entries.len;
+            while (_root_id < __end_19) : (_root_id += 1) {
                 if ((states[@as(usize, @intCast(_root_id))] != .unvisited)) {
                     continue;
                 }
-                _ = try stack.append(manager.allocator, .{ .id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(_root_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(_root_id)) else cp_cast_int(i32, _root_id)) }, .dep_idx = 0, .hasher = undefined });
+                _ = try stack.append(manager.allocator, .{ .id = Store.Entry.Id.@"from"(@as(u32, @intCast(_root_id))), .dep_idx = 0, .hasher = undefined });
                 while ((stack.items.len > 0)) {
                     const top = (&stack.items[@as(usize, @intCast((stack.items.len - 1)))]);
                     const id = top.id;
@@ -858,7 +868,7 @@ else => false,
                             _ = stack.pop();
                             continue;
                         }
-                        top.hasher = .init(-7046029254386353131);
+                        top.hasher = .init((cp_shl((if (comptime @typeInfo(@TypeOf(2654435769)) == .@"enum") cp_cast_int(u64, @intFromEnum(2654435769)) else cp_cast_int(u64, 2654435769)), 32) | 2135587861));
                         {
                             var hw: WyhashWriter = .{ .hasher = (&top.hasher) };
                             _ = &hw;
@@ -956,12 +966,12 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             {
                 var root: i32 = 0;
                 _ = &root;
-                const __end_24 = n;
-                while (root < __end_24) : (root += 1) {
+                const __end_20 = n;
+                while (root < __end_20) : (root += 1) {
                     if ((tarjan_index[@as(usize, @intCast(root))] != std.math.maxInt(u32))) {
                         continue;
                     }
-                    _ = try work.append(manager.allocator, .{ .v = (if (comptime @typeInfo(@TypeOf(root)) == .@"enum") cp_cast_int(i32, @intFromEnum(root)) else cp_cast_int(i32, root)), .child = 0 });
+                    _ = try work.append(manager.allocator, .{ .v = @as(u32, @intCast(root)), .child = 0 });
                     while ((work.items.len > 0)) {
                         const frame = (&work.items[@as(usize, @intCast((work.items.len - 1)))]);
                         const v = frame.v;
@@ -1016,13 +1026,13 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                             if ((members.len == 1)) {
                                 const m = members[0];
                                 if ((entry_hashes[@as(usize, @intCast(m))] != 0)) {
-                                    var sub: std.hash.Wyhash = .init(-7046029254386353131);
+                                    var sub: std.hash.Wyhash = .init((cp_shl((if (comptime @typeInfo(@TypeOf(2654435769)) == .@"enum") cp_cast_int(u64, @intFromEnum(2654435769)) else cp_cast_int(u64, 2654435769)), 32) | 2135587861));
                                     _ = &sub;
                                     var hw: WyhashWriter = .{ .hasher = (&sub) };
                                     _ = &hw;
                                     var w_ = hw.writer();
                                     _ = &w_;
-                                    _ = ((w_.print("{f}", .{ Store.Entry.fmtStorePath(.{ .@"from" = m }, (&store), lockfile) })) catch unreachable);
+                                    _ = ((w_.print("{f}", .{ Store.Entry.fmtStorePath(Store.Entry.Id.@"from"(@as(u32, @intCast(m))), (&store), lockfile) })) catch unreachable);
                                     _ = sub.update(std.mem.asBytes((&pkg_metas[@as(usize, @intCast(node_pkg_ids[@as(usize, @intCast(entry_node_ids[@as(usize, @intCast(m))].get()))]))].integrity)));
                                     var poisoned = false;
                                     _ = &poisoned;
@@ -1069,7 +1079,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                                         _ = &hw;
                                         var w_ = hw.writer();
                                         _ = &w_;
-                                        _ = ((w_.print("{f}", .{ Store.Entry.fmtStorePath(.{ .@"from" = m }, (&store), lockfile) })) catch unreachable);
+                                        _ = ((w_.print("{f}", .{ Store.Entry.fmtStorePath(Store.Entry.Id.@"from"(@as(u32, @intCast(m))), (&store), lockfile) })) catch unreachable);
                                         _ = sub.update(std.mem.asBytes((&pkg_metas[@as(usize, @intCast(node_pkg_ids[@as(usize, @intCast(entry_node_ids[@as(usize, @intCast(m))].get()))]))].integrity)));
                                         _ = try member_sub.append(manager.allocator, sub.final());
                                         for (cp_iter_slice(entry_dependencies[@as(usize, @intCast(m))].slice())) |dep| {
@@ -1085,12 +1095,14 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                                             _ = &ext;
                                             _ = ext.update(std.mem.asBytes((&dependencies[@as(usize, @intCast(dep.dep_id))].name_hash)));
                                             _ = ext.update(std.mem.asBytes((&entry_hashes[@as(usize, @intCast(di))])));
-                                            _ = try scc_ext.put(manager.allocator, ext.final(), .{});
+                                            const void_val: void = undefined;
+                                            _ = try scc_ext.put(manager.allocator, ext.final(), void_val);
                                         }
                                     }
-                                    _ = std.mem.sort(u64, member_sub.items, .{}, std.sort.asc(u64));
+                                    const empty_sort_ctx: void = undefined;
+                                    _ = std.mem.sort(u64, member_sub.items, empty_sort_ctx, std.sort.asc(u64));
                                     const ext_keys = scc_ext.keys();
-                                    _ = std.mem.sort(u64, ext_keys, .{}, std.sort.asc(u64));
+                                    _ = std.mem.sort(u64, ext_keys, empty_sort_ctx, std.sort.asc(u64));
                                     var hasher: std.hash.Wyhash = .init(4803020144034412985);
                                     _ = &hasher;
                                     for (member_sub.items) |k| {
@@ -1131,8 +1143,8 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             {
                 var idx: i32 = 0;
                 _ = &idx;
-                const __end_32 = store.entries.len;
-                while (idx < __end_32) : (idx += 1) {
+                const __end_28 = store.entries.len;
+                while (idx < __end_28) : (idx += 1) {
                     if ((entry_hashes[@as(usize, @intCast(idx))] == 0)) {
                         continue;
                     }
@@ -1174,7 +1186,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                 _ = rename_path.deinit();
                 }
                 {
-                    var mkdir_path: AutoRelPathU16 = .{ .@"from" = "node_modules" };
+                    var mkdir_path = AutoRelPathU16.@"from"("node_modules");
                     _ = &mkdir_path;
                     defer {
                     _ = mkdir_path.deinit();
@@ -1190,7 +1202,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                     break :is_new_bun_modules true;
                 }
                 const node_modules = node_modules_opt.?;
-                var entry_path: bun.AutoRelPath = .{ .@"from" = "node_modules" };
+                var entry_path = bun.AutoRelPath.@"from"("node_modules");
                 _ = &entry_path;
                 defer {
                 _ = entry_path.deinit();
@@ -1226,7 +1238,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                 }
                 for (lockfile.workspace_paths.values()) |workspace_path| {
                     _ = &workspace_path;
-                    var workspace_node_modules: bun.AutoRelPath = .{ .@"from" = workspace_path.slice(lockfile.buffers.string_bytes.items) };
+                    var workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
                     _ = &workspace_node_modules;
                     defer {
                     _ = workspace_node_modules.deinit();
@@ -1252,7 +1264,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                 break :blk_catch_11 Global.exit(1); }); });
                 _ = (blk_catch_12: { break :blk_catch_12 ((sys.mkdirat(FD.cwd(), bun_modules_path, 493).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to create './node_modules/.bun'", .{});
                 break :blk_catch_12 Global.exit(1); }); });
-                var rename_path: bun.AutoRelPath = .{ .@"from" = "node_modules" };
+                var rename_path = bun.AutoRelPath.@"from"("node_modules");
                 _ = &rename_path;
                 defer {
                 _ = rename_path.deinit();
@@ -1262,7 +1274,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                     break :is_new_bun_modules true;
                 }
                 _ = rename_path.append(".cache");
-                var cache_path: bun.AutoRelPath = .{ .@"from" = "node_modules" };
+                var cache_path = bun.AutoRelPath.@"from"("node_modules");
                 _ = &cache_path;
                 defer {
                 _ = cache_path.deinit();
@@ -1272,7 +1284,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
                 _ = rename_path.undo(1);
                 for (lockfile.workspace_paths.values()) |workspace_path| {
                     _ = &workspace_path;
-                    var workspace_node_modules: bun.AutoRelPath = .{ .@"from" = workspace_path.slice(lockfile.buffers.string_bytes.items) };
+                    var workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
                     _ = &workspace_node_modules;
                     defer {
                     _ = workspace_node_modules.deinit();
@@ -1333,13 +1345,15 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             defer {
             _ = seen_entry_ids.deinit(lockfile.allocator);
             }
-            _ = try seen_entry_ids.ensureTotalCapacity(lockfile.allocator, (if (comptime @typeInfo(@TypeOf(store.entries.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(store.entries.len)) else cp_cast_int(i32, store.entries.len)));
+            const seen_cap: u32 = @intCast(store.entries.len);
+            _ = try seen_entry_ids.ensureTotalCapacity(lockfile.allocator, seen_cap);
             var seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID,void) = .empty;
             _ = &seen_workspace_ids;
             defer {
             _ = seen_workspace_ids.deinit(lockfile.allocator);
             }
-            const tasks = try manager.allocator.alloc(Store.Installer.Task, store.entries.len);
+            var tasks = try manager.allocator.alloc(Store.Installer.Task, store.entries.len);
+            _ = &tasks;
             defer {
             _ = manager.allocator.free(tasks);
             }
@@ -1350,21 +1364,17 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             }
             var task_entry_idx: usize = 0;
             _ = &task_entry_idx;
-            for (cp_mut_slice(&tasks)) |*task| {
-                _ = &task;
-                defer {
-                task_entry_idx = (task_entry_idx + 1);
-                }
-                const entry_id: Store.Entry.Id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(task_entry_idx)) == .@"enum") cp_cast_int(i32, @intFromEnum(task_entry_idx)) else cp_cast_int(i32, task_entry_idx)) };
-                (task.*).* = .{ .entry_id = entry_id, .installer = (&installer), .result = .none, .task = .{ .callback = (&Store.Installer.Task.callback) }, .next = null };
+            while ((task_entry_idx < tasks.len)) : (task_entry_idx = (task_entry_idx + 1)) {
+                const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(task_entry_idx)));
+                tasks[cp_cast_int(usize, task_entry_idx)] = .{ .entry_id = entry_id, .installer = (&installer), .result = .none, .task = .{ .callback = (&Store.Installer.Task.callback) }, .next = null };
             }
-            _ = manager.incrementPendingTasks((if (comptime @typeInfo(@TypeOf(store.entries.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(store.entries.len)) else cp_cast_int(i32, store.entries.len)));
+            _ = manager.incrementPendingTasks(@as(u32, @intCast(store.entries.len)));
             {
                 var _entry_id: i32 = 0;
                 _ = &_entry_id;
-                const __end_37 = store.entries.len;
-                while (_entry_id < __end_37) : (_entry_id += 1) {
-                    const entry_id: Store.Entry.Id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(_entry_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(_entry_id)) else cp_cast_int(i32, _entry_id)) };
+                const __end_32 = store.entries.len;
+                while (_entry_id < __end_32) : (_entry_id += 1) {
+                    const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(_entry_id)));
                     const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
                     const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
                     const dep_id = node_dep_ids[@as(usize, @intCast(node_id.get()))];
@@ -1387,7 +1397,8 @@ if ((dep_id == invalid_dependency_id)) {
                     continue;
 },
 .workspace => {
-if ((!try seen_workspace_ids.getOrPut(lockfile.allocator, pkg_id).found_existing)) {
+const ws_gop = try seen_workspace_ids.getOrPut(lockfile.allocator, pkg_id);
+                    if ((!ws_gop.found_existing)) {
                         _ = entry_steps[@as(usize, @intCast(entry_id.get()))].store(.symlink_dependencies, .monotonic);
                         _ = installer.startTask(entry_id);
                         continue;
@@ -1433,7 +1444,7 @@ const patch_info = try installer.packagePatchInfo(pkg_name, pkg_name_hash, (&pkg
                     break :stale false;
 });
                     const needs_install = ((((manager.options.enable.force_install or (is_new_bun_modules and (!uses_global_store))) or has_stale_gvs_link) or (patch_info == .remove)) or needs_install: {
-                    var store_path: bun.AbsPath({}) = .initTopLevelDir();
+                    var store_path: bun.AbsPath(.{}) = .initTopLevelDir();
                     _ = &store_path;
                     defer {
                     _ = store_path.deinit();
@@ -1483,14 +1494,14 @@ _ = entry_steps[@as(usize, @intCast(entry_id.get()))].store(.done, .monotonic);
                         _ = installer.onTaskComplete(entry_id, .skipped);
                         continue;
                     }
-                    var pkg_cache_dir_subpath: AutoRelPath = .{ .@"from" = (switch (pkg_res_tag) {
+                    var pkg_cache_dir_subpath = AutoRelPath.@"from"((switch (pkg_res_tag) {
 .npm => manager.cachedNPMPackageFolderName(pkg_name.slice(string_buf), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version, patch_info.contentsHash()),
 .git => manager.cachedGitFolderName((&(if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).git), patch_info.contentsHash()),
 .github => manager.cachedGitHubFolderName((&(if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).github), patch_info.contentsHash()),
 .local_tarball => manager.cachedTarballFolderName((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).local_tarball, patch_info.contentsHash()),
 .remote_tarball => manager.cachedTarballFolderName((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).remote_tarball, patch_info.contentsHash()),
 else => (comptime unreachable),
-}) };
+}));
                     _ = &pkg_cache_dir_subpath;
                     defer {
                     _ = pkg_cache_dir_subpath.deinit();
@@ -1648,7 +1659,7 @@ _ = (comptime unreachable);
                     defer {
                     ci_entry_idx = (ci_entry_idx + 1);
                     }
-                    const entry_id: Store.Entry.Id = .{ .@"from" = (if (comptime @typeInfo(@TypeOf(ci_entry_idx)) == .@"enum") cp_cast_int(i32, @intFromEnum(ci_entry_idx)) else cp_cast_int(i32, ci_entry_idx)) };
+                    const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(ci_entry_idx)));
                     const step = entry_step.load(.monotonic);
                     if ((step == .done)) {
                         continue;

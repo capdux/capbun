@@ -1024,7 +1024,8 @@ pub fn generateCodeCoverage(self: *CommandLineReporter, vm: *jsc.VirtualMachine,
             if ((byte_ranges.items.len == 0)) {
                 return;
             }
-            _ = std.sort.pdq(bun.SourceMap.coverage.ByteRangeMapping, byte_ranges.items, .{}, bun.SourceMap.coverage.ByteRangeMapping.isLessThan);
+            const empty_sort_ctx: void = undefined;
+            _ = std.sort.pdq(bun.SourceMap.coverage.ByteRangeMapping, byte_ranges.items, empty_sort_ctx, bun.SourceMap.coverage.ByteRangeMapping.isLessThan);
             _ = try self.printCodeCoverage(vm, opts, byte_ranges.items, reporters, enable_ansi_colors);
     }
 
@@ -1048,7 +1049,8 @@ pub fn writeLcovOnly(self: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: 
             if ((byte_ranges.items.len == 0)) {
                 return;
             }
-            _ = std.sort.pdq(bun.SourceMap.coverage.ByteRangeMapping, byte_ranges.items, .{}, bun.SourceMap.coverage.ByteRangeMapping.isLessThan);
+            const empty_sort_ctx: void = undefined;
+            _ = std.sort.pdq(bun.SourceMap.coverage.ByteRangeMapping, byte_ranges.items, empty_sort_ctx, bun.SourceMap.coverage.ByteRangeMapping.isLessThan);
             const relative_dir = vm.transpiler.fs.top_level_dir;
             const open_res = bun.sys.File.openat(.cwd(), out_path, (((bun.O.CREAT | bun.O.WRONLY) | bun.O.TRUNC) | bun.O.CLOEXEC), 420);
             if ((open_res == .err)) {
@@ -1066,10 +1068,12 @@ pub fn writeLcovOnly(self: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: 
             var buffered = file.writer().adaptToNewApi(buf);
             _ = &buffered;
             const writer = (&buffered.new_interface);
-            for (byte_ranges.items) |*entry| {
-                _ = &entry;
+            var entry_i: usize = 0;
+            _ = &entry_i;
+            while ((entry_i < byte_ranges.items.len)) : (entry_i = (entry_i + 1)) {
+                const entry = (&byte_ranges.items[@as(usize, @intCast(entry_i))]);
                 if ((opts.ignore_patterns.len > 0)) {
-                    const rel = bun.path.relative(relative_dir, (entry.*).source_url.slice());
+                    const rel = bun.path.relative(relative_dir, entry.source_url.slice());
                     var skip = false;
                     _ = &skip;
                     for (cp_iter_slice(opts.ignore_patterns)) |p| {
@@ -1083,7 +1087,7 @@ pub fn writeLcovOnly(self: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: 
                         continue;
                     }
                 }
-                const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, (entry.*), opts.ignore_sourcemap);
+                const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, entry, opts.ignore_sourcemap);
                 if ((report_opt == null)) {
                     continue;
                 }
@@ -1098,7 +1102,8 @@ pub fn writeLcovOnly(self: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: 
     }
 
 pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: *TestCommand.CodeCoverageOptions, byte_ranges: []bun.SourceMap.coverage.ByteRangeMapping, comptime reporters: TestCommand.Reporters, comptime enable_ansi_colors: bool) !void {
-            const trace = (if ((reporters.text and reporters.lcov)) bun.perf.trace("TestCommand.printCodeCoverageLCovAndText") else (if (reporters.text) bun.perf.trace("TestCommand.printCodeCoverageText") else (if (reporters.lcov) bun.perf.trace("TestCommand.printCodeCoverageLCov") else @compileError("No reporters enabled"))));
+            var trace = (if ((reporters.text and reporters.lcov)) bun.perf.trace("TestCommand.printCodeCoverageLCovAndText") else (if (reporters.text) bun.perf.trace("TestCommand.printCodeCoverageText") else (if (reporters.lcov) bun.perf.trace("TestCommand.printCodeCoverageLCov") else @compileError("No reporters enabled"))));
+            _ = &trace;
             defer {
             _ = trace.end();
             }
@@ -1109,9 +1114,11 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
             const max_filepath_length: usize = (if (reporters.text) brk: {
             var len = "All files".len;
             _ = &len;
-            for (cp_mut_slice(&byte_ranges)) |*entry| {
-                _ = &entry;
-                const utf8 = (entry.*).source_url.slice();
+            var entry_i: usize = 0;
+            _ = &entry_i;
+            while ((entry_i < byte_ranges.len)) : (entry_i = (entry_i + 1)) {
+                const entry = (&byte_ranges[@as(usize, @intCast(entry_i))]);
+                const utf8 = entry.source_url.slice();
                 const relative_path = bun.path.relative(relative_dir, utf8);
                 if ((opts.ignore_patterns.len > 0)) {
                     var should_ignore = false;
@@ -1198,10 +1205,12 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                 }
             }
             }
-            for (cp_mut_slice(&byte_ranges)) |*entry| {
-                _ = &entry;
+            var entry_i: usize = 0;
+            _ = &entry_i;
+            while ((entry_i < byte_ranges.len)) : (entry_i = (entry_i + 1)) {
+                const entry = (&byte_ranges[@as(usize, @intCast(entry_i))]);
                 if ((opts.ignore_patterns.len > 0)) {
-                    const utf8 = (entry.*).source_url.slice();
+                    const utf8 = entry.source_url.slice();
                     const relative_path = bun.path.relative(relative_dir, utf8);
                     var should_ignore = false;
                     _ = &should_ignore;
@@ -1216,7 +1225,7 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                         continue;
                     }
                 }
-                const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, (entry.*), opts.ignore_sourcemap);
+                const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, entry, opts.ignore_sourcemap);
                 if ((report_opt == null)) {
                     continue;
                 }
@@ -1424,7 +1433,7 @@ pub fn exec(ctx: Command.Context) !void {
                 const file_or_dirnames = ctx.positionals[1..];
                 for (cp_iter_slice(file_or_dirnames)) |arg| {
                     _ = &arg;
-                    _ = (blk_catch_58: { break :blk_catch_58 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_58 (__sw_blk_15: { const __disc_15 = e; _ = &__disc_15; if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .OutOfMemory)) {  break :__sw_blk_15 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .DoesNotExist)) {  break :__sw_blk_15 cp_val((if ((file_or_dirnames.len == 1)) blk: {
+                    _ = (blk_catch_58: { break :blk_catch_58 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_58 (__sw_blk_12: { const __disc_12 = e; _ = &__disc_12; if ((!cp_has_ok_val(__disc_12) and !cp_is_null_val(__disc_12))) { const __err_v_12 = cp_unwrap_err_val(__disc_12); _ = &__err_v_12; if (cp_match_tag(__err_v_12, .OutOfMemory)) {  break :__sw_blk_12 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_12) and !cp_is_null_val(__disc_12))) { const __err_v_12 = cp_unwrap_err_val(__disc_12); _ = &__err_v_12; if (cp_match_tag(__err_v_12, .DoesNotExist)) {  break :__sw_blk_12 cp_val((if ((file_or_dirnames.len == 1)) blk: {
                     if (Output.isAIAgent()) {
                         _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
@@ -1437,7 +1446,7 @@ pub fn exec(ctx: Command.Context) !void {
 } else null)); } }  unreachable; }); }); });
                 }
             } else {
-                const empty_filters: [0][]const u8 = &.{};
+                const empty_filters: [0][]const u8 = undefined;
                 const filter_names: []const []const u8 = (if ((ctx.positionals.len == 0)) (&empty_filters) else ctx.positionals[1..]);
                 const filter_names_normalized = (if ((!Environment.isWindows)) filter_names else brk: {
                 var normalized = try ctx.allocator.alloc(string, filter_names.len);
@@ -1445,8 +1454,8 @@ pub fn exec(ctx: Command.Context) !void {
                 {
                     var ni: i32 = 0;
                     _ = &ni;
-                    const __end_16 = filter_names.len;
-                    while (ni < __end_16) : (ni += 1) {
+                    const __end_13 = filter_names.len;
+                    while (ni < __end_13) : (ni += 1) {
                         const to_normalize = try ctx.allocator.dupe(u8, filter_names[@as(usize, @intCast(ni))]);
                         _ = bun.path.posixToPlatformInPlace(u8, to_normalize);
                         normalized[cp_cast_int(usize, ni)] = to_normalize;
@@ -1472,14 +1481,14 @@ pub fn exec(ctx: Command.Context) !void {
                 }
                 break :brk scanner.fs.top_level_dir;
 };
-                _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  break :__sw_blk_18 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .DoesNotExist)) {  if (Output.isAIAgent()) {
+                _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_15: { const __disc_15 = e; _ = &__disc_15; if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .OutOfMemory)) {  break :__sw_blk_15 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .DoesNotExist)) {  if (Output.isAIAgent()) {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                 } else {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
                 }
                 vm.exit_handler.exit_code = 1;
                 vm.is_shutting_down = true;
-                break :__sw_blk_18 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
+                break :__sw_blk_15 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
             }
             const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
             defer {
@@ -1525,19 +1534,17 @@ pub fn exec(ctx: Command.Context) !void {
             if (ctx.test_options.shard) |shard| {
                 _ = &shard;
                 if ((test_files.len > 0)) {
-                    _ = std.sort.pdq(PathString, test_files, .{}, PathStringSortCtx.lessThan);
+                    const empty_sort_ctx: void = undefined;
+                    _ = std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
                     var write: usize = 0;
                     _ = &write;
-                    {
-                        var i: i32 = 0;
-                        _ = &i;
-                        const __end_20 = test_files.len;
-                        while (i < __end_20) : (i += 1) {
-                            const file = test_files[@as(usize, @intCast(i))];
-                            if (((i % shard.count) == (shard.index - 1))) {
-                                test_files[cp_cast_int(usize, write)] = file;
-                                write = (write + 1);
-                            }
+                    var i: usize = 0;
+                    _ = &i;
+                    while ((i < test_files.len)) : (i = (i + 1)) {
+                        const file = test_files[@as(usize, @intCast(i))];
+                        if (((@as(u32, @intCast(i)) % shard.count) == (shard.index - 1))) {
+                            test_files[cp_cast_int(usize, write)] = file;
+                            write = (write + 1);
                         }
                     }
                     _ = Output.prettyError("<r><d>--shard={d}/{d}:<r> running {d}/{d} test file{s}\n", .{ shard.index, shard.count, write, test_files.len, (if ((test_files.len == 1)) "" else "s") });
@@ -1626,7 +1633,7 @@ else => {
                     if (Output.isAIAgent()) {
                         _ = Output.errGeneric("0 test files matching **{{.test,.spec,_test_,_spec_}}.{{js,ts,jsx,tsx}} in --cwd={f}", .{ bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
-                        _ = Output.prettyErrorln("<yellow>No tests found!<r>", "", "Tests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>", "", .{});
+                        _ = Output.prettyErrorln("<yellow>No tests found!<r>\n\nTests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>\n", .{});
                     }
                 } else {
                     if (Output.isAIAgent()) {
@@ -1636,30 +1643,27 @@ else => {
                     }
                     var has_file_like: ?usize = null;
                     _ = &has_file_like;
-                    {
-                        var i: i32 = 1;
-                        _ = &i;
-                        const __end_22 = ctx.positionals.len;
-                        while (i < __end_22) : (i += 1) {
-                            const filter = ctx.positionals[@as(usize, @intCast(i))];
-                            _ = Output.prettyError(" {s}", .{ filter });
-                            if (((has_file_like == null) and (((strings.hasSuffixComptime(filter, ".ts") or strings.hasSuffixComptime(filter, ".tsx")) or strings.hasSuffixComptime(filter, ".js")) or strings.hasSuffixComptime(filter, ".jsx")))) {
-                                has_file_like = i;
-                            }
+                    var i: usize = 1;
+                    _ = &i;
+                    while ((i < ctx.positionals.len)) : (i = (i + 1)) {
+                        const filter = ctx.positionals[@as(usize, @intCast(i))];
+                        _ = Output.prettyError(" {s}", .{ filter });
+                        if (((has_file_like == null) and (((strings.hasSuffixComptime(filter, ".ts") or strings.hasSuffixComptime(filter, ".tsx")) or strings.hasSuffixComptime(filter, ".js")) or strings.hasSuffixComptime(filter, ".jsx")))) {
+                            has_file_like = i;
                         }
                     }
                     if ((search_count > 0)) {
                         _ = Output.prettyError("\n{d} files were searched ", .{ search_count });
                         _ = Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
                     }
-                    _ = Output.prettyErrorln("", "", "<blue>note<r><d>:<r> Tests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>", .{});
-                    if (has_file_like) |i| {
-                        _ = &i;
-                        _ = Output.prettyErrorln("<blue>note<r><d>:<r> To treat the \"{s}\" filter as a path, run \"bun test ./{s}\"<r>", .{ ctx.positionals[@as(usize, @intCast(i))], ctx.positionals[@as(usize, @intCast(i))] });
+                    _ = Output.prettyErrorln("\n\n<blue>note<r><d>:<r> Tests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>", .{});
+                    if (has_file_like) |file_idx| {
+                        _ = &file_idx;
+                        _ = Output.prettyErrorln("<blue>note<r><d>:<r> To treat the \"{s}\" filter as a path, run \"bun test ./{s}\"<r>", .{ ctx.positionals[@as(usize, @intCast(file_idx))], ctx.positionals[@as(usize, @intCast(file_idx))] });
                     }
                 }
                 if ((!Output.isAIAgent())) {
-                    _ = Output.prettyError("", "Learn more about bun test: <magenta>https://bun.com/docs/cli/test<r>", .{});
+                    _ = Output.prettyError("\nLearn more about bun test: <magenta>https://bun.com/docs/cli/test<r>", .{});
                 }
             } else {
                 _ = Output.prettyError("\n", .{});

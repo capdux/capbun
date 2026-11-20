@@ -92,7 +92,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
 
     // you typed "." and we already scanned it
     if (!scanner.has_iterated) {
-        if (@as(FileSystem.RealFS.EntriesOption.Tag, root.*) == .entries) {
+        if (root.* == .entries) {
             let iter = root.entries.data.iterator();
             const fd = root.entries.fd;
             bun.assert(fd != bun.invalid_fd);
@@ -179,7 +179,7 @@ pub fn matchesPathIgnorePattern(scanner: *Scanner, abs_path: []const u8): bool {
     // Build rel_path + '/' once. rel_path is a relative path from the project
     // root; 4096 bytes covers any sane test directory depth (POSIX PATH_MAX).
     let buf: [4096]u8 = undefined;
-    const rel_with_slash: []const u8? = if (rel_path.len > 0 &&
+    const rel_with_slash: ([]const u8)? = if (rel_path.len > 0 &&
         rel_path.len + 1 <= buf.len &&
         rel_path[rel_path.len - 1] != '/')
     blk: {

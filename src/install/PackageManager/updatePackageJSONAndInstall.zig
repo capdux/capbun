@@ -185,11 +185,11 @@ else => {
 }
 
 pub fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(manager: *PackageManager, ctx: Command.Context, original_cwd: []const u8, positionals: []const []const u8, update_requests: *UpdateRequest.Array) !void {
-        var empty_updates: [0]UpdateRequest = &.{};
+        var empty_updates: [0]UpdateRequest = undefined;
         _ = &empty_updates;
         var updates: []UpdateRequest = (if (((manager.subcommand == .@"patch-commit") or (manager.subcommand == .patch))) empty_updates[0..0] else UpdateRequest.parse(ctx.allocator, manager, ctx.log, positionals, update_requests, manager.subcommand));
         _ = &updates;
-        _ = try updatePackageJSONAndInstallWithManagerWithUpdates(manager, ctx, (&updates), manager.subcommand, original_cwd);
+        _ = try updatePackageJSONAndInstallWithManagerWithUpdates(manager, ctx, updates, manager.subcommand, original_cwd);
 }
 
 pub fn updatePackageJSONAndInstallWithManagerWithUpdates(manager: *PackageManager, ctx: Command.Context, updates: []UpdateRequest, subcommand: Subcommand, original_cwd: []const u8) !void {
@@ -242,9 +242,10 @@ pub fn updatePackageJSONAndInstallWithManagerWithUpdates(manager: *PackageManage
         _ = &not_in_workspace_root;
         switch (subcommand) {
 .remove => {
-for (cp_iter_slice(updates.*)) |request| {
+for (cp_iter_slice(updates)) |request| {
             _ = &request;
-            for (cp_iter_slice(.{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" })) |list| {
+            const dep_lists: [4][]const u8 = .{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" };
+            for (cp_iter_slice(dep_lists)) |list| {
                 _ = &list;
                 if (current_package_json.root.asProperty(list)) |query| {
                     _ = &query;
@@ -303,7 +304,7 @@ if ((manager.options.patch_features == .commit)) {
                 if (stuff.not_in_workspace_root) {
                     not_in_workspace_root = stuff;
                 } else {
-                    _ = PackageJSONEditor.editPatchedDependencies(manager, (&current_package_json.root), stuff.patch_key, stuff.patchfile_path);
+                    _ = try PackageJSONEditor.editPatchedDependencies(manager, (&current_package_json.root), stuff.patch_key, stuff.patchfile_path);
                 }
             }
         }
@@ -311,7 +312,7 @@ if ((manager.options.patch_features == .commit)) {
 }
         manager.to_update = (subcommand == .update);
         {
-            const cloned = updates.*;
+            const cloned = updates;
             manager.update_requests = cloned;
         }
         var buffer_writer = JSPrinter.BufferWriter.init(manager.allocator);
@@ -352,7 +353,7 @@ if ((manager.options.patch_features == .commit)) {
 });
         if (not_in_workspace_root) |stuff| {
             _ = &stuff;
-            _ = PackageJSONEditor.editPatchedDependencies(manager, (&root_package_json.root), stuff.patch_key, stuff.patchfile_path);
+            _ = try PackageJSONEditor.editPatchedDependencies(manager, (&root_package_json.root), stuff.patch_key, stuff.patchfile_path);
             var buffer_writer2 = JSPrinter.BufferWriter.init(manager.allocator);
             _ = &buffer_writer2;
             _ = try buffer_writer2.buffer.list.ensureTotalCapacity(manager.allocator, (root_package_json.source.contents.len + 1));
@@ -367,7 +368,7 @@ if ((manager.options.patch_features == .commit)) {
 };
         _ = try manager.installWithManager(ctx, root_package_json_path, original_cwd);
         if ((((subcommand == .update) or (subcommand == .add)) or (subcommand == .link))) {
-            for (cp_iter_slice(updates.*)) |request| {
+            for (cp_iter_slice(updates)) |request| {
                 _ = &request;
                 if (request.failed) {
                     _ = Global.exit(1);
@@ -418,7 +419,7 @@ if ((manager.options.patch_features == .commit)) {
                 _ = bun.copy(u8, (&node_modules_buf), ("node_modules" ++ std.fs.path.sep_str));
                 const offset_buf = node_modules_buf["node_modules/".len..];
                 const name_hashes = manager.lockfile.packages.items(.name_hash);
-                for (cp_iter_slice(updates.*)) |request| {
+                for (cp_iter_slice(updates)) |request| {
                     _ = &request;
                     if ((std.mem.indexOfScalar(PackageNameHash, name_hashes, String.Builder.stringHash((if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name))) == null)) {
                         _ = bun.copy(u8, offset_buf, (if (@typeInfo(@TypeOf(request)) == .@"enum" or @typeInfo(@TypeOf(request)) == .@"union") @tagName(request) else request.name));
@@ -430,7 +431,9 @@ if ((manager.options.patch_features == .commit)) {
                     _ = Global.crash();
                 }
                 break :blk_catch_10 null; }); });
-                if (open_res) |node_modules_bin| {
+                if (open_res) |node_modules_bin_val| {
+                    _ = &node_modules_bin_val;
+                    var node_modules_bin = node_modules_bin_val;
                     _ = &node_modules_bin;
                     defer {
                     _ = node_modules_bin.close();
@@ -474,8 +477,8 @@ return e;
 })); }); });
 }
 
-pub fn updatePackageJSONAndInstallAndCLI(ctx: Command.Context, subcommand: Subcommand, cli: CommandLineArguments) !void {
-        const init_res = (blk_catch_16: { break :blk_catch_16 ((PackageManager.init(ctx, cli, subcommand)) catch |e| { _ = &e; if ((e == error.MissingPackageJSON)) {
+pub fn initManagerOrCreate(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcommand) @TypeOf(PackageManager.init(ctx,cli,subcommand)) {
+        return (blk_catch_16: { break :blk_catch_16 ((PackageManager.init(ctx, cli, subcommand)) catch |e| { _ = &e; if ((e == error.MissingPackageJSON)) {
             switch (subcommand) {
 .update => {
 _ = Output.prettyErrorln("<r>No package.json, so nothing to update", .{});
@@ -491,12 +494,15 @@ _ = Output.prettyErrorln("<r>No package.json, so nothing to patch", .{});
 },
 else => {
 _ = try attemptToCreatePackageJSON();
-            _ = try PackageManager.init(ctx, cli, subcommand);
+            return PackageManager.init(ctx, cli, subcommand);
 },
 }
-        } else {
-            return e;
-        } }); });
+        }
+        return e; }); });
+}
+
+pub fn updatePackageJSONAndInstallAndCLI(ctx: Command.Context, subcommand: Subcommand, cli: CommandLineArguments) !void {
+        const init_res = try initManagerOrCreate(ctx, cli, subcommand);
         var manager = init_res[0];
         _ = &manager;
         const original_cwd = init_res[1];
@@ -509,7 +515,7 @@ _ = try attemptToCreatePackageJSON();
         }
         if (subcommand.canGloballyInstallPackages()) {
             if ((manager.options.global and (manager.options.log_level != .silent))) {
-                manager.track_installed_bin = .{ .pending = .{} };
+                manager.track_installed_bin = .pending;
             }
         }
         _ = try updatePackageJSONAndInstallWithManager(manager, ctx, original_cwd);
@@ -550,7 +556,8 @@ inline else => |cmd| try PackageManager.CommandLineArguments.parse(ctx.allocator
             _ = &analyzer;
             var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{ .ctx = (&analyzer), .entry_points = cli.positionals[1..], .onFetch = @ptrCast((&Analyzer.onAnalyze)) };
             _ = &fetcher;
-            _ = try bun.cli.BuildCommand.exec(bun.cli.Command.get());
+            const exec_fn = bun.cli.BuildCommand.exec;
+            _ = try exec_fn(bun.cli.Command.get(), (&fetcher));
             return;
         }
         return updatePackageJSONAndInstallAndCLI(ctx, subcommand, cli);

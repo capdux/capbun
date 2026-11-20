@@ -1028,7 +1028,7 @@ pub fn memoryCost(self: *const @This()) usize {
             return (self.path.len + self.route.memoryCost());
     }
 
-pub fn clone(self: @This()) StaticRouteEntry!void {
+pub fn clone(self: @This()) !StaticRouteEntry {
             _ = self.route.ref();
             return .{ .path = try bun.default_allocator.dupe(u8, self.path), .route = self.route, .method = self.method };
     }

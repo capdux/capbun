@@ -1333,21 +1333,21 @@ pub struct DefaultAtRuleParser {
         pub const Prelude = void;
         pub const AtRule = DefaultAtRule;
 
-        fn parsePrelude(_: *This, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
+        static fn parsePrelude(_: *This, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
             return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
 
-        fn parseBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
+        static fn parseBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
             return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
 
-        fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
+        static fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
             return { err: undefined };
         }
 
-        fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) void {}
+        static fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) {}
 
-        fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) void {}
+        static fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) {}
 
         static fn enclosingLayerLength(_: *This): u32 {
             return 0;
@@ -3541,11 +3541,13 @@ pub struct StyleAttribute {
             s.appendAssumeCapacity(options.filename);
             break :sources s;
         };
-        const ParseErr = Err(ParserError);
         return { result: StyleAttribute{
             declarations: switch (DeclarationBlock.parse(&parser, &options)) {
                 .result => |v| v,
-                .err => |e| return { err: ParseErr.fromParseError(e, "") },
+                .err => |e| {
+                    const ParseErr = errors_.Err(ParserError);
+                    return .{ .err = ParseErr.fromParseError(e, "") };
+                },
             },
             sources: sources,
         } };

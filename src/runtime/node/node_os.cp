@@ -15,7 +15,7 @@ extern fn set_process_priority(pid: i32, priority: i32): i32;
 extern fn Bun__Os__getFreeMemory(): u64;
 
 pub fn createNodeOsBinding(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-    return ((jsc.JSObject.create({
+    const obj = jsc.JSObject.create({
         hostCpuCount: @max(1, bun_sysconf__SC_NPROCESSORS_ONLN()),
         cpus: gen.createCpusCallback(global),
         freemem: gen.createFreememCallback(global),
@@ -30,7 +30,8 @@ pub fn createNodeOsBinding(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue
         userInfo: gen.createUserInfoCallback(global),
         version: gen.createVersionCallback(global),
         setPriority: gen.createSetPriorityCallback(global),
-    }, global))?).toJS();
+    }, global)?;
+    return obj.toJS();
 }
 
 struct CPUTimes {

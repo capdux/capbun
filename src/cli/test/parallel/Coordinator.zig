@@ -69,7 +69,7 @@ pub const test_command = @import("../../test_command.zig");
 pub const bun = @import("bun");
 pub const CoordinatorAbortHandler = struct {
 
-pub fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: ?*const void) callconv(.c) void {
+pub fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: ?*anyopaque) callconv(.c) void {
             _ = abort_should_abort.store(true, .release);
     }
 
@@ -366,15 +366,15 @@ var nums: [9]u32 = undefined;
                 _ = &n;
                 n.* = rd.u32_();
             }
-            const idx = undefined;
-            const pass = undefined;
-            const fail = undefined;
-            const skip = undefined;
-            const todo = undefined;
-            const expectations = undefined;
-            const skipped_label = undefined;
-            const files = undefined;
-            const unhandled = nums;
+            const idx = nums[0];
+            const pass = nums[1];
+            const fail = nums[2];
+            const skip = nums[3];
+            const todo = nums[4];
+            const expectations = nums[5];
+            const skipped_label = nums[6];
+            const files = nums[7];
+            const unhandled = nums[8];
             _ = self.flushCaptured(w);
             if ((w.inflight != idx)) {
                 return;

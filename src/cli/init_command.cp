@@ -17,7 +17,9 @@ pub struct InitCommand {
         // unset `ENABLE_VIRTUAL_TERMINAL_INPUT` on windows. This prevents backspace from
         // deleting the entire line
         const original_mode: if (Environment.isWindows) bun.windows.DWORD? else void = if (comptime Environment.isWindows)
-            bun.windows.updateStdioModeFlags(.std_in, { unset: bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT }) catch null;
+            bun.windows.updateStdioModeFlags(.std_in, { unset: bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT }) catch null
+        else
+            undefined;
 
         defer if (comptime Environment.isWindows) {
             if (mode := original_mode) {
@@ -50,7 +52,8 @@ pub struct InitCommand {
                     @compileError("Choices must be an enum type with at least one field");
                 }
                 let expected_value = 0;
-                let choices: [choices_fields.len]([]const u8) = undefined;
+                const n_choices = choices_fields.len;
+                let choices: [n_choices][]const u8 = undefined;
                 for (choices_fields, 0..) |field, i| {
                     if (field.value != expected_value) {
                         @compileError("Choices must be an enum type with consecutive values starting from 0");
@@ -187,7 +190,9 @@ pub struct InitCommand {
                 set: bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT,
                 // disabling line input sends keys immediately, disabling echo input makes sure it doesn't print to the terminal
                 unset: bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT,
-            }) catch null;
+            }) catch null
+        else
+            undefined;
 
         if (Environment.isPosix)
             * = bun.tty.setMode(0, .raw);
@@ -450,10 +455,9 @@ pub struct InitCommand {
         }
 
         fields.name = brk: {
-            if (name := normalizePackageName(alloc, if (pathname.filename.len > 0) pathname.filename else "") catch null) {
-                if (name.len > 0) {
-                    break :brk name;
-                }
+            const name = normalizePackageName(alloc, if (pathname.filename.len > 0) pathname.filename else "") catch "";
+            if (name.len > 0) {
+                break :brk name;
             }
 
             break :brk "project";
@@ -864,7 +868,7 @@ struct DependencyNeeded {
     version: []const u8,
 }
 
-const empty_deps: [0]DependencyNeeded = [];
+const empty_deps: []const DependencyNeeded = [];
 const blank_dev_deps: [1]DependencyNeeded = [
     DependencyNeeded{ name: "@types/bun", version: "latest" },
 ];
@@ -910,7 +914,7 @@ pub struct DependencyGroup {
     devDependencies: []const DependencyNeeded,
 
     pub const blank = DependencyGroup{
-        dependencies: &empty_deps,
+        dependencies: empty_deps,
         devDependencies: &blank_dev_deps,
     };
 
@@ -966,7 +970,7 @@ pub const TemplateFile = struct {
     can_skip_if_exists: bool = false,
 };
 
-const empty_template_files: [0]TemplateFile = [];
+const empty_template_files: []const TemplateFile = [];
 
 const agent_rule = @embedFile("./init/rule.md");
 const cursor_rule = TemplateFile{ path: ".cursor/rules/use-bun-instead-of-node-vite-npm-pnpm.mdc", contents: agent_rule };
@@ -984,7 +988,7 @@ const react_blank_scripts: [6]string = [
     "build",
     "NODE_ENV=production bun .",
 ];
-const empty_scripts: [0]string = [];
+const empty_scripts: []const string = [];
 
 enum Template {
     blank,
@@ -1043,7 +1047,7 @@ enum Template {
     }
     fn scripts(): []const string {
         return switch (_) {
-            .blank, .typescript_library => &empty_scripts,
+            .blank, .typescript_library => empty_scripts,
             .react_tailwind, .react_tailwind_shadcn => &react_tailwind_scripts,
             .react_blank => &react_blank_scripts,
         };
@@ -1162,33 +1166,37 @@ enum Template {
             .react_blank => &react_blank_files,
             .react_tailwind => &react_tailwind_files,
             .react_tailwind_shadcn => &react_shadcn_files,
-            else => &empty_template_files,
+            else => empty_template_files,
         };
     }
 
     pub fn @"write files and run `bun dev`"(allocator: std.mem.Allocator)! {
         Template.createAgentRule();
 
-        inline for (file of comptime _.files()) {
-            const path = file.path;
-            const contents = file.contents;
+        switch (_) {
+            inline else => |tpl| {
+                inline for (file of comptime tpl.files()) {
+                    const path = file.path;
+                    const contents = file.contents;
 
-            const result = if (comptime strings.eqlComptime(path, "README.md"))
-                InitCommand.Assets.createWithContents("README.md", contents, .{
-                    name: _.templateName(),
-                    bunVersion: Environment.version_string,
-                })
-            else
-                InitCommand.Assets.createNew(path, contents);
-            result catch |e| {
-                if (e == error.EEXIST) {
-                    Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{ path });
-                    Output.flush();
-                } else {
-                    Output.err(e, "failed to create file: '{s}'", .{ path });
-                    Global.crash();
+                    const result = if (comptime strings.eqlComptime(path, "README.md"))
+                        InitCommand.Assets.createWithContents("README.md", contents, .{
+                            name: tpl.templateName(),
+                            bunVersion: Environment.version_string,
+                        })
+                    else
+                        InitCommand.Assets.createNew(path, contents);
+                    result catch |e| {
+                        if (e == error.EEXIST) {
+                            Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{ path });
+                            Output.flush();
+                        } else {
+                            Output.err(e, "failed to create file: '{s}'", .{ path });
+                            Global.crash();
+                        }
+                    };
                 }
-            };
+            },
         }
 
         Output.pretty("\n", .{});
@@ -1207,24 +1215,9 @@ enum Template {
         * = install.spawnAndWait()?;
 
         Output.prettyln(
-            \\
-            \\✨ New project configured!
-            \\
-            \\<b><cyan>Development<r><d> - full-stack dev server with hot reload<r>
-            \\
-            \\    <cyan><b>bun dev<r>
-            \\
-            \\<b><yellow>Static Site<r><d> - build optimized assets to disk (no backend)<r>
-            \\
-            \\    <yellow><b>bun run build<r>
-            \\
-            \\<b><green>Production<r><d> - serve a full-stack production build<r>
-            \\
-            \\    <green><b>bun start<r>
-            \\
-            \\<blue>Happy bunning! 🐇<r>
-            \\
-        , .{});
+            "\n✨ New project configured!\n\n<b><cyan>Development<r><d> - full-stack dev server with hot reload<r>\n\n    <cyan><b>bun dev<r>\n\n<b><yellow>Static Site<r><d> - build optimized assets to disk (no backend)<r>\n\n    <yellow><b>bun run build<r>\n\n<b><green>Production<r><d> - serve a full-stack production build<r>\n\n    <green><b>bun start<r>\n\n<blue>Happy bunning! 🐇<r>\n",
+            .{},
+        );
 
         Output.flush();
     }

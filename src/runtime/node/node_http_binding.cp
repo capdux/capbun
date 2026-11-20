@@ -36,7 +36,7 @@ pub fn setMaxHTTPHeaderSize(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
     if (num <= 0) {
         return globalThis.throwInvalidArgumentTypeValue("maxHeaderSize", "non-negative integer", value);
     }
-    bun.http.max_http_header_size = i32(num);
+    bun.http.max_http_header_size = @as(usize, @intCast(num));
     return jsc.JSValue.jsNumber(bun.http.max_http_header_size);
 }
 

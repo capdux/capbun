@@ -112,23 +112,23 @@ else => {
         _ = try writer.writeInt(u64, 0, .little);
         if ((lockfile.workspace_versions.count() > 0)) {
             _ = try writer.writeAll(std.mem.asBytes((&has_workspace_package_ids_tag)));
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.workspace_versions.keys());
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Semver.Version, lockfile.workspace_versions.values());
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.workspace_paths.keys());
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.workspace_paths.values());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.workspace_versions.keys()), lockfile.workspace_versions.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.workspace_versions.values()), lockfile.workspace_versions.values());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.workspace_paths.keys()), lockfile.workspace_paths.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.workspace_paths.values()), lockfile.workspace_paths.values());
         }
         if (lockfile.trusted_dependencies) |trusted_dependencies| {
             _ = &trusted_dependencies;
             if ((trusted_dependencies.count() > 0)) {
                 _ = try writer.writeAll(std.mem.asBytes((&has_trusted_dependencies_tag)));
-                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, u32, trusted_dependencies.keys());
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(trusted_dependencies.keys()), trusted_dependencies.keys());
             } else {
                 _ = try writer.writeAll(std.mem.asBytes((&has_empty_trusted_dependencies_tag)));
             }
         }
         if ((lockfile.overrides.map.count() > 0)) {
             _ = try writer.writeAll(std.mem.asBytes((&has_overrides_tag)));
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameHash, lockfile.overrides.map.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.overrides.map.keys()), lockfile.overrides.map.keys());
             var external_overrides = try std.ArrayListUnmanaged(Dependency.External).initCapacity(z_allocator, lockfile.overrides.map.count());
             _ = &external_overrides;
             defer {
@@ -144,7 +144,7 @@ else => {
                     external_overrides.items[cp_cast_int(usize, i)] = over_vals[@as(usize, @intCast(i))].toExternal();
                 }
             }
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_overrides.items);
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(external_overrides.items), external_overrides.items);
         }
         if ((lockfile.patched_dependencies.entries.len > 0)) {
             for (lockfile.patched_dependencies.values()) |patched_dep| {
@@ -152,12 +152,12 @@ else => {
                 _ = bun.assert((!patched_dep.patchfile_hash_is_null));
             }
             _ = try writer.writeAll(std.mem.asBytes((&has_patched_dependencies_tag)));
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PackageNameAndVersionHash, lockfile.patched_dependencies.keys());
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, PatchedDep, lockfile.patched_dependencies.values());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.patched_dependencies.keys()), lockfile.patched_dependencies.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.patched_dependencies.values()), lockfile.patched_dependencies.values());
         }
         if (lockfile.catalogs.hasAny()) {
             _ = try writer.writeAll(std.mem.asBytes((&has_catalogs_tag)));
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.catalogs.default.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.catalogs.default.keys()), lockfile.catalogs.default.keys());
             var external_deps_buf: std.ArrayListUnmanaged(Dependency.External) = try .initCapacity(z_allocator, lockfile.catalogs.default.count());
             _ = &external_deps_buf;
             defer {
@@ -173,12 +173,12 @@ else => {
                     external_deps_buf.items[cp_cast_int(usize, i)] = cat_vals[@as(usize, @intCast(i))].toExternal();
                 }
             }
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_deps_buf.items);
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(external_deps_buf.items), external_deps_buf.items);
             _ = external_deps_buf.clearRetainingCapacity();
-            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, lockfile.catalogs.groups.keys());
+            _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(lockfile.catalogs.groups.keys()), lockfile.catalogs.groups.keys());
             for (lockfile.catalogs.groups.values()) |catalog_deps| {
                 _ = &catalog_deps;
-                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, String, catalog_deps.keys());
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(catalog_deps.keys()), catalog_deps.keys());
                 _ = catalog_deps_buf_ensure: {
                 break :catalog_deps_buf_ensure try external_deps_buf.ensureTotalCapacity(z_allocator, catalog_deps.count());
 
@@ -196,7 +196,7 @@ else => {
                         external_deps_buf.items[cp_cast_int(usize, i)] = group_cat_vals[@as(usize, @intCast(i))].toExternal();
                     }
                 }
-                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, &.{}, Dependency.External, external_deps_buf.items);
+                _ = try Lockfile.Buffers.writeArray(StreamType, stream, @TypeOf(writer), writer, @TypeOf(external_deps_buf.items), external_deps_buf.items);
             }
         }
         const config_version: bun.ConfigVersion = ((options.config_version) orelse (.current));

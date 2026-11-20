@@ -1131,7 +1131,7 @@ pub fn normalizeStringAlloc(allocator: std.mem.Allocator, str: []const u8, compt
 }
 
 pub fn joinAbs2(_cwd: []const u8, comptime platform: Platform, part: []const u8, part2: []const u8) []const u8 {
-    const parts = [part, part2];
+    const parts: [2]string = [part, part2];
     const slice = joinAbsString(_cwd, &parts, platform);
     return slice;
 }

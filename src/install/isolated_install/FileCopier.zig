@@ -210,4 +210,4 @@ const Global = bun.Global;
 const OOM = bun.OOM;
 const Output = bun.Output;
 const sys = bun.sys;
-const empty_skip_dirnames: [0]bun.OSPathSlice = &.{};
+const empty_skip_dirnames: [0]bun.OSPathSlice = undefined;

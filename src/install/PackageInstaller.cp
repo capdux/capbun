@@ -87,7 +87,7 @@ pub struct PackageInstaller {
             let link_target_buf: bun.PathBuffer = undefined;
             let link_dest_buf: bun.PathBuffer = undefined;
             let link_rel_buf: bun.PathBuffer = undefined;
-            _.linkTreeBins(tree, tree_id, &link_target_buf, &link_dest_buf, &link_rel_buf, log_level);
+            _.linkTreeBins(&_.trees[tree_id], tree_id, &link_target_buf, &link_dest_buf, &link_rel_buf, log_level);
         }
 
         if (comptime should_install_packages) {
@@ -109,7 +109,7 @@ pub struct PackageInstaller {
         const lockfile = _.lockfile;
         const manager = _.manager;
         const string_buf = lockfile.buffers.string_bytes.items;
-        let node_modules_path: DefaultAbsPath = .@"from"(_.node_modules.path.items);
+        let node_modules_path = DefaultAbsPath.@"from"(_.node_modules.path.items);
         defer node_modules_path.deinit();
 
         const pkgs = lockfile.packages.slice();
@@ -181,7 +181,7 @@ pub struct PackageInstaller {
 
             while (true) {
                 let target_nm_path = &node_modules_path;
-                if (*path := target_node_modules_path_opt) target_nm_path = path;
+                if (target_node_modules_path_opt != null) target_nm_path = &(target_node_modules_path_opt.?);
                 let bin_linker: Bin.Linker = {
                     bin: bin,
                     global_bin_path: _.options.bin_path,
@@ -249,7 +249,7 @@ pub struct PackageInstaller {
                 _.node_modules.path.items.len = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1;
                 const rel_path_res = Lockfile.Tree.relativePathAndDepth(
                     lockfile,
-                    i32(tree_id),
+                    @as(u32, @intCast(tree_id)),
                     &node_modules_rel_path_buf,
                     &depth_buf,
                     .node_modules,
@@ -258,7 +258,7 @@ pub struct PackageInstaller {
 
                 bun.handleOom(_.node_modules.path.appendSlice(rel_path));
 
-                _.linkTreeBins(tree, i32(tree_id), &link_target_buf, &link_dest_buf, &link_rel_buf, log_level);
+                _.linkTreeBins(&_.trees[tree_id], @as(u32, @intCast(tree_id)), &link_target_buf, &link_dest_buf, &link_rel_buf, log_level);
             }
         }
     }
@@ -284,16 +284,15 @@ pub struct PackageInstaller {
                 ) catch |e| {
                     if (log_level != .silent) {
                         const fmt = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
-                        const args = .{ name, @errorName(e) };
 
                         if (log_level.showProgress()) {
-                            switch (Output.enable_ansi_colors_stderr) {
-                                inline else => |enable_ansi_colors| {
-                                    _.progress.log(comptime Output.prettyFmt(fmt, enable_ansi_colors), args);
-                                },
+                            if (Output.enable_ansi_colors_stderr) {
+                                _.progress.log(comptime Output.prettyFmt(fmt, true), .{ name, @errorName(e) });
+                            } else {
+                                _.progress.log(comptime Output.prettyFmt(fmt, false), .{ name, @errorName(e) });
                             }
                         } else {
-                            Output.prettyErrorln(fmt, args);
+                            Output.prettyErrorln(fmt, .{ name, @errorName(e) });
                         }
                     }
 
@@ -320,7 +319,7 @@ pub struct PackageInstaller {
         let i: usize = 0;
         for (*tree of _.trees) {
             defer i += 1;
-            if (force || _.canInstallPackageForTree(_.lockfile.buffers.trees.items, i32(i))) {
+            if (force || _.canInstallPackageForTree(_.lockfile.buffers.trees.items, @as(u32, @intCast(i)))) {
                 defer tree.pending_installs.clearRetainingCapacity();
 
                 // If installing these packages completes the tree, we don't allow it
@@ -369,16 +368,15 @@ pub struct PackageInstaller {
             _.manager.spawnPackageLifecycleScripts(_.command_ctx, entry.list, optional, output_in_foreground, null) catch |e| {
                 if (log_level != .silent) {
                     const fmt = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
-                    const args = .{ package_name, @errorName(e) };
 
                     if (log_level.showProgress()) {
-                        switch (Output.enable_ansi_colors_stderr) {
-                            inline else => |enable_ansi_colors| {
-                                _.progress.log(comptime Output.prettyFmt(fmt, enable_ansi_colors), args);
-                            },
+                        if (Output.enable_ansi_colors_stderr) {
+                            _.progress.log(comptime Output.prettyFmt(fmt, true), .{ package_name, @errorName(e) });
+                        } else {
+                            _.progress.log(comptime Output.prettyFmt(fmt, false), .{ package_name, @errorName(e) });
                         }
                     } else {
-                        Output.prettyErrorln(fmt, args);
+                        Output.prettyErrorln(fmt, .{ package_name, @errorName(e) });
                     }
                 }
 
@@ -535,7 +533,7 @@ pub struct PackageInstaller {
 
         if (comptime Environment.allow_assert) {
             Output.panic("Ran callback to install enqueued packages, but there was no task associated with it. {f}:{f} (dependency_id: {d})", .{
-                bun.fmt.quote(name.slice(_.lockfile.buffers.string_bytes.items)),
+                bun.fmt.quote(@TypeOf(name).slice(&name, _.lockfile.buffers.string_bytes.items)),
                 bun.fmt.quote(data.url),
                 dependency_id,
             });
@@ -667,7 +665,7 @@ pub struct PackageInstaller {
             let sfa = std.heap.stackFallback(1024, _.lockfile.allocator);
             const alloc = sfa.get();
             const name_and_version = std.fmt.allocPrint(alloc, "{s}@{s}", .{
-                pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                 package_version,
             }) catch unreachable;
             defer alloc.free(name_and_version);
@@ -719,14 +717,14 @@ pub struct PackageInstaller {
             };
         }
         debug("Installing {s}@{f}", .{
-            pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+            @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
             resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix),
         });
 
         switch (resolution.tag) {
             .npm => {
                 installer.cache_dir_subpath = _.manager.cachedNPMPackageFolderName(
-                    pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                    @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                     resolution.value.npm.version,
                     patch_contents_hash,
                 );
@@ -906,14 +904,14 @@ pub struct PackageInstaller {
                             // This caused bugs. We can't assert on it because they could come from old lockfiles
                             if (resolution.value.npm.url.isEmpty()) {
                                 Output.debugWarn("package {s}@{f} missing tarball_url", .{
-                                    pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                                    @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                                     resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix),
                                 });
                             }
                         }
 
                         _.manager.enqueuePackageForDownload(
-                            pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                            @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                             dependency_id,
                             package_id,
                             resolution.value.npm.version,
@@ -976,7 +974,7 @@ pub struct PackageInstaller {
             let destination_dir = _.node_modules.makeAndOpenDir(_.root_node_modules_folder) catch |e| {
                 if (log_level != .silent) {
                     Output.err(e, "Failed to open node_modules folder for <r><red>{s}<r> in {f}", .{
-                        pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                        @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                         bun.fmt.fmtPath(u8, _.node_modules.path.items, {}),
                     });
                 }
@@ -1042,7 +1040,7 @@ pub struct PackageInstaller {
                     const is_trusted_through_update_request = trusted_info[1];
 
                     if (resolution.tag != .root && (resolution.tag == .workspace || is_trusted)) {
-                        let folder_path: AutoAbsPath = .@"from"(_.node_modules.path.items);
+                        let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
                         defer folder_path.deinit();
                         folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
@@ -1061,7 +1059,7 @@ pub struct PackageInstaller {
                             )) {
                                 if (PackageManager.verbose_install) {
                                     Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{
-                                        pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                                        @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                                     });
                                 }
                                 break :enqueueLifecycleScripts;
@@ -1082,7 +1080,8 @@ pub struct PackageInstaller {
                                     ) catch |e| bun.handleOom(e);
 
                                     if (_.lockfile.trusted_dependencies == null) _.lockfile.trusted_dependencies = {};
-                                    _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, {}) catch |e| bun.handleOom(e);
+                                    const void_val: void = undefined;
+                                    _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch |e| bun.handleOom(e);
                                 }
                             }
                         }
@@ -1095,7 +1094,7 @@ pub struct PackageInstaller {
                         else => if (!is_trusted && _.metas[package_id].hasInstallScript()) {
                             // Check if the package actually has scripts. `hasInstallScript` can be false positive if a package is published with
                             // an auto binding.gyp rebuild script but binding.gyp is excluded from the published files.
-                            let folder_path: AutoAbsPath = .@"from"(_.node_modules.path.items);
+                            let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
                             defer folder_path.deinit();
                             folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
@@ -1135,7 +1134,7 @@ pub struct PackageInstaller {
                     if (cause.err == error.DanglingSymlink) {
                         Output.prettyErrorln(
                             "<r><red>error<r>: <b>{s}<r> \"link:{s}\" not found (try running 'bun link' in the intended package's folder)<r>",
-                            .{ @errorName(cause.err), _.names[package_id].slice(_.lockfile.buffers.string_bytes.items) },
+                            .{ @errorName(cause.err), @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items) },
                         );
                         _.summary.fail += 1;
                     } else if (cause.err == error.AccessDenied) {
@@ -1151,7 +1150,7 @@ pub struct PackageInstaller {
                             if (!Environment.isWindows) {
                                 const stat = bun.sys.fstat(.fromStdDir(lazy_package_dir.getDir() catch |e| {
                                     Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
-                                        _.names[package_id].slice(_.lockfile.buffers.string_bytes.items),
+                                        @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                                     });
                                     if (Environment.isDebug) {
                                         Output.err(e, "Failed to stat node_modules", {});
@@ -1159,7 +1158,7 @@ pub struct PackageInstaller {
                                     Global.exit(1);
                                 })).unwrap() catch |e| {
                                     Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
-                                        _.names[package_id].slice(_.lockfile.buffers.string_bytes.items),
+                                        @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                                     });
                                     if (Environment.isDebug) {
                                         Output.err(e, "Failed to stat node_modules", {});
@@ -1168,11 +1167,11 @@ pub struct PackageInstaller {
                                 };
 
                                 const is_writable = if (stat.uid == bun.c.getuid())
-                                    stat.mode & bun.S.IWUSR > 0
+                                    (stat.mode & bun.S.IWUSR) != 0
                                 else if (stat.gid == bun.c.getgid())
-                                    stat.mode & bun.S.IWGRP > 0
+                                    (stat.mode & bun.S.IWGRP) != 0
                                 else
-                                    stat.mode & bun.S.IWOTH > 0;
+                                    (stat.mode & bun.S.IWOTH) != 0;
 
                                 if (!is_writable) {
                                     Output.err("EACCES", "Permission denied while writing packages into node_modules.", {});
@@ -1183,7 +1182,7 @@ pub struct PackageInstaller {
                         }
 
                         Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
-                            _.names[package_id].slice(_.lockfile.buffers.string_bytes.items),
+                            @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                         });
 
                         _.summary.fail += 1;
@@ -1193,7 +1192,7 @@ pub struct PackageInstaller {
                             "failed {s} for package <b>{s}<r>",
                             .{
                                 install_result.failure.step.name(),
-                                _.names[package_id].slice(_.lockfile.buffers.string_bytes.items),
+                                @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                             },
                         );
                         if (Environment.isDebug) {
@@ -1239,7 +1238,7 @@ pub struct PackageInstaller {
             const add_to_lockfile = trusted_info[2];
 
             if (resolution.tag != .root && is_trusted) {
-                let folder_path: AutoAbsPath = .@"from"(_.node_modules.path.items);
+                let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
                 defer folder_path.deinit();
                 folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
@@ -1258,7 +1257,7 @@ pub struct PackageInstaller {
                     )) {
                         if (PackageManager.verbose_install) {
                             Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{
-                                pkg_name.slice(_.lockfile.buffers.string_bytes.items),
+                                @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                             });
                         }
                         break :enqueueLifecycleScripts;
@@ -1281,7 +1280,8 @@ pub struct PackageInstaller {
 
                         if (add_to_lockfile) {
                             if (_.lockfile.trusted_dependencies == null) _.lockfile.trusted_dependencies = {};
-                            _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, {}) catch |e| bun.handleOom(e);
+                            const void_val: void = undefined;
+                            _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch |e| bun.handleOom(e);
                         }
                     }
                 }
@@ -1318,16 +1318,15 @@ pub struct PackageInstaller {
         ) catch |e| {
             if (log_level != .silent) {
                 const fmt = "\n<r><red>error:<r> failed to enqueue lifecycle scripts for <b>{s}<r>: {s}\n";
-                const args = .{ folder_name, @errorName(e) };
 
                 if (log_level.showProgress()) {
-                    switch (Output.enable_ansi_colors_stderr) {
-                        inline else => |enable_ansi_colors| {
-                            _.progress.log(comptime Output.prettyFmt(fmt, enable_ansi_colors), args);
-                        },
+                    if (Output.enable_ansi_colors_stderr) {
+                        _.progress.log(comptime Output.prettyFmt(fmt, true), .{ folder_name, @errorName(e) });
+                    } else {
+                        _.progress.log(comptime Output.prettyFmt(fmt, false), .{ folder_name, @errorName(e) });
                     }
                 } else {
-                    Output.prettyErrorln(fmt, args);
+                    Output.prettyErrorln(fmt, .{ folder_name, @errorName(e) });
                 }
             }
 
@@ -1453,7 +1452,8 @@ pub struct NodeModulesFolder_ {
     fn openDir(root: std.fs.Dir): std.fs.Dir! {
         if (comptime Environment.isPosix) {
             const p = std.posix.toPosixPath(_.path.items)?;
-            return (bun.sys.openat(.fromStdDir(root), &p, bun.O.DIRECTORY, 0).unwrap()?).stdDir();
+            const fd = bun.sys.openat(.fromStdDir(root), &p, bun.O.DIRECTORY, 0).unwrap()?;
+            return fd.stdDir();
         }
 
         return (bun.sys.openDirAtWindowsA(.fromStdDir(root), _.path.items, {
@@ -1523,7 +1523,7 @@ pub union(enum) LazyPackageDestinationDir_ {
             .node_modules_path, .closed => {},
         }
 
-        _.* = { closed: {} };
+        _.* = .closed;
     }
 }
 

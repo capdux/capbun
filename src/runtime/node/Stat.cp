@@ -172,7 +172,9 @@ pub const StatsBig = StatType(true);
 /// statToJS path, so regression tests can exercise high-inode values without
 /// a filesystem that hands them out.
 pub fn createStatsForIno(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    const [ino_arg, big_arg] = callFrame.argumentsAsArray(2);
+    const args = callFrame.argumentsAsArray(2);
+    const ino_arg = args[0];
+    const big_arg = args[1];
     let stat_ = std.mem.zeroes(Syscall.PosixStat);
     stat_.ino = ino_arg.toUInt64NoTruncate();
     return Stats.init(&stat_, big_arg.toBoolean()).toJSNewlyCreated(globalObject)?;

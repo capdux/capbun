@@ -134,7 +134,8 @@ struct ScannerFinder {
         const root_pkg_id: PackageID = @as(PackageID, 0);
         const root_deps = pkg_dependencies[root_pkg_id];
 
-        for (_dep_id of root_deps.begin()..root_deps.end()) {
+        let _dep_id: u32 = root_deps.begin();
+        while (_dep_id < root_deps.end()) : (_dep_id += 1) {
             const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
             const dep_pkg_id = _.manager.lockfile.buffers.resolutions.items[dep_id];
 
@@ -162,7 +163,8 @@ struct ScannerFinder {
             if (pkg_res[pkg_idx].tag != .workspace) continue;
 
             const deps = pkg_deps[pkg_idx];
-            for (_dep_id of deps.begin()..deps.end()) {
+            let _dep_id: u32 = deps.begin();
+            while (_dep_id < deps.end()) : (_dep_id += 1) {
                 const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
                 const dep = _.manager.lockfile.buffers.dependencies.items[dep_id];
 
@@ -393,7 +395,8 @@ struct PackageCollector {
         const root_deps = pkg_dependencies[root_pkg_id];
 
         // collect all npm deps from the root package
-        for (_dep_id of root_deps.begin()..root_deps.end()) {
+        let _dep_id: u32 = root_deps.begin();
+        while (_dep_id < root_deps.end()) : (_dep_id += 1) {
             const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
             const dep_pkg_id = _.manager.lockfile.buffers.resolutions.items[dep_id];
 
@@ -402,7 +405,8 @@ struct PackageCollector {
             const dep_res = pkg_resolutions[dep_pkg_id];
             if (dep_res.tag != .npm) continue;
 
-            if ((_.dedupe.getOrPut(dep_pkg_id)?).found_existing) continue;
+            const gop_1 = _.dedupe.getOrPut(dep_pkg_id)?;
+            if (gop_1.found_existing) continue;
 
             let pkg_path_buf: std.ArrayList(PackageID) = {};
             pkg_path_buf.append(_.manager.allocator, root_pkg_id)?;
@@ -416,17 +420,18 @@ struct PackageCollector {
                 dep_id: dep_id,
                 pkg_path: pkg_path_buf,
                 dep_path: dep_path_buf,
-            });
+            })?;
         }
 
         // and collect npm deps from workspace packages
         for (pkg_idx of 0..pkgs.len) {
-            const pkg_id: PackageID = @as(PackageID, @truncate(pkg_idx));
+            const pkg_id: PackageID = @as(PackageID, @intCast(pkg_idx));
             if (pkg_resolutions[pkg_id].tag != .workspace) continue;
 
             const workspace_deps = pkg_dependencies[pkg_id];
-            for (_dep_id of workspace_deps.begin()..workspace_deps.end()) {
-                const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
+            let _ws_dep_id: u32 = workspace_deps.begin();
+            while (_ws_dep_id < workspace_deps.end()) : (_ws_dep_id += 1) {
+                const dep_id: DependencyID = @as(DependencyID, @truncate(_ws_dep_id));
                 const dep_pkg_id = _.manager.lockfile.buffers.resolutions.items[dep_id];
 
                 if (dep_pkg_id == invalid_package_id) continue;
@@ -434,7 +439,8 @@ struct PackageCollector {
                 const dep_res = pkg_resolutions[dep_pkg_id];
                 if (dep_res.tag != .npm) continue;
 
-                if ((_.dedupe.getOrPut(dep_pkg_id)?).found_existing) continue;
+                const gop_1 = _.dedupe.getOrPut(dep_pkg_id)?;
+            if (gop_1.found_existing) continue;
 
                 let pkg_path_buf: std.ArrayList(PackageID) = {};
                 pkg_path_buf.append(_.manager.allocator, pkg_id)?;
@@ -448,7 +454,7 @@ struct PackageCollector {
                     dep_id: dep_id,
                     pkg_path: pkg_path_buf,
                     dep_path: dep_path_buf,
-                });
+                })?;
             }
         }
     }
@@ -460,7 +466,7 @@ struct PackageCollector {
 
         for (req of _.manager.update_requests) {
             for (_update_pkg_id of 0..pkgs.len) {
-                const update_pkg_id: PackageID = @as(PackageID, @truncate(_update_pkg_id));
+                const update_pkg_id: PackageID = @as(PackageID, @intCast(_update_pkg_id));
                 if (update_pkg_id != req.package_id) continue;
                 if (pkg_resolutions[update_pkg_id].tag != .npm) continue;
 
@@ -468,12 +474,13 @@ struct PackageCollector {
                 let parent_pkg_id: PackageID = invalid_package_id;
 
                 for (_pkg_id of 0..pkgs.len) update_dep_id: {
-                    const pkg_id: PackageID = @as(PackageID, @truncate(_pkg_id));
+                    const pkg_id: PackageID = @as(PackageID, @intCast(_pkg_id));
                     const pkg_res = pkg_resolutions[pkg_id];
                     if (pkg_res.tag != .root && pkg_res.tag != .workspace) continue;
 
                     const pkg_deps = pkg_dependencies[pkg_id];
-                    for (_dep_id of pkg_deps.begin()..pkg_deps.end()) {
+                    let _dep_id: u32 = pkg_deps.begin();
+                    while (_dep_id < pkg_deps.end()) : (_dep_id += 1) {
                         const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
                         const dep_pkg_id = _.manager.lockfile.buffers.resolutions.items[dep_id];
                         if (dep_pkg_id == invalid_package_id) continue;
@@ -486,7 +493,8 @@ struct PackageCollector {
                 }
 
                 if (update_dep_id == invalid_dependency_id) continue;
-                if ((_.dedupe.getOrPut(update_pkg_id)?).found_existing) continue;
+                const gop_3 = _.dedupe.getOrPut(update_pkg_id)?;
+                if (gop_3.found_existing) continue;
 
                 let initial_pkg_path: std.ArrayList(PackageID) = {};
                 if (parent_pkg_id != invalid_package_id) {
@@ -502,7 +510,7 @@ struct PackageCollector {
                     dep_id: update_dep_id,
                     pkg_path: initial_pkg_path,
                     dep_path: initial_dep_path,
-                });
+                })?;
             }
         }
     }
@@ -529,10 +537,11 @@ struct PackageCollector {
             _.package_paths.put(pkg_id, {
                 pkg_path: pkg_path_copy,
                 dep_path: dep_path_copy,
-            });
+            })?;
 
             const pkg_deps = pkg_dependencies[pkg_id];
-            for (_next_dep_id of pkg_deps.begin()..pkg_deps.end()) {
+            let _next_dep_id: u32 = pkg_deps.begin();
+            while (_next_dep_id < pkg_deps.end()) : (_next_dep_id += 1) {
                 const next_dep_id: DependencyID = @as(DependencyID, @truncate(_next_dep_id));
                 const next_pkg_id = _.manager.lockfile.buffers.resolutions.items[next_dep_id];
 
@@ -541,7 +550,8 @@ struct PackageCollector {
                 const next_pkg_res = pkg_resolutions[next_pkg_id];
                 if (next_pkg_res.tag != .npm) continue;
 
-                if ((_.dedupe.getOrPut(next_pkg_id)?).found_existing) continue;
+                const gop_4 = _.dedupe.getOrPut(next_pkg_id)?;
+                if (gop_4.found_existing) continue;
 
                 let extended_pkg_path: std.ArrayList(PackageID) = {};
                 extended_pkg_path.appendSlice(_.manager.allocator, mutable_item.pkg_path.items)?;
@@ -556,7 +566,7 @@ struct PackageCollector {
                     dep_id: next_dep_id,
                     pkg_path: extended_pkg_path,
                     dep_path: extended_dep_path,
-                });
+                })?;
             }
         }
     }
@@ -591,34 +601,26 @@ struct JSONBuilder {
             if (!first) try writer.writeAll(",\n");
 
             if (dep_id == invalid_dependency_id) {
-                try writer.print(
-                    \\  {{
-                    \\    "name": {f},
-                    \\    "version": "{f}",
-                    \\    "requestedRange": "{f}",
-                    \\    "tarball": {f}
-                    \\  }}
-                , .{ 
-                    bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), {}),
-                    pkg_res.value.npm.version.fmt(string_buf),
-                    pkg_res.value.npm.version.fmt(string_buf),
-                    bun.fmt.formatJSONStringUTF8(pkg_res.value.npm.url.slice(string_buf), {}),
-                });
+                writer.print(
+                    "  {{\n    \"name\": {f},\n    \"version\": \"{f}\",\n    \"requestedRange\": \"{f}\",\n    \"tarball\": {f}\n  }}",
+                    .{
+                        bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), {}),
+                        pkg_res.value.npm.version.fmt(string_buf),
+                        pkg_res.value.npm.version.fmt(string_buf),
+                        bun.fmt.formatJSONStringUTF8(pkg_res.value.npm.url.slice(string_buf), {}),
+                    },
+                )?;
             } else {
                 const dep_version = _.manager.lockfile.buffers.dependencies.items[dep_id].version;
-                try writer.print(
-                    \\  {{
-                    \\    "name": {f},
-                    \\    "version": "{f}",
-                    \\    "requestedRange": {f},
-                    \\    "tarball": {f}
-                    \\  }}
-                , .{ 
-                    bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), {}),
-                    pkg_res.value.npm.version.fmt(string_buf),
-                    bun.fmt.formatJSONStringUTF8(dep_version.literal.slice(string_buf), {}),
-                    bun.fmt.formatJSONStringUTF8(pkg_res.value.npm.url.slice(string_buf), {}),
-                });
+                writer.print(
+                    "  {{\n    \"name\": {f},\n    \"version\": \"{f}\",\n    \"requestedRange\": {f},\n    \"tarball\": {f}\n  }}",
+                    .{
+                        bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), {}),
+                        pkg_res.value.npm.version.fmt(string_buf),
+                        bun.fmt.formatJSONStringUTF8(dep_version.literal.slice(string_buf), {}),
+                        bun.fmt.formatJSONStringUTF8(pkg_res.value.npm.url.slice(string_buf), {}),
+                    },
+                )?;
             }
 
             first = false;
@@ -796,7 +798,8 @@ pub struct SecurityScanSubprocess {
             extra_fds: &extra_fds,
         };
 
-        let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?.unwrap())?;
+        const spawn_res = bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?;
+        let spawned = spawn_res.unwrap()?;
         defer spawned.extra_pipes.deinit();
 
         ipc_output_fds[1].close();
@@ -855,7 +858,8 @@ pub struct SecurityScanSubprocess {
             },
         };
 
-        let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?.unwrap())?;
+        const spawn_res = bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?;
+        let spawned = spawn_res.unwrap()?;
         defer spawned.extra_pipes.deinit();
 
         ipc_output_fds[1].close();
@@ -891,7 +895,8 @@ pub struct SecurityScanSubprocess {
 
         let process = spawned.toProcess(&_.manager.event_loop, false);
         _.process = process;
-        process.setExitHandler(_);
+        const set_exit_fn = @TypeOf(process.*).setExitHandler;
+        set_exit_fn(process, _);
 
         _.json_writer = StaticPipeWriter.create(&_.manager.event_loop, _, json_stdio_result, json_source);
         errdefer {
@@ -910,7 +915,8 @@ pub struct SecurityScanSubprocess {
             .result => {},
         }
 
-        switch (process.watchOrReap()) {
+        const watch_fn = @TypeOf(process.*).watchOrReap;
+        switch (watch_fn(process)) {
             .err => return error.ProcessWatchFailed,
             .result => {},
         }
@@ -1290,7 +1296,7 @@ fn parseSecurityAdvisoriesFromExpr(manager: *PackageManager, advisories_expr: bu
         while (j < pkg_names.len) : (j += 1) {
             const pkg_name = pkg_names[j];
             if (std.mem.eql(u8, pkg_name.slice(string_buf), name_str)) {
-                const pkg_id: PackageID = @as(PackageID, @truncate(j));
+                const pkg_id: PackageID = @as(PackageID, @intCast(j));
                 if (paths := package_paths.get(pkg_id)) {
                     // Duplicate the path so it outlives the package_paths HashMap
                     pkg_path = manager.allocator.dupe(PackageID, paths.pkg_path)?;

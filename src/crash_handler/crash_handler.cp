@@ -951,7 +951,7 @@ struct DlIterateContext {
     }
 }
 
-const slash_chars_u16: []const u16 = ['\\', '/'];
+const slash_chars_u16: [2]u16 = ['\\', '/'];
 
 struct StackLine {
     address: i32,
@@ -974,7 +974,7 @@ struct StackLine {
                 return StackLine{
                     address: (addr - base_address) as i32,
                     object: if (!std.mem.eql(u16, name, image_path)) name_blk: {
-                        const slash_idx = std.mem.lastIndexOfAny(u16, name, slash_chars_u16);
+                        const slash_idx = std.mem.lastIndexOfAny(u16, name, &slash_chars_u16);
                         const start_idx = if (slash_idx != null) slash_idx.? + 1 else 0;
                         const basename = name[start_idx..];
                         break :name_blk bun.strings.convertUTF16toUTF8InBuffer(name_bytes, basename) catch null;

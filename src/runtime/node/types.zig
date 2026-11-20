@@ -191,8 +191,8 @@ return try jsc.WebCore.encoding.toStringComptime(input, globalObject, enc);
 }
     }
 
-pub fn toJS(self: *Encoding, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-            return WebCore_BufferEncodingType_toJS(globalObject, self);
+pub fn toJS(encoding: Encoding, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+            return WebCore_BufferEncodingType_toJS(globalObject, encoding);
     }
     
     pub const map = bun.ComptimeStringMap(Encoding, .{ .{ "utf-8", Encoding.utf8 }, .{ "utf8", Encoding.utf8 }, .{ "ucs-2", Encoding.utf16le }, .{ "ucs2", Encoding.utf16le }, .{ "utf16-le", Encoding.utf16le }, .{ "utf16le", Encoding.utf16le }, .{ "binary", Encoding.latin1 }, .{ "latin1", Encoding.latin1 }, .{ "ascii", Encoding.ascii }, .{ "base64", Encoding.base64 }, .{ "hex", Encoding.hex }, .{ "buffer", Encoding.buffer }, .{ "base64url", Encoding.base64url } });

@@ -767,7 +767,7 @@ const IOWriter = Interpreter.IOWriter;
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
 pub const Result = @import("../bun_core/result.zig").Result;
-const empty_args: [0][*:0]const u8 = &.{};
+const empty_args: [0][*:0]const u8 = undefined;
 pub const Impl = union(Kind) {
     cat: Cat,
     touch: Touch,

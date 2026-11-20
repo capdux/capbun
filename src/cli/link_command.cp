@@ -28,7 +28,7 @@ fn link(ctx: Command.Context)! {
 
         let lockfile: Lockfile = undefined;
         let name: string = "";
-        let package = Lockfile.Package{};
+        let package: Lockfile.Package = {};
 
         // Step 1. parse the nearest package.json file
         {
@@ -62,7 +62,9 @@ fn link(ctx: Command.Context)! {
             Bin.Linker.ensureUmask();
             let explicit_global_dir: string = "";
             if (install_ := ctx.install) {
-                explicit_global_dir = install_.global_dir ?? explicit_global_dir;
+                if (gd := install_.global_dir) {
+                    explicit_global_dir = gd;
+                }
             }
             manager.global_dir = Options.openGlobalDir(explicit_global_dir)?;
 
@@ -169,15 +171,7 @@ fn link(ctx: Command.Context)! {
         // Done
         if (manager.options.log_level != .silent)
             Output.prettyln(
-                \\<r><green>Success!<r> Registered "{[name]s}"
-                \\
-                \\To use {[name]s} in a project, run:
-                \\  <cyan>bun link {[name]s}<r>
-                \\
-                \\Or add it in dependencies in your package.json file:
-                \\  <cyan>"{[name]s}": "link:{[name]s}"<r>
-                \\
-            ,
+                "<r><green>Success!<r> Registered \"{[name]s}\"\n\nTo use {[name]s} in a project, run:\n  <cyan>bun link {[name]s}<r>\n\nOr add it in dependencies in your package.json file:\n  <cyan>\"{[name]s}\": \"link:{[name]s}\"<r>\n",
                 .{
                     .name = name,
                 },

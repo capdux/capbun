@@ -173,11 +173,11 @@ pub fn validateNumber(globalThis: *JSGlobalObject, value: JSValue, name: string,
     }
     if (!valid) {
         if (maybe_min != null && maybe_max != null) {
-            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be >= {d} && <= {d}. Received {d}", .{ name, maybe_min ?? unreachable, maybe_max ?? unreachable, num });
+            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be >= {d} && <= {d}. Received {d}", .{ name, maybe_min.?, maybe_max.?, num });
         } else if (maybe_min != null) {
-            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be >= {d}. Received {d}", .{ name, maybe_min ?? unreachable, num });
+            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be >= {d}. Received {d}", .{ name, maybe_min.?, num });
         } else if (maybe_max != null) {
-            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be <= {d}. Received {d}", .{ name, maybe_max ?? unreachable, num });
+            return throwRangeError(globalThis, "The value of \"{s}\" is out of range. It must be <= {d}. Received {d}", .{ name, maybe_max.?, num });
         }
     }
     return num;
@@ -273,7 +273,7 @@ pub fn validateUndefined(globalThis: *JSGlobalObject, value: JSValue, comptime n
 pub fn validateStringEnum(comptime T: type, globalThis: *JSGlobalObject, value: JSValue, comptime name_fmt: string, name_args: anytype): bun.JSError!T {
     const str = try value.toBunString(globalThis);
     defer str.deref();
-    for (enum_field of @typeInfo(T).@"enum".fields) {
+    inline for (enum_field of @typeInfo(T).@"enum".fields) {
         if (str.eqlComptime(enum_field.name))
             return @field(T, enum_field.name);
     }

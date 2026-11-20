@@ -89,19 +89,21 @@ pub fn Package(comptime SemverIntType: type): type {
             const old_extern_string_buf = old.buffers.extern_strings.items;
             let builder_ = new_lockfile.stringBuilder();
             let builder = &builder_;
+            const name_slice = @TypeOf(this.name).slice(&this.name, old_string_buf);
             debug("Clone: {s}@{f} ({s}, {d} dependencies)", .{
-                this.name.slice(old_string_buf),
+                name_slice,
                 this.resolution.fmt(old_string_buf, .auto),
                 @tagName(this.resolution.tag),
                 this.dependencies.len,
             });
 
-            builder.count(this.name.slice(old_string_buf));
+            builder.count(name_slice);
             this.resolution.count(old_string_buf, *Lockfile.StringBuilder, builder);
             this.@"meta".count(old_string_buf, *Lockfile.StringBuilder, builder);
             this.scripts.count(old_string_buf, *Lockfile.StringBuilder, builder);
             for (patched_dep of old.patched_dependencies.values()) {
-                builder.count(patched_dep.path.slice(old.buffers.string_bytes.items));
+                const pslice = @TypeOf(patched_dep.path).slice(&patched_dep.path, old.buffers.string_bytes.items);
+                builder.count(pslice);
             }
             const new_extern_string_count = this.bin.count(old_string_buf, old_extern_string_buf, *Lockfile.StringBuilder, builder);
             const old_dependencies: []const Dependency = this.dependencies.get(old.buffers.dependencies.items);
@@ -136,7 +138,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 {
                     name: builder.appendWithHash(
                         String,
-                        this.name.slice(old_string_buf),
+                        name_slice,
                         this.name_hash,
                     ),
                     bin: this.bin.clone(
@@ -189,21 +191,23 @@ pub fn Package(comptime SemverIntType: type): type {
 
             cloner.trees_count += @as(u32, @intFromBool(old_resolutions.len > 0));
 
-            for (old_resolutions, resolutions, 0..) |old_resolution, *resolution, i| {
+            let i: usize = 0;
+            while (i < old_resolutions.len) : (i += 1) {
+                const old_resolution = old_resolutions[i];
                 if (old_resolution >= max_package_id) {
-                    resolution.* = invalid_package_id;
+                    resolutions[i] = invalid_package_id;
                     continue;
                 }
 
                 const mapped = package_id_mapping[old_resolution];
                 if (mapped < max_package_id) {
-                    resolution.* = mapped;
+                    resolutions[i] = mapped;
                 } else {
-                    try cloner.clone_queue.append({
+                    cloner.clone_queue.append({
                         old_resolution: old_resolution,
                         parent: new_package.@"meta".id,
                         resolve_id: new_package.resolutions.off + @as(PackageID, @intCast(i)),
-                    });
+                    })?;
                 }
             }
 
@@ -710,7 +714,8 @@ pub fn Package(comptime SemverIntType: type): type {
                             while (entry := from_trusted_iter.next()) {
                                 const from_trusted = entry.key_ptr.*;
                                 if (!to_trusted_dependencies.contains(from_trusted)) {
-                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, {})?;
+                                    const void_val: void = undefined;
+                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
                                 }
                             }
                         }
@@ -739,7 +744,8 @@ pub fn Package(comptime SemverIntType: type): type {
                             while (entry := from_trusted_iter.next()) {
                                 const from_trusted = entry.key_ptr.*;
                                 if (!default_trusted_dependencies.hasWithHash(@intCast(from_trusted))) {
-                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, {})?;
+                                    const void_val: void = undefined;
+                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
                                 }
                             }
                         }
@@ -863,7 +869,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 package_json_path.append("package.json");
 
                                 let source_file: bun.logger.Source = undefined;
-                                if (src_opt := bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap()) {
+                                if (src_opt := bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap() catch null) {
                                     source_file = src_opt;
                                 } else {
                                     break :update_mapping false;
@@ -872,25 +878,25 @@ pub fn Package(comptime SemverIntType: type): type {
 
                                 let workspace_pkg: PackageType = {};
 
-                                let json: bun.PackageJSON = undefined;
-                                if (json_opt := pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap()) {
-                                    json = json_opt;
+                                let json_root: bun.ast.Expr = undefined;
+                                if (json_opt := pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap() catch null) {
+                                    json_root = json_opt.root;
                                 } else {
                                     break :update_mapping false;
                                 }
 
-                                let resolver: void = {};
-                                try workspace_pkg.parseWithJSON(
+                                let resolver: void = undefined;
+                                workspace_pkg.parseWithJSON(
                                     to_lockfile,
                                     pm,
                                     allocator,
                                     log,
                                     source,
-                                    json.root,
+                                    json_root,
                                     void,
                                     &resolver,
                                     Features.workspace,
-                                );
+                                )?;
 
                                 to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
 
@@ -1583,15 +1589,15 @@ pub fn Package(comptime SemverIntType: type): type {
             }
 
             if (comptime features.is_main) {
-                lockfile.overrides.parseCount(lockfile, json, &string_builder);
+                @TypeOf(lockfile.overrides).parseCount(lockfile, json, &string_builder);
 
                 if (workspaces_expr := json.get("workspaces")) {
-                    lockfile.catalogs.parseCount(lockfile, workspaces_expr, &string_builder);
+                    @TypeOf(lockfile.catalogs).parseCount(lockfile, workspaces_expr, &string_builder);
                 }
 
                 // Count catalog strings in top-level package.json as well, since parseAppend
                 // might process them later if no catalogs were found in workspaces
-                lockfile.catalogs.parseCount(lockfile, json, &string_builder);
+                @TypeOf(lockfile.catalogs).parseCount(lockfile, json, &string_builder);
 
                 install.PostinstallOptimizer.fromPackageJSON(&pm.postinstall_optimizer, &json, allocator)?;
             }

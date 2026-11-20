@@ -91,7 +91,9 @@ pub fn install(ctx: Command.Context) !void {
             _ = &analyzer;
             var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{ .ctx = (&analyzer), .entry_points = cli.positionals[1..], .onFetch = @ptrCast((&Analyzer.onAnalyze)) };
             _ = &fetcher;
-            _ = try bun.cli.BuildCommand.exec(bun.cli.Command.get());
+            const fetcher_ptr: *bun.bundle_v2.BundleV2.DependenciesScanner = (&fetcher);
+            const exec_fn = bun.cli.BuildCommand.exec;
+            _ = try exec_fn(bun.cli.Command.get(), fetcher_ptr);
             return;
         }
         return installWithCLI(ctx, cli);

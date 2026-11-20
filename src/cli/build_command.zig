@@ -426,7 +426,12 @@ _ = Output.err(e, "could not write metafile-md {f}", .{ bun.fmt.quote(ctx.bundle
             _ = &output_dir;
             const will_be_one_file = (ctx.bundler_options.compile or ((output_files.len == 1) and ((if (@typeInfo(@TypeOf(output_files[0])) == .@"enum") @intFromEnum(output_files[0]) else output_files[0].value) == .buffer)));
             if ((((output_dir.len == 0) and (outfile.len > 0)) and will_be_one_file)) {
-                if (output_dir == null) { output_dir = "."; }
+                if (std.fs.path.dirname(outfile)) |d| {
+                    _ = &d;
+                    output_dir = d;
+                } else {
+                    output_dir = ".";
+                }
                 if (ctx.bundler_options.compile) {
                     for (cp_mut_slice(&output_files)) |*f| {
                         _ = &f;
@@ -450,7 +455,12 @@ _ = Output.err(e, "could not write metafile-md {f}", .{ bun.fmt.quote(ctx.bundle
             var root_path = output_dir;
             _ = &root_path;
             if (((root_path.len == 0) and (ctx.args.entry_points.len == 1))) {
-                if (root_path == null) { root_path = "."; }
+                if (std.fs.path.dirname(ctx.args.entry_points[0])) |d| {
+                    _ = &d;
+                    root_path = d;
+                } else {
+                    root_path = ".";
+                }
             }
             const root_dir = (if (((root_path.len == 0) or strings.eqlComptime(root_path, "."))) std.fs.cwd() else (blk_catch_4: { break :blk_catch_4 ((std.fs.cwd().makeOpenPath(root_path, .{})) catch |e| { _ = &e; _ = Output.err(e, "could not open output directory {f}", .{ bun.fmt.quote(root_path) });
             _ = exitOrWatch(1, (ctx.debug.hot_reload == .watch));
@@ -470,10 +480,10 @@ _ = Output.err(e, "could not write metafile-md {f}", .{ bun.fmt.quote(ctx.bundle
             const from_path = resolve_path.longestCommonPath(all_paths);
             var size_padding: usize = 0;
             _ = &size_padding;
-            for (cp_iter_slice(output_files)) |f| {
+            for (cp_mut_slice(&output_files)) |*f| {
                 _ = &f;
-                max_path_len = @max(((@max(from_path.len, f.dest_path.len) + 2) - from_path.len), max_path_len);
-                size_padding = @max(size_padding, std.fmt.count("{f}", .{ bun.fmt.size(f.size, .{}) }));
+                max_path_len = @max(((@max(from_path.len, (f.*).dest_path.len) + 2) - from_path.len), max_path_len);
+                size_padding = @max(size_padding, std.fmt.count("{f}", .{ bun.fmt.size((f.*).size, .{}) }));
             }
             if (ctx.bundler_options.compile) {
                 _ = printSummary(bundled_end, minify_duration, ((this_transpiler.options.minify_identifiers or this_transpiler.options.minify_whitespace) or this_transpiler.options.minify_syntax), input_code_length, reachable_file_count, output_files);
@@ -498,14 +508,14 @@ _ = Output.err(e, "could not write metafile-md {f}", .{ bun.fmt.quote(ctx.bundle
                     _ = Global.exit(1);
                 }
                 if ((this_transpiler.options.source_map == .external)) {
-                    for (cp_iter_slice(output_files)) |f| {
+                    for (cp_mut_slice(&output_files)) |*f| {
                         _ = &f;
-                        if (((f.output_kind == .sourcemap) and ((if (@typeInfo(@TypeOf(f)) == .@"enum") @intFromEnum(f) else f.value) == .buffer))) {
-                            const sourcemap_bytes = (if (@typeInfo(@TypeOf(f)) == .@"enum") @intFromEnum(f) else f.value).buffer.bytes;
+                        if ((((f.*).output_kind == .sourcemap) and ((if (@typeInfo(@TypeOf((f.*))) == .@"enum") @intFromEnum((f.*)) else (f.*).value) == .buffer))) {
+                            const sourcemap_bytes = (if (@typeInfo(@TypeOf((f.*))) == .@"enum") @intFromEnum((f.*)) else (f.*).value).buffer.bytes;
                             if ((sourcemap_bytes.len == 0)) {
                                 continue;
                             }
-                            const map_basename = (if ((f.dest_path.len > 0)) bun.path.basename(f.dest_path) else brk: {
+                            const map_basename = (if (((f.*).dest_path.len > 0)) bun.path.basename((f.*).dest_path) else brk: {
                             const exe_base = bun.path.basename(outfile);
                             break :brk (if (((compile_target.os == .windows) and (!strings.hasSuffixComptime(exe_base, ".exe")))) try std.fmt.allocPrint(allocator, "{s}.exe.map", .{ exe_base }) else try std.fmt.allocPrint(allocator, "{s}.map", .{ exe_base }));
 });
@@ -552,21 +562,21 @@ else => 0,
                 _ = Output.prettyln("\n", .{});
                 _ = Output.flush();
             }
-            for (cp_iter_slice(output_files)) |f| {
+            for (cp_mut_slice(&output_files)) |*f| {
                 _ = &f;
-                size_padding = @max(size_padding, std.fmt.count("{f}", .{ bun.fmt.size(f.size, .{}) }));
+                size_padding = @max(size_padding, std.fmt.count("{f}", .{ bun.fmt.size((f.*).size, .{}) }));
             }
-            for (cp_iter_slice(output_files)) |f| {
+            for (cp_mut_slice(&output_files)) |*f| {
                 _ = &f;
-                _ = (blk_catch_6: { break :blk_catch_6 ((f.writeToDisk(root_dir, from_path)) catch |e| { _ = &e; _ = Output.err(e, "failed to write file '{f}'", .{ bun.fmt.quote(f.dest_path) });
+                _ = (blk_catch_6: { break :blk_catch_6 (((f.*).writeToDisk(root_dir, from_path)) catch |e| { _ = &e; _ = Output.err(e, "failed to write file '{f}'", .{ bun.fmt.quote((f.*).dest_path) });
                 had_err = true;
                 continue; }); });
-                _ = bun.debugAssert((!std.fs.path.isAbsolute(f.dest_path)));
-                const rel_path = bun.strings.trimPrefixComptime(u8, f.dest_path, "./");
+                _ = bun.debugAssert((!std.fs.path.isAbsolute((f.*).dest_path)));
+                const rel_path = bun.strings.trimPrefixComptime(u8, (f.*).dest_path, "./");
                 const padding_count = @max(2, (@max(rel_path.len, max_path_len) - rel_path.len));
                 _ = try writer.splatByteAll(32, 2);
                 if (Output.enable_ansi_colors_stdout) {
-                    _ = try writer.writeAll((switch (f.output_kind) {
+                    _ = try writer.writeAll((switch ((f.*).output_kind) {
 .@"entry-point" => Output.prettyFmt("<blue>", true),
 .chunk => Output.prettyFmt("<cyan>", true),
 .asset => Output.prettyFmt("<magenta>", true),
@@ -578,24 +588,24 @@ else => 0,
                 }
                 _ = try writer.writeAll(rel_path);
                 if (Output.enable_ansi_colors_stdout) {
-                    const warn_threshold: usize = (switch (f.output_kind) {
+                    const warn_threshold: usize = (switch ((f.*).output_kind) {
 .@"entry-point", .chunk => (if (comptime @typeInfo(@TypeOf((128 * 1024))) == .@"enum") cp_cast_int(usize, @intFromEnum((128 * 1024))) else cp_cast_int(usize, (128 * 1024))),
 .asset => (if (comptime @typeInfo(@TypeOf(((16 * 1024) * 1024))) == .@"enum") cp_cast_int(usize, @intFromEnum(((16 * 1024) * 1024))) else cp_cast_int(usize, ((16 * 1024) * 1024))),
 else => std.math.maxInt(usize),
 });
-                    if ((f.size > warn_threshold)) {
+                    if (((f.*).size > warn_threshold)) {
                         _ = try writer.writeAll(Output.prettyFmt("<yellow>", true));
                     } else {
                         _ = try writer.writeAll("\x1b[0m");
                     }
                 }
                 _ = try writer.splatByteAll(32, padding_count);
-                _ = try writer.print("{f}  ", .{ bun.fmt.size(f.size, .{}) });
-                _ = try writer.splatByteAll(32, (size_padding - std.fmt.count("{f}", .{ bun.fmt.size(f.size, .{}) })));
+                _ = try writer.print("{f}  ", .{ bun.fmt.size((f.*).size, .{}) });
+                _ = try writer.splatByteAll(32, (size_padding - std.fmt.count("{f}", .{ bun.fmt.size((f.*).size, .{}) })));
                 if (Output.enable_ansi_colors_stdout) {
                     _ = try writer.writeAll("\x1b[2m");
                 }
-                _ = try writer.print("({s})", .{ (switch (f.output_kind) {
+                _ = try writer.print("({s})", .{ (switch ((f.*).output_kind) {
 .@"entry-point" => "entry point",
 .chunk => "chunk",
 .asset => "asset",
@@ -652,10 +662,10 @@ else => 0,
             const output_size = brk: {
             var total_size: u64 = 0;
             _ = &total_size;
-            for (cp_iter_slice(output_files)) |f| {
+            for (cp_mut_slice(&output_files)) |*f| {
                 _ = &f;
-                if ((f.loader == .js)) {
-                    total_size = (total_size + f.size_without_sourcemap);
+                if (((f.*).loader == .js)) {
+                    total_size = (total_size + (f.*).size_without_sourcemap);
                 }
             }
             break :brk total_size;

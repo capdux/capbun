@@ -78,7 +78,7 @@ pub struct UntrustedCommand {
             const alias = dep.name.slice(buf);
             const resolution = &resolutions[package_id];
             if (!pm.lockfile.hasTrustedDependency(alias, resolution)) {
-                untrusted_dep_ids.put(ctx.allocator, dep_id, .{})?;
+                untrusted_dep_ids.put(ctx.allocator, dep_id, @as(void, undefined))?;
             }
         }
 
@@ -147,29 +147,23 @@ pub struct UntrustedCommand {
             const dep_id = entry.key_ptr.*;
             const scripts_list = entry.value_ptr.*;
             const package_id = pm.lockfile.buffers.resolutions.items[dep_id];
-            const resolution = pm.lockfile.packages.items(.resolution)[package_id];
+            const resolution = &pm.lockfile.packages.items(.resolution)[package_id];
 
-            scripts_list.printScripts(&resolution, buf, .untrusted);
+            scripts_list.printScripts(resolution, buf, .untrusted);
             Output.pretty("\n", .{});
         }
 
         Output.pretty(
-            \\These dependencies had their lifecycle scripts blocked during install.
-            \\
-            \\If you trust them and wish to run their scripts, use <d>`<r><blue>bun pm trust<r><d>`<r>.
-            \\
-        , .{});
+            "These dependencies had their lifecycle scripts blocked during install.\n\nIf you trust them and wish to run their scripts, use <d>`<r><blue>bun pm trust<r><d>`<r>.\n",
+            .{},
+        );
     }
 
     static fn printZeroUntrustedDependenciesFound() {
         Output.pretty(
-            \\Found <b>0<r> untrusted dependencies with scripts.
-            \\
-            \\This means all packages with scripts are in "trustedDependencies" or none of your dependencies have scripts.
-            \\
-            \\For more information, visit <magenta>https://bun.com/docs/install/lifecycle#trusteddependencies<r>
-            \\
-        , .{});
+            "Found <b>0<r> untrusted dependencies with scripts.\n\nThis means all packages with scripts are in \"trustedDependencies\" or none of your dependencies have scripts.\n\nFor more information, visit <magenta>https://bun.com/docs/install/lifecycle#trusteddependencies<r>\n",
+            .{},
+        );
     }
 }
 
@@ -233,7 +227,7 @@ pub struct TrustCommand {
             const alias = dep.name.slice(buf);
             const resolution = &resolutions[package_id];
             if (!pm.lockfile.hasTrustedDependency(alias, resolution)) {
-                untrusted_dep_ids.put(ctx.allocator, dep_id, .{})?;
+                untrusted_dep_ids.put(ctx.allocator, dep_id, @as(void, undefined))?;
             }
         }
 
@@ -317,7 +311,7 @@ pub struct TrustCommand {
                         })?;
 
                         if (!skip) {
-                            package_names_to_add.put(ctx.allocator, ctx.allocator.dupe(u8, alias)?, .{})?;
+                            package_names_to_add.put(ctx.allocator, ctx.allocator.dupe(u8, alias)?, @as(void, undefined))?;
                             scripts_count += scripts_list.total;
                         }
                     }
@@ -414,14 +408,14 @@ pub struct TrustCommand {
             let iter = std.mem.reverseIterator(scripts_at_depth.values());
             while (entry := iter.next()) {
                 for (info of entry.items) {
-                    const resolution = pm.lockfile.packages.items(.resolution)[info.package_id];
+                    const resolution = &pm.lockfile.packages.items(.resolution)[info.package_id];
                     if (info.skip) {
-                        info.scripts_list.printScripts(&resolution, buf, .untrusted);
+                        info.scripts_list.printScripts(resolution, buf, .untrusted);
                         total_skipped_packages += 1;
                     } else {
                         total_packages_with_scripts += 1;
                         total_scripts_ran += info.scripts_list.total;
-                        info.scripts_list.printScripts(&resolution, buf, .completed);
+                        info.scripts_list.printScripts(resolution, buf, .completed);
                     }
                     Output.print("\n", .{});
                 }
@@ -431,7 +425,7 @@ pub struct TrustCommand {
         Install.PackageManager.PackageJSONEditor.editTrustedDependencies(ctx.allocator, &package_json, names)?;
 
         for (name of names) {
-            pm.lockfile.trusted_dependencies.?.put(ctx.allocator, @truncate(String.Builder.stringHash(name)), .{})?;
+            pm.lockfile.trusted_dependencies.?.put(ctx.allocator, @truncate(String.Builder.stringHash(name)), @as(void, undefined))?;
         }
 
         pm.lockfile.saveToDisk(&load_lockfile, &pm.options);

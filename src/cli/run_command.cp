@@ -50,7 +50,7 @@ pub struct RunCommand {
             }
         }
 
-        const hardcoded_popular_ones = [
+        const hardcoded_popular_ones: [8][:0]const u8 = [
             "/bin/bash",
             "/usr/bin/bash",
             "/usr/local/bin/bash", // don't think this is a real one
@@ -271,7 +271,7 @@ pub struct RunCommand {
             return;
         }
 
-        const argv = [
+        const argv: [3]string = [
             shell_bin,
             if (Environment.isWindows) "/c" else "-c",
             copy_script.items,
@@ -283,6 +283,7 @@ pub struct RunCommand {
             break :blk bun.FD.fromNative(fd);
         } else null; // TODO: implement on Windows
 
+        const void_val: void = undefined;
         const spawn_result = switch ((bun.spawnSync(&{
             argv: &argv,
             argv0: shell_bin.ptr,
@@ -299,7 +300,7 @@ pub struct RunCommand {
 
             windows: if (Environment.isWindows) .{
                 .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
-            },
+            } else void_val,
         }) catch |e| {
             if (!silent) {
                 Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ name, @errorName(e) });
@@ -445,7 +446,7 @@ pub struct RunCommand {
         passthrough: []const string,
         original_script_for_bun_run: ([]const u8)?,
     ): !noreturn {
-        let argv_ = [executable];
+        let argv_: [1]string = [executable];
         let argv: []const string = &argv_;
 
         if (passthrough.len > 0) {
@@ -472,7 +473,7 @@ pub struct RunCommand {
 
             windows: if (Environment.isWindows) .{
                 .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
-            },
+            } else @as(void, undefined),
         }) catch |e| {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
@@ -645,44 +646,45 @@ pub struct RunCommand {
 
     static fn createFakeTemporaryNodeExecutable(
         PATH: *std.array_list.Managed(u8),
-        optional_bun_path: *string,
-    )! {
+        initial_bun_path: string,
+    ): string! {
+        let out_bun_path = initial_bun_path;
         // If we are already running as "node", the path should exist
-        if (CLI.pretend_to_be_node) return;
+        if (CLI.pretend_to_be_node) return out_bun_path;
 
         if (Environment.isPosix) {
-            let argv0 = @as([*:0]const u8, @ptrCast(optional_bun_path.ptr));
+            let argv0 = @as([*:0]const u8, @ptrCast(out_bun_path.ptr));
 
             // if we are already an absolute path, use that
             // if the user started the application via a shebang, it's likely that the path is absolute already
             if (bun.argv[0][0] == '/') {
-                optional_bun_path.* = bun.argv[0];
+                out_bun_path = bun.argv[0];
                 argv0 = bun.argv[0];
-            } else if (optional_bun_path.len == 0) {
+            } else if (out_bun_path.len == 0) {
                 // otherwise, ask the OS for the absolute path
                 const self = bun.selfExePath()?;
                 if (self.len > 0) {
                     argv0 = self.ptr;
-                    optional_bun_path.* = self;
+                    out_bun_path = self;
                 }
             }
 
-            if (optional_bun_path.len == 0) {
+            if (out_bun_path.len == 0) {
                 argv0 = bun.argv[0];
             }
 
             if (Environment.isDebug) {
                 std.fs.deleteTreeAbsolute(bun_node_dir) catch {};
             }
-            const paths = .{ bun_node_dir ++ "/node", bun_node_dir ++ "/bun" };
-            inline for (path of paths) {
+            const paths: [2][:0]const u8 = [ bun_node_dir ++ "/node", bun_node_dir ++ "/bun" ];
+            for (path of paths) {
                 let retried = false;
                 while (true) {
                     inner: {
                         std.posix.symlinkZ(argv0, path) catch |e| {
                             if (e == error.PathAlreadyExists) break :inner;
                             if (retried)
-                                return;
+                                return out_bun_path;
 
                             std.fs.makeDirAbsoluteZ(bun_node_dir) catch {};
 
@@ -712,7 +714,7 @@ pub struct RunCommand {
             );
             if (len == 0) {
                 Output.debug("Failed to create temporary node dir: {s}", .{@tagName(std.os.windows.kernel32.GetLastError())});
-                return;
+                return out_bun_path;
             }
 
             @memcpy(target_path_buffer[0..prefix.len], prefix);
@@ -752,7 +754,7 @@ pub struct RunCommand {
                             }
 
                             if (bun.windows.CreateHardLinkW(@ptrCast(file_slice.ptr), image_path.ptr, null) == 0) {
-                                return;
+                                return out_bun_path;
                             }
                         },
                     }
@@ -768,6 +770,7 @@ pub struct RunCommand {
             bun.strings.toUTF8AppendToList(PATH, dir_slice[prefix.len..])?;
             PATH.append(std.fs.path.delimiter)?;
         }
+        return out_bun_path;
     }
 
     pub const Filter = enum { script, bin, all, bun_js, all_plus_bun_js, script_and_descriptions, script_exclude };
@@ -848,7 +851,7 @@ pub struct RunCommand {
 
         if (this_transpiler.env.get("npm_execpath") == null) {
             // we don't care if this fails
-            if (self_exe_path := bun.selfExePath()) {
+            if (self_exe_path := bun.selfExePath() catch null) {
                 this_transpiler.env.map.putDefault("npm_execpath", self_exe_path) catch unreachable;
             }
         }
@@ -876,7 +879,8 @@ pub struct RunCommand {
                 while (config_i < config_keys.len) : (config_i += 1) {
                     const k = config_keys[config_i];
                     const v = config_vals[config_i];
-                    const key = bun.strings.concat(bun.default_allocator, [ "npm_package_config_", k ])?;
+                    const parts: [2][]const u8 = [ "npm_package_config_", k ];
+                    const key = bun.strings.concat(bun.default_allocator, &parts)?;
                     this_transpiler.env.map.putAssumeCapacity(key, v);
                 }
             }
@@ -889,7 +893,7 @@ pub struct RunCommand {
         ctx: Command.Context,
         package_json_dir: string,
         this_transpiler: *transpiler.Transpiler,
-        ORIGINAL_PATH: (*string)?,
+        ORIGINAL_PATH: (*[]const u8)?,
         cwd: string,
         force_using_bun: bool,
     ): ![]u8 {
@@ -930,9 +934,9 @@ pub struct RunCommand {
         let new_path = std.array_list.Managed(u8).initCapacity(ctx.allocator, new_path_len)?;
 
         if (needs_to_force_bun) {
-            createFakeTemporaryNodeExecutable(
+            optional_bun_self_path = createFakeTemporaryNodeExecutable(
                 &new_path,
-                &optional_bun_self_path,
+                optional_bun_self_path,
             ) catch |e| {
                 if (e == error.OutOfMemory) {
                     bun.outOfMemory();
@@ -980,7 +984,7 @@ pub struct RunCommand {
         ctx: Command.Context,
         root_dir_info: *DirInfo,
         this_transpiler: *transpiler.Transpiler,
-        ORIGINAL_PATH: (*string)?,
+        ORIGINAL_PATH: (*[]const u8)?,
         cwd: string,
         force_using_bun: bool,
     )! {
@@ -1159,15 +1163,15 @@ pub struct RunCommand {
                                     if (description.len > 0 && strings.startsWith(description, "NODE_OPTIONS=")) {
                                         if (i := strings.indexOfChar(description, '=')) {
                                             const delimiter: u8 = if (description.len > i + 1)
-                                                @as(u8, switch (description[i + 1]) {
-                                                    '\'' => '\'',
-                                                    '"' => '"',
-                                                    else => ' ',
-                                                })
+                                                switch (description[i + 1]) {
+                                                    '\'' => @as(u8, '\''),
+                                                    '"' => @as(u8, '"'),
+                                                    else => @as(u8, ' '),
+                                                }
                                             else
                                                 break :trimmer;
 
-                                            const delimiter_offset = @as(usize, if (delimiter == ' ') 1 else 2);
+                                            const delimiter_offset: usize = if (delimiter == ' ') @as(usize, 1) else @as(usize, 2);
                                             if (description.len > delimiter_offset + i) {
                                                 if (j := strings.indexOfChar(description[delimiter_offset + i ..], delimiter)) {
                                                     description = std.mem.trim(u8, description[delimiter_offset + i ..][j + 1 ..], " ");
@@ -1537,7 +1541,7 @@ pub struct RunCommand {
             image_base_dir: image_base_dir,
         };
 
-        const rendered = bun.md.renderToAnsi(
+        const rendered_opt = bun.md.renderToAnsi(
             contents,
             bun.default_allocator,
             md_opts,
@@ -1549,13 +1553,14 @@ pub struct RunCommand {
                 Output.flush();
                 Global.exit(1);
             },
-        } orelse {
+        };
+        if (rendered := rendered_opt) {
+            Output.writer().writeAll(rendered) catch {};
+        } else {
             Output.prettyErrorln("<r><red>error<r>: failed to render markdown", {});
             Output.flush();
             Global.exit(1);
-        };
-
-        Output.writer().writeAll(rendered) catch {};
+        }
         Output.flush();
         // Temp files prefetchRemoteImages() wrote are deliberately NOT
         // unlinked here. Output.flush() only guarantees the APC bytes
@@ -1639,7 +1644,7 @@ pub struct RunCommand {
             switch (bun.sys.fstat(file)) {
                 .result => |stat| {
                     // directories cannot be run. if only there was a faster way to check this
-                    if (bun.S.ISDIR(i32(stat.mode))) return false;
+                    if (bun.S.ISDIR(usize(stat.mode))) return false;
                 },
                 .err => return false,
             }
@@ -1791,7 +1796,7 @@ pub struct RunCommand {
                             [],
                             ctx.debug.silent,
                             ctx.debug.use_system_shell,
-                        );
+                        )?;
                     }
 
                     runPackageScriptForeground(
@@ -1804,7 +1809,7 @@ pub struct RunCommand {
                         passthrough,
                         ctx.debug.silent,
                         ctx.debug.use_system_shell,
-                    );
+                    )?;
 
                     @memcpy(temp_script_buffer[0.."post".len], "post");
 
@@ -1819,7 +1824,7 @@ pub struct RunCommand {
                             [],
                             ctx.debug.silent,
                             ctx.debug.use_system_shell,
-                        );
+                        )?;
                     }
 
                     return true;
@@ -1837,6 +1842,7 @@ pub struct RunCommand {
             defer this_transpiler.resolver.opts.preserve_symlinks = preserve_symlinks;
             this_transpiler.resolver.opts.preserve_symlinks = ctx.runtime_options.preserve_symlinks_main ||
                 bun.env_var.NODE_PRESERVE_SYMLINKS_MAIN.get();
+            const join_parts: [2]string = [ "./", target_name ];
             break :brk this_transpiler.resolver.resolve(
                 this_transpiler.fs.top_level_dir,
                 target_name,
@@ -1844,12 +1850,12 @@ pub struct RunCommand {
             ) catch
                 this_transpiler.resolver.resolve(
                     this_transpiler.fs.top_level_dir,
-                    std.mem.join(ctx.allocator, "", [ "./", target_name ])?,
+                    std.mem.join(ctx.allocator, "", &join_parts)?,
                     .entry_point_run,
                 );
         };
         let resolved_to_unrunnable_file: UnrunnableFile? = null;
-        if (resolved := resolution) {
+        if (resolved := resolution catch null) {
             let resolved_mutable = resolved;
             const path = resolved_mutable.path().?;
             const loader: bun.options.Loader = this_transpiler.options.loaders.get(path.name.ext) ??

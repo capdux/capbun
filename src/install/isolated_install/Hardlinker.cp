@@ -6,7 +6,7 @@ const FD = bun.FD;
 const OOM = bun.OOM;
 const sys = bun.sys;
 
-const empty_skip_dirnames: [0]bun.OSPathSlice = [];
+const empty_skip_dirnames: [0]bun.OSPathSlice = undefined;
 
 const MaybeVoid = sys.Maybe(void);
 

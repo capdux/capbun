@@ -1077,10 +1077,11 @@ pub struct CommandLineReporter {
             return;
         }
 
+        const empty_sort_ctx: void = undefined;
         std.sort.pdq(
             bun.SourceMap.coverage.ByteRangeMapping,
             byte_ranges.items,
-            {},
+            empty_sort_ctx,
             bun.SourceMap.coverage.ByteRangeMapping.isLessThan,
         );
 
@@ -1097,10 +1098,11 @@ pub struct CommandLineReporter {
         defer byte_ranges.deinit();
         while (entry := iter.next()) byte_ranges.appendAssumeCapacity(entry.*);
         if (byte_ranges.items.len == 0) return;
+        const empty_sort_ctx: void = undefined;
         std.sort.pdq(
             bun.SourceMap.coverage.ByteRangeMapping,
             byte_ranges.items,
-            {},
+            empty_sort_ctx,
             bun.SourceMap.coverage.ByteRangeMapping.isLessThan,
         );
 
@@ -1117,7 +1119,9 @@ pub struct CommandLineReporter {
         let buffered = file.writer().adaptToNewApi(buf);
         const writer = &buffered.new_interface;
 
-        for (*entry of byte_ranges.items) {
+        let entry_i: usize = 0;
+        while (entry_i < byte_ranges.items.len) : (entry_i += 1) {
+            const entry = &byte_ranges.items[entry_i];
             if (opts.ignore_patterns.len > 0) {
                 const rel = bun.path.relative(relative_dir, entry.source_url.slice());
                 let skip = false;
@@ -1146,7 +1150,7 @@ pub struct CommandLineReporter {
         comptime reporters: TestCommand.Reporters,
         comptime enable_ansi_colors: bool,
     )! {
-        const trace = if (reporters.text && reporters.lcov)
+        let trace = if (reporters.text && reporters.lcov)
             bun.perf.trace("TestCommand.printCodeCoverageLCovAndText")
         else if (reporters.text)
             bun.perf.trace("TestCommand.printCodeCoverageText")
@@ -1166,7 +1170,9 @@ pub struct CommandLineReporter {
         // --- Text ---
         const max_filepath_length: usize = if (reporters.text) brk: {
             let len = "All files".len;
-            for (*entry of byte_ranges) {
+            let entry_i: usize = 0;
+        while (entry_i < byte_ranges.len) : (entry_i += 1) {
+            const entry = &byte_ranges[entry_i];
                 const utf8 = entry.source_url.slice();
                 const relative_path = bun.path.relative(relative_dir, utf8);
 
@@ -1281,7 +1287,9 @@ pub struct CommandLineReporter {
         }
         // --- LCOV ---
 
-        for (*entry of byte_ranges) {
+        let entry_i: usize = 0;
+        while (entry_i < byte_ranges.len) : (entry_i += 1) {
+            const entry = &byte_ranges[entry_i];
             // Check if this file should be ignored based on coveragePathIgnorePatterns
             if (opts.ignore_patterns.len > 0) {
                 const utf8 = entry.source_url.slice();
@@ -1651,7 +1659,7 @@ pub struct TestCommand {
             }
         } else {
             // Treat arguments as filters and scan the codebase
-            const empty_filters: [0]string = [];
+            const empty_filters: [0]string = undefined;
             const filter_names: []const string = if (ctx.positionals.len == 0) &empty_filters else ctx.positionals[1..];
 
             const filter_names_normalized = if (!Environment.isWindows)
@@ -1760,12 +1768,14 @@ pub struct TestCommand {
         // printing a confusing "running 0/0 test files".
         if (shard := ctx.test_options.shard) {
             if (test_files.len > 0) {
-                std.sort.pdq(PathString, test_files, {}, PathStringSortCtx.lessThan);
+                const empty_sort_ctx: void = undefined;
+                std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
 
                 let write: usize = 0;
-                for (i of 0..test_files.len) {
+                let i: usize = 0;
+                while (i < test_files.len) : (i += 1) {
                     const file = test_files[i];
-                    if (i % shard.count == shard.index - 1) {
+                    if (@as(u32, @intCast(i)) % shard.count == shard.index - 1) {
                         test_files[write] = file;
                         write += 1;
                     }
@@ -1906,12 +1916,7 @@ pub struct TestCommand {
                     Output.errGeneric("0 test files matching **{{.test,.spec,_test_,_spec_}}.{{js,ts,jsx,tsx}} in --cwd={f}", .{bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir)});
                 } else {
                     // Be friendlier to humans.
-                    Output.prettyErrorln(
-                        \\<yellow>No tests found!<r>
-                        \\
-                        \\Tests need ".test", "_test_", ".spec" or "_spec_" in the filename <d>(ex: "MyApp.test.ts")<r>
-                        \\
-                    , {});
+                    Output.prettyErrorln("<yellow>No tests found!<r>\n\nTests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>\n", {});
                 }
             } else {
                 if (Output.isAIAgent()) {
@@ -1920,7 +1925,8 @@ pub struct TestCommand {
                     Output.prettyErrorln("<yellow>The following filters did not match any test files:<r>", {});
                 }
                 let has_file_like: usize? = null;
-                for (i of 1..ctx.positionals.len) {
+                let i: usize = 1;
+                while (i < ctx.positionals.len) : (i += 1) {
                     const filter = ctx.positionals[i];
                     Output.prettyError(" {s}", .{filter});
 
@@ -1938,24 +1944,15 @@ pub struct TestCommand {
                     Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
                 }
 
-                Output.prettyErrorln(
-                    \\
-                    \\
-                    \\<blue>note<r><d>:<r> Tests need ".test", "_test_", ".spec" or "_spec_" in the filename <d>(ex: "MyApp.test.ts")<r>
-                , {});
+                Output.prettyErrorln("\n\n<blue>note<r><d>:<r> Tests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename <d>(ex: \"MyApp.test.ts\")<r>", {});
 
                 // print a helpful note
-                if (i := has_file_like) {
-                    Output.prettyErrorln(
-                        \\<blue>note<r><d>:<r> To treat the "{s}" filter as a path, run "bun test ./{s}"<r>
-                    , .{ ctx.positionals[i], ctx.positionals[i] });
+                if (file_idx := has_file_like) {
+                    Output.prettyErrorln("<blue>note<r><d>:<r> To treat the \"{s}\" filter as a path, run \"bun test ./{s}\"<r>", .{ ctx.positionals[file_idx], ctx.positionals[file_idx] });
                 }
             }
             if (!Output.isAIAgent()) {
-                Output.prettyError(
-                    \\
-                    \\Learn more about bun test: <magenta>https://bun.com/docs/cli/test<r>
-                , {});
+                Output.prettyError("\nLearn more about bun test: <magenta>https://bun.com/docs/cli/test<r>", {});
             }
         } else {
             Output.prettyError("\n", {});

@@ -143,52 +143,34 @@ const str = result;
                 headers.content.cap = (headers.content.cap + ("Basic ".len + scope.auth.len));
             }
         }
-        var response_buf: std.array_list.Managed(u8) = brk: {
-        var headers_buf: [4096]u8 = undefined;
-        _ = &headers_buf;
-        var buf = headers.init((&headers_buf));
-        _ = &buf;
-        _ = buf.put("Accept", "application/json");
+        _ = try headers.allocate(allocator);
+        _ = headers.append("Accept", "application/json");
         if ((scope.token.len > 0)) {
-            _ = buf.put("Authorization", "Bearer ");
-            _ = buf.append(scope.token);
+            _ = headers.appendFmt("Authorization", "Bearer {s}", .{ scope.token });
         } else {
             if ((scope.auth.len > 0)) {
-                _ = buf.put("Authorization", "Basic ");
-                _ = buf.append(scope.auth);
+                _ = headers.appendFmt("Authorization", "Basic {s}", .{ scope.auth });
             }
         }
-        var response = (blk_catch_2: { break :blk_catch_2 ((manager.http_client.fetch(allocator, .GET, url, buf.get(), null, null, false, false, .npm)) catch |e| { _ = &e; _ = Output.err(e, "failed to fetch package manifest for {s}", .{ name });
-        break :blk_catch_2 Global.exit(1); }); });
-        _ = &response;
-        defer {
-        _ = response.deinit();
-        }
-        if ((response.status_code != 200)) {
-            if ((response.status_code == 404)) {
-                _ = Output.errGeneric("package <b>{s}<r> not found", .{ name });
-            } else {
-                _ = Output.errGeneric("failed to fetch package manifest for {s}: HTTP {d}", .{ name, response.status_code });
-            }
-            _ = Global.exit(1);
-        }
-        var body = ((response.body) orelse {
-        _ = Output.errGeneric("failed to fetch package manifest for {s}: empty body", .{ name });
-        _ = Global.exit(1);
-});
-        _ = &body;
-        break :brk body;
-};
+        var response_buf = try MutableString.init(allocator, 2048);
         _ = &response_buf;
         defer {
         _ = response_buf.deinit();
+        }
+        var req = http.AsyncHTTP.initSync(allocator, .GET, url, headers.entries, headers.content.ptr.?[0..headers.content.len], (&response_buf), "", manager.httpProxy(url), null, .follow);
+        _ = &req;
+        req.client.flags.reject_unauthorized = manager.tlsRejectUnauthorized();
+        const res = (blk_catch_2: { break :blk_catch_2 ((req.sendSync()) catch |e| { _ = &e; _ = Output.err(e, "view request failed to send", .{});
+        break :blk_catch_2 Global.crash(); }); });
+        if ((res.status_code >= 400)) {
+            _ = try npm.responseError(allocator, (&req), (&res), .{ name, version }, (&response_buf), false);
         }
         var log = logger.Log.init(allocator);
         _ = &log;
         const source = (&logger.Source.initPathString(url.href, response_buf.list.items));
         const json = (blk_catch_3: { break :blk_catch_3 ((bun.json.parse(source, (&log), allocator, false)) catch |e| { _ = &e; _ = Output.err(e, "failed to parse package manifest", .{});
         break :blk_catch_3 Global.exit(1); }); });
-        const parsed_manifest_opt = (blk_catch_4: { break :blk_catch_4 ((manager.parseRegistryPackageManifest(allocator, scope, (&log), response_buf.list.items, name, "", "", 0, true)) catch |e| { _ = &e; _ = Output.err(e, "failed to parse package manifest", .{});
+        const parsed_manifest_opt = (blk_catch_4: { break :blk_catch_4 ((PackageManifest.parse(allocator, scope, (&log), response_buf.list.items, name, "", "", 0, true)) catch |e| { _ = &e; _ = Output.err(e, "failed to parse package manifest", .{});
         break :blk_catch_4 Global.exit(1); }); });
         if ((parsed_manifest_opt == null)) {
             _ = Output.errGeneric("failed to parse package manifest", .{});
@@ -230,7 +212,8 @@ const str = result;
                 const version_str = (((prop.*).key.?.asString(allocator)) orelse continue);
                 const sliced_version = Semver.SlicedString.init(version_str, version_str);
                 const parsed_version = Semver.Version.parse(sliced_version);
-                if ((parsed_version.valid and (parsed_version.version.max()).?.eql(wanted_version))) {
+                const max_fn = @TypeOf(parsed_version.version).max;
+                if ((parsed_version.valid and max_fn(parsed_version.version).eql(wanted_version))) {
                     break :brk .{ version_str, (if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).? };
                 }
             }
@@ -321,9 +304,9 @@ const str = result;
             _ = Output.flush();
             return;
         }
-        const pkg_name = (blk_catch_5: { break :blk_catch_5 ((manifest.getStringCloned(allocator, "name")) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 ((null) orelse (name)); }); });
-        const pkg_version = (blk_catch_6: { break :blk_catch_6 ((manifest.getStringCloned(allocator, "version")) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 ((null) orelse (version)); }); });
-        const license = (blk_catch_7: { break :blk_catch_7 ((manifest.getStringCloned(allocator, "license")) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 ((null) orelse ("")); }); });
+        const pkg_name = (((blk_catch_5: { break :blk_catch_5 ((manifest.getStringCloned(allocator, "name")) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) orelse (name));
+        const pkg_version = (((blk_catch_6: { break :blk_catch_6 ((manifest.getStringCloned(allocator, "version")) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) orelse (version));
+        const license = (((blk_catch_7: { break :blk_catch_7 ((manifest.getStringCloned(allocator, "license")) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); })) orelse (""));
         var dep_count: usize = 0;
         _ = &dep_count;
         const dependencies_object = manifest.getObject("dependencies");
@@ -432,8 +415,8 @@ const str = result;
             var iter = maint_iter;
             _ = &iter;
             while (iter.next()) |m| {
-                const nm = (blk_catch_13: { break :blk_catch_13 ((m.getStringCloned(allocator, "name")) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 ((null) orelse ("")); }); });
-                const em = (blk_catch_14: { break :blk_catch_14 ((m.getStringCloned(allocator, "email")) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 ((null) orelse ("")); }); });
+                const nm = (((blk_catch_13: { break :blk_catch_13 ((m.getStringCloned(allocator, "name")) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 null; }); })) orelse (""));
+                const em = (((blk_catch_14: { break :blk_catch_14 ((m.getStringCloned(allocator, "email")) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 null; }); })) orelse (""));
                 if ((em.len > 0)) {
                     _ = Output.prettyln("<d>-<r> {s} <d>\\<{s}\\><r>", .{ nm, em });
                 } else {

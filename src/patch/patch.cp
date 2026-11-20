@@ -1088,7 +1088,7 @@ pub fn spawnOpts(
         break :brk argv_buf;
     };
 
-    const envp: [:null]([*:0]const u8)? = brk: {
+    const envp = brk: {
         const env_arr: [4][:0]const u8 = [
             "GIT_CONFIG_NOSYSTEM",
             "HOME",
@@ -1103,7 +1103,7 @@ pub fn spawnOpts(
         }
         if (p := PATH) {
             unsafe {
-                envp_buf[envp_buf.len - 1] = p.ptr as [*:0]const u8!;
+                envp_buf[envp_buf.len - 1] = @as([*:0]const u8, @ptrCast(p.ptr));
             }
         }
         break :brk envp_buf;

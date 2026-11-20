@@ -505,8 +505,8 @@ pub enum Encoding: u8 {
         }
     }
 
-    fn toJS(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        return WebCore_BufferEncodingType_toJS(globalObject, _);
+    static fn toJS(encoding: Encoding, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        return WebCore_BufferEncodingType_toJS(globalObject, encoding);
     }
 }
 

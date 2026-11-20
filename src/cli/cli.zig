@@ -61,14 +61,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const ShellCompletions = @import("./shell_completions.zig");
@@ -98,7 +90,7 @@ pub fn start(allocator: std.mem.Allocator) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((Command.start(allocator, log)) catch |e| { _ = &e; _ = (blk_catch_1: { break :blk_catch_1 ((log.print(Output.errorWriter())) catch |__ce_1| { _ = &__ce_1;  }); });
             break :blk_catch_0 @as(void, bun.crash_handler.handleRootError(e, @errorReturnTrace())); }); });
     }
-    const CompileTarget = @import("../options_types/CompileTarget.zig");
+    pub const CompileTarget = @import("../options_types/CompileTarget.zig");
 };
 
 pub const AutoCommand = struct {
@@ -123,7 +115,14 @@ pub fn printWithReason(comptime reason: Reason, show_all_flags: bool) void {
             const package_add_i = rand.uintAtMost(usize, (packages_to_add_filler.len - 1));
             const package_remove_i = rand.uintAtMost(usize, (packages_to_remove_filler.len - 1));
             const package_create_i = rand.uintAtMost(usize, (packages_to_create_filler.len - 1));
-            const args: struct { *anyopaque, *anyopaque, *anyopaque, *anyopaque, *anyopaque, *anyopaque, *anyopaque } = .{ packages_to_x_filler[@as(usize, @intCast(package_x_i))], packages_to_add_filler[@as(usize, @intCast(package_add_i))], packages_to_remove_filler[@as(usize, @intCast(package_remove_i))], packages_to_add_filler[@as(usize, @intCast(((package_add_i + 1) % packages_to_add_filler.len)))], packages_to_add_filler[@as(usize, @intCast(((package_add_i + 2) % packages_to_add_filler.len)))], packages_to_add_filler[@as(usize, @intCast(((package_add_i + 3) % packages_to_add_filler.len)))], packages_to_create_filler[@as(usize, @intCast(package_create_i))] };
+            const arg0: []const u8 = packages_to_x_filler[@as(usize, @intCast(package_x_i))];
+            const arg1: []const u8 = packages_to_add_filler[@as(usize, @intCast(package_add_i))];
+            const arg2: []const u8 = packages_to_remove_filler[@as(usize, @intCast(package_remove_i))];
+            const arg3: []const u8 = packages_to_add_filler[@as(usize, @intCast(((package_add_i + 1) % packages_to_add_filler.len)))];
+            const arg4: []const u8 = packages_to_add_filler[@as(usize, @intCast(((package_add_i + 2) % packages_to_add_filler.len)))];
+            const arg5: []const u8 = packages_to_add_filler[@as(usize, @intCast(((package_add_i + 3) % packages_to_add_filler.len)))];
+            const arg6: []const u8 = packages_to_create_filler[@as(usize, @intCast(package_create_i))];
+            const args: struct { []const u8, []const u8, []const u8, []const u8, []const u8, []const u8, []const u8 } = .{ arg0, arg1, arg2, arg3, arg4, arg5, arg6 };
             switch (reason) {
 .explicit => {
 if (comptime Environment.isDebug) {
@@ -265,7 +264,7 @@ pub fn exec(_: std.mem.Allocator) !void {
                 command_name = arg;
                 break;
             }
-            _ = Output.prettyError("<r><red>Uh-oh<r>. <b><yellow>bun {s}<r> is a subcommand reserved for future use by Bun.", "", "If you were trying to run a package.json script called {s}, use <b><magenta>bun run {s}<r>.", "", .{ command_name, command_name, command_name });
+            _ = Output.prettyError("<r><red>Uh-oh<r>. <b><yellow>bun {s}<r> is a subcommand reserved for future use by Bun.\n\nIf you were trying to run a package.json script called {s}, use <b><magenta>bun run {s}<r>.\n", .{ command_name, command_name, command_name });
             _ = Output.flush();
             _ = std.process.exit(1);
     }
@@ -338,19 +337,115 @@ pub fn which() Tag {
             var next_arg = ((args_iter.next()) orelse { return .AutoCommand; });
             _ = &next_arg;
             while ((((next_arg.len > 0) and (next_arg[0] == 45)) and (!((next_arg.len > 1) and (next_arg[1] == 101))))) {
-                if (next_arg == null) { next_arg = return .AutoCommand; }
+                const n_opt = args_iter.next();
+                if ((n_opt == null)) {
+                    return .AutoCommand;
+                }
+                next_arg = n_opt.?;
             }
             const first_arg_name = next_arg;
             const RootCommandMatcher = strings.ExactSizeMatcher(12);
-            return (__sw_blk_1: { const __disc_1 = RootCommandMatcher.match(first_arg_name); _ = &__disc_1; { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "init"))) {  break :__sw_blk_1 cp_val(.InitCommand); } } { if (((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "build")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "bun")))) {  break :__sw_blk_1 cp_val(.BuildCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "discord"))) {  break :__sw_blk_1 cp_val(.DiscordCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "upgrade"))) {  break :__sw_blk_1 cp_val(.UpgradeCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "completions"))) {  break :__sw_blk_1 cp_val(.InstallCompletionsCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "getcompletes"))) {  break :__sw_blk_1 cp_val(.GetCompletionsCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "link"))) {  break :__sw_blk_1 cp_val(.LinkCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "unlink"))) {  break :__sw_blk_1 cp_val(.UnlinkCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "x"))) {  break :__sw_blk_1 cp_val(.BunxCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "repl"))) {  break :__sw_blk_1 cp_val(.ReplCommand); } } { if (((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "i")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "install")))) {  break :__sw_blk_1 cp_val(brk: {
-            for (cp_iter_slice(args_iter.buf)) |arg| {
-                _ = &arg;
-                if (((arg.len > 0) and (strings.eqlComptime(arg, "-g") or strings.eqlComptime(arg, "--global")))) {
-                    break :brk .AddCommand;
-                }
+            const cmd_m = RootCommandMatcher.match(first_arg_name);
+            if ((cmd_m == RootCommandMatcher.case("init"))) {
+                return .InitCommand;
             }
-            break :brk .InstallCommand;
-}); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "ci"))) {  break :__sw_blk_1 cp_val(.InstallCommand); } } { if (((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "c")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "create")))) {  break :__sw_blk_1 cp_val(.CreateCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "test"))) {  break :__sw_blk_1 cp_val(.TestCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "pm"))) {  break :__sw_blk_1 cp_val(.PackageManagerCommand); } } { if (((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "add")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "a")))) {  break :__sw_blk_1 cp_val(.AddCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "update"))) {  break :__sw_blk_1 cp_val(.UpdateCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "patch"))) {  break :__sw_blk_1 cp_val(.PatchCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "patch-commit"))) {  break :__sw_blk_1 cp_val(.PatchCommitCommand); } } { if (((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "r")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "remove")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "rm")) or (cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "uninstall")))) {  break :__sw_blk_1 cp_val(.RemoveCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "run"))) {  break :__sw_blk_1 cp_val(.RunCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "help"))) {  break :__sw_blk_1 cp_val(.HelpCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "exec"))) {  break :__sw_blk_1 cp_val(.ExecCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "outdated"))) {  break :__sw_blk_1 cp_val(.OutdatedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "publish"))) {  break :__sw_blk_1 cp_val(.PublishCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "audit"))) {  break :__sw_blk_1 cp_val(.AuditCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "info"))) {  break :__sw_blk_1 cp_val(.InfoCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "deploy"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "cloud"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "config"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "use"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "auth"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "login"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "logout"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "whoami"))) {  break :__sw_blk_1 cp_val(.PackageManagerCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "prune"))) {  break :__sw_blk_1 cp_val(.ReservedCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "list"))) {  break :__sw_blk_1 cp_val(.PackageManagerCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "why"))) {  break :__sw_blk_1 cp_val(.WhyCommand); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "fuzzilli"))) {  break :__sw_blk_1 cp_val((if (bun.Environment.enable_fuzzilli) .FuzzilliCommand else .AutoCommand)); } } { if ((cp_match_tag(__disc_1, .case) and cp_eq(@field(__disc_1, "case"), "-e"))) {  break :__sw_blk_1 cp_val(.AutoCommand); } } {  break :__sw_blk_1 cp_val(.AutoCommand); }  unreachable; });
+            if (((cmd_m == RootCommandMatcher.case("build")) or (cmd_m == RootCommandMatcher.case("bun")))) {
+                return .BuildCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("discord"))) {
+                return .DiscordCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("upgrade"))) {
+                return .UpgradeCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("completions"))) {
+                return .InstallCompletionsCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("getcompletes"))) {
+                return .GetCompletionsCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("link"))) {
+                return .LinkCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("unlink"))) {
+                return .UnlinkCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("x"))) {
+                return .BunxCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("repl"))) {
+                return .ReplCommand;
+            }
+            if (((cmd_m == RootCommandMatcher.case("i")) or (cmd_m == RootCommandMatcher.case("install")))) {
+                for (cp_iter_slice(args_iter.buf)) |arg| {
+                    _ = &arg;
+                    if (((arg.len > 0) and (strings.eqlComptime(arg, "-g") or strings.eqlComptime(arg, "--global")))) {
+                        return .AddCommand;
+                    }
+                }
+                return .InstallCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("ci"))) {
+                return .InstallCommand;
+            }
+            if (((cmd_m == RootCommandMatcher.case("c")) or (cmd_m == RootCommandMatcher.case("create")))) {
+                return .CreateCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("test"))) {
+                return .TestCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("pm"))) {
+                return .PackageManagerCommand;
+            }
+            if (((cmd_m == RootCommandMatcher.case("add")) or (cmd_m == RootCommandMatcher.case("a")))) {
+                return .AddCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("update"))) {
+                return .UpdateCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("patch"))) {
+                return .PatchCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("patch-commit"))) {
+                return .PatchCommitCommand;
+            }
+            if (((((cmd_m == RootCommandMatcher.case("r")) or (cmd_m == RootCommandMatcher.case("remove"))) or (cmd_m == RootCommandMatcher.case("rm"))) or (cmd_m == RootCommandMatcher.case("uninstall")))) {
+                return .RemoveCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("run"))) {
+                return .RunCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("help"))) {
+                return .HelpCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("exec"))) {
+                return .ExecCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("outdated"))) {
+                return .OutdatedCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("publish"))) {
+                return .PublishCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("audit"))) {
+                return .AuditCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("info"))) {
+                return .InfoCommand;
+            }
+            if (((((((((cmd_m == RootCommandMatcher.case("deploy")) or (cmd_m == RootCommandMatcher.case("cloud"))) or (cmd_m == RootCommandMatcher.case("config"))) or (cmd_m == RootCommandMatcher.case("use"))) or (cmd_m == RootCommandMatcher.case("auth"))) or (cmd_m == RootCommandMatcher.case("login"))) or (cmd_m == RootCommandMatcher.case("logout"))) or (cmd_m == RootCommandMatcher.case("prune")))) {
+                return .ReservedCommand;
+            }
+            if (((cmd_m == RootCommandMatcher.case("whoami")) or (cmd_m == RootCommandMatcher.case("list")))) {
+                return .PackageManagerCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("why"))) {
+                return .WhyCommand;
+            }
+            if ((cmd_m == RootCommandMatcher.case("fuzzilli"))) {
+                return (if (bun.Environment.enable_fuzzilli) .FuzzilliCommand else .AutoCommand);
+            }
+            return .AutoCommand;
     }
 
 pub fn start(allocator: std.mem.Allocator, log: *logger.Log) !void {
@@ -651,7 +746,7 @@ const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun init<r> <cyan>[flags]
             _ = Output.flush();
 },
 .BunxCommand => {
-_ = Output.prettyErrorln("<b>Usage<r>: <b><green>bunx<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> [flags and arguments for the package]<r>", "Execute an npm package executable (CLI), automatically installing into a global shared cache if not installed in node_modules.", "", "Flags:", "  <cyan>--bun<r>                  Force the command to run with Bun instead of Node.js", "  <cyan>-p, --package <blue>\\<package\\><r>    Specify package to install when binary name differs from package name", "  <cyan>--no-install<r>           Skip installation if package is not already installed", "  <cyan>--verbose<r>              Enable verbose output during installation", "  <cyan>--silent<r>               Suppress output during installation", "", "Examples<d>:<r>", "  <b><green>bunx<r> <blue>prisma<r> migrate<r>", "  <b><green>bunx<r> <blue>prettier<r> foo.js<r>", "  <b><green>bunx<r> <cyan>-p @angular/cli<r> <blue>ng<r> new my-app", "  <b><green>bunx<r> <cyan>--bun<r> <blue>vite<r> dev foo.js<r>", "", .{});
+_ = Output.prettyErrorln("<b>Usage<r>: <b><green>bunx<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> [flags and arguments for the package]<r>\nExecute an npm package executable (CLI), automatically installing into a global shared cache if not installed in node_modules.\n\nFlags:\n  <cyan>--bun<r>                  Force the command to run with Bun instead of Node.js\n  <cyan>-p, --package <blue>\\<package\\><r>    Specify package to install when binary name differs from package name\n  <cyan>--no-install<r>           Skip installation if package is not already installed\n  <cyan>--verbose<r>              Enable verbose output during installation\n  <cyan>--silent<r>               Suppress output during installation\n\nExamples<d>:<r>\n  <b><green>bunx<r> <blue>prisma<r> migrate<r>\n  <b><green>bunx<r> <blue>prettier<r> foo.js<r>\n  <b><green>bunx<r> <cyan>-p @angular/cli<r> <blue>ng<r> new my-app\n  <b><green>bunx<r> <cyan>--bun<r> <blue>vite<r> dev foo.js<r>\n", .{});
 },
 .BuildCommand => {
 const intro_text: []const u8 = "<b>Usage<r>:";
@@ -738,20 +833,8 @@ _ = HelpCommand.printWithReason(.explicit);
 .UpgradeCommand => {
 const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun upgrade<r> <cyan>[flags]<r>";
             _ = "  Upgrade Bun";
-            const outro_text: []const u8 = "<b>Examples:<r>";
-            _ = "  <d>Install the latest {s} version<r>";
-            _ = "  <b><green>bun upgrade<r>";
-            _ = "";
-            _ = "  <d>{s}<r>";
-            _ = "  <b><green>bun upgrade<r> <cyan>--{s}<r>";
-            _ = "";
-            _ = "Full documentation is available at <magenta>https://bun.com/docs/installation#upgrading<r>";
-            _ = "";
-            const args = (comptime (switch (Environment.is_canary) {
-true => .{ "canary", "Switch from the canary version back to the latest stable release", "stable" },
-false => .{ "stable", "Install the most recent canary version of Bun", "canary" },
-else => unreachable,
-}));
+            const outro_text: []const u8 = "<b>Examples:<r>\n  <d>Install the latest {s} version<r>\n  <b><green>bun upgrade<r>\n\n  <d>{s}<r>\n  <b><green>bun upgrade<r> <cyan>--{s}<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/installation#upgrading<r>\n";
+            const args = (if (Environment.is_canary) .{ "canary", "Switch from the canary version back to the latest stable release", "stable" } else .{ "stable", "Install the most recent canary version of Bun", "canary" });
             _ = Output.pretty(intro_text, .{});
             _ = Output.pretty("\n\n", .{});
             _ = Output.flush();
@@ -780,7 +863,7 @@ _ = Install.PackageManager.CommandLineArguments.printHelp(.patch);
 _ = Install.PackageManager.CommandLineArguments.printHelp(.@"patch-commit");
 },
 .ExecCommand => {
-_ = Output.pretty("<b>Usage: bun exec <r><cyan>\\<script\\><r>", "", "Execute a shell script directly from Bun.", "", "<b><red>Note<r>: If executing this from a shell, make sure to escape the string!", "", "<b>Examples<d>:<r>", "  <b>bun exec \"echo hi\"<r>", "  <b>bun exec \"echo \\\"hey friends\\\"!\"<r>", "", .{});
+_ = Output.pretty("<b>Usage: bun exec <r><cyan>\\<script\\><r>\n\nExecute a shell script directly from Bun.\n\n<b><red>Note<r>: If executing this from a shell, make sure to escape the string!\n\n<b>Examples<d>:<r>\n  <b>bun exec \"echo hi\"<r>\n  <b>bun exec \"echo \\\"hey friends\\\"!\"<r>\n", .{});
             _ = Output.flush();
 },
 .OutdatedCommand, .UpdateInteractiveCommand, .PublishCommand, .AuditCommand => {
@@ -894,28 +977,28 @@ pub fn @"bun getcompletes"(allocator: std.mem.Allocator, log: *logger.Log) !void
             var completions = ShellCompletions{  };
             _ = &completions;
             if ((filter.len == 0)) {
-                completions = try RunCommand.completions(ctx, *const default_completions_list, *const reject_list, .all);
+                completions = try RunCommand.completions(ctx, default_completions_list[0..], reject_list[0..], .all);
             } else {
                 if (strings.eqlComptime(filter[0], "s")) {
-                    completions = try RunCommand.completions(ctx, null, *const reject_list, .script);
+                    completions = try RunCommand.completions(ctx, null, reject_list[0..], .script);
                 } else {
                     if (strings.eqlComptime(filter[0], "i")) {
-                        completions = try RunCommand.completions(ctx, *const default_completions_list, *const reject_list, .script_exclude);
+                        completions = try RunCommand.completions(ctx, default_completions_list[0..], reject_list[0..], .script_exclude);
                     } else {
                         if (strings.eqlComptime(filter[0], "b")) {
-                            completions = try RunCommand.completions(ctx, null, *const reject_list, .bin);
+                            completions = try RunCommand.completions(ctx, null, reject_list[0..], .bin);
                         } else {
                             if (strings.eqlComptime(filter[0], "r")) {
-                                completions = try RunCommand.completions(ctx, null, *const reject_list, .all);
+                                completions = try RunCommand.completions(ctx, null, reject_list[0..], .all);
                             } else {
                                 if (strings.eqlComptime(filter[0], "g")) {
-                                    completions = try RunCommand.completions(ctx, null, *const reject_list, .all_plus_bun_js);
+                                    completions = try RunCommand.completions(ctx, null, reject_list[0..], .all_plus_bun_js);
                                 } else {
                                     if (strings.eqlComptime(filter[0], "j")) {
-                                        completions = try RunCommand.completions(ctx, null, *const reject_list, .bun_js);
+                                        completions = try RunCommand.completions(ctx, null, reject_list[0..], .bun_js);
                                     } else {
                                         if (strings.eqlComptime(filter[0], "z")) {
-                                            completions = try RunCommand.completions(ctx, null, *const reject_list, .script_and_descriptions);
+                                            completions = try RunCommand.completions(ctx, null, reject_list[0..], .script_and_descriptions);
                                         } else {
                                             if (strings.eqlComptime(filter[0], "a")) {
                                                 const FirstLetter = AddCompletions.FirstLetter;
@@ -1033,12 +1116,12 @@ pub fn @"bun create"(allocator: std.mem.Allocator, log: *logger.Log) !void {
             }
             const template_name = positionals[1];
             if (strings.eqlComptime(template_name, "react")) {
-                _ = Output.prettyErrorln("The \"react\" template has been deprecated.", "It is recommended to use \"react-app\" or \"vite\" instead.", "", "To create a project using Create React App, run", "", "  <d>bun create react-app<r>", "", "To create a React project using Vite, run", "", "  <d>bun create vite<r>", "", "Then select \"React\" from the list of frameworks.", "", .{});
+                _ = Output.prettyErrorln("The \"react\" template has been deprecated.\nIt is recommended to use \"react-app\" or \"vite\" instead.\n\nTo create a project using Create React App, run\n\n  <d>bun create react-app<r>\n\nTo create a React project using Vite, run\n\n  <d>bun create vite<r>\n\nThen select \"React\" from the list of frameworks.\n", .{});
                 _ = Global.exit(1);
                 return;
             }
             if (strings.eqlComptime(template_name, "next")) {
-                _ = Output.prettyErrorln("<yellow>warn: No template <b>create-next<r> found.", "To create a project with the official Next.js scaffolding tool, run", "  <b>bun create next-app <cyan>[destination]<r>", .{});
+                _ = Output.prettyErrorln("<yellow>warn: No template <b>create-next<r> found.\nTo create a project with the official Next.js scaffolding tool, run\n  <b>bun create next-app <cyan>[destination]<r>", .{});
                 _ = Global.exit(1);
                 return;
             }

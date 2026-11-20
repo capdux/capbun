@@ -934,11 +934,12 @@ export class UDPSocket {
         const connect_port = connect_port_js.asInt32();
         const port: u16 = if (connect_port < 1 or connect_port > 0xffff) 0 else @as(u16, @intCast(connect_port));
 
-        const socket_opt = this_socket.socket;
-        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
-        const socket = socket_opt.?;
-        if (socket.connect(connect_host, port) == -1) {
-            return globalThis.throw("Failed to connect socket", .{});
+        if (socket := this_socket.socket) {
+            if (socket.connect(connect_host, port) == -1) {
+                return globalThis.throw("Failed to connect socket", .{});
+            }
+        } else {
+            return globalThis.throw("Socket is closed", .{});
         }
         this_socket.connect_info = .{
             .port = port,
@@ -950,7 +951,7 @@ export class UDPSocket {
         return JSValue.js_undefined;
     }
 
-    pub fn jsDisconnect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    pub static fn jsDisconnect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         let this_socket = callFrame.this().as(UDPSocket) orelse {
             return globalObject.throwInvalidArguments("Expected UDPSocket as 'this'", .{});
         };

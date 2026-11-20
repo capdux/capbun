@@ -4520,11 +4520,13 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
 /// Used in JS tests, see `internal-for-testing.ts` and shell tests.
 pub struct TestingAPIs {
     static fn disabledOnThisPlatform(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        if (comptime bun.Environment.isWindows) return .false;
+        if (comptime bun.Environment.isWindows) return jsc.JSValue.jsBoolean(false);
 
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        const str_arg = arguments.nextEat() ?? return globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", {});
+        const str_arg_opt = arguments.nextEat();
+        if (str_arg_opt == null) return globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", {});
+        const str_arg = str_arg_opt.?;
 
         const bunstr = str_arg.toBunString(globalThis)?;
         defer bunstr.deref();
@@ -4533,10 +4535,10 @@ pub struct TestingAPIs {
 
         inline for (disabled of Interpreter.Builtin.Kind.DISABLED_ON_POSIX) {
             if (bun.strings.eqlComptime(utf8str.byteSlice(), @tagName(disabled))) {
-                return .true;
+                return jsc.JSValue.jsBoolean(true);
             }
         }
-        return .false;
+        return jsc.JSValue.jsBoolean(false);
     }
 
     pub const shellLex = jsc.MarkedArgumentBuffer.wrap(shellLexImpl);
@@ -4548,12 +4550,16 @@ pub struct TestingAPIs {
     ): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        const string_args = arguments.nextEat() ?? return globalThis.throw("shell_parse: expected 2 arguments, got 0", {});
+        const string_args_opt = arguments.nextEat();
+        if (string_args_opt == null) return globalThis.throw("shell_parse: expected 2 arguments, got 0", {});
+        const string_args = string_args_opt.?;
 
         let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
         defer arena_.deinit();
 
-        const template_args_js = arguments.nextEat() ?? return globalThis.throw("shell: expected 2 arguments, got 0", {});
+        const template_args_js_opt = arguments.nextEat();
+        if (template_args_js_opt == null) return globalThis.throw("shell: expected 2 arguments, got 0", {});
+        const template_args_js = template_args_js_opt.?;
         let template_args = template_args_js.arrayIterator(globalThis)?;
         let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, arena_.allocator());
         let jsstrings = std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?;
@@ -4612,12 +4618,16 @@ pub struct TestingAPIs {
     ): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        const string_args = arguments.nextEat() ?? return globalThis.throw("shell_parse: expected 2 arguments, got 0", {});
+        const string_args_opt = arguments.nextEat();
+        if (string_args_opt == null) return globalThis.throw("shell_parse: expected 2 arguments, got 0", {});
+        const string_args = string_args_opt.?;
 
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
         defer arena_.deinit();
 
-        const template_args_js = arguments.nextEat() ?? return globalThis.throw("shell: expected 2 arguments, got 0", {});
+        const template_args_js_opt = arguments.nextEat();
+        if (template_args_js_opt == null) return globalThis.throw("shell: expected 2 arguments, got 0", {});
+        const template_args_js = template_args_js_opt.?;
         let template_args = template_args_js.arrayIterator(globalThis)?;
         let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, arena_.allocator());
         let jsstrings = std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?;

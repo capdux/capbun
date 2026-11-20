@@ -195,7 +195,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
                 const diagonal_index = x - y;
 
                 const diag_offset = u(diagonal_index + max);
-                const prev_diagonal_index: int = if (diagonal_index == -i(diff_level) ||
+                const prev_diagonal_index: int = if (diagonal_index == (0 - i(diff_level)) ||
                     (diagonal_index != diff_level && graph[u(diag_offset - 1)] < graph[u(diag_offset + 1)]))
                     diagonal_index + 1
                 else
@@ -306,7 +306,7 @@ fn areStrLinesEqual(comptime T: type, a: T, b: T, comptime check_comma_disparity
 
 /// Generic equality function. Returns `true` if two lines are equal.
 pub fn LineCmp(comptime Line: type): type {
-    return *const fn (a: Line, b: Line) bool;
+    return fn (a: Line, b: Line) bool;
 }
 
 pub err DiffError {

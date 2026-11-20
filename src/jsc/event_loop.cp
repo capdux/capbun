@@ -612,7 +612,9 @@ enum DrainMicrotasksResult: u8 {
     }
 }
 
-@c fn noopForeverTimer(_: *uws.Timer) {}
+@c fn noopForeverTimer(_: *uws.Timer) {
+    return;
+}
 
 @c fn externRunCallback1(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue) {
     global.bunVM().eventLoop().runCallback(callback, global, recv, &.{arg0});

@@ -32,10 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn CpOptType(comptime __T: type) type { if (@typeInfo(__T) == .optional) return __T; return ?__T; }
-fn CpUnwrapOpt(comptime __T: type) type { if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn cp_opt_is_null(v: anytype) bool { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) return v == null; return false; }
-fn cp_opt_unwrap(v: anytype) CpUnwrapOpt(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -164,24 +160,21 @@ pub fn findInRootDependencies(self: ScannerFinder) ?PackageID {
             const string_buf = self.manager.lockfile.buffers.string_bytes.items;
             const root_pkg_id: PackageID = (if (comptime @typeInfo(PackageID) == .@"enum") @as(PackageID, @enumFromInt(0)) else @as(PackageID, 0));
             const root_deps = pkg_dependencies[@as(usize, @intCast(root_pkg_id))];
-            {
-                var _dep_id: i32 = root_deps.begin();
-                _ = &_dep_id;
-                const __end_1 = root_deps.end();
-                while (_dep_id < __end_1) : (_dep_id += 1) {
-                    const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
-                    const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                    if ((dep_pkg_id == invalid_package_id)) {
-                        continue;
-                    }
-                    const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
-                    if ((dep_res.tag != .npm)) {
-                        continue;
-                    }
-                    const dep_name = (if (@typeInfo(@TypeOf(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"enum" or @typeInfo(@TypeOf(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"union") @tagName(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]) else self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))].name);
-                    if (std.mem.eql(u8, dep_name.slice(string_buf), self.scanner_name)) {
-                        return dep_pkg_id;
-                    }
+            var _dep_id: u32 = root_deps.begin();
+            _ = &_dep_id;
+            while ((_dep_id < root_deps.end())) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
+                const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                if ((dep_pkg_id == invalid_package_id)) {
+                    continue;
+                }
+                const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
+                if ((dep_res.tag != .npm)) {
+                    continue;
+                }
+                const dep_name = (if (@typeInfo(@TypeOf(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"enum" or @typeInfo(@TypeOf(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"union") @tagName(self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]) else self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))].name);
+                if (std.mem.eql(u8, dep_name.slice(string_buf), self.scanner_name)) {
+                    return dep_pkg_id;
                 }
             }
             return null;
@@ -195,22 +188,19 @@ pub fn validateNotInWorkspaces(self: ScannerFinder) !void {
             {
                 var pkg_idx: i32 = 0;
                 _ = &pkg_idx;
-                const __end_2 = pkgs.len;
-                while (pkg_idx < __end_2) : (pkg_idx += 1) {
+                const __end_1 = pkgs.len;
+                while (pkg_idx < __end_1) : (pkg_idx += 1) {
                     if ((pkg_res[@as(usize, @intCast(pkg_idx))].tag != .workspace)) {
                         continue;
                     }
                     const deps = pkg_deps[@as(usize, @intCast(pkg_idx))];
-                    {
-                        var _dep_id: i32 = deps.begin();
-                        _ = &_dep_id;
-                        const __end_3 = deps.end();
-                        while (_dep_id < __end_3) : (_dep_id += 1) {
-                            const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
-                            const dep = self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
-                            if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf), self.scanner_name)) {
-                                return error.SecurityScannerInWorkspace;
-                            }
+                    var _dep_id: u32 = deps.begin();
+                    _ = &_dep_id;
+                    while ((_dep_id < deps.end())) : (_dep_id = (_dep_id + 1)) {
+                        const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
+                        const dep = self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+                        if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf), self.scanner_name)) {
+                            return error.SecurityScannerInWorkspace;
                         }
                     }
                 }
@@ -246,69 +236,65 @@ pub fn collectAllPackages(self: *PackageCollector) !void {
             const pkg_resolutions = pkgs.items(.resolution);
             const root_pkg_id: PackageID = (if (comptime @typeInfo(PackageID) == .@"enum") @as(PackageID, @enumFromInt(0)) else @as(PackageID, 0));
             const root_deps = pkg_dependencies[@as(usize, @intCast(root_pkg_id))];
-            {
-                var _dep_id: i32 = root_deps.begin();
-                _ = &_dep_id;
-                const __end_4 = root_deps.end();
-                while (_dep_id < __end_4) : (_dep_id += 1) {
-                    const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
-                    const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                    if ((dep_pkg_id == invalid_package_id)) {
-                        continue;
-                    }
-                    const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
-                    if ((dep_res.tag != .npm)) {
-                        continue;
-                    }
-                    if (try self.dedupe.getOrPut(dep_pkg_id).found_existing) {
-                        continue;
-                    }
-                    var pkg_path_buf: std.ArrayList(PackageID) = .{};
-                    _ = &pkg_path_buf;
-                    _ = try pkg_path_buf.append(self.manager.allocator, root_pkg_id);
-                    _ = try pkg_path_buf.append(self.manager.allocator, dep_pkg_id);
-                    var dep_path_buf: std.ArrayList(DependencyID) = .{};
-                    _ = &dep_path_buf;
-                    _ = try dep_path_buf.append(self.manager.allocator, dep_id);
-                    _ = self.queue.writeItem(.{ .pkg_id = dep_pkg_id, .dep_id = dep_id, .pkg_path = pkg_path_buf, .dep_path = dep_path_buf });
+            var _dep_id: u32 = root_deps.begin();
+            _ = &_dep_id;
+            while ((_dep_id < root_deps.end())) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
+                const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                if ((dep_pkg_id == invalid_package_id)) {
+                    continue;
                 }
+                const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
+                if ((dep_res.tag != .npm)) {
+                    continue;
+                }
+                const gop_1 = try self.dedupe.getOrPut(dep_pkg_id);
+                if (gop_1.found_existing) {
+                    continue;
+                }
+                var pkg_path_buf: std.ArrayList(PackageID) = .{};
+                _ = &pkg_path_buf;
+                _ = try pkg_path_buf.append(self.manager.allocator, root_pkg_id);
+                _ = try pkg_path_buf.append(self.manager.allocator, dep_pkg_id);
+                var dep_path_buf: std.ArrayList(DependencyID) = .{};
+                _ = &dep_path_buf;
+                _ = try dep_path_buf.append(self.manager.allocator, dep_id);
+                _ = try self.queue.writeItem(.{ .pkg_id = dep_pkg_id, .dep_id = dep_id, .pkg_path = pkg_path_buf, .dep_path = dep_path_buf });
             }
             {
                 var pkg_idx: i32 = 0;
                 _ = &pkg_idx;
-                const __end_5 = pkgs.len;
-                while (pkg_idx < __end_5) : (pkg_idx += 1) {
-                    const pkg_id: PackageID = @as(PackageID, @truncate(pkg_idx));
+                const __end_2 = pkgs.len;
+                while (pkg_idx < __end_2) : (pkg_idx += 1) {
+                    const pkg_id: PackageID = @as(PackageID, @intCast(pkg_idx));
                     if ((pkg_resolutions[@as(usize, @intCast(pkg_id))].tag != .workspace)) {
                         continue;
                     }
                     const workspace_deps = pkg_dependencies[@as(usize, @intCast(pkg_id))];
-                    {
-                        var _dep_id: i32 = workspace_deps.begin();
-                        _ = &_dep_id;
-                        const __end_6 = workspace_deps.end();
-                        while (_dep_id < __end_6) : (_dep_id += 1) {
-                            const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
-                            const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                            if ((dep_pkg_id == invalid_package_id)) {
-                                continue;
-                            }
-                            const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
-                            if ((dep_res.tag != .npm)) {
-                                continue;
-                            }
-                            if (try self.dedupe.getOrPut(dep_pkg_id).found_existing) {
-                                continue;
-                            }
-                            var pkg_path_buf: std.ArrayList(PackageID) = .{};
-                            _ = &pkg_path_buf;
-                            _ = try pkg_path_buf.append(self.manager.allocator, pkg_id);
-                            _ = try pkg_path_buf.append(self.manager.allocator, dep_pkg_id);
-                            var dep_path_buf: std.ArrayList(DependencyID) = .{};
-                            _ = &dep_path_buf;
-                            _ = try dep_path_buf.append(self.manager.allocator, dep_id);
-                            _ = self.queue.writeItem(.{ .pkg_id = dep_pkg_id, .dep_id = dep_id, .pkg_path = pkg_path_buf, .dep_path = dep_path_buf });
+                    var _ws_dep_id: u32 = workspace_deps.begin();
+                    _ = &_ws_dep_id;
+                    while ((_ws_dep_id < workspace_deps.end())) : (_ws_dep_id = (_ws_dep_id + 1)) {
+                        const dep_id: DependencyID = @as(DependencyID, @truncate(_ws_dep_id));
+                        const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                        if ((dep_pkg_id == invalid_package_id)) {
+                            continue;
                         }
+                        const dep_res = pkg_resolutions[@as(usize, @intCast(dep_pkg_id))];
+                        if ((dep_res.tag != .npm)) {
+                            continue;
+                        }
+                        const gop_1 = try self.dedupe.getOrPut(dep_pkg_id);
+                        if (gop_1.found_existing) {
+                            continue;
+                        }
+                        var pkg_path_buf: std.ArrayList(PackageID) = .{};
+                        _ = &pkg_path_buf;
+                        _ = try pkg_path_buf.append(self.manager.allocator, pkg_id);
+                        _ = try pkg_path_buf.append(self.manager.allocator, dep_pkg_id);
+                        var dep_path_buf: std.ArrayList(DependencyID) = .{};
+                        _ = &dep_path_buf;
+                        _ = try dep_path_buf.append(self.manager.allocator, dep_id);
+                        _ = try self.queue.writeItem(.{ .pkg_id = dep_pkg_id, .dep_id = dep_id, .pkg_path = pkg_path_buf, .dep_path = dep_path_buf });
                     }
                 }
             }
@@ -323,9 +309,9 @@ pub fn collectUpdatePackages(self: *PackageCollector) !void {
                 {
                     var _update_pkg_id: i32 = 0;
                     _ = &_update_pkg_id;
-                    const __end_8 = pkgs.len;
-                    while (_update_pkg_id < __end_8) : (_update_pkg_id += 1) {
-                        const update_pkg_id: PackageID = @as(PackageID, @truncate(_update_pkg_id));
+                    const __end_4 = pkgs.len;
+                    while (_update_pkg_id < __end_4) : (_update_pkg_id += 1) {
+                        const update_pkg_id: PackageID = @as(PackageID, @intCast(_update_pkg_id));
                         if ((update_pkg_id != req.package_id)) {
                             continue;
                         }
@@ -339,32 +325,29 @@ pub fn collectUpdatePackages(self: *PackageCollector) !void {
                         {
                             var _pkg_id: i32 = 0;
                             _ = &_pkg_id;
-                            const __end_9 = pkgs.len;
-                            while (_pkg_id < __end_9) : (_pkg_id += 1) {
+                            const __end_5 = pkgs.len;
+                            while (_pkg_id < __end_5) : (_pkg_id += 1) {
                                 _ = update_dep_id: {
-                                const pkg_id: PackageID = @as(PackageID, @truncate(_pkg_id));
+                                const pkg_id: PackageID = @as(PackageID, @intCast(_pkg_id));
                                 const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
                                 if (((pkg_res.tag != .root) and (pkg_res.tag != .workspace))) {
                                     continue;
                                 }
                                 const pkg_deps = pkg_dependencies[@as(usize, @intCast(pkg_id))];
-                                {
-                                    var _dep_id: i32 = pkg_deps.begin();
-                                    _ = &_dep_id;
-                                    const __end_10 = pkg_deps.end();
-                                    while (_dep_id < __end_10) : (_dep_id += 1) {
-                                        const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
-                                        const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                                        if ((dep_pkg_id == invalid_package_id)) {
-                                            continue;
-                                        }
-                                        if ((dep_pkg_id != update_pkg_id)) {
-                                            continue;
-                                        }
-                                        update_dep_id = dep_id;
-                                        parent_pkg_id = pkg_id;
-                                        break :update_dep_id;
+                                var _dep_id: u32 = pkg_deps.begin();
+                                _ = &_dep_id;
+                                while ((_dep_id < pkg_deps.end())) : (_dep_id = (_dep_id + 1)) {
+                                    const dep_id: DependencyID = @as(DependencyID, @truncate(_dep_id));
+                                    const dep_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                                    if ((dep_pkg_id == invalid_package_id)) {
+                                        continue;
                                     }
+                                    if ((dep_pkg_id != update_pkg_id)) {
+                                        continue;
+                                    }
+                                    update_dep_id = dep_id;
+                                    parent_pkg_id = pkg_id;
+                                    break :update_dep_id;
                                 }
 };
                             }
@@ -372,7 +355,8 @@ pub fn collectUpdatePackages(self: *PackageCollector) !void {
                         if ((update_dep_id == invalid_dependency_id)) {
                             continue;
                         }
-                        if (try self.dedupe.getOrPut(update_pkg_id).found_existing) {
+                        const gop_3 = try self.dedupe.getOrPut(update_pkg_id);
+                        if (gop_3.found_existing) {
                             continue;
                         }
                         var initial_pkg_path: std.ArrayList(PackageID) = .{};
@@ -384,7 +368,7 @@ pub fn collectUpdatePackages(self: *PackageCollector) !void {
                         var initial_dep_path: std.ArrayList(DependencyID) = .{};
                         _ = &initial_dep_path;
                         _ = try initial_dep_path.append(self.manager.allocator, update_dep_id);
-                        _ = self.queue.writeItem(.{ .pkg_id = update_pkg_id, .dep_id = update_dep_id, .pkg_path = initial_pkg_path, .dep_path = initial_dep_path });
+                        _ = try self.queue.writeItem(.{ .pkg_id = update_pkg_id, .dep_id = update_dep_id, .pkg_path = initial_pkg_path, .dep_path = initial_dep_path });
                     }
                 }
             }
@@ -409,35 +393,33 @@ pub fn processQueue(self: *PackageCollector) !void {
                 _ = @memcpy(pkg_path_copy, mutable_item.pkg_path.items);
                 const dep_path_copy = try self.manager.allocator.alloc(DependencyID, mutable_item.dep_path.items.len);
                 _ = @memcpy(dep_path_copy, mutable_item.dep_path.items);
-                _ = self.package_paths.put(pkg_id, .{ .pkg_path = pkg_path_copy, .dep_path = dep_path_copy });
+                _ = try self.package_paths.put(pkg_id, .{ .pkg_path = pkg_path_copy, .dep_path = dep_path_copy });
                 const pkg_deps = pkg_dependencies[@as(usize, @intCast(pkg_id))];
-                {
-                    var _next_dep_id: i32 = pkg_deps.begin();
-                    _ = &_next_dep_id;
-                    const __end_11 = pkg_deps.end();
-                    while (_next_dep_id < __end_11) : (_next_dep_id += 1) {
-                        const next_dep_id: DependencyID = @as(DependencyID, @truncate(_next_dep_id));
-                        const next_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(next_dep_id))];
-                        if ((next_pkg_id == invalid_package_id)) {
-                            continue;
-                        }
-                        const next_pkg_res = pkg_resolutions[@as(usize, @intCast(next_pkg_id))];
-                        if ((next_pkg_res.tag != .npm)) {
-                            continue;
-                        }
-                        if (try self.dedupe.getOrPut(next_pkg_id).found_existing) {
-                            continue;
-                        }
-                        var extended_pkg_path: std.ArrayList(PackageID) = .{};
-                        _ = &extended_pkg_path;
-                        _ = try extended_pkg_path.appendSlice(self.manager.allocator, mutable_item.pkg_path.items);
-                        _ = try extended_pkg_path.append(self.manager.allocator, next_pkg_id);
-                        var extended_dep_path: std.ArrayList(DependencyID) = .{};
-                        _ = &extended_dep_path;
-                        _ = try extended_dep_path.appendSlice(self.manager.allocator, mutable_item.dep_path.items);
-                        _ = try extended_dep_path.append(self.manager.allocator, next_dep_id);
-                        _ = self.queue.writeItem(.{ .pkg_id = next_pkg_id, .dep_id = next_dep_id, .pkg_path = extended_pkg_path, .dep_path = extended_dep_path });
+                var _next_dep_id: u32 = pkg_deps.begin();
+                _ = &_next_dep_id;
+                while ((_next_dep_id < pkg_deps.end())) : (_next_dep_id = (_next_dep_id + 1)) {
+                    const next_dep_id: DependencyID = @as(DependencyID, @truncate(_next_dep_id));
+                    const next_pkg_id = self.manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(next_dep_id))];
+                    if ((next_pkg_id == invalid_package_id)) {
+                        continue;
                     }
+                    const next_pkg_res = pkg_resolutions[@as(usize, @intCast(next_pkg_id))];
+                    if ((next_pkg_res.tag != .npm)) {
+                        continue;
+                    }
+                    const gop_4 = try self.dedupe.getOrPut(next_pkg_id);
+                    if (gop_4.found_existing) {
+                        continue;
+                    }
+                    var extended_pkg_path: std.ArrayList(PackageID) = .{};
+                    _ = &extended_pkg_path;
+                    _ = try extended_pkg_path.appendSlice(self.manager.allocator, mutable_item.pkg_path.items);
+                    _ = try extended_pkg_path.append(self.manager.allocator, next_pkg_id);
+                    var extended_dep_path: std.ArrayList(DependencyID) = .{};
+                    _ = &extended_dep_path;
+                    _ = try extended_dep_path.appendSlice(self.manager.allocator, mutable_item.dep_path.items);
+                    _ = try extended_dep_path.append(self.manager.allocator, next_dep_id);
+                    _ = try self.queue.writeItem(.{ .pkg_id = next_pkg_id, .dep_id = next_dep_id, .pkg_path = extended_pkg_path, .dep_path = extended_dep_path });
                 }
             }
     }
@@ -477,10 +459,10 @@ pub fn buildPackageJSON(self: JSONBuilder) ![]const u8 {
                     _ = try writer.writeAll(",\n");
                 }
                 if ((dep_id == invalid_dependency_id)) {
-                    _ = try writer.print("  {{", "    \"name\": {f},", "    \"version\": \"{f}\",", "    \"requestedRange\": \"{f}\",", "    \"tarball\": {f}", "  }}", .{ bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), .{}), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), bun.fmt.formatJSONStringUTF8((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.url.slice(string_buf), .{}) });
+                    _ = try writer.print("  {{\n    \"name\": {f},\n    \"version\": \"{f}\",\n    \"requestedRange\": \"{f}\",\n    \"tarball\": {f}\n  }}", .{ bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), .{}), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), bun.fmt.formatJSONStringUTF8((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.url.slice(string_buf), .{}) });
                 } else {
                     const dep_version = self.manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))].version;
-                    _ = try writer.print("  {{", "    \"name\": {f},", "    \"version\": \"{f}\",", "    \"requestedRange\": {f},", "    \"tarball\": {f}", "  }}", .{ bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), .{}), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), bun.fmt.formatJSONStringUTF8(dep_version.literal.slice(string_buf), .{}), bun.fmt.formatJSONStringUTF8((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.url.slice(string_buf), .{}) });
+                    _ = try writer.print("  {{\n    \"name\": {f},\n    \"version\": \"{f}\",\n    \"requestedRange\": {f},\n    \"tarball\": {f}\n  }}", .{ bun.fmt.formatJSONStringUTF8(pkg_name.slice(string_buf), .{}), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version.fmt(string_buf), bun.fmt.formatJSONStringUTF8(dep_version.literal.slice(string_buf), .{}), bun.fmt.formatJSONStringUTF8((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.url.slice(string_buf), .{}) });
                 }
                 first = false;
             }
@@ -532,7 +514,8 @@ return error.IPCPipeFailed;
 pub fn spawnPosix(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc_output_fds: [2]bun.FD) !void {
             const extra_fds = (&.{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio.buffer });
             const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = extra_fds };
-            var spawned = try (blk_oc_0: { const __o_0 = bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr)); const __R_0 = CpOptType(@TypeOf(cp_opt_unwrap(__o_0).unwrap())); if (cp_opt_is_null(__o_0)) break :blk_oc_0 @as(__R_0, null); break :blk_oc_0 @as(__R_0, cp_opt_unwrap(__o_0).unwrap()); });
+            const spawn_res = try bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr));
+            var spawned = try spawn_res.unwrap();
             _ = &spawned;
             defer {
             _ = spawned.extra_pipes.deinit();
@@ -579,7 +562,8 @@ pub fn spawnWindows(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc
             parent_write_fd = null;
             const extra_fds = (&.{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio{ .pipe = child_read_fd.? } });
             const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = extra_fds, .windows = .{ .loop = jsc.EventLoopHandle.init((&self.manager.event_loop)) } };
-            var spawned = try (blk_oc_1: { const __o_1 = bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr)); const __R_1 = CpOptType(@TypeOf(cp_opt_unwrap(__o_1).unwrap())); if (cp_opt_is_null(__o_1)) break :blk_oc_1 @as(__R_1, null); break :blk_oc_1 @as(__R_1, cp_opt_unwrap(__o_1).unwrap()); });
+            const spawn_res = try bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr));
+            var spawned = try spawn_res.unwrap();
             _ = &spawned;
             defer {
             _ = spawned.extra_pipes.deinit();
@@ -599,7 +583,8 @@ pub fn finishSpawn(self: *SecurityScanSubprocess, spawned: anytype, ipc_read_fd:
             var process = spawned.toProcess((&self.manager.event_loop), false);
             _ = &process;
             self.process = process;
-            _ = (process).?.setExitHandler(self);
+            const set_exit_fn = @TypeOf(process.*).setExitHandler;
+            _ = set_exit_fn(process, self);
             self.json_writer = StaticPipeWriter.create((&self.manager.event_loop), self, json_stdio_result, json_source);
             errdefer {
             {
@@ -620,7 +605,8 @@ _ = Output.errGeneric("Failed to start security scanner JSON pipe writer: {f}", 
 
 },
 }
-            switch ((process).?.watchOrReap()) {
+            const watch_fn = @TypeOf(process.*).watchOrReap;
+            switch (watch_fn(process)) {
 .err => {
 return error.ProcessWatchFailed;
 },
@@ -728,7 +714,7 @@ _ = Output.errGeneric("Security scanner terminated abnormally without sending da
             defer {
             _ = temp_log.deinit();
             }
-            const json_expr = (blk_catch_2: { break :blk_catch_2 ((bun.json.parseUTF8((&json_source), (&temp_log), self.manager.allocator)) catch |e| { _ = &e; _ = Output.errGeneric("Security scanner sent invalid JSON: {s}", .{ @errorName(e) });
+            const json_expr = (blk_catch_0: { break :blk_catch_0 ((bun.json.parseUTF8((&json_source), (&temp_log), self.manager.allocator)) catch |e| { _ = &e; _ = Output.errGeneric("Security scanner sent invalid JSON: {s}", .{ @errorName(e) });
             if ((self.ipc_data.items.len < 1000)) {
                 _ = Output.errGeneric("Response: {s}", .{ self.ipc_data.items });
             }
@@ -1091,7 +1077,7 @@ pub fn promptForWarnings() bool {
         var buffered = stdin.readerStreaming((&reader_buffer));
         _ = &buffered;
         const reader = (&buffered.interface);
-        const first_byte_res = (blk_catch_3: { break :blk_catch_3 ((reader.takeByte()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
+        const first_byte_res = (blk_catch_1: { break :blk_catch_1 ((reader.takeByte()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
         if ((first_byte_res == null)) {
             _ = Output.pretty("\n<red>Installation cancelled.<r>\n", .{});
             return false;
@@ -1100,14 +1086,14 @@ pub fn promptForWarnings() bool {
         const should_continue = (switch (first_byte) {
 10 => false,
 13 => blk: {
-        const next_byte = (blk_catch_4: { break :blk_catch_4 ((reader.takeByte()) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); });
+        const next_byte = (blk_catch_2: { break :blk_catch_2 ((reader.takeByte()) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
         if ((next_byte == null)) {
             break :blk false;
         }
         break :blk ((next_byte.? == 10) and false);
 },
 'y', 'Y' => blk: {
-        const next_byte = (blk_catch_5: { break :blk_catch_5 ((reader.takeByte()) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); });
+        const next_byte = (blk_catch_3: { break :blk_catch_3 ((reader.takeByte()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
         if ((next_byte == null)) {
             break :blk false;
         }
@@ -1115,7 +1101,7 @@ pub fn promptForWarnings() bool {
             break :blk true;
         } else {
             if ((next_byte.? == 13)) {
-                const second_byte = (blk_catch_6: { break :blk_catch_6 ((reader.takeByte()) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); });
+                const second_byte = (blk_catch_4: { break :blk_catch_4 ((reader.takeByte()) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); });
                 if ((second_byte == null)) {
                     break :blk false;
                 }
@@ -1125,7 +1111,7 @@ pub fn promptForWarnings() bool {
         break :blk false;
 },
 else => blk: {
-        while ((blk_catch_7: { break :blk_catch_7 ((reader.takeByte()) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); })) |b| {
+        while ((blk_catch_5: { break :blk_catch_5 ((reader.takeByte()) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) |b| {
             if (((b == 10) or (b == 13))) {
                 break;
             }
@@ -1316,7 +1302,7 @@ pub fn parseSecurityAdvisoriesFromExpr(manager: *PackageManager, advisories_expr
             while ((j < pkg_names.len)) : (j = (j + 1)) {
                 const pkg_name = pkg_names[@as(usize, @intCast(j))];
                 if (std.mem.eql(u8, pkg_name.slice(string_buf), name_str)) {
-                    const pkg_id: PackageID = @as(PackageID, @truncate(j));
+                    const pkg_id: PackageID = @as(PackageID, @intCast(j));
                     if (package_paths.get(pkg_id)) |paths| {
                         _ = &paths;
                         pkg_path = try manager.allocator.dupe(PackageID, paths.pkg_path);

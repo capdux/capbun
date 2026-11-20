@@ -2739,7 +2739,7 @@ pub fn symlinkRunningExecutable(target: [:0]const u8, dest: [:0]const u8): Maybe
             },
             else => return { err: e },
         },
-        .result => return { result: {} },
+        .result => return .success,
     }
 }
 

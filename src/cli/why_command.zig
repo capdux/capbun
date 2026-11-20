@@ -439,7 +439,8 @@ pub fn execWithManager(ctx: Command.Context, pm: *PackageManager, package_patter
                         defer {
                         _ = ctx_data.clearPathTracker();
                         }
-                        _ = std.sort.insertion(DependentInfo, dependents.items, .{}, compareDependents);
+                        const empty_ctx: void = undefined;
+                        _ = std.sort.insertion(DependentInfo, dependents.items, empty_ctx, compareDependents);
                         var dep_idx: usize = 0;
                         _ = &dep_idx;
                         for (dependents.items) |dep| {
@@ -514,7 +515,8 @@ pub fn printDependencyTree(ctx: *TreeContext, current_pkg_id: PackageID, prefix:
             defer {
             _ = ctx.allocator.free(sorted_dependents);
             }
-            _ = std.sort.insertion(DependentInfo, sorted_dependents, .{}, compareDependents);
+            const empty_ctx: void = undefined;
+            _ = std.sort.insertion(DependentInfo, sorted_dependents, empty_ctx, compareDependents);
             var dep_idx: usize = 0;
             _ = &dep_idx;
             for (cp_iter_slice(sorted_dependents)) |dep| {

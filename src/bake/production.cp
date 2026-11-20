@@ -245,10 +245,10 @@ pub struct PerThread {
     }
 }
 
-const empty_input_files: [0]EntryPointInputFile = [];
-const empty_bundled_outputs: [0]OutputFile = [];
-const empty_output_indexes: [0]OutputFile.Index = [];
-const empty_module_keys: [0]bun.String = [];
+const empty_input_files: [0]EntryPointInputFile = undefined;
+const empty_bundled_outputs: [0]OutputFile = undefined;
+const empty_output_indexes: [0]OutputFile.Index = undefined;
+const empty_module_keys: [0]bun.String = undefined;
 
 fn getOnModuleNamespace(global: *jsc.JSGlobalObject, module: JSValue, property: []const u8): JSValue? {
     const result: JSValue = BakeGetOnModuleNamespace(global, module, property.ptr, property.len);
@@ -268,7 +268,8 @@ fn registerProductionChunk(global: *jsc.JSGlobalObject, key: bun.String, source_
 /// unsafe function, must be run outside of the event loop
 /// quits the process on exception
 fn loadModule(vm: *VirtualMachine, global: *jsc.JSGlobalObject, key: JSValue): !JSValue {
-    const promise = (BakeLoadModuleByKey(global, key).asAnyPromise())?.internal;
+    const any_promise = BakeLoadModuleByKey(global, key).asAnyPromise().?;
+    const promise = any_promise.internal;
     promise.setHandled();
     vm.waitForPromise({ internal: promise });
     // TODO: Specially draining microtasks here because `waitForPromise` has a
@@ -392,7 +393,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
     vm.is_main_thread = true;
     jsc.VirtualMachine.is_main_thread_vm = true;
 
-    const api_lock = vm.jsc_vm.getAPILock();
+    let api_lock = vm.jsc_vm.getAPILock();
     defer api_lock.release();
 
     let pt: PerThread = PerThread{
@@ -520,7 +521,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     }
 
     if (ctx.bundler_options.bake_debug_disable_minify) {
-        const transpilers = [ &client_transpiler, &server_transpiler, &ssr_transpiler ];
+        const transpilers: [3]*bun.transpiler.Transpiler = [ &client_transpiler, &server_transpiler, &ssr_transpiler ];
         for (transpiler of transpilers) {
             transpiler.options.minify_syntax = false;
             transpiler.options.minify_identifiers = false;
@@ -566,9 +567,10 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         const maybe_entry = server_transpiler.resolver.readDirInfoIgnoreError(joined_root);
         const entry = maybe_entry ?? continue;
 
-        let client_file = FrameworkRouter.ClientFile.none;
+        let client_file: FrameworkRouter.OpaqueFileId.Optional = .none;
         if (client := fsr.entry_client) {
-            client_file = ((entry_points.getOrPutEntryPoint(client, .client))?).toOptional();
+            const cf = entry_points.getOrPutEntryPoint(client, .client)?;
+            client_file = cf.toOptional();
         }
 
         router_types.append(allocator, FrameworkRouter.Type{
@@ -647,9 +649,9 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         });
         if (file.loader.isCSS()) {
             if (css_chunks_count == 0) {
-                css_chunks_first = i;
+                css_chunks_first = @as(usize, @intCast(i));
             } else {
-                css_chunks_first = @min(css_chunks_first, i);
+                css_chunks_first = @min(css_chunks_first, @as(usize, @intCast(i)));
             }
             css_chunks_count += 1;
         }
@@ -752,7 +754,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
             }
         }
         if (any_client_chunks) {
-            const runtime_file: *const OutputFile = &bundled_outputs[runtime_file_index];
+            const runtime_file: *OutputFile = &bundled_outputs[runtime_file_index];
             * = runtime_file.writeToDisk(root_dir, ".") catch |e| {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Output.err(e, "Failed to write {f} to output directory", .{bun.fmt.quote(runtime_file.dest_path)});
@@ -780,10 +782,11 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     for (i of 0..router.types.len) {
         const router_type = router.types[i];
         if (client_file := router_type.client_file.unwrap()) {
-            const str = (((bun.String.createFormat("{s}{s}", .{
+            const fmt_str = bun.String.createFormat("{s}{s}", .{
                 public_path,
                 pt.outputFile(client_file).dest_path,
-            }))?).toJS(global))?;
+            })?;
+            const str = fmt_str.toJS(global)?;
             client_entry_urls.putIndex(global, @intCast(i), str)?;
         } else {
             client_entry_urls.putIndex(global, @intCast(i), JSValue.null)?;
@@ -840,11 +843,12 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
 
     let css_chunk_js_strings = (allocator.alloc(JSValue, css_chunks_count))?;
     for (i of 0..css_chunks_count) {
-        const output_file = bundled_outputs[css_chunks_first + i];
+        const output_file = bundled_outputs[css_chunks_first + @as(usize, @intCast(i))];
         bun.assert(output_file.dest_path[0] != '.');
         // CSS chunks must be in contiguous order!!
         bun.assert(output_file.loader.isCSS());
-        css_chunk_js_strings[i] = (((bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path }))?).toJS(global))?;
+        const fmt_str = bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path })?;
+        css_chunk_js_strings[i] = fmt_str.toJS(global)?;
     }
 
     // Route URL patterns with parameter placeholders.
@@ -977,7 +981,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
             const param_info_array = (JSValue.createEmptyArray(global, params_buf.items.len))?;
             for (i of 0..params_buf.items.len) {
                 const param = params_buf.items[i];
-                param_info_array.putIndex(global, @intCast(params_buf.items.len - i - 1), (bun.String.createUTF8ForJS(global, param))?)?;
+                param_info_array.putIndex(global, @intCast(params_buf.items.len - @as(usize, @intCast(i)) - 1), (bun.String.createUTF8ForJS(global, param))?)?;
             }
             route_param_info.putIndex(global, @intCast(nav_index), param_info_array)?;
         } else {

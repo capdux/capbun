@@ -307,7 +307,7 @@ pub fn fromAddress(addr: usize, name_bytes: []u8) ?StackLine {
                 const name = ((bun.windows.getModuleNameW(module, (&temp_buf))) orelse { return null; });
                 const image_path = bun.windows.exePathW();
                 return StackLine{ .address = (if (comptime @typeInfo(@TypeOf((addr - base_address))) == .@"enum") cp_cast_int(i32, @intFromEnum((addr - base_address))) else cp_cast_int(i32, (addr - base_address))), .object = (if ((!std.mem.eql(u16, name, image_path))) name_blk: {
-                const slash_idx = std.mem.lastIndexOfAny(u16, name, slash_chars_u16);
+                const slash_idx = std.mem.lastIndexOfAny(u16, name, (&slash_chars_u16));
                 const start_idx = (if ((slash_idx != null)) (slash_idx.? + 1) else 0);
                 const basename = name[start_idx..];
                 break :name_blk (blk_catch_0: { break :blk_catch_0 ((bun.strings.convertUTF16toUTF8InBuffer(name_bytes, basename)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
@@ -530,7 +530,7 @@ pub var Bun__reported_memory_size: usize = 0;
 const Platform_current = @field(Platform, std.fmt.comptimePrint("{s}_{s}{s}", .{ @tagName(bun.Environment.os), @tagName(builtin.target.cpu.arch), (if (bun.Environment.baseline) "_baseline" else "") }));
 const version_char = (if (bun.Environment.is_canary) "2" else "1");
 const git_sha = (if ((bun.Environment.git_sha.len > 0)) bun.Environment.git_sha[0..7] else "unknown");
-const slash_chars_u16: []const u16 = .{ 92, 47 };
+const slash_chars_u16: [2]u16 = .{ 92, 47 };
 pub var verbose_error_trace: bool = false;
 const empty_stored_trace = StoredTrace{ .data = @as([31]usize, @splat(@as(usize, 0))), .index = 0 };
 pub const js_bindings = crash_handler_jsc.js_bindings;

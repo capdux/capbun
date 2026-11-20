@@ -334,7 +334,7 @@ pub fn runOnResolvePlugins(self: *JSGlobalObject, namespace_: bun.String, path: 
     }
 
 pub fn createErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            if (comptime (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
+            if (comptime ((@TypeOf(args) != void) and (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0)))) {
                 var stack_fallback = std.heap.stackFallback((1024 * 4), self.allocator());
                 _ = &stack_fallback;
                 var buf = ((std.Io.Writer.Allocating.initCapacity(stack_fallback.get(), 2048)) catch unreachable);
@@ -359,7 +359,7 @@ pub fn createErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8, ar
     }
 
 pub fn createTypeErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            if (comptime (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
+            if (comptime ((@TypeOf(args) != void) and (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0)))) {
                 var stack_fallback = std.heap.stackFallback((1024 * 4), self.allocator());
                 _ = &stack_fallback;
                 var buf = ((bun.MutableString.init2048(stack_fallback.get())) catch unreachable);
@@ -380,7 +380,7 @@ pub fn createTypeErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8
     }
 
 pub fn createDOMExceptionInstance(self: *JSGlobalObject, code: jsc.WebCore.DOMExceptionCode, comptime fmt: [:0]const u8, args: anytype) JSError!JSValue {
-            if (comptime (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
+            if (comptime ((@TypeOf(args) != void) and (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0)))) {
                 var stack_fallback = std.heap.stackFallback((1024 * 4), self.allocator());
                 _ = &stack_fallback;
                 var buf = try bun.MutableString.init2048(stack_fallback.get());
@@ -400,7 +400,7 @@ pub fn createDOMExceptionInstance(self: *JSGlobalObject, code: jsc.WebCore.DOMEx
     }
 
 pub fn createSyntaxErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            if (comptime (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
+            if (comptime ((@TypeOf(args) != void) and (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0)))) {
                 var stack_fallback = std.heap.stackFallback((1024 * 4), self.allocator());
                 _ = &stack_fallback;
                 var buf = ((bun.MutableString.init2048(stack_fallback.get())) catch unreachable);
@@ -421,7 +421,7 @@ pub fn createSyntaxErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const 
     }
 
 pub fn createRangeErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            if (comptime (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
+            if (comptime ((@TypeOf(args) != void) and (if ((@typeInfo(@TypeOf(args)) == .pointer)) (std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0) else (std.@"meta".fieldNames(@TypeOf(args)).len > 0)))) {
                 var stack_fallback = std.heap.stackFallback((1024 * 4), self.allocator());
                 _ = &stack_fallback;
                 var buf = ((bun.MutableString.init2048(stack_fallback.get())) catch unreachable);

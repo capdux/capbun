@@ -245,7 +245,7 @@ pub fn randomFill(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
         bytes: [*]u8,
         offset: u32,
         length: usize,
-        result: void = .{},
+        result: void = undefined,
     
     pub fn init(self: *@This(), _: *JSGlobalObject) !void {
                 _ = self.value.protect();
@@ -438,7 +438,8 @@ pub fn runTask(self: *Scrypt, key: []u8) void {
             }
             const res = BoringSSL.EVP_PBE_scrypt(password.ptr, password.len, salt.ptr, salt.len, self.N, self.r, self.p, self.maxmem, key.ptr, key.len);
             if ((res == 0)) {
-                self.e = BoringSSL.ERR_peek_last_error;
+                const get_err = BoringSSL.ERR_peek_last_error;
+                self.e = get_err();
                 return;
             }
     }
@@ -672,7 +673,7 @@ pub fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bu
         defer {
         _ = data.deinit();
         }
-        const out_arraybuffer = try jsc.JSValue.createBufferFromLength(globalThis, @as(i32, @intCast(data.length)));
+        const out_arraybuffer = try jsc.JSValue.createBufferFromLength(globalThis, @as(usize, @intCast(data.length)));
         const output_opt = out_arraybuffer.asArrayBuffer(globalThis);
         if ((output_opt == null)) {
             _ = data.deinit();
@@ -680,8 +681,10 @@ pub fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bu
         }
         const output = output_opt.?;
         if ((!data.run(output.slice()))) {
-            const e = Crypto.createCryptoError(globalThis, BoringSSL.ERR_get_error);
-            _ = BoringSSL.ERR_clear_error;
+            const get_err = BoringSSL.ERR_get_error;
+            const clear_err = BoringSSL.ERR_clear_error;
+            const e = Crypto.createCryptoError(globalThis, get_err());
+            _ = clear_err();
             return globalThis.throwValue(e);
         }
         return out_arraybuffer;
@@ -725,14 +728,14 @@ pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
         return global.ERR(.CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED, "Custom engines not supported by BoringSSL", .{}).throw();
 }
 
-pub fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ?[*:0]const u8, _: ?[*:0]const u8, ctx: *void) callconv(.c) void {
+pub fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ?[*:0]const u8, _: ?[*:0]const u8, ctx: *anyopaque) callconv(.c) void {
         if ((maybe_from == null)) {
             return;
         }
         const from_str = maybe_from.?;
         {
             const hashes: *bun.CaseInsensitiveASCIIStringArrayHashMap(void) = @ptrCast(@alignCast(ctx));
-            _ = bun.handleOom(hashes.put(bun.span(from_str), .{}));
+            _ = bun.handleOom(hashes.put(bun.span(from_str), undefined));
         }
 }
 
@@ -751,7 +754,7 @@ pub fn getHashes(global: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
         for (cp_iter_slice(hashes.keys())) |hash| {
             _ = &hash;
             const str = try String.createUTF8ForJS(global, hash);
-            _ = try array.putIndex(global, @as(i32, @intCast(i)), str);
+            _ = try array.putIndex(global, @as(u32, @intCast(i)), str);
             i = (i + 1);
         }
         return array;

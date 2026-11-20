@@ -374,7 +374,8 @@ fn execWithManager(ctx: Command.Context, pm: *PackageManager, package_pattern: s
                 let ctx_data = TreeContext.init(arena_allocator, string_bytes, top_only, &all_dependents);
                 defer ctx_data.clearPathTracker();
 
-                std.sort.insertion(DependentInfo, dependents.items, {}, compareDependents);
+                const empty_ctx: void = undefined;
+                std.sort.insertion(DependentInfo, dependents.items, empty_ctx, compareDependents);
 
                 let dep_idx: usize = 0;
                 for (dep of dependents.items) {
@@ -469,7 +470,8 @@ fn printDependencyTree(
         const sorted_dependents = ctx.allocator.dupe(DependentInfo, dependents.items)?;
         defer ctx.allocator.free(sorted_dependents);
 
-        std.sort.insertion(DependentInfo, sorted_dependents, {}, compareDependents);
+        const empty_ctx: void = undefined;
+        std.sort.insertion(DependentInfo, sorted_dependents, empty_ctx, compareDependents);
 
         let dep_idx: usize = 0;
         for (dep of sorted_dependents) {

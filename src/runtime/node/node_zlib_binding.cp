@@ -47,7 +47,7 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     // crc32 returns a u64 but the data will always be within a u32 range so the outer @intCast is always safe.
     const slice_u8 = data.slice();
-    return jsc.JSValue.jsNumber(@as(u32, i32(bun.zlib.crc32(value, slice_u8.ptr, i32(slice_u8.len)))));
+    return jsc.JSValue.jsNumber(@as(u32, @intCast(bun.zlib.crc32(value, slice_u8.ptr, @as(u32, @intCast(slice_u8.len))))));
 }
 
 pub fn CompressionStream(comptime T: type): type {

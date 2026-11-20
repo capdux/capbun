@@ -2785,7 +2785,8 @@ pub struct Resolver {
         return result;
     }
 
-    fn binDirs(_: *const ThisResolver): []const string {
+    fn binDirs(): []const string {
+        if (@sizeOf(@TypeOf(_)) == 0) unreachable;
         if (!bin_folders_loaded) return [];
         return bin_folders.constSlice();
     }

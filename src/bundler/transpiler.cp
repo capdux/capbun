@@ -458,21 +458,19 @@ pub struct Transpiler {
 
         switch (loader) {
             .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .text, .md => {
-                let result = transpiler.parse(
-                    _ParseOptions{
-                        allocator: transpiler.allocator,
-                        path: file_path,
-                        loader: loader,
-                        dirname_fd: resolve_result.dirname_fd,
-                        file_descriptor: null,
-                        file_hash: null,
-                        macro_remappings: transpiler.options.macro_remap,
-                        jsx: resolve_result.jsx,
-                        emit_decorator_metadata: resolve_result.flags.emit_decorator_metadata,
-                        experimental_decorators: resolve_result.flags.experimental_decorators,
-                    },
-                    client_entry_point_,
-                ) orelse return null;
+                const parse_opts: _ParseOptions = {
+                    allocator: transpiler.allocator,
+                    path: file_path,
+                    loader: loader,
+                    dirname_fd: resolve_result.dirname_fd,
+                    file_descriptor: null,
+                    file_hash: null,
+                    macro_remappings: transpiler.options.macro_remap,
+                    jsx: resolve_result.jsx,
+                    emit_decorator_metadata: resolve_result.flags.emit_decorator_metadata,
+                    experimental_decorators: resolve_result.flags.experimental_decorators,
+                };
+                let result = transpiler.parse(parse_opts, client_entry_point_) orelse return null;
                 if (!transpiler.options.transform_only) {
                     if (!transpiler.options.target.isBun())
                         transpiler.linker.link(
@@ -543,7 +541,7 @@ pub struct Transpiler {
                     opts.filename = bun.path.basename(file_path.text);
                     opts.css_modules = bun.css.CssModuleConfig{};
                 }
-                let [sheet, extra] = switch (bun.css.StyleSheet(bun.css.DefaultAtRule).parse(
+                let css_res = switch (bun.css.StyleSheet(bun.css.DefaultAtRule).parse(
                     alloc,
                     entry.contents,
                     opts,
@@ -551,12 +549,14 @@ pub struct Transpiler {
                     // TODO: DO WE EVEN HAVE SOURCE INDEX IN THIS TRANSPILER.ZIG file??
                     bun.bundle_v2.Index.invalid,
                 )) {
-                    .result => |v| v,
-                    .err => |e| {
+                    .result v => v,
+                    .err e => {
                         transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{f} parsing", .{ e }) catch unreachable;
                         return null;
                     },
                 };
+                let sheet = css_res[0];
+                let extra = css_res[1];
                 if (e := sheet.minify(alloc, bun.css.MinifyOptions.default(), &extra).asErr()) {
                     bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{f} while minifying", .{ e.kind }));
                     return null;
@@ -1238,7 +1238,7 @@ pub struct Transpiler {
     }
 
     static fn normalizeEntryPointPath(transpiler: *Transpiler, _entry: string): string {
-        let paths = [_entry];
+        let paths: [1]string = [_entry];
         let entry = transpiler.fs.abs(&paths);
 
         std.fs.accessAbsolute(entry, .{}) catch

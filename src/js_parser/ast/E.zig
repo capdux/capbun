@@ -176,7 +176,8 @@ pub fn alphabetizeStrings(self: *Array) void {
                     _ = bun.assert((item.data == .e_string));
                 }
             }
-            _ = std.sort.pdq(Expr, self.items.slice(), .{}, Sorter.isLessThan);
+            const empty_ctx: void = undefined;
+            _ = std.sort.pdq(Expr, self.items.slice(), empty_ctx, Sorter.isLessThan);
     }
     pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").arrayToJS;
     const Sorter = ArraySorter;
@@ -474,7 +475,7 @@ pub fn put(self: *Object, allocator: std.mem.Allocator, key: []const u8, expr: E
     }
 
 pub fn putString(self: *Object, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
-            return try self.put(self, allocator, key, Expr.init(E.String, E.String.init(value), logger.Loc.Empty));
+            return try self.put(allocator, key, Expr.init(E.String, E.String.init(value), logger.Loc.Empty));
     }
 
 pub fn set(self: *Object, key: Expr, allocator: std.mem.Allocator, value: Expr) SetError!void {
@@ -650,11 +651,13 @@ pub fn alphabetizeProperties(self: *Object) void {
                     _ = bun.assert((prop.key.?.data == .e_string));
                 }
             }
-            _ = std.sort.pdq(G.Property, self.properties.slice(), .{}, Sorter.isLessThan);
+            const empty_ctx: void = undefined;
+            _ = std.sort.pdq(G.Property, self.properties.slice(), empty_ctx, Sorter.isLessThan);
     }
 
 pub fn packageJSONSort(self: *Object) void {
-            _ = std.sort.pdq(G.Property, self.properties.slice(), .{}, PackageJSONSort.Fields.isLessThan);
+            const empty_ctx: void = undefined;
+            _ = std.sort.pdq(G.Property, self.properties.slice(), empty_ctx, PackageJSONSort.Fields.isLessThan);
     }
     pub const Rope = ObjectRope;
     pub const RopeQuery = ObjectRopeQuery;

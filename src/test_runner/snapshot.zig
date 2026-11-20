@@ -350,7 +350,8 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     }
                 }
                 }
-                _ = std.mem.sort(SnapshotInlineSnapshotToWrite, ils_info.items, .{}, SnapshotInlineSnapshotToWrite.lessThanFn);
+                const empty_ctx: void = undefined;
+                _ = std.mem.sort(SnapshotInlineSnapshotToWrite, ils_info.items, empty_ctx, SnapshotInlineSnapshotToWrite.lessThanFn);
                 const test_file = Jest.runner.?.files.get(file_id);
                 const test_filename = try arena_.dupeZ(u8, test_file.source.path.text);
                 const fd = (switch (bun.sys.open(test_filename, bun.O.RDWR, 420)) {

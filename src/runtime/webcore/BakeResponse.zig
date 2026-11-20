@@ -32,7 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -64,8 +63,10 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
 pub fn fixDeadCodeElimination() void {
-        _ = std.mem.doNotOptimizeAway(*const BakeResponseClass__constructForSSR);
-        _ = std.mem.doNotOptimizeAway(*const BakeResponseClass__constructRender);
+        const f1 = BakeResponseClass__constructForSSR;
+        _ = std.mem.doNotOptimizeAway((&f1));
+        const f2 = BakeResponseClass__constructRender;
+        _ = std.mem.doNotOptimizeAway((&f2));
 }
 
 extern "c" fn BakeResponse__createForSSR(globalObject: *JSGlobalObject, self: *Response, kind: u8) callconv(jsc.conv) jsc.JSValue;
@@ -77,10 +78,11 @@ pub fn toJSForSSR(self: *Response, globalObject: *JSGlobalObject, kind: SSRKind)
 
 pub export fn BakeResponseClass__constructForSSR(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, bake_ssr_has_jsx: *c_int, js_this: jsc.JSValue) callconv(jsc.conv) ?*anyopaque {
         const res = (blk_catch_0: { break :blk_catch_0 ((constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-            _ = (blk_catch_1: { break :blk_catch_1 ((globalObject.throwOutOfMemory()) catch |__ce_1| { _ = &__ce_1;  }); });
+            if ((globalObject.throwOutOfMemory() == error.JSError)) {
+            }
         }
         return null; }); });
-        return @as(?*anyopaque, @ptrCast(@alignCast(&(res))));
+        return res;
 }
 
 pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, bake_ssr_has_jsx: *c_int, js_this: jsc.JSValue) bun.JSError!*Response {
@@ -123,7 +125,11 @@ pub export fn BakeResponseClass__constructRender(globalObject: *jsc.JSGlobalObje
 pub fn constructRender(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         const arguments = callframe.argumentsAsArray(2);
         const vm = globalThis.bunVM();
-        const async_local_storage = ((try vm.getDevServerAsyncLocalStorage()) orelse { return .{ .ok = globalThis.throwInvalidArguments("Response.render() is only available in the Bun dev server", .{}) }; });
+        const async_local_storage_opt = try vm.getDevServerAsyncLocalStorage();
+        if ((async_local_storage_opt == null)) {
+            return globalThis.throwInvalidArguments("Response.render() is only available in the Bun dev server", .{});
+        }
+        const async_local_storage = async_local_storage_opt.?;
         _ = try assertStreamingDisabled(globalThis, async_local_storage, "Response.render");
         if ((arguments.len < 1)) {
             return globalThis.throwInvalidArguments("Response.render() requires at least a path argument", .{});

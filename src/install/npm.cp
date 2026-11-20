@@ -153,6 +153,13 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
 
 const PkgId = struct { string, string };
 
+fn parseOptionalJson(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): BunJSON.Expr?! {
+    return BunJSON.parseUTF8(source, log, allocator) catch |e| {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        return null;
+    };
+}
+
 pub fn responseError(
     allocator: std.mem.Allocator,
     req: *const http.AsyncHTTP,
@@ -166,13 +173,7 @@ pub fn responseError(
     {
         let log = logger.Log.init(allocator);
         const source = &logger.Source.initPathString("???", response_body.list.items);
-        let parsed_json: BunJSON.Expr? = null;
-        if (j := BunJSON.parseUTF8(source, &log, allocator) catch |e| {
-            if (e == error.OutOfMemory) return error.OutOfMemory;
-            parsed_json = null;
-        }) {
-            parsed_json = j;
-        }
+        const parsed_json = parseOptionalJson(source, &log, allocator)?;
         if (json := parsed_json) {
             if (err_pair := json.getString(allocator, "error")?) {
                 message = err_pair[0];

@@ -39,15 +39,17 @@ pub struct Job_ {
             return;
         };
         if (!job.pbkdf2.run(job.output)) {
-            job.err = @intCast(BoringSSL.ERR_get_error());
-            BoringSSL.ERR_clear_error();
+            const get_err = BoringSSL.ERR_get_error;
+            const clear_err = BoringSSL.ERR_clear_error;
+            job.err = @intCast(get_err());
+            clear_err();
 
             bun.default_allocator.free(job.output);
             job.output = job.output[0..0];
         }
     }
 
-    pub fn runFromJS(*_: *Job_): anyerror!void {
+    pub fn runFromJS(*_: *Job_): bun.JSError!void {
         defer this.release();
         if (this.vm.isShuttingDown()) {
             return;
@@ -97,7 +99,7 @@ pub struct Job_ {
 
 pub const Job = Job_;
 
-export class PBKDF2 {
+pub struct PBKDF2 {
     password: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty;
     salt: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty;
     iteration_count: u32 = 1;
@@ -106,15 +108,15 @@ export class PBKDF2 {
 
     pub const Job = Job_;
 
-    pub fn run(*_: *PBKDF2, output: []u8): bool {
-        const password = this.password.slice();
-        const salt = this.salt.slice();
-        const algorithm = this.algorithm;
-        const iteration_count = this.iteration_count;
-        const length = this.length;
+    pub fn run(output: []u8): bool {
+        const password = _.password.slice();
+        const salt = _.salt.slice();
+        const algorithm = _.algorithm;
+        const iteration_count = _.iteration_count;
+        const length = _.length;
 
         @memset(output, 0);
-        assert(this.length <= @as(i32, @intCast(output.len)));
+        assert(_.length <= @as(i32, @intCast(output.len)));
         BoringSSL.ERR_clear_error();
         const rc = BoringSSL.PKCS5_PBKDF2_HMAC(
             if (password.len > 0) password.ptr else null,
@@ -134,22 +136,18 @@ export class PBKDF2 {
         return true;
     }
 
-    pub fn deinitAndUnprotect(*_: *PBKDF2) {
-        this.password.deinitAndUnprotect();
-        this.salt.deinitAndUnprotect();
+    pub fn deinitAndUnprotect(*_) {
+        _.password.deinitAndUnprotect();
+        _.salt.deinitAndUnprotect();
     }
 
-    pub fn release(*_: *PBKDF2) {
-        this.password.deinit();
-        this.salt.deinit();
-    }
-
-    pub fn deinit(*_: *PBKDF2) {
-        this.release();
+    pub fn deinit(*_) {
+        _.password.deinit();
+        _.salt.deinit();
     }
 }
 
-pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_async: bool): anyerror!PBKDF2 {
+pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_async: bool): bun.JSError!PBKDF2 {
     const args = callFrame.argumentsAsArray(6);
     const arg0 = args[0];
     const arg1 = args[1];
@@ -232,7 +230,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
             if (is_async) {
                 out.deinitAndUnprotect();
             } else {
-                out.release();
+                out.deinit();
             }
         }
     }

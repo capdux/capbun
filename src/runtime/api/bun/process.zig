@@ -1015,7 +1015,7 @@ pub fn onChildStopped(self: SyncJobControl) void {
             if ((tcgetpgrp(0) == getpgrp())) {
                 _ = SyncJobControl.ttouBlocked(self.script_pgid);
             }
-            _ = std.c.kill((0 - self).script_pgid, std.posix.SIG.CONT);
+            _ = std.c.kill((0 - self.script_pgid), std.posix.SIG.CONT);
     }
 
 pub fn ttouBlocked(pgid: std.c.pid_t) void {
@@ -1052,7 +1052,7 @@ pub fn flattenOwnedChunks(total_allocator: std.mem.Allocator, chunks_allocator: 
             return result;
     }
 
-pub fn spawnWindowsWithoutPipes(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
+pub fn spawnWindowsWithoutPipes(options: *const Options, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !Maybe(Result) {
             var loop = options.windows.loop.platformEventLoop();
             _ = &loop;
             var spawned = (switch (try spawnProcessWindows((&options.toSpawnOptions(false)), argv, envp)) {
@@ -1077,7 +1077,7 @@ return .{ .err = e };
             return .{ .result = .{ .status = process.status } };
     }
 
-pub fn spawnWindowsWithPipes(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
+pub fn spawnWindowsWithPipes(options: *const Options, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !Maybe(Result) {
             var loop: jsc.EventLoopHandle = options.windows.loop;
             _ = &loop;
             var spawned = (switch (try spawnProcessWindows((&options.toSpawnOptions(false)), argv, envp)) {
@@ -1121,7 +1121,7 @@ _ = win_proc.process.kill(1);
             return .{ .result = result };
     }
 
-pub fn spawnWithArgv(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
+pub fn spawnWithArgv(options: *const Options, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !Maybe(Result) {
             if (comptime Environment.isWindows) {
                 if ((((options.stdin != .buffer) and (options.stderr != .buffer)) and (options.stdout != .buffer))) {
                     return try spawnWindowsWithoutPipes(options, argv, envp);
@@ -1132,7 +1132,7 @@ pub fn spawnWithArgv(options: *const Options, argv: ?[*:null][*:0]const u8, envp
     }
 
 pub fn spawn(options: *const Options) !Maybe(Result) {
-            const envp = ((options.envp) orelse (@as(?[*:null][*:0]const u8, @ptrCast(std.c.environ))));
+            const envp = ((options.envp) orelse (@as([*:null]OptCStr, @ptrCast(std.c.environ))));
             const argv = options.argv;
             var string_builder = bun.StringBuilder{  };
             _ = &string_builder;
@@ -1157,7 +1157,7 @@ pub fn spawn(options: *const Options) !Maybe(Result) {
             return spawnWithArgv(options, @ptrCast(args.items.ptr), @ptrCast(envp));
     }
 
-pub fn spawnPosix(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
+pub fn spawnPosix(options: *const Options, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !Maybe(Result) {
             const no_orphans = (bun.ParentDeathWatchdog.isEnabled() and (!(Environment.isMac and options.use_execve_on_macos)));
             var siblings_buf: [64]std.c.pid_t = undefined;
             _ = &siblings_buf;
@@ -1260,7 +1260,7 @@ _ = (if ((w.pid <= 0)) break else null);
             defer {
             {
                 if ((!success)) {
-                    for (cp_mut_slice(&(&out))) |*array_list| {
+                    for (cp_mut_slice(&out)) |*array_list| {
                         _ = &array_list;
                         _ = (array_list.*).clearAndFree();
                     }
@@ -1331,7 +1331,7 @@ break :blk st;
                 if ((poll_fds.len == 0)) {
                     break;
                 }
-                const rc = std.c.poll(poll_fds.ptr, (if (comptime @typeInfo(@TypeOf(poll_fds.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(poll_fds.len)) else cp_cast_int(i32, poll_fds.len)), -1);
+                const rc = std.c.poll(poll_fds.ptr, @as(usize, @intCast(poll_fds.len)), -1);
                 switch (bun.sys.getErrno(rc)) {
 .SUCCESS => {
 
@@ -1604,7 +1604,7 @@ _ = (if ((e.getErrno() == .SRCH)) bun.Global.exit(bun.ParentDeathWatchdog.exit_c
                 _ = &pfds;
                 const push = struct {
 
-pub fn f(l: []std.c.pollfd, fd: bun.FD) void {
+pub fn f(l: *PollFdSlice, fd: bun.FD) void {
             l.len = (l.len + 1);
             l.*[cp_cast_int(usize, (l.len - 1))] = .{ .fd = (if (comptime @typeInfo(@TypeOf(fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(fd.cast())) else cp_cast_int(i32, fd.cast())), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 };
     }
@@ -1623,7 +1623,7 @@ pub fn f(l: []std.c.pollfd, fd: bun.FD) void {
                 if ((chld_fd != bun.invalid_fd)) {
                     _ = push((&pfds), chld_fd);
                 }
-                const rc = std.c.poll(pfds.ptr, (if (comptime @typeInfo(@TypeOf(pfds.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(pfds.len)) else cp_cast_int(i32, pfds.len)), timeout_ms);
+                const rc = std.c.poll(pfds.ptr, @as(usize, @intCast(pfds.len)), timeout_ms);
                 switch (bun.sys.getErrno(rc)) {
 .SUCCESS => {
 
@@ -1698,14 +1698,14 @@ pub fn reapChild(child: std.c.pid_t) Status {
         cwd: []const u8 = "",
         detached: bool = false,
         argv: []const []const u8,
-        envp: ??[*:null][*:0]const u8,
+        envp: ?[*:null]OptCStr,
         use_execve_on_macos: bool = false,
         argv0: ?[*:0]const u8 = null,
         windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = (if (Environment.isWindows) ({
-    }) else null),
+    }) else undefined),
     
     pub fn toSpawnOptions(self: @This(), new_process_group: bool) SpawnOptions {
-                return SpawnOptions{ .stdin = self.stdin.toStdio(), .stdout = self.stdout.toStdio(), .stderr = self.stderr.toStdio(), .ipc = self.ipc, .cwd = self.cwd, .detached = self.detached, .use_execve_on_macos = self.use_execve_on_macos, .stream = false, .argv0 = self.argv0, .new_process_group = new_process_group, .windows = (if (Environment.isWindows) self.windows else null) };
+                return SpawnOptions{ .stdin = self.stdin.toStdio(), .stdout = self.stdout.toStdio(), .stderr = self.stderr.toStdio(), .ipc = self.ipc, .cwd = self.cwd, .detached = self.detached, .use_execve_on_macos = self.use_execve_on_macos, .stream = false, .argv0 = self.argv0, .new_process_group = new_process_group, .windows = (if (Environment.isWindows) self.windows else undefined) };
         }
         pub const Stdio = SyncOptionsStdio;
     };
@@ -1801,6 +1801,7 @@ pub fn reapChild(child: std.c.pid_t) Status {
 
 const OptFD = ?bun.FD;
 const OptCStr = ?[*:0]const u8;
+const PollFdSlice = []std.c.pollfd;
 const ArgPtr = ?[*:0]u8;
 const pid_t = (if (Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
 const fd_t = (if (Environment.isPosix) std.posix.fd_t else i32);
@@ -2377,7 +2378,7 @@ if ((e.getErrno() == .SRCH)) {
         _ = unreachable;
 }
 
-pub fn spawnProcessWindows(options: *const WindowsSpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(WindowsSpawnResult) {
+pub fn spawnProcessWindows(options: *const WindowsSpawnOptions, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !bun.sys.Maybe(WindowsSpawnResult) {
         _ = bun.markWindowsOnly();
         bun.analytics.Features.spawn = (bun.analytics.Features.spawn + 1);
         var uv_process_options = std.mem.zeroes(uv.uv_process_options_t);
@@ -2610,7 +2611,7 @@ stdio.flags = uv.StdioFlags.inherit_fd;
         _ = &result;
         const StdioResult = WindowsSpawnResult.StdioResult;
         _ = &StdioResult;
-        const result_stdios: []*const StdioResult = .{ (&result.stdin), (&result.stdout), (&result.stderr) };
+        const result_stdios: [3]*const StdioResult = .{ (&result.stdin), (&result.stdout), (&result.stderr) };
         inline for (0..3) |i| {
             const stdio = stdio_containers.items[@as(usize, @intCast(i))];
             const result_stdio = result_stdios[@as(usize, @intCast(i))];

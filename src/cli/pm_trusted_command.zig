@@ -108,7 +108,7 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
                 const alias = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf);
                 const resolution = (&resolutions[@as(usize, @intCast(package_id))]);
                 if ((!pm.lockfile.hasTrustedDependency(alias, resolution))) {
-                    _ = try untrusted_dep_ids.put(ctx.allocator, dep_id, .{});
+                    _ = try untrusted_dep_ids.put(ctx.allocator, dep_id, @as(void, undefined));
                 }
             }
             if ((untrusted_dep_ids.count() == 0)) {
@@ -174,15 +174,15 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
                 const dep_id = entry.key_ptr.*;
                 const scripts_list = entry.value_ptr.*;
                 const package_id = pm.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                const resolution = pm.lockfile.packages.items(.resolution)[@as(usize, @intCast(package_id))];
+                const resolution = (&pm.lockfile.packages.items(.resolution)[@as(usize, @intCast(package_id))]);
                 _ = scripts_list.printScripts(resolution, buf, .untrusted);
                 _ = Output.pretty("\n", .{});
             }
-            _ = Output.pretty("These dependencies had their lifecycle scripts blocked during install.", "", "If you trust them and wish to run their scripts, use <d>`<r><blue>bun pm trust<r><d>`<r>.", "", .{});
+            _ = Output.pretty("These dependencies had their lifecycle scripts blocked during install.\n\nIf you trust them and wish to run their scripts, use <d>`<r><blue>bun pm trust<r><d>`<r>.\n", .{});
     }
 
 pub fn printZeroUntrustedDependenciesFound() void {
-            _ = Output.pretty("Found <b>0<r> untrusted dependencies with scripts.", "", "This means all packages with scripts are in \"trustedDependencies\" or none of your dependencies have scripts.", "", "For more information, visit <magenta>https://bun.com/docs/install/lifecycle#trusteddependencies<r>", "", .{});
+            _ = Output.pretty("Found <b>0<r> untrusted dependencies with scripts.\n\nThis means all packages with scripts are in \"trustedDependencies\" or none of your dependencies have scripts.\n\nFor more information, visit <magenta>https://bun.com/docs/install/lifecycle#trusteddependencies<r>\n", .{});
     }
 };
 
@@ -254,7 +254,7 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
                 const alias = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf);
                 const resolution = (&resolutions[@as(usize, @intCast(package_id))]);
                 if ((!pm.lockfile.hasTrustedDependency(alias, resolution))) {
-                    _ = try untrusted_dep_ids.put(ctx.allocator, dep_id, .{});
+                    _ = try untrusted_dep_ids.put(ctx.allocator, dep_id, @as(void, undefined));
                 }
             }
             if ((untrusted_dep_ids.count() == 0)) {
@@ -330,7 +330,7 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
                             }
                             _ = try entry.value_ptr.append(ctx.allocator, ScriptInfo{ .package_id = package_id, .scripts_list = scripts_list, .skip = skip });
                             if ((!skip)) {
-                                _ = try package_names_to_add.put(ctx.allocator, try ctx.allocator.dupe(u8, alias), .{});
+                                _ = try package_names_to_add.put(ctx.allocator, try ctx.allocator.dupe(u8, alias), @as(void, undefined));
                                 scripts_count = (scripts_count + scripts_list.total);
                             }
                         }
@@ -416,7 +416,7 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
                 while (iter.next()) |entry| {
                     for (entry.items) |info| {
                         _ = &info;
-                        const resolution = pm.lockfile.packages.items(.resolution)[@as(usize, @intCast(info.package_id))];
+                        const resolution = (&pm.lockfile.packages.items(.resolution)[@as(usize, @intCast(info.package_id))]);
                         if (info.skip) {
                             _ = info.scripts_list.printScripts(resolution, buf, .untrusted);
                             total_skipped_packages = (total_skipped_packages + 1);
@@ -432,7 +432,7 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, args: [][:0]u8) !void {
             _ = try Install.PackageManager.PackageJSONEditor.editTrustedDependencies(ctx.allocator, (&package_json), names);
             for (cp_iter_slice(names)) |name| {
                 _ = &name;
-                _ = try pm.lockfile.trusted_dependencies.?.put(ctx.allocator, @truncate(String.Builder.stringHash(name)), .{});
+                _ = try pm.lockfile.trusted_dependencies.?.put(ctx.allocator, @truncate(String.Builder.stringHash(name)), @as(void, undefined));
             }
             _ = pm.lockfile.saveToDisk((&load_lockfile), (&pm.options));
             var buffer_writer = bun.js_printer.BufferWriter.init(ctx.allocator);

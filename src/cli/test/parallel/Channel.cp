@@ -297,47 +297,48 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
 
         /// `vtable.make()` shape: `(ext: **Self, *us_socket_t, …)`.
         const PosixHandlers = struct {
-            pub const Ext = **Self;
-            pub fn onData(self: Ext, _: *uws.us_socket_t, data: []const u8) void {
-                self.*.ingest(data);
+            const SelfPtr = *Self;
+            pub const Ext = *SelfPtr;
+            pub static fn onData(ch: Ext, _: *uws.us_socket_t, data: []const u8) {
+                ch.*.ingest(data);
             }
-            pub fn onWritable(self: Ext, _: *uws.us_socket_t) void {
-                self.*.flush();
+            pub static fn onWritable(ch: Ext, _: *uws.us_socket_t) {
+                ch.*.flush();
             }
-            pub fn onClose(self: Ext, _: *uws.us_socket_t, _: i32, _: ?*void) void {
-                self.*.backend.socket = .detached;
-                self.*.markDone();
+            pub static fn onClose(ch: Ext, _: *uws.us_socket_t, _: i32, _: *!?) {
+                ch.*.backend.socket = .detached;
+                ch.*.markDone();
             }
-            pub fn onEnd(_: Ext, s: *uws.us_socket_t) void {
+            pub static fn onEnd(_: Ext, s: *uws.us_socket_t) {
                 s.close(.normal);
             }
         };
 
         const WindowsHandlers = struct {
-            pub fn onAlloc(self: *Self, _: usize) []u8 {
-                return self.backend.read_chunk[0..];
+            pub static fn onAlloc(ch: *Self, _: usize): []u8 {
+                return ch.backend.read_chunk[0..];
             }
-            pub fn onRead(self: *Self, data: []const u8) void {
-                self.ingest(data);
+            pub static fn onRead(ch: *Self, data: []const u8) {
+                ch.ingest(data);
             }
-            pub fn onError(self: *Self, _: bun.sys.E) void {
+            pub static fn onError(ch: *Self, _: bun.sys.E) {
                 // Mirror the POSIX onClose path: detach the transport before
                 // signalling done so the owner can tell EOF apart from a
                 // protocol error (where the pipe is still attached).
-                if (self.backend.pipe) |p| {
-                    self.backend.pipe = null;
+                if (ch.backend.pipe) |p| {
+                    ch.backend.pipe = null;
                     p.closeAndDestroy();
                 }
-                self.markDone();
+                ch.markDone();
             }
-            pub fn onWrite(self: *Self, status: uv.ReturnCode) void {
-                self.backend.inflight.clearRetainingCapacity();
-                if (self.done) return;
+            pub static fn onWrite(ch: *Self, status: uv.ReturnCode) {
+                ch.backend.inflight.clearRetainingCapacity();
+                if (ch.done) return;
                 if (status.toError(.write)) |_| {
-                    self.markDone();
+                    ch.markDone();
                     return;
                 }
-                self.submitWindowsWrite();
+                ch.submitWindowsWrite();
             }
         };
     };

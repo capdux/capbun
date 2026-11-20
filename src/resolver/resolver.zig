@@ -2250,8 +2250,10 @@ pub fn parseTSConfig(r: *ThisResolver, file: []const u8, dirname_fd: FD) !?*TSCo
             return result;
     }
 
-pub fn binDirs(self: Resolver, _: *const ThisResolver) []const []const u8 {
-        _ = self;
+pub fn binDirs(self: Resolver) []const []const u8 {
+            if ((@sizeOf(@TypeOf(self)) == 0)) {
+                _ = unreachable;
+            }
             if ((!bin_folders_loaded)) {
                 return &.{};
             }

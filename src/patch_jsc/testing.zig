@@ -90,16 +90,16 @@ pub fn makeDiff(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const old_folder_jsval = ((arguments.nextEat()) orelse (({
+            const old_folder_jsval = ((arguments.nextEat()) orelse {
             return globalThis.throw("expected 2 strings", .{});
-})));
+});
             const old_folder_bunstr = try old_folder_jsval.toBunString(globalThis);
             defer {
             _ = old_folder_bunstr.deref();
             }
-            const new_folder_jsval = ((arguments.nextEat()) orelse (({
+            const new_folder_jsval = ((arguments.nextEat()) orelse {
             return globalThis.throw("expected 2 strings", .{});
-})));
+});
             const new_folder_bunstr = try new_folder_jsval.toBunString(globalThis);
             defer {
             _ = new_folder_bunstr.deref();
@@ -154,9 +154,9 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const patchfile_src_js = ((arguments.nextEat()) orelse (({
+            const patchfile_src_js = ((arguments.nextEat()) orelse {
             return globalThis.throw("TestingAPIs.parse: expected at least 1 argument, got 0", .{});
-})));
+});
             const patchfile_src_bunstr = try patchfile_src_js.toBunString(globalThis);
             const patchfile_src = patchfile_src_bunstr.toUTF8(bun.default_allocator);
             var patchfile = (blk_catch_1: { break :blk_catch_1 ((parsePatchFile(patchfile_src.slice())) catch |e| { _ = &e; if ((e == error.hunk_header_integrity_check_failed)) {
@@ -179,7 +179,8 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             _ = &arguments;
             const patchfile_js_opt = arguments.nextEat();
             if ((patchfile_js_opt == null)) {
-                _ = (blk_catch_2: { break :blk_catch_2 ((globalThis.throw("apply: expected at least 1 argument, got 0", .{})) catch |__ce_2| { _ = &__ce_2;  }); });
+                if ((globalThis.throw("apply: expected at least 1 argument, got 0", .{}) == error.JSError)) {
+                }
                 return .initErr(.js_undefined);
             }
             const patchfile_js = patchfile_js_opt.?;
@@ -187,7 +188,7 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             _ = &dir_fd;
             if (arguments.nextEat()) |dir_js| {
                 _ = &dir_js;
-                var bunstr = (blk_catch_3: { break :blk_catch_3 ((dir_js.toBunString(globalThis)) catch |__ce_3| { _ = &__ce_3; return .initErr(.js_undefined); }); });
+                var bunstr = (blk_catch_2: { break :blk_catch_2 ((dir_js.toBunString(globalThis)) catch |__ce_2| { _ = &__ce_2; return .initErr(.js_undefined); }); });
                 _ = &bunstr;
                 defer {
                 _ = bunstr.deref();
@@ -199,23 +200,25 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
                 dir_fd = (switch (bun.sys.open(path, (bun.O.DIRECTORY | bun.O.RDONLY), 0)) {
 .err => |e| {
 {
-                    _ = (blk_catch_6: { break :blk_catch_6 ((globalThis.throwValue((blk_catch_5: { break :blk_catch_5 ((e.withPath(path).toJS(globalThis)) catch |__ce_5| { _ = &__ce_5; return .initErr(.js_undefined); }); }))) catch |__ce_6| { _ = &__ce_6;  }); });
+                    if ((globalThis.throwValue((blk_catch_4: { break :blk_catch_4 ((e.withPath(path).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return .initErr(.js_undefined); }); })) == error.JSError)) {
+                    }
                     return .initErr(.js_undefined);
                 }
 },
 .result => |fd| fd,
 });
             }
-            const patchfile_bunstr = (blk_catch_7: { break :blk_catch_7 ((patchfile_js.toBunString(globalThis)) catch |__ce_7| { _ = &__ce_7; return .initErr(.js_undefined); }); });
+            const patchfile_bunstr = (blk_catch_5: { break :blk_catch_5 ((patchfile_js.toBunString(globalThis)) catch |__ce_5| { _ = &__ce_5; return .initErr(.js_undefined); }); });
             defer {
             _ = patchfile_bunstr.deref();
             }
             const patchfile_src = patchfile_bunstr.toUTF8(bun.default_allocator);
-            const patch_file = (blk_catch_8: { break :blk_catch_8 ((parsePatchFile(patchfile_src.slice())) catch |e| { _ = &e; if ((bun.FD.cwd() != dir_fd)) {
+            const patch_file = (blk_catch_6: { break :blk_catch_6 ((parsePatchFile(patchfile_src.slice())) catch |e| { _ = &e; if ((bun.FD.cwd() != dir_fd)) {
                 _ = dir_fd.close();
             }
             _ = patchfile_src.deinit();
-            _ = (blk_catch_9: { break :blk_catch_9 ((globalThis.throwError(e, "failed to parse patchfile")) catch |__ce_9| { _ = &__ce_9;  }); });
+            if ((globalThis.throwError(e, "failed to parse patchfile") == error.JSError)) {
+            }
             return .initErr(.js_undefined); }); });
             return .{ .result = ApplyArgs{ .dirfd = dir_fd, .patchfile = patch_file, .patchfile_txt = patchfile_src } };
     }

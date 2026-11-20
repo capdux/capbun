@@ -52,7 +52,8 @@ const jsc = bun.jsc;
 const gen = bun.gen.bindgen_test;
 
 pub fn getBindgenTestFunctions(global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return try jsc.JSObject.create(.{ .add = gen.createAddCallback(global), .requiredAndOptionalArg = gen.createRequiredAndOptionalArgCallback(global) }, global).toJS();
+        const obj = try jsc.JSObject.create(.{ .add = gen.createAddCallback(global), .requiredAndOptionalArg = gen.createRequiredAndOptionalArgCallback(global) }, global);
+        return obj.toJS();
 }
 
 pub fn add(global: *jsc.JSGlobalObject, a: i32, b: i32) !i32 {

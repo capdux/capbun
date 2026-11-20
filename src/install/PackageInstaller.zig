@@ -121,7 +121,7 @@ pub fn incrementTreeInstallCount(self: *PackageInstaller, tree_id: Lockfile.Tree
                 _ = &link_dest_buf;
                 var link_rel_buf: bun.PathBuffer = undefined;
                 _ = &link_rel_buf;
-                _ = self.linkTreeBins(tree, tree_id, (&link_target_buf), (&link_dest_buf), (&link_rel_buf), log_level);
+                _ = self.linkTreeBins((&self.trees[@as(usize, @intCast(tree_id))]), tree_id, (&link_target_buf), (&link_dest_buf), (&link_rel_buf), log_level);
             }
             if (comptime should_install_packages) {
                 const force = false;
@@ -134,7 +134,7 @@ pub fn linkTreeBins(self: *PackageInstaller, tree: *TreeContext, tree_id: TreeCo
             const lockfile = self.lockfile;
             const manager = self.manager;
             const string_buf = lockfile.buffers.string_bytes.items;
-            var node_modules_path: DefaultAbsPath = .{ .@"from" = self.node_modules.path.items };
+            var node_modules_path = DefaultAbsPath.@"from"(self.node_modules.path.items);
             _ = &node_modules_path;
             defer {
             _ = node_modules_path.deinit();
@@ -203,9 +203,8 @@ const target_cpu = manager.options.cpu;
                 while (true) {
                     var target_nm_path = (&node_modules_path);
                     _ = &target_nm_path;
-                    if (target_node_modules_path_opt) |*path| {
-                        _ = &path;
-                        target_nm_path = (path.*);
+                    if ((target_node_modules_path_opt != null)) {
+                        target_nm_path = (&target_node_modules_path_opt.?);
                     }
                     var bin_linker: Bin.Linker = .{ .bin = bin, .global_bin_path = self.options.bin_path, .package_name = package_name_, .target_package_name = target_package_name, .string_buf = string_buf, .extern_string_buf = lockfile.buffers.extern_strings.items, .seen = (&self.seen_bin_links), .node_modules_path = (&node_modules_path), .target_node_modules_path = target_nm_path, .abs_target_buf = link_target_buf, .abs_dest_buf = link_dest_buf, .rel_buf = link_rel_buf };
                     _ = &bin_linker;
@@ -255,10 +254,10 @@ pub fn linkRemainingBins(self: *PackageInstaller, log_level: Options.LogLevel) v
                 if (((tree.*).binaries.count() > 0)) {
                     _ = self.seen_bin_links.clearRetainingCapacity();
                     self.node_modules.path.items.len = (strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1);
-                    const rel_path_res = Lockfile.Tree.relativePathAndDepth(lockfile, (if (comptime @typeInfo(@TypeOf(tree_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(tree_id)) else cp_cast_int(i32, tree_id)), (&node_modules_rel_path_buf), (&depth_buf), .node_modules);
+                    const rel_path_res = Lockfile.Tree.relativePathAndDepth(lockfile, @as(u32, @intCast(tree_id)), (&node_modules_rel_path_buf), (&depth_buf), .node_modules);
                     const rel_path = rel_path_res[0];
                     _ = bun.handleOom(self.node_modules.path.appendSlice(rel_path));
-                    _ = self.linkTreeBins((tree.*), (if (comptime @typeInfo(@TypeOf(tree_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(tree_id)) else cp_cast_int(i32, tree_id)), (&link_target_buf), (&link_dest_buf), (&link_rel_buf), log_level);
+                    _ = self.linkTreeBins((&self.trees[@as(usize, @intCast(tree_id))]), @as(u32, @intCast(tree_id)), (&link_target_buf), (&link_dest_buf), (&link_rel_buf), log_level);
                 }
             }
     }
@@ -277,15 +276,14 @@ pub fn runAvailableScripts(self: *PackageInstaller, log_level: Options.LogLevel)
                     const output_in_foreground = false;
                     _ = (blk_catch_1: { break :blk_catch_1 ((self.manager.spawnPackageLifecycleScripts(self.command_ctx, entry.list, optional, output_in_foreground, null)) catch |e| { _ = &e; if ((log_level != .silent)) {
                         const fmt: []const u8 = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
-                        const args: struct { *anyopaque, *anyopaque } = .{ name, @errorName(e) };
                         if (log_level.showProgress()) {
-                            switch (Output.enable_ansi_colors_stderr) {
-inline else => |enable_ansi_colors| {
-_ = self.progress.log((comptime Output.prettyFmt(fmt, enable_ansi_colors)), args);
-},
-}
+                            if (Output.enable_ansi_colors_stderr) {
+                                _ = self.progress.log((comptime Output.prettyFmt(fmt, true)), .{ name, @errorName(e) });
+                            } else {
+                                _ = self.progress.log((comptime Output.prettyFmt(fmt, false)), .{ name, @errorName(e) });
+                            }
                         } else {
-                            _ = Output.prettyErrorln(fmt, args);
+                            _ = Output.prettyErrorln(fmt, .{ name, @errorName(e) });
                         }
                     }
                     if (self.manager.options.enable.fail_early) {
@@ -316,7 +314,7 @@ pub fn installAvailablePackages(self: *PackageInstaller, log_level: Options.LogL
                 defer {
                 i = (i + 1);
                 }
-                if ((force or self.canInstallPackageForTree(self.lockfile.buffers.trees.items, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))))) {
+                if ((force or self.canInstallPackageForTree(self.lockfile.buffers.trees.items, @as(u32, @intCast(i))))) {
                     defer {
                     _ = (tree.*).pending_installs.clearRetainingCapacity();
                     }
@@ -348,15 +346,14 @@ pub fn completeRemainingScripts(self: *PackageInstaller, log_level: Options.LogL
                 const output_in_foreground = false;
                 _ = (blk_catch_2: { break :blk_catch_2 ((self.manager.spawnPackageLifecycleScripts(self.command_ctx, entry.list, optional, output_in_foreground, null)) catch |e| { _ = &e; if ((log_level != .silent)) {
                     const fmt: []const u8 = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
-                    const args: struct { *anyopaque, *anyopaque } = .{ package_name, @errorName(e) };
                     if (log_level.showProgress()) {
-                        switch (Output.enable_ansi_colors_stderr) {
-inline else => |enable_ansi_colors| {
-_ = self.progress.log((comptime Output.prettyFmt(fmt, enable_ansi_colors)), args);
-},
-}
+                        if (Output.enable_ansi_colors_stderr) {
+                            _ = self.progress.log((comptime Output.prettyFmt(fmt, true)), .{ package_name, @errorName(e) });
+                        } else {
+                            _ = self.progress.log((comptime Output.prettyFmt(fmt, false)), .{ package_name, @errorName(e) });
+                        }
                     } else {
-                        _ = Output.prettyErrorln(fmt, args);
+                        _ = Output.prettyErrorln(fmt, .{ package_name, @errorName(e) });
                     }
                 }
                 if (self.manager.options.enable.fail_early) {
@@ -477,7 +474,7 @@ pub fn installEnqueuedPackagesAfterExtraction(self: *PackageInstaller, task_id: 
                 return;
             }
             if (comptime Environment.allow_assert) {
-                _ = Output.panic("Ran callback to install enqueued packages, but there was no task associated with it. {f}:{f} (dependency_id: {d})", .{ bun.fmt.quote(cp_iter_slice(name)[@intCast(self.lockfile.buffers.string_bytes.items)..]), bun.fmt.quote(data.url), dependency_id });
+                _ = Output.panic("Ran callback to install enqueued packages, but there was no task associated with it. {f}:{f} (dependency_id: {d})", .{ bun.fmt.quote(@TypeOf(name).slice((&name), self.lockfile.buffers.string_bytes.items)), bun.fmt.quote(data.url), dependency_id });
             }
     }
 
@@ -566,7 +563,7 @@ pub fn installPackageWithNameAndResolution(self: *PackageInstaller, dependency_i
             var sfa = std.heap.stackFallback(1024, self.lockfile.allocator);
             _ = &sfa;
             const alloc = sfa.get();
-            const name_and_version = ((std.fmt.allocPrint(alloc, "{s}@{s}", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], package_version })) catch unreachable);
+            const name_and_version = ((std.fmt.allocPrint(alloc, "{s}@{s}", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), package_version })) catch unreachable);
             defer {
             _ = alloc.free(name_and_version);
             }
@@ -593,10 +590,10 @@ pub fn installPackageWithNameAndResolution(self: *PackageInstaller, dependency_i
                 _ = &p;
                 installer.patch = .{ .contents_hash = patch_contents_hash.?, .path = p };
             }
-            _ = debug("Installing {s}@{f}", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
+            _ = debug("Installing {s}@{f}", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
             switch (resolution.tag) {
 .npm => {
-installer.cache_dir_subpath = self.manager.cachedNPMPackageFolderName(cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, patch_contents_hash);
+installer.cache_dir_subpath = self.manager.cachedNPMPackageFolderName(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, patch_contents_hash);
             installer.cache_dir = self.manager.getCacheDirectory();
 },
 .git => {
@@ -722,10 +719,10 @@ _ = (blk_catch_8: { break :blk_catch_8 ((self.manager.enqueueTarballForDownload(
 .npm => {
 if (comptime Environment.isDebug) {
                         if ((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.isEmpty()) {
-                            _ = Output.debugWarn("package {s}@{f} missing tarball_url", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
+                            _ = Output.debugWarn("package {s}@{f} missing tarball_url", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
                         }
                     }
-                    _ = (blk_catch_9: { break :blk_catch_9 ((self.manager.enqueuePackageForDownload(cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, patch_name_and_version_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_9: { break :blk_catch_9 ((self.manager.enqueuePackageForDownload(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, patch_name_and_version_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
@@ -757,7 +754,7 @@ if (comptime Environment.allow_assert) {
                     return;
                 }
                 var destination_dir = (blk_catch_11: { break :blk_catch_11 ((self.node_modules.makeAndOpenDir(self.root_node_modules_folder)) catch |e| { _ = &e; if ((log_level != .silent)) {
-                    _ = Output.err(e, "Failed to open node_modules folder for <r><red>{s}<r> in {f}", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..], bun.fmt.fmtPath(u8, self.node_modules.path.items, .{}) });
+                    _ = Output.err(e, "Failed to open node_modules folder for <r><red>{s}<r> in {f}", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), bun.fmt.fmtPath(u8, self.node_modules.path.items, .{}) });
                 }
                 self.summary.fail = (self.summary.fail + 1);
                 _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);
@@ -812,7 +809,7 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
                 const is_trusted = trusted_info[0];
                 const is_trusted_through_update_request = trusted_info[1];
                 if (((resolution.tag != .root) and ((resolution.tag == .workspace) or is_trusted))) {
-                    var folder_path: AutoAbsPath = .{ .@"from" = self.node_modules.path.items };
+                    var folder_path = AutoAbsPath.@"from"(self.node_modules.path.items);
                     _ = &folder_path;
                     defer {
                     _ = folder_path.deinit();
@@ -821,7 +818,7 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
                     _ = enqueueLifecycleScripts: {
                     if (self.manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(.{ .name_hash = pkg_name_hash, .version = (if ((resolution.tag == .npm)) (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version else null), .version_buf = self.lockfile.buffers.string_bytes.items }, self.lockfile.packages.items(.resolutions)[@as(usize, @intCast(package_id))].get(self.lockfile.buffers.resolutions.items), self.lockfile.packages.items(.@"meta"), self.manager.options.cpu, self.manager.options.os, self.current_tree_id)) {
                         if (PackageManager.verbose_install) {
-                            _ = Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                            _ = Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items) });
                         }
                         break :enqueueLifecycleScripts;
                     }
@@ -831,7 +828,8 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
                             if ((self.lockfile.trusted_dependencies == null)) {
                                 self.lockfile.trusted_dependencies = .{};
                             }
-                            _ = (blk_catch_14: { break :blk_catch_14 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, .{})) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
+                            const void_val: void = undefined;
+                            _ = (blk_catch_14: { break :blk_catch_14 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
                         }
                     }
 };
@@ -842,7 +840,7 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
 },
 else => {
 _ = (if (((!is_trusted) and self.metas[@as(usize, @intCast(package_id))].hasInstallScript())) ({
-                var folder_path: AutoAbsPath = .{ .@"from" = self.node_modules.path.items };
+                var folder_path = AutoAbsPath.@"from"(self.node_modules.path.items);
                 _ = &folder_path;
                 defer {
                 _ = folder_path.deinit();
@@ -870,7 +868,7 @@ if (comptime Environment.allow_assert) {
                 }
                 _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);
                 if ((cause.err == error.DanglingSymlink)) {
-                    _ = Output.prettyErrorln("<r><red>error<r>: <b>{s}<r> \"link:{s}\" not found (try running 'bun link' in the intended package's folder)<r>", .{ @errorName(cause.err), cp_iter_slice(self.names[@as(usize, @intCast(package_id))])[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                    _ = Output.prettyErrorln("<r><red>error<r>: <b>{s}<r> \"link:{s}\" not found (try running 'bun link' in the intended package's folder)<r>", .{ @errorName(cause.err), @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                     self.summary.fail = (self.summary.fail + 1);
                 } else {
                     if ((cause.err == error.AccessDenied)) {
@@ -879,16 +877,16 @@ if (comptime Environment.allow_assert) {
                         };
                         if ((!Singleton.node_modules_is_ok)) {
                             if ((!Environment.isWindows)) {
-                                const stat = (blk_catch_17: { break :blk_catch_17 ((bun.sys.fstat(.fromStdDir((blk_catch_15: { break :blk_catch_15 ((lazy_package_dir.getDir()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ cp_iter_slice(self.names[@as(usize, @intCast(package_id))])[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                                const stat = (blk_catch_17: { break :blk_catch_17 ((bun.sys.fstat(.fromStdDir((blk_catch_15: { break :blk_catch_15 ((lazy_package_dir.getDir()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                                 if (Environment.isDebug) {
                                     _ = Output.err(e, "Failed to stat node_modules", .{});
                                 }
-                                break :blk_catch_15 Global.exit(1); }); }))).unwrap()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ cp_iter_slice(self.names[@as(usize, @intCast(package_id))])[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                                break :blk_catch_15 Global.exit(1); }); }))).unwrap()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                                 if (Environment.isDebug) {
                                     _ = Output.err(e, "Failed to stat node_modules", .{});
                                 }
                                 break :blk_catch_17 Global.exit(1); }); });
-                                const is_writable = (if ((stat.uid == bun.c.getuid())) (stat.mode & (bun.S.IWUSR > 0)) else (if ((stat.gid == bun.c.getgid())) (stat.mode & (bun.S.IWGRP > 0)) else (stat.mode & (bun.S.IWOTH > 0))));
+                                const is_writable = (if ((stat.uid == bun.c.getuid())) ((stat.mode & bun.S.IWUSR) != 0) else (if ((stat.gid == bun.c.getgid())) ((stat.mode & bun.S.IWGRP) != 0) else ((stat.mode & bun.S.IWOTH) != 0)));
                                 if ((!is_writable)) {
                                     _ = Output.err("EACCES", "Permission denied while writing packages into node_modules.", .{});
                                     _ = Global.exit(1);
@@ -896,10 +894,10 @@ if (comptime Environment.allow_assert) {
                             }
                             Singleton.node_modules_is_ok = true;
                         }
-                        _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ cp_iter_slice(self.names[@as(usize, @intCast(package_id))])[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                        _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                         self.summary.fail = (self.summary.fail + 1);
                     } else {
-                        _ = Output.err(cause.err, "failed {s} for package <b>{s}<r>", .{ (if (@typeInfo(@TypeOf(install_result.failure.step)) == .@"enum" or @typeInfo(@TypeOf(install_result.failure.step)) == .@"union") @tagName(install_result.failure.step) else install_result.failure.step.name)(), cp_iter_slice(self.names[@as(usize, @intCast(package_id))])[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                        _ = Output.err(cause.err, "failed {s} for package <b>{s}<r>", .{ install_result.failure.step.name(), @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                         if (Environment.isDebug) {
                             var t = cause.debug_trace;
                             _ = &t;
@@ -940,7 +938,7 @@ if (comptime Environment.allow_assert) {
                 const is_trusted_through_update_request = trusted_info[1];
                 const add_to_lockfile = trusted_info[2];
                 if (((resolution.tag != .root) and is_trusted)) {
-                    var folder_path: AutoAbsPath = .{ .@"from" = self.node_modules.path.items };
+                    var folder_path = AutoAbsPath.@"from"(self.node_modules.path.items);
                     _ = &folder_path;
                     defer {
                     _ = folder_path.deinit();
@@ -949,7 +947,7 @@ if (comptime Environment.allow_assert) {
                     _ = enqueueLifecycleScripts: {
                     if (self.manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(.{ .name_hash = pkg_name_hash, .version = (if ((resolution.tag == .npm)) (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version else null), .version_buf = self.lockfile.buffers.string_bytes.items }, self.lockfile.packages.items(.resolutions)[@as(usize, @intCast(package_id))].get(self.lockfile.buffers.resolutions.items), self.lockfile.packages.items(.@"meta"), self.manager.options.cpu, self.manager.options.os, self.current_tree_id)) {
                         if (PackageManager.verbose_install) {
-                            _ = Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{ cp_iter_slice(pkg_name)[@intCast(self.lockfile.buffers.string_bytes.items)..] });
+                            _ = Output.prettyErrorln("<d>[Lifecycle Scripts]<r> ignoring {s} lifecycle scripts", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items) });
                         }
                         break :enqueueLifecycleScripts;
                     }
@@ -961,7 +959,8 @@ if (comptime Environment.allow_assert) {
                             if ((self.lockfile.trusted_dependencies == null)) {
                                 self.lockfile.trusted_dependencies = .{};
                             }
-                            _ = (blk_catch_19: { break :blk_catch_19 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, .{})) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
+                            const void_val: void = undefined;
+                            _ = (blk_catch_19: { break :blk_catch_19 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
                         }
                     }
 };
@@ -979,15 +978,14 @@ pub fn enqueueLifecycleScripts(self: *PackageInstaller, folder_name: []const u8,
             _ = &scripts;
             const scripts_list = (blk_catch_20: { break :blk_catch_20 ((scripts.getList(self.manager.log, self.lockfile, package_path, folder_name, resolution)) catch |e| { _ = &e; if ((log_level != .silent)) {
                 const fmt: []const u8 = "\n<r><red>error:<r> failed to enqueue lifecycle scripts for <b>{s}<r>: {s}\n";
-                const args: struct { []const u8, *anyopaque } = .{ folder_name, @errorName(e) };
                 if (log_level.showProgress()) {
-                    switch (Output.enable_ansi_colors_stderr) {
-inline else => |enable_ansi_colors| {
-_ = self.progress.log((comptime Output.prettyFmt(fmt, enable_ansi_colors)), args);
-},
-}
+                    if (Output.enable_ansi_colors_stderr) {
+                        _ = self.progress.log((comptime Output.prettyFmt(fmt, true)), .{ folder_name, @errorName(e) });
+                    } else {
+                        _ = self.progress.log((comptime Output.prettyFmt(fmt, false)), .{ folder_name, @errorName(e) });
+                    }
                 } else {
-                    _ = Output.prettyErrorln(fmt, args);
+                    _ = Output.prettyErrorln(fmt, .{ folder_name, @errorName(e) });
                 }
             }
             if (self.manager.options.enable.fail_early) {
@@ -1103,7 +1101,8 @@ return file;
 pub fn openDir(self: NodeModulesFolder_, root: std.fs.Dir) !std.fs.Dir {
             if (comptime Environment.isPosix) {
                 const p = try std.posix.toPosixPath(self.path.items);
-                return try bun.sys.openat(.fromStdDir(root), (&p), bun.O.DIRECTORY, 0).unwrap().stdDir();
+                const fd = try bun.sys.openat(.fromStdDir(root), (&p), bun.O.DIRECTORY, 0).unwrap();
+                return fd.stdDir();
             }
             return try bun.sys.openDirAtWindowsA(.fromStdDir(root), self.path.items, .{ .can_rename_or_delete = false, .read_only = false }).unwrap().stdDir();
     }
@@ -1164,7 +1163,7 @@ if ((self.dir.fd != std.fs.cwd().fd)) {
 
 },
 }
-            self.* = .{ .closed = .{} };
+            self.* = .closed;
     }
 };
 

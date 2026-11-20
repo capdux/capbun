@@ -498,12 +498,10 @@ pub fn spawnPackageScripts(manager: *PackageManager, list: Lockfile.Package.Scri
             var lifecycle_subprocess = LifecycleScriptSubprocess.new(.{ .manager = manager, .envp = envp, .shell_bin = shell_bin, .scripts = list, .package_name = list.package_name, .foreground = foreground, .optional = optional, .ctx = ctx });
             _ = &lifecycle_subprocess;
             if (log_level.isVerbose()) {
-                const start_args: struct { *anyopaque } = .{ list.package_name };
-                _ = Output.prettyErrorln("<d>[Scripts]<r> Starting scripts for <b>\"{s}\"<r>", start_args);
+                _ = Output.prettyErrorln("<d>[Scripts]<r> Starting scripts for <b>\"{s}\"<r>", .{ list.package_name });
             }
             _ = lifecycle_subprocess.incrementPendingScriptTasks();
-            _ = (blk_catch_7: { break :blk_catch_7 ((lifecycle_subprocess.spawnNextScript(list.first_index)) catch |e| { _ = &e; const fail_args: struct { *anyopaque, *anyopaque } = .{ Lockfile.Scripts.names[@as(usize, @intCast(list.first_index))], @errorName(e) };
-            _ = Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", fail_args);
+            _ = (blk_catch_7: { break :blk_catch_7 ((lifecycle_subprocess.spawnNextScript(list.first_index)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ Lockfile.Scripts.names[@as(usize, @intCast(list.first_index))], @errorName(e) });
             break :blk_catch_7 Global.exit(1); }); });
     }
 

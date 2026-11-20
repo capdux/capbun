@@ -211,14 +211,14 @@ pub fn format(self: TopStorePathFormatter, writer: *std.Io.Writer) std.Io.Writer
                 _ = try writer.print("{f}", .{ self.repo.owner.fmtStorePath(self.string_buf) });
                 _ = try writer.writeByte(43);
             } else {
-                if (Dependency.isSCPLikePath(cp_iter_slice(self.repo.repo)[@intCast(self.string_buf)..])) {
+                if (Dependency.isSCPLikePath(String.slice((&self.repo.repo), self.string_buf))) {
                     _ = try writer.writeAll("ssh++");
                 }
             }
             _ = try writer.print("{f}", .{ self.repo.repo.fmtStorePath(self.string_buf) });
             if ((!self.repo.resolved.isEmpty())) {
                 _ = try writer.writeByte(43);
-                var resolved = cp_iter_slice(self.repo.resolved)[@intCast(self.string_buf)..];
+                var resolved = String.slice((&self.repo.resolved), self.string_buf);
                 _ = &resolved;
                 if (strings.lastIndexOfChar(resolved, 45)) |i| {
                     _ = &i;
@@ -380,15 +380,17 @@ pub fn order(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8
     }
 
 pub fn count(self: Repository, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
-            _ = builder.count(cp_iter_slice(self.owner)[@intCast(buf)..]);
-            _ = builder.count(cp_iter_slice(self.repo)[@intCast(buf)..]);
-            _ = builder.count(cp_iter_slice(self.committish)[@intCast(buf)..]);
-            _ = builder.count(cp_iter_slice(self.resolved)[@intCast(buf)..]);
-            _ = builder.count(cp_iter_slice(self.package_name)[@intCast(buf)..]);
+            const slice_fn = String.slice;
+            _ = builder.count(slice_fn((&self.owner), buf));
+            _ = builder.count(slice_fn((&self.repo), buf));
+            _ = builder.count(slice_fn((&self.committish), buf));
+            _ = builder.count(slice_fn((&self.resolved), buf));
+            _ = builder.count(slice_fn((&self.package_name), buf));
     }
 
 pub fn clone(self: Repository, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) Repository {
-            return .{ .owner = builder.append(String, cp_iter_slice(self.owner)[@intCast(buf)..]), .repo = builder.append(String, cp_iter_slice(self.repo)[@intCast(buf)..]), .committish = builder.append(String, cp_iter_slice(self.committish)[@intCast(buf)..]), .resolved = builder.append(String, cp_iter_slice(self.resolved)[@intCast(buf)..]), .package_name = builder.append(String, cp_iter_slice(self.package_name)[@intCast(buf)..]) };
+            const slice_fn = String.slice;
+            return .{ .owner = builder.append(String, slice_fn((&self.owner), buf)), .repo = builder.append(String, slice_fn((&self.repo), buf)), .committish = builder.append(String, slice_fn((&self.committish), buf)), .resolved = builder.append(String, slice_fn((&self.resolved), buf)), .package_name = builder.append(String, slice_fn((&self.package_name), buf)) };
     }
 
 pub fn eql(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, rhs_buf: []const u8) bool {

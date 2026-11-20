@@ -388,7 +388,9 @@ _ = self.bufWrite((&end), "[{Bi:.2}] ", .{ current_item });
 pub fn log(self: *Progress, comptime format: []const u8, args: anytype) void {
         if (self.terminal) |file| {
             _ = &file;
-            var file_writer = file.writerStreaming((&&.{}));
+            var empty_buf: [0]u8 = undefined;
+            _ = &empty_buf;
+            var file_writer = file.writerStreaming((&empty_buf));
             _ = &file_writer;
             const writer = (&file_writer.interface);
             _ = self.refresh();

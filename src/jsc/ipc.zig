@@ -1575,3 +1575,27 @@ pub fn ipcSerialize(globalObject: *jsc.JSGlobalObject, message: jsc.JSValue, han
 pub fn ipcParse(globalObject: *jsc.JSGlobalObject, target: jsc.JSValue, serialized: jsc.JSValue, fd: jsc.JSValue) bun.JSError!jsc.JSValue {
         return bun.cpp.IPCParse(globalObject, target, serialized, fd);
 }
+
+pub fn emitHandleIPCMessage(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        const args = callframe.argumentsAsArray(3);
+        const target = args[0];
+        const message = args[1];
+        const handle = args[2];
+        if (target.isNull()) {
+            const ipc = globalThis.bunVM().getIPCInstance();
+            if ((ipc == null)) {
+                return JSValue.js_undefined;
+            }
+            _ = ipc.?.handleIPCMessage(.{ .data = message }, handle);
+        } else {
+            if ((!target.isCell())) {
+                return JSValue.js_undefined;
+            }
+            const subprocess = bun.jsc.Subprocess.fromJSDirect(target);
+            if ((subprocess == null)) {
+                return JSValue.js_undefined;
+            }
+            _ = subprocess.?.handleIPCMessage(.{ .data = message }, handle);
+        }
+        return JSValue.js_undefined;
+}

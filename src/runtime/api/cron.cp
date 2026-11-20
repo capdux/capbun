@@ -1062,8 +1062,8 @@ pub struct CronJob {
         _.scheduleNext(vm);
     }
 
-    pub export const Bun__CronJob__onPromiseResolve = jsc.toJSHostFn(onPromiseResolve);
-    pub export const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
+    pub const Bun__CronJob__onPromiseResolve = jsc.toJSHostFn(onPromiseResolve);
+    pub const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
 
     static fn onPromiseResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
@@ -1833,3 +1833,10 @@ const jsc = bun.jsc;
 const OutputReader = bun.io.BufferedReader;
 const Process = bun.spawn.Process;
 const EventLoopTimer = bun.api.Timer.EventLoopTimer;
+
+comptime {
+    const r1 = CronJob.Bun__CronJob__onPromiseResolve;
+    const r2 = CronJob.Bun__CronJob__onPromiseReject;
+    @export(&r1, .{ name: "Bun__CronJob__onPromiseResolve" });
+    @export(&r2, .{ name: "Bun__CronJob__onPromiseReject" });
+}

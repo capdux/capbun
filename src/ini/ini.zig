@@ -713,9 +713,9 @@ pub fn next(self: *@This()) ?Option(Item) {
                     if (bun.strings.hasPrefixComptime(key, "//")) {
                         const optnames = (comptime brk: {
                         const names = std.meta.fieldNames(Item.Opt);
-                        var names2: struct { names.len } = undefined;
+                        const names_len = names.len;
+                        var names2: [names_len]StrZ = undefined;
                         _ = &names2;
-                        StrZ = undefined;
                         for (0..names.len) |i| {
                             _ = &i;
                             names2[cp_cast_int(usize, ((names2.len - i) - 1))] = names[@as(usize, @intCast(i))];
@@ -846,13 +846,13 @@ pub fn next(self: *@This()) OOM!?Option(Item) {
                                     break :brk try parser.parseRegistryURLStringImpl(str);
                                 }
                             }
-                            return error.none;
+                            return Option(Item).none;
 } } };
                         }
                     }
                 }
             }
-            return error.none;
+            return Option(Item).none;
     }
     const Error = error{
                 no_value,
@@ -958,7 +958,8 @@ pub fn loadNpmrc(allocator: std.mem.Allocator, install: *bun.schema.api.BunInsta
                         _ = &i;
                         for (arr.items.slice()) |item| {
                             _ = &item;
-                            list[cp_cast_int(usize, i)] = try ((item.asStringCloned(allocator)) orelse continue);
+                            const cloned = try item.asStringCloned(allocator);
+                            list[cp_cast_int(usize, i)] = ((cloned) orelse continue);
                             i = (i + 1);
                         }
                         install.ca = .{ .list = list };
@@ -1226,9 +1227,8 @@ else => {
                 const conf_item_url = bun.URL.parse(conf_item.registry_url);
                 if ((std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))) {
                     const v: *bun.schema.api.NpmRegistry = brk: {
-                    if (install.default_registry) |*r| {
-                        _ = &r;
-                        break :brk (r.*);
+                    if ((install.default_registry != null)) {
+                        break :brk (&install.default_registry.?);
                     }
                     install.default_registry = bun.schema.api.NpmRegistry{ .password = "", .token = "", .username = "", .url = Registry.default_url, .email = "" };
                     break :brk (&install.default_registry.?);
@@ -1331,13 +1331,13 @@ pub fn @"handle _auth"(allocator: Allocator, v: *bun.schema.api.NpmRegistry, con
                 return;
             }
             const user_pass = decoded[0..result.count];
-            const colon_idx = ((std.mem.indexOfScalar(u8, user_pass, 58)) orelse (({
+            const colon_idx = ((std.mem.indexOfScalar(u8, user_pass, 58)) orelse {
             defer {
             _ = allocator.free(user_pass);
             }
             _ = try log.addErrorOpts("invalid _auth value, expected base64 encoded \"<username>:<password>\"", .{ .source = source, .loc = conf_item.loc, .redact_sensitive_information = true });
             return;
-})));
+});
             const username = user_pass[0..colon_idx];
             if (((colon_idx + 1) >= user_pass.len)) {
                 defer {

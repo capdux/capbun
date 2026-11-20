@@ -103,7 +103,7 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
 
     let argv: [2]([*:0]u8)? = [@constCast(exe.ptr), null];
 
-    let extra_fds = [bun.spawn.SpawnOptions.ExtraFd{ pipe: fds[1] }];
+    let extra_fds: [1]bun.spawn.SpawnOptions.ExtraFd = [bun.spawn.SpawnOptions.ExtraFd{ pipe: fds[1] }];
 
     let opts: bun.spawn.SpawnOptions = {
         stdin: .ignore,

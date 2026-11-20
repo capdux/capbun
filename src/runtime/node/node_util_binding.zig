@@ -123,211 +123,212 @@ pub fn internalErrorName(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
         if ((err_int == -3014)) {
             return bun.String.static("EAI_PROTOCOL").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.@"2BIG")) {
+        const uv_e = bun.sys.UV_E;
+        if ((err_int == (0 - uv_e.@"2BIG"))) {
             return bun.String.static("E2BIG").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ACCES)) {
+        if ((err_int == (0 - uv_e.ACCES))) {
             return bun.String.static("EACCES").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ADDRINUSE)) {
+        if ((err_int == (0 - uv_e.ADDRINUSE))) {
             return bun.String.static("EADDRINUSE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ADDRNOTAVAIL)) {
+        if ((err_int == (0 - uv_e.ADDRNOTAVAIL))) {
             return bun.String.static("EADDRNOTAVAIL").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.AFNOSUPPORT)) {
+        if ((err_int == (0 - uv_e.AFNOSUPPORT))) {
             return bun.String.static("EAFNOSUPPORT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.AGAIN)) {
+        if ((err_int == (0 - uv_e.AGAIN))) {
             return bun.String.static("EAGAIN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ALREADY)) {
+        if ((err_int == (0 - uv_e.ALREADY))) {
             return bun.String.static("EALREADY").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.BADF)) {
+        if ((err_int == (0 - uv_e.BADF))) {
             return bun.String.static("EBADF").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.BUSY)) {
+        if ((err_int == (0 - uv_e.BUSY))) {
             return bun.String.static("EBUSY").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.CANCELED)) {
+        if ((err_int == (0 - uv_e.CANCELED))) {
             return bun.String.static("ECANCELED").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.CHARSET)) {
+        if ((err_int == (0 - uv_e.CHARSET))) {
             return bun.String.static("ECHARSET").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.CONNABORTED)) {
+        if ((err_int == (0 - uv_e.CONNABORTED))) {
             return bun.String.static("ECONNABORTED").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.CONNREFUSED)) {
+        if ((err_int == (0 - uv_e.CONNREFUSED))) {
             return bun.String.static("ECONNREFUSED").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.CONNRESET)) {
+        if ((err_int == (0 - uv_e.CONNRESET))) {
             return bun.String.static("ECONNRESET").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.DESTADDRREQ)) {
+        if ((err_int == (0 - uv_e.DESTADDRREQ))) {
             return bun.String.static("EDESTADDRREQ").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.EXIST)) {
+        if ((err_int == (0 - uv_e.EXIST))) {
             return bun.String.static("EEXIST").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.FAULT)) {
+        if ((err_int == (0 - uv_e.FAULT))) {
             return bun.String.static("EFAULT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.HOSTUNREACH)) {
+        if ((err_int == (0 - uv_e.HOSTUNREACH))) {
             return bun.String.static("EHOSTUNREACH").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.INTR)) {
+        if ((err_int == (0 - uv_e.INTR))) {
             return bun.String.static("EINTR").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.INVAL)) {
+        if ((err_int == (0 - uv_e.INVAL))) {
             return bun.String.static("EINVAL").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.IO)) {
+        if ((err_int == (0 - uv_e.IO))) {
             return bun.String.static("EIO").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ISCONN)) {
+        if ((err_int == (0 - uv_e.ISCONN))) {
             return bun.String.static("EISCONN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ISDIR)) {
+        if ((err_int == (0 - uv_e.ISDIR))) {
             return bun.String.static("EISDIR").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.LOOP)) {
+        if ((err_int == (0 - uv_e.LOOP))) {
             return bun.String.static("ELOOP").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.MFILE)) {
+        if ((err_int == (0 - uv_e.MFILE))) {
             return bun.String.static("EMFILE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.MSGSIZE)) {
+        if ((err_int == (0 - uv_e.MSGSIZE))) {
             return bun.String.static("EMSGSIZE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NAMETOOLONG)) {
+        if ((err_int == (0 - uv_e.NAMETOOLONG))) {
             return bun.String.static("ENAMETOOLONG").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NETDOWN)) {
+        if ((err_int == (0 - uv_e.NETDOWN))) {
             return bun.String.static("ENETDOWN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NETUNREACH)) {
+        if ((err_int == (0 - uv_e.NETUNREACH))) {
             return bun.String.static("ENETUNREACH").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NFILE)) {
+        if ((err_int == (0 - uv_e.NFILE))) {
             return bun.String.static("ENFILE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOBUFS)) {
+        if ((err_int == (0 - uv_e.NOBUFS))) {
             return bun.String.static("ENOBUFS").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NODEV)) {
+        if ((err_int == (0 - uv_e.NODEV))) {
             return bun.String.static("ENODEV").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOENT)) {
+        if ((err_int == (0 - uv_e.NOENT))) {
             return bun.String.static("ENOENT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOMEM)) {
+        if ((err_int == (0 - uv_e.NOMEM))) {
             return bun.String.static("ENOMEM").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NONET)) {
+        if ((err_int == (0 - uv_e.NONET))) {
             return bun.String.static("ENONET").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOSPC)) {
+        if ((err_int == (0 - uv_e.NOSPC))) {
             return bun.String.static("ENOSPC").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOSYS)) {
+        if ((err_int == (0 - uv_e.NOSYS))) {
             return bun.String.static("ENOSYS").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTCONN)) {
+        if ((err_int == (0 - uv_e.NOTCONN))) {
             return bun.String.static("ENOTCONN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTDIR)) {
+        if ((err_int == (0 - uv_e.NOTDIR))) {
             return bun.String.static("ENOTDIR").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTEMPTY)) {
+        if ((err_int == (0 - uv_e.NOTEMPTY))) {
             return bun.String.static("ENOTEMPTY").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTSOCK)) {
+        if ((err_int == (0 - uv_e.NOTSOCK))) {
             return bun.String.static("ENOTSOCK").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTSUP)) {
+        if ((err_int == (0 - uv_e.NOTSUP))) {
             return bun.String.static("ENOTSUP").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.PERM)) {
+        if ((err_int == (0 - uv_e.PERM))) {
             return bun.String.static("EPERM").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.PIPE)) {
+        if ((err_int == (0 - uv_e.PIPE))) {
             return bun.String.static("EPIPE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.PROTO)) {
+        if ((err_int == (0 - uv_e.PROTO))) {
             return bun.String.static("EPROTO").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.PROTONOSUPPORT)) {
+        if ((err_int == (0 - uv_e.PROTONOSUPPORT))) {
             return bun.String.static("EPROTONOSUPPORT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.PROTOTYPE)) {
+        if ((err_int == (0 - uv_e.PROTOTYPE))) {
             return bun.String.static("EPROTOTYPE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ROFS)) {
+        if ((err_int == (0 - uv_e.ROFS))) {
             return bun.String.static("EROFS").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.SHUTDOWN)) {
+        if ((err_int == (0 - uv_e.SHUTDOWN))) {
             return bun.String.static("ESHUTDOWN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.SPIPE)) {
+        if ((err_int == (0 - uv_e.SPIPE))) {
             return bun.String.static("ESPIPE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.SRCH)) {
+        if ((err_int == (0 - uv_e.SRCH))) {
             return bun.String.static("ESRCH").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.TIMEDOUT)) {
+        if ((err_int == (0 - uv_e.TIMEDOUT))) {
             return bun.String.static("ETIMEDOUT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.TXTBSY)) {
+        if ((err_int == (0 - uv_e.TXTBSY))) {
             return bun.String.static("ETXTBSY").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.XDEV)) {
+        if ((err_int == (0 - uv_e.XDEV))) {
             return bun.String.static("EXDEV").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.FBIG)) {
+        if ((err_int == (0 - uv_e.FBIG))) {
             return bun.String.static("EFBIG").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOPROTOOPT)) {
+        if ((err_int == (0 - uv_e.NOPROTOOPT))) {
             return bun.String.static("ENOPROTOOPT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.RANGE)) {
+        if ((err_int == (0 - uv_e.RANGE))) {
             return bun.String.static("ERANGE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NXIO)) {
+        if ((err_int == (0 - uv_e.NXIO))) {
             return bun.String.static("ENXIO").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.MLINK)) {
+        if ((err_int == (0 - uv_e.MLINK))) {
             return bun.String.static("EMLINK").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.HOSTDOWN)) {
+        if ((err_int == (0 - uv_e.HOSTDOWN))) {
             return bun.String.static("EHOSTDOWN").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.REMOTEIO)) {
+        if ((err_int == (0 - uv_e.REMOTEIO))) {
             return bun.String.static("EREMOTEIO").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOTTY)) {
+        if ((err_int == (0 - uv_e.NOTTY))) {
             return bun.String.static("ENOTTY").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.FTYPE)) {
+        if ((err_int == (0 - uv_e.FTYPE))) {
             return bun.String.static("EFTYPE").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.ILSEQ)) {
+        if ((err_int == (0 - uv_e.ILSEQ))) {
             return bun.String.static("EILSEQ").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.OVERFLOW)) {
+        if ((err_int == (0 - uv_e.OVERFLOW))) {
             return bun.String.static("EOVERFLOW").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.SOCKTNOSUPPORT)) {
+        if ((err_int == (0 - uv_e.SOCKTNOSUPPORT))) {
             return bun.String.static("ESOCKTNOSUPPORT").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NODATA)) {
+        if ((err_int == (0 - uv_e.NODATA))) {
             return bun.String.static("ENODATA").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.UNATCH)) {
+        if ((err_int == (0 - uv_e.UNATCH))) {
             return bun.String.static("EUNATCH").toJS(globalThis);
         }
-        if ((err_int == (0 - bun).sys.UV_E.NOEXEC)) {
+        if ((err_int == (0 - uv_e.NOEXEC))) {
             return bun.String.static("ENOEXEC").toJS(globalThis);
         }
         var fmtstring = bun.handleOom(bun.String.createFormat("Unknown system error {d}", .{ err_int }));
@@ -336,11 +337,13 @@ pub fn internalErrorName(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
 }
 
 pub fn etimedoutErrorCode(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumberFromInt32((0 - bun).sys.UV_E.TIMEDOUT);
+        const code = bun.sys.UV_E.TIMEDOUT;
+        return jsc.JSValue.jsNumberFromInt32((0 - code));
 }
 
 pub fn enobufsErrorCode(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumberFromInt32((0 - bun).sys.UV_E.NOBUFS);
+        const code = bun.sys.UV_E.NOBUFS;
+        return jsc.JSValue.jsNumberFromInt32((0 - code));
 }
 
 pub fn extractedSplitNewLinesFastPathStringsOnly(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -427,7 +430,9 @@ pub fn normalizeEncoding(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
         _ = str.deref();
         }
         if ((str.length() == 0)) {
-            return jsc.Node.Encoding.utf8.toJS(globalThis);
+            var utf8 = jsc.Node.Encoding.utf8;
+            _ = &utf8;
+            return utf8.toJS(globalThis);
         }
         if (str.inMapCaseInsensitive(jsc.Node.Encoding.map)) |enc| {
             _ = &enc;

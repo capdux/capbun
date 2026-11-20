@@ -289,7 +289,8 @@ pub struct Snapshots {
             }
 
             // 1. sort ils_info by row, col
-            std.mem.sort(SnapshotInlineSnapshotToWrite, ils_info.items, .{}, SnapshotInlineSnapshotToWrite.lessThanFn);
+            const empty_ctx: void = undefined;
+            std.mem.sort(SnapshotInlineSnapshotToWrite, ils_info.items, empty_ctx, SnapshotInlineSnapshotToWrite.lessThanFn);
 
             // 2. load file text
             const test_file = Jest.runner.?.files.get(file_id);

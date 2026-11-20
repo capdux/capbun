@@ -721,12 +721,12 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
 
     // Node added a `--loader` flag (that's kinda like `--register`). It's
     // completely different from ours.
-    let empty_u8_arr: [0]u8 = [];
-    let empty_loader_arr: [0]Api.Loader = [];
+    const empty_loader_keys: [0]string = undefined;
+    const empty_loader_vals: [0]bun.schema.api.Loader = undefined;
     const loader_tuple = if (cmd != .RunAsNodeCommand)
         try LoaderColonList.resolve(allocator, args.options("--loader"))
     else
-        LoaderColonList.Result{ keys: empty_u8_arr[0..0], values: empty_loader_arr[0..0] };
+        LoaderColonList{ keys: empty_loader_keys[0..0], values: empty_loader_vals[0..0] };
 
     if (loader_tuple.keys.len > 0) {
         opts.loaders = {
@@ -1200,13 +1200,20 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
                 }
             }
 
-            opts.target = opts.target ?? switch (TargetMatcher.match(_target)) {
-                TargetMatcher.case("browser") => Api.Target.browser,
-                TargetMatcher.case("node") => Api.Target.node,
-                TargetMatcher.case("macro") => if (cmd == .BuildCommand) Api.Target.bun_macro else Api.Target.bun,
-                TargetMatcher.case("bun") => Api.Target.bun,
-                else => CLI.invalidTarget(&diag, _target),
-            };
+            if (opts.target == null) {
+                const matched_target = TargetMatcher.match(_target);
+                if (matched_target == TargetMatcher.case("browser")) {
+                    opts.target = Api.Target.browser;
+                } else if (matched_target == TargetMatcher.case("node")) {
+                    opts.target = Api.Target.node;
+                } else if (matched_target == TargetMatcher.case("macro")) {
+                    opts.target = if (cmd == .BuildCommand) Api.Target.bun_macro else Api.Target.bun;
+                } else if (matched_target == TargetMatcher.case("bun")) {
+                    opts.target = Api.Target.bun;
+                } else {
+                    opts.target = CLI.invalidTarget(&diag, _target);
+                }
+            }
 
             if (opts.target.? == .bun) {
                 ctx.debug.run_in_bun = opts.target.? == .bun;
@@ -1707,7 +1714,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
     }
 
     if (args.flag("--no-macros")) {
-        ctx.debug.macros = { disable: {} };
+        ctx.debug.macros = { disable: undefined };
     }
 
     opts.output_dir = output_dir;

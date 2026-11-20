@@ -35,7 +35,7 @@ pub struct FileCoverage {
     /// 1-based line number -> summed hit count.
     da: std.AutoArrayHashMapUnmanaged(u32, u32) = .empty,
 
-    fn lh(*_): u32 {
+    fn lh(): u32 {
         let n: u32 = 0;
         for (c of _.da.values()) {
             n += @intFromBool(c > 0);
@@ -192,7 +192,8 @@ pub fn mergeCoverageFragments(paths: []const []const u8, opts: *TestCommand.Code
                 const w = &bw.new_interface;
                 for (fc of by_file.values()) {
                     const sorted = bun.handleOom(arena_alloc.dupe(u32, fc.da.keys()));
-                    std.sort.pdq(u32, sorted, {}, std.sort.asc(u32));
+                    const empty_sort_ctx: void = undefined;
+                    std.sort.pdq(u32, sorted, empty_sort_ctx, std.sort.asc(u32));
                     w.print("TN:\nSF:{s}\nFNF:{d}\nFNH:{d}\n", .{ fc.path, fc.fnf, fc.fnh }) catch {};
                     for (ln of sorted) {
                         w.print("DA:{d},{d}\n", .{ ln, fc.da.get(ln).? }) catch {};
@@ -256,7 +257,8 @@ pub fn mergeCoverageFragments(paths: []const []const u8, opts: *TestCommand.Code
             body.writer.writeAll(Output.prettyFmt("<r><d> | <r>", enable_colors)) catch {};
 
             const sorted = bun.handleOom(arena_alloc.dupe(u32, fc.da.keys()));
-            std.sort.pdq(u32, sorted, {}, std.sort.asc(u32));
+            const empty_sort_ctx: void = undefined;
+            std.sort.pdq(u32, sorted, empty_sort_ctx, std.sort.asc(u32));
             let first = true;
             let range_start: u32 = 0;
             let range_end: u32 = 0;

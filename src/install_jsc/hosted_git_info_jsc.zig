@@ -105,6 +105,9 @@ pub fn jsFromUrl(go: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError
         _ = as_utf8.deinit();
         }
         const maybe_parsed = (blk_catch_1: { break :blk_catch_1 ((hgi.HostedGitInfo.fromUrl(allocator, as_utf8.mut())) catch |e| { _ = &e; return go.throw("Invalid Git URL: {}", .{ e }); }); });
-        const parsed = ((maybe_parsed) orelse { return .{ .ok = .@"null" }; });
+        if ((maybe_parsed == null)) {
+            return jsc.JSValue.@"null";
+        }
+        const parsed = maybe_parsed.?;
         return parsed.toJS(go);
 }

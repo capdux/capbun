@@ -167,7 +167,12 @@ pub fn bootBunShell(ctx: Command.Context, entry_path: []const u8) !bun.shell.Exi
             _ = &bundle;
             _ = try bundle.runEnvLoader(bundle.options.env.disable_default_env_files);
             const mini = jsc.MiniEventLoop.initGlobal(bundle.env, null);
-            if (mini.top_level_dir == null) { mini.top_level_dir = ""; }
+            if (ctx.args.absolute_working_dir) |dir| {
+                _ = &dir;
+                mini.top_level_dir = dir;
+            } else {
+                mini.top_level_dir = "";
+            }
             return bun.shell.Interpreter.initAndRunFromFile(ctx, mini, entry_path);
     }
 
@@ -211,7 +216,7 @@ pub fn boot(ctx: Command.Context, entry_path: []const u8, loader: ?bun.options.L
                     defer {
                     _ = bun.default_allocator.free(escaped_period);
                     }
-                    const cron_script = try std.fmt.allocPrint(bun.default_allocator, "const mod = await import(\"{s}\");", "const scheduled = (mod.default || mod).scheduled;", "if (typeof scheduled !== \"function\") throw new Error(\"Module does not export default.scheduled()\");", "const controller = {{ cron: \"{s}\", type: \"scheduled\", scheduledTime: Date.now() }};", "await scheduled(controller);", .{ escaped_path, escaped_period });
+                    const cron_script = try std.fmt.allocPrint(bun.default_allocator, "const mod = await import(\"{s}\");\nconst scheduled = (mod.default || mod).scheduled;\nif (typeof scheduled !== \"function\") throw new Error(\"Module does not export default.scheduled()\");\nconst controller = {{ cron: \"{s}\", type: \"scheduled\", scheduledTime: Date.now() }};\nawait scheduled(controller);\n", .{ escaped_path, escaped_period });
                     const trigger = bun.pathLiteral("/[eval]");
                     var cwd_buf: bun.PathBuffer = undefined;
                     _ = &cwd_buf;

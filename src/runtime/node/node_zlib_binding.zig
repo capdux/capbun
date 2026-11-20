@@ -85,7 +85,7 @@ pub fn isError(self: Error) bool {
     pub const ok: Error = Error.init(null, 0, null);
 };
 
-const CStr = [*:0]u8;
+const CStr = [*:0]const u8;
 const debug = bun.Output.scoped(.zlib, .hidden);
 pub const NativeZlib = jsc.Codegen.JSNativeZlib.getConstructor;
 pub const NativeBrotli = jsc.Codegen.JSNativeBrotli.getConstructor;
@@ -142,7 +142,7 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         break :blk @intFromFloat(valuef);
 };
         const slice_u8 = data.slice();
-        return jsc.JSValue.jsNumber((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) else cp_cast_int(i32, bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) else cp_cast_int(i32, bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))) else cp_cast_int(i32, bun.zlib.crc32(value, slice_u8.ptr, (if (comptime @typeInfo(@TypeOf(slice_u8.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice_u8.len)) else cp_cast_int(i32, slice_u8.len))))))));
+        return jsc.JSValue.jsNumber(@as(u32, @intCast(bun.zlib.crc32(value, slice_u8.ptr, @as(u32, @intCast(slice_u8.len))))));
 }
 
 pub fn CompressionStream(comptime T: type) type {

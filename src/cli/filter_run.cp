@@ -390,7 +390,7 @@ pub struct AbortHandler {
     pub const should_abort = &abort_should_abort;
 
     @callconv("c")
-    fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: (*const void)?) {
+    fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: *!?) {
         * = sig;
         * = info;
         abort_should_abort = true;
@@ -435,7 +435,7 @@ fn windowsIsTerminal(): bool {
     return res == bun.windows.FILE_TYPE_CHAR;
 }
 
-pub fn runScriptsWithFilter(ctx: Command.Context)!noreturn {
+pub fn runScriptsWithFilter(ctx: Command.Context): noreturn! {
     const script_name = if (ctx.positionals.len > 1) ctx.positionals[1] else if (ctx.positionals.len > 0) ctx.positionals[0] else {
         Output.prettyErrorln("<r><red>error<r>: No script name provided", .{});
         Global.exit(1);
@@ -457,7 +457,8 @@ pub fn runScriptsWithFilter(ctx: Command.Context)!noreturn {
     }
 
     let filter_instance = FilterArg.FilterSet.init(ctx.allocator, filters_to_use, fsinstance.top_level_dir)?;
-    let patterns = std.array_list.Managed([]u8).init(ctx.allocator);
+    const empty_mut_str: []u8 = undefined;
+    let patterns = std.array_list.Managed(@TypeOf(empty_mut_str)).init(ctx.allocator);
 
     let root_buf: bun.PathBuffer = undefined;
     const resolve_root = FilterArg.getCandidatePackagePatterns(ctx.allocator, ctx.log, &patterns, fsinstance.top_level_dir, &root_buf)?;
@@ -575,13 +576,13 @@ pub fn runScriptsWithFilter(ctx: Command.Context)!noreturn {
         script_item_idx += 1;
         state.handles[i] = ProcessHandle{
             state: &state,
-            config: script,
+            config: &scripts.items[i],
             options: .{
                 .stdin = .ignore,
                 .stdout = if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) },
                 .stderr = if (Environment.isPosix) .buffer else .{ .buffer = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) },
                 .cwd = std.fs.path.dirname(script.package_json_path) ?? "",
-                .windows = if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(event_loop) },
+                .windows = if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(event_loop) } else @as(void, undefined),
                 .stream = true,
             },
         };
@@ -594,14 +595,17 @@ pub fn runScriptsWithFilter(ctx: Command.Context)!noreturn {
         }
     }
 
+    let handle_idx: usize = 0;
     for (*handle of state.handles) {
+        const cur_handle_idx = handle_idx;
+        handle_idx += 1;
         const source_buf = handle.config.deps.source_buf;
         let iter = handle.config.deps.map.iterator();
         while (entry := iter.next()) {
             const name = entry.key_ptr.slice(source_buf);
             if (pkgs := map.get(name)) {
                 for (dep of pkgs.items) {
-                    dep.dependents.append(handle)?;
+                    dep.dependents.append(&state.handles[cur_handle_idx])?;
                     handle.remaining_dependencies += 1;
                 }
             }
@@ -609,8 +613,9 @@ pub fn runScriptsWithFilter(ctx: Command.Context)!noreturn {
     }
 
     let has_cycle = false;
-    for (*handle of state.handles) {
-        if (hasCycle(handle)) {
+    let hi: usize = 0;
+    while (hi < state.handles.len) : (hi += 1) {
+        if (hasCycle(&state.handles[hi])) {
             has_cycle = true;
             break;
         }

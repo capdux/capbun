@@ -428,7 +428,7 @@ pub fn runInstall(argv: [][]const u8) !void {
         _ = Output.commandOut(argv);
         _ = Output.flush();
         argv[cp_cast_int(usize, 0)] = try bun.selfExePath();
-        const process = (blk_catch_1: { break :blk_catch_1 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = bun.fs.FileSystem.instance.top_level_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.err(e, "failed to install dependencies", .{});
+        const process = (blk_catch_1: { break :blk_catch_1 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = bun.fs.FileSystem.instance.top_level_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.err(e, "failed to install dependencies", .{});
         break :blk_catch_1 Global.crash(); }); });
         switch (process) {
 .err => |err| {
@@ -469,7 +469,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: []const u8, depe
         if ((extension.len > 0)) {
             normalized_name = normalized_name[0..(normalized_name.len - extension.len)];
         }
-        switch ((if (comptime @typeInfo(Template.Tag) == .@"enum") @as(Template.Tag, @enumFromInt(template)) else @as(Template.Tag, template))) {
+        switch (std.meta.activeTag(template)) {
 inline else => |active| {
 const current = @field(SourceFileProjectGenerator, @tagName(active));
         const files: []const TemplateFile = current.files;
@@ -586,7 +586,7 @@ _ = log.ifNew();
 },
 }
         _ = Output.flush();
-        const start = (blk_catch_3: { break :blk_catch_3 ((bun.spawnSync((&.{ .argv = (&.{ try bun.selfExePath(), "dev" }), .envp = null, .cwd = bun.fs.FileSystem.instance.top_level_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.err(e, "failed to start app", .{});
+        const start = (blk_catch_3: { break :blk_catch_3 ((bun.spawnSync((&.{ .argv = (&.{ try bun.selfExePath(), "dev" }), .envp = null, .cwd = bun.fs.FileSystem.instance.top_level_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.err(e, "failed to start app", .{});
         break :blk_catch_3 Global.crash(); }); });
         switch (start) {
 .err => |err| {
@@ -681,7 +681,7 @@ else => {
         return false;
 }
 
-pub fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index) bun.StringSet!void {
+pub fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index) !bun.StringSet {
         const input_files = bundler.graph.input_files.slice();
         const loaders = input_files.items(.loader);
         const all = bundler.graph.ast.items(.import_records);

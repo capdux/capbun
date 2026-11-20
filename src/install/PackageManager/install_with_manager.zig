@@ -171,14 +171,14 @@ pub fn installWithManager(manager: *PackageManager, ctx: Command.Context, root_p
                 _ = bun.dns.internal.prefetch(manager.event_loop.loop(), hostname, manager.options.scope.url.getPortAuto());
             }
         }
-        var load_result: Lockfile.LoadResult = (if (manager.options.do.load_lockfile) manager.lockfile.loadFromCwd(manager, manager.allocator, manager.log, true) else Lockfile.LoadResult{ .not_found = .{} });
+        var load_result: Lockfile.LoadResult = (if (manager.options.do.load_lockfile) manager.lockfile.loadFromCwd(manager, manager.allocator, manager.log, true) else .not_found);
         _ = &load_result;
         _ = try manager.updateLockfileIfNeeded(load_result);
         const config_version_result = load_result.chooseConfigVersion();
         const config_version = config_version_result[0];
         const changed_config_version = config_version_result[1];
         manager.options.config_version = config_version;
-        var root = Lockfile.Package;
+        var root: Lockfile.Package = .{};
         _ = &root;
         var needs_new_lockfile = ((load_result != .ok) or ((load_result.ok.lockfile.buffers.dependencies.items.len == 0) and (manager.update_requests.len > 0)));
         _ = &needs_new_lockfile;
@@ -278,7 +278,7 @@ if ((manager.subcommand == .update)) {
         var lockfile: Lockfile = undefined;
         _ = &lockfile;
         _ = lockfile.initEmpty(manager.allocator);
-        var maybe_root = Lockfile.Package;
+        var maybe_root: Lockfile.Package = .{};
         _ = &maybe_root;
         const root_package_json_entry = (switch (manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, root_package_json_path, .{})) {
 .entry => |entry| entry,
@@ -307,7 +307,7 @@ if ((manager.subcommand == .update)) {
         _ = try maybe_root.parse((&lockfile), manager, manager.allocator, manager.log, (&source_copy), void, (&resolver), Features.main);
         const mapping = try manager.lockfile.allocator.alloc(PackageID, maybe_root.dependencies.len);
         _ = @memset(mapping, invalid_package_id);
-        manager.summary = Package.Diff.generate(manager, manager.allocator, manager.log, manager.lockfile, (&lockfile), (&root), (&maybe_root), (if (manager.to_update) manager.update_requests else null), mapping);
+        manager.summary = try Package.Diff.generate(manager, manager.allocator, manager.log, manager.lockfile, (&lockfile), (&root), (&maybe_root), (if (manager.to_update) manager.update_requests else null), mapping);
         had_any_diffs = manager.summary.hasDiffs();
         if ((!had_any_diffs)) {
             var builder_ = manager.lockfile.stringBuilder();
@@ -462,7 +462,8 @@ if ((manager.subcommand == .update)) {
                     iter = manager.lockfile.patched_dependencies.iterator();
                     while (iter.next()) |entry| {
                         if ((!lockfile.patched_dependencies.contains(entry.key_ptr.*))) {
-                            _ = try manager.patched_dependencies_to_remove.put(manager.allocator, entry.key_ptr.*, .{});
+                            const void_val: void = undefined;
+                            _ = try manager.patched_dependencies_to_remove.put(manager.allocator, entry.key_ptr.*, void_val);
                         }
                     }
                     for (cp_iter_slice(manager.patched_dependencies_to_remove.keys())) |hash| {
@@ -482,7 +483,7 @@ if ((manager.subcommand == .update)) {
                         const dependency = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_i))];
                         if (std.mem.indexOfScalar(PackageNameHash, all_name_hashes, dependency.name_hash)) |_| {
                             manager.lockfile.buffers.resolutions.items[cp_cast_int(usize, dependency_i)] = invalid_package_id;
-                            _ = (blk_catch_0: { break :blk_catch_0 ((manager.enqueueDependencyWithMain(@truncate(dependency_i), (&dependency), invalid_package_id, false)) catch |e| { _ = &e; break :blk_catch_0 addDependencyError(manager, (&dependency), e); }); });
+                            _ = (blk_catch_0: { break :blk_catch_0 ((manager.enqueueDependencyWithMain(@as(u32, @intCast(dependency_i)), (&dependency), invalid_package_id, false)) catch |e| { _ = &e; break :blk_catch_0 addDependencyError(manager, (&dependency), e); }); });
                         }
                     }
                 }
@@ -514,7 +515,7 @@ if ((manager.subcommand == .update)) {
                     const __end_11 = changes;
                     while (counter_i < __end_11) : (counter_i += 1) {
                         if ((mapping[@as(usize, @intCast(counter_i))] == invalid_package_id)) {
-                            const dependency_i = (counter_i + off);
+                            const dependency_i = (@as(u32, @intCast(counter_i)) + off);
                             const dependency = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_i))];
                             _ = (blk_catch_2: { break :blk_catch_2 ((manager.enqueueDependencyWithMain(dependency_i, (&dependency), manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dependency_i))], false)) catch |e| { _ = &e; break :blk_catch_2 addDependencyError(manager, (&dependency), e); }); });
                         }
@@ -681,7 +682,7 @@ pub fn runAndWait(mgr: *PackageManager) !void {
         _ = try manager.log.print(Output.errorWriter());
         _ = manager.log.reset();
         const lockfile_before_clean = manager.lockfile;
-        manager.lockfile = manager.lockfile.cleanWithLogger(manager, manager.update_requests, manager.log, manager.options.enable.exact_versions, log_level);
+        manager.lockfile = try manager.lockfile.cleanWithLogger(manager, manager.update_requests, manager.log, manager.options.enable.exact_versions, log_level);
         if ((manager.lockfile.packages.len > 0)) {
             root = manager.lockfile.packages.get(0);
         }
@@ -809,7 +810,7 @@ pub fn runAndWait(mgr: *PackageManager) !void {
         const lockfile_before_install = manager.lockfile;
         const save_format = load_result.saveFormat((&manager.options));
         if (manager.options.lockfile_only) {
-            manager.lockfile.meta_hash = manager.lockfile.generateMetaHash((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), packages_len_before_install);
+            manager.lockfile.meta_hash = try manager.lockfile.generateMetaHash((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), packages_len_before_install);
             _ = try manager.saveLockfile((&load_result), save_format, had_any_diffs, lockfile_before_install, packages_len_before_install, log_level);
             if (manager.options.do.summary) {
                 _ = Output.pretty("\nSaved <green>{s}<r> ({d} package{s}) ", .{ (switch (save_format) {
@@ -853,7 +854,7 @@ pub fn runAndWait(mgr: *PackageManager) !void {
         if ((had_errors_before_cleaning_lockfile or manager.log.hasErrors())) {
             _ = Global.crash();
         }
-        const did_meta_hash_change = ((!manager.options.enable.frozen_lockfile) and (if (load_result.loadedFromTextLockfile()) (!manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)) else try manager.lockfile.hasMetaHashChanged((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), @min(packages_len_before_install, manager.lockfile.packages.len))));
+        const did_meta_hash_change = ((!manager.options.enable.frozen_lockfile) and (if (load_result.loadedFromTextLockfile()) (!try manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)) else try manager.lockfile.hasMetaHashChanged((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), @min(packages_len_before_install, manager.lockfile.packages.len))));
         const should_save_lockfile = (((load_result == .ok) and (((load_result.ok.format == .binary) and (save_format == .text)) or (((load_result.ok.format == .text) and (save_format == .text)) and (manager.lockfile.text_lockfile_version != TextLockfile.Version.current)))) or (manager.options.do.save_lockfile and (((((did_meta_hash_change or had_any_diffs) or (manager.update_requests.len > 0)) or ((load_result == .ok) and (load_result.ok.serializer_result.packages_need_update or load_result.ok.serializer_result.migrated_from_lockb_v2))) or manager.lockfile.isEmpty()) or manager.options.enable.force_save_lockfile)));
         if (should_save_lockfile) {
             _ = try manager.saveLockfile((&load_result), save_format, had_any_diffs, lockfile_before_install, packages_len_before_install, log_level);
@@ -1010,12 +1011,11 @@ pub fn printBlockedPackagesInfo(summary: *const PackageInstall.Summary, global: 
 
 pub fn addDependencyError(manager: *PackageManager, dependency: *const Dependency, e: anyerror) void {
         const lockfile = manager.lockfile;
-        const path_sep: bun.Path.PathSeparators = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any");
-        const note: __CpObj_fmt___const_u8_args_struct____anyopaque__ = .{ .fmt = "error occurred while resolving {f}", .args = .{ bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = path_sep }) } };
+        const fmt_str: []const u8 = "error occurred while resolving {f}";
+        const path_arg = bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any") });
         if ((dependency.behavior.isOptional() or dependency.behavior.isPeer())) {
-            _ = ((manager.log.addWarningWithNote(null, .{}, manager.allocator, @errorName(e), note.fmt, note.args)) catch unreachable);
+            _ = ((manager.log.addWarningWithNote(null, .{}, manager.allocator, @errorName(e), fmt_str, .{ path_arg })) catch unreachable);
         } else {
-            _ = ((manager.log.addZigErrorWithNote(manager.allocator, e, note.fmt, note.args)) catch unreachable);
+            _ = ((manager.log.addZigErrorWithNote(manager.allocator, e, fmt_str, .{ path_arg })) catch unreachable);
         }
 }
-pub const __CpObj_fmt___const_u8_args_struct____anyopaque__ = struct { fmt: []const u8, args: struct { *anyopaque } };

@@ -435,7 +435,11 @@ pub struct BuildCommand {
                 (output_files.len == 1 && output_files[0].value == .buffer);
 
             if (output_dir.len == 0 && outfile.len > 0 && will_be_one_file) {
-                output_dir = std.fs.path.dirname(outfile) ?? ".";
+                if (d := std.fs.path.dirname(outfile)) {
+                    output_dir = d;
+                } else {
+                    output_dir = ".";
+                }
                 if (ctx.bundler_options.compile) {
                     // If the first output file happens to be a client-side chunk imported server-side
                     // then don't rename it to something else, since an HTML
@@ -462,8 +466,13 @@ pub struct BuildCommand {
             }
 
             let root_path = output_dir;
-            if (root_path.len == 0 && ctx.args.entry_points.len == 1)
-                root_path = std.fs.path.dirname(ctx.args.entry_points[0]) ?? ".";
+            if (root_path.len == 0 && ctx.args.entry_points.len == 1) {
+                if (d := std.fs.path.dirname(ctx.args.entry_points[0])) {
+                    root_path = d;
+                } else {
+                    root_path = ".";
+                }
+            }
 
             const root_dir = if (root_path.len == 0 || strings.eqlComptime(root_path, "."))
                 std.fs.cwd()
@@ -484,7 +493,7 @@ pub struct BuildCommand {
 
             let size_padding: usize = 0;
 
-            for (f of output_files) {
+            for (*f of output_files) {
                 max_path_len = @max(
                     @max(from_path.len, f.dest_path.len) + 2 - from_path.len,
                     max_path_len,
@@ -550,7 +559,7 @@ pub struct BuildCommand {
                 // Write external sourcemap files next to the compiled executable.
                 // With --splitting, there can be multiple .map files (one per chunk).
                 if (this_transpiler.options.source_map == .external) {
-                    for (f of output_files) {
+                    for (*f of output_files) {
                         if (f.output_kind == .sourcemap && f.value == .buffer) {
                             const sourcemap_bytes = f.value.buffer.bytes;
                             if (sourcemap_bytes.len == 0) continue;
@@ -642,11 +651,11 @@ pub struct BuildCommand {
                 Output.flush();
             }
 
-            for (f of output_files) {
+            for (*f of output_files) {
                 size_padding = @max(size_padding, std.fmt.count("{f}", .{bun.fmt.size(f.size, {})}));
             }
 
-            for (f of output_files) {
+            for (*f of output_files) {
                 f.writeToDisk(root_dir, from_path) catch |e| {
                     Output.err(e, "failed to write file '{f}'", .{bun.fmt.quote(f.dest_path)});
                     had_err = true;
@@ -746,7 +755,7 @@ fn printSummary(bundled_end: i128, minify_duration: u64, minified: bool, input_c
         Output.printElapsedStdoutTrim(@as(f64, @floatFromInt(minify_duration)));
         const output_size = brk: {
             let total_size: u64 = 0;
-            for (f of output_files) {
+            for (*f of output_files) {
                 if (f.loader == .js) {
                     total_size += f.size_without_sourcemap;
                 }

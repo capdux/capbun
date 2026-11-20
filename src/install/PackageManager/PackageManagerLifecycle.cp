@@ -286,7 +286,7 @@ pub fn spawnPackageLifecycleScripts(
 
     const original_path = script_env.get("PATH") ?? "";
 
-    let PATH: bun.EnvPath({}) = .initCapacity(bun.default_allocator, original_path.len + 1 + "node_modules/.bin".len + cwd.len + 1)?;
+    let PATH: bun.EnvPath(.{}) = .initCapacity(bun.default_allocator, original_path.len + 1 + "node_modules/.bin".len + cwd.len + 1)?;
     defer PATH.deinit();
 
     let parent: string? = cwd;

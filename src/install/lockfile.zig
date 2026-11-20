@@ -353,7 +353,7 @@ pub const Cloner = struct {
     lockfile: *Lockfile,
     old: *Lockfile,
     mapping: []PackageID,
-    trees: Tree.List = Tree.List,
+    trees: Tree.List = .empty,
     trees_count: u32 = 1,
     log: *logger.Log,
     old_preinstall_state: std.ArrayListUnmanaged(Install.PreinstallState),
@@ -866,7 +866,7 @@ pub fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, update
                                     _ = &pv;
                                     dep.version = pv;
                                 } else {
-                                    dep.version = Dependency.Version;
+                                    dep.version = .{};
                                 }
                             }
                         }
@@ -957,7 +957,8 @@ pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: ?Pack
         return 0;
 }
 
-pub fn cleanWithLogger(old: *Lockfile, manager: *PackageManager, updates: []PackageManager.UpdateRequest, log: *logger.Log, exact_versions: bool, log_level: PackageManager.Options.LogLevel) !*Lockfile {
+pub fn cleanWithLogger(self: *Lockfile, manager: *PackageManager, updates: []PackageManager.UpdateRequest, log: *logger.Log, exact_versions: bool, log_level: PackageManager.Options.LogLevel) !*Lockfile {
+        const old = self;
         var timer: std.time.Timer = undefined;
         _ = &timer;
         if (log_level.isVerbose()) {
@@ -975,11 +976,11 @@ pub fn cleanWithLogger(old: *Lockfile, manager: *PackageManager, updates: []Pack
         }
         _ = @memset(preinstall_state.items, .unknown);
         if ((updates.len > 0)) {
-            _ = try preprocessUpdateRequests(old, manager, updates, exact_versions);
+            _ = try Lockfile.preprocessUpdateRequests(old, manager, updates, exact_versions);
         }
         var new_lf: *Lockfile = try old.allocator.create(Lockfile);
         _ = &new_lf;
-        _ = initEmpty(new_lf, old.allocator);
+        _ = Lockfile.initEmpty(new_lf, old.allocator);
         _ = try new_lf.string_pool.ensureTotalCapacity(old.string_pool.capacity());
         _ = try new_lf.package_index.ensureTotalCapacity(old.package_index.capacity());
         _ = try new_lf.packages.ensureTotalCapacity(old.allocator, old.packages.len);
@@ -1011,21 +1012,12 @@ pub fn cleanWithLogger(old: *Lockfile, manager: *PackageManager, updates: []Pack
             _ = try new_lf.workspace_versions.ensureTotalCapacity(z_allocator, old.workspace_versions.count());
             var workspace_paths_builder = new_lf.stringBuilder();
             _ = &workspace_paths_builder;
-            const WorkspacePathSorter = struct {
-    string_buf: []const u8,
-    entries: NameHashMap.DataList,
-
-pub fn lessThan(self: @This(), sorter: @This(), a: usize, b: usize) bool {
-        _ = self;
-            const left = sorter.entries.items(.value)[@as(usize, @intCast(a))];
-            const right = sorter.entries.items(.value)[@as(usize, @intCast(b))];
-            return (strings.order(left.slice(sorter.string_buf), right.slice(sorter.string_buf)) == .lt);
-    }
-};
             _ = old.workspace_paths.sort(WorkspacePathSorter{ .entries = old.workspace_paths.entries, .string_buf = old.buffers.string_bytes.items });
-            for (old.workspace_paths.values()) |*path| {
-                _ = &path;
-                _ = workspace_paths_builder.count(old.str((path.*)));
+            const old_wp_vals_count = old.workspace_paths.values();
+            var wp_cnt_i: usize = 0;
+            _ = &wp_cnt_i;
+            while ((wp_cnt_i < old_wp_vals_count.len)) : (wp_cnt_i = (wp_cnt_i + 1)) {
+                _ = workspace_paths_builder.count(old.str((&old_wp_vals_count[@as(usize, @intCast(wp_cnt_i))])));
             }
             const versions: []const Semver.Version = old.workspace_versions.values();
             for (cp_iter_slice(versions)) |version| {
@@ -1284,8 +1276,8 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
             _ = writer_allocating.deinit();
             }
             const writer = (&writer_allocating.writer);
-            _ = (blk_catch_15: { break :blk_catch_15 ((TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer)) catch |e| { _ = &e; break :blk_catch_15 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .WriteFailed)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
-            _ = (blk_catch_16: { break :blk_catch_16 ((writer.flush()) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WriteFailed)) {  break :__sw_blk_11 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_15: { break :blk_catch_15 ((TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer)) catch |e| { _ = &e; break :blk_catch_15 (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .WriteFailed)) {  break :__sw_blk_9 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((writer.flush()) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .WriteFailed)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             break :bytes bun.handleOom(writer_allocating.toOwnedSlice());
         }
         var bytes = std.array_list.Managed(u8).init(bun.default_allocator);
@@ -1831,6 +1823,16 @@ pub fn hasTrustedDependency(client: *const Lockfile, name: []const u8, resolutio
 const StreamByteSlice = []u8;
 pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
+const WorkspacePathSorter = struct {
+    string_buf: []const u8,
+    entries: NameHashMap.DataList,
+
+pub fn lessThan(self: @This(), a: usize, b: usize) bool {
+            const left = self.entries.items(.value)[@as(usize, @intCast(a))];
+            const right = self.entries.items(.value)[@as(usize, @intCast(b))];
+            return (strings.order(left.slice(self.string_buf), right.slice(self.string_buf)) == .lt);
+    }
+};
 const PendingResolutions = std.array_list.Managed(PendingResolution);
 pub const FormatVersion = enum(u32) {
     v0 = 0,
@@ -1880,7 +1882,9 @@ pub fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
             return (std.mem.order(u8, lhs, rhs) == .lt);
     }
 };
-    _ = std.sort.pdq(string, buf[0..i], .{}, Sorter.lessThan);
+    const empty_ctx: void = undefined;
+    _ = &empty_ctx;
+    _ = std.sort.pdq(string, buf[0..i], empty_ctx, Sorter.lessThan);
     var names: [i][]const u8 = undefined;
     _ = &names;
     _ = @memcpy(names[0..i], buf[0..i]);
@@ -1894,7 +1898,7 @@ pub const default_trusted_dependencies = brk: {
 pub fn hash(self: @This(), s: []const u8) u64 {
         _ = self;
             _ = @setEvalBranchQuota(999999);
-            return (if (comptime @typeInfo(@TypeOf(@as(u32, @truncate(String.Builder.stringHash(s))))) == .@"enum") cp_cast_int(i32, @intFromEnum(@as(u32, @truncate(String.Builder.stringHash(s))))) else cp_cast_int(i32, @as(u32, @truncate(String.Builder.stringHash(s)))));
+            return (if (comptime @typeInfo(@TypeOf(@as(u32, @truncate(String.Builder.stringHash(s))))) == .@"enum") cp_cast_int(u64, @intFromEnum(@as(u32, @truncate(String.Builder.stringHash(s))))) else cp_cast_int(u64, @as(u32, @truncate(String.Builder.stringHash(s)))));
     }
 
 pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {

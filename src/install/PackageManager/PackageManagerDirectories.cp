@@ -11,7 +11,7 @@ pub inline fn getCacheDirectory(client: *PackageManager): std.fs.Dir {
 
 pub inline fn getCacheDirectoryAndAbsPath(client: *PackageManager): CacheDirectoryAndAbsPath {
     const cache_dir = client.getCacheDirectory();
-    return .{ .fromStdDir(cache_dir), .@"from"(client.cache_directory_path) };
+    return .{ bun.FD.fromStdDir(cache_dir), @FieldType(CacheDirectoryAndAbsPath, "1").@"from"(client.cache_directory_path) };
 }
 
 pub inline fn getTemporaryDirectory(client: *PackageManager): TemporaryDirectory {
@@ -683,9 +683,9 @@ pub fn updateLockfileIfNeeded(
 )! {
     if (load_result == .ok && load_result.ok.serializer_result.packages_need_update) {
         const slice = manager.lockfile.packages.slice();
-        for (*@"meta" of slice.items(.@"meta")) {
+        for (*pkg_meta of slice.items(.@"meta")) {
             // these are possibly updated later, but need to make sure non are zero
-            @"meta"(.setHasInstallScript(false));
+            pkg_meta.setHasInstallScript(false);
         }
     }
 

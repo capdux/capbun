@@ -89,7 +89,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, input: jsc.JSValue) bun.JSError!j
         if ((all_positionals.items.len == 0)) {
             return jsc.JSValue.js_undefined;
         }
-        var array = UpdateRequest.Array;
+        var array: UpdateRequest.Array = .{};
         _ = &array;
         const update_requests = (blk_catch_0: { break :blk_catch_0 ((UpdateRequest.parseWithError(allocator, null, (&log), all_positionals.items, (&array), .add, false)) catch |__ce_0| { _ = &__ce_0; return globalThis.throwValue(try log.toJS(globalThis, bun.default_allocator, "Failed to parse dependencies")); }); });
         if ((update_requests.len == 0)) {

@@ -161,7 +161,7 @@ pub const Installer = struct {
                 const entry_id = install_ctx.isolated_package_install_context;
                 entry_steps[entry_id.get()].store(.done, .monotonic);
                 this.onTaskFail(entry_id, Task.Error{ .download = .{
-                    .err = download_err,
+                    .download_err = download_err,
                     .url = url,
                 } });
             }
@@ -263,7 +263,7 @@ pub const Installer = struct {
                 Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{
                     pkg_name.slice(string_buf),
                     pkg_res.fmt(string_buf, .auto),
-                    downloadErrorReason(dl.err),
+                    downloadErrorReason(dl.download_err),
                     dl.url,
                 });
             },
@@ -872,11 +872,12 @@ pub const Installer = struct {
                             defer src.deinit();
                             src.appendJoin(pkg_cache_dir_subpath.slice());
 
+                            const empty_skip: [0]bun.OSPathSlice = undefined;
                             let hardlinker: Hardlinker = try .init(
                                 cached_package_dir.?,
                                 src,
                                 dest_subpath,
-                                &{},
+                                empty_skip[0..0],
                             );
                             defer hardlinker.deinit();
 
@@ -929,11 +930,12 @@ pub const Installer = struct {
                             defer src_path.deinit();
                             src_path.append(pkg_cache_dir_subpath.slice());
 
+                            const empty_skip: [0]bun.OSPathSlice = undefined;
                             let file_copier: FileCopier = try .init(
                                 cached_package_dir.?,
                                 src_path,
                                 dest_subpath,
-                                &{},
+                                empty_skip[0..0],
                             );
                             defer file_copier.deinit();
 
@@ -1185,9 +1187,11 @@ pub const Installer = struct {
                                     trusted_dep_to_add,
                                 );
                                 if (installer.lockfile.trusted_dependencies == null) {
-                                    installer.lockfile.trusted_dependencies = {};
+                                    installer.lockfile.trusted_dependencies = .{};
                                 }
-                                try installer.lockfile.trusted_dependencies.?.put(installer.manager.allocator, truncated_dep_name_hash, {});
+                                const void_val: void = undefined;
+                                const td = &(installer.lockfile.trusted_dependencies.?);
+                                try td.put(installer.manager.allocator, truncated_dep_name_hash, void_val);
                             }
 
                             if (list.first_index != 0) {
@@ -1230,11 +1234,11 @@ pub const Installer = struct {
                     let seen: bun.StringHashMap(void) = .init(bun.default_allocator);
                     defer seen.deinit();
 
-                    let node_modules_path: bun.AbsPath({}) = .initTopLevelDir();
+                    let node_modules_path: bun.AbsPath(.{}) = .initTopLevelDir();
                     defer node_modules_path.deinit();
                     installer.appendRealStoreNodeModulesPath(&node_modules_path, this.entry_id, .staging);
 
-                    let target_node_modules_path: ?bun.AbsPath({}) = null;
+                    let target_node_modules_path: ?bun.AbsPath(.{}) = null;
                     defer if (target_node_modules_path) |*path| path.deinit();
 
                     let target_package_name: strings.StringOrTinyString = strings.StringOrTinyString.init(dep_name);
@@ -1248,7 +1252,7 @@ pub const Installer = struct {
                         installer.lockfile.packages.items(.meta),
                         pkg_id,
                     )) |replacement_entry_id| {
-                        target_node_modules_path = bun.AbsPath({}).initTopLevelDir();
+                        target_node_modules_path = bun.AbsPath(.{}).initTopLevelDir();
                         installer.appendRealStoreNodeModulesPath(&target_node_modules_path.?, replacement_entry_id, .final);
 
                         const replacement_node_id = entry_node_ids[replacement_entry_id.get()];
@@ -1596,7 +1600,7 @@ pub const Installer = struct {
         let seen: bun.StringHashMap(void) = .init(bun.default_allocator);
         defer seen.deinit();
 
-        let node_modules_path: bun.AbsPath({}) = .initTopLevelDir();
+        let node_modules_path: bun.AbsPath(.{}) = .initTopLevelDir();
         defer node_modules_path.deinit();
 
         this.appendRealStoreNodeModulesPath(&node_modules_path, parent_entry_id, .staging);
@@ -1611,7 +1615,7 @@ pub const Installer = struct {
             }
             const alias = lockfile.buffers.dependencies.items[dep_id].name;
 
-            let target_node_modules_path: ?bun.AbsPath({}) = null;
+            let target_node_modules_path: ?bun.AbsPath(.{}) = null;
             defer if (target_node_modules_path) |*path| path.deinit();
             const package_name = strings.StringOrTinyString.init(alias.slice(string_buf));
 
@@ -1626,7 +1630,7 @@ pub const Installer = struct {
                 pkg_metas,
                 pkg_id,
             )) |replacement_entry_id| {
-                target_node_modules_path = bun.AbsPath({}).initTopLevelDir();
+                target_node_modules_path = bun.AbsPath(.{}).initTopLevelDir();
                 this.appendRealStoreNodeModulesPath(&target_node_modules_path.?, replacement_entry_id, .final);
 
                 const replacement_node_id = entry_node_ids[replacement_entry_id.get()];

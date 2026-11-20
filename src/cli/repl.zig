@@ -450,7 +450,7 @@ use_colors: bool = false,
 terminal_width: u16 = 80,
 terminal_height: u16 = 24,
 ctrl_c_pressed: bool = false,
-stdin_buf: [256]u8 = (.{ 0 } * (&256)),
+stdin_buf: [256]u8 = std.mem.zeroes([256]u8),
 stdin_buf_start: usize = 0,
 stdin_buf_end: usize = 0,
 vm: ?*jsc.VirtualMachine = null,
@@ -1931,14 +1931,11 @@ pub fn cmdBreak(repl: *Repl, _: []const u8) ReplResult {
 pub fn cmdHistory(repl: *Repl, _: []const u8) ReplResult {
         _ = repl.print("\n{s}Command History:{s}\n", .{ Color.bold, Color.reset });
         const start = (if ((repl.history.entries.items.len > 20)) (repl.history.entries.items.len - 20) else 0);
-        {
-            var i: i32 = start;
-            _ = &i;
-            const __end_8 = repl.history.entries.items.len;
-            while (i < __end_8) : (i += 1) {
-                const entry = repl.history.entries.items[@as(usize, @intCast(i))];
-                _ = repl.print("  {s}{d:>4}{s}  {s}\n", .{ Color.dim, (i + 1), Color.reset, entry });
-            }
+        var i: usize = start;
+        _ = &i;
+        while ((i < repl.history.entries.items.len)) : (i = (i + 1)) {
+            const entry = repl.history.entries.items[@as(usize, @intCast(i))];
+            _ = repl.print("  {s}{d:>4}{s}  {s}\n", .{ Color.dim, (i + 1), Color.reset, entry });
         }
         _ = repl.print("\n", .{});
         return .skip_eval;

@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections import Counter, OrderedDict
 
 
@@ -40,12 +41,14 @@ def main():
     ap.add_argument("files", nargs="+", help="Target .cp files")
     a = ap.parse_args()
 
+    failed = False
     for cp_arg in a.files:
         stem = cp_arg[:-3] if cp_arg.endswith(".cp") else cp_arg
         cp, zig, bak = stem + ".cp", stem + ".zig", stem + "_.zig"
 
         if not os.path.exists(cp):
             print(f"== {cp}: FAIL(not found)")
+            failed = True
             continue
 
         src_lines = open(cp, encoding="utf-8").read().splitlines()
@@ -125,6 +128,11 @@ def main():
         g = gates(cp, bak)
         bad = [k for k, v in g.items() if (k in ("zig{}", "var", "tuple.@N", "anyopaque") and v) or (k == "backup" and not v) or (k == "ratio_ok" and not v)]
         print(f"   gates: {dict(g)}{'  VIOLATIONS=' + str(bad) if bad else '  OK'}")
+        if status != "PASS" or bad:
+            failed = True
+
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

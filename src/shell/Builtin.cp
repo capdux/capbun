@@ -45,7 +45,7 @@ pub const Result = @import("../bun_core/result.zig").Result;
 pub type StringZ = [*:0]const u8;
 pub type OptStringZ = ([*:0]const u8)?;
 
-const empty_args: [0][*:0]const u8 = [];
+const empty_args: [0][*:0]const u8 = undefined;
 
 pub enum Kind {
     cat,

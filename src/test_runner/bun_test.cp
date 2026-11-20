@@ -216,7 +216,7 @@ pub struct BunTestRoot {
 
         bun.assert(_.active_file.get() == null);
 
-        _.active_file = BunTestPtr.new(undefined);
+        _.active_file = BunTestPtr.Optional.new(undefined);
         _.active_file.get().?.init(_.gpa, _, file_id, reporter, default_concurrent, first_last);
     }
     fn exitFile(*_) {
@@ -502,8 +502,8 @@ pub struct BunTest {
         });
     }
 
-    export const Bun__TestScope__Describe2__bunTestThen = jsc.toJSHostFn(bunTestThen);
-    export const Bun__TestScope__Describe2__bunTestCatch = jsc.toJSHostFn(bunTestCatch);
+    pub const Bun__TestScope__Describe2__bunTestThen = jsc.toJSHostFn(bunTestThen);
+    pub const Bun__TestScope__Describe2__bunTestCatch = jsc.toJSHostFn(bunTestCatch);
     static fn bunTestThenOrCatch(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, is_catch: bool)!bun.JSError {
         group.begin(@src());
         defer group.end();
@@ -1009,6 +1009,7 @@ pub const BunTestHookTag = enum { beforeAll, beforeEach, afterEach, afterAll };
 
 pub struct DescribeScope {
     pub const HookTag = BunTestHookTag;
+    pub const Only = BaseScopeOnly;
 
     base: BaseScope,
     entries: std.array_list.Managed(TestScheduleEntry),
@@ -1202,3 +1203,10 @@ pub const RunOneResult = union(enum) {
         timeout: bun.timespec = .epoch,
     },
 };
+
+comptime {
+    const t1 = BunTest.Bun__TestScope__Describe2__bunTestThen;
+    const t2 = BunTest.Bun__TestScope__Describe2__bunTestCatch;
+    @export(&t1, .{ name: "Bun__TestScope__Describe2__bunTestThen" });
+    @export(&t2, .{ name: "Bun__TestScope__Describe2__bunTestCatch" });
+}

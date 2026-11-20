@@ -84,7 +84,7 @@ pub fn installWithManager(
             true,
         )
     else
-        Lockfile.LoadResult{ not_found: {} };
+        .not_found;
 
     manager.updateLockfileIfNeeded(load_result)?;
 
@@ -93,7 +93,7 @@ pub fn installWithManager(
     const changed_config_version = config_version_result[1];
     manager.options.config_version = config_version;
 
-    let root = Lockfile.Package{};
+    let root: Lockfile.Package = {};
     let needs_new_lockfile = load_result != .ok ||
         (load_result.ok.lockfile.buffers.dependencies.items.len == 0 && manager.update_requests.len > 0);
 
@@ -201,7 +201,7 @@ pub fn installWithManager(
 
                 let lockfile: Lockfile = undefined;
                 lockfile.initEmpty(manager.allocator);
-                let maybe_root = Lockfile.Package{};
+                let maybe_root: Lockfile.Package = {};
 
                 const root_package_json_entry = switch (manager.workspace_package_json_cache.getWithPath(
                     manager.allocator,
@@ -252,7 +252,7 @@ pub fn installWithManager(
                     &maybe_root,
                     if (manager.to_update) manager.update_requests else null,
                     mapping,
-                );
+                )?;
 
                 had_any_diffs = manager.summary.hasDiffs();
 
@@ -414,7 +414,8 @@ pub fn installWithManager(
                             iter = manager.lockfile.patched_dependencies.iterator();
                             while (entry := iter.next()) {
                                 if (!lockfile.patched_dependencies.contains(entry.key_ptr.*)) {
-                                    manager.patched_dependencies_to_remove.put(manager.allocator, entry.key_ptr.*, {})?;
+                                    const void_val: void = undefined;
+                                    manager.patched_dependencies_to_remove.put(manager.allocator, entry.key_ptr.*, void_val)?;
                                 }
                             }
                             for (hash of manager.patched_dependencies_to_remove.keys()) {
@@ -437,7 +438,7 @@ pub fn installWithManager(
                             if (_ := std.mem.indexOfScalar(PackageNameHash, all_name_hashes, dependency.name_hash)) {
                                 manager.lockfile.buffers.resolutions.items[dependency_i] = invalid_package_id;
                                 manager.enqueueDependencyWithMain(
-                                    @truncate(dependency_i),
+                                    @as(u32, @intCast(dependency_i)),
                                     &dependency,
                                     invalid_package_id,
                                     false,
@@ -476,7 +477,7 @@ pub fn installWithManager(
 
                         for (counter_i of 0..changes) {
                             if (mapping[counter_i] == invalid_package_id) {
-                                const dependency_i = counter_i + off;
+                                const dependency_i = @as(u32, @intCast(counter_i)) + off;
                                 const dependency = manager.lockfile.buffers.dependencies.items[dependency_i];
                                 manager.enqueueDependencyWithMain(
                                     dependency_i,
@@ -695,7 +696,7 @@ pub fn installWithManager(
         manager.log,
         manager.options.enable.exact_versions,
         log_level,
-    );
+    )?;
 
     if (manager.lockfile.packages.len > 0) {
         root = manager.lockfile.packages.get(0);
@@ -873,7 +874,7 @@ pub fn installWithManager(
         manager.lockfile.meta_hash = manager.lockfile.generateMetaHash(
             PackageManager.verbose_install || manager.options.do.print_meta_hash_string,
             packages_len_before_install,
-        );
+        )?;
 
         manager.saveLockfile(&load_result, save_format, had_any_diffs, lockfile_before_install, packages_len_before_install, log_level)?;
 
@@ -947,7 +948,7 @@ pub fn installWithManager(
         // If the lockfile was frozen, we already checked it
         !manager.options.enable.frozen_lockfile &&
         if (load_result.loadedFromTextLockfile())
-            !manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)
+            !(manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)?)
         else
             try manager.lockfile.hasMetaHashChanged(
                 PackageManager.verbose_install || manager.options.do.print_meta_hash_string,
@@ -1164,18 +1165,15 @@ fn printBlockedPackagesInfo(summary: *const PackageInstall.Summary, global: bool
 /// manager.log.hasErrors() is checked.
 fn addDependencyError(manager: *PackageManager, dependency: *const Dependency, e: anyerror) {
     const lockfile = manager.lockfile;
-    const path_sep: bun.Path.PathSeparators = if (dependency.version.tag == .folder) .@"auto" else .@"any";
-    const note = {
-        fmt: "error occurred while resolving {f}",
-        args: .{bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), {
-            path_sep: path_sep,
-        })},
-    };
+    const fmt_str = "error occurred while resolving {f}";
+    const path_arg = bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), .{
+        path_sep: if (dependency.version.tag == .folder) .@"auto" else .@"any",
+    });
 
     if (dependency.behavior.isOptional() || dependency.behavior.isPeer())
-        manager.log.addWarningWithNote(null, {}, manager.allocator, @errorName(e), note.fmt, note.args) catch unreachable
+        manager.log.addWarningWithNote(null, {}, manager.allocator, @errorName(e), fmt_str, .{ path_arg }) catch unreachable
     else
-        manager.log.addZigErrorWithNote(manager.allocator, e, note.fmt, note.args) catch unreachable;
+        manager.log.addZigErrorWithNote(manager.allocator, e, fmt_str, .{ path_arg }) catch unreachable;
 }
 
 import security_scanner from "./security_scanner.zig";

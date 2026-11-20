@@ -389,7 +389,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
+        if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = std.Io.Writer.Allocating.initCapacity(stack_fallback.get(), 2048) catch unreachable;
             defer buf.deinit();
@@ -415,7 +415,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createTypeErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
+        if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();
@@ -432,7 +432,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createDOMExceptionInstance(*_, code: jsc.WebCore.DOMExceptionCode, comptime fmt: [:0]const u8, args: auto): JSError!JSValue {
-        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
+        if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get())?;
             defer buf.deinit();
@@ -446,7 +446,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createSyntaxErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
+        if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();
@@ -463,7 +463,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createRangeErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
+        if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();

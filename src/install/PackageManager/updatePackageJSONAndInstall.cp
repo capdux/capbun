@@ -147,7 +147,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(
     positionals: []const string,
     update_requests: *UpdateRequest.Array,
 )! {
-    let empty_updates: [0]UpdateRequest = [];
+    let empty_updates: [0]UpdateRequest = undefined;
     let updates: []UpdateRequest = if (manager.subcommand == .@"patch-commit" || manager.subcommand == .patch)
         empty_updates[0..0]
     else
@@ -155,7 +155,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(
     updatePackageJSONAndInstallWithManagerWithUpdates(
         manager,
         ctx,
-        &updates,
+        updates,
         manager.subcommand,
         original_cwd,
     )?;
@@ -241,8 +241,9 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
         .remove => {
             // if we're removing, they don't have to specify where it is installed in the dependencies list
             // they can even put it multiple times and we will just remove all of them
-            for (request of updates.*) {
-                for (list of [ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" ]) {
+            for (request of updates) {
+                const dep_lists: [4]string = [ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" ];
+            for (list of dep_lists) {
                     if (query := current_package_json.root.asProperty(list)) {
                         if (query.expr.data == .e_object) {
                             let dependencies = query.expr.data.e_object.properties.slice();
@@ -326,7 +327,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                             &current_package_json.root,
                             stuff.patch_key,
                             stuff.patchfile_path,
-                        );
+                        )?;
                     }
                 }
             }
@@ -337,7 +338,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
 
     {
         // Incase it's a pointer to self. Avoid RLS.
-        const cloned = updates.*;
+        const cloned = updates;
         manager.update_requests = cloned;
     }
 
@@ -417,7 +418,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                 &root_package_json.root,
                 stuff.patch_key,
                 stuff.patchfile_path,
-            );
+            )?;
             let buffer_writer2 = JSPrinter.BufferWriter.init(manager.allocator);
             buffer_writer2.buffer.list.ensureTotalCapacity(manager.allocator, root_package_json.source.contents.len + 1)?;
             buffer_writer2.append_newline = preserve_trailing_newline_at_eof_for_package_json;
@@ -445,7 +446,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
     manager.installWithManager(ctx, root_package_json_path, original_cwd)?;
 
     if (subcommand == .update || subcommand == .add || subcommand == .link) {
-        for (request of updates.*) {
+        for (request of updates) {
             if (request.failed) {
                 Global.exit(1);
                 return;
@@ -547,7 +548,7 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
             bun.copy(u8, &node_modules_buf, "node_modules" ++ std.fs.path.sep_str);
             const offset_buf = node_modules_buf["node_modules/".len..];
             const name_hashes = manager.lockfile.packages.items(.name_hash);
-            for (request of updates.*) {
+            for (request of updates) {
                 // If the package no longer exists in the updated lockfile, delete the directory
                 // This is not thorough.
                 // It does not handle nested dependencies
@@ -567,7 +568,8 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                 }
                 null
             };
-            if (node_modules_bin := open_res) {
+            if (node_modules_bin_val := open_res) {
+                let node_modules_bin = node_modules_bin_val;
                 defer node_modules_bin.close();
                 let iter: std.fs.Dir.Iterator = node_modules_bin.iterate();
                 while (entry := (iter.next() catch null)) {
@@ -612,12 +614,12 @@ pub fn updatePackageJSONAndInstallCatchError(
     };
 }
 
-fn updatePackageJSONAndInstallAndCLI(
+fn initManagerOrCreate(
     ctx: Command.Context,
-    subcommand: Subcommand,
     cli: CommandLineArguments,
-)! {
-    const init_res = PackageManager.init(ctx, cli, subcommand) catch (e) {
+    subcommand: Subcommand,
+): @TypeOf(PackageManager.init(ctx, cli, subcommand)) {
+    return PackageManager.init(ctx, cli, subcommand) catch |e| {
         if (e == error.MissingPackageJSON) {
             switch (subcommand) {
                 .update => {
@@ -634,13 +636,20 @@ fn updatePackageJSONAndInstallAndCLI(
                 },
                 else => {
                     attemptToCreatePackageJSON()?;
-                    PackageManager.init(ctx, cli, subcommand)?
+                    return PackageManager.init(ctx, cli, subcommand);
                 },
             }
-        } else {
-            return e;
         }
+        return e;
     };
+}
+
+fn updatePackageJSONAndInstallAndCLI(
+    ctx: Command.Context,
+    subcommand: Subcommand,
+    cli: CommandLineArguments,
+)! {
+    const init_res = initManagerOrCreate(ctx, cli, subcommand)?;
     let manager = init_res[0];
     const original_cwd = init_res[1];
     defer ctx.allocator.free(original_cwd);
@@ -654,7 +663,7 @@ fn updatePackageJSONAndInstallAndCLI(
     // We should tell the user to add it to $PATH so they don't get confused.
     if (subcommand.canGloballyInstallPackages()) {
         if (manager.options.global && manager.options.log_level != .silent) {
-            manager.track_installed_bin = { pending: {} };
+            manager.track_installed_bin = .pending;
         }
     }
 
@@ -752,7 +761,8 @@ pub fn updatePackageJSONAndInstall(
         };
 
         // This runs the bundler.
-        bun.cli.BuildCommand.exec(bun.cli.Command.get(), &fetcher)?;
+        const exec_fn = bun.cli.BuildCommand.exec;
+        exec_fn(bun.cli.Command.get(), &fetcher)?;
         return;
     }
 

@@ -3,6 +3,7 @@ type string = []const u8;
 import Dependency from "../install/dependency.zig";
 import Fs from "../resolver/fs.zig";
 import Lockfile from "../install/lockfile.zig";
+import migration from "../install/migration.zig";
 import Path from "../paths/resolve_path.zig";
 import PmViewCommand from "./pm_view_command.zig";
 import cli from "./cli.zig";
@@ -46,7 +47,7 @@ pub struct ByName {
 
     static fn isLessThan(ctx: ByName, lhs: DependencyID, rhs: DependencyID): bool {
         return strings.cmpStringsAsc(
-            .{},
+            undefined,
             ctx.dependencies[lhs].name.slice(ctx.buf),
             ctx.dependencies[rhs].name.slice(ctx.buf),
         );
@@ -54,6 +55,15 @@ pub struct ByName {
 }
 
 pub struct PackageManagerCommand {
+    pub static fn printHelp() {
+        const intro_text = "\n<b>Usage<r>: <b><green>bun pm<r> <cyan>[flags]<r> <blue>[\\<command\\>]<r>\n\n  Run package manager utilities.";
+        const outro_text = "\n\n<b>Commands:<r>\n\n  <b><green>bun pm<r> <blue>scan<r>                 scan all packages in lockfile for security vulnerabilities\n  <b><green>bun pm<r> <blue>pack<r>                 create a tarball of the current workspace\n  <d>├<r> <cyan>--dry-run<r>                 do everything except for writing the tarball to disk\n  <d>├<r> <cyan>--destination<r>             the directory the tarball will be saved in\n  <d>├<r> <cyan>--filename<r>                the name of the tarball\n  <d>├<r> <cyan>--ignore-scripts<r>          don't run pre/postpack and prepare scripts\n  <d>├<r> <cyan>--gzip-level<r>              specify a custom compression level for gzip (0-9, default is 9)\n  <d>└<r> <cyan>--quiet<r>                   only output the tarball filename\n  <b><green>bun pm<r> <blue>bin<r>                  print the path to bin folder\n  <d>└<r> <cyan>-g<r>                        print the <b>global<r> path to bin folder\n  <b><green>bun<r> <blue>list<r>                  list the dependency tree according to the current lockfile\n  <d>└<r> <cyan>--all<r>                     list the entire dependency tree according to the current lockfile\n  <b><green>bun pm<r> <blue>why<r> <d>\\<pkg\\><r>            show dependency tree explaining why a package is installed\n  <b><green>bun pm<r> <blue>whoami<r>               print the current npm username\n  <b><green>bun pm<r> <blue>view<r> <d>name[@version]<r>  view package metadata from the registry <d>(use `bun info` instead)<r>\n  <b><green>bun pm<r> <blue>version<r> <d>[increment]<r>  bump the version in package.json and create a git tag\n  <d>└<r> <cyan>increment<r>                 patch, minor, major, prepatch, preminor, premajor, prerelease, from-git, or a specific version\n  <b><green>bun pm<r> <blue>pkg<r>                  manage data in package.json\n  <d>├<r> <cyan>get<r> <d>[key ...]<r>\n  <d>├<r> <cyan>set<r> <d>key=value ...<r>\n  <d>├<r> <cyan>delete<r> <d>key ...<r>\n  <d>└<r> <cyan>fix<r>                       auto-correct common package.json errors\n  <b><green>bun pm<r> <blue>hash<r>                 generate & print the hash of the current lockfile\n  <b><green>bun pm<r> <blue>hash-string<r>          print the string used to hash the lockfile\n  <b><green>bun pm<r> <blue>hash-print<r>           print the hash stored in the current lockfile\n  <b><green>bun pm<r> <blue>cache<r>                print the path to the cache folder\n  <b><green>bun pm<r> <blue>cache rm<r>             clear the cache\n  <b><green>bun pm<r> <blue>migrate<r>              migrate another package manager's lockfile without installing anything\n  <b><green>bun pm<r> <blue>untrusted<r>            print current untrusted dependencies with scripts\n  <b><green>bun pm<r> <blue>trust<r> <d>names ...<r>      run scripts for untrusted dependencies and add to `trustedDependencies`\n  <d>└<r>  <cyan>--all<r>                    trust all untrusted dependencies\n  <b><green>bun pm<r> <blue>default-trusted<r>      print the default trusted dependencies list\n\nLearn more about these at <magenta>https://bun.com/docs/cli/pm<r>.\n";
+
+        Output.pretty(intro_text, .{});
+        Output.pretty(outro_text, .{});
+        Output.flush();
+    }
+
     pub static fn handleLoadLockfileErrors(load_lockfile: Lockfile.LoadResult, pm: *PackageManager) {
         if (load_lockfile == .not_found) {
             if (pm.options.log_level != .silent) {
@@ -119,8 +129,10 @@ pub struct PackageManagerCommand {
         return subcommand;
     }
 
-    pub static fn exec(ctx: Command.Context, is_direct_whoami: bool)! {
-        let args: [][:0]u8 = ctx.args.positionals;
+    pub static fn exec(ctx: Command.Context)! {
+        const is_direct_whoami = if (bun.argv.len > 1) strings.eqlComptime(bun.argv[1], "whoami") else false;
+        let args = std.process.argsAlloc(ctx.allocator)?;
+        args = args[1..];
         if (args.len > 0 && strings.eqlComptime(args[0], "pm")) {
             args = args[1..];
         }
@@ -133,7 +145,7 @@ pub struct PackageManagerCommand {
                     Global.crash();
                 };
                 defer file.close();
-                printHash(ctx, file)?;
+                printHash(ctx, File.from(file))?;
                 return;
             }
         }
@@ -309,36 +321,55 @@ pub struct PackageManagerCommand {
             DefaultTrustedCommand.exec()?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "untrusted")) {
-            UntrustedCommand.exec(ctx, pm, args)?;
+            const untrusted_exec = UntrustedCommand.exec;
+            untrusted_exec(ctx, pm, args)?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "trust")) {
-            TrustCommand.exec(ctx, pm, args)?;
+            const trust_exec = TrustCommand.exec;
+            trust_exec(ctx, pm, args)?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "ls")) {
             const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
             PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
 
-            let lockfile = &load_lockfile.ok.lockfile;
+            let lockfile = load_lockfile.ok.lockfile;
             const resolutions = lockfile.packages.items(.resolution);
             const string_bytes = lockfile.buffers.string_bytes.items;
 
             Output.flush();
 
-            if (pm.options.all) {
-                let directories = Lockfile.Tree.Iterator(.node_modules).init(lockfile).list(ctx.allocator) catch |e| {
-                    Output.err(e, "Failed to list dependencies", .{});
-                    Global.crash();
-                };
+            if (strings.leftHasAnyInRight(args, &.{ "-A", "-a", "--all" })) {
+                let iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
+                let max_depth: usize = 0;
+                let directories = std.array_list.Managed(NodeModulesFolder).init(ctx.allocator);
                 defer directories.deinit();
+                while (node_modules := iterator.next(null)) {
+                    const path_len = node_modules.relative_path.len;
+                    let path = ctx.allocator.alloc(u8, path_len + 1)?;
+                    bun.copy(u8, path, node_modules.relative_path);
+                    path[path_len] = 0;
+
+                    const dependencies = ctx.allocator.alloc(DependencyID, node_modules.dependencies.len)?;
+                    bun.copy(DependencyID, dependencies, node_modules.dependencies);
+
+                    if (max_depth < node_modules.depth + 1) max_depth = node_modules.depth + 1;
+
+                    directories.append({
+                        relative_path: path[0..path_len :0],
+                        dependencies: dependencies,
+                        tree_id: node_modules.tree_id,
+                        depth: node_modules.depth,
+                    })?;
+                }
 
                 if (directories.items.len == 0) {
-                    Global.exit(0);
+                    return;
                 }
 
                 const first_directory = directories.orderedRemove(0);
-                let more_packages = ctx.allocator.alloc(bool, directories.items.len + 1)?;
-                defer ctx.allocator.free(more_packages);
-                @memset(more_packages, true);
+                let more_packages = ctx.allocator.alloc(bool, max_depth)?;
+                @memset(more_packages, false);
+                if (first_directory.dependencies.len > 1) more_packages[0] = true;
                 printNodeModulesFolderStructure(&first_directory, null, 0, &directories, lockfile, more_packages)?;
             } else {
                 let tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
@@ -381,37 +412,48 @@ pub struct PackageManagerCommand {
             if (!pm.options.enable.force_save_lockfile) {
                 if (bun.sys.existsZ("bun.lock")) {
                     Output.prettyErrorln(
-                        \\<r><red>error<r>: bun.lock already exists
-                        \\run with --force to overwrite
-                    , .{});
+                        "<r><red>error<r>: bun.lock already exists\nrun with --force to overwrite",
+                        .{},
+                    );
                     Global.exit(1);
                 }
 
                 if (bun.sys.existsZ("bun.lockb")) {
                     Output.prettyErrorln(
-                        \\<r><red>error<r>: bun.lockb already exists
-                        \\run with --force to overwrite
-                    , .{});
+                        "<r><red>error<r>: bun.lockb already exists\nrun with --force to overwrite",
+                        .{},
+                    );
                     Global.exit(1);
                 }
             }
 
-            pm.options.enable.save_lockfile = true;
-            pm.options.enable.force_save_lockfile = true;
-
-            const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
+            const load_lockfile = migration.detectAndLoadOtherLockfile(
+                pm.lockfile,
+                bun.FD.cwd(),
+                pm,
+                ctx.allocator,
+                pm.log,
+            );
+            if (load_lockfile == .not_found) {
+                Output.prettyErrorln("<r><red>error<r>: could not find any other lockfile", .{});
+                Global.exit(1);
+            }
             PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
+            const lockfile = load_lockfile.ok.lockfile;
 
-            pm.lockfile.saveToDisk(&load_lockfile, &pm.options);
+            lockfile.saveToDisk(&load_lockfile, &pm.options);
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "version")) {
-            PmVersionCommand.exec(ctx, pm, pm.options.positionals, cwd)?;
+            const ver_exec = PmVersionCommand.exec;
+            ver_exec(ctx, pm, pm.options.positionals, cwd)?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "why")) {
-            PmWhyCommand.exec(ctx, pm, pm.options.positionals)?;
+            const why_exec = PmWhyCommand.exec;
+            why_exec(ctx, pm, pm.options.positionals)?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "pkg")) {
-            PmPkgCommand.exec(ctx, pm, pm.options.positionals, cwd)?;
+            const pkg_exec = PmPkgCommand.exec;
+            pkg_exec(ctx, pm, pm.options.positionals, cwd)?;
             Global.exit(0);
         } else {
             Output.errGeneric("unknown subcommand: \"{s}\"", .{ subcommand });

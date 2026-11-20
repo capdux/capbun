@@ -125,7 +125,7 @@ fn findMatchingWorkspaces(
                         else => unreachable,
                     };
 
-                    const res_paths = [res_path];
+                    const res_paths: [1][]const u8 = [res_path];
                     const abs_res_path = path.joinAbsStringBuf(FileSystem.instance.top_level_dir, &path_buf, res_paths[0..1], .posix);
 
                     if (!glob.match(pattern, strings.withoutTrailingSlash(abs_res_path)).matches()) {
@@ -186,7 +186,7 @@ fn groupCatalogDependencies(
             const catalog_name = dep.version.value.catalog.slice(string_buf);
             const catalog_name_hash = bun.hash(catalog_name);
 
-            const entry = catalog_map.getOrPut(allocator, CatalogKey{
+            const entry = catalog_map.getOrPut(CatalogKey{
                 name_hash: name_hash,
                 catalog_name_hash: catalog_name_hash,
                 behavior: dep.behavior,
@@ -219,7 +219,7 @@ fn groupCatalogDependencies(
                 const dep = dependencies[item.dep_id];
                 if (bun.hash(dep.name.slice(string_buf)) == key.name_hash &&
                     bun.hash(dep.version.value.catalog.slice(string_buf)) == key.catalog_name_hash &&
-                    dep.behavior.eql(key.behavior))
+                    std.meta.eql(dep.behavior, key.behavior))
                 {
                     first_item = item;
                     break;
@@ -373,11 +373,17 @@ fn printOutdatedInfoTable(
                 manager.options.minimum_release_age_ms != null,
             ) ?? continue;
 
+            const actual_latest = manifest.findByDistTag("latest") ?? continue;
+
             const latest = manifest.findByDistTagWithFilter("latest", manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes);
             const update_version = if (resolved_version.tag == .npm)
                 manifest.findBestVersionWithFilter(resolved_version.value.npm.version, string_buf, manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes)
             else
                 manifest.findByDistTagWithFilter(resolved_version.value.dist_tag.tag.slice(string_buf), manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes);
+
+            if (resolution.value.npm.version.order(actual_latest.version, string_buf, manifest.string_buf) != .lt) {
+                continue;
+            }
 
             if (update_version.latestIsFiltered()) {
                 has_filtered_update = true;
@@ -386,12 +392,6 @@ fn printOutdatedInfoTable(
             if (latest.latestIsFiltered()) {
                 has_filtered_latest = true;
                 has_filtered_versions = true;
-            }
-
-            if (!latest.isOutdated(resolution.value.npm.version, string_buf, manifest.string_buf) &&
-                !update_version.isOutdated(resolution.value.npm.version, string_buf, manifest.string_buf))
-            {
-                continue;
             }
 
             const behavior_str_len = if (dep.behavior.dev)
@@ -468,14 +468,14 @@ fn printOutdatedInfoTable(
     const column_left_pad = 1;
     const column_right_pad = 1;
 
-    const headers_with_workspace = [
+    const headers_with_workspace: [5][]const u8 = [
         "Package",
         "Current",
         "Update",
         "Latest",
         "Workspace",
     ];
-    const headers_without_workspace = [
+    const headers_without_workspace: [4][]const u8 = [
         "Package",
         "Current",
         "Update",
@@ -486,14 +486,14 @@ fn printOutdatedInfoTable(
     else
         headers_without_workspace[0..4];
 
-    const lengths_with_workspace = [
+    const lengths_with_workspace: [5]usize = [
         package_column_inside_length,
         current_column_inside_length,
         update_column_inside_length,
         latest_column_inside_length,
         workspace_column_inside_length,
     ];
-    const lengths_without_workspace = [
+    const lengths_without_workspace: [4]usize = [
         package_column_inside_length,
         current_column_inside_length,
         update_column_inside_length,
@@ -512,7 +512,7 @@ fn printOutdatedInfoTable(
     table.printTopLineSeparator();
     table.printColumnNames();
 
-    const group_behaviors = [
+    const group_behaviors: [4]Behavior = [
         Behavior{ prod: true },
         Behavior{ dev: true },
         Behavior{ peer: true },
@@ -524,7 +524,7 @@ fn printOutdatedInfoTable(
             const dep_id = item.dep_id;
 
             const dep = &dependencies[dep_id];
-            if (!dep.behavior.includes(group_behavior)) continue;
+            if (!Behavior.includes(dep.behavior, group_behavior)) continue;
 
             const package_name = pkg_names[package_id].slice(string_buf);
             const resolution = pkg_resolutions[package_id];
@@ -558,25 +558,27 @@ fn printOutdatedInfoTable(
                 else
                     "";
 
-                Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
 
                 Output.pretty("{s}<d>{s}<r>", .{ package_name, behavior_str });
-                for (pad_i of package_name.len + behavior_str.len..package_column_inside_length + column_right_pad) Output.pretty(" ", .{});
+                let pad_i: usize = package_name.len + behavior_str.len;
+                while (pad_i < package_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
             }
 
             {
-                Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
 
                 bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(string_buf) }));
                 Output.pretty("{s}", .{ version_buf.items });
-                for (pad_i of version_buf.items.len..current_column_inside_length + column_right_pad) Output.pretty(" ", .{});
+                let pad_i: usize = version_buf.items.len;
+                while (pad_i < current_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
                 version_buf.clearRetainingCapacity();
             }
 
             {
-                Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
                 if (update_version := update.unwrap()) {
                     bun.handleOom(version_writer.print("{f}", .{ update_version.version.fmt(manifest.string_buf) }));
@@ -590,12 +592,13 @@ fn printOutdatedInfoTable(
                     Output.pretty(" <blue>*<r>", .{});
                     update_version_len += " *".len;
                 }
-                for (pad_i of update_version_len..update_column_inside_length + column_right_pad) Output.pretty(" ", .{});
+                let pad_i: usize = update_version_len;
+                while (pad_i < update_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
                 version_buf.clearRetainingCapacity();
             }
 
             {
-                Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
                 if (latest_version := latest.unwrap()) {
                     bun.handleOom(version_writer.print("{f}", .{ latest_version.version.fmt(manifest.string_buf) }));
@@ -609,12 +612,13 @@ fn printOutdatedInfoTable(
                     Output.pretty(" <blue>*<r>", .{});
                     latest_version_len += " *".len;
                 }
-                for (pad_i of latest_version_len..latest_column_inside_length + column_right_pad) Output.pretty(" ", .{});
+                let pad_i: usize = latest_version_len;
+                while (pad_i < latest_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
                 version_buf.clearRetainingCapacity();
             }
 
             if (show_workspace_column) {
-                Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
 
                 let workspace_name = pkg_names[item.workspace_pkg_id].slice(string_buf);
@@ -623,10 +627,11 @@ fn printOutdatedInfoTable(
                 }
                 Output.pretty("{s}", .{ workspace_name });
 
-                for (pad_i of workspace_name.len..workspace_column_inside_length + column_right_pad) Output.pretty(" ", .{});
+                let pad_i: usize = workspace_name.len;
+                while (pad_i < workspace_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
             }
 
-            Output.pretty("{s}\n", .{ table.symbols.verticalEdge() });
+            Output.pretty("{s}\n", .{ @TypeOf(table).symbols.verticalEdge() });
         }
     }
 
@@ -709,7 +714,7 @@ fn outdatedWithColor(manager: *PackageManager, original_cwd: string, comptime en
         const root_pkg_id = manager.root_package_id.get(manager.lockfile, manager.workspace_name_hash);
         if (root_pkg_id == invalid_package_id) return;
 
-        const root_arr = [root_pkg_id];
+        const root_arr: [1]PackageID = [root_pkg_id];
         const root_slice = root_arr[0..1];
         manager.populateManifestCache({ ids: root_slice })?;
         printOutdatedInfoTable(manager, root_slice, false, enable_ansi_colors)?;

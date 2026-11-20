@@ -301,8 +301,10 @@ pub struct Source {
                     enable_color = true;
                 }
 
-                enable_ansi_colors_stdout = enable_color ?? is_stdout_tty;
-                enable_ansi_colors_stderr = enable_color ?? is_stderr_tty;
+                const use_color_stdout = enable_color ?? is_stdout_tty;
+                const use_color_stderr = enable_color ?? is_stderr_tty;
+                enable_ansi_colors_stdout = use_color_stdout;
+                enable_ansi_colors_stderr = use_color_stderr;
             }
 
             stdout_stream = stdout;
@@ -702,14 +704,11 @@ pub fn printElapsedStdoutTrim(elapsed: f64) {
     switch (@as(i64, @intFromFloat(@round(elapsed)))) {
         0..=1500 => {
             const fmt = "<r><d>[<b>{d:>}ms<r><d>]<r>";
-            const args = [elapsed];
-            pretty(fmt, args);
+            pretty(fmt, .{ elapsed });
         },
         else => {
             const fmt = "<r><d>[<b>{d:>}s<r><d>]<r>";
-            const args = [elapsed / 1000.0];
-
-            pretty(fmt, args);
+            pretty(fmt, .{ elapsed / 1000.0 });
         },
     }
 }
@@ -1230,17 +1229,21 @@ pub inline fn debugWarn(comptime fmt: []const u8, args: auto) {
 }
 
 fn TupleCatType(comptime AT: type, comptime BT: type): type {
+    @setEvalBranchQuota(1_000_000);
     const af = @typeInfo(AT).@"struct".fields;
     const bf = @typeInfo(BT).@"struct".fields;
     const total = af.len + bf.len;
-    let types: [total]type = undefined;
-    inline for (i of 0..af.len) {
-        types[i] = af[i].type;
-    }
-    inline for (j of 0..bf.len) {
-        types[af.len + j] = bf[j].type;
-    }
-    return std.meta.Tuple(&types);
+    return comptime brk: {
+        let t: [total]type = undefined;
+        for (i of 0..af.len) {
+            t[i] = af[i].type;
+        }
+        for (j of 0..bf.len) {
+            t[af.len + j] = bf[j].type;
+        }
+        const t_const = t;
+        break :brk std.meta.Tuple(&t_const);
+    };
 }
 
 inline fn concatTuple(a: auto, b: auto): TupleCatType(@TypeOf(a), @TypeOf(b)) {
@@ -1430,7 +1433,7 @@ pub struct Synchronized {
     }
 
     pub fn end() {
-        if (Environment.isPosix) {
+        if (Environment.isPosix && @sizeOf(@TypeOf(_)) == 0) {
             print(synchronized_end, {});
         }
     }

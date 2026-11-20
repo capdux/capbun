@@ -119,7 +119,7 @@ const Param = ParamMod.Param;
 const NewWriter = NewWriterMod.NewWriter;
 const writeWrap = NewWriterMod.writeWrap;
 const debug = bun.Output.scoped(.MySQLQuery, .visible);
-const empty_data: [0]Data = &.{};
+const empty_data: [0]Data = undefined;
 
 pub fn execute(query: []const u8, writer: anytype) anyerror!void {
         var packet = try writer.start(0);

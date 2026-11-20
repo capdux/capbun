@@ -152,7 +152,7 @@ pub fn start(self: *Worker) !void {
         if (Environment.isPosix) {
             self.extra_fd_stdio = .{ .buffer };
             const options: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = .buffer, .stderr = .buffer, .extra_fds = (&self.extra_fd_stdio), .cwd = coord.cwd, .stream = true, .new_process_group = true, .linux_pdeathsig = (if (Environment.isLinux) std.posix.SIG.KILL else null) };
-            var sp_raw = try try bun.spawn.spawnProcess((&options), coord.argv.ptr, coord.envps[@as(usize, @intCast(self.idx))].ptr);
+            var sp_raw = try bun.spawn.spawnProcess((&options), coord.argv.ptr, coord.envps[@as(usize, @intCast(self.idx))].ptr);
             _ = &sp_raw;
             var spawned = try sp_raw.unwrap();
             _ = &spawned;
@@ -162,13 +162,13 @@ pub fn start(self: *Worker) !void {
             self.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if (spawned.stdout) |fd| {
                 _ = &fd;
-                var st = try self.out.reader.start(fd, true);
+                var st = self.out.reader.start(fd, true);
                 _ = &st;
                 _ = try st.unwrap();
             }
             if (spawned.stderr) |fd| {
                 _ = &fd;
-                var st = try self.err.reader.start(fd, true);
+                var st = self.err.reader.start(fd, true);
                 _ = &st;
                 _ = try st.unwrap();
             }
@@ -189,7 +189,7 @@ pub fn start(self: *Worker) !void {
             }
             self.extra_fd_stdio = .{ .{ .ipc = ipc_pipe } };
             const options: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = .{ .buffer = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe)) }, .stderr = .{ .buffer = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe)) }, .extra_fds = (&self.extra_fd_stdio), .cwd = coord.cwd, .windows = .{ .loop = jsc.EventLoopHandle.init(coord.vm) }, .stream = true };
-            var sp_raw = try try bun.spawn.spawnProcess((&options), coord.argv.ptr, coord.envps[@as(usize, @intCast(self.idx))].ptr);
+            var sp_raw = try bun.spawn.spawnProcess((&options), coord.argv.ptr, coord.envps[@as(usize, @intCast(self.idx))].ptr);
             _ = &sp_raw;
             var spawned = try sp_raw.unwrap();
             _ = &spawned;
@@ -198,12 +198,12 @@ pub fn start(self: *Worker) !void {
             }
             self.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if ((spawned.stdout == .buffer)) {
-                var st = try self.out.reader.startWithPipe(spawned.stdout.buffer);
+                var st = self.out.reader.startWithPipe(spawned.stdout.buffer);
                 _ = &st;
                 _ = try st.unwrap();
             }
             if ((spawned.stderr == .buffer)) {
-                var st = try self.err.reader.startWithPipe(spawned.stderr.buffer);
+                var st = self.err.reader.startWithPipe(spawned.stderr.buffer);
                 _ = &st;
                 _ = try st.unwrap();
             }

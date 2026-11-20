@@ -1243,7 +1243,7 @@ pub fn spawnOpts(old_folder: []const u8, new_folder: []const u8, cwd: [:0]const 
         argv_buf[cp_cast_int(usize, (ARGV.len + 1))] = new_folder;
         break :brk argv_buf;
 };
-        const envp: ?[:null][*:0]const u8 = brk: {
+        const envp = brk: {
         const env_arr: [4][:0]const u8 = .{ "GIT_CONFIG_NOSYSTEM", "HOME", "XDG_CONFIG_HOME", "USERPROFILE" };
         const PATH = bun.env_var.PATH.get();
         const extra: usize = @intFromBool((PATH != null));
@@ -1260,7 +1260,7 @@ pub fn spawnOpts(old_folder: []const u8, new_folder: []const u8, cwd: [:0]const 
         if (PATH) |p| {
             _ = &p;
             {
-                envp_buf[cp_cast_int(usize, (envp_buf.len - 1))] = @as([*:0]const u8, p.ptr);
+                envp_buf[cp_cast_int(usize, (envp_buf.len - 1))] = @as([*:0]const u8, @ptrCast(p.ptr));
             }
         }
         break :brk envp_buf;

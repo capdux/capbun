@@ -242,7 +242,7 @@ pub struct PmVersionCommand {
             return;
         }
 
-        if (!pm.options.force && !isGitClean(cwd)?) {
+        if (!pm.options.force && !(isGitClean(cwd)?)) {
             Output.errGeneric("Git working directory not clean.", .{});
             Global.exit(1);
         }
@@ -306,15 +306,7 @@ pub struct PmVersionCommand {
         defer ctx.allocator.free(major_version);
         defer ctx.allocator.free(prerelease_version);
 
-        const increment_help_text =
-            \\
-            \\<b>Increment<r>:
-            \\  <cyan>patch<r>      <d>{s} → {s}<r>
-            \\  <cyan>minor<r>      <d>{s} → {s}<r>
-            \\  <cyan>major<r>      <d>{s} → {s}<r>
-            \\  <cyan>prerelease<r> <d>{s} → {s}<r>
-            \\
-        ;
+        const increment_help_text = "\n<b>Increment<r>:\n  <cyan>patch<r>      <d>{s} → {s}<r>\n  <cyan>minor<r>      <d>{s} → {s}<r>\n  <cyan>major<r>      <d>{s} → {s}<r>\n  <cyan>prerelease<r> <d>{s} → {s}<r>\n";
         Output.pretty(increment_help_text, .{
             current_version, patch_version,
             current_version, minor_version,
@@ -330,12 +322,7 @@ pub struct PmVersionCommand {
             defer ctx.allocator.free(preminor_version);
             defer ctx.allocator.free(premajor_version);
 
-            const prerelease_help_text =
-                \\  <cyan>prepatch<r>   <d>{s} → {s}<r>
-                \\  <cyan>preminor<r>   <d>{s} → {s}<r>
-                \\  <cyan>premajor<r>   <d>{s} → {s}<r>
-                \\
-            ;
+            const prerelease_help_text = "  <cyan>prepatch<r>   <d>{s} → {s}<r>\n  <cyan>preminor<r>   <d>{s} → {s}<r>\n  <cyan>premajor<r>   <d>{s} → {s}<r>\n";
             Output.pretty(prerelease_help_text, .{
                 current_version, prepatch_version,
                 current_version, preminor_version,
@@ -346,25 +333,7 @@ pub struct PmVersionCommand {
         const beta_prerelease_version = calculateNewVersion(ctx.allocator, current_version, .prerelease, null, "beta", cwd)?;
         defer ctx.allocator.free(beta_prerelease_version);
 
-        const set_specific_version_help_text =
-            \\  <cyan>from-git<r>   <d>Use version from latest git tag<r>
-            \\  <blue>1.2.3<r>      <d>Set specific version<r>
-            \\
-            \\<b>Options<r>:
-            \\  <cyan>--no-git-tag-version<r> <d>Skip git operations<r>
-            \\  <cyan>--allow-same-version<r> <d>Prevents throwing error if version is the same<r>
-            \\  <cyan>--message<d>=\<val\><r>, <cyan>-m<r>  <d>Custom commit message, use %s for version substitution<r>
-            \\  <cyan>--preid<d>=\<val\><r>        <d>Prerelease identifier (i.e beta → {s})<r>
-            \\  <cyan>--force<r>, <cyan>-f<r>          <d>Bypass dirty git history check<r>
-            \\
-            \\<b>Examples<r>:
-            \\  <d>$<r> <b><green>bun pm version<r> <cyan>patch<r>
-            \\  <d>$<r> <b><green>bun pm version<r> <blue>1.2.3<r> <cyan>--no-git-tag-version<r>
-            \\  <d>$<r> <b><green>bun pm version<r> <cyan>prerelease<r> <cyan>--preid<r> <blue>beta<r> <cyan>--message<r> <blue>"Release beta: %s"<r>
-            \\
-            \\More info: <magenta>https://bun.com/docs/cli/pm#version<r>
-            \\
-        ;
+        const set_specific_version_help_text = "  <cyan>from-git<r>   <d>Use version from latest git tag<r>\n  <blue>1.2.3<r>      <d>Set specific version<r>\n\n<b>Options<r>:\n  <cyan>--no-git-tag-version<r> <d>Skip git operations<r>\n  <cyan>--allow-same-version<r> <d>Prevents throwing error if version is the same<r>\n  <cyan>--message<d>=\\<val\\><r>, <cyan>-m<r>  <d>Custom commit message, use %s for version substitution<r>\n  <cyan>--preid<d>=\\<val\\><r>        <d>Prerelease identifier (i.e beta → {s})<r>\n  <cyan>--force<r>, <cyan>-f<r>          <d>Bypass dirty git history check<r>\n\n<b>Examples<r>:\n  <d>$<r> <b><green>bun pm version<r> <cyan>patch<r>\n  <d>$<r> <b><green>bun pm version<r> <blue>1.2.3<r> <cyan>--no-git-tag-version<r>\n  <d>$<r> <b><green>bun pm version<r> <cyan>prerelease<r> <cyan>--preid<r> <blue>beta<r> <cyan>--message<r> <blue>\"Release beta: %s\"<r>\n\nMore info: <magenta>https://bun.com/docs/cli/pm#version<r>\n";
         Output.pretty(set_specific_version_help_text, .{ beta_prerelease_version });
         Output.flush();
     }
@@ -410,7 +379,7 @@ pub struct PmVersionCommand {
     }
 
     static fn incrementVersion(allocator: std.mem.Allocator, current_str: []const u8, current: Semver.Version.ParseResult, version_type: PmVersionType, preid: []const u8): bun.OOM![]const u8 {
-        let new_version = current.version.min();
+        let new_version: Semver.Version = current.version.min();
 
         switch (version_type) {
             .patch => {
@@ -494,7 +463,7 @@ pub struct PmVersionCommand {
             .envp = null,
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            } else null,
+            } else @as(void, undefined),
         }) catch |e| {
             Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             Global.exit(1);
@@ -527,7 +496,7 @@ pub struct PmVersionCommand {
             .envp = null,
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            } else null,
+            } else @as(void, undefined),
         }) catch |e| {
             Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             Global.exit(1);
@@ -574,7 +543,7 @@ pub struct PmVersionCommand {
             .envp = null,
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            } else null,
+            } else @as(void, undefined),
         }) catch |e| {
             Output.errGeneric("Failed to stage package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
@@ -600,7 +569,7 @@ pub struct PmVersionCommand {
                     defer replaced.deinit();
 
                     let index: usize = 0;
-                    while (pos := strings.indexOfPos(custom, index, "%s")) {
+                    while (pos := std.mem.indexOfPos(u8, custom, index, "%s")) {
                         replaced.appendSlice(custom[index..pos])?;
                         replaced.appendSlice(version)?;
                         index = pos + 2;
@@ -626,7 +595,7 @@ pub struct PmVersionCommand {
             .envp = null,
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            } else null,
+            } else @as(void, undefined),
         }) catch |e| {
             Output.errGeneric("Git commit failed: {s}", .{ @errorName(e) });
             Global.exit(1);
@@ -657,7 +626,7 @@ pub struct PmVersionCommand {
             .envp = null,
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            } else null,
+            } else @as(void, undefined),
         }) catch |e| {
             Output.errGeneric("Git tag failed: {s}", .{ @errorName(e) });
             Global.exit(1);

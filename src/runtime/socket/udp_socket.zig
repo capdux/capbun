@@ -961,17 +961,13 @@ pub fn jsConnect(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun
             var __connect_port_moved = false; _ = &__connect_port_moved;
             defer if (!__connect_port_moved) { const __T = @TypeOf(connect_port); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connect_port.release() catch {}; } else { connect_port.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connect_port; _drop_val.release(); } };
             const port: u16 = (if (((connect_port < 1) or (connect_port > 65535))) 0 else @as(u16, @intCast(connect_port)));
-            const socket_opt = this_socket.socket;
-            var __socket_opt_moved = false; _ = &__socket_opt_moved;
-            defer if (!__socket_opt_moved) { const __T = @TypeOf(socket_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket_opt.release() catch {}; } else { socket_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket_opt; _drop_val.release(); } };
-            if ((socket_opt == null)) {
+            if (this_socket.socket) |socket| {
+                _ = &socket;
+                if ((socket.connect(connect_host, port) == -1)) {
+                    return globalThis.throw("Failed to connect socket", .{});
+                }
+            } else {
                 return globalThis.throw("Socket is closed", .{});
-            }
-            const socket = socket_opt.?;
-            var __socket_moved = false; _ = &__socket_moved;
-            defer if (!__socket_moved) { const __T = @TypeOf(socket); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = socket.release() catch {}; } else { socket.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = socket; _drop_val.release(); } };
-            if (((socket).?.connect(connect_host, port) == -1)) {
-                return globalThis.throw("Failed to connect socket", .{});
             }
             this_socket.connect_info = .{ .port = port };
             _ = UDPSocket.js.addressSetCached(callFrame.this(), globalThis, .zero);
@@ -979,8 +975,7 @@ pub fn jsConnect(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun
             return JSValue.js_undefined;
     }
 
-pub fn jsDisconnect(self: *UDPSocket, globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsDisconnect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             var this_socket = ((callFrame.this().as(UDPSocket)) orelse {
             return globalObject.throwInvalidArguments("Expected UDPSocket as 'this'", .{});
 });

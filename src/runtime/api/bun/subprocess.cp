@@ -149,7 +149,9 @@ pub const StaticPipeWriter = NewStaticPipeWriter(Subprocess);
 
 pub struct TestingAPIs {
     pub static fn injectStdioReadError(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        let [subprocess_value, kind_value] = callframe.argumentsAsArray(2);
+        const args = callframe.argumentsAsArray(2);
+        const subprocess_value = args[0];
+        const kind_value = args[1];
         const sub_opt = Subprocess.fromJS(subprocess_value);
         if (sub_opt == null) {
             return globalThis.throw("first argument must be a Subprocess", {});

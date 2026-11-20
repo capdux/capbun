@@ -9,7 +9,7 @@ pub let Bun__Node__ProcessTitle: string? = null;
 }
 
 pub struct Cli {
-    const CompileTarget = @import("../options_types/CompileTarget.zig");
+    pub const CompileTarget = @import("../options_types/CompileTarget.zig");
     static let log_: logger.Log = undefined;
     static fn startTransform(_: std.mem.Allocator, _: api.TransformOptions, _: *logger.Log)! {}
     static fn start(allocator: std.mem.Allocator) {
@@ -215,15 +215,14 @@ pub struct HelpCommand {
         const package_remove_i = rand.uintAtMost(usize, packages_to_remove_filler.len - 1);
         const package_create_i = rand.uintAtMost(usize, packages_to_create_filler.len - 1);
 
-        const args = .{
-            packages_to_x_filler[package_x_i],
-            packages_to_add_filler[package_add_i],
-            packages_to_remove_filler[package_remove_i],
-            packages_to_add_filler[(package_add_i + 1) % packages_to_add_filler.len],
-            packages_to_add_filler[(package_add_i + 2) % packages_to_add_filler.len],
-            packages_to_add_filler[(package_add_i + 3) % packages_to_add_filler.len],
-            packages_to_create_filler[package_create_i],
-        };
+        const arg0: []const u8 = packages_to_x_filler[package_x_i];
+        const arg1: []const u8 = packages_to_add_filler[package_add_i];
+        const arg2: []const u8 = packages_to_remove_filler[package_remove_i];
+        const arg3: []const u8 = packages_to_add_filler[(package_add_i + 1) % packages_to_add_filler.len];
+        const arg4: []const u8 = packages_to_add_filler[(package_add_i + 2) % packages_to_add_filler.len];
+        const arg5: []const u8 = packages_to_add_filler[(package_add_i + 3) % packages_to_add_filler.len];
+        const arg6: []const u8 = packages_to_create_filler[package_create_i];
+        const args = .{ arg0, arg1, arg2, arg3, arg4, arg5, arg6 };
 
         switch (reason) {
             .explicit => {
@@ -288,11 +287,9 @@ pub struct ReservedCommand {
             break;
         }
         Output.prettyError(
-            \\<r><red>Uh-oh<r>. <b><yellow>bun {s}<r> is a subcommand reserved for future use by Bun.
-            \\
-            \\If you were trying to run a package.json script called {s}, use <b><magenta>bun run {s}<r>.
-            \\
-        , .{ command_name, command_name, command_name });
+            "<r><red>Uh-oh<r>. <b><yellow>bun {s}<r> is a subcommand reserved for future use by Bun.\n\nIf you were trying to run a package.json script called {s}, use <b><magenta>bun run {s}<r>.\n",
+            .{ command_name, command_name, command_name },
+        );
         Output.flush();
         std.process.exit(1);
     }
@@ -421,85 +418,54 @@ pub struct Command {
 
         let next_arg = ((args_iter.next()) ?? return .AutoCommand);
         while (next_arg.len > 0 && next_arg[0] == '-' && !(next_arg.len > 1 && next_arg[1] == 'e')) {
-            next_arg = ((args_iter.next()) ?? return .AutoCommand);
+            const n_opt = args_iter.next();
+            if (n_opt == null) return .AutoCommand;
+            next_arg = n_opt.?;
         }
 
         const first_arg_name = next_arg;
         const RootCommandMatcher = strings.ExactSizeMatcher(12);
 
-        return switch (RootCommandMatcher.match(first_arg_name)) {
-            RootCommandMatcher.case("init") => .InitCommand,
-            RootCommandMatcher.case("build"), RootCommandMatcher.case("bun") => .BuildCommand,
-            RootCommandMatcher.case("discord") => .DiscordCommand,
-            RootCommandMatcher.case("upgrade") => .UpgradeCommand,
-            RootCommandMatcher.case("completions") => .InstallCompletionsCommand,
-            RootCommandMatcher.case("getcompletes") => .GetCompletionsCommand,
-            RootCommandMatcher.case("link") => .LinkCommand,
-            RootCommandMatcher.case("unlink") => .UnlinkCommand,
-            RootCommandMatcher.case("x") => .BunxCommand,
-            RootCommandMatcher.case("repl") => .ReplCommand,
-
-            RootCommandMatcher.case("i"),
-            RootCommandMatcher.case("install") => brk: {
-                for (arg of args_iter.buf) {
-                    if (arg.len > 0 && (strings.eqlComptime(arg, "-g") || strings.eqlComptime(arg, "--global"))) {
-                        break :brk .AddCommand;
-                    }
+        const cmd_m = RootCommandMatcher.match(first_arg_name);
+        if (cmd_m == RootCommandMatcher.case("init")) return .InitCommand;
+        if (cmd_m == RootCommandMatcher.case("build") || cmd_m == RootCommandMatcher.case("bun")) return .BuildCommand;
+        if (cmd_m == RootCommandMatcher.case("discord")) return .DiscordCommand;
+        if (cmd_m == RootCommandMatcher.case("upgrade")) return .UpgradeCommand;
+        if (cmd_m == RootCommandMatcher.case("completions")) return .InstallCompletionsCommand;
+        if (cmd_m == RootCommandMatcher.case("getcompletes")) return .GetCompletionsCommand;
+        if (cmd_m == RootCommandMatcher.case("link")) return .LinkCommand;
+        if (cmd_m == RootCommandMatcher.case("unlink")) return .UnlinkCommand;
+        if (cmd_m == RootCommandMatcher.case("x")) return .BunxCommand;
+        if (cmd_m == RootCommandMatcher.case("repl")) return .ReplCommand;
+        if (cmd_m == RootCommandMatcher.case("i") || cmd_m == RootCommandMatcher.case("install")) {
+            for (arg of args_iter.buf) {
+                if (arg.len > 0 && (strings.eqlComptime(arg, "-g") || strings.eqlComptime(arg, "--global"))) {
+                    return .AddCommand;
                 }
-
-                break :brk .InstallCommand;
-            },
-            RootCommandMatcher.case("ci") => .InstallCommand,
-            RootCommandMatcher.case("c"), RootCommandMatcher.case("create") => .CreateCommand,
-
-            RootCommandMatcher.case("test") => .TestCommand,
-
-            RootCommandMatcher.case("pm") => .PackageManagerCommand,
-
-            RootCommandMatcher.case("add"), RootCommandMatcher.case("a") => .AddCommand,
-
-            RootCommandMatcher.case("update") => .UpdateCommand,
-            RootCommandMatcher.case("patch") => .PatchCommand,
-            RootCommandMatcher.case("patch-commit") => .PatchCommitCommand,
-
-            RootCommandMatcher.case("r"),
-            RootCommandMatcher.case("remove"),
-            RootCommandMatcher.case("rm"),
-            RootCommandMatcher.case("uninstall") => .RemoveCommand,
-
-            RootCommandMatcher.case("run") => .RunCommand,
-            RootCommandMatcher.case("help") => .HelpCommand,
-
-            RootCommandMatcher.case("exec") => .ExecCommand,
-
-            RootCommandMatcher.case("outdated") => .OutdatedCommand,
-            RootCommandMatcher.case("publish") => .PublishCommand,
-            RootCommandMatcher.case("audit") => .AuditCommand,
-            RootCommandMatcher.case("info") => .InfoCommand,
-
-            // These are reserved for future use by Bun, so that someone
-            // doing `bun deploy` to run a script doesn't accidentally break
-            // when we add our actual command
-            RootCommandMatcher.case("deploy") => .ReservedCommand,
-            RootCommandMatcher.case("cloud") => .ReservedCommand,
-            RootCommandMatcher.case("config") => .ReservedCommand,
-            RootCommandMatcher.case("use") => .ReservedCommand,
-            RootCommandMatcher.case("auth") => .ReservedCommand,
-            RootCommandMatcher.case("login") => .ReservedCommand,
-            RootCommandMatcher.case("logout") => .ReservedCommand,
-            RootCommandMatcher.case("whoami") => .PackageManagerCommand,
-            RootCommandMatcher.case("prune") => .ReservedCommand,
-            RootCommandMatcher.case("list") => .PackageManagerCommand,
-            RootCommandMatcher.case("why") => .WhyCommand,
-            RootCommandMatcher.case("fuzzilli") => if (bun.Environment.enable_fuzzilli)
-                .FuzzilliCommand
-            else
-                .AutoCommand,
-
-            RootCommandMatcher.case("-e") => .AutoCommand,
-
-            else => .AutoCommand,
-        };
+            }
+            return .InstallCommand;
+        }
+        if (cmd_m == RootCommandMatcher.case("ci")) return .InstallCommand;
+        if (cmd_m == RootCommandMatcher.case("c") || cmd_m == RootCommandMatcher.case("create")) return .CreateCommand;
+        if (cmd_m == RootCommandMatcher.case("test")) return .TestCommand;
+        if (cmd_m == RootCommandMatcher.case("pm")) return .PackageManagerCommand;
+        if (cmd_m == RootCommandMatcher.case("add") || cmd_m == RootCommandMatcher.case("a")) return .AddCommand;
+        if (cmd_m == RootCommandMatcher.case("update")) return .UpdateCommand;
+        if (cmd_m == RootCommandMatcher.case("patch")) return .PatchCommand;
+        if (cmd_m == RootCommandMatcher.case("patch-commit")) return .PatchCommitCommand;
+        if (cmd_m == RootCommandMatcher.case("r") || cmd_m == RootCommandMatcher.case("remove") || cmd_m == RootCommandMatcher.case("rm") || cmd_m == RootCommandMatcher.case("uninstall")) return .RemoveCommand;
+        if (cmd_m == RootCommandMatcher.case("run")) return .RunCommand;
+        if (cmd_m == RootCommandMatcher.case("help")) return .HelpCommand;
+        if (cmd_m == RootCommandMatcher.case("exec")) return .ExecCommand;
+        if (cmd_m == RootCommandMatcher.case("outdated")) return .OutdatedCommand;
+        if (cmd_m == RootCommandMatcher.case("publish")) return .PublishCommand;
+        if (cmd_m == RootCommandMatcher.case("audit")) return .AuditCommand;
+        if (cmd_m == RootCommandMatcher.case("info")) return .InfoCommand;
+        if (cmd_m == RootCommandMatcher.case("deploy") || cmd_m == RootCommandMatcher.case("cloud") || cmd_m == RootCommandMatcher.case("config") || cmd_m == RootCommandMatcher.case("use") || cmd_m == RootCommandMatcher.case("auth") || cmd_m == RootCommandMatcher.case("login") || cmd_m == RootCommandMatcher.case("logout") || cmd_m == RootCommandMatcher.case("prune")) return .ReservedCommand;
+        if (cmd_m == RootCommandMatcher.case("whoami") || cmd_m == RootCommandMatcher.case("list")) return .PackageManagerCommand;
+        if (cmd_m == RootCommandMatcher.case("why")) return .WhyCommand;
+        if (cmd_m == RootCommandMatcher.case("fuzzilli")) return if (bun.Environment.enable_fuzzilli) .FuzzilliCommand else .AutoCommand;
+        return .AutoCommand;
     }
 
     const default_completions_list: [17]string = [
@@ -927,23 +893,9 @@ pub struct Command {
 
             .BunxCommand => {
                 Output.prettyErrorln(
-                    \\<b>Usage<r>: <b><green>bunx<r> <cyan>[flags]<r> <blue>\<package\><r><d>\<@version\><r> [flags and arguments for the package]<r>
-                    \\Execute an npm package executable (CLI), automatically installing into a global shared cache if not installed in node_modules.
-                    \\
-                    \\Flags:
-                    \\  <cyan>--bun<r>                  Force the command to run with Bun instead of Node.js
-                    \\  <cyan>-p, --package <blue>\<package\><r>    Specify package to install when binary name differs from package name
-                    \\  <cyan>--no-install<r>           Skip installation if package is not already installed
-                    \\  <cyan>--verbose<r>              Enable verbose output during installation
-                    \\  <cyan>--silent<r>               Suppress output during installation
-                    \\
-                    \\Examples<d>:<r>
-                    \\  <b><green>bunx<r> <blue>prisma<r> migrate<r>
-                    \\  <b><green>bunx<r> <blue>prettier<r> foo.js<r>
-                    \\  <b><green>bunx<r> <cyan>-p @angular/cli<r> <blue>ng<r> new my-app
-                    \\  <b><green>bunx<r> <cyan>--bun<r> <blue>vite<r> dev foo.js<r>
-                    \\
-                , {});
+                    "<b>Usage<r>: <b><green>bunx<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> [flags and arguments for the package]<r>\nExecute an npm package executable (CLI), automatically installing into a global shared cache if not installed in node_modules.\n\nFlags:\n  <cyan>--bun<r>                  Force the command to run with Bun instead of Node.js\n  <cyan>-p, --package <blue>\\<package\\><r>    Specify package to install when binary name differs from package name\n  <cyan>--no-install<r>           Skip installation if package is not already installed\n  <cyan>--verbose<r>              Enable verbose output during installation\n  <cyan>--silent<r>               Suppress output during installation\n\nExamples<d>:<r>\n  <b><green>bunx<r> <blue>prisma<r> migrate<r>\n  <b><green>bunx<r> <blue>prettier<r> foo.js<r>\n  <b><green>bunx<r> <cyan>-p @angular/cli<r> <blue>ng<r> new my-app\n  <b><green>bunx<r> <cyan>--bun<r> <blue>vite<r> dev foo.js<r>\n",
+                    .{},
+                );
             },
             .BuildCommand => {
                 const intro_text =
@@ -1049,22 +1001,12 @@ pub struct Command {
                     \\<b>Usage<r>: <b><green>bun upgrade<r> <cyan>[flags]<r>
                     \\  Upgrade Bun
                 ;
-                const outro_text =
-                    \\<b>Examples:<r>
-                    \\  <d>Install the latest {s} version<r>
-                    \\  <b><green>bun upgrade<r>
-                    \\
-                    \\  <d>{s}<r>
-                    \\  <b><green>bun upgrade<r> <cyan>--{s}<r>
-                    \\
-                    \\Full documentation is available at <magenta>https://bun.com/docs/installation#upgrading<r>
-                    \\
-                ;
+                const outro_text = "<b>Examples:<r>\n  <d>Install the latest {s} version<r>\n  <b><green>bun upgrade<r>\n\n  <d>{s}<r>\n  <b><green>bun upgrade<r> <cyan>--{s}<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/installation#upgrading<r>\n";
 
-                const args = comptime switch (Environment.is_canary) {
-                    true => .{ "canary", "Switch from the canary version back to the latest stable release", "stable" },
-                    false => .{ "stable", "Install the most recent canary version of Bun", "canary" },
-                };
+                const args = if (Environment.is_canary)
+                    .{ "canary", "Switch from the canary version back to the latest stable release", "stable" }
+                else
+                    .{ "stable", "Install the most recent canary version of Bun", "canary" };
 
                 Output.pretty(intro_text, {});
                 Output.pretty("\n\n", {});
@@ -1099,17 +1041,9 @@ pub struct Command {
             },
             .ExecCommand => {
                 Output.pretty(
-                    \\<b>Usage: bun exec <r><cyan>\<script\><r>
-                    \\
-                    \\Execute a shell script directly from Bun.
-                    \\
-                    \\<b><red>Note<r>: If executing this from a shell, make sure to escape the string!
-                    \\
-                    \\<b>Examples<d>:<r>
-                    \\  <b>bun exec "echo hi"<r>
-                    \\  <b>bun exec "echo \"hey friends\"!"<r>
-                    \\
-                , {});
+                    "<b>Usage: bun exec <r><cyan>\\<script\\><r>\n\nExecute a shell script directly from Bun.\n\n<b><red>Note<r>: If executing this from a shell, make sure to escape the string!\n\n<b>Examples<d>:<r>\n  <b>bun exec \"echo hi\"<r>\n  <b>bun exec \"echo \\\"hey friends\\\"!\"<r>\n",
+                    {},
+                );
                 Output.flush();
             },
             .OutdatedCommand, .UpdateInteractiveCommand, .PublishCommand, .AuditCommand => {
@@ -1231,21 +1165,21 @@ pub struct Command {
         let completions = ShellCompletions{};
 
         if (filter.len == 0) {
-            completions = RunCommand.completions(ctx, &default_completions_list, &reject_list, .all)?;
+            completions = RunCommand.completions(ctx, default_completions_list[0..], reject_list[0..], .all)?;
         } else if (strings.eqlComptime(filter[0], "s")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .script)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .script)?;
         } else if (strings.eqlComptime(filter[0], "i")) {
-            completions = RunCommand.completions(ctx, &default_completions_list, &reject_list, .script_exclude)?;
+            completions = RunCommand.completions(ctx, default_completions_list[0..], reject_list[0..], .script_exclude)?;
         } else if (strings.eqlComptime(filter[0], "b")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .bin)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .bin)?;
         } else if (strings.eqlComptime(filter[0], "r")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .all)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .all)?;
         } else if (strings.eqlComptime(filter[0], "g")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .all_plus_bun_js)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .all_plus_bun_js)?;
         } else if (strings.eqlComptime(filter[0], "j")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .bun_js)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .bun_js)?;
         } else if (strings.eqlComptime(filter[0], "z")) {
-            completions = RunCommand.completions(ctx, null, &reject_list, .script_and_descriptions)?;
+            completions = RunCommand.completions(ctx, null, reject_list[0..], .script_and_descriptions)?;
         } else if (strings.eqlComptime(filter[0], "a")) {
             const FirstLetter = AddCompletions.FirstLetter;
 
@@ -1364,20 +1298,9 @@ pub struct Command {
         // print message telling user to use "bun create vite" instead
         if (strings.eqlComptime(template_name, "react")) {
             Output.prettyErrorln(
-                \\The "react" template has been deprecated.
-                \\It is recommended to use "react-app" or "vite" instead.
-                \\
-                \\To create a project using Create React App, run
-                \\
-                \\  <d>bun create react-app<r>
-                \\
-                \\To create a React project using Vite, run
-                \\
-                \\  <d>bun create vite<r>
-                \\
-                \\Then select "React" from the list of frameworks.
-                \\
-            , {});
+                "The \"react\" template has been deprecated.\nIt is recommended to use \"react-app\" or \"vite\" instead.\n\nTo create a project using Create React App, run\n\n  <d>bun create react-app<r>\n\nTo create a React project using Vite, run\n\n  <d>bun create vite<r>\n\nThen select \"React\" from the list of frameworks.\n",
+                {},
+            );
             Global.exit(1);
             return;
         }
@@ -1386,10 +1309,9 @@ pub struct Command {
         // print message telling user to use "bun create next-app" instead
         if (strings.eqlComptime(template_name, "next")) {
             Output.prettyErrorln(
-                \\<yellow>warn: No template <b>create-next<r> found.
-                \\To create a project with the official Next.js scaffolding tool, run
-                \\  <b>bun create next-app <cyan>[destination]<r>
-            , {});
+                "<yellow>warn: No template <b>create-next<r> found.\nTo create a project with the official Next.js scaffolding tool, run\n  <b>bun create next-app <cyan>[destination]<r>",
+                {},
+            );
             Global.exit(1);
             return;
         }

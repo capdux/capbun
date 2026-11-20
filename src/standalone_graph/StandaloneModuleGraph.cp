@@ -1315,7 +1315,7 @@ pub struct StandaloneModuleGraph {
             const offsets = std.mem.bytesToValue(StandaloneOffsets, macho_bytes_slice[0..@sizeOf(StandaloneOffsets)]);
             let mut_bytes: []u8 = undefined;
             unsafe {
-                mut_bytes = (macho_bytes.ptr as [*]u8!)[0..macho_bytes.len];
+                mut_bytes = @constCast(macho_bytes);
             }
             return fromBytesAlloc(allocator, mut_bytes, offsets)?;
         }
@@ -1335,7 +1335,7 @@ pub struct StandaloneModuleGraph {
             const offsets = std.mem.bytesToValue(StandaloneOffsets, pe_bytes_slice[0..@sizeOf(StandaloneOffsets)]);
             let mut_bytes: []u8 = undefined;
             unsafe {
-                mut_bytes = (pe_bytes.ptr as [*]u8!)[0..pe_bytes.len];
+                mut_bytes = @constCast(pe_bytes);
             }
             return fromBytesAlloc(allocator, mut_bytes, offsets)?;
         }
@@ -1355,7 +1355,7 @@ pub struct StandaloneModuleGraph {
             const offsets = std.mem.bytesToValue(StandaloneOffsets, elf_bytes_slice[0..@sizeOf(StandaloneOffsets)]);
             let mut_bytes: []u8 = undefined;
             unsafe {
-                mut_bytes = (elf_bytes.ptr as [*]u8!)[0..elf_bytes.len];
+                mut_bytes = @constCast(elf_bytes);
             }
             return fromBytesAlloc(allocator, mut_bytes, offsets)?;
         }

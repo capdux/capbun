@@ -496,7 +496,7 @@ pub fn isLessThan(string_buf: []const u8, lhs: Dependency.Version, rhs: Dependen
             if (comptime Environment.allow_assert) {
                 _ = bun.assert((lhs.tag == rhs.tag));
             }
-            return strings.cmpStringsAsc(.{}, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
+            return strings.cmpStringsAsc(undefined, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
     }
 
 pub fn isLessThanWithTag(string_buf: []const u8, lhs: Dependency.Version, rhs: Dependency.Version) bool {
@@ -504,7 +504,7 @@ pub fn isLessThanWithTag(string_buf: []const u8, lhs: Dependency.Version, rhs: D
             if ((tag_order != .eq)) {
                 return (tag_order == .lt);
             }
-            return strings.cmpStringsAsc(.{}, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
+            return strings.cmpStringsAsc(undefined, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
     }
 
 pub fn toVersion(alias: String, alias_hash: PackageNameHash, bytes: DependencyVersion.External, ctx: Dependency.Context) Dependency.Version {

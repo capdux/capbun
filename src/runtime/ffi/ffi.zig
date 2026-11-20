@@ -87,14 +87,14 @@ pub const FFI = struct {
         source: Source = .{ .file = "" },
         current_file_for_errors: [:0]const u8 = "",
 
-        libraries: StringArray = {},
-        library_dirs: StringArray = {},
-        include_dirs: StringArray = {},
-        symbols: SymbolsMap = {},
-        define: std.ArrayListUnmanaged([2][:0]const u8) = {},
+        libraries: StringArray = .{},
+        library_dirs: StringArray = .{},
+        include_dirs: StringArray = .{},
+        symbols: SymbolsMap = .{},
+        define: std.ArrayListUnmanaged([2][:0]const u8) = .{},
         // Flags to replace the default flags
         flags: [:0]const u8 = "",
-        deferred_errors: std.ArrayListUnmanaged([]const u8) = {},
+        deferred_errors: std.ArrayListUnmanaged([]const u8) = .{},
 
         const Source = union(enum) {
             file: [:0]const u8,
@@ -559,7 +559,7 @@ pub const FFI = struct {
         }
     };
     const SymbolsMap = struct {
-        map: bun.StringArrayHashMapUnmanaged(Function) = {},
+        map: bun.StringArrayHashMapUnmanaged(Function) = .{},
         pub fn deinit(this: *SymbolsMap) void {
             for (this.map.keys()) |key| {
                 bun.default_allocator.free(@constCast(key));
@@ -569,7 +569,7 @@ pub const FFI = struct {
     };
 
     const StringArray = struct {
-        items: []const [:0]const u8 = &{},
+        items: []const [:0]const u8 = &.{},
         pub fn deinit(this: *StringArray) void {
             for (this.items) |item| {
                 // Attempting to free an empty null-terminated slice will crash if it was a default value
@@ -603,12 +603,12 @@ pub const FFI = struct {
         }
 
         pub fn fromJSString(globalThis: *jsc.JSGlobalObject, value: jsc.JSValue, comptime property: []const u8) bun.JSError!StringArray {
-            if (value.isUndefined()) return {};
+            if (value.isUndefined()) return .{};
             if (!value.isString()) {
                 return globalThis.throwInvalidArgumentTypeValue(property, "array of strings", value);
             }
             const str = try value.getZigString(globalThis);
-            if (str.isEmpty()) return {};
+            if (str.isEmpty()) return .{};
             var items = std.array_list.Managed([:0]const u8).init(bun.default_allocator);
             bun.handleOom(items.append(bun.handleOom(str.toOwnedSliceZ(bun.default_allocator))));
             return .{ .items = items.items };
@@ -748,7 +748,7 @@ pub const FFI = struct {
 
         if (try object.getOwn(globalThis, "source")) |source_value| {
             if (source_value.isArray()) {
-                compile_c.source = .{ .files = {} };
+                compile_c.source = .{ .files = .{} };
                 var iter = try source_value.arrayIterator(globalThis);
                 while (try iter.next()) |value| {
                     if (!value.isString()) {
@@ -840,7 +840,7 @@ pub const FFI = struct {
             .functions = compile_c.symbols.map,
         };
         tcc_state = null;
-        compile_c.symbols = {};
+        compile_c.symbols = SymbolsMap{};
 
         const js_object = lib.toJS(globalThis);
         jsc.Codegen.JSFFI.symbolsValueSetCached(js_object, globalThis, obj);
@@ -2335,7 +2335,7 @@ const CompilerRT = struct {
 
     fn createCompilerRTDir() void {
         const tmpdir = Fs.FileSystem.instance.tmpdir() catch return;
-        var bunCC = tmpdir.makeOpenPath("bun-cc", {}) catch return;
+        var bunCC = tmpdir.makeOpenPath("bun-cc", std.fs.Dir.OpenOptions{}) catch return;
         defer bunCC.close();
 
         inline for (comptime std.meta.declarations(compiler_rt_sources)) |decl| {

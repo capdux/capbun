@@ -66,6 +66,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const Dependency = @import("../install/dependency.zig");
 pub const Fs = @import("../resolver/fs.zig");
 pub const Lockfile = @import("../install/lockfile.zig");
+pub const migration = @import("../install/migration.zig");
 pub const Path = @import("../paths/resolve_path.zig");
 pub const PmViewCommand = @import("./pm_view_command.zig");
 pub const cli = @import("./cli.zig");
@@ -81,11 +82,19 @@ pub const ByName = struct {
     buf: []const u8,
 
 pub fn isLessThan(ctx: ByName, lhs: DependencyID, rhs: DependencyID) bool {
-            return strings.cmpStringsAsc(.{}, (if (@typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(lhs))])) == .@"enum" or @typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(lhs))])) == .@"union") @tagName(ctx.dependencies[@as(usize, @intCast(lhs))]) else ctx.dependencies[@as(usize, @intCast(lhs))].name).slice(ctx.buf), (if (@typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(rhs))])) == .@"enum" or @typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(rhs))])) == .@"union") @tagName(ctx.dependencies[@as(usize, @intCast(rhs))]) else ctx.dependencies[@as(usize, @intCast(rhs))].name).slice(ctx.buf));
+            return strings.cmpStringsAsc(undefined, (if (@typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(lhs))])) == .@"enum" or @typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(lhs))])) == .@"union") @tagName(ctx.dependencies[@as(usize, @intCast(lhs))]) else ctx.dependencies[@as(usize, @intCast(lhs))].name).slice(ctx.buf), (if (@typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(rhs))])) == .@"enum" or @typeInfo(@TypeOf(ctx.dependencies[@as(usize, @intCast(rhs))])) == .@"union") @tagName(ctx.dependencies[@as(usize, @intCast(rhs))]) else ctx.dependencies[@as(usize, @intCast(rhs))].name).slice(ctx.buf));
     }
 };
 
 pub const PackageManagerCommand = struct {
+
+pub fn printHelp() void {
+            const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun pm<r> <cyan>[flags]<r> <blue>[\\<command\\>]<r>\n\n  Run package manager utilities.";
+            const outro_text: []const u8 = "\n\n<b>Commands:<r>\n\n  <b><green>bun pm<r> <blue>scan<r>                 scan all packages in lockfile for security vulnerabilities\n  <b><green>bun pm<r> <blue>pack<r>                 create a tarball of the current workspace\n  <d>├<r> <cyan>--dry-run<r>                 do everything except for writing the tarball to disk\n  <d>├<r> <cyan>--destination<r>             the directory the tarball will be saved in\n  <d>├<r> <cyan>--filename<r>                the name of the tarball\n  <d>├<r> <cyan>--ignore-scripts<r>          don't run pre/postpack and prepare scripts\n  <d>├<r> <cyan>--gzip-level<r>              specify a custom compression level for gzip (0-9, default is 9)\n  <d>└<r> <cyan>--quiet<r>                   only output the tarball filename\n  <b><green>bun pm<r> <blue>bin<r>                  print the path to bin folder\n  <d>└<r> <cyan>-g<r>                        print the <b>global<r> path to bin folder\n  <b><green>bun<r> <blue>list<r>                  list the dependency tree according to the current lockfile\n  <d>└<r> <cyan>--all<r>                     list the entire dependency tree according to the current lockfile\n  <b><green>bun pm<r> <blue>why<r> <d>\\<pkg\\><r>            show dependency tree explaining why a package is installed\n  <b><green>bun pm<r> <blue>whoami<r>               print the current npm username\n  <b><green>bun pm<r> <blue>view<r> <d>name[@version]<r>  view package metadata from the registry <d>(use `bun info` instead)<r>\n  <b><green>bun pm<r> <blue>version<r> <d>[increment]<r>  bump the version in package.json and create a git tag\n  <d>└<r> <cyan>increment<r>                 patch, minor, major, prepatch, preminor, premajor, prerelease, from-git, or a specific version\n  <b><green>bun pm<r> <blue>pkg<r>                  manage data in package.json\n  <d>├<r> <cyan>get<r> <d>[key ...]<r>\n  <d>├<r> <cyan>set<r> <d>key=value ...<r>\n  <d>├<r> <cyan>delete<r> <d>key ...<r>\n  <d>└<r> <cyan>fix<r>                       auto-correct common package.json errors\n  <b><green>bun pm<r> <blue>hash<r>                 generate & print the hash of the current lockfile\n  <b><green>bun pm<r> <blue>hash-string<r>          print the string used to hash the lockfile\n  <b><green>bun pm<r> <blue>hash-print<r>           print the hash stored in the current lockfile\n  <b><green>bun pm<r> <blue>cache<r>                print the path to the cache folder\n  <b><green>bun pm<r> <blue>cache rm<r>             clear the cache\n  <b><green>bun pm<r> <blue>migrate<r>              migrate another package manager's lockfile without installing anything\n  <b><green>bun pm<r> <blue>untrusted<r>            print current untrusted dependencies with scripts\n  <b><green>bun pm<r> <blue>trust<r> <d>names ...<r>      run scripts for untrusted dependencies and add to `trustedDependencies`\n  <d>└<r>  <cyan>--all<r>                    trust all untrusted dependencies\n  <b><green>bun pm<r> <blue>default-trusted<r>      print the default trusted dependencies list\n\nLearn more about these at <magenta>https://bun.com/docs/cli/pm<r>.\n";
+            _ = Output.pretty(intro_text, .{});
+            _ = Output.pretty(outro_text, .{});
+            _ = Output.flush();
+    }
 
 pub fn handleLoadLockfileErrors(load_lockfile: Lockfile.LoadResult, pm: *PackageManager) void {
             if ((load_lockfile == .not_found)) {
@@ -144,9 +153,11 @@ pub fn getSubcommand(args_ptr: *[]const []const u8) []const u8 {
             return subcommand;
     }
 
-pub fn exec(ctx: Command.Context, is_direct_whoami: bool) !void {
-            var args: [][:0]u8 = ctx.args.positionals;
+pub fn exec(ctx: Command.Context) !void {
+            const is_direct_whoami = (if ((bun.argv.len > 1)) strings.eqlComptime(bun.argv[1], "whoami") else false);
+            var args = try std.process.argsAlloc(ctx.allocator);
             _ = &args;
+            args = args[1..];
             if (((args.len > 0) and strings.eqlComptime(args[0], "pm"))) {
                 args = args[1..];
             }
@@ -159,7 +170,7 @@ pub fn exec(ctx: Command.Context, is_direct_whoami: bool) !void {
                     defer {
                     _ = file.close();
                     }
-                    _ = try printHash(ctx, file);
+                    _ = try printHash(ctx, File.from(file));
                     return;
                 }
             }
@@ -319,38 +330,56 @@ pub fn exec(ctx: Command.Context, is_direct_whoami: bool) !void {
                                                     _ = Global.exit(0);
                                                 } else {
                                                     if (strings.eqlComptime(subcommand, "untrusted")) {
-                                                        _ = try UntrustedCommand.exec(ctx);
+                                                        const untrusted_exec = UntrustedCommand.exec;
+                                                        _ = try untrusted_exec(ctx, pm, args);
                                                         _ = Global.exit(0);
                                                     } else {
                                                         if (strings.eqlComptime(subcommand, "trust")) {
-                                                            _ = try TrustCommand.exec(ctx);
+                                                            const trust_exec = TrustCommand.exec;
+                                                            _ = try trust_exec(ctx, pm, args);
                                                             _ = Global.exit(0);
                                                         } else {
                                                             if (strings.eqlComptime(subcommand, "ls")) {
                                                                 const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
                                                                 _ = PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
-                                                                var lockfile = (&load_lockfile.ok.lockfile);
+                                                                var lockfile = load_lockfile.ok.lockfile;
                                                                 _ = &lockfile;
                                                                 const resolutions = lockfile.packages.items(.resolution);
                                                                 const string_bytes = lockfile.buffers.string_bytes.items;
                                                                 _ = Output.flush();
-                                                                if (pm.options.all) {
-                                                                    var directories = (blk_catch_11: { break :blk_catch_11 ((Lockfile.Tree.Iterator(.node_modules).init(lockfile).list(ctx.allocator)) catch |e| { _ = &e; _ = Output.err(e, "Failed to list dependencies", .{});
-                                                                    break :blk_catch_11 Global.crash(); }); });
+                                                                if (strings.leftHasAnyInRight(args, (&.{ "-A", "-a", "--all" }))) {
+                                                                    var iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
+                                                                    _ = &iterator;
+                                                                    var max_depth: usize = 0;
+                                                                    _ = &max_depth;
+                                                                    var directories = std.array_list.Managed(NodeModulesFolder).init(ctx.allocator);
                                                                     _ = &directories;
                                                                     defer {
                                                                     _ = directories.deinit();
                                                                     }
+                                                                    while (iterator.next(null)) |node_modules| {
+                                                                        const path_len = node_modules.relative_path.len;
+                                                                        var path = try ctx.allocator.alloc(u8, (path_len + 1));
+                                                                        _ = &path;
+                                                                        _ = bun.copy(u8, path, node_modules.relative_path);
+                                                                        path[cp_cast_int(usize, path_len)] = 0;
+                                                                        const dependencies = try ctx.allocator.alloc(DependencyID, node_modules.dependencies.len);
+                                                                        _ = bun.copy(DependencyID, dependencies, node_modules.dependencies);
+                                                                        if ((max_depth < (node_modules.depth + 1))) {
+                                                                            max_depth = (node_modules.depth + 1);
+                                                                        }
+                                                                        _ = try directories.append(.{ .relative_path = path[0..path_len :0], .dependencies = dependencies, .tree_id = node_modules.tree_id, .depth = node_modules.depth });
+                                                                    }
                                                                     if ((directories.items.len == 0)) {
-                                                                        _ = Global.exit(0);
+                                                                        return;
                                                                     }
                                                                     const first_directory = directories.orderedRemove(0);
-                                                                    var more_packages = try ctx.allocator.alloc(bool, (directories.items.len + 1));
+                                                                    var more_packages = try ctx.allocator.alloc(bool, max_depth);
                                                                     _ = &more_packages;
-                                                                    defer {
-                                                                    _ = ctx.allocator.free(more_packages);
+                                                                    _ = @memset(more_packages, false);
+                                                                    if ((first_directory.dependencies.len > 1)) {
+                                                                        more_packages[cp_cast_int(usize, 0)] = true;
                                                                     }
-                                                                    _ = @memset(more_packages, true);
                                                                     _ = try printNodeModulesFolderStructure((&first_directory), null, 0, (&directories), lockfile, more_packages);
                                                                 } else {
                                                                     var tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
@@ -358,8 +387,8 @@ pub fn exec(ctx: Command.Context, is_direct_whoami: bool) !void {
                                                                     const first_directory = ((tree_iter.next(null)) orelse (Global.exit(0)));
                                                                     var cwd_buf: bun.PathBuffer = undefined;
                                                                     _ = &cwd_buf;
-                                                                    const path = (blk_catch_12: { break :blk_catch_12 ((bun.getcwd((&cwd_buf))) catch |__ce_12| { _ = &__ce_12; _ = Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
-                                                                    break :blk_catch_12 Global.exit(1); }); });
+                                                                    const path = (blk_catch_11: { break :blk_catch_11 ((bun.getcwd((&cwd_buf))) catch |__ce_11| { _ = &__ce_11; _ = Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
+                                                                    break :blk_catch_11 Global.exit(1); }); });
                                                                     _ = Output.println("{s} node_modules", .{ path });
                                                                     const dependencies = lockfile.buffers.dependencies.items;
                                                                     const sorted_dependencies = try ctx.allocator.alloc(DependencyID, first_directory.dependencies.len);
@@ -390,31 +419,37 @@ pub fn exec(ctx: Command.Context, is_direct_whoami: bool) !void {
                                                                 if (strings.eqlComptime(subcommand, "migrate")) {
                                                                     if ((!pm.options.enable.force_save_lockfile)) {
                                                                         if (bun.sys.existsZ("bun.lock")) {
-                                                                            _ = Output.prettyErrorln("<r><red>error<r>: bun.lock already exists", "run with --force to overwrite", .{});
+                                                                            _ = Output.prettyErrorln("<r><red>error<r>: bun.lock already exists\nrun with --force to overwrite", .{});
                                                                             _ = Global.exit(1);
                                                                         }
                                                                         if (bun.sys.existsZ("bun.lockb")) {
-                                                                            _ = Output.prettyErrorln("<r><red>error<r>: bun.lockb already exists", "run with --force to overwrite", .{});
+                                                                            _ = Output.prettyErrorln("<r><red>error<r>: bun.lockb already exists\nrun with --force to overwrite", .{});
                                                                             _ = Global.exit(1);
                                                                         }
                                                                     }
-                                                                    pm.options.enable.save_lockfile = true;
-                                                                    pm.options.enable.force_save_lockfile = true;
-                                                                    const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
+                                                                    const load_lockfile = migration.detectAndLoadOtherLockfile(pm.lockfile, bun.FD.cwd(), pm, ctx.allocator, pm.log);
+                                                                    if ((load_lockfile == .not_found)) {
+                                                                        _ = Output.prettyErrorln("<r><red>error<r>: could not find any other lockfile", .{});
+                                                                        _ = Global.exit(1);
+                                                                    }
                                                                     _ = PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
-                                                                    _ = pm.lockfile.saveToDisk((&load_lockfile), (&pm.options));
+                                                                    const lockfile = load_lockfile.ok.lockfile;
+                                                                    _ = lockfile.saveToDisk((&load_lockfile), (&pm.options));
                                                                     _ = Global.exit(0);
                                                                 } else {
                                                                     if (strings.eqlComptime(subcommand, "version")) {
-                                                                        _ = try PmVersionCommand.exec(ctx);
+                                                                        const ver_exec = PmVersionCommand.exec;
+                                                                        _ = try ver_exec(ctx, pm, pm.options.positionals, cwd);
                                                                         _ = Global.exit(0);
                                                                     } else {
                                                                         if (strings.eqlComptime(subcommand, "why")) {
-                                                                            _ = try PmWhyCommand.exec(ctx);
+                                                                            const why_exec = PmWhyCommand.exec;
+                                                                            _ = try why_exec(ctx, pm, pm.options.positionals);
                                                                             _ = Global.exit(0);
                                                                         } else {
                                                                             if (strings.eqlComptime(subcommand, "pkg")) {
-                                                                                _ = try PmPkgCommand.exec(ctx);
+                                                                                const pkg_exec = PmPkgCommand.exec;
+                                                                                _ = try pkg_exec(ctx, pm, pm.options.positionals, cwd);
                                                                                 _ = Global.exit(0);
                                                                             } else {
                                                                                 _ = Output.errGeneric("unknown subcommand: \"{s}\"", .{ subcommand });
@@ -511,8 +546,8 @@ pub fn printNodeModulesFolderStructure(directory: *const NodeModulesFolder, dire
             } else {
                 var cwd_buf: bun.PathBuffer = undefined;
                 _ = &cwd_buf;
-                const path = (blk_catch_13: { break :blk_catch_13 ((bun.getcwd((&cwd_buf))) catch |__ce_13| { _ = &__ce_13; _ = Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
-                break :blk_catch_13 Global.exit(1); }); });
+                const path = (blk_catch_12: { break :blk_catch_12 ((bun.getcwd((&cwd_buf))) catch |__ce_12| { _ = &__ce_12; _ = Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
+                break :blk_catch_12 Global.exit(1); }); });
                 _ = Output.println("{s} node_modules", .{ path });
             }
         }

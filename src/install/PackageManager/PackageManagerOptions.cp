@@ -266,7 +266,7 @@ pub const Enable = packed struct(u16) {
 
         if (home_dir := bun.env_var.BUN_INSTALL.get()) {
             let buf: bun.PathBuffer = undefined;
-            const parts = [
+            const parts: [1]string = [
                 "bin",
             ];
             const path = Path.joinAbsStringBuf(home_dir, &buf, &parts, .auto);
@@ -275,7 +275,7 @@ pub const Enable = packed struct(u16) {
 
         if (home_dir := bun.env_var.XDG_CACHE_HOME.get() ?? bun.env_var.HOME.get()) {
             let buf: bun.PathBuffer = undefined;
-            const parts = [
+            const parts: [2]string = [
                 ".bun",
                 "bin",
             ];

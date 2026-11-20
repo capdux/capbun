@@ -201,9 +201,11 @@ fn pkgInfoForNameAndVersion(
         Output.prettyError("  {s}@<blue>{f}<r>\n", .{ pkg.name.slice(strbuf), pkg.resolution.fmt(strbuf, .posix) });
 
         if (i + 1 < pairs.items.len) {
-            for (*p of pairs.items[i + 1 ..]) {
-                if (p[1] == pkgid) {
-                    p[1] = invalid_package_id;
+            let j: usize = i + 1;
+            while (j < pairs.items.len) : (j += 1) {
+                if (pairs.items[j][1] == pkgid) {
+                    const pair_key = pairs.items[j][0];
+                    pairs.items[j] = .{ pair_key, invalid_package_id };
                 }
             }
         }
@@ -322,7 +324,7 @@ pub fn doPatchCommit(
             };
 
             let resolver: void = undefined;
-            let package = Lockfile.Package{};
+            let package: Lockfile.Package = {};
             package.parseWithJSON(lockfile, manager, manager.allocator, manager.log, package_json_source, json, void, &resolver, Features.folder)?;
 
             const name = lockfile.str(&package.name);
@@ -687,7 +689,7 @@ fn initEscapeTable(): [256]EscapeVal {
         table[i] = .other;
     }
     const ty = @typeInfo(EscapeVal);
-    for (field of ty.@"enum".fields) {
+    inline for (field of ty.@"enum".fields) {
         if (field.name.len == 1) {
             const c = field.name[0];
             table[c] = @enumFromInt(field.value);
@@ -785,7 +787,7 @@ pub fn preparePatch(manager: *PackageManager)! {
             };
 
             let resolver: void = undefined;
-            let package = Lockfile.Package{};
+            let package: Lockfile.Package = {};
             package.parseWithJSON(lockfile, manager, manager.allocator, manager.log, package_json_source, json, void, &resolver, Features.folder)?;
 
             const name = lockfile.str(&package.name);
@@ -959,7 +961,7 @@ fn detachModuleFolderFromSharedStore(module_folder: []const u8) {
             }
         } else {
             if (st := bun.sys.lstat(path.sliceZ()).asValue()) {
-                is_symlink = std.posix.S.ISLNK(i32(st.mode));
+                is_symlink = std.posix.S.ISLNK(@as(std.posix.mode_t, @intCast(st.mode)));
             } else {
                 return;
             }

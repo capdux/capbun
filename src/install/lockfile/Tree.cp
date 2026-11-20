@@ -384,25 +384,27 @@ pub fn isFilteredDependencyOrWorkspace(
         let filter_path: bun.AbsPath(.{ .sep = .posix }) = .initTopLevelDir();
         defer filter_path.deinit();
 
-        let [pattern, name_or_path] = switch (filter) {
+        const filter_pair: [2]string = switch (filter) {
             .all => {
                 (workspace_matched = true);
                 continue;
             },
-            .name => |name_pattern| [
+            .name name_pattern => [
                 name_pattern,
                 pkg_names[pkg_id].slice(lockfile.buffers.string_bytes.items),
             ],
-            .path => |path_pattern| path_pattern: {
+            .path path_pattern => path_pattern_blk: {
                 if (res.tag != .workspace) {
                     return false;
                 }
 
                 filter_path.join(&[res.value.workspace.slice(lockfile.buffers.string_bytes.items)]);
 
-                break :path_pattern [path_pattern, filter_path.slice()];
+                break :path_pattern_blk [path_pattern, filter_path.slice()];
             },
         };
+        const pattern = filter_pair[0];
+        const name_or_path = filter_pair[1];
 
         switch (bun.glob.match(pattern, name_or_path)) {
             .match, .negate_match => {

@@ -563,7 +563,7 @@ pub fn getAllWorkspaces(allocator: std.mem.Allocator, manager: *PackageManager) 
                     if (((resolution.tag != .workspace) and (resolution.tag != .root))) {
                         continue;
                     }
-                    _ = try workspace_pkg_ids.append(allocator, (if (comptime @typeInfo(@TypeOf(pkg_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(pkg_id)) else cp_cast_int(i32, pkg_id)));
+                    _ = try workspace_pkg_ids.append(allocator, @as(u32, @intCast(pkg_id)));
                 }
             }
             return workspace_pkg_ids.toOwnedSlice(allocator);
@@ -586,7 +586,7 @@ pub fn findMatchingWorkspaces(allocator: std.mem.Allocator, original_cwd: []cons
                     if (((resolution.tag != .workspace) and (resolution.tag != .root))) {
                         continue;
                     }
-                    _ = try workspace_pkg_ids.append(allocator, (if (comptime @typeInfo(@TypeOf(pkg_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(pkg_id)) else cp_cast_int(i32, pkg_id)));
+                    _ = try workspace_pkg_ids.append(allocator, @as(u32, @intCast(pkg_id)));
                 }
             }
             var path_buf: bun.PathBuffer = undefined;
@@ -765,61 +765,59 @@ pub fn getOutdatedPackages(allocator: std.mem.Allocator, manager: *PackageManage
             for (cp_iter_slice(workspace_pkg_ids)) |workspace_pkg_id| {
                 _ = &workspace_pkg_id;
                 const pkg_deps = pkg_dependencies[@as(usize, @intCast(workspace_pkg_id))];
-                {
-                    var dep_id: i32 = pkg_deps.begin();
-                    _ = &dep_id;
-                    const __end_14 = pkg_deps.end();
-                    while (dep_id < __end_14) : (dep_id += 1) {
-                        const package_id = lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
-                        if ((package_id == invalid_package_id)) {
-                            continue;
-                        }
-                        const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                        const resolved_version = ((manager.lockfile.resolveCatalogDependency(dep)) orelse continue);
-                        if (((resolved_version.tag != .npm) and (resolved_version.tag != .dist_tag))) {
-                            continue;
-                        }
-                        const resolution = pkg_resolutions[@as(usize, @intCast(package_id))];
-                        if ((resolution.tag != .npm)) {
-                            continue;
-                        }
-                        const name_slice = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
-                        const package_name = pkg_names[@as(usize, @intCast(package_id))].slice(string_buf);
-                        var expired = false;
-                        _ = &expired;
-                        const manifest = ((manager.manifests.byNameAllowExpired(manager, manager.scopeForPackageName(package_name), package_name, (&expired), .load_from_memory_fallback_to_disk, (manager.options.minimum_release_age_ms != null))) orelse continue);
-                        const latest = ((manifest.findByDistTagWithFilter("latest", manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse continue);
-                        const update_version = (if ((resolved_version.tag == .npm)) ((manifest.findBestVersionWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).npm.version, string_buf, manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse (latest)) else ((manifest.findByDistTagWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).dist_tag.tag.slice(string_buf), manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse (latest)));
-                        const current_ver = (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version;
-                        const update_ver = update_version.version;
-                        const latest_ver = latest.version;
-                        const update_is_same = ((((current_ver.major == update_ver.major) and (current_ver.minor == update_ver.minor)) and (current_ver.patch == update_ver.patch)) and current_ver.tag.eql(update_ver.tag));
-                        const latest_is_same = ((((current_ver.major == latest_ver.major) and (current_ver.minor == latest_ver.minor)) and (current_ver.patch == latest_ver.patch)) and current_ver.tag.eql(latest_ver.tag));
-                        if ((update_is_same and latest_is_same)) {
-                            continue;
-                        }
-                        _ = version_buf.clearRetainingCapacity();
-                        _ = try version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) });
-                        const current_version_buf = try allocator.dupe(u8, version_buf.items);
-                        _ = version_buf.clearRetainingCapacity();
-                        _ = try version_writer.print("{f}", .{ update_version.version.fmt(manifest.string_buf) });
-                        const update_version_buf = try allocator.dupe(u8, version_buf.items);
-                        _ = version_buf.clearRetainingCapacity();
-                        _ = try version_writer.print("{f}", .{ latest.version.fmt(manifest.string_buf) });
-                        const latest_version_buf = try allocator.dupe(u8, version_buf.items);
-                        _ = version_buf.clearRetainingCapacity();
-                        const dep_type = (if (dep.behavior.dev) "devDependencies" else (if (dep.behavior.optional) "optionalDependencies" else (if (dep.behavior.peer) "peerDependencies" else "dependencies")));
-                        const workspace_resolution = pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))];
-                        const workspace_name = (if ((workspace_resolution.tag == .workspace)) pkg_names[@as(usize, @intCast(workspace_pkg_id))].slice(string_buf) else "");
-                        const catalog_name_str = (if ((dep.version.tag == .catalog)) (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf) else "");
-                        const catalog_name: ?[]const u8 = (if ((catalog_name_str.len > 0)) try allocator.dupe(u8, catalog_name_str) else null);
-                        _ = try outdated_packages.append(.{ .name = try allocator.dupe(u8, name_slice), .current_version = try allocator.dupe(u8, current_version_buf), .latest_version = try allocator.dupe(u8, latest_version_buf), .update_version = try allocator.dupe(u8, update_version_buf), .package_id = package_id, .dep_id = (if (comptime @typeInfo(@TypeOf(dep_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(dep_id)) else cp_cast_int(i32, dep_id)), .workspace_pkg_id = workspace_pkg_id, .dependency_type = dep_type, .workspace_name = try allocator.dupe(u8, workspace_name), .behavior = dep.behavior, .manager = manager, .is_catalog = (dep.version.tag == .catalog), .catalog_name = catalog_name, .use_latest = manager.options.do.update_to_latest });
+                var dep_id: u32 = pkg_deps.begin();
+                _ = &dep_id;
+                while ((dep_id < pkg_deps.end())) : (dep_id = (dep_id + 1)) {
+                    const package_id = lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                    if ((package_id == invalid_package_id)) {
+                        continue;
                     }
+                    const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                    const resolved_version = ((manager.lockfile.resolveCatalogDependency(dep)) orelse continue);
+                    if (((resolved_version.tag != .npm) and (resolved_version.tag != .dist_tag))) {
+                        continue;
+                    }
+                    const resolution = pkg_resolutions[@as(usize, @intCast(package_id))];
+                    if ((resolution.tag != .npm)) {
+                        continue;
+                    }
+                    const name_slice = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                    const package_name = pkg_names[@as(usize, @intCast(package_id))].slice(string_buf);
+                    var expired = false;
+                    _ = &expired;
+                    const manifest = ((manager.manifests.byNameAllowExpired(manager, manager.scopeForPackageName(package_name), package_name, (&expired), .load_from_memory_fallback_to_disk, (manager.options.minimum_release_age_ms != null))) orelse continue);
+                    const latest = ((manifest.findByDistTagWithFilter("latest", manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse continue);
+                    const update_version = (if ((resolved_version.tag == .npm)) ((manifest.findBestVersionWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).npm.version, string_buf, manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse (latest)) else ((manifest.findByDistTagWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).dist_tag.tag.slice(string_buf), manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes).unwrap()) orelse (latest)));
+                    const current_ver = (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version;
+                    const update_ver = update_version.version;
+                    const latest_ver = latest.version;
+                    const update_is_same = ((((current_ver.major == update_ver.major) and (current_ver.minor == update_ver.minor)) and (current_ver.patch == update_ver.patch)) and current_ver.tag.eql(update_ver.tag));
+                    const latest_is_same = ((((current_ver.major == latest_ver.major) and (current_ver.minor == latest_ver.minor)) and (current_ver.patch == latest_ver.patch)) and current_ver.tag.eql(latest_ver.tag));
+                    if ((update_is_same and latest_is_same)) {
+                        continue;
+                    }
+                    _ = version_buf.clearRetainingCapacity();
+                    _ = try version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) });
+                    const current_version_buf = try allocator.dupe(u8, version_buf.items);
+                    _ = version_buf.clearRetainingCapacity();
+                    _ = try version_writer.print("{f}", .{ update_version.version.fmt(manifest.string_buf) });
+                    const update_version_buf = try allocator.dupe(u8, version_buf.items);
+                    _ = version_buf.clearRetainingCapacity();
+                    _ = try version_writer.print("{f}", .{ latest.version.fmt(manifest.string_buf) });
+                    const latest_version_buf = try allocator.dupe(u8, version_buf.items);
+                    _ = version_buf.clearRetainingCapacity();
+                    const dep_type = (if (dep.behavior.dev) "devDependencies" else (if (dep.behavior.optional) "optionalDependencies" else (if (dep.behavior.peer) "peerDependencies" else "dependencies")));
+                    const workspace_resolution = pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))];
+                    const workspace_name = (if ((workspace_resolution.tag == .workspace)) pkg_names[@as(usize, @intCast(workspace_pkg_id))].slice(string_buf) else "");
+                    const catalog_name_str = (if ((dep.version.tag == .catalog)) (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf) else "");
+                    const catalog_name: ?[]const u8 = (if ((catalog_name_str.len > 0)) try allocator.dupe(u8, catalog_name_str) else null);
+                    _ = try outdated_packages.append(.{ .name = try allocator.dupe(u8, name_slice), .current_version = try allocator.dupe(u8, current_version_buf), .latest_version = try allocator.dupe(u8, latest_version_buf), .update_version = try allocator.dupe(u8, update_version_buf), .package_id = package_id, .dep_id = dep_id, .workspace_pkg_id = workspace_pkg_id, .dependency_type = dep_type, .workspace_name = try allocator.dupe(u8, workspace_name), .behavior = dep.behavior, .manager = manager, .is_catalog = (dep.version.tag == .catalog), .catalog_name = catalog_name, .use_latest = manager.options.do.update_to_latest });
                 }
             }
             const result = try outdated_packages.toOwnedSlice();
             const grouped_result = try groupCatalogDependencies(allocator, result);
-            _ = std.sort.pdq(OutdatedPackage, grouped_result, .{}, OutdatedPackageSortCtx.lessThan);
+            const empty_ctx: void = undefined;
+            _ = std.sort.pdq(OutdatedPackage, grouped_result, empty_ctx, OutdatedPackageSortCtx.lessThan);
             return grouped_result;
     }
 
@@ -953,7 +951,7 @@ pub fn promptForUpdates(allocator: std.mem.Allocator, packages: []OutdatedPackag
             const terminal_size = getTerminalSize();
             var state = MultiSelectState{ .packages = packages, .selected = selected, .viewport_height = terminal_size.height, .max_name_len = columns.name, .max_current_len = columns.current, .max_update_len = columns.target, .max_latest_len = columns.latest, .max_workspace_len = columns.workspace, .show_workspace = columns.show_workspace };
             _ = &state;
-            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_6: { break :blk_catch_6 ((bun.windows.updateStdioModeFlags(.std_in, .{ .set = (bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT), .unset = (bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT) })) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); }) else null);
+            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_6: { break :blk_catch_6 ((bun.windows.updateStdioModeFlags(.std_in, .{ .set = (bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT), .unset = (bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT) })) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); }) else undefined);
             if (Environment.isPosix) {
                 _ = bun.tty.setMode(0, .raw);
             }
@@ -1121,284 +1119,281 @@ pub fn processMultiSelect(state: *MultiSelectState, initial_terminal_size: Termi
                     _ = &lines_displayed;
                     var packages_displayed: usize = 0;
                     _ = &packages_displayed;
-                    {
-                        var i: i32 = state.viewport_start;
-                        _ = &i;
-                        const __end_17 = viewport_end;
-                        while (i < __end_17) : (i += 1) {
-                            const pkg = (&state.packages[@as(usize, @intCast(i))]);
-                            const selected = state.selected[@as(usize, @intCast(i))];
-                            const needs_header = ((current_dep_type == null) or (!strings.eql(current_dep_type.?, pkg.dependency_type)));
-                            if (needs_header) {
-                                var selected_count: usize = 0;
-                                _ = &selected_count;
-                                {
-                                    var pi: i32 = 0;
-                                    _ = &pi;
-                                    const __end_18 = state.packages.len;
-                                    while (pi < __end_18) : (pi += 1) {
-                                        const p = state.packages[@as(usize, @intCast(pi))];
-                                        const sel = state.selected[@as(usize, @intCast(pi))];
-                                        if ((strings.eql(p.dependency_type, pkg.dependency_type) and sel)) {
-                                            selected_count = (selected_count + 1);
-                                        }
+                    var i: usize = state.viewport_start;
+                    _ = &i;
+                    while ((i < viewport_end)) : (i = (i + 1)) {
+                        const pkg = (&state.packages[@as(usize, @intCast(i))]);
+                        const selected = state.selected[@as(usize, @intCast(i))];
+                        const needs_header = ((current_dep_type == null) or (!strings.eql(current_dep_type.?, pkg.dependency_type)));
+                        if (needs_header) {
+                            var selected_count: usize = 0;
+                            _ = &selected_count;
+                            {
+                                var pi: i32 = 0;
+                                _ = &pi;
+                                const __end_16 = state.packages.len;
+                                while (pi < __end_16) : (pi += 1) {
+                                    const p = state.packages[@as(usize, @intCast(pi))];
+                                    const sel = state.selected[@as(usize, @intCast(pi))];
+                                    if ((strings.eql(p.dependency_type, pkg.dependency_type) and sel)) {
+                                        selected_count = (selected_count + 1);
                                     }
                                 }
-                                _ = Output.print("\n  ", .{});
-                                if ((selected_count > 0)) {
-                                    _ = Output.pretty("<r><b>{s} {d}<r>", .{ pkg.dependency_type, selected_count });
-                                } else {
-                                    _ = Output.pretty("<r>{s}<r>", .{ pkg.dependency_type });
-                                }
-                                var j: usize = 0;
-                                _ = &j;
-                                const dep_type_text_len: usize = (if ((selected_count > 0)) ((pkg.dependency_type.len + 1) + std.fmt.count("{d}", .{ selected_count })) else pkg.dependency_type.len);
-                                const total_offset = ((6 + state.max_name_len) + 2);
-                                const header_start = (2 + dep_type_text_len);
-                                const padding_to_current = (if ((header_start >= total_offset)) 1 else (total_offset - header_start));
-                                while ((j < padding_to_current)) : (j = (j + 1)) {
-                                    _ = Output.print(" ", .{});
-                                }
-                                _ = Output.print("Current", .{});
-                                j = 0;
-                                while ((j < ((state.max_current_len - "Current".len) + 2))) : (j = (j + 1)) {
-                                    _ = Output.print(" ", .{});
-                                }
-                                _ = Output.print("Target", .{});
-                                j = 0;
-                                while ((j < ((state.max_update_len - "Target".len) + 2))) : (j = (j + 1)) {
-                                    _ = Output.print(" ", .{});
-                                }
-                                _ = Output.print("Latest", .{});
-                                if (state.show_workspace) {
-                                    j = 0;
-                                    while ((j < ((state.max_latest_len - "Latest".len) + 2))) : (j = (j + 1)) {
-                                        _ = Output.print(" ", .{});
-                                    }
-                                    _ = Output.print("Workspace", .{});
-                                }
-                                _ = Output.print("\x1B[0K\n", .{});
-                                lines_displayed = (lines_displayed + 2);
-                                current_dep_type = pkg.dependency_type;
                             }
-                            const is_cursor = (i == state.cursor);
-                            const checkbox = (if (selected) "■" else "□");
-                            var dev_tag_len: usize = 0;
-                            _ = &dev_tag_len;
-                            if (pkg.behavior.dev) {
-                                dev_tag_len = 4;
+                            _ = Output.print("\n  ", .{});
+                            if ((selected_count > 0)) {
+                                _ = Output.pretty("<r><b>{s} {d}<r>", .{ pkg.dependency_type, selected_count });
                             } else {
-                                if (pkg.behavior.peer) {
-                                    dev_tag_len = 5;
-                                } else {
-                                    if (pkg.behavior.optional) {
-                                        dev_tag_len = 9;
-                                    }
+                                _ = Output.pretty("<r>{s}<r>", .{ pkg.dependency_type });
+                            }
+                            var j: usize = 0;
+                            _ = &j;
+                            const dep_type_text_len: usize = (if ((selected_count > 0)) ((pkg.dependency_type.len + 1) + std.fmt.count("{d}", .{ selected_count })) else pkg.dependency_type.len);
+                            const total_offset = ((6 + state.max_name_len) + 2);
+                            const header_start = (2 + dep_type_text_len);
+                            const padding_to_current = (if ((header_start >= total_offset)) 1 else (total_offset - header_start));
+                            while ((j < padding_to_current)) : (j = (j + 1)) {
+                                _ = Output.print(" ", .{});
+                            }
+                            _ = Output.print("Current", .{});
+                            j = 0;
+                            while ((j < ((state.max_current_len - "Current".len) + 2))) : (j = (j + 1)) {
+                                _ = Output.print(" ", .{});
+                            }
+                            _ = Output.print("Target", .{});
+                            j = 0;
+                            while ((j < ((state.max_update_len - "Target".len) + 2))) : (j = (j + 1)) {
+                                _ = Output.print(" ", .{});
+                            }
+                            _ = Output.print("Latest", .{});
+                            if (state.show_workspace) {
+                                j = 0;
+                                while ((j < ((state.max_latest_len - "Latest".len) + 2))) : (j = (j + 1)) {
+                                    _ = Output.print(" ", .{});
+                                }
+                                _ = Output.print("Workspace", .{});
+                            }
+                            _ = Output.print("\x1B[0K\n", .{});
+                            lines_displayed = (lines_displayed + 2);
+                            current_dep_type = pkg.dependency_type;
+                        }
+                        const is_cursor = (i == state.cursor);
+                        const checkbox = (if (selected) "■" else "□");
+                        var dev_tag_len: usize = 0;
+                        _ = &dev_tag_len;
+                        if (pkg.behavior.dev) {
+                            dev_tag_len = 4;
+                        } else {
+                            if (pkg.behavior.peer) {
+                                dev_tag_len = 5;
+                            } else {
+                                if (pkg.behavior.optional) {
+                                    dev_tag_len = 9;
                                 }
                             }
-                            const total_name_len = (pkg.name.len + dev_tag_len);
-                            const name_padding = (if ((total_name_len >= state.max_name_len)) 0 else (state.max_name_len - total_name_len));
-                            const current_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.current_version, pkg.current_version));
-                            const update_ver_parsed = (if (pkg.use_latest) Semver.Version.parse(SlicedString.init(pkg.latest_version, pkg.latest_version)) else Semver.Version.parse(SlicedString.init(pkg.update_version, pkg.update_version)));
-                            var checkbox_color: []const u8 = "green";
-                            _ = &checkbox_color;
-                            if ((current_ver_parsed.valid and update_ver_parsed.valid)) {
-                                const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
-                                const update_full = Semver.Version{ .major = ((update_ver_parsed.version.major) orelse (0)), .minor = ((update_ver_parsed.version.minor) orelse (0)), .patch = ((update_ver_parsed.version.patch) orelse (0)), .tag = update_ver_parsed.version.tag };
-                                const target_ver_str = (if (pkg.use_latest) pkg.latest_version else pkg.update_version);
-                                const diff = update_full.whichVersionIsDifferent(current_full, target_ver_str, pkg.current_version);
-                                if (diff) |d| {
-                                    _ = &d;
-                                    switch (d) {
+                        }
+                        const total_name_len = (pkg.name.len + dev_tag_len);
+                        const name_padding = (if ((total_name_len >= state.max_name_len)) 0 else (state.max_name_len - total_name_len));
+                        const current_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.current_version, pkg.current_version));
+                        const update_ver_parsed = (if (pkg.use_latest) Semver.Version.parse(SlicedString.init(pkg.latest_version, pkg.latest_version)) else Semver.Version.parse(SlicedString.init(pkg.update_version, pkg.update_version)));
+                        var checkbox_color: []const u8 = "green";
+                        _ = &checkbox_color;
+                        if ((current_ver_parsed.valid and update_ver_parsed.valid)) {
+                            const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
+                            const update_full = Semver.Version{ .major = ((update_ver_parsed.version.major) orelse (0)), .minor = ((update_ver_parsed.version.minor) orelse (0)), .patch = ((update_ver_parsed.version.patch) orelse (0)), .tag = update_ver_parsed.version.tag };
+                            const target_ver_str = (if (pkg.use_latest) pkg.latest_version else pkg.update_version);
+                            const diff = update_full.whichVersionIsDifferent(current_full, target_ver_str, pkg.current_version);
+                            if (diff) |d| {
+                                _ = &d;
+                                switch (d) {
 .major => {
 checkbox_color = "red";
 },
 .minor => {
 if ((current_full.major == 0)) {
-                                        checkbox_color = "red";
-                                    } else {
-                                        checkbox_color = "yellow";
-                                    }
+                                    checkbox_color = "red";
+                                } else {
+                                    checkbox_color = "yellow";
+                                }
 },
 .patch => {
 if (((current_full.major == 0) and (current_full.minor == 0))) {
-                                        checkbox_color = "red";
-                                    } else {
-                                        checkbox_color = "green";
-                                    }
+                                    checkbox_color = "red";
+                                } else {
+                                    checkbox_color = "green";
+                                }
 },
 else => {
 checkbox_color = "green";
 },
 }
-                                }
                             }
-                            if (is_cursor) {
-                                _ = Output.pretty("  <r><cyan>❯<r> ", .{});
-                            } else {
-                                _ = Output.print("    ", .{});
-                            }
-                            if (selected) {
-                                if (strings.eqlComptime(checkbox_color, "red")) {
-                                    _ = Output.pretty("<r><red>{s}<r> ", .{ checkbox });
-                                } else {
-                                    if (strings.eqlComptime(checkbox_color, "yellow")) {
-                                        _ = Output.pretty("<r><yellow>{s}<r> ", .{ checkbox });
-                                    } else {
-                                        _ = Output.pretty("<r><green>{s}<r> ", .{ checkbox });
-                                    }
-                                }
-                            } else {
-                                _ = Output.print("{s} ", .{ checkbox });
-                            }
-                            const available_name_width = (if ((state.max_name_len > dev_tag_len)) (state.max_name_len - dev_tag_len) else state.max_name_len);
-                            const display_name = try truncateWithEllipsis(bun.default_allocator, pkg.name, available_name_width, false);
-                            defer {
-                            _ = bun.default_allocator.free(display_name);
-                            }
-                            const uses_default_registry = ((pkg.manager.options.scope.url_hash == Install.Npm.Registry.default_url_hash) and (pkg.manager.scopeForPackageName(pkg.name).url_hash == Install.Npm.Registry.default_url_hash));
-                            const url_version = (if (selected) (if (pkg.use_latest) pkg.latest_version else pkg.update_version) else pkg.current_version);
-                            const package_url = (if ((Output.enable_ansi_colors_stdout and uses_default_registry)) try std.fmt.allocPrint(bun.default_allocator, "https://npmjs.org/package/{s}/v/{s}", .{ pkg.name, url_version }) else "");
-                            defer {
-                            {
-                                if ((package_url.len > 0)) {
-                                    _ = bun.default_allocator.free(package_url);
-                                }
-                            }
-                            }
-                            const hyperlink = TerminalHyperlink.new(package_url, display_name, (package_url.len > 0));
-                            if (selected) {
-                                if (strings.eqlComptime(checkbox_color, "red")) {
-                                    _ = Output.pretty("<r><red>{f}<r>", .{ hyperlink });
-                                } else {
-                                    if (strings.eqlComptime(checkbox_color, "yellow")) {
-                                        _ = Output.pretty("<r><yellow>{f}<r>", .{ hyperlink });
-                                    } else {
-                                        _ = Output.pretty("<r><green>{f}<r>", .{ hyperlink });
-                                    }
-                                }
-                            } else {
-                                _ = Output.pretty("<r>{f}<r>", .{ hyperlink });
-                            }
-                            if (pkg.behavior.dev) {
-                                _ = Output.pretty("<r><d> dev<r>", .{});
-                            } else {
-                                if (pkg.behavior.peer) {
-                                    _ = Output.pretty("<r><d> peer<r>", .{});
-                                } else {
-                                    if (pkg.behavior.optional) {
-                                        _ = Output.pretty("<r><d> optional<r>", .{});
-                                    }
-                                }
-                            }
-                            var j: usize = 0;
-                            _ = &j;
-                            while ((j < (name_padding + 2))) : (j = (j + 1)) {
-                                _ = Output.print(" ", .{});
-                            }
-                            const truncated_current = try truncateWithEllipsis(bun.default_allocator, pkg.current_version, state.max_current_len, false);
-                            defer {
-                            _ = bun.default_allocator.free(truncated_current);
-                            }
-                            _ = Output.pretty("<r>{s}<r>", .{ truncated_current });
-                            const current_padding = (if ((truncated_current.len >= state.max_current_len)) 0 else (state.max_current_len - truncated_current.len));
-                            j = 0;
-                            while ((j < (current_padding + 2))) : (j = (j + 1)) {
-                                _ = Output.print(" ", .{});
-                            }
-                            const target_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.update_version, pkg.update_version));
-                            const truncated_target = try truncateWithEllipsis(bun.default_allocator, pkg.update_version, state.max_update_len, false);
-                            defer {
-                            _ = bun.default_allocator.free(truncated_target);
-                            }
-                            const target_width: usize = truncated_target.len;
-                            if ((current_ver_parsed.valid and target_ver_parsed.valid)) {
-                                const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
-                                const target_full = Semver.Version{ .major = ((target_ver_parsed.version.major) orelse (0)), .minor = ((target_ver_parsed.version.minor) orelse (0)), .patch = ((target_ver_parsed.version.patch) orelse (0)), .tag = target_ver_parsed.version.tag };
-                                if ((selected and (!pkg.use_latest))) {
-                                    _ = Output.print("\x1B[4m", .{});
-                                }
-                                if ((truncated_target.len < pkg.update_version.len)) {
-                                    _ = Output.pretty("<r>{s}<r>", .{ truncated_target });
-                                } else {
-                                    _ = Output.pretty("{f}", .{ target_full.diffFmt(current_full, pkg.update_version, pkg.current_version) });
-                                }
-                                if ((selected and (!pkg.use_latest))) {
-                                    _ = Output.print("\x1B[24m", .{});
-                                }
-                            } else {
-                                if ((selected and (!pkg.use_latest))) {
-                                    _ = Output.print("\x1B[4m", .{});
-                                }
-                                _ = Output.pretty("<r>{s}<r>", .{ truncated_target });
-                                if ((selected and (!pkg.use_latest))) {
-                                    _ = Output.print("\x1B[24m", .{});
-                                }
-                            }
-                            const target_padding = (if ((target_width >= state.max_update_len)) 0 else (state.max_update_len - target_width));
-                            j = 0;
-                            while ((j < (target_padding + 2))) : (j = (j + 1)) {
-                                _ = Output.print(" ", .{});
-                            }
-                            const latest_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.latest_version, pkg.latest_version));
-                            const truncated_latest = try truncateWithEllipsis(bun.default_allocator, pkg.latest_version, state.max_latest_len, false);
-                            defer {
-                            _ = bun.default_allocator.free(truncated_latest);
-                            }
-                            if ((current_ver_parsed.valid and latest_ver_parsed.valid)) {
-                                const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
-                                const latest_full = Semver.Version{ .major = ((latest_ver_parsed.version.major) orelse (0)), .minor = ((latest_ver_parsed.version.minor) orelse (0)), .patch = ((latest_ver_parsed.version.patch) orelse (0)), .tag = latest_ver_parsed.version.tag };
-                                const is_same_as_target = strings.eql(pkg.latest_version, pkg.update_version);
-                                if (is_same_as_target) {
-                                    _ = Output.print("\x1B[2m", .{});
-                                }
-                                if ((selected and pkg.use_latest)) {
-                                    _ = Output.print("\x1B[4m", .{});
-                                }
-                                if ((truncated_latest.len < pkg.latest_version.len)) {
-                                    _ = Output.pretty("<r>{s}<r>", .{ truncated_latest });
-                                } else {
-                                    _ = Output.pretty("{f}", .{ latest_full.diffFmt(current_full, pkg.latest_version, pkg.current_version) });
-                                }
-                                if ((selected and pkg.use_latest)) {
-                                    _ = Output.print("\x1B[24m", .{});
-                                }
-                                if (is_same_as_target) {
-                                    _ = Output.print("\x1B[22m", .{});
-                                }
-                            } else {
-                                const is_same_as_target = strings.eql(pkg.latest_version, pkg.update_version);
-                                if (is_same_as_target) {
-                                    _ = Output.print("\x1B[2m", .{});
-                                }
-                                if ((selected and pkg.use_latest)) {
-                                    _ = Output.print("\x1B[4m", .{});
-                                }
-                                _ = Output.pretty("<r>{s}<r>", .{ truncated_latest });
-                                if ((selected and pkg.use_latest)) {
-                                    _ = Output.print("\x1B[24m", .{});
-                                }
-                                if (is_same_as_target) {
-                                    _ = Output.print("\x1B[22m", .{});
-                                }
-                            }
-                            if (state.show_workspace) {
-                                const latest_width: usize = truncated_latest.len;
-                                const latest_padding = (if ((latest_width >= state.max_latest_len)) 0 else (state.max_latest_len - latest_width));
-                                j = 0;
-                                while ((j < (latest_padding + 2))) : (j = (j + 1)) {
-                                    _ = Output.print(" ", .{});
-                                }
-                                const truncated_workspace = try truncateWithEllipsis(bun.default_allocator, pkg.workspace_name, state.max_workspace_len, true);
-                                defer {
-                                _ = bun.default_allocator.free(truncated_workspace);
-                                }
-                                _ = Output.pretty("<r><d>{s}<r>", .{ truncated_workspace });
-                            }
-                            _ = Output.print("\x1B[0K\n", .{});
-                            lines_displayed = (lines_displayed + 1);
-                            packages_displayed = (packages_displayed + 1);
                         }
+                        if (is_cursor) {
+                            _ = Output.pretty("  <r><cyan>❯<r> ", .{});
+                        } else {
+                            _ = Output.print("    ", .{});
+                        }
+                        if (selected) {
+                            if (strings.eqlComptime(checkbox_color, "red")) {
+                                _ = Output.pretty("<r><red>{s}<r> ", .{ checkbox });
+                            } else {
+                                if (strings.eqlComptime(checkbox_color, "yellow")) {
+                                    _ = Output.pretty("<r><yellow>{s}<r> ", .{ checkbox });
+                                } else {
+                                    _ = Output.pretty("<r><green>{s}<r> ", .{ checkbox });
+                                }
+                            }
+                        } else {
+                            _ = Output.print("{s} ", .{ checkbox });
+                        }
+                        const available_name_width = (if ((state.max_name_len > dev_tag_len)) (state.max_name_len - dev_tag_len) else state.max_name_len);
+                        const display_name = try truncateWithEllipsis(bun.default_allocator, pkg.name, available_name_width, false);
+                        defer {
+                        _ = bun.default_allocator.free(display_name);
+                        }
+                        const uses_default_registry = ((pkg.manager.options.scope.url_hash == Install.Npm.Registry.default_url_hash) and (pkg.manager.scopeForPackageName(pkg.name).url_hash == Install.Npm.Registry.default_url_hash));
+                        const url_version = (if (selected) (if (pkg.use_latest) pkg.latest_version else pkg.update_version) else pkg.current_version);
+                        const package_url = (if ((Output.enable_ansi_colors_stdout and uses_default_registry)) try std.fmt.allocPrint(bun.default_allocator, "https://npmjs.org/package/{s}/v/{s}", .{ pkg.name, url_version }) else "");
+                        defer {
+                        {
+                            if ((package_url.len > 0)) {
+                                _ = bun.default_allocator.free(package_url);
+                            }
+                        }
+                        }
+                        const hyperlink = TerminalHyperlink.new(package_url, display_name, (package_url.len > 0));
+                        if (selected) {
+                            if (strings.eqlComptime(checkbox_color, "red")) {
+                                _ = Output.pretty("<r><red>{f}<r>", .{ hyperlink });
+                            } else {
+                                if (strings.eqlComptime(checkbox_color, "yellow")) {
+                                    _ = Output.pretty("<r><yellow>{f}<r>", .{ hyperlink });
+                                } else {
+                                    _ = Output.pretty("<r><green>{f}<r>", .{ hyperlink });
+                                }
+                            }
+                        } else {
+                            _ = Output.pretty("<r>{f}<r>", .{ hyperlink });
+                        }
+                        if (pkg.behavior.dev) {
+                            _ = Output.pretty("<r><d> dev<r>", .{});
+                        } else {
+                            if (pkg.behavior.peer) {
+                                _ = Output.pretty("<r><d> peer<r>", .{});
+                            } else {
+                                if (pkg.behavior.optional) {
+                                    _ = Output.pretty("<r><d> optional<r>", .{});
+                                }
+                            }
+                        }
+                        var j: usize = 0;
+                        _ = &j;
+                        while ((j < (name_padding + 2))) : (j = (j + 1)) {
+                            _ = Output.print(" ", .{});
+                        }
+                        const truncated_current = try truncateWithEllipsis(bun.default_allocator, pkg.current_version, state.max_current_len, false);
+                        defer {
+                        _ = bun.default_allocator.free(truncated_current);
+                        }
+                        _ = Output.pretty("<r>{s}<r>", .{ truncated_current });
+                        const current_padding = (if ((truncated_current.len >= state.max_current_len)) 0 else (state.max_current_len - truncated_current.len));
+                        j = 0;
+                        while ((j < (current_padding + 2))) : (j = (j + 1)) {
+                            _ = Output.print(" ", .{});
+                        }
+                        const target_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.update_version, pkg.update_version));
+                        const truncated_target = try truncateWithEllipsis(bun.default_allocator, pkg.update_version, state.max_update_len, false);
+                        defer {
+                        _ = bun.default_allocator.free(truncated_target);
+                        }
+                        const target_width: usize = truncated_target.len;
+                        if ((current_ver_parsed.valid and target_ver_parsed.valid)) {
+                            const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
+                            const target_full = Semver.Version{ .major = ((target_ver_parsed.version.major) orelse (0)), .minor = ((target_ver_parsed.version.minor) orelse (0)), .patch = ((target_ver_parsed.version.patch) orelse (0)), .tag = target_ver_parsed.version.tag };
+                            if ((selected and (!pkg.use_latest))) {
+                                _ = Output.print("\x1B[4m", .{});
+                            }
+                            if ((truncated_target.len < pkg.update_version.len)) {
+                                _ = Output.pretty("<r>{s}<r>", .{ truncated_target });
+                            } else {
+                                _ = Output.pretty("{f}", .{ target_full.diffFmt(current_full, pkg.update_version, pkg.current_version) });
+                            }
+                            if ((selected and (!pkg.use_latest))) {
+                                _ = Output.print("\x1B[24m", .{});
+                            }
+                        } else {
+                            if ((selected and (!pkg.use_latest))) {
+                                _ = Output.print("\x1B[4m", .{});
+                            }
+                            _ = Output.pretty("<r>{s}<r>", .{ truncated_target });
+                            if ((selected and (!pkg.use_latest))) {
+                                _ = Output.print("\x1B[24m", .{});
+                            }
+                        }
+                        const target_padding = (if ((target_width >= state.max_update_len)) 0 else (state.max_update_len - target_width));
+                        j = 0;
+                        while ((j < (target_padding + 2))) : (j = (j + 1)) {
+                            _ = Output.print(" ", .{});
+                        }
+                        const latest_ver_parsed = Semver.Version.parse(SlicedString.init(pkg.latest_version, pkg.latest_version));
+                        const truncated_latest = try truncateWithEllipsis(bun.default_allocator, pkg.latest_version, state.max_latest_len, false);
+                        defer {
+                        _ = bun.default_allocator.free(truncated_latest);
+                        }
+                        if ((current_ver_parsed.valid and latest_ver_parsed.valid)) {
+                            const current_full = Semver.Version{ .major = ((current_ver_parsed.version.major) orelse (0)), .minor = ((current_ver_parsed.version.minor) orelse (0)), .patch = ((current_ver_parsed.version.patch) orelse (0)), .tag = current_ver_parsed.version.tag };
+                            const latest_full = Semver.Version{ .major = ((latest_ver_parsed.version.major) orelse (0)), .minor = ((latest_ver_parsed.version.minor) orelse (0)), .patch = ((latest_ver_parsed.version.patch) orelse (0)), .tag = latest_ver_parsed.version.tag };
+                            const is_same_as_target = strings.eql(pkg.latest_version, pkg.update_version);
+                            if (is_same_as_target) {
+                                _ = Output.print("\x1B[2m", .{});
+                            }
+                            if ((selected and pkg.use_latest)) {
+                                _ = Output.print("\x1B[4m", .{});
+                            }
+                            if ((truncated_latest.len < pkg.latest_version.len)) {
+                                _ = Output.pretty("<r>{s}<r>", .{ truncated_latest });
+                            } else {
+                                _ = Output.pretty("{f}", .{ latest_full.diffFmt(current_full, pkg.latest_version, pkg.current_version) });
+                            }
+                            if ((selected and pkg.use_latest)) {
+                                _ = Output.print("\x1B[24m", .{});
+                            }
+                            if (is_same_as_target) {
+                                _ = Output.print("\x1B[22m", .{});
+                            }
+                        } else {
+                            const is_same_as_target = strings.eql(pkg.latest_version, pkg.update_version);
+                            if (is_same_as_target) {
+                                _ = Output.print("\x1B[2m", .{});
+                            }
+                            if ((selected and pkg.use_latest)) {
+                                _ = Output.print("\x1B[4m", .{});
+                            }
+                            _ = Output.pretty("<r>{s}<r>", .{ truncated_latest });
+                            if ((selected and pkg.use_latest)) {
+                                _ = Output.print("\x1B[24m", .{});
+                            }
+                            if (is_same_as_target) {
+                                _ = Output.print("\x1B[22m", .{});
+                            }
+                        }
+                        if (state.show_workspace) {
+                            const latest_width: usize = truncated_latest.len;
+                            const latest_padding = (if ((latest_width >= state.max_latest_len)) 0 else (state.max_latest_len - latest_width));
+                            j = 0;
+                            while ((j < (latest_padding + 2))) : (j = (j + 1)) {
+                                _ = Output.print(" ", .{});
+                            }
+                            const truncated_workspace = try truncateWithEllipsis(bun.default_allocator, pkg.workspace_name, state.max_workspace_len, true);
+                            defer {
+                            _ = bun.default_allocator.free(truncated_workspace);
+                            }
+                            _ = Output.pretty("<r><d>{s}<r>", .{ truncated_workspace });
+                        }
+                        _ = Output.print("\x1B[0K\n", .{});
+                        lines_displayed = (lines_displayed + 1);
+                        packages_displayed = (packages_displayed + 1);
                     }
                     if (show_bottom_indicator) {
                         _ = Output.pretty("  <d>↓ {d} more package{s} below<r>", .{ (state.packages.len - viewport_end), (if (((state.packages.len - viewport_end) == 1)) "" else "s") });
@@ -1443,9 +1438,10 @@ _ = @memset(state.selected, false);
                 state.toggle_all = false;
 },
 'i', 'I' => {
-for (cp_mut_slice(&state.selected)) |*sel| {
-                    _ = &sel;
-                    (sel.*).* = (!(sel.*).*);
+var sel_idx: usize = 0;
+                _ = &sel_idx;
+                while ((sel_idx < state.selected.len)) : (sel_idx = (sel_idx + 1)) {
+                    state.selected[cp_cast_int(usize, sel_idx)] = (!state.selected[@as(usize, @intCast(sel_idx))]);
                 }
                 state.toggle_all = false;
 },
@@ -1455,8 +1451,8 @@ if (state.toggle_all) {
                     {
                         var si: i32 = 0;
                         _ = &si;
-                        const __end_21 = state.selected.len;
-                        while (si < __end_21) : (si += 1) {
+                        const __end_18 = state.selected.len;
+                        while (si < __end_18) : (si += 1) {
                             if (state.selected[@as(usize, @intCast(si))]) {
                                 state.packages[@as(usize, @intCast(si))].use_latest = new_latest_state;
                             }
@@ -1638,7 +1634,8 @@ pub fn editCatalogDefinitions(manager: *PackageManager, updates: []CatalogUpdate
 }
 
 pub fn updateDefaultCatalog(allocator: std.mem.Allocator, package_json: *Expr, package_name: []const u8, new_version: []const u8) !void {
-        var catalog_obj = brk: {
+        var catalog_obj: E.Object = brk: {
+        const empty_obj: E.Object = .{};
         if (package_json.asProperty("workspaces")) |workspaces_query| {
             _ = &workspaces_query;
             if ((workspaces_query.expr.data == .e_object)) {
@@ -1656,7 +1653,7 @@ pub fn updateDefaultCatalog(allocator: std.mem.Allocator, package_json: *Expr, p
                 break :brk catalog_query.expr.data.e_object.*;
             }
         }
-        break :brk E.Object;
+        break :brk empty_obj;
 };
         _ = &catalog_obj;
         var version_with_prefix = new_version;
@@ -1685,7 +1682,8 @@ pub fn updateDefaultCatalog(allocator: std.mem.Allocator, package_json: *Expr, p
 }
 
 pub fn updateNamedCatalog(allocator: std.mem.Allocator, package_json: *Expr, catalog_name: []const u8, package_name: []const u8, new_version: []const u8) !void {
-        var catalogs_obj = brk: {
+        var catalogs_obj: E.Object = brk: {
+        const empty_obj: E.Object = .{};
         if (package_json.asProperty("workspaces")) |workspaces_query| {
             _ = &workspaces_query;
             if ((workspaces_query.expr.data == .e_object)) {
@@ -1703,17 +1701,18 @@ pub fn updateNamedCatalog(allocator: std.mem.Allocator, package_json: *Expr, cat
                 break :brk catalogs_query.expr.data.e_object.*;
             }
         }
-        break :brk E.Object;
+        break :brk empty_obj;
 };
         _ = &catalogs_obj;
-        var catalog_obj = brk: {
+        var catalog_obj: E.Object = brk: {
+        const empty_obj: E.Object = .{};
         if (catalogs_obj.get(catalog_name)) |catalog_query| {
             _ = &catalog_query;
             if ((catalog_query.data == .e_object)) {
                 break :brk catalog_query.data.e_object.*;
             }
         }
-        break :brk E.Object;
+        break :brk empty_obj;
 };
         _ = &catalog_obj;
         var version_with_prefix = new_version;

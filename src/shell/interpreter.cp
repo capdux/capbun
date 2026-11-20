@@ -238,7 +238,7 @@ pub struct ShellArgs {
 }
 
 pub type StringZ = [:0]const u8;
-const empty_bun_strings: [0]bun.String = [];
+const empty_bun_strings: [0]bun.String = undefined;
 
 pub struct IsDone {
     interp: *const Interpreter,
@@ -1122,7 +1122,7 @@ pub struct Interpreter {
             },
             else => {},
         }
-        mini.tick(&is_done, @as(fn (*!) bool, IsDone.isDone));
+        mini.tick(&is_done, &IsDone.isDone);
         const code = interp.exit_code.?;
         interp.deinitFromExec();
         return code;
@@ -1181,7 +1181,7 @@ pub struct Interpreter {
             },
             else => {},
         }
-        mini.tick(&is_done, @as(fn (*!) bool, IsDone.isDone));
+        mini.tick(&is_done, &IsDone.isDone);
         const code = interp.exit_code.?;
         interp.deinitFromExec();
         return code;
@@ -1388,18 +1388,18 @@ pub struct Interpreter {
         _.allocator.destroy(_);
     }
 
-    fn #deinitFromExec(*_: *ThisInterpreter)  {
+    pub fn deinitFromExec(*_) {
         log("deinit interpreter", {});
 
-        this.this_jsvalue = .zero;
-        this.root_io.deref();
-        this.root_shell.deinitImpl(false, true);
+        _.this_jsvalue = .zero;
+        _.root_io.deref();
+        _.root_shell.deinitImpl(false, true);
 
-        for (str of this.vm_args_utf8.items[0..]) {
+        for (str of _.vm_args_utf8.items[0..]) {
             str.deinit();
         }
-        this.vm_args_utf8.deinit();
-        this.allocator.destroy(this);
+        _.vm_args_utf8.deinit();
+        _.allocator.destroy(_);
     }
 
     fn setQuiet(*_, _: *JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {

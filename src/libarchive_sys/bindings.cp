@@ -310,7 +310,7 @@ extern fn archive_write_add_filter_none(a: *Archive!): ArchiveResult;
 extern fn archive_write_add_filter_uuencode(a: *Archive!): ArchiveResult;
 extern fn archive_write_add_filter_xz(a: *Archive!): ArchiveResult;
 extern fn archive_write_add_filter_zstd(a: *Archive!): ArchiveResult;
-extern fn archive_write_set_filter_option(a: *Archive!, m: ([*c]const u8)?, o: [*c]const u8, v: [*c]const u8): ArchiveResult;
+extern fn archive_write_set_filter_option(a: *Archive!, m: ([*:0]const u8)?, o: [*c]const u8, v: [*c]const u8): ArchiveResult;
 extern fn archive_write_open_filename(a: *Archive!, f: [*c]const u8): ArchiveResult;
 extern fn archive_write_open_fd(a: *Archive!, _fd: c_int): ArchiveResult;
 extern fn archive_write_open_memory(a: *Archive!, _buffer: *!?, _buffSize: usize, _used: [*c]usize): ArchiveResult;
@@ -567,7 +567,8 @@ pub struct ArchiveIterator {
         if (ArchiveIterator.isErrResult(this.archive.readFree())) {
             return { err: ArchiveIteratorErr{ message: "failed to free archive read", archive: this.archive } };
         }
-        return { result: {} };
+        const void_val: void = undefined;
+        return { result: void_val };
     }
 }
 
@@ -694,11 +695,10 @@ pub @opaque struct Archive {
     }
     pub fn writeSetFilterOption(*_, m: ([:0]const u8)?, o: [:0]const u8, v: [:0]const u8): ArchiveResult {
         unsafe {
-            let m_ptr: ([*c]const u8)? = null;
             if (mv := m) {
-                m_ptr = mv.ptr;
+                return archive_write_set_filter_option(this, mv.ptr, o.ptr, v.ptr);
             }
-            return archive_write_set_filter_option(this, m_ptr, o.ptr, v.ptr);
+            return archive_write_set_filter_option(this, null, o.ptr, v.ptr);
         }
     }
     pub fn writeOpenFilename(*_, filename: [:0]const u8): ArchiveResult {

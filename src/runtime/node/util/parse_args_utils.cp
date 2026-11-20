@@ -79,10 +79,10 @@ pub fn findOptionByShortName(short_name: String, options: []const OptionDefiniti
     for (i of 0..options.len) {
         const option = options[i];
         if (short_name.eql(option.short_name)) {
-            return i;
+            return @intCast(i);
         }
         if (option.long_name.length() == 1 && short_name.eql(option.long_name)) {
-            long_option_index = i;
+            long_option_index = @intCast(i);
         }
     }
     return long_option_index;

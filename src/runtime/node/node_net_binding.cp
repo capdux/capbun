@@ -8,7 +8,7 @@ pub fn getDefaultAutoSelectFamily(global: *jsc.JSGlobalObject): jsc.JSValue {
         fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             * = globalThis;
             * = callframe;
-            return .jsBoolean(autoSelectFamilyDefault);
+            return jsc.JSValue.jsBoolean(autoSelectFamilyDefault);
         }
     }).getter, 0, {});
 }
@@ -26,7 +26,7 @@ pub fn setDefaultAutoSelectFamily(global: *jsc.JSGlobalObject): jsc.JSValue {
             }
             const value = arg.toBoolean();
             autoSelectFamilyDefault = value;
-            return .jsBoolean(value);
+            return jsc.JSValue.jsBoolean(value);
         }
     }).setter, 1, {});
 }
@@ -45,7 +45,7 @@ pub fn getDefaultAutoSelectFamilyAttemptTimeout(global: *jsc.JSGlobalObject): js
         fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             * = globalThis;
             * = callframe;
-            return .jsNumber(autoSelectFamilyAttemptTimeoutDefault);
+            return jsc.JSValue.jsNumber(autoSelectFamilyAttemptTimeoutDefault);
         }
     }).getter, 0, {});
 }
@@ -61,7 +61,7 @@ pub fn setDefaultAutoSelectFamilyAttemptTimeout(global: *jsc.JSGlobalObject): js
             let value = validators.validateInt32(globalThis, arg, "value", {}, 1, null)?;
             if (value < 10) value = 10;
             autoSelectFamilyAttemptTimeoutDefault = @as(u32, @intCast(value));
-            return .jsNumber(value);
+            return jsc.JSValue.jsNumber(value);
         }
     }).setter, 1, {});
 }

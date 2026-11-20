@@ -704,7 +704,9 @@ pub const WorkPoolTask = @import("../threading/work_pool.zig").Task;
 
 extern "c" fn JSC__JSGlobalObject__drainMicrotasks(global: *jsc.JSGlobalObject) callconv(.c) DrainMicrotasksResult;
 
-extern "c" fn noopForeverTimer(_: *uws.Timer) callconv(.c) void;
+pub fn noopForeverTimer(_: *uws.Timer) callconv(.c) void {
+        return;
+}
 
 pub fn externRunCallback1(global: *jsc.JSGlobalObject, callback: jsc.JSValue, recv: jsc.JSValue, arg0: jsc.JSValue) callconv(.c) void {
         _ = global.bunVM().eventLoop().runCallback(callback, global, recv, (&.{ arg0 }));

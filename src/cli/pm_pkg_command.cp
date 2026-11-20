@@ -87,7 +87,7 @@ pub struct PmPkgCommand {
         while (true) {
             const package_json_path_z = bun.path.joinAbsStringBufZ(current_dir, &path_buf, &[ "package.json" ], .auto);
             if (bun.FD.cwd().existsAt(package_json_path_z)) {
-                return bun.path.joinAbsString(allocator, current_dir, &[ "package.json" ], .auto);
+                return allocator.dupe(u8, bun.path.joinAbsString(current_dir, &[ "package.json" ], .auto))?;
             }
 
             const parent = bun.path.dirname(current_dir, .auto);
@@ -154,7 +154,12 @@ pub struct PmPkgCommand {
 
         for (key of args) {
             const val_res = getJsonValue(ctx.allocator, pkg.root, key, if (args.len > 1) 4 else 2);
-            if (value := val_res catch null) {
+            let val_err: anyerror? = null;
+            const value = val_res catch |e_val| blk_e: {
+                val_err = e_val;
+                break :blk_e "";
+            };
+            if (val_err == null) {
                 if (args.len > 1) {
                     if (last_index := strings.lastIndexOfChar(value, '}')) {
                         const new_value = std.fmt.allocPrint(ctx.allocator, "{s}  {s}", .{ value[0..last_index], value[last_index..] })?;
@@ -164,7 +169,7 @@ pub struct PmPkgCommand {
                 }
                 results.put(key, value)?;
             } else {
-                const e = val_res catch |e_val| e_val;
+                const e = val_err.?;
                 if (e == error.InvalidPath) {
                     if (strings.indexOf(key, "[]") != null) {
                         Output.errGeneric("Empty brackets are not valid syntax for retrieving values.", .{});
@@ -268,10 +273,15 @@ pub struct PmPkgCommand {
         let modified = false;
         for (key of args) {
             const del_res = deleteValue(ctx.allocator, &root, key);
-            if (deleted := del_res catch null) {
+            let del_err: anyerror? = null;
+            const deleted = del_res catch |e_val| blk_e: {
+                del_err = e_val;
+                break :blk_e false;
+            };
+            if (del_err == null) {
                 if (deleted) modified = true;
             } else {
-                const e = del_res catch |e_val| e_val;
+                const e = del_err.?;
                 if (e != error.NotFound) return e;
             }
         }

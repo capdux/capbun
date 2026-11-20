@@ -64,8 +64,9 @@ pub fn Table(
     comptime column_right_pad: usize,
     comptime enable_ansi_colors: bool,
 ): type {
-    const symbols = TableSymbols{ enable_ansi_colors: enable_ansi_colors };
+    const table_symbols = TableSymbols{ enable_ansi_colors: enable_ansi_colors };
     return struct {
+        pub const symbols = table_symbols;
         column_names: []const string;
         column_inside_lengths: []const usize;
 
@@ -77,11 +78,11 @@ pub fn Table(
         }
 
         pub fn printTopLineSeparator(this): void {
-            this.printLine(symbols.topLeftSep(), symbols.topRightSep(), symbols.topColumnSep());
+            this.printLine(table_symbols.topLeftSep(), table_symbols.topRightSep(), table_symbols.topColumnSep());
         }
 
         pub fn printBottomLineSeparator(this): void {
-            this.printLine(symbols.bottomLeftSep(), symbols.bottomRightSep(), symbols.bottomColumnSep());
+            this.printLine(table_symbols.bottomLeftSep(), table_symbols.bottomRightSep(), table_symbols.bottomColumnSep());
         }
 
         pub fn printLineSeparator(this): void {
@@ -116,7 +117,8 @@ pub fn Table(
                     Output.pretty(" ", .{});
                 }
                 Output.pretty(col_fmt, [this.column_names[i]]);
-                for (j of this.column_names[i].len..(column_inside_length + column_right_pad)) {
+                let j: usize = this.column_names[i].len;
+                while (j < (column_inside_length + column_right_pad)) : (j += 1) {
                     Output.pretty(" ", .{});
                 }
                 if (i == this.column_inside_lengths.len - 1) {

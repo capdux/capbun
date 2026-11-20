@@ -220,3 +220,24 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 3. **Zig 编译与校验加速**：
    - 语义检查阶段统一使用 `bun run zig:check`（仅类型/语义检查，不触发 LLVM codegen）。
    - 进入二进制编译联调阶段时，优先使用 **Debug 模式并跳过 LLVM**（如 `--profile=debug` 配合 `-fno-llvm` / 本地快速调试配置）提速，待功能与测试全绿后再跑完整构建。
+
+---
+
+## 十一、 收敛期高频 `cpc` 雷区与子智能体省 Token 指派规范（2026-11-21 固化）
+
+1. **5 类高频机械雷区（主/子智能体主动排雷必查）**：
+   - `std.sort.*(..., .{}, ...)` / `std.mem.sort(..., {}, ...)` → 必须先声明 `const empty_sort_ctx: void = undefined;` 再传入 `empty_sort_ctx`（否则报 `parameter 0 'void' cannot cast into '@TypeOf(.{})'`）。
+   - `.windows = if (Environment.isWindows) .{...}` → 必须显式补全 `else @as(void, undefined)`（禁省略或 `else null`）。
+   - `Output.pretty*` / `Output.print` → 严禁直接传入多行 `\\` 字符串（`cpc` 会拆成多个参数），统一改用 `\n` 转义单行字符串。
+   - `XxxCommand.exec(a, b, ...)` → 多参数直接调用会被 `cpc` 截断成 1 个参数，必须提取 `const exec_fn = XxxCommand.exec; exec_fn(a, b, ...)`。
+   - `[0]T = []` / `&.{}` → 改为 `= undefined`，切片点用 `arr[0..0]`。
+   - `Type!void` / `[][]const u8 = .{ ... }` → 错误联合写为 `: !Type`（禁 `: Type!`），局部数组字面量必须显式定长 `[N]T = [ ... ]`（禁推导为 `[]*anyopaque` / `[][]const u8 = .{`）。
+2. **结构性与静默丢弃防护**：
+   - **禁止匿名 `struct` 作函数返回类型**（如 `fn foo(): !struct { ... }`），否则 `cpc` 会静默跳过整段父结构体 codegen；必须先提炼具名 `pub struct`。
+   - 修改含 `pub struct XxxCommand` 的文件后，验收时用 `rg -n "pub const XxxCommand" <out>.zig` 二次确认导出结构体未被吞掉。
+3. **子智能体省 Token 精确指派铁律**：
+   - 主智能体派发子智能体前，先给出**精确目录范围 + `rg -n` 命中正则/特征模式 + 1 条 `cpc_brief.py -n 4` 验收命令**，禁止子智能体盲目全目录 `find`/`read_file` 浪费上下文；短任务结束后及时回收或按批次接力，保持最多 2 路并发持续推进。
+4. **全仓 `zig:check` 防空跑与提速铁律**：
+   - `cpc_brief.py` 失败时必须返回非 0 退出码，严禁在 `FAIL(ast-check)` 时继续串联运行 40 秒的 `bun run zig:check`；
+   - 发现任意新模式错误（如 `Type!void`、未定长数组字面量）后，立即用 `rg -n` 一次性扫描全仓 `.zig` 批量排雷，打破“改 1 处 → 等 40 秒”的洋葱循环；
+   - 仅修改 `.cp -> .zig` 且无构建配置变更时，可跳过外层 `scripts/build.ts` configure 包装以缩短单轮验证耗时。

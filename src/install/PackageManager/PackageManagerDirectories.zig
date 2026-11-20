@@ -207,7 +207,7 @@ pub inline fn getCacheDirectory(client: *PackageManager) std.fs.Dir {
 
 pub inline fn getCacheDirectoryAndAbsPath(client: *PackageManager) CacheDirectoryAndAbsPath {
         const cache_dir = client.getCacheDirectory();
-        return .{ .fromStdDir(cache_dir), .{ .@"from" = client.cache_directory_path } };
+        return .{ bun.FD.fromStdDir(cache_dir), @FieldType(CacheDirectoryAndAbsPath, "1").@"from"(client.cache_directory_path) };
 }
 
 pub inline fn getTemporaryDirectory(client: *PackageManager) TemporaryDirectory {
@@ -601,9 +601,9 @@ _ = Output.prettyErrorln("No packages! Deleted empty lockfile", .{});
 pub fn updateLockfileIfNeeded(manager: *PackageManager, load_result: Lockfile.LoadResult) !void {
         if (((load_result == .ok) and load_result.ok.serializer_result.packages_need_update)) {
             const slice = manager.lockfile.packages.slice();
-            for (cp_mut_slice(&slice.items(.@"meta"))) |*@"meta"| {
-                _ = &@"meta";
-                _ = @"meta"(.setHasInstallScript(false));
+            for (cp_mut_slice(&slice.items(.@"meta"))) |*pkg_meta| {
+                _ = &pkg_meta;
+                _ = (pkg_meta.*).setHasInstallScript(false);
             }
         }
         return;

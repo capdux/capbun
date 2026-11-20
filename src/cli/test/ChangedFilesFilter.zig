@@ -332,7 +332,7 @@ pub fn initWatchTrigger(allocator: std.mem.Allocator) void {
         jsc.hot_reloader.watch_changed_trigger_file = path;
 }
 
-extern "c" fn setenv(name: [*:0]u8, value: [*:0]u8, overwrite: c_int) callconv(.c) c_int;
+extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) callconv(.c) c_int;
 
 pub fn consumeWatchTrigger(allocator: std.mem.Allocator) ?bun.StringSet {
         if (bun.Environment.isWindows) {
@@ -518,7 +518,7 @@ pub fn runGit(allocator: std.mem.Allocator, git_path: []const u8, cwd: []const u
         _ = argv.appendAssumeCapacity("-c");
         _ = argv.appendAssumeCapacity("core.quotePath=off");
         _ = argv.appendSliceAssumeCapacity(args);
-        const proc = (blk_catch_4: { break :blk_catch_4 ((bun.spawnSync((&.{ .argv = argv.items, .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get()) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("--changed: failed to spawn git: {s}", .{ @errorName(e) });
+        const proc = (blk_catch_4: { break :blk_catch_4 ((bun.spawnSync((&.{ .argv = argv.items, .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get()) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("--changed: failed to spawn git: {s}", .{ @errorName(e) });
         return GitResult{ .ok = false, .spawn_failed = true, .stdout = .init(allocator), .stderr = .init(allocator) }; }); });
         return (switch (proc) {
 .err => |e| {

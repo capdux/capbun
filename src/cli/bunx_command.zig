@@ -31,6 +31,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -304,12 +305,19 @@ pub fn bunxGetBinNameFromSubpath(transpiler: *bun.Transpiler, dir_fd: bun.FD, su
             }
             if (bin_expr.asProperty("bin")) |prop| {
                 _ = &prop;
-                return (if (@typeInfo(@TypeOf(prop)) == .@"enum" or @typeInfo(@TypeOf(prop)) == .@"union") @tagName(prop) else prop.name);
+                if (prop.expr.asString(transpiler.allocator)) |s| {
+                    _ = &s;
+                    return s;
+                }
             }
             if ((bin_expr.data == .e_object)) {
                 const properties = bin_expr.data.e_object.properties.slice();
                 if ((properties.len > 0)) {
-                    return ((properties[0].key.asString(transpiler.allocator)) orelse (error.NoBinFound));
+                    if (properties[0].key) |k| {
+                        _ = &k;
+                        return ((k.asString(transpiler.allocator)) orelse (error.NoBinFound));
+                    }
+                    return error.NoBinFound;
                 }
             }
         }
@@ -619,7 +627,11 @@ break :is_stale true;
             const root_dir_fd = root_dir_info.getFileDescriptor();
             _ = bun.assert(root_dir_fd.isValid());
             if ((opts.binary_name == null)) {
-                if ((blk_catch_13: { break :blk_catch_13 ((bunxGetBinName((&this_transpiler), root_dir_fd, bunx_cache_dir, result_package_name)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 @as([]const u8, null); }); })) |package_name_for_bin| {
+                const pkg_bin_opt: ?[]const u8 = pkg_bin_blk: {
+                const v = (blk_catch_13: { break :blk_catch_13 ((bunxGetBinName((&this_transpiler), root_dir_fd, bunx_cache_dir, result_package_name)) catch |__ce_13| { _ = &__ce_13; break :pkg_bin_blk null; }); });
+                break :pkg_bin_blk v;
+};
+                if (pkg_bin_opt) |package_name_for_bin| {
                     _ = &package_name_for_bin;
                     if ((!strings.eqlLong(package_name_for_bin, initial_bin_name, true))) {
                         absolute_in_cache_dir = ((std.fmt.bufPrint((&absolute_in_cache_dir_buf), bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix })) catch unreachable);
@@ -668,7 +680,7 @@ break :is_stale true;
         const argv_to_use = args.slice();
         _ = debug("installing package: {f}", .{ bun.fmt.fmtSlice(argv_to_use, " ") });
         _ = bun.handleOom(this_transpiler.env.map.put("BUN_INTERNAL_BUNX_INSTALL", "true"));
-        const spawn_res = (blk_catch_22: { break :blk_catch_22 ((bun.spawnSync((&.{ .argv = argv_to_use, .envp = try this_transpiler.env.map.createNullDelimitedEnvMap(bun.default_allocator), .cwd = bunx_cache_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(this_transpiler.env, null)) } else null) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: bunx failed to install <b>{s}<r> due to error <b>{s}<r>", .{ install_param, @errorName(e) });
+        const spawn_res = (blk_catch_22: { break :blk_catch_22 ((bun.spawnSync((&.{ .argv = argv_to_use, .envp = try this_transpiler.env.map.createNullDelimitedEnvMap(bun.default_allocator), .cwd = bunx_cache_dir, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(this_transpiler.env, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: bunx failed to install <b>{s}<r> due to error <b>{s}<r>", .{ install_param, @errorName(e) });
         break :blk_catch_22 Global.exit(1); }); });
         const spawn_result = (switch (spawn_res) {
 .err => |e| {
@@ -713,7 +725,11 @@ else => {
             _ = @compileError("unreachable");
         }
         if ((opts.binary_name == null)) {
-            if ((blk_catch_24: { break :blk_catch_24 ((bunxGetBinNameFromTempDirectory((&this_transpiler), bunx_cache_dir, result_package_name, false)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 @as([]const u8, null); }); })) |package_name_for_bin| {
+            const pkg_bin_opt2: ?[]const u8 = pkg_bin_blk2: {
+            const v = (blk_catch_24: { break :blk_catch_24 ((bunxGetBinNameFromTempDirectory((&this_transpiler), bunx_cache_dir, result_package_name, false)) catch |__ce_24| { _ = &__ce_24; break :pkg_bin_blk2 null; }); });
+            break :pkg_bin_blk2 v;
+};
+            if (pkg_bin_opt2) |package_name_for_bin| {
                 _ = &package_name_for_bin;
                 if ((!strings.eqlLong(package_name_for_bin, initial_bin_name, true))) {
                     absolute_in_cache_dir = ((std.fmt.bufPrint((&absolute_in_cache_dir_buf), "{s}/node_modules/.bin/{s}{s}", .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix })) catch unreachable);

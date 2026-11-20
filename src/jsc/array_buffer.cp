@@ -353,7 +353,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         let buf: jsc.JSValue = .zero;
         switch (comptime kind) {
             .Uint8Array => buf = bun.jsc.fromJSHostCall(global, @src(), Bun__allocUint8ArrayForCopy, .{ global, len, unsafe { @as(**!, &ptr) } })?,
-            .ArrayBuffer => buf = bun.jsc.fromJSHostCall(global, @src(), Bun__allocArrayBufferForCopy, .{ global, len, unsafe { @as(**!, &ptr) } })?,
+            .ArrayBuffer => buf = bun.jsc.fromJSHostCall(global, @src(), Bun__allocArrayBufferForCopy, .{ global, len, unsafe { @ptrCast(&ptr) } })?,
             else => @compileError("Not implemented yet"),
         }
         return .{ buf, unsafe { ptr[0..len] } };

@@ -66,14 +66,6 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const Open = @import("./open.zig");
@@ -93,8 +85,8 @@ pub fn Context(comptime directory_publish: bool) type {
     integrity: sha.SHA512.Digest,
     uses_workspaces: bool,
     normalized_pkg_info: []const u8,
-    publish_script: if (directory_publish) ?[]const u8 else void = (if (directory_publish) null else null),
-    postpublish_script: if (directory_publish) ?[]const u8 else void = (if (directory_publish) null else null),
+    publish_script: if (directory_publish) ?[]const u8 else void = (if (directory_publish) null else void_val),
+    postpublish_script: if (directory_publish) ?[]const u8 else void = (if (directory_publish) null else void_val),
     script_env: if (directory_publish) *DotEnv.Loader else void,
 
 pub fn fromTarballPath(ctx: Command.Context, manager: *PackageManager, tarball_path: []const u8) FromTarballError!Context(directory_publish) {
@@ -140,7 +132,7 @@ pub fn fromTarballPath(ctx: Command.Context, manager: *PackageManager, tarball_p
 })) |next| {
                 const pathname = (if (comptime Environment.isWindows) next.entry.pathnameW() else next.entry.pathname());
                 const size = next.entry.size();
-                unpacked_size = (unpacked_size + (if (comptime @typeInfo(@TypeOf(@max(0, size))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, size))) else cp_cast_int(i32, @max(0, size))));
+                unpacked_size = (unpacked_size + @as(usize, @intCast(@max(0, size))));
                 total_files = (total_files + @intFromBool((next.kind == .file)));
                 if (strings.indexOfAnyT(bun.OSPathChar, pathname, "/\\")) |slash| {
                     _ = &slash;
@@ -197,7 +189,7 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                 return error.MissingPackageJSON;
             }
             const package_json_contents = maybe_package_json_contents.?;
-            const _tmp_v1 = package_info: {
+            const pkg_info_res = package_info: {
             const source = (&logger.Source.initPathString("package.json", package_json_contents));
             const json = (blk_catch_1: { break :blk_catch_1 ((JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator)) catch |e| { _ = &e; return (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  return error.OutOfMemory; } } {  break :__sw_blk_0 cp_val(error.InvalidPackageJSON); }  unreachable; }); }); });
             if (json.get("publishConfig")) |config| {
@@ -220,7 +212,7 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                     }
                 }
             }
-            const name_opt = json.getStringCloned(ctx.allocator, "name");
+            const name_opt = try json.getStringCloned(ctx.allocator, "name");
             if ((name_opt == null)) {
                 return error.MissingPackageName;
             }
@@ -232,7 +224,7 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                     return error.RestrictedUnscopedPackage;
                 }
             }
-            const version_opt = json.getStringCloned(ctx.allocator, "version");
+            const version_opt = try json.getStringCloned(ctx.allocator, "version");
             if ((version_opt == null)) {
                 return error.MissingPackageVersion;
             }
@@ -242,14 +234,11 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
             }
             break :package_info .{ name, version, json, source };
 };
-            var package_name = cp_unpack_elem(_tmp_v1, 0);
-            _ = &package_name;
-            var package_version = cp_unpack_elem(_tmp_v1, 1);
-            _ = &package_version;
-            var json = cp_unpack_elem(_tmp_v1, 2);
+            const package_name = pkg_info_res[0];
+            const package_version = pkg_info_res[1];
+            var json = pkg_info_res[2];
             _ = &json;
-            var json_source = cp_unpack_elem(_tmp_v1, 3);
-            _ = &json_source;
+            const json_source = pkg_info_res[3];
             var shasum: sha.SHA1.Digest = undefined;
             _ = &shasum;
             var sha1 = sha.SHA1.init();
@@ -270,7 +259,7 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
             _ = sha512.final((&integrity));
             const normalized_pkg_info = try normalizedPackage(ctx.allocator, manager, package_name, package_version, (&json), json_source, shasum, integrity, maybe_readme);
             _ = Pack.Context.printSummary(.{ .total_files = total_files, .unpacked_size = unpacked_size, .packed_size = tarball_bytes.len }, shasum, integrity, manager.options.log_level);
-            return .{ .manager = manager, .allocator = ctx.allocator, .package_name = package_name, .package_version = package_version, .abs_tarball_path = try ctx.allocator.dupeZ(u8, abs_tarball_path), .tarball_bytes = tarball_bytes, .shasum = shasum, .integrity = integrity, .uses_workspaces = false, .command_ctx = ctx, .script_env = .{}, .normalized_pkg_info = normalized_pkg_info };
+            return .{ .manager = manager, .allocator = ctx.allocator, .package_name = package_name, .package_version = package_version, .abs_tarball_path = try ctx.allocator.dupeZ(u8, abs_tarball_path), .tarball_bytes = tarball_bytes, .shasum = shasum, .integrity = integrity, .uses_workspaces = false, .command_ctx = ctx, .script_env = void_val, .normalized_pkg_info = normalized_pkg_info };
     }
 
 pub fn fromWorkspace(ctx: Command.Context, manager: *PackageManager) FromWorkspaceError!Context(directory_publish) {
@@ -308,6 +297,7 @@ _ = Output.errGeneric("failed to migrate lockfile: {s}", .{ @errorName((if (@typ
             _ = &pack_ctx;
             return Pack.pack((&pack_ctx), manager.original_package_json_path, true);
     }
+    const void_val: void = undefined;
     const FromTarballError = (OOM || error{
                     MissingPackageJSON,
                     InvalidPackageJSON,
@@ -326,47 +316,46 @@ pub fn exec(ctx: Command.Context) !void {
             _ = Output.prettyln((("<r><b>bun publish <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), .{});
             _ = Output.flush();
             const cli = try PackageManager.CommandLineArguments.parse(ctx.allocator, .publish);
-            const _tmp_v0 = (blk_catch_0: { break :blk_catch_0 ((PackageManager.init(ctx, cli, .publish)) catch |e| { _ = &e; if ((!cli.silent)) {
+            const init_res = (blk_catch_0: { break :blk_catch_0 ((PackageManager.init(ctx, cli, .publish)) catch |e| { _ = &e; if ((!cli.silent)) {
                 if ((e == error.MissingPackageJSON)) {
                     _ = Output.errGeneric("missing package.json, nothing to publish", .{});
                 }
                 _ = Output.errGeneric("failed to initialize bun install: {s}", .{ @errorName(e) });
             }
             break :blk_catch_0 Global.crash(); }); });
-            var manager = cp_unpack_elem(_tmp_v0, 0);
+            var manager = init_res[0];
             _ = &manager;
-            var original_cwd = cp_unpack_elem(_tmp_v0, 1);
-            _ = &original_cwd;
+            const original_cwd = init_res[1];
             defer {
             _ = ctx.allocator.free(original_cwd);
             }
             if ((cli.positionals.len > 1)) {
-                const context = (blk_catch_1: { break :blk_catch_1 ((Context(false).fromTarballPath(ctx, manager, cli.positionals[1])) catch |e| { _ = &e; __sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if ((cp_match_tag(__err_v_1, .InvalidPackageName) or cp_match_tag(__err_v_1, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json in tarball '{s}'", .{ cli.positionals[1] }); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .InvalidPackageJSON)) {  _ = (blk_catch_2: { break :blk_catch_2 ((manager.log.print(Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
-                _ = Output.errGeneric("failed to parse tarball package.json", .{}); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_1; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_1; } }  }
+                const context = (blk_catch_1: { break :blk_catch_1 ((Context(false).fromTarballPath(ctx, manager, cli.positionals[1])) catch |e| { _ = &e; __sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if ((cp_match_tag(__err_v_0, .InvalidPackageName) or cp_match_tag(__err_v_0, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json in tarball '{s}'", .{ cli.positionals[1] }); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidPackageJSON)) {  _ = (blk_catch_2: { break :blk_catch_2 ((manager.log.print(Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
+                _ = Output.errGeneric("failed to parse tarball package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_0; } }  }
                 break :blk_catch_1 Global.crash(); }); });
-                _ = (blk_catch_3: { break :blk_catch_3 ((publish(false, (&context))) catch |e| { _ = &e; break :blk_catch_3 @as(void, (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  break :__sw_blk_2 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
-                break :__sw_blk_2 cp_val(Global.crash()); } }  unreachable; })); }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((publish(false, (&context))) catch |e| { _ = &e; break :blk_catch_3 @as(void, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
+                break :__sw_blk_1 cp_val(Global.crash()); } }  unreachable; })); }); });
                 _ = Output.prettyln("\n<green> +<r> {s}@{s}{s}", .{ context.package_name, Dependency.withoutBuildTag(context.package_version), (if (manager.options.dry_run) " (dry-run)" else "") });
                 return;
             }
-            const context = (blk_catch_4: { break :blk_catch_4 ((Context(true).fromWorkspace(ctx, manager)) catch |e| { _ = &e; __sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if ((cp_match_tag(__err_v_3, .InvalidPackageName) or cp_match_tag(__err_v_3, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json from: '{s}'", .{ FileSystem.instance.top_level_dir }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_3; } }  }
+            const context = (blk_catch_4: { break :blk_catch_4 ((Context(true).fromWorkspace(ctx, manager)) catch |e| { _ = &e; __sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if ((cp_match_tag(__err_v_2, .InvalidPackageName) or cp_match_tag(__err_v_2, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json from: '{s}'", .{ FileSystem.instance.top_level_dir }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_2; } }  }
             break :blk_catch_4 Global.crash(); }); });
             _ = bun.sys.unlink(context.abs_tarball_path);
-            _ = (blk_catch_5: { break :blk_catch_5 ((publish(true, (&context))) catch |e| { _ = &e; break :blk_catch_5 @as(void, (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .OutOfMemory)) {  break :__sw_blk_4 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
-            break :__sw_blk_4 cp_val(Global.crash()); } }  unreachable; })); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((publish(true, (&context))) catch |e| { _ = &e; break :blk_catch_5 @as(void, (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .OutOfMemory)) {  break :__sw_blk_3 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
+            break :__sw_blk_3 cp_val(Global.crash()); } }  unreachable; })); }); });
             _ = Output.prettyln("\n<green> +<r> {s}@{s}{s}", .{ context.package_name, Dependency.withoutBuildTag(context.package_version), (if (manager.options.dry_run) " (dry-run)" else "") });
             if (manager.options.do.run_scripts) {
                 const abs_workspace_path: []const u8 = strings.withoutTrailingSlash(strings.withoutSuffixComptime(manager.original_package_json_path, "package.json"));
                 _ = try context.script_env.map.put("npm_command", "publish");
                 if (context.publish_script) |publish_script| {
                     _ = &publish_script;
-                    _ = (blk_catch_6: { break :blk_catch_6 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, publish_script, "publish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run publish script", .{});
-                    break :__sw_blk_5 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_6: { break :blk_catch_6 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, publish_script, "publish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run publish script", .{});
+                    break :__sw_blk_4 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                 }
                 if (context.postpublish_script) |postpublish_script| {
                     _ = &postpublish_script;
-                    _ = (blk_catch_7: { break :blk_catch_7 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, postpublish_script, "postpublish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_7 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpublish script", .{});
-                    break :__sw_blk_6 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, postpublish_script, "postpublish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_7 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpublish script", .{});
+                    break :__sw_blk_5 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                 }
             }
     }
@@ -450,7 +439,7 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
                 }
             }
             const access_str = (if ((ctx.manager.options.publish_config.access != null)) @tagName(ctx.manager.options.publish_config.access.?) else "default");
-            _ = Output.pretty("<b><blue>Tag<r>: {s}", "<b><blue>Access<r>: {s}", "<b><blue>Registry<r>: {s}", "", .{ (if ((ctx.manager.options.publish_config.tag.len > 0)) ctx.manager.options.publish_config.tag else "latest"), access_str, registry.url.href });
+            _ = Output.pretty("<b><blue>Tag<r>: {s}\n<b><blue>Access<r>: {s}\n<b><blue>Registry<r>: {s}\n", .{ (if ((ctx.manager.options.publish_config.tag.len > 0)) ctx.manager.options.publish_config.tag else "latest"), access_str, registry.url.href });
             if (ctx.manager.options.dry_run) {
                 return;
             }
@@ -470,8 +459,8 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
             _ = print_buf.clearRetainingCapacity();
             var req = http.AsyncHTTP.initSync(ctx.allocator, .PUT, publish_url, publish_headers.entries, publish_headers.content.ptr.?[0..publish_headers.content.len], (&response_buf), publish_req_body, null, null, .follow);
             _ = &req;
-            const res = (blk_catch_17: { break :blk_catch_17 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_17 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
-            break :__sw_blk_7 cp_val(Global.crash()); }  unreachable; }); }); });
+            const res = (blk_catch_17: { break :blk_catch_17 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_17 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
+            break :__sw_blk_6 cp_val(Global.crash()); }  unreachable; }); }); });
             if ((res.status_code >= 400)) {
                 const prompt_for_otp = prompt_for_otp: {
                 if ((res.status_code != 401)) {
@@ -482,7 +471,7 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
                     var iter = strings.split(www_auth, ",");
                     _ = &iter;
                     while (iter.next()) |part| {
-                        const trimmed = strings.trim(part, (&strings.whitespace_chars));
+                        const trimmed = strings.trim(part, strings.whitespace_chars);
                         if (strings.eqlCaseInsensitiveASCII(trimmed, "ipaddress", true)) {
                             _ = Output.errGeneric("login is not allowed from your IP address", .{});
                             _ = Global.crash();
@@ -516,8 +505,8 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
                 _ = response_buf.reset();
                 var otp_req = http.AsyncHTTP.initSync(ctx.allocator, .PUT, publish_url, otp_headers.entries, otp_headers.content.ptr.?[0..otp_headers.content.len], (&response_buf), publish_req_body, null, null, .follow);
                 _ = &otp_req;
-                const otp_res = (blk_catch_18: { break :blk_catch_18 ((otp_req.sendSync()) catch |e| { _ = &e; break :blk_catch_18 (__sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
-                break :__sw_blk_8 cp_val(Global.crash()); }  unreachable; }); }); });
+                const otp_res = (blk_catch_18: { break :blk_catch_18 ((otp_req.sendSync()) catch |e| { _ = &e; break :blk_catch_18 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
+                break :__sw_blk_7 cp_val(Global.crash()); }  unreachable; }); }); });
                 if ((otp_res.status_code >= 400)) {
                     const otp_response = true;
                     _ = try Npm.responseError(ctx.allocator, (&otp_req), (&otp_res), .{ ctx.package_name, ctx.package_version }, (&response_buf), otp_response);
@@ -565,12 +554,12 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
             if (parse_result) |json| {
                 _ = &json;
                 _ = try_web: {
-                const auth_url_opt = json.getStringClonedZ(ctx.allocator, "authUrl");
+                const auth_url_opt = try json.getStringClonedZ(ctx.allocator, "authUrl");
                 if ((auth_url_opt == null)) {
                     break :try_web;
                 }
                 const auth_url_str = auth_url_opt.?;
-                const done_url_opt = json.getStringCloned(ctx.allocator, "doneUrl");
+                const done_url_opt = try json.getStringCloned(ctx.allocator, "doneUrl");
                 if ((done_url_opt == null)) {
                     break :try_web;
                 }
@@ -589,8 +578,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_9 = offset;
-                    while (i < __end_9) : (i += 1) {
+                    const __end_8 = offset;
+                    while (i < __end_8) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -598,8 +587,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_10 = width;
-                    while (i < __end_10) : (i += 1) {
+                    const __end_9 = width;
+                    while (i < __end_9) : (i += 1) {
                         _ = Output.print("{s}", .{ horizontal });
                     }
                 }
@@ -607,12 +596,21 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_11 = offset;
-                    while (i < __end_11) : (i += 1) {
+                    const __end_10 = offset;
+                    while (i < __end_10) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
                 _ = Output.print("{s}", .{ vertical });
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_11 = padding;
+                    while (i < __end_11) : (i += 1) {
+                        _ = Output.print(" ", .{});
+                    }
+                }
+                _ = Output.pretty("<b>{s}<r>", .{ auth_url_str });
                 {
                     var i: i32 = 0;
                     _ = &i;
@@ -621,21 +619,12 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                         _ = Output.print(" ", .{});
                     }
                 }
-                _ = Output.pretty("<b>{s}<r>", .{ auth_url_str });
-                {
-                    var i: i32 = 0;
-                    _ = &i;
-                    const __end_13 = padding;
-                    while (i < __end_13) : (i += 1) {
-                        _ = Output.print(" ", .{});
-                    }
-                }
                 _ = Output.println("{s}", .{ vertical });
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_14 = offset;
-                    while (i < __end_14) : (i += 1) {
+                    const __end_13 = offset;
+                    while (i < __end_13) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -643,8 +632,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_15 = width;
-                    while (i < __end_15) : (i += 1) {
+                    const __end_14 = width;
+                    while (i < __end_14) : (i += 1) {
                         _ = Output.print("{s}", .{ horizontal });
                     }
                 }
@@ -658,15 +647,15 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                     _ = response_buf.reset();
                     var req = http.AsyncHTTP.initSync(ctx.allocator, .GET, done_url, auth_headers.entries, auth_headers.content.ptr.?[0..auth_headers.content.len], response_buf, "", null, null, .follow);
                     _ = &req;
-                    const res = (blk_catch_25: { break :blk_catch_25 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_25 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to send OTP request", .{});
-                    break :__sw_blk_16 cp_val(Global.crash()); }  unreachable; }); }); });
+                    const res = (blk_catch_25: { break :blk_catch_25 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_25 (__sw_blk_15: { const __disc_15 = e; _ = &__disc_15; if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to send OTP request", .{});
+                    break :__sw_blk_15 cp_val(Global.crash()); }  unreachable; }); }); });
                     switch (res.status_code) {
 202 => {
 const nanoseconds = nanoseconds: {
                     if (res.headers.get("retry-after")) |retry| {
                         _ = &retry;
                         _ = default: {
-                        const trimmed = strings.trim(retry, (&strings.whitespace_chars));
+                        const trimmed = strings.trim(retry, strings.whitespace_chars);
                         const seconds = (blk_catch_26: { break :blk_catch_26 ((std.fmt.parseInt(u32, trimmed, 10)) catch |__ce_26| { _ = &__ce_26; break :default; }); });
                         break :nanoseconds (seconds * std.time.ns_per_s);
 };
@@ -678,8 +667,8 @@ const nanoseconds = nanoseconds: {
 },
 200 => {
 const otp_done_source = logger.Source.initPathString("???", response_buf.list.items);
-                    const otp_done_json = (blk_catch_27: { break :blk_catch_27 ((JSON.parseUTF8((&otp_done_source), ctx.manager.log, ctx.allocator)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_17: { const __disc_17 = e; _ = &__disc_17; if ((!cp_has_ok_val(__disc_17) and !cp_is_null_val(__disc_17))) { const __err_v_17 = cp_unwrap_err_val(__disc_17); _ = &__err_v_17; if (cp_match_tag(__err_v_17, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err("WebLogin", "failed to parse response json", .{});
-                    break :__sw_blk_17 cp_val(Global.crash()); }  unreachable; }); }); });
+                    const otp_done_json = (blk_catch_27: { break :blk_catch_27 ((JSON.parseUTF8((&otp_done_source), ctx.manager.log, ctx.allocator)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err("WebLogin", "failed to parse response json", .{});
+                    break :__sw_blk_16 cp_val(Global.crash()); }  unreachable; }); }); });
                     const token_opt = try otp_done_json.getStringCloned(ctx.allocator, "token");
                     if ((token_opt == null)) {
                         _ = Output.err("WebLogin", "missing `token` field in reponse json", .{});
@@ -702,8 +691,8 @@ const otp_response = false;
                 }
 };
             }
-            return (blk_catch_28: { break :blk_catch_28 ((prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "")) catch |e| { _ = &e; break :blk_catch_28 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to read OTP input", .{});
-            break :__sw_blk_18 cp_val(Global.crash()); }  unreachable; }); }); });
+            return (blk_catch_28: { break :blk_catch_28 ((prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "")) catch |e| { _ = &e; break :blk_catch_28 (__sw_blk_17: { const __disc_17 = e; _ = &__disc_17; if ((!cp_has_ok_val(__disc_17) and !cp_is_null_val(__disc_17))) { const __err_v_17 = cp_unwrap_err_val(__disc_17); _ = &__err_v_17; if (cp_match_tag(__err_v_17, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to read OTP input", .{});
+            break :__sw_blk_17 cp_val(Global.crash()); }  unreachable; }); }); });
     }
 
 pub fn normalizedPackage(allocator: std.mem.Allocator, manager: *PackageManager, package_name: []const u8, package_version: []const u8, json: *Expr, json_source: *const logger.Source, shasum: sha.SHA1.Digest, integrity: sha.SHA512.Digest, readme: ?ReadmeInfo) OOM![]const u8 {
@@ -741,8 +730,8 @@ pub fn normalizedPackage(allocator: std.mem.Allocator, manager: *PackageManager,
             const buffer_writer = bun.js_printer.BufferWriter.init(allocator);
             var writer = bun.js_printer.BufferPrinter.init(buffer_writer);
             _ = &writer;
-            const written = (blk_catch_30: { break :blk_catch_30 ((bun.js_printer.printJSON(@TypeOf((&writer)), (&writer), json.*, json_source, .{ .minify_whitespace = true, .mangled_props = null })) catch |e| { _ = &e; break :blk_catch_30 (__sw_blk_19: { const __disc_19 = e; _ = &__disc_19; if ((!cp_has_ok_val(__disc_19) and !cp_is_null_val(__disc_19))) { const __err_v_19 = cp_unwrap_err_val(__disc_19); _ = &__err_v_19; if (cp_match_tag(__err_v_19, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to print normalized package.json: {s}", .{ @errorName(e) });
-            break :__sw_blk_19 cp_val(Global.crash()); }  unreachable; }); }); });
+            const written = (blk_catch_30: { break :blk_catch_30 ((bun.js_printer.printJSON(@TypeOf((&writer)), (&writer), json.*, json_source, .{ .minify_whitespace = true, .mangled_props = null })) catch |e| { _ = &e; break :blk_catch_30 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to print normalized package.json: {s}", .{ @errorName(e) });
+            break :__sw_blk_18 cp_val(Global.crash()); }  unreachable; }); }); });
             _ = &written;
             return writer.ctx.writtenWithoutTrailingZero();
     }
@@ -883,13 +872,10 @@ else => {
                         }
                         _ = try dirs.append(allocator, .{ bin_dir.stdDir(), normalized_bin_dir, false });
                         while (dirs.pop()) |dir_info| {
-                            const _tmp_v21 = dir_info;
-                            var dir = cp_unpack_elem(_tmp_v21, 0);
+                            var dir = dir_info[0];
                             _ = &dir;
-                            var dir_subpath = cp_unpack_elem(_tmp_v21, 1);
-                            _ = &dir_subpath;
-                            var close_dir = cp_unpack_elem(_tmp_v21, 2);
-                            _ = &close_dir;
+                            const dir_subpath = dir_info[1];
+                            const close_dir = dir_info[2];
                             defer {
                             if (close_dir) {
                                 _ = dir.close();
@@ -898,15 +884,13 @@ else => {
                             var iter = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), .@"u8");
                             _ = &iter;
                             while ((blk_catch_34: { break :blk_catch_34 ((iter.next().unwrap()) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 null; }); })) |entry| {
-                                const _tmp_v22 = name_and_subpath: {
+                                const name_and_subpath_res = name_and_subpath: {
                                 const name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).slice();
                                 const join = try std.fmt.allocPrintSentinel(allocator, "{s}{s}{s}", .{ dir_subpath, (if ((dir_subpath.len == 0)) "" else std.fs.path.sep_str_posix), strings.withoutTrailingSlash(name) }, 0);
                                 break :name_and_subpath .{ join[(join.len - name.len)..][0..name.len :0], join };
 };
-                                var name = cp_unpack_elem(_tmp_v22, 0);
-                                _ = &name;
-                                var subpath = cp_unpack_elem(_tmp_v22, 1);
-                                _ = &subpath;
+                                const name = name_and_subpath_res[0];
+                                const subpath = name_and_subpath_res[1];
                                 if ((((name.len == 0) or ((name.len == 1) and (name[0] == 46))) or (((name.len == 2) and (name[0] == 46)) and (name[1] == 46)))) {
                                     continue;
                                 }

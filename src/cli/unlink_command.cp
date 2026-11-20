@@ -28,7 +28,7 @@ fn unlink(ctx: Command.Context)! {
 
         let lockfile: Lockfile = undefined;
         let name: string = "";
-        let package = Lockfile.Package{};
+        let package: Lockfile.Package = {};
 
         // Step 1. parse the nearest package.json file
         {
@@ -75,7 +75,9 @@ fn unlink(ctx: Command.Context)! {
             Bin.Linker.ensureUmask();
             let explicit_global_dir: string = "";
             if (install_ := ctx.install) {
-                explicit_global_dir = install_.global_dir ?? explicit_global_dir;
+                if (gd := install_.global_dir) {
+                    explicit_global_dir = gd;
+                }
             }
             manager.global_dir = Options.openGlobalDir(explicit_global_dir)?;
 

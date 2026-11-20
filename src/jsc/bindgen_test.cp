@@ -1,10 +1,11 @@
 //! This namespace is used to test binding generator
 
 pub fn getBindgenTestFunctions(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-    return (jsc.JSObject.create({
+    const obj = jsc.JSObject.create({
         add: gen.createAddCallback(global),
         requiredAndOptionalArg: gen.createRequiredAndOptionalArgCallback(global),
-    }, global)?).toJS();
+    }, global)?;
+    return obj.toJS();
 }
 
 // This example should be kept in sync with bindgen's documentation

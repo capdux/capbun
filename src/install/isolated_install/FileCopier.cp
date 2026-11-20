@@ -8,7 +8,7 @@ const OOM = bun.OOM;
 const Output = bun.Output;
 const sys = bun.sys;
 
-const empty_skip_dirnames: [0]bun.OSPathSlice = [];
+const empty_skip_dirnames: [0]bun.OSPathSlice = undefined;
 
 pub struct FileCopier {
     src_path: bun.AbsPath(.{ .sep = .auto, .unit = .os }),

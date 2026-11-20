@@ -175,7 +175,7 @@ pub fn templateName(self: Template) []const u8 {
 
 pub fn scripts(self: Template) []const []const u8 {
             return (switch (self) {
-.blank, .typescript_library => (&empty_scripts),
+.blank, .typescript_library => empty_scripts,
 .react_tailwind, .react_tailwind_shadcn => (&react_tailwind_scripts),
 .react_blank => (&react_blank_scripts),
 });
@@ -274,16 +274,18 @@ pub fn files(self: Template) []const TemplateFile {
 .react_blank => (&react_blank_files),
 .react_tailwind => (&react_tailwind_files),
 .react_tailwind_shadcn => (&react_shadcn_files),
-else => (&empty_template_files),
+else => empty_template_files,
 });
     }
 
 pub fn @"write files and run `bun dev`"(self: Template, allocator: std.mem.Allocator) !void {
             _ = Template.createAgentRule();
-            inline for ((comptime self.files())) |file| {
+            switch (self) {
+inline else => |tpl| {
+inline for ((comptime tpl.files())) |file| {
                 const path = file.path;
                 const contents = file.contents;
-                const result = (if (comptime strings.eqlComptime(path, "README.md")) InitCommand.Assets.createWithContents("README.md", contents, .{ .name = self.templateName(), .bunVersion = Environment.version_string }) else InitCommand.Assets.createNew(path, contents));
+                const result = (if (comptime strings.eqlComptime(path, "README.md")) InitCommand.Assets.createWithContents("README.md", contents, .{ .name = tpl.templateName(), .bunVersion = Environment.version_string }) else InitCommand.Assets.createNew(path, contents));
                 _ = (blk_catch_6: { break :blk_catch_6 ((result) catch |e| { _ = &e; if ((e == error.EEXIST)) {
                     _ = Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{ path });
                     _ = Output.flush();
@@ -292,6 +294,8 @@ pub fn @"write files and run `bun dev`"(self: Template, allocator: std.mem.Alloc
                     _ = Global.crash();
                 } }); });
             }
+},
+}
             _ = Output.pretty("\n", .{});
             _ = Output.flush();
             const self_exe = try bun.selfExePath();
@@ -302,7 +306,7 @@ pub fn @"write files and run `bun dev`"(self: Template, allocator: std.mem.Alloc
             install.stdin_behavior = .Ignore;
             install.stdout_behavior = .Inherit;
             _ = try install.spawnAndWait();
-            _ = Output.prettyln("", "✨ New project configured!", "", "<b><cyan>Development<r><d> - full-stack dev server with hot reload<r>", "", "    <cyan><b>bun dev<r>", "", "<b><yellow>Static Site<r><d> - build optimized assets to disk (no backend)<r>", "", "    <yellow><b>bun run build<r>", "", "<b><green>Production<r><d> - serve a full-stack production build<r>", "", "    <green><b>bun start<r>", "", "<blue>Happy bunning! 🐇<r>", "", .{});
+            _ = Output.prettyln("\n✨ New project configured!\n\n<b><cyan>Development<r><d> - full-stack dev server with hot reload<r>\n\n    <cyan><b>bun dev<r>\n\n<b><yellow>Static Site<r><d> - build optimized assets to disk (no backend)<r>\n\n    <yellow><b>bun run build<r>\n\n<b><green>Production<r><d> - serve a full-stack production build<r>\n\n    <green><b>bun start<r>\n\n<blue>Happy bunning! 🐇<r>\n", .{});
             _ = Output.flush();
     }
 };
@@ -315,7 +319,7 @@ pub fn prompt(alloc: std.mem.Allocator, comptime label: []const u8, default: []c
                 _ = Output.pretty("<d>({s}):<r> ", .{ .default = default });
             }
             _ = Output.flush();
-            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_7: { break :blk_catch_7 ((bun.windows.updateStdioModeFlags(.std_in, .{ .unset = bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); }) else null);
+            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_7: { break :blk_catch_7 ((bun.windows.updateStdioModeFlags(.std_in, .{ .unset = bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); }) else undefined);
             defer {
             if (comptime Environment.isWindows) {
                 if (original_mode) |mode| {
@@ -351,7 +355,8 @@ inline else => |colors_comptime| (comptime choices: {
             }
             var expected_value: i32 = 0;
             _ = &expected_value;
-            var choices: struct { choices_fields.len } = undefined;
+            const n_choices = choices_fields.len;
+            var choices: [n_choices][]const u8 = undefined;
             _ = &choices;
             for (choices_fields, 0..) |field, i| {
                 _ = &field;
@@ -488,7 +493,7 @@ else => {
     }
 
 pub fn radio(label: []const u8, comptime Choices: type) !Choices {
-            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_11: { break :blk_catch_11 ((bun.windows.updateStdioModeFlags(.std_in, .{ .set = (bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT), .unset = (bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT) })) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); }) else null);
+            const original_mode: if (Environment.isWindows) ?bun.windows.DWORD else void = (if (comptime Environment.isWindows) (blk_catch_11: { break :blk_catch_11 ((bun.windows.updateStdioModeFlags(.std_in, .{ .set = (bun.windows.ENABLE_VIRTUAL_TERMINAL_INPUT | bun.windows.ENABLE_PROCESSED_INPUT), .unset = (bun.windows.ENABLE_LINE_INPUT | bun.windows.ENABLE_ECHO_INPUT) })) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); }) else undefined);
             if (Environment.isPosix) {
                 _ = bun.tty.setMode(0, .raw);
             }
@@ -655,11 +660,9 @@ pub fn exec(alloc: std.mem.Allocator, init_args: [][:0]const u8) !void {
             }
 };
             (if (@typeInfo(@TypeOf(fields)) == .@"enum" or @typeInfo(@TypeOf(fields)) == .@"union") @tagName(fields) else fields.name) = brk: {
-            if ((blk_catch_19: { break :blk_catch_19 ((normalizePackageName(alloc, (if ((pathname.filename.len > 0)) pathname.filename else ""))) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 @as([]const u8, null); }); })) |name| {
-                _ = &name;
-                if ((name.len > 0)) {
-                    break :brk name;
-                }
+            const name = (blk_catch_19: { break :blk_catch_19 ((normalizePackageName(alloc, (if ((pathname.filename.len > 0)) pathname.filename else ""))) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 @as([]const u8, ""); }); });
+            if ((name.len > 0)) {
+                break :brk name;
             }
             break :brk "project";
 };
@@ -1092,7 +1095,7 @@ pub const DependencyNeeded = struct {
 pub const DependencyGroup = struct {
     dependencies: []const DependencyNeeded,
     devDependencies: []const DependencyNeeded,
-    pub const blank = DependencyGroup{ .dependencies = (&empty_deps), .devDependencies = (&blank_dev_deps) };
+    pub const blank = DependencyGroup{ .dependencies = empty_deps, .devDependencies = (&blank_dev_deps) };
     pub const react = DependencyGroup{ .dependencies = (&react_deps), .devDependencies = (&react_dev_deps) };
     pub const tailwind = DependencyGroup{ .dependencies = (&tailwind_deps), .devDependencies = (&tailwind_dev_deps) };
     pub const shadcn = DependencyGroup{ .dependencies = (&shadcn_deps), .devDependencies = (&tailwind_dev_deps) };
@@ -1100,7 +1103,7 @@ pub const DependencyGroup = struct {
 
 const string = []const u8;
 const stringZ = [:0]const u8;
-const empty_deps: [0]DependencyNeeded = &.{};
+const empty_deps: []const DependencyNeeded = &.{};
 const blank_dev_deps: [1]DependencyNeeded = .{ DependencyNeeded{ .name = "@types/bun", .version = "latest" } };
 const react_deps: [2]DependencyNeeded = .{ DependencyNeeded{ .name = "react", .version = "^19" }, DependencyNeeded{ .name = "react-dom", .version = "^19" } };
 const react_dev_deps: [3]DependencyNeeded = .{ DependencyNeeded{ .name = "@types/react", .version = "^19" }, DependencyNeeded{ .name = "@types/react-dom", .version = "^19" }, DependencyNeeded{ .name = "@types/bun", .version = "latest" } };
@@ -1112,13 +1115,13 @@ pub const TemplateFile = struct {
     contents: [:0]const u8,
     can_skip_if_exists: bool = false,
 };
-const empty_template_files: [0]TemplateFile = &.{};
+const empty_template_files: []const TemplateFile = &.{};
 const agent_rule = @embedFile("./init/rule.md");
 const cursor_rule = TemplateFile{ .path = ".cursor/rules/use-bun-instead-of-node-vite-npm-pnpm.mdc", .contents = agent_rule };
 const cursor_rule_path_to_claude_md = "../../CLAUDE.md";
 const react_tailwind_scripts: [4][]const u8 = .{ "dev", "bun './**/*.html'", "build", "bun 'REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts'" };
 const react_blank_scripts: [6][]const u8 = .{ "dev", "bun --hot .", "static", "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'", "build", "NODE_ENV=production bun ." };
-const empty_scripts: [0][]const u8 = &.{};
+const empty_scripts: []const []const u8 = &.{};
 const react_blank_files: [14]TemplateFile = .{ TemplateFile{ .path = "bunfig.toml", .contents = @embedFile("./init/react-app/bunfig.toml") }, TemplateFile{ .path = "package.json", .contents = @embedFile("./init/react-app/package.json") }, TemplateFile{ .path = "tsconfig.json", .contents = @embedFile("./init/react-app/tsconfig.json") }, TemplateFile{ .path = "bun-env.d.ts", .contents = @embedFile("./init/react-app/bun-env.d.ts") }, TemplateFile{ .path = "README.md", .contents = InitCommand.Assets.@"README2.md" }, TemplateFile{ .path = ".gitignore", .contents = InitCommand.Assets.@".gitignore", .can_skip_if_exists = true }, TemplateFile{ .path = "src/index.ts", .contents = @embedFile("./init/react-app/src/index.ts") }, TemplateFile{ .path = "src/App.tsx", .contents = @embedFile("./init/react-app/src/App.tsx") }, TemplateFile{ .path = "src/index.html", .contents = @embedFile("./init/react-app/src/index.html") }, TemplateFile{ .path = "src/index.css", .contents = @embedFile("./init/react-app/src/index.css") }, TemplateFile{ .path = "src/APITester.tsx", .contents = @embedFile("./init/react-app/src/APITester.tsx") }, TemplateFile{ .path = "src/react.svg", .contents = @embedFile("./init/react-app/src/react.svg") }, TemplateFile{ .path = "src/frontend.tsx", .contents = @embedFile("./init/react-app/src/frontend.tsx") }, TemplateFile{ .path = "src/logo.svg", .contents = @embedFile("./init/react-app/src/logo.svg") } };
 const react_tailwind_files: [15]TemplateFile = .{ TemplateFile{ .path = "bunfig.toml", .contents = @embedFile("./init/react-tailwind/bunfig.toml") }, TemplateFile{ .path = "package.json", .contents = @embedFile("./init/react-tailwind/package.json") }, TemplateFile{ .path = "tsconfig.json", .contents = @embedFile("./init/react-tailwind/tsconfig.json") }, TemplateFile{ .path = "bun-env.d.ts", .contents = @embedFile("./init/react-tailwind/bun-env.d.ts") }, TemplateFile{ .path = "README.md", .contents = InitCommand.Assets.@"README2.md" }, TemplateFile{ .path = ".gitignore", .contents = InitCommand.Assets.@".gitignore", .can_skip_if_exists = true }, TemplateFile{ .path = "src/index.ts", .contents = @embedFile("./init/react-tailwind/src/index.ts") }, TemplateFile{ .path = "src/App.tsx", .contents = @embedFile("./init/react-tailwind/src/App.tsx") }, TemplateFile{ .path = "src/index.html", .contents = @embedFile("./init/react-tailwind/src/index.html") }, TemplateFile{ .path = "src/index.css", .contents = @embedFile("./init/react-tailwind/src/index.css") }, TemplateFile{ .path = "src/APITester.tsx", .contents = @embedFile("./init/react-tailwind/src/APITester.tsx") }, TemplateFile{ .path = "src/react.svg", .contents = @embedFile("./init/react-tailwind/src/react.svg") }, TemplateFile{ .path = "src/frontend.tsx", .contents = @embedFile("./init/react-tailwind/src/frontend.tsx") }, TemplateFile{ .path = "src/logo.svg", .contents = @embedFile("./init/react-tailwind/src/logo.svg") }, TemplateFile{ .path = "build.ts", .contents = @embedFile("./init/react-tailwind/build.ts") } };
 const react_shadcn_files: [24]TemplateFile = .{ TemplateFile{ .path = "bunfig.toml", .contents = @embedFile("./init/react-shadcn/bunfig.toml") }, TemplateFile{ .path = "styles/globals.css", .contents = @embedFile("./init/react-shadcn/styles/globals.css") }, TemplateFile{ .path = "package.json", .contents = @embedFile("./init/react-shadcn/package.json") }, TemplateFile{ .path = "components.json", .contents = @embedFile("./init/react-shadcn/components.json") }, TemplateFile{ .path = "tsconfig.json", .contents = @embedFile("./init/react-shadcn/tsconfig.json") }, TemplateFile{ .path = "bun-env.d.ts", .contents = @embedFile("./init/react-shadcn/bun-env.d.ts") }, TemplateFile{ .path = "README.md", .contents = InitCommand.Assets.@"README2.md" }, TemplateFile{ .path = ".gitignore", .contents = InitCommand.Assets.@".gitignore", .can_skip_if_exists = true }, TemplateFile{ .path = "src/index.ts", .contents = @embedFile("./init/react-shadcn/src/index.ts") }, TemplateFile{ .path = "src/App.tsx", .contents = @embedFile("./init/react-shadcn/src/App.tsx") }, TemplateFile{ .path = "src/index.html", .contents = @embedFile("./init/react-shadcn/src/index.html") }, TemplateFile{ .path = "src/index.css", .contents = @embedFile("./init/react-shadcn/src/index.css") }, TemplateFile{ .path = "src/components/ui/card.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/card.tsx") }, TemplateFile{ .path = "src/components/ui/label.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/label.tsx") }, TemplateFile{ .path = "src/components/ui/button.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/button.tsx") }, TemplateFile{ .path = "src/components/ui/select.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/select.tsx") }, TemplateFile{ .path = "src/components/ui/input.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/input.tsx") }, TemplateFile{ .path = "src/components/ui/textarea.tsx", .contents = @embedFile("./init/react-shadcn/src/components/ui/textarea.tsx") }, TemplateFile{ .path = "src/APITester.tsx", .contents = @embedFile("./init/react-shadcn/src/APITester.tsx") }, TemplateFile{ .path = "src/lib/utils.ts", .contents = @embedFile("./init/react-shadcn/src/lib/utils.ts") }, TemplateFile{ .path = "src/react.svg", .contents = @embedFile("./init/react-shadcn/src/react.svg") }, TemplateFile{ .path = "src/frontend.tsx", .contents = @embedFile("./init/react-shadcn/src/frontend.tsx") }, TemplateFile{ .path = "src/logo.svg", .contents = @embedFile("./init/react-shadcn/src/logo.svg") }, TemplateFile{ .path = "build.ts", .contents = @embedFile("./init/react-shadcn/build.ts") } };

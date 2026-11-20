@@ -177,7 +177,7 @@ pub const WorkspaceFilter = union(enum) {
 
 pub fn init(allocator: std.mem.Allocator, input: []const u8, cwd: []const u8, path_buf: []u8) OOM!WorkspaceFilter {
             if ((((input.len == 1) and (input[0] == 42)) or strings.eqlComptime(input, "**"))) {
-                return error.all;
+                return WorkspaceFilter.all;
             }
             var remain = input;
             _ = &remain;
@@ -267,13 +267,13 @@ pub fn run(client: *PackageManager, ctx: Command.Context, log_level: Options.Log
                 } else {
                     _ = brk: {
                     const current_path = ((client.env.get("PATH")) orelse (""));
-                    var PATH = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len);
-                    _ = &PATH;
-                    _ = try PATH.appendSlice(current_path);
+                    var path_list = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len);
+                    _ = &path_list;
+                    _ = try path_list.appendSlice(current_path);
                     var bun_path: []const u8 = "";
                     _ = &bun_path;
-                    _ = (blk_catch_2: { break :blk_catch_2 ((RunCommand.createFakeTemporaryNodeExecutable(*const PATH, (&bun_path))) catch |__ce_2| { _ = &__ce_2; break :brk; }); });
-                    _ = try client.env.map.put("PATH", PATH.items);
+                    bun_path = (blk_catch_2: { break :blk_catch_2 ((RunCommand.createFakeTemporaryNodeExecutable((&path_list), bun_path)) catch |__ce_2| { _ = &__ce_2; break :brk; }); });
+                    _ = try client.env.map.put("PATH", path_list.items);
                     _ = try client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, bun_path)));
 };
                 }
@@ -691,7 +691,10 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
             _ = &explicit_global_dir;
             if (ctx.install) |opts| {
                 _ = &opts;
-                if (explicit_global_dir == null) { explicit_global_dir = explicit_global_dir; }
+                if (opts.global_dir) |dir| {
+                    _ = &dir;
+                    explicit_global_dir = dir;
+                }
             }
             var global_dir = try Options.openGlobalDir(explicit_global_dir);
             _ = &global_dir;
@@ -780,7 +783,7 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
         _ = &found;
         if (subcommand.shouldChdirToRoot()) {
             if ((!created_package_json)) {
-                while (std.fs.path.dirname(this_cwd)) |parent| : (this_cwd = parent) {
+                ws_while: while (std.fs.path.dirname(this_cwd)) |parent| : (this_cwd = parent) {
                     const parent_without_trailing_slash = strings.withoutTrailingSlash(parent);
                     var parent_path_buf: bun.PathBuffer = undefined;
                     _ = &parent_path_buf;
@@ -811,7 +814,7 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
                     }
                     if (json.asProperty("workspaces")) |prop| {
                         _ = &prop;
-                        const json_array = (switch (prop.expr.data) {
+                        const json_array_opt: ?*bun.ast.E.Array = (switch (prop.expr.data) {
 .e_array => |arr| arr,
 .e_object => |obj| brk_pkg: {
                         if (obj.get("packages")) |packages| {
@@ -821,21 +824,25 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
 break :brk_pkg arr;
 },
 else => {
-break :brk_pkg;
+break :brk_pkg null;
 },
 }
                         } else {
-                            break;
+                            break :brk_pkg null;
                         }
 },
-else => break :root_package_json_file,
+else => null,
 });
+                        if ((json_array_opt == null)) {
+                            break :ws_while;
+                        }
+                        const json_array = json_array_opt.?;
                         var log = logger.Log.init(ctx.allocator);
                         _ = &log;
                         defer {
                         _ = log.deinit();
                         }
-                        _ = (blk_catch_10: { break :blk_catch_10 ((workspace_names.processNamesArray(ctx.allocator, (&workspace_package_json_cache), (&log), json_array, (&json_source), prop.loc, null)) catch |__ce_10| { _ = &__ce_10; break :root_package_json_file; }); });
+                        _ = (blk_catch_10: { break :blk_catch_10 ((workspace_names.processNamesArray(ctx.allocator, (&workspace_package_json_cache), (&log), json_array, (&json_source), prop.loc, null)) catch |__ce_10| { _ = &__ce_10; break :ws_while; }); });
                         const ws_keys = workspace_names.keys();
                         const ws_vals = workspace_names.values();
                         var ws_i: usize = 0;
@@ -887,7 +894,7 @@ else => break :root_package_json_file,
 };
         _ = &env;
         _ = try env.loadProcess();
-        var empty_env_paths: [0][]u8 = &.{};
+        var empty_env_paths: [0][]u8 = undefined;
         _ = &empty_env_paths;
         _ = try env.load(entries_option.entries, (&empty_env_paths), .production, false);
         _ = initializeStore();
@@ -934,7 +941,7 @@ else => break :root_package_json_file,
         _ = manager.event_loop.loop().internal_loop_data.setParentEventLoop(bun.jsc.EventLoopHandle.init((&manager.event_loop)));
         manager.lockfile = try ctx.allocator.create(Lockfile);
         {
-            var normalized: PosixAbsPath = .{ .@"from" = root_package_json_path };
+            var normalized = PosixAbsPath.@"from"(root_package_json_path);
             _ = &normalized;
             defer {
             _ = normalized.deinit();

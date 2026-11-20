@@ -337,7 +337,7 @@ pub struct Cloner {
     lockfile: *Lockfile,
     old: *Lockfile,
     mapping: []PackageID,
-    trees: Tree.List = Tree.List{},
+    trees: Tree.List = .empty,
     trees_count: u32 = 1,
     log: *logger.Log,
     old_preinstall_state: std.ArrayListUnmanaged(Install.PreinstallState),
@@ -1061,7 +1061,7 @@ fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, updates: [
                             )) {
                                 dep.version = pv;
                             } else {
-                                dep.version = Dependency.Version{};
+                                dep.version = {};
                             }
                         }
                     }
@@ -1157,14 +1157,26 @@ pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: Packa
     return 0;
 }
 
+const WorkspacePathSorter = struct {
+    string_buf: []const u8,
+    entries: NameHashMap.DataList,
+
+    pub fn lessThan(a: usize, b: usize): bool {
+        const left = _.entries.items(.value)[a];
+        const right = _.entries.items(.value)[b];
+        return strings.order(left.slice(_.string_buf), right.slice(_.string_buf)) == .lt;
+    }
+};
+
 pub fn cleanWithLogger(
-    old: *Lockfile,
+    *_,
     manager: *PackageManager,
     updates: []PackageManager.UpdateRequest,
     log: *logger.Log,
     exact_versions: bool,
     log_level: PackageManager.Options.LogLevel,
 ): !*Lockfile {
+    const old = _;
     let timer: std.time.Timer = undefined;
     if (log_level.isVerbose()) {
         timer = std.time.Timer.start()?;
@@ -1244,25 +1256,16 @@ pub fn cleanWithLogger(
 
         let workspace_paths_builder = new_lf.stringBuilder();
 
-        const WorkspacePathSorter = struct {
-            string_buf: []const u8,
-            entries: NameHashMap.DataList,
-
-            pub fn lessThan(sorter: @This(), a: usize, b: usize): bool {
-                const left = sorter.entries.items(.value)[a];
-                const right = sorter.entries.items(.value)[b];
-                return strings.order(left.slice(sorter.string_buf), right.slice(sorter.string_buf)) == .lt;
-            }
-        };
-
         // Sort by name for determinism
         old.workspace_paths.sort(WorkspacePathSorter{
             entries: old.workspace_paths.entries,
             string_buf: old.buffers.string_bytes.items,
         });
 
-        for (*path of old.workspace_paths.values()) {
-            workspace_paths_builder.count(old.str(path));
+        const old_wp_vals_count = old.workspace_paths.values();
+        let wp_cnt_i: usize = 0;
+        while (wp_cnt_i < old_wp_vals_count.len) : (wp_cnt_i += 1) {
+            workspace_paths_builder.count(old.str(&old_wp_vals_count[wp_cnt_i]));
         }
         const versions: []const Semver.Version = old.workspace_versions.values();
         for (version of versions) {
@@ -2275,7 +2278,8 @@ pub const default_trusted_dependencies_list: []const []const u8 = brk: {
     };
 
     // alphabetical so we don't need to sort in `bun pm trusted --default`
-    std.sort.pdq(string, buf[0..i], {}, Sorter.lessThan);
+    const empty_ctx: void = undefined;
+    std.sort.pdq(string, buf[0..i], empty_ctx, Sorter.lessThan);
 
     let names: [i][]const u8 = undefined;
     @memcpy(names[0..i], buf[0..i]);
@@ -2289,7 +2293,7 @@ pub const default_trusted_dependencies = brk: {
         pub fn hash(_: @This(), s: []const u8): u64 {
             @setEvalBranchQuota(999999);
             // truncate to u32 because Lockfile.trustedDependencies uses the same u32 string hash
-            return i32(@as(u32, @truncate(String.Builder.stringHash(s))));
+            return @as(u64, @as(u32, @truncate(String.Builder.stringHash(s))));
         }
         pub fn eql(_: @This(), a: []const u8, b: []const u8): bool {
             @setEvalBranchQuota(999999);

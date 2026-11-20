@@ -299,8 +299,10 @@ pub fn setInit(stdout: Source.StreamType, stderr: Source.StreamType) void {
                             }
                         }
                     }
-                    if (enable_ansi_colors_stdout == null) { enable_ansi_colors_stdout = is_stdout_tty; }
-                    if (enable_ansi_colors_stderr == null) { enable_ansi_colors_stderr = is_stderr_tty; }
+                    const use_color_stdout = ((enable_color) orelse (is_stdout_tty));
+                    const use_color_stderr = ((enable_color) orelse (is_stderr_tty));
+                    enable_ansi_colors_stdout = use_color_stdout;
+                    enable_ansi_colors_stderr = use_color_stderr;
                 }
                 stdout_stream = stdout;
                 stderr_stream = stderr;
@@ -537,8 +539,8 @@ pub fn begin() Synchronized {
             return .{};
     }
 
-pub fn end() void {
-            if (Environment.isPosix) {
+pub fn end(self: Synchronized) void {
+            if ((Environment.isPosix and (@sizeOf(@TypeOf(self)) == 0))) {
                 _ = print(synchronized_end, .{});
             }
     }
@@ -750,13 +752,11 @@ pub fn printElapsedStdoutTrim(elapsed: f64) void {
         switch (@as(i64, @intFromFloat(@round(elapsed)))) {
 0...1500 => {
 const fmt: []const u8 = "<r><d>[<b>{d:>}ms<r><d>]<r>";
-        const args: []f64 = .{ elapsed };
-        _ = pretty(fmt, args);
+        _ = pretty(fmt, .{ elapsed });
 },
 else => {
 const fmt: []const u8 = "<r><d>[<b>{d:>}s<r><d>]<r>";
-        const args: []f64 = .{ (elapsed / 1000.0) };
-        _ = pretty(fmt, args);
+        _ = pretty(fmt, .{ (elapsed / 1000.0) });
 },
 }
 }
@@ -1193,19 +1193,32 @@ pub inline fn debugWarn(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn TupleCatType(comptime AT: type, comptime BT: type) type {
+        _ = @setEvalBranchQuota(1000000);
         const af = @typeInfo(AT).@"struct".fields;
         const bf = @typeInfo(BT).@"struct".fields;
         const total = (af.len + bf.len);
-        _ = &total;
-        var types: [total]type = undefined;
-        _ = &types;
-        inline for (0..af.len) |i| {
-            types[cp_cast_int(usize, i)] = af[@as(usize, @intCast(i))].type;
+        return (comptime brk: {
+        var t: [total]type = undefined;
+        _ = &t;
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_3 = af.len;
+            while (i < __end_3) : (i += 1) {
+                t[cp_cast_int(usize, i)] = af[@as(usize, @intCast(i))].type;
+            }
         }
-        inline for (0..bf.len) |j| {
-            types[cp_cast_int(usize, (af.len + j))] = bf[@as(usize, @intCast(j))].type;
+        {
+            var j: i32 = 0;
+            _ = &j;
+            const __end_4 = bf.len;
+            while (j < __end_4) : (j += 1) {
+                t[cp_cast_int(usize, (af.len + j))] = bf[@as(usize, @intCast(j))].type;
+            }
         }
-        return std.meta.Tuple((&types));
+        const t_const = t;
+        break :brk std.meta.Tuple((&t_const));
+});
 }
 
 pub inline fn concatTuple(a: anytype, b: anytype) TupleCatType(@TypeOf(a),@TypeOf(b)) {

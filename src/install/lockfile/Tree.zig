@@ -620,7 +620,7 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
             defer {
             _ = filter_path.deinit();
             }
-            const _tmp_v7 = (switch (filter) {
+            const filter_pair: [2][]const u8 = (switch (filter) {
 .all => {
 {
                 workspace_matched = true;
@@ -628,18 +628,16 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
             }
 },
 .name => |name_pattern| .{ name_pattern, pkg_names[@as(usize, @intCast(pkg_id))].slice(lockfile.buffers.string_bytes.items) },
-.path => |path_pattern| path_pattern: {
+.path => |path_pattern| path_pattern_blk: {
             if ((res.tag != .workspace)) {
                 return false;
             }
             _ = filter_path.join((&.{ (if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).workspace.slice(lockfile.buffers.string_bytes.items) }));
-            break :path_pattern .{ path_pattern, filter_path.slice() };
+            break :path_pattern_blk .{ path_pattern, filter_path.slice() };
 },
 });
-            var pattern = cp_unpack_elem(_tmp_v7, 0);
-            _ = &pattern;
-            var name_or_path = cp_unpack_elem(_tmp_v7, 1);
-            _ = &name_or_path;
+            const pattern = filter_pair[0];
+            const name_or_path = filter_pair[1];
             switch (bun.glob.match(pattern, name_or_path)) {
 .match, .negate_match => {
 workspace_matched = true;

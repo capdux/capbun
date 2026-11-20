@@ -311,7 +311,7 @@ pub fn spawnPackageLifecycleScripts(self: *PackageManager, ctx: Command.Context,
         _ = script_env.map.deinit();
         }
         const original_path = ((script_env.get("PATH")) orelse (""));
-        var PATH: bun.EnvPath({}) = try .initCapacity(bun.default_allocator, ((((original_path.len + 1) + "node_modules/.bin".len) + cwd.len) + 1));
+        var PATH: bun.EnvPath(.{}) = try .initCapacity(bun.default_allocator, ((((original_path.len + 1) + "node_modules/.bin".len) + cwd.len) + 1));
         _ = &PATH;
         defer {
         _ = PATH.deinit();

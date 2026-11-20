@@ -167,14 +167,20 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
                     if ((create_err != .none)) {
                         return global.throwValue(create_err.toJS(global));
                     }
-                    return global.throwValue(bun.BoringSSL.ERR_toJS(global, BoringSSL.ERR_get_error));
+                    const get_err = BoringSSL.ERR_get_error;
+                    var __get_err_moved = false; _ = &__get_err_moved;
+                    defer if (!__get_err_moved) { const __T = @TypeOf(get_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = get_err.release() catch {}; } else { get_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = get_err; _drop_val.release(); } };
+                    return global.throwValue(bun.BoringSSL.ERR_toJS(global, get_err()));
                 }
                 sni_ctx = cached_ctx;
             } else {
                 return JSValue.js_undefined;
             }
         }
-        const final_sni_ctx = ((sni_ctx) orelse { return .{ .ok = JSValue.js_undefined }; });
+        if ((sni_ctx == null)) {
+            return JSValue.js_undefined;
+        }
+        const final_sni_ctx = sni_ctx.?;
         _ = ls.removeServerName(server_name);
         const ok = ls.addServerName(server_name, final_sni_ctx, null);
         var __ok_moved = false; _ = &__ok_moved;

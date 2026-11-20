@@ -1433,12 +1433,16 @@ pub const TestingAPIs = struct {
 
 pub fn disabledOnThisPlatform(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             if (comptime bun.Environment.isWindows) {
-                return error.false;
+                return jsc.JSValue.jsBoolean(false);
             }
             const arguments_ = callframe.arguments_old(1);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const str_arg = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", .{}) }; });
+            const str_arg_opt = arguments.nextEat();
+            if ((str_arg_opt == null)) {
+                return globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", .{});
+            }
+            const str_arg = str_arg_opt.?;
             const bunstr = try str_arg.toBunString(globalThis);
             defer {
             _ = bunstr.deref();
@@ -1449,23 +1453,31 @@ pub fn disabledOnThisPlatform(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             }
             inline for (Interpreter.Builtin.Kind.DISABLED_ON_POSIX) |disabled| {
                 if (bun.strings.eqlComptime(utf8str.byteSlice(), @tagName(disabled))) {
-                    return error.true;
+                    return jsc.JSValue.jsBoolean(true);
                 }
             }
-            return error.false;
+            return jsc.JSValue.jsBoolean(false);
     }
 
 pub fn shellLexImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!jsc.JSValue {
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const string_args = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell_parse: expected 2 arguments, got 0", .{}) }; });
+            const string_args_opt = arguments.nextEat();
+            if ((string_args_opt == null)) {
+                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
+            }
+            const string_args = string_args_opt.?;
             var arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_;
             defer {
             _ = arena_.deinit();
             }
-            const template_args_js = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell: expected 2 arguments, got 0", .{}) }; });
+            const template_args_js_opt = arguments.nextEat();
+            if ((template_args_js_opt == null)) {
+                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
+            }
+            const template_args_js = template_args_js_opt.?;
             var template_args = try template_args_js.arrayIterator(globalThis);
             _ = &template_args;
             var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());
@@ -1526,13 +1538,21 @@ pub fn shellParseImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const string_args = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell_parse: expected 2 arguments, got 0", .{}) }; });
+            const string_args_opt = arguments.nextEat();
+            if ((string_args_opt == null)) {
+                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
+            }
+            const string_args = string_args_opt.?;
             var arena_ = bun.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_;
             defer {
             _ = arena_.deinit();
             }
-            const template_args_js = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell: expected 2 arguments, got 0", .{}) }; });
+            const template_args_js_opt = arguments.nextEat();
+            if ((template_args_js_opt == null)) {
+                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
+            }
+            const template_args_js = template_args_js_opt.?;
             var template_args = try template_args_js.arrayIterator(globalThis);
             _ = &template_args;
             var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());

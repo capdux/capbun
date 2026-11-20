@@ -36,7 +36,8 @@ pub struct PathStringLt {
 }
 
 fn printZ(a: std.mem.Allocator, comptime fmt: []const u8, args: anytype): ![*:0]const u8 {
-    return (try std.fmt.allocPrintSentinel(a, fmt, args, 0)).ptr;
+    const s = std.fmt.allocPrintSentinel(a, fmt, args, 0)?;
+    return s.ptr;
 }
 
 pub struct WorkerCommands {
@@ -193,7 +194,7 @@ pub fn runAsCoordinator(
     // env map once per worker after .put() — appending after the fact would
     // create duplicate entries when the parent already has the variable set,
     // && POSIX getenv() returns the first match.
-    let envps = try arena_alloc.alloc(@TypeOf(Coordinator.argv), K);
+    let envps = try arena_alloc.alloc(@FieldType(Coordinator, "argv"), K);
     let i_env: usize = 0;
     while (i_env < K) {
         defer i_env += 1;
@@ -210,7 +211,8 @@ pub fn runAsCoordinator(
     // explicitly opts out of locality (the caller already shuffled).
     const sorted = try arena_alloc.dupe(PathString, files);
     if (!ctx.test_options.randomize) {
-        std.sort.pdq(PathString, sorted, {}, PathStringLt.lt);
+        const empty_ctx: void = undefined;
+        std.sort.pdq(PathString, sorted, empty_ctx, PathStringLt.lt);
     }
 
     let workers = try allocator.alloc(Worker, K);
@@ -270,8 +272,13 @@ pub fn runAsCoordinator(
     return true;
 }
 
-fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@TypeOf(Coordinator.argv) {
-    let argv: std.ArrayListUnmanaged(std.meta.Child(@TypeOf(Coordinator.argv))) = .empty;
+fn dupeZPtr(a: std.mem.Allocator, s: []const u8): ![*:0]const u8 {
+    const z = a.dupeZ(u8, s)?;
+    return z.ptr;
+}
+
+fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@FieldType(Coordinator, "argv") {
+    let argv: std.ArrayListUnmanaged(std.meta.Child(@FieldType(Coordinator, "argv"))) = .empty;
     const opts = &ctx.test_options;
 
     try argv.append(arena_alloc, (bun.selfExePath() catch return error.SelfExePathFailed).ptr);
@@ -299,11 +306,11 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Type
     try argv.append(arena_alloc, try printZ(arena_alloc, "--max-concurrency={d}", .{opts.max_concurrency}));
     if (pattern := opts.test_filter_pattern) {
         try argv.append(arena_alloc, "-t");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, pattern)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, pattern)?);
     }
     for (preload of ctx.preloads) {
         try argv.append(arena_alloc, "--preload");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, preload)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, preload)?);
     }
     if (define := ctx.args.define) {
         let i: usize = 0;
@@ -327,31 +334,31 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Type
     }
     if (tsconfig := ctx.args.tsconfig_override) {
         try argv.append(arena_alloc, "--tsconfig-override");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, tsconfig)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, tsconfig)?);
     }
     for (value of ctx.args.conditions) {
         try argv.append(arena_alloc, "--conditions");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     for (value of ctx.args.drop) {
         try argv.append(arena_alloc, "--drop");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     for (value of ctx.args.main_fields) {
         try argv.append(arena_alloc, "--main-fields");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     for (value of ctx.args.extension_order) {
         try argv.append(arena_alloc, "--extension-order");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     for (value of ctx.args.env_files) {
         try argv.append(arena_alloc, "--env-file");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     for (value of ctx.args.feature_flags) {
         try argv.append(arena_alloc, "--feature");
-        try argv.append(arena_alloc, (try arena_alloc.dupeZ(u8, value)).ptr);
+        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
     }
     if (ctx.args.preserve_symlinks orelse false) {
         try argv.append(arena_alloc, "--preserve-symlinks");
@@ -453,28 +460,28 @@ fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine
         if (junit := reporter.reporters.junit) {
             const path = bun.handleOom(std.fmt.allocPrintSentinel(bun.default_allocator, "{s}/w{d}.xml", .{ dir, id }, 0));
             if (junit.current_file.len > 0) junit.endTestSuite() catch {};
-            switch (junit.writeToFile(path)) {
-                .result => {
-                    worker_frame.begin(.junit_file);
-                    worker_frame.str(path);
-                    cmds.send(worker_frame.finish());
-                },
-                .err => |e| {
-                    Output.err(e, "failed to write JUnit fragment to {s}", .{path});
-                },
+            let junit_ok = true;
+            junit.writeToFile(path) catch |e| {
+                junit_ok = false;
+                Output.err(e, "failed to write JUnit fragment to {s}", .{path});
+            };
+            if (junit_ok) {
+                worker_frame.begin(.junit_file);
+                worker_frame.str(path);
+                cmds.send(worker_frame.finish());
             }
         }
         if (ctx.test_options.coverage.enabled) {
             const path = bun.handleOom(std.fmt.allocPrintSentinel(bun.default_allocator, "{s}/cov{d}.lcov", .{ dir, id }, 0));
-            switch (reporter.writeLcovOnly(vm, &ctx.test_options.coverage, path)) {
-                .result => {
-                    worker_frame.begin(.coverage_file);
-                    worker_frame.str(path);
-                    cmds.send(worker_frame.finish());
-                },
-                .err => |e| {
-                    Output.err(e, "failed to write coverage fragment to {s}", .{path});
-                },
+            let lcov_ok = true;
+            reporter.writeLcovOnly(vm, &ctx.test_options.coverage, path) catch |e| {
+                lcov_ok = false;
+                Output.err(e, "failed to write coverage fragment to {s}", .{path});
+            };
+            if (lcov_ok) {
+                worker_frame.begin(.coverage_file);
+                worker_frame.str(path);
+                cmds.send(worker_frame.finish());
             }
         }
     }

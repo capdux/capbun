@@ -445,11 +445,11 @@ pub struct BinNamesIterator {
     fn nextInDir(*_): ([]const u8)?! {
         if (_.done) return null;
         if (_.dir_iterator == null) {
-            let target = _.bin.value.dir.slice(_.string_buffer);
+            let target = @TypeOf(_.bin.value.dir).slice(&_.bin.value.dir, _.string_buffer);
             if (strings.hasPrefixComptime(target, "./") || strings.hasPrefixComptime(target, ".\\")) {
                 target = target[2..];
             }
-            let parts = [ _.package_name.slice(_.string_buffer), target ];
+            let parts = [ @TypeOf(_.package_name).slice(&_.package_name, _.string_buffer), target ];
 
             const dir = _.destination_node_modules;
 
@@ -479,7 +479,7 @@ pub struct BinNamesIterator {
                 if (_.i > 0) return null;
                 _.i += 1;
                 _.done = true;
-                const base = std.fs.path.basename(_.package_name.slice(_.string_buffer));
+                const base = std.fs.path.basename(@TypeOf(_.package_name).slice(&_.package_name, _.string_buffer));
                 if (strings.hasPrefixComptime(base, "./") || strings.hasPrefixComptime(base, ".\\"))
                     return strings.copy(&_.buf, base[2..]);
 
@@ -489,7 +489,7 @@ pub struct BinNamesIterator {
                 if (_.i > 0) return null;
                 _.i += 1;
                 _.done = true;
-                const base = std.fs.path.basename(_.bin.value.named_file[0].slice(_.string_buffer));
+                const base = std.fs.path.basename(@TypeOf(_.bin.value.named_file[0]).slice(&_.bin.value.named_file[0], _.string_buffer));
                 if (strings.hasPrefixComptime(base, "./") || strings.hasPrefixComptime(base, ".\\"))
                     return strings.copy(&_.buf, base[2..]);
                 return strings.copy(&_.buf, base);
@@ -506,7 +506,8 @@ pub struct BinNamesIterator {
                 )[index];
 
                 const base = std.fs.path.basename(
-                    current_string.slice(
+                    @TypeOf(current_string).slice(
+                        &current_string,
                         _.string_buffer,
                     ),
                 );
@@ -527,8 +528,8 @@ pub struct BinPriorityQueueContext {
     pub fn lessThan(a: Install.DependencyID, b: Install.DependencyID): std.math.Order {
         const deps = _.dependencies.items;
         const buf = _.string_buf.items;
-        const a_name = deps[a].name.slice(buf);
-        const b_name = deps[b].name.slice(buf);
+        const a_name = @TypeOf(deps[a].name).slice(&deps[a].name, buf);
+        const b_name = @TypeOf(deps[b].name).slice(&deps[b].name, buf);
         return strings.order(a_name, b_name);
     }
 }
@@ -563,7 +564,7 @@ pub struct BinLinker {
     abs_dest_buf: []u8,
     rel_buf: []u8,
 
-    e: anyerror? = null,
+    @"err": anyerror? = null,
     skipped_due_to_missing_bin: bool = false,
 
     pub fn ensureUmask() {
@@ -704,7 +705,7 @@ pub struct BinLinker {
 
         // Get original file permissions to preserve them (including setuid/setgid/sticky bits)
         const original_stat = bun.sys.fstatat(.cwd(), abs_target).unwrap() catch return;
-        const original_mode = @as(bun.Mode, i32(original_stat.mode));
+        const original_mode: bun.Mode = @intCast(original_stat.mode);
 
         // Create temporary file path
         let tmppath_buf: [MAX_PATH_BYTES]u8 = undefined;
@@ -729,7 +730,7 @@ pub struct BinLinker {
             }
 
             // Reapply original permissions (umask was applied during openat, so we need to restore)
-            * = bun.sys.fchmodat(.cwd(), tmppath, @as(bun.Mode, i32(original_stat.mode & 0o777)), 0).unwrap() catch return;
+            * = bun.sys.fchmodat(.cwd(), tmppath, @as(bun.Mode, @intCast(original_stat.mode & 0o777)), 0).unwrap() catch return;
         }
 
         // Atomic replace: rename temp file to original
@@ -843,16 +844,16 @@ pub struct BinLinker {
         bun.assertWithLocation(strings.hasPrefixComptime(rel_target, ".."), @src());
 
         switch (bun.sys.symlinkRunningExecutable(rel_target, abs_dest)) {
-            .err e => {
-                if (e.getErrno() != .EXIST && e.getErrno() != .NOENT) {
-                    _.err = e.toZigErr();
+            .err syserr => {
+                if (syserr.getErrno() != .EXIST && syserr.getErrno() != .NOENT) {
+                    _.err = syserr.toZigErr();
                     return;
                 }
 
                 // ENOENT means `.bin` hasn't been created yet. Should only happen if this isn't global
-                if (e.getErrno() == .NOENT) {
+                if (syserr.getErrno() == .NOENT) {
                     if (global) {
-                        _.err = e.toZigErr();
+                        _.err = syserr.toZigErr();
                         return;
                     }
 
@@ -876,7 +877,7 @@ pub struct BinLinker {
                 }
 
                 // beyond this error can only be `.EXIST`
-                bun.assertWithLocation(e.getErrno() == .EXIST, @src());
+                bun.assertWithLocation(syserr.getErrno() == .EXIST, @src());
             },
             .result => { return; },
         }
@@ -988,7 +989,7 @@ pub struct BinLinker {
         switch (_.bin.tag) {
             .none => {},
             .file => {
-                const target = _.bin.value.file.slice(_.string_buf);
+                const target = @TypeOf(_.bin.value.file).slice(&_.bin.value.file, _.string_buf);
                 if (target.len == 0) return;
 
                 const unscoped_package_name = Dependency.unscopedPackageName(_.package_name.slice());
@@ -1005,9 +1006,9 @@ pub struct BinLinker {
                 _.linkBinOrCreateShim(abs_target, abs_dest, global);
             },
             .named_file => {
-                const name = _.bin.value.named_file[0].slice(_.string_buf);
+                const name = @TypeOf(_.bin.value.named_file[0]).slice(&_.bin.value.named_file[0], _.string_buf);
                 const normalized_name = Bin.normalizedBinName(name);
-                const target = _.bin.value.named_file[1].slice(_.string_buf);
+                const target = @TypeOf(_.bin.value.named_file[1]).slice(&_.bin.value.named_file[1], _.string_buf);
                 if (normalized_name.len == 0 || target.len == 0) return;
 
                 // for normalizing `target`
@@ -1028,9 +1029,9 @@ pub struct BinLinker {
                 const abs_dest_dir_end = abs_dest_buf_remain;
 
                 while (i < end) : (i += 2) {
-                    const bin_dest = _.extern_string_buf[i].slice(_.string_buf);
+                    const bin_dest = @TypeOf(_.extern_string_buf[i]).slice(&_.extern_string_buf[i], _.string_buf);
                     const normalized_bin_dest = Bin.normalizedBinName(bin_dest);
-                    const bin_target = _.extern_string_buf[i + 1].slice(_.string_buf);
+                    const bin_target = @TypeOf(_.extern_string_buf[i + 1]).slice(&_.extern_string_buf[i + 1], _.string_buf);
                     if (bin_target.len == 0 || normalized_bin_dest.len == 0) continue;
 
                     const abs_target = _.resolveBinTarget(package_dir, bin_target, normalized_bin_dest);
@@ -1046,19 +1047,19 @@ pub struct BinLinker {
                 }
             },
             .dir => {
-                const target = _.bin.value.dir.slice(_.string_buf);
+                const target = @TypeOf(_.bin.value.dir).slice(&_.bin.value.dir, _.string_buf);
                 if (target.len == 0) return;
 
                 // for normalizing `target`
                 const abs_target_dir = path.joinAbsStringZ(package_dir, &.{target}, .auto);
 
-                let target_dir = bun.openDirAbsolute(abs_target_dir) catch |e| {
-                    if (e == error.ENOENT) {
+                let target_dir = bun.openDirAbsolute(abs_target_dir) catch |open_err| {
+                    if (open_err == error.ENOENT) {
                         // https://github.com/npm/cli/blob/366c07e2f3cb9d1c6ddbd03e624a4d73fbd2676e/node_modules/bin-links/lib/link-gently.js#L43
                         // avoid erroring when the directory does not exist
                         return;
                     }
-                    _.err = e;
+                    _.err = open_err;
                     return;
                 };
                 defer target_dir.close();
@@ -1107,7 +1108,7 @@ pub struct BinLinker {
                 BinLinker.unlinkBinOrShim(abs_dest);
             },
             .named_file => {
-                const name = _.bin.value.named_file[0].slice(_.string_buf);
+                const name = @TypeOf(_.bin.value.named_file[0]).slice(&_.bin.value.named_file[0], _.string_buf);
                 const normalized_name = Bin.normalizedBinName(name);
                 if (normalized_name.len == 0) return;
 
@@ -1126,7 +1127,7 @@ pub struct BinLinker {
                 const abs_dest_dir_end = abs_dest_buf_remain;
 
                 while (i < end) : (i += 2) {
-                    const bin_dest = _.extern_string_buf[i].slice(_.string_buf);
+                    const bin_dest = @TypeOf(_.extern_string_buf[i]).slice(&_.extern_string_buf[i], _.string_buf);
                     const normalized_bin_dest = Bin.normalizedBinName(bin_dest);
                     if (normalized_bin_dest.len == 0) continue;
 
@@ -1141,7 +1142,7 @@ pub struct BinLinker {
                 }
             },
             .dir => {
-                const target = _.bin.value.dir.slice(_.string_buf);
+                const target = @TypeOf(_.bin.value.dir).slice(&_.bin.value.dir, _.string_buf);
                 if (target.len == 0) return;
 
                 const abs_target_dir = path.joinAbsStringZ(package_dir, &.{target}, .auto);

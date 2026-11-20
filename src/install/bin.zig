@@ -411,12 +411,12 @@ pub fn nextInDir(self: *BinNamesIterator) !?[]const u8 {
                 return null;
             }
             if ((self.dir_iterator == null)) {
-                var target = self.bin.value.dir.slice(self.string_buffer);
+                var target = @TypeOf(self.bin.value.dir).slice((&self.bin.value.dir), self.string_buffer);
                 _ = &target;
                 if ((strings.hasPrefixComptime(target, "./") or strings.hasPrefixComptime(target, ".\\"))) {
                     target = target[2..];
                 }
-                var parts = .{ cp_iter_slice(self.package_name)[@intCast(self.string_buffer)..], target };
+                var parts = .{ @TypeOf(self.package_name).slice((&self.package_name), self.string_buffer), target };
                 _ = &parts;
                 const dir = self.destination_node_modules;
                 const joined = path.joinStringBuf((&self.buf), (&parts), .auto);
@@ -448,7 +448,7 @@ if ((self.i > 0)) {
             }
             self.i = (self.i + 1);
             self.done = true;
-            const base = std.fs.path.basename(cp_iter_slice(self.package_name)[@intCast(self.string_buffer)..]);
+            const base = std.fs.path.basename(@TypeOf(self.package_name).slice((&self.package_name), self.string_buffer));
             if ((strings.hasPrefixComptime(base, "./") or strings.hasPrefixComptime(base, ".\\"))) {
                 return strings.copy((&self.buf), base[2..]);
             }
@@ -460,7 +460,7 @@ if ((self.i > 0)) {
             }
             self.i = (self.i + 1);
             self.done = true;
-            const base = std.fs.path.basename(self.bin.value.named_file[0].slice(self.string_buffer));
+            const base = std.fs.path.basename(@TypeOf(self.bin.value.named_file[0]).slice((&self.bin.value.named_file[0]), self.string_buffer));
             if ((strings.hasPrefixComptime(base, "./") or strings.hasPrefixComptime(base, ".\\"))) {
                 return strings.copy((&self.buf), base[2..]);
             }
@@ -477,7 +477,7 @@ if ((self.i >= self.bin.value.map.len)) {
             self.i = (self.i + 2);
             self.done = (self.i >= self.bin.value.map.len);
             const current_string = self.bin.value.map.get(self.extern_string_buf)[@as(usize, @intCast(index))];
-            const base = std.fs.path.basename(current_string.slice(self.string_buffer));
+            const base = std.fs.path.basename(@TypeOf(current_string).slice((&current_string), self.string_buffer));
             if ((strings.hasPrefixComptime(base, "./") or strings.hasPrefixComptime(base, ".\\"))) {
                 return strings.copy((&self.buf), base[2..]);
             }
@@ -497,8 +497,8 @@ pub const BinPriorityQueueContext = struct {
 pub fn lessThan(self: BinPriorityQueueContext, a: Install.DependencyID, b: Install.DependencyID) std.math.Order {
             const deps = self.dependencies.items;
             const buf = self.string_buf.items;
-            const a_name = (if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"union") @tagName(deps[@as(usize, @intCast(a))]) else deps[@as(usize, @intCast(a))].name).slice(buf);
-            const b_name = (if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"union") @tagName(deps[@as(usize, @intCast(b))]) else deps[@as(usize, @intCast(b))].name).slice(buf);
+            const a_name = @TypeOf((if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"union") @tagName(deps[@as(usize, @intCast(a))]) else deps[@as(usize, @intCast(a))].name)).slice((&(if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(a))])) == .@"union") @tagName(deps[@as(usize, @intCast(a))]) else deps[@as(usize, @intCast(a))].name)), buf);
+            const b_name = @TypeOf((if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"union") @tagName(deps[@as(usize, @intCast(b))]) else deps[@as(usize, @intCast(b))].name)).slice((&(if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(b))])) == .@"union") @tagName(deps[@as(usize, @intCast(b))]) else deps[@as(usize, @intCast(b))].name)), buf);
             return strings.order(a_name, b_name);
     }
 };
@@ -516,7 +516,7 @@ pub const BinLinker = struct {
     abs_target_buf: []u8,
     abs_dest_buf: []u8,
     rel_buf: []u8,
-    e: ?anyerror = null,
+    @"err": ?anyerror = null,
     skipped_due_to_missing_bin: bool = false,
 
 pub fn ensureUmask() void {
@@ -568,8 +568,8 @@ pub fn linkBinOrCreateShim(self: *BinLinker, abs_target: [:0]const u8, abs_dest:
             if (comptime (!Environment.isWindows)) {
                 _ = self.createSymlink(abs_target, abs_dest, global);
             } else {
-                const target = (blk_catch_1: { break :blk_catch_1 ((bun.sys.openat(.cwd(), abs_target, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if ((self.e != error.EISDIR)) {
-                    self.err = self.e;
+                const target = (blk_catch_1: { break :blk_catch_1 ((bun.sys.openat(.cwd(), abs_target, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if ((e != error.EISDIR)) {
+                    self.err = e;
                 }
                 return; }); });
                 defer {
@@ -642,7 +642,7 @@ return;
             _ = bun.default_allocator.free(content_to_free);
             }
             const original_stat = (blk_catch_5: { break :blk_catch_5 ((bun.sys.fstatat(.cwd(), abs_target).unwrap()) catch |__ce_5| { _ = &__ce_5; return; }); });
-            const original_mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt((if (comptime @typeInfo(@TypeOf(original_stat.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(original_stat.mode)) else cp_cast_int(i32, original_stat.mode)))) else @as(bun.Mode, (if (comptime @typeInfo(@TypeOf(original_stat.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(original_stat.mode)) else cp_cast_int(i32, original_stat.mode))));
+            const original_mode: bun.Mode = @intCast(original_stat.mode);
             var tmppath_buf: [MAX_PATH_BYTES]u8 = undefined;
             _ = &tmppath_buf;
             const tmppath = bun.path.joinAbsStringBufZ(dir_path, (&tmppath_buf), (&.{ tmpname }), .auto);
@@ -665,7 +665,7 @@ return;
                 if ((content.len > (newline + 1))) {
                     _ = (blk_catch_9: { break :blk_catch_9 ((tmpfile.writeAll(content[(newline + 1)..]).unwrap()) catch |__ce_9| { _ = &__ce_9; return; }); });
                 }
-                _ = (blk_catch_10: { break :blk_catch_10 ((bun.sys.fchmodat(.cwd(), tmppath, (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt((if (comptime @typeInfo(@TypeOf((original_stat.mode & 511))) == .@"enum") cp_cast_int(i32, @intFromEnum((original_stat.mode & 511))) else cp_cast_int(i32, (original_stat.mode & 511))))) else @as(bun.Mode, (if (comptime @typeInfo(@TypeOf((original_stat.mode & 511))) == .@"enum") cp_cast_int(i32, @intFromEnum((original_stat.mode & 511))) else cp_cast_int(i32, (original_stat.mode & 511))))), 0).unwrap()) catch |__ce_10| { _ = &__ce_10; return; }); });
+                _ = (blk_catch_10: { break :blk_catch_10 ((bun.sys.fchmodat(.cwd(), tmppath, @as(bun.Mode, @intCast((original_stat.mode & 511))), 0).unwrap()) catch |__ce_10| { _ = &__ce_10; return; }); });
             }
             switch (bun.sys.renameat(.cwd(), tmppath, .cwd(), abs_target)) {
 .result => {
@@ -690,8 +690,8 @@ pub fn createWindowsShim(self: *BinLinker, target: bun.FD, abs_target: [:0]const
             _ = @memcpy(dest_buf[abs_dest_w.len..][0..".bunx\x00".len], (comptime strings.literal(u16, ".bunx\x00")));
             const abs_bunx_file: [:0]const u16 = dest_buf[0..(abs_dest_w.len + ".bunx".len) :0];
             const bunx_file = (blk_catch_11: { break :blk_catch_11 ((bun.sys.File.openatOSPath(bun.invalid_fd, abs_bunx_file, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 436).unwrap()) catch |e| { _ = &e; break :blk_catch_11 bunx_file: {
-            if (((self.e != error.ENOENT) or global)) {
-                self.err = self.e;
+            if (((e != error.ENOENT) or global)) {
+                self.err = e;
                 return;
             }
             const node_modules_path_save = self.node_modules_path.save();
@@ -736,14 +736,14 @@ pub fn createWindowsShim(self: *BinLinker, target: bun.FD, abs_target: [:0]const
             const metadata = shim_buf[0..len];
             _ = (blk_catch_16: { break :blk_catch_16 ((shim.encodeInto(metadata)) catch |__ce_16| { _ = &__ce_16; self.err = error.InvalidBinContent;
             return; }); });
-            _ = (blk_catch_17: { break :blk_catch_17 ((bunx_file.writer().writeAll(metadata)) catch |e| { _ = &e; self.err = self.e;
+            _ = (blk_catch_17: { break :blk_catch_17 ((bunx_file.writer().writeAll(metadata)) catch |e| { _ = &e; self.err = e;
             return; }); });
             _ = @memcpy(dest_buf[abs_dest_w.len..][0..".exe\x00".len], (comptime strings.literal(u16, ".exe\x00")));
             const abs_exe_file: [:0]const u16 = dest_buf[0..(abs_dest_w.len + ".exe".len) :0];
-            _ = (blk_catch_18: { break :blk_catch_18 ((bun.sys.File.writeFile(bun.invalid_fd, abs_exe_file, WinBinLinkingShim.embedded_executable_data).unwrap()) catch |e| { _ = &e; if ((self.e == error.EBUSY)) {
+            _ = (blk_catch_18: { break :blk_catch_18 ((bun.sys.File.writeFile(bun.invalid_fd, abs_exe_file, WinBinLinkingShim.embedded_executable_data).unwrap()) catch |e| { _ = &e; if ((e == error.EBUSY)) {
                 return;
             }
-            self.err = self.e;
+            self.err = e;
             return; }); });
     }
 
@@ -759,14 +759,14 @@ pub fn createSymlink(self: *BinLinker, abs_target: [:0]const u8, abs_dest: [:0]c
             const rel_target = path.relativeBufZ(self.rel_buf, abs_dest_dir, abs_target);
             _ = bun.assertWithLocation(strings.hasPrefixComptime(rel_target, ".."), @src());
             switch (bun.sys.symlinkRunningExecutable(rel_target, abs_dest)) {
-.err => |e| {
-if ((((e).?.getErrno() != .EXIST) and ((e).?.getErrno() != .NOENT))) {
-                self.err = (e).?.toZigErr();
+.err => |syserr| {
+if (((syserr.getErrno() != .EXIST) and (syserr.getErrno() != .NOENT))) {
+                self.err = syserr.toZigErr();
                 return;
             }
-            if (((e).?.getErrno() == .NOENT)) {
+            if ((syserr.getErrno() == .NOENT)) {
                 if (global) {
-                    self.err = (e).?.toZigErr();
+                    self.err = syserr.toZigErr();
                     return;
                 }
                 const node_modules_path_save = self.node_modules_path.save();
@@ -786,14 +786,14 @@ return;
                 break :blk_catch_20 {}; }); });
                 return;
             }
-            _ = bun.assertWithLocation(((e).?.getErrno() == .EXIST), @src());
+            _ = bun.assertWithLocation((syserr.getErrno() == .EXIST), @src());
 },
 .result => {
 return;
 },
 }
             _ = (blk_catch_21: { break :blk_catch_21 ((std.fs.deleteTreeAbsolute(abs_dest)) catch |__ce_21| { _ = &__ce_21;  }); });
-            _ = (blk_catch_22: { break :blk_catch_22 ((bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap()) catch |e| { _ = &e; self.err = self.e;
+            _ = (blk_catch_22: { break :blk_catch_22 ((bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap()) catch |e| { _ = &e; self.err = e;
             break :blk_catch_22 {}; }); });
     }
 
@@ -863,7 +863,7 @@ pub fn link(self: *BinLinker, global: bool) void {
 
 },
 .file => {
-const target = self.bin.value.file.slice(self.string_buf);
+const target = @TypeOf(self.bin.value.file).slice((&self.bin.value.file), self.string_buf);
             if ((target.len == 0)) {
                 return;
             }
@@ -877,9 +877,9 @@ const target = self.bin.value.file.slice(self.string_buf);
             _ = self.linkBinOrCreateShim(abs_target, abs_dest, global);
 },
 .named_file => {
-const name = self.bin.value.named_file[0].slice(self.string_buf);
+const name = @TypeOf(self.bin.value.named_file[0]).slice((&self.bin.value.named_file[0]), self.string_buf);
             const normalized_name = Bin.normalizedBinName(name);
-            const target = self.bin.value.named_file[1].slice(self.string_buf);
+            const target = @TypeOf(self.bin.value.named_file[1]).slice((&self.bin.value.named_file[1]), self.string_buf);
             if (((normalized_name.len == 0) or (target.len == 0))) {
                 return;
             }
@@ -897,9 +897,9 @@ var i = self.bin.value.map.begin();
             const end = self.bin.value.map.end();
             const abs_dest_dir_end = abs_dest_buf_remain;
             while ((i < end)) : (i = (i + 2)) {
-                const bin_dest = self.extern_string_buf[@as(usize, @intCast(i))].slice(self.string_buf);
+                const bin_dest = @TypeOf(self.extern_string_buf[@as(usize, @intCast(i))]).slice((&self.extern_string_buf[@as(usize, @intCast(i))]), self.string_buf);
                 const normalized_bin_dest = Bin.normalizedBinName(bin_dest);
-                const bin_target = self.extern_string_buf[@as(usize, @intCast((i + 1)))].slice(self.string_buf);
+                const bin_target = @TypeOf(self.extern_string_buf[@as(usize, @intCast((i + 1)))]).slice((&self.extern_string_buf[@as(usize, @intCast((i + 1)))]), self.string_buf);
                 if (((bin_target.len == 0) or (normalized_bin_dest.len == 0))) {
                     continue;
                 }
@@ -914,15 +914,15 @@ var i = self.bin.value.map.begin();
             }
 },
 .dir => {
-const target = self.bin.value.dir.slice(self.string_buf);
+const target = @TypeOf(self.bin.value.dir).slice((&self.bin.value.dir), self.string_buf);
             if ((target.len == 0)) {
                 return;
             }
             const abs_target_dir = path.joinAbsStringZ(package_dir, (&.{ target }), .auto);
-            var target_dir = (blk_catch_23: { break :blk_catch_23 ((bun.openDirAbsolute(abs_target_dir)) catch |e| { _ = &e; if ((self.e == error.ENOENT)) {
+            var target_dir = (blk_catch_23: { break :blk_catch_23 ((bun.openDirAbsolute(abs_target_dir)) catch |open_err| { _ = &open_err; if ((open_err == error.ENOENT)) {
                 return;
             }
-            self.err = self.e;
+            self.err = open_err;
             return; }); });
             _ = &target_dir;
             defer {
@@ -971,7 +971,7 @@ const unscoped_package_name = Dependency.unscopedPackageName(self.package_name.s
             _ = BinLinker.unlinkBinOrShim(abs_dest);
 },
 .named_file => {
-const name = self.bin.value.named_file[0].slice(self.string_buf);
+const name = @TypeOf(self.bin.value.named_file[0]).slice((&self.bin.value.named_file[0]), self.string_buf);
             const normalized_name = Bin.normalizedBinName(name);
             if ((normalized_name.len == 0)) {
                 return;
@@ -989,7 +989,7 @@ var i = self.bin.value.map.begin();
             const end = self.bin.value.map.end();
             const abs_dest_dir_end = abs_dest_buf_remain;
             while ((i < end)) : (i = (i + 2)) {
-                const bin_dest = self.extern_string_buf[@as(usize, @intCast(i))].slice(self.string_buf);
+                const bin_dest = @TypeOf(self.extern_string_buf[@as(usize, @intCast(i))]).slice((&self.extern_string_buf[@as(usize, @intCast(i))]), self.string_buf);
                 const normalized_bin_dest = Bin.normalizedBinName(bin_dest);
                 if ((normalized_bin_dest.len == 0)) {
                     continue;
@@ -1004,12 +1004,12 @@ var i = self.bin.value.map.begin();
             }
 },
 .dir => {
-const target = self.bin.value.dir.slice(self.string_buf);
+const target = @TypeOf(self.bin.value.dir).slice((&self.bin.value.dir), self.string_buf);
             if ((target.len == 0)) {
                 return;
             }
             const abs_target_dir = path.joinAbsStringZ(package_dir, (&.{ target }), .auto);
-            var target_dir = (blk_catch_25: { break :blk_catch_25 ((bun.openDirAbsolute(abs_target_dir)) catch |e| { _ = &e; self.err = self.e;
+            var target_dir = (blk_catch_25: { break :blk_catch_25 ((bun.openDirAbsolute(abs_target_dir)) catch |e| { _ = &e; self.err = e;
             return; }); });
             _ = &target_dir;
             defer {

@@ -180,7 +180,7 @@ export struct MacroContext {
     }
 }
 
-const empty_imports: [0]SImport = [];
+const empty_imports: [0]SImport = undefined;
 
 export struct MacroResult {
     import_statements: []S.Import = empty_imports[0..0],

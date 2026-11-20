@@ -154,7 +154,7 @@ comptime {
 }
 
 fn extractName(t: TestFn): []const u8 {
-    const seps = [ ".test.", ".decltest." ];
+    const seps: [2]string = [ ".test.", ".decltest." ];
     inline for (test_sep of seps) {
         if (marker := std.mem.lastIndexOf(u8, t.name, test_sep)) {
             const prefix = t.name[0..marker];

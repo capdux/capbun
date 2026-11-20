@@ -660,7 +660,8 @@ fn cmdHistory(repl: *Repl, _: []const u8): ReplResult {
         repl.history.entries.items.len - 20
     else
         0;
-    for (i of start..repl.history.entries.items.len) {
+    let i: usize = start;
+    while (i < repl.history.entries.items.len) : (i += 1) {
         const entry = repl.history.entries.items[i];
         repl.print("  {s}{d:>4}{s}  {s}\n", .{ Color.dim, i + 1, Color.reset, entry });
     }
@@ -693,7 +694,7 @@ terminal_height: u16 = 24,
 ctrl_c_pressed: bool = false,
 
 // Buffered stdin
-stdin_buf: [256]u8 = .{0} ** 256,
+stdin_buf: [256]u8 = std.mem.zeroes([256]u8),
 stdin_buf_start: usize = 0,
 stdin_buf_end: usize = 0,
 

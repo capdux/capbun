@@ -356,7 +356,7 @@ pub struct AbortHandler {
     pub const should_abort = &abort_should_abort;
 
     @callconv("c")
-    fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: (*const void)?) {
+    fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: *!?) {
         * = sig;
         * = info;
         abort_should_abort = true;
@@ -600,7 +600,8 @@ pub fn run(ctx: Command.Context): !noreturn {
         }
 
         let filter_instance = FilterArg.FilterSet.init(ctx.allocator, filters_to_use, cwd)?;
-        let patterns = std.array_list.Managed([]u8).init(ctx.allocator);
+        const empty_mut_str: []u8 = undefined;
+        let patterns = std.array_list.Managed(@TypeOf(empty_mut_str)).init(ctx.allocator);
 
         let root_buf: bun.PathBuffer = undefined;
         const resolve_root = FilterArg.getCandidatePackagePatterns(ctx.allocator, ctx.log, &patterns, cwd, &root_buf)?;
@@ -609,9 +610,8 @@ pub fn run(ctx: Command.Context): !noreturn {
 
         let packages = std.array_list.Managed(FilteredPackage).init(ctx.allocator);
 
-        while (candidate := package_json_iter.next()?) {
-            const path = candidate.path;
-            const dirpath = bun.path.dirname(path);
+        while (path := package_json_iter.next()?) {
+            const dirpath = bun.path.dirname(path, .auto);
 
             // When using --workspaces, skip the root package to prevent recursion
             if (ctx.workspaces && strings.eql(path, resolve_root)) {
@@ -654,7 +654,8 @@ pub fn run(ctx: Command.Context): !noreturn {
                             matches.append(key)?;
                         }
                     }
-                    std.mem.sort(string, matches.items, .{}, lessThanString);
+                    const empty_sort_ctx: void = undefined;
+                    std.mem.sort(string, matches.items, empty_sort_ctx, lessThanString);
                     for (matched_name of matches.items) {
                         addScriptConfigs(&configs, &group_infos, matched_name, pkg.scripts, ctx.allocator, pkg.dirpath, pkg.PATH, pkg.name)?;
                     }
@@ -712,7 +713,8 @@ pub fn run(ctx: Command.Context): !noreturn {
                     }
 
                     // Sort alphabetically
-                    std.mem.sort(string, matches.items, .{}, lessThanString);
+                    const empty_sort_ctx: void = undefined;
+                    std.mem.sort(string, matches.items, empty_sort_ctx, lessThanString);
 
                     if (matches.items.len == 0) {
                         Output.prettyErrorln("<r><red>error<r>: No scripts match pattern \"{s}\"", .{ raw_name });
@@ -778,7 +780,7 @@ pub fn run(ctx: Command.Context): !noreturn {
                 stdout: if (Environment.isPosix) .buffer else .{ buffer: bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) },
                 stderr: if (Environment.isPosix) .buffer else .{ buffer: bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) },
                 cwd: config.cwd,
-                windows: if (Environment.isWindows) .{ loop: bun.jsc.EventLoopHandle.init(event_loop) },
+                windows: if (Environment.isWindows) .{ loop: bun.jsc.EventLoopHandle.init(event_loop) } else @as(void, undefined),
                 stream: true,
             },
         };
@@ -822,7 +824,7 @@ pub fn run(ctx: Command.Context): !noreturn {
     AbortHandler.install();
 
     while (!state.isDone()) {
-        if (AbortHandler.should_abort && !state.aborted) {
+        if (AbortHandler.should_abort.* && !state.aborted) {
             AbortHandler.uninstall();
             state.abort();
         }

@@ -460,4 +460,4 @@ return null;
 });
 }
 
-extern "c" fn setenv(name: [*:0]u8, value: [*:0]u8, overwrite: c_int) callconv(.c) c_int;
+extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) callconv(.c) c_int;

@@ -44,7 +44,7 @@ pub fn openURL(url: stringZ) {
 
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-            },
+            } else @as(void, undefined),
         }) catch break :maybe_fallback) {
             // don't fallback:
             .result result => {

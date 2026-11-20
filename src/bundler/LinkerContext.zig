@@ -1606,7 +1606,8 @@ pub const LinkerContext = struct {
                 .ref = export_ref,
             };
         }
-        std.sort.pdq(StableRef, result.items, {}, StableRef.isLessThan);
+        const empty_sort_ctx: void = undefined;
+        std.sort.pdq(StableRef, result.items, empty_sort_ctx, StableRef.isLessThan);
     }
 
     pub fn markFileReachableForCodeSplitting(

@@ -334,140 +334,135 @@ _ = try w.beginArray();
             defer {
             _ = (blk_catch_15: { break :blk_catch_15 ((w.endArray()) catch |__ce_15| { _ = &__ce_15;  }); });
             }
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_4 = client.packages.len;
-                while (i < __end_4) : (i += 1) {
-                    const pkg: Package = client.packages.get(i);
+            var i: usize = 0;
+            _ = &i;
+            while ((i < client.packages.len)) : (i = (i + 1)) {
+                const pkg: Package = client.packages.get(i);
+                _ = try w.beginObject();
+                defer {
+                _ = (blk_catch_16: { break :blk_catch_16 ((w.endObject()) catch |__ce_16| { _ = &__ce_16;  }); });
+                }
+                _ = try w.objectField("id");
+                _ = try w.write(i);
+                _ = try w.objectField("name");
+                _ = try w.write((if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name).slice(sb));
+                _ = try w.objectField("name_hash");
+                _ = try w.write(pkg.name_hash);
+                _ = try w.objectField("resolution");
+                {
+                    const res = pkg.resolution;
                     _ = try w.beginObject();
                     defer {
-                    _ = (blk_catch_16: { break :blk_catch_16 ((w.endObject()) catch |__ce_16| { _ = &__ce_16;  }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((w.endObject()) catch |__ce_17| { _ = &__ce_17;  }); });
                     }
-                    _ = try w.objectField("id");
-                    _ = try w.write(i);
-                    _ = try w.objectField("name");
-                    _ = try w.write((if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name).slice(sb));
-                    _ = try w.objectField("name_hash");
-                    _ = try w.write(pkg.name_hash);
-                    _ = try w.objectField("resolution");
-                    {
-                        const res = pkg.resolution;
-                        _ = try w.beginObject();
-                        defer {
-                        _ = (blk_catch_17: { break :blk_catch_17 ((w.endObject()) catch |__ce_17| { _ = &__ce_17;  }); });
-                        }
-                        _ = try w.objectField("tag");
-                        _ = try w.write(@tagName(res.tag));
-                        _ = try w.objectField("value");
-                        _ = try w.print("\"{f}\"", .{ res.fmt(sb, .posix) });
-                        _ = try w.objectField("resolved");
-                        _ = try w.print("\"{f}\"", .{ res.fmtURL(sb) });
+                    _ = try w.objectField("tag");
+                    _ = try w.write(@tagName(res.tag));
+                    _ = try w.objectField("value");
+                    _ = try w.print("\"{f}\"", .{ res.fmt(sb, .posix) });
+                    _ = try w.objectField("resolved");
+                    _ = try w.print("\"{f}\"", .{ res.fmtURL(sb) });
+                }
+                _ = try w.objectField("dependencies");
+                {
+                    _ = try w.beginArray();
+                    defer {
+                    _ = (blk_catch_18: { break :blk_catch_18 ((w.endArray()) catch |__ce_18| { _ = &__ce_18;  }); });
                     }
-                    _ = try w.objectField("dependencies");
-                    {
-                        _ = try w.beginArray();
-                        defer {
-                        _ = (blk_catch_18: { break :blk_catch_18 ((w.endArray()) catch |__ce_18| { _ = &__ce_18;  }); });
-                        }
-                        {
-                            var dep_id: i32 = pkg.dependencies.off;
-                            _ = &dep_id;
-                            const __end_5 = (pkg.dependencies.off + pkg.dependencies.len);
-                            while (dep_id < __end_5) : (dep_id += 1) {
-                                _ = try w.write(dep_id);
-                            }
+                    var dep_id: u32 = pkg.dependencies.off;
+                    _ = &dep_id;
+                    const dep_end = (pkg.dependencies.off + pkg.dependencies.len);
+                    while ((dep_id < dep_end)) : (dep_id = (dep_id + 1)) {
+                        _ = try w.write(dep_id);
+                    }
+                }
+                if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".arch))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".arch))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".arch))) != Npm.Architecture.all_value)) {
+                    _ = try w.objectField("arch");
+                    _ = try w.beginArray();
+                    defer {
+                    _ = (blk_catch_19: { break :blk_catch_19 ((w.endArray()) catch |__ce_19| { _ = &__ce_19;  }); });
+                    }
+                    for (cp_iter_slice(Npm.Architecture.NameMap.kvs)) |kv| {
+                        _ = &kv;
+                        if (pkg.@"meta".arch.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
+                            _ = try w.write(kv.key);
                         }
                     }
-                    if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".arch))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".arch))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".arch))) != Npm.Architecture.all_value)) {
-                        _ = try w.objectField("arch");
-                        _ = try w.beginArray();
-                        defer {
-                        _ = (blk_catch_19: { break :blk_catch_19 ((w.endArray()) catch |__ce_19| { _ = &__ce_19;  }); });
-                        }
-                        for (cp_iter_slice(Npm.Architecture.NameMap.kvs)) |kv| {
-                            _ = &kv;
-                            if (pkg.@"meta".arch.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
-                                _ = try w.write(kv.key);
-                            }
+                }
+                if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".os))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".os))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".os))) != Npm.OperatingSystem.all_value)) {
+                    _ = try w.objectField("os");
+                    _ = try w.beginArray();
+                    defer {
+                    _ = (blk_catch_20: { break :blk_catch_20 ((w.endArray()) catch |__ce_20| { _ = &__ce_20;  }); });
+                    }
+                    for (cp_iter_slice(Npm.OperatingSystem.NameMap.kvs)) |kv| {
+                        _ = &kv;
+                        if (pkg.@"meta".os.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
+                            _ = try w.write(kv.key);
                         }
                     }
-                    if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".os))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".os))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".os))) != Npm.OperatingSystem.all_value)) {
-                        _ = try w.objectField("os");
-                        _ = try w.beginArray();
-                        defer {
-                        _ = (blk_catch_20: { break :blk_catch_20 ((w.endArray()) catch |__ce_20| { _ = &__ce_20;  }); });
-                        }
-                        for (cp_iter_slice(Npm.OperatingSystem.NameMap.kvs)) |kv| {
-                            _ = &kv;
-                            if (pkg.@"meta".os.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
-                                _ = try w.write(kv.key);
-                            }
-                        }
-                    }
-                    _ = try w.objectField("integrity");
-                    if ((pkg.@"meta".integrity.tag != .unknown)) {
-                        _ = try w.print("\"{f}\"", .{ pkg.@"meta".integrity });
-                    } else {
-                        _ = try w.write(null);
-                    }
-                    _ = try w.objectField("man_dir");
-                    _ = try w.write(pkg.@"meta".man_dir.slice(sb));
-                    _ = try w.objectField("origin");
-                    _ = try w.write(@tagName(pkg.@"meta".origin));
-                    _ = try w.objectField("bin");
-                    switch (pkg.bin.tag) {
+                }
+                _ = try w.objectField("integrity");
+                if ((pkg.@"meta".integrity.tag != .unknown)) {
+                    _ = try w.print("\"{f}\"", .{ pkg.@"meta".integrity });
+                } else {
+                    _ = try w.write(null);
+                }
+                _ = try w.objectField("man_dir");
+                _ = try w.write(pkg.@"meta".man_dir.slice(sb));
+                _ = try w.objectField("origin");
+                _ = try w.write(@tagName(pkg.@"meta".origin));
+                _ = try w.objectField("bin");
+                switch (pkg.bin.tag) {
 .none => {
 _ = try w.write(null);
 },
 .file => {
 _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_21: { break :blk_catch_21 ((w.endObject()) catch |__ce_21| { _ = &__ce_21;  }); });
-                    }
-                    _ = try w.objectField("file");
-                    _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).file.slice(sb));
+                defer {
+                _ = (blk_catch_21: { break :blk_catch_21 ((w.endObject()) catch |__ce_21| { _ = &__ce_21;  }); });
+                }
+                _ = try w.objectField("file");
+                _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).file.slice(sb));
 },
 .named_file => {
 _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_22: { break :blk_catch_22 ((w.endObject()) catch |__ce_22| { _ = &__ce_22;  }); });
-                    }
-                    _ = try w.objectField("name");
-                    _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[0].slice(sb));
-                    _ = try w.objectField("file");
-                    _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[1].slice(sb));
+                defer {
+                _ = (blk_catch_22: { break :blk_catch_22 ((w.endObject()) catch |__ce_22| { _ = &__ce_22;  }); });
+                }
+                _ = try w.objectField("name");
+                _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[0].slice(sb));
+                _ = try w.objectField("file");
+                _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[1].slice(sb));
 },
 .dir => {
 _ = try w.objectField("dir");
-                    _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).dir.slice(sb));
+                _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).dir.slice(sb));
 },
 .map => {
 _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_23: { break :blk_catch_23 ((w.endObject()) catch |__ce_23| { _ = &__ce_23;  }); });
-                    }
-                    const data: []const ExternalString = (if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).map.get(client.buffers.extern_strings.items);
-                    var bin_i: usize = 0;
-                    _ = &bin_i;
-                    while ((bin_i < data.len)) : (bin_i = (bin_i + 2)) {
-                        _ = try w.objectField(data[@as(usize, @intCast(bin_i))].slice(sb));
-                        _ = try w.write(data[@as(usize, @intCast((bin_i + 1)))].slice(sb));
-                    }
+                defer {
+                _ = (blk_catch_23: { break :blk_catch_23 ((w.endObject()) catch |__ce_23| { _ = &__ce_23;  }); });
+                }
+                const data: []const ExternalString = (if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).map.get(client.buffers.extern_strings.items);
+                var bin_i: usize = 0;
+                _ = &bin_i;
+                while ((bin_i < data.len)) : (bin_i = (bin_i + 2)) {
+                    _ = try w.objectField(data[@as(usize, @intCast(bin_i))].slice(sb));
+                    _ = try w.write(data[@as(usize, @intCast((bin_i + 1)))].slice(sb));
+                }
 },
 }
-                    {
-                        _ = try w.objectField("scripts");
-                        _ = try w.beginObject();
-                        defer {
-                        _ = (blk_catch_24: { break :blk_catch_24 ((w.endObject()) catch |__ce_24| { _ = &__ce_24;  }); });
-                        }
-                        inline for ((comptime std.@"meta".fieldNames(Lockfile.Scripts))) |field_name| {
-                            const script = @field(pkg.scripts, field_name).slice(sb);
-                            if ((script.len > 0)) {
-                                _ = try w.objectField(field_name);
-                                _ = try w.write(script);
-                            }
+                {
+                    _ = try w.objectField("scripts");
+                    _ = try w.beginObject();
+                    defer {
+                    _ = (blk_catch_24: { break :blk_catch_24 ((w.endObject()) catch |__ce_24| { _ = &__ce_24;  }); });
+                    }
+                    inline for ((comptime std.@"meta".fieldNames(Lockfile.Scripts))) |field_name| {
+                        const script = @field(pkg.scripts, field_name).slice(sb);
+                        if ((script.len > 0)) {
+                            _ = try w.objectField(field_name);
+                            _ = try w.write(script);
                         }
                     }
                 }
@@ -486,8 +481,8 @@ _ = try w.beginObject();
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_8 = wp_keys.len;
-                while (i < __end_8) : (i += 1) {
+                const __end_6 = wp_keys.len;
+                while (i < __end_6) : (i += 1) {
                     const k = wp_keys[@as(usize, @intCast(i))];
                     const v = wp_vals[@as(usize, @intCast(i))];
                     const len = std.fmt.printInt((&buf), k, 10, .lower, .{});
@@ -507,8 +502,8 @@ _ = try w.beginObject();
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_9 = wv_keys.len;
-                while (i < __end_9) : (i += 1) {
+                const __end_7 = wv_keys.len;
+                while (i < __end_7) : (i += 1) {
                     const k = wv_keys[@as(usize, @intCast(i))];
                     const v = wv_vals[@as(usize, @intCast(i))];
                     const len = std.fmt.printInt((&buf), k, 10, .lower, .{});

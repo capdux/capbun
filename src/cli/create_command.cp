@@ -111,7 +111,7 @@ fn execTask(allocator: std.mem.Allocator, task_: string, cwd: string, _: string,
 
         windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-        } else null,
+        } else @as(void, undefined),
     }) catch return;
 }
 
@@ -165,7 +165,7 @@ struct CreateOptions {
 
         let diag = clap.Diagnostic{};
 
-        let args = clap.parse(clap.Help, &params, { diagnostic: &diag, allocator: ctx.allocator }) catch |e| {
+        let args = clap.parse(clap.Help, &CreateOptions.params, { diagnostic: &diag, allocator: ctx.allocator }) catch |e| {
             // Report useful error and exit
             diag.report(Output.errorWriter(), e) catch {};
             return e;
@@ -191,6 +191,203 @@ struct CreateOptions {
 
 const BUN_CREATE_DIR = ".bun-create";
 let home_dir_buf: bun.PathBuffer = undefined;
+const CreateInjectionPrefill = struct {
+    const dependencies_string = "dependencies";
+    const dev_dependencies_string = "devDependencies";
+    const bun_string = "bun";
+    const macros_string = "macros";
+    const bun_macros_relay_path = "bun-macro-relay";
+
+    let dependencies_e_string = js_ast.E.String.init(dependencies_string);
+    let devDependencies_e_string = js_ast.E.String.init(dev_dependencies_string);
+    let bun_e_string = js_ast.E.String.init(bun_string);
+    let macros_e_string = js_ast.E.String.init(macros_string);
+    let react_relay_string = js_ast.E.String.init("react-relay");
+    let bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
+    let babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
+    let babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
+    let graphql_string = js_ast.E.String.init("graphql");
+
+    let npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
+
+    pub const npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = &npx_react_scripts_build_str }, .loc = logger.Loc.Empty };
+
+    let bun_macro_relay_properties: [1]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &graphql_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_string = &bun_macros_relay_path_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+
+    let bun_macro_relay_object = js_ast.E.Object{
+        .properties = undefined,
+    };
+
+    let bun_macros_relay_object_properties: [3]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &react_relay_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &babel_plugin_relay_macro,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &babel_plugin_relay_macro_js,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macro_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+
+    let bun_macros_relay_object = js_ast.E.Object{
+        .properties = undefined,
+    };
+
+    let bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
+    let bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{
+        js_ast.G.Property{
+            .key = js_ast.Expr{
+                .data = .{
+                    .e_string = &bun_macros_relay_only_object_string,
+                },
+                .loc = logger.Loc.Empty,
+            },
+            .value = js_ast.Expr{
+                .data = .{
+                    .e_object = &bun_macros_relay_object,
+                },
+                .loc = logger.Loc.Empty,
+            },
+        },
+    };
+    let bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
+
+    let bun_only_macros_string = js_ast.E.String.init("bun");
+    let bun_only_macros_relay_property = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_only_macros_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &bun_macros_relay_only_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    let bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
+    let bun_framework_next_version = js_ast.E.String.init("latest");
+    let bun_framework_next_property = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_framework_next_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_framework_next_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    let bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
+    let bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
+
+    let bun_macro_relay_dependency = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_macro_relay_dependency_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &bun_macro_relay_dependency_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    let refresh_runtime_string = js_ast.E.String.init("react-refresh");
+    let refresh_runtime_version = js_ast.E.String.init("0.10.0");
+    let react_refresh_dependency = js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &refresh_runtime_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_string = &refresh_runtime_version,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    };
+
+    let dev_dependencies_key = js_ast.Expr{
+        .data = .{
+            .e_string = &devDependencies_e_string,
+        },
+        .loc = logger.Loc.Empty,
+    };
+    let dependencies_key = js_ast.Expr{
+        .data = .{ .e_string = &dependencies_e_string },
+        .loc = logger.Loc.Empty,
+    };
+
+    pub const bun_bun_for_nextjs_task: string = "bun bun --use next";
+};
+
+pub struct ExtractInfoResult {
+    example_tag: Example.Tag,
+    template: []const u8,
+}
+
 pub struct CreateCommand {
     static fn exec(ctx: Command.Context, example_tag: Example.Tag, template: []const u8)! {
         @branchHint(.cold);
@@ -325,7 +522,7 @@ pub struct CreateCommand {
 
                 const file_buf = ctx.allocator.alloc(u8, 16384)?;
 
-                let tarball_buf_list = std.ArrayListUnmanaged(u8){ capacity: file_buf.len, items: file_buf };
+                let tarball_buf_list = std.ArrayListUnmanaged(u8).fromOwnedSlice(file_buf);
                 let gunzip = Zlib.ZlibReaderArrayList.init(tarball_bytes.list.items, &tarball_buf_list, ctx.allocator)?;
                 defer gunzip.deinit();
                 gunzip.readAll(true)?;
@@ -386,12 +583,13 @@ pub struct CreateCommand {
                     }
                 }
 
+                const empty_extract_ctx: void = undefined;
                 * = try Archiver.extractToDisk(
                     tarball_buf_list.items,
                     destination,
                     &archive_context,
                     void,
-                    .{},
+                    empty_extract_ctx,
                     {
                         depth_to_skip: 1,
                     },
@@ -410,7 +608,7 @@ pub struct CreateCommand {
                 }
             },
             .local_folder => {
-                let template_parts = [ template ];
+                let template_parts: [1]string = [ template ];
 
                 node.name = "Copying files";
                 progress.refresh();
@@ -435,14 +633,14 @@ pub struct CreateCommand {
                 };
 
                 let destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
-                const dst_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination);
+                const dst_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination) else @as(void, undefined);
                 if (comptime Environment.isWindows) {
                     strings.copyU8IntoU16(&destination_buf, dst_without_trailing_slash);
                     destination_buf[dst_without_trailing_slash.len] = std.fs.path.sep;
                 }
 
                 let template_path_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
-                const src_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(abs_template_path);
+                const src_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(abs_template_path) else @as(void, undefined);
                 if (comptime Environment.isWindows) {
                     strings.copyU8IntoU16(&template_path_buf, src_without_trailing_slash);
                     template_path_buf[src_without_trailing_slash.len] = std.fs.path.sep;
@@ -534,7 +732,7 @@ pub struct CreateCommand {
                             switch (infile.stat()) {
                                 .err => {},
                                 .result => |stat| {
-                                    * = outfile.chmod(i32(stat.mode));
+                                    * = outfile.chmod(usize(stat.mode));
                                 },
                             }
 
@@ -553,10 +751,10 @@ pub struct CreateCommand {
                     &walker_,
                     node,
                     &progress,
-                    if (comptime Environment.isWindows) dst_without_trailing_slash.len + 1,
-                    if (comptime Environment.isWindows) &destination_buf,
-                    if (comptime Environment.isWindows) src_without_trailing_slash.len + 1,
-                    if (comptime Environment.isWindows) &template_path_buf,
+                    if (comptime Environment.isWindows) dst_without_trailing_slash.len + 1 else @as(void, undefined),
+                    if (comptime Environment.isWindows) &destination_buf else @as(void, undefined),
+                    if (comptime Environment.isWindows) src_without_trailing_slash.len + 1 else @as(void, undefined),
+                    if (comptime Environment.isWindows) &template_path_buf else @as(void, undefined),
                 );
 
                 package_json_file = destination_dir.openFile("package.json", { mode: .read_write }) catch null;
@@ -568,6 +766,7 @@ pub struct CreateCommand {
                                 break :brk try pkg.getEndPos();
                             }
 
+                            let stat_ok = true;
                             const stat = pkg.stat() catch |e| {
                                 node.end();
 
@@ -575,8 +774,10 @@ pub struct CreateCommand {
 
                                 package_json_file = null;
                                 Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e)});
-                                break :read_package_json;
+                                stat_ok = false;
+                                std.mem.zeroes(std.fs.File.Stat)
                             };
+                            if (!stat_ok) break :read_package_json;
 
                             if (stat.kind != .file || stat.size == 0) {
                                 package_json_file = null;
@@ -593,6 +794,7 @@ pub struct CreateCommand {
                         package_json_contents.list.expandToCapacity();
 
                         const prev_file_pos = if (comptime Environment.isWindows) try pkg.getPos() else 0;
+                        let pread_ok = true;
                         * = pkg.preadAll(package_json_contents.list.items, 0) catch |e| {
                             package_json_file = null;
 
@@ -601,8 +803,10 @@ pub struct CreateCommand {
                             progress.refresh();
 
                             Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e)});
-                            break :read_package_json;
+                            pread_ok = false;
+                            0
                         };
+                        if (!pread_ok) break :read_package_json;
                         if (comptime Environment.isWindows) try pkg.seekTo(prev_file_pos);
                         // The printer doesn't truncate, so we must do so manually
                         std.posix.ftruncate(pkg.handle, 0) catch {};
@@ -620,8 +824,8 @@ pub struct CreateCommand {
         const is_nextjs = false;
         const is_create_react_app = false;
         const create_react_app_entry_point_path: string = "";
-        let preinstall_tasks = std.mem.zeroes(std.ArrayListUnmanaged([]const u8));
-        let postinstall_tasks = std.mem.zeroes(std.ArrayListUnmanaged([]const u8));
+        let preinstall_tasks: std.ArrayListUnmanaged(string) = .empty;
+        let postinstall_tasks: std.ArrayListUnmanaged(string) = .empty;
         let has_dependencies: bool = false;
         const PATH = env_loader.map.get("PATH") ?? "";
 
@@ -656,10 +860,13 @@ pub struct CreateCommand {
 
                 const source = &logger.Source.initPathString("package.json", package_json_contents.list.items);
 
+                let parse_ok = true;
                 let package_json_expr = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch {
                     package_json_file = null;
-                    break :process_package_json;
+                    parse_ok = false;
+                    undefined
                 };
+                if (!parse_ok) break :process_package_json;
 
                 if (package_json_expr.data != .e_object) {
                     package_json_file = null;
@@ -678,7 +885,7 @@ pub struct CreateCommand {
                 if (name_expr := package_json_expr.asProperty("name")) {
                     if (name_expr.expr.data == .e_string) {
                         const basename = std.fs.path.basename(destination);
-                        name_expr.expr.data.e_string.data = @as([*]u8, @ptrFromInt(@intFromPtr(basename.ptr)))[0..basename.len];
+                        name_expr.expr.data.e_string.data = @constCast(basename);
                     }
                 }
 
@@ -859,197 +1066,7 @@ pub struct CreateCommand {
 
                 const E = js_ast.E;
 
-                const InjectionPrefill = struct {
-                    const dependencies_string = "dependencies";
-                    const dev_dependencies_string = "devDependencies";
-                    const bun_string = "bun";
-                    const macros_string = "macros";
-                    const bun_macros_relay_path = "bun-macro-relay";
-
-                    let dependencies_e_string = E.String.init(dependencies_string);
-                    let devDependencies_e_string = E.String.init(dev_dependencies_string);
-                    let bun_e_string = E.String.init(bun_string);
-                    let macros_e_string = E.String.init(macros_string);
-                    let react_relay_string = E.String.init("react-relay");
-                    let bun_macros_relay_path_string = E.String.init("bun-macro-relay");
-                    let babel_plugin_relay_macro = E.String.init("babel-plugin-relay/macro");
-                    let babel_plugin_relay_macro_js = E.String.init("babel-plugin-relay/macro.js");
-                    let graphql_string = E.String.init("graphql");
-
-                    let npx_react_scripts_build_str = E.String.init("npx react-scripts build");
-
-                    pub const npx_react_scripts_build = js_ast.Expr{ data: { e_string: &npx_react_scripts_build_str }, loc: logger.Loc.Empty };
-
-                    let bun_macro_relay_properties = [
-                        js_ast.G.Property{
-                            key: js_ast.Expr{
-                                data: {
-                                    e_string: &graphql_string,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                            value: js_ast.Expr{
-                                data: {
-                                    e_string: &bun_macros_relay_path_string,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                        },
-                    ];
-
-                    let bun_macro_relay_object = js_ast.E.Object{
-                        properties: undefined,
-                    };
-
-                    let bun_macros_relay_object_properties = [
-                        js_ast.G.Property{
-                            key: js_ast.Expr{
-                                data: {
-                                    e_string: &react_relay_string,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                            value: js_ast.Expr{
-                                data: {
-                                    e_object: &bun_macro_relay_object,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                        },
-                        js_ast.G.Property{
-                            key: js_ast.Expr{
-                                data: {
-                                    e_string: &babel_plugin_relay_macro,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                            value: js_ast.Expr{
-                                data: {
-                                    e_object: &bun_macro_relay_object,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                        },
-                        js_ast.G.Property{
-                            key: js_ast.Expr{
-                                data: {
-                                    e_string: &babel_plugin_relay_macro_js,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                            value: js_ast.Expr{
-                                data: {
-                                    e_object: &bun_macro_relay_object,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                        },
-                    ];
-
-                    let bun_macros_relay_object = E.Object{
-                        properties: undefined,
-                    };
-
-                    let bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
-                    let bun_macros_relay_only_object_properties = [
-                        js_ast.G.Property{
-                            key: js_ast.Expr{
-                                data: {
-                                    e_string: &bun_macros_relay_only_object_string,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                            value: js_ast.Expr{
-                                data: {
-                                    e_object: &bun_macros_relay_object,
-                                },
-                                loc: logger.Loc.Empty,
-                            },
-                        },
-                    ];
-                    let bun_macros_relay_only_object = E.Object{ properties: undefined };
-
-                    let bun_only_macros_string = js_ast.E.String.init("bun");
-                    let bun_only_macros_relay_property = js_ast.G.Property{
-                        key: js_ast.Expr{
-                            data: {
-                                e_string: &bun_only_macros_string,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                        value: js_ast.Expr{
-                            data: {
-                                e_object: &bun_macros_relay_only_object,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                    };
-
-                    let bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
-                    let bun_framework_next_version = js_ast.E.String.init("latest");
-                    let bun_framework_next_property = js_ast.G.Property{
-                        key: js_ast.Expr{
-                            data: {
-                                e_string: &bun_framework_next_string,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                        value: js_ast.Expr{
-                            data: {
-                                e_string: &bun_framework_next_version,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                    };
-
-                    let bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
-                    let bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
-
-                    let bun_macro_relay_dependency = js_ast.G.Property{
-                        key: js_ast.Expr{
-                            data: {
-                                e_string: &bun_macro_relay_dependency_string,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                        value: js_ast.Expr{
-                            data: {
-                                e_string: &bun_macro_relay_dependency_version,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                    };
-
-                    let refresh_runtime_string = js_ast.E.String.init("react-refresh");
-                    let refresh_runtime_version = js_ast.E.String.init("0.10.0");
-                    let react_refresh_dependency = js_ast.G.Property{
-                        key: js_ast.Expr{
-                            data: {
-                                e_string: &refresh_runtime_string,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                        value: js_ast.Expr{
-                            data: {
-                                e_string: &refresh_runtime_version,
-                            },
-                            loc: logger.Loc.Empty,
-                        },
-                    };
-
-                    let dev_dependencies_key = js_ast.Expr{
-                        data: {
-                            e_string: &devDependencies_e_string,
-                        },
-                        loc: logger.Loc.Empty,
-                    };
-                    let dependencies_key = js_ast.Expr{
-                        data: { e_string: &dependencies_e_string },
-                        loc: logger.Loc.Empty,
-                    };
-
-                    pub const bun_bun_for_nextjs_task: string = "bun bun --use next";
-                };
+                const InjectionPrefill = CreateInjectionPrefill;
 
                 InjectionPrefill.bun_macro_relay_object.properties = js_ast.G.Property.List
                     .fromBorrowedSliceDangerous(InjectionPrefill.bun_macro_relay_properties[0..]);
@@ -1395,6 +1412,7 @@ pub struct CreateCommand {
                 buffer_writer.append_newline = true;
                 let package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
 
+                let write_ok = true;
                 * = JSPrinter.printJSON(
                     @TypeOf(&package_json_writer),
                     &package_json_writer,
@@ -1404,19 +1422,26 @@ pub struct CreateCommand {
                 ) catch |e| {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
-                    break :process_package_json;
+                    write_ok = false;
+                    @as(usize, 0)
                 };
+                if (!write_ok) break :process_package_json;
                 const written = package_json_writer.ctx.getWritten();
+                const void_ok: void = undefined;
                 bun.sys.File.writeAll({ handle: file }, written).unwrap() catch |e| {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
-                    break :process_package_json;
+                    write_ok = false;
+                    void_ok
                 };
+                if (!write_ok) break :process_package_json;
                 file.truncate(i32(written.len)).unwrap() catch |e| {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
-                    break :process_package_json;
+                    write_ok = false;
+                    void_ok
                 };
+                if (!write_ok) break :process_package_json;
             }
         }
 
@@ -1488,7 +1513,7 @@ pub struct CreateCommand {
 
                 windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-        } else null,
+        } else @as(void, undefined),
             });
             * = try process.unwrap();
         }
@@ -1509,18 +1534,10 @@ pub struct CreateCommand {
 
         Output.flush();
 
-        Output.pretty(
-            \\
-            \\<d>Come hang out in bun's Discord: https://bun.com/discord<r>
-            \\
-        , .{});
+        Output.pretty("\n<d>Come hang out in bun's Discord: https://bun.com/discord<r>\n", .{});
 
         if (!create_options.skip_install) {
-            Output.pretty(
-                \\
-                \\<r><d>-----<r>
-                \\
-            , .{});
+            Output.pretty("\n<r><d>-----<r>\n", .{});
             Output.flush();
         }
 
@@ -1532,23 +1549,11 @@ pub struct CreateCommand {
         // }
 
         if (!create_options.skip_git && !create_options.skip_install) {
-            Output.pretty(
-                \\
-                \\<d>A local git repository was created for you and dependencies were installed automatically.<r>
-                \\
-            , .{});
+            Output.pretty("\n<d>A local git repository was created for you and dependencies were installed automatically.<r>\n", .{});
         } else if (!create_options.skip_git) {
-            Output.pretty(
-                \\
-                \\<d>A local git repository was created for you.<r>
-                \\
-            , .{});
+            Output.pretty("\n<d>A local git repository was created for you.<r>\n", .{});
         } else if (!create_options.skip_install) {
-            Output.pretty(
-                \\
-                \\<d>Dependencies were installed automatically.<r>
-                \\
-            , .{});
+            Output.pretty("\n<d>Dependencies were installed automatically.<r>\n", .{});
         }
 
         if (example_tag == .github_repository) {
@@ -1560,61 +1565,26 @@ pub struct CreateCommand {
                 }
             }
 
-            Output.pretty(
-                \\
-                \\<b><green>Success!<r> <b>{s}<r> loaded into <b>{s}<r>
-                \\
-            , .{ display_name, std.fs.path.basename(destination) });
+            Output.pretty("\n<b><green>Success!<r> <b>{s}<r> loaded into <b>{s}<r>\n", .{ display_name, std.fs.path.basename(destination) });
         } else {
-            Output.pretty(
-                \\
-                \\<b>Created <green>{s}<r> project successfully
-                \\
-            , .{ std.fs.path.basename(template)});
+            Output.pretty("\n<b>Created <green>{s}<r> project successfully\n", .{ std.fs.path.basename(template)});
         }
 
         if (is_nextjs) {
-            Output.pretty(
-                \\
-                \\<r><d>#<r> When dependencies change, run this to update node_modules.bun:
-                \\
-                \\  <b><cyan>bun bun --use next<r>
-                \\
-            , .{});
+            Output.pretty("\n<r><d>#<r> When dependencies change, run this to update node_modules.bun:\n\n  <b><cyan>bun bun --use next<r>\n", .{});
         } else if (is_create_react_app) {
-            Output.pretty(
-                \\
-                \\<r><d>#<r> When dependencies change, run this to update node_modules.bun:
-                \\
-                \\  <b><cyan>bun bun {s}<r>
-                \\
-            , .{ create_react_app_entry_point_path});
+            Output.pretty("\n<r><d>#<r> When dependencies change, run this to update node_modules.bun:\n\n  <b><cyan>bun bun {s}<r>\n", .{ create_react_app_entry_point_path});
         }
 
         const rel_destination = filesystem.relativeTo(destination);
         const is_empty_destination = rel_destination.len == 0;
 
         if (is_empty_destination) {
-            Output.pretty(
-                \\
-                \\<d>#<r><b> To get started, run:<r>
-                \\
-                \\  <b><cyan>{s}<r>
-                \\
-                \\
-            , { 
+            Output.pretty("\n<d>#<r><b> To get started, run:<r>\n\n  <b><cyan>{s}<r>\n\n", .{
                 start_command,
             });
         } else {
-            Output.pretty(
-                \\
-                \\<d>#<r><b> To get started, run:<r>
-                \\
-                \\  <b><cyan>cd {s}<r>
-                \\  <b><cyan>{s}<r>
-                \\
-                \\
-            , { 
+            Output.pretty("\n<d>#<r><b> To get started, run:<r>\n\n  <b><cyan>cd {s}<r>\n  <b><cyan>{s}<r>\n\n", .{
                 rel_destination,
                 start_command,
             });
@@ -1667,9 +1637,10 @@ pub struct CreateCommand {
             entry_points: &[ analyzer.entry_point ],
             onFetch: @ptrCast(&Analyzer.onAnalyze),
         };
-        bun.cli.BuildCommand.exec(bun.cli.Command.get(), &fetcher)?;
+        const build_exec = bun.cli.BuildCommand.exec;
+        build_exec(bun.cli.Command.get(), &fetcher)?;
     }
-    static fn extractInfo(ctx: Command.Context) !struct { example_tag: Example.Tag, template: []const u8 } {
+    static fn extractInfo(ctx: Command.Context): !ExtractInfoResult {
         let example_tag = Example.Tag.unknown;
         let filesystem = fs.FileSystem.init(null)?;
 
@@ -1694,7 +1665,7 @@ pub struct CreateCommand {
             let positional = positionals[0];
 
             outer: {
-                let parts = [ filesystem.top_level_dir, positional ];
+                let parts: [2]string = [ filesystem.top_level_dir, positional ];
                 const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                 home_dir_buf[outdir_path.len] = 0;
                 const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
@@ -1719,7 +1690,7 @@ pub struct CreateCommand {
             if (!std.fs.path.isAbsolute(positional)) {
                 outer: {
                     if (home_dir := env_loader.map.get("BUN_CREATE_DIR")) {
-                        let parts = [ home_dir, positional ];
+                        let parts: [2]string = [ home_dir, positional ];
                         const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                         home_dir_buf[outdir_path.len] = 0;
                         const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
@@ -1732,7 +1703,7 @@ pub struct CreateCommand {
                 }
 
                 outer: {
-                    let parts = [ filesystem.top_level_dir, BUN_CREATE_DIR, positional ];
+                    let parts: [3]string = [ filesystem.top_level_dir, BUN_CREATE_DIR, positional ];
                     const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                     home_dir_buf[outdir_path.len] = 0;
                     const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
@@ -1745,7 +1716,7 @@ pub struct CreateCommand {
 
                 outer: {
                     if (home_dir := env_loader.map.get("HOME")) {
-                        let parts = [ home_dir, BUN_CREATE_DIR, positional ];
+                        let parts: [3]string = [ home_dir, BUN_CREATE_DIR, positional ];
                         const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                         home_dir_buf[outdir_path.len] = 0;
                         const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
@@ -1828,7 +1799,7 @@ pub enum ExampleTag {
         .{ ".tsx", .jslike_file },
         .{ ".jsx", .jslike_file },
     });
-    pub fn fromFileExtension(extension: string): ExampleTag? {
+    pub static fn fromFileExtension(extension: string): ExampleTag? {
         return ExtensionTagMap.get(extension);
     }
 }
@@ -1872,25 +1843,25 @@ pub struct Example {
 
         let examples = std.array_list.Managed(Example).fromOwnedSlice(ctx.allocator, remote_examples);
         {
-            let folders = [
+            let folders: [3]std.fs.Dir = [
                 bun.invalid_fd.stdDir(),
                 bun.invalid_fd.stdDir(),
                 bun.invalid_fd.stdDir(),
             ];
             if (home_dir := env_loader.map.get("BUN_CREATE_DIR")) {
-                let parts = [ home_dir ];
+                let parts: [1]string = [ home_dir ];
                 const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                 folders[0] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
             }
 
             {
-                let parts = [ filesystem.top_level_dir, BUN_CREATE_DIR ];
+                let parts: [2]string = [ filesystem.top_level_dir, BUN_CREATE_DIR ];
                 const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                 folders[1] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
             }
 
             if (home_dir := env_loader.map.get(bun.env_var.HOME.key())) {
-                let parts = [ home_dir, BUN_CREATE_DIR ];
+                let parts: [2]string = [ home_dir, BUN_CREATE_DIR ];
                 const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
                 folders[2] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
             }
@@ -1985,11 +1956,11 @@ pub struct Example {
                     {
                         name: {
                             offset: 0,
-                            length: i32("Authorization".len),
+                            length: u32("Authorization".len),
                         },
                         value: {
-                            offset: i32("Authorization".len),
-                            length: i32(headers_buf.len - "Authorization".len),
+                            offset: u32("Authorization".len),
+                            length: u32(headers_buf.len - "Authorization".len),
                         },
                     },
                 );
@@ -2400,11 +2371,10 @@ struct GitHandler {
         //   Range (min … max):   299.5 ms … 318.8 ms    10 runs
 
         if (git := which(&bun_path_buf, PATH, destination, "git")) {
-            const git_commands = .{
-                &[ git, "init", "--quiet" ],
-                &[ git, "add", destination, "--ignore-errors" ],
-                &[ git, "commit", "-am", "Initial commit (via bun create)", "--quiet" ],
-            };
+            const cmd_0: [3]string = [ git, "init", "--quiet" ];
+            const cmd_1: [4]string = [ git, "add", destination, "--ignore-errors" ];
+            const cmd_2: [5]string = [ git, "commit", "-am", "Initial commit (via bun create)", "--quiet" ];
+            const git_commands: [3][]const string = [ &cmd_0, &cmd_1, &cmd_2 ];
 
             if (comptime verbose) {
                 Output.prettyErrorln("git backend: {s}", .{ git});
@@ -2412,8 +2382,7 @@ struct GitHandler {
 
             // same names, just comptime known values
 
-            inline for (command_field of comptime std.@"meta".fieldNames(@TypeOf(Commands))) {
-                const command: []const string = @field(git_commands, command_field);
+            for (command of git_commands) {
                 let process = std.process.Child.init(command, default_allocator);
                 process.cwd = destination;
                 process.stdin_behavior = .Inherit;

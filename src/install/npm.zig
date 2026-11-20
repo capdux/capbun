@@ -2384,6 +2384,13 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager) WhoamiErro
         return error.ProbablyInvalidAuth;
 }
 
+pub fn parseOptionalJson(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator) !?BunJSON.Expr {
+        return (blk_catch_9: { break :blk_catch_9 ((BunJSON.parseUTF8(source, log, allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        return null; }); });
+}
+
 pub fn responseError(allocator: std.mem.Allocator, req: *const http.AsyncHTTP, res: *const bun.picohttp.Response, pkg_id: ?PkgId, response_body: *MutableString, comptime otp_response: bool) OOM!noreturn {
         var message: ?[]const u8 = null;
         _ = &message;
@@ -2391,16 +2398,7 @@ pub fn responseError(allocator: std.mem.Allocator, req: *const http.AsyncHTTP, r
             var log = logger.Log.init(allocator);
             _ = &log;
             const source = (&logger.Source.initPathString("???", response_body.list.items));
-            var parsed_json: ?BunJSON.Expr = null;
-            _ = &parsed_json;
-            if ((blk_catch_9: { break :blk_catch_9 ((BunJSON.parseUTF8(source, (&log), allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-                return error.OutOfMemory;
-            }
-            parsed_json = null;
-            break :blk_catch_9 {}; }); })) |j| {
-                _ = &j;
-                parsed_json = j;
-            }
+            const parsed_json = try parseOptionalJson(source, (&log), allocator);
             if (parsed_json) |json| {
                 _ = &json;
                 if (try json.getString(allocator, "error")) |err_pair| {

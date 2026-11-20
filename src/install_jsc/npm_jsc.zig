@@ -84,7 +84,10 @@ pub fn jsParseManifest(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) b
             const colon = strings.indexOfChar(registry.slice(), 58);
             const scope = npm.Registry.Scope{ .url_hash = npm.Registry.Scope.hash(strings.withoutTrailingSlash(registry.slice())), .url = .{ .host = strings.withoutTrailingSlash(strings.withoutPrefixComptime(registry.slice(), "http://")), .hostname = strings.withoutTrailingSlash(strings.withoutPrefixComptime(registry.slice(), "http://")), .href = registry.slice(), .origin = strings.withoutTrailingSlash(registry.slice()), .protocol = (if ((colon != null)) registry.slice()[0..colon.?] else "") } };
             const maybe_package_manifest = (blk_catch_1: { break :blk_catch_1 ((npm.PackageManifest.Serializer.loadByFile(bun.default_allocator, (&scope), bun.sys.File.@"from"(manifest_file))) catch |e| { _ = &e; return global.throw("failed to load manifest file: {s}", .{ @errorName(e) }); }); });
-            const package_manifest: npm.PackageManifest = ((maybe_package_manifest) orelse { return .{ .ok = global.throw("manifest is invalid ", .{}) }; });
+            if ((maybe_package_manifest == null)) {
+                return global.throw("manifest is invalid ", .{});
+            }
+            const package_manifest: npm.PackageManifest = maybe_package_manifest.?;
             var buf: std.ArrayListUnmanaged(u8) = .{};
             _ = &buf;
             const writer = buf.writer(bun.default_allocator);

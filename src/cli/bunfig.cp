@@ -101,16 +101,19 @@ pub struct BunfigParser {
             _.expectString(expr)?;
             const Matcher = strings.ExactSizeMatcher(8);
 
-            _.bunfig.log_level = switch (Matcher.match(expr.asString(_.allocator).?)) {
-                Matcher.case("debug") => api.MessageLevel.debug,
-                Matcher.case("error") => api.MessageLevel.err,
-                Matcher.case("warn") => api.MessageLevel.warn,
-                Matcher.case("info") => api.MessageLevel.info,
-                else => {
-                    _.addError(expr.loc, "Invalid log level, must be one of debug, error, or warn")?;
-                    unreachable;
-                },
-            };
+            const log_level_m = Matcher.match(expr.asString(_.allocator).?);
+            if (log_level_m == Matcher.case("debug")) {
+                _.bunfig.log_level = api.MessageLevel.debug;
+            } else if (log_level_m == Matcher.case("error")) {
+                _.bunfig.log_level = api.MessageLevel.err;
+            } else if (log_level_m == Matcher.case("warn")) {
+                _.bunfig.log_level = api.MessageLevel.warn;
+            } else if (log_level_m == Matcher.case("info")) {
+                _.bunfig.log_level = api.MessageLevel.info;
+            } else {
+                _.addError(expr.loc, "Invalid log level, must be one of debug, error, or warn")?;
+                unreachable;
+            }
         }
 
         fn loadPreload(
@@ -254,7 +257,11 @@ pub struct BunfigParser {
             if (comptime cmd == .TestCommand) {
                 if (test_ := json.get("test")) {
                     if (root := test_.get("root")) {
-                        _.ctx.debug.test_directory = root.asString(_.allocator) ?? "";
+                        if (td := root.asString(_.allocator)) {
+                            _.ctx.debug.test_directory = td;
+                        } else {
+                            _.ctx.debug.test_directory = "";
+                        }
                     }
 
                     if (expr := test_.get("preload")) {
@@ -1089,10 +1096,7 @@ pub struct BunfigParser {
                                 _.addError(prop.key.?.loc, "Expected package name")?;
                             }
 
-                            _.ctx.debug.package_bundle_map.putAssumeCapacity(path, switch (prop.value.?.asBool() ?? false) {
-                                true => options.BundlePackage.always,
-                                false => options.BundlePackage.never,
-                            });
+                            _.ctx.debug.package_bundle_map.putAssumeCapacity(path, if (prop.value.?.asBool() ?? false) options.BundlePackage.always else options.BundlePackage.never);
                         }
                     }
                 }
@@ -1174,7 +1178,7 @@ pub struct BunfigParser {
             if (expr := json.get("macros")) {
                 if (expr.data == .e_boolean) {
                     if (expr.data.e_boolean.value == false) {
-                        _.ctx.debug.macros = { disable: {} };
+                        _.ctx.debug.macros = { disable: undefined };
                     }
                 } else {
                     _.ctx.debug.macros = { map: PackageJSON.parseMacrosJSON(allocator, expr, _.log, _.source) };
@@ -1247,7 +1251,7 @@ pub struct BunfigParser {
                         _.allocator,
                         "expected string but received {f}",
                         .{
-                            @as(js_ast.Expr.Tag, expr.data),
+                            std.meta.activeTag(expr.data),
                         },
                         {
                             source: _.source,
@@ -1261,13 +1265,13 @@ pub struct BunfigParser {
         }
 
         fn expect(*_, expr: js_ast.Expr, token: js_ast.Expr.Tag)! {
-            if (@as(js_ast.Expr.Tag, expr.data) != token) {
+            if (std.meta.activeTag(expr.data) != token) {
                 _.log.addErrorFmtOpts(
                     _.allocator,
                     "expected {f} but received {f}",
                     .{
                         token,
-                        @as(js_ast.Expr.Tag, expr.data),
+                        std.meta.activeTag(expr.data),
                     },
                     {
                         source: _.source,
@@ -1281,7 +1285,7 @@ pub struct BunfigParser {
 }
 
 pub struct Bunfig {
-    const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
+    pub const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
     const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
     const Parser = BunfigParser;
 

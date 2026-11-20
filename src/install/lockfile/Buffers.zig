@@ -168,7 +168,7 @@ else => {
                     _ = &dep;
                     _ = to_clone.appendAssumeCapacity(Dependency.toExternal(dep));
                 }
-                _ = try writeArray(StreamType, stream, Writer, writer, &.{}, Dependency.External, to_clone.items);
+                _ = try writeArray(StreamType, stream, Writer, writer, @TypeOf(to_clone.items), to_clone.items);
             } else {
                 const list = @field(buffers, name);
                 const items = list.items;

@@ -126,7 +126,7 @@ pub fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: boo
         _ = env.appendAssumeCapacity(null);
         var argv: [2]?[*:0]u8 = .{ @constCast(exe.ptr), null };
         _ = &argv;
-        var extra_fds: []bun.spawn.SpawnOptions.ExtraFd = .{ bun.spawn.SpawnOptions.ExtraFd{ .pipe = fds[1] } };
+        var extra_fds: [1]bun.spawn.SpawnOptions.ExtraFd = .{ bun.spawn.SpawnOptions.ExtraFd{ .pipe = fds[1] } };
         _ = &extra_fds;
         var opts: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = (if (stdoutInherit) .inherit else .ignore), .stderr = (if (stderrInherit) .inherit else .ignore), .extra_fds = (&extra_fds), .argv0 = exe.ptr };
         _ = &opts;

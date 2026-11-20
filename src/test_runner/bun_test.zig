@@ -32,6 +32,15 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+comptime {
+    const t1 = BunTest.Bun__TestScope__Describe2__bunTestThen;
+    _ = &t1;
+    const t2 = BunTest.Bun__TestScope__Describe2__bunTestCatch;
+    _ = &t2;
+    _ = @export((&t1), .{ .name = "Bun__TestScope__Describe2__bunTestThen" });
+    _ = @export((&t2), .{ .name = "Bun__TestScope__Describe2__bunTestCatch" });
+
+}
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -239,7 +248,7 @@ pub fn enterFile(self: *BunTestRoot, file_id: jsc.Jest.TestRunner.File.ID, repor
             _ = group.end();
             }
             _ = bun.assert((self.active_file.get() == null));
-            self.active_file = BunTestPtr.new(undefined);
+            self.active_file = BunTestPtr.Optional.new(undefined);
             _ = (self.active_file.get()).?.init(self.gpa, self, file_id, reporter, default_concurrent, first_last);
     }
 
@@ -992,6 +1001,7 @@ pub fn appendHook(self: *DescribeScope, gpa: std.mem.Allocator, tag: BunTestHook
             return entry;
     }
     pub const HookTag = BunTestHookTag;
+    pub const Only = BaseScopeOnly;
 };
 
 pub const ExecutionEntry = struct {

@@ -221,7 +221,7 @@ statements: PreparedStatementsMap = PreparedStatementsMap{  },
 @"#flags": ConnectionFlags = ConnectionFlags{  },
 
 pub fn init(database: []const u8, username: []const u8, password: []const u8, options: []const u8, options_buf: []const u8, tls_config: SSLConfig, secure: ?*uws.SslCtx, ssl_mode: SSLMode) MySQLConnection {
-        return MySQLConnection{ .@"#database" = database, .@"#user" = username, .@"#password" = password, .@"#options" = options, .@"#options_buf" = options_buf, .@"#socket" = Socket{ .SocketTCP = .{ .socket = .{ .detached = .{} } } }, .queue = MySQLRequestQueue.init(), .statements = PreparedStatementsMap{  }, .@"#tls_config" = tls_config, .@"#secure" = secure, .@"#ssl_mode" = ssl_mode, .@"#tls_status" = (if ((ssl_mode != .disable)) .pending else .none), .@"#character_set" = CharacterSet.default };
+        return MySQLConnection{ .@"#database" = database, .@"#user" = username, .@"#password" = password, .@"#options" = options, .@"#options_buf" = options_buf, .@"#socket" = Socket{ .SocketTCP = .{ .socket = .{ .detached = undefined } } }, .queue = MySQLRequestQueue.init(), .statements = PreparedStatementsMap{  }, .@"#tls_config" = tls_config, .@"#secure" = secure, .@"#ssl_mode" = ssl_mode, .@"#tls_status" = (if ((ssl_mode != .disable)) .pending else .none), .@"#character_set" = CharacterSet.default };
 }
 
 pub fn canPipeline(self: *MySQLConnection) bool {

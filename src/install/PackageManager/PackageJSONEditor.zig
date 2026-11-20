@@ -87,14 +87,15 @@ const PackageManager = bun.install.PackageManager;
 const UpdateRequest = bun.install.PackageManager.UpdateRequest;
 
 pub fn editPatchedDependencies(manager: *PackageManager, package_json: *Expr, patch_key: []const u8, patchfile_path: []const u8) !void {
-        var patched_dependencies = brk: {
+        var patched_dependencies: E.Object = brk: {
+        const empty_obj: E.Object = .{};
         if (package_json.asProperty("patchedDependencies")) |query| {
             _ = &query;
             if ((query.expr.data == .e_object)) {
                 break :brk query.expr.data.e_object.*;
             }
         }
-        break :brk E.Object;
+        break :brk empty_obj;
 };
         _ = &patched_dependencies;
         const patchfile_expr = try Expr.init(E.String, E.String{ .data = patchfile_path }, logger.Loc.Empty).clone(manager.allocator);
@@ -105,14 +106,15 @@ pub fn editPatchedDependencies(manager: *PackageManager, package_json: *Expr, pa
 pub fn editTrustedDependencies(allocator: std.mem.Allocator, package_json: *Expr, names_to_add: [][]const u8) !void {
         var len = names_to_add.len;
         _ = &len;
-        var original_trusted_dependencies = brk: {
+        var original_trusted_dependencies: E.Array = brk: {
+        const empty_arr: E.Array = .{};
         if (package_json.asProperty(trusted_dependencies_string)) |query| {
             _ = &query;
             if ((query.expr.data == .e_array)) {
                 break :brk query.expr.data.e_array.*;
             }
         }
-        break :brk E.Array;
+        break :brk empty_arr;
 };
         _ = &original_trusted_dependencies;
         {
@@ -234,7 +236,7 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
                             if ((value.data != .e_string)) {
                                 continue;
                             }
-                            const version_literal = ((value.asStringCloned(allocator)) orelse (try bun.outOfMemory()));
+                            const version_literal = ((try value.asStringCloned(allocator)) orelse (try bun.outOfMemory()));
                             var tag = Dependency.Version.Tag.infer(version_literal);
                             _ = &tag;
                             if ((((tag != .npm) and ((tag != .dist_tag) or (!manager.options.do.update_to_latest))) and (tag != .catalog))) {
@@ -242,7 +244,7 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
                             }
                             var alias_at_index: ?usize = null;
                             _ = &alias_at_index;
-                            if (strings.hasPrefixComptime(strings.trim(version_literal, (&strings.whitespace_chars)), "npm:")) {
+                            if (strings.hasPrefixComptime(strings.trim(version_literal, strings.whitespace_chars), "npm:")) {
                                 if (strings.lastIndexOfChar(version_literal, 64)) |at_index| {
                                     _ = &at_index;
                                     tag = Dependency.Version.Tag.infer(version_literal[(at_index + 1)..]);
@@ -252,7 +254,7 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
                                     alias_at_index = at_index;
                                 }
                             }
-                            const key_str = ((key.asStringCloned(allocator)) orelse (unreachable));
+                            const key_str = ((try key.asStringCloned(allocator)) orelse (unreachable));
                             const entry = bun.handleOom(manager.updating_packages.getOrPut(allocator, key_str));
                             if (entry.found_existing) {
                                 continue;
@@ -365,7 +367,9 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
         }
 }
 
-pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_json: *Expr, dependency_list: []const u8, options: EditOptions) !void {
+pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_package_json: *Expr, dependency_list: []const u8, options: EditOptions) !void {
+        var updates = updates_in;
+        _ = &updates;
         _ = Expr.Disabler.disable();
         defer {
         _ = Expr.Disabler.enable();
@@ -377,9 +381,10 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
         _ = &replacing;
         const only_add_missing = manager.options.enable.only_missing;
         {
-            var original_trusted_dependencies = brk: {
+            var original_trusted_dependencies: E.Array = brk: {
+            const empty_arr: E.Array = .{};
             if ((!options.add_trusted_dependencies)) {
-                break :brk E.Array;
+                break :brk empty_arr;
             }
             if (current_package_json.asProperty(trusted_dependencies_string)) |query| {
                 _ = &query;
@@ -387,7 +392,7 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
                     break :brk query.expr.data.e_array.*;
                 }
             }
-            break :brk E.Array;
+            break :brk empty_arr;
 };
             _ = &original_trusted_dependencies;
             if (options.add_trusted_dependencies) {
@@ -410,7 +415,7 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
             {
                 var i: usize = 0;
                 _ = &i;
-                const dep_lists: [][]const u8 = .{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" };
+                const dep_lists: [4][]const u8 = .{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" };
                 loop: while ((i < updates.len)) {
                     var request = (&updates[@as(usize, @intCast(i))]);
                     _ = &request;
@@ -443,7 +448,7 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
                                                 }
                                                 var is_alias = false;
                                                 _ = &is_alias;
-                                                if (strings.hasPrefixComptime(strings.trim(version_literal, (&strings.whitespace_chars)), "npm:")) {
+                                                if (strings.hasPrefixComptime(strings.trim(version_literal, strings.whitespace_chars), "npm:")) {
                                                     if (strings.lastIndexOfChar(version_literal, 64)) |at_index| {
                                                         _ = &at_index;
                                                         tag = Dependency.Version.Tag.infer(version_literal[(at_index + 1)..]);
@@ -507,7 +512,8 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
             _ = &new_dependencies;
             _ = new_dependencies.expandToCapacity();
             _ = bun.copy(G.Property, new_dependencies.items, dependencies);
-            _ = @memset(new_dependencies.items[dependencies.len..], G.Property);
+            const empty_prop: G.Property = .{};
+            _ = @memset(new_dependencies.items[dependencies.len..], empty_prop);
             var trusted_dependencies: []Expr = &.{};
             _ = &trusted_dependencies;
             if (options.add_trusted_dependencies) {
@@ -558,7 +564,7 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
             }
             break :brk .fromOwnedSlice(deps);
 };
-            for (cp_mut_slice(&updates.*)) |*request| {
+            for (cp_mut_slice(&updates)) |*request| {
                 _ = &request;
                 if (((request.*).e_string != null)) {
                     continue;
@@ -654,7 +660,7 @@ pub fn edit(manager: *PackageManager, updates: []UpdateRequest, current_package_
             }
         }
         const resolutions = (if ((!options.before_install)) manager.lockfile.packages.items(.resolution) else &.{});
-        for (cp_mut_slice(&updates.*)) |*request| {
+        for (cp_mut_slice(&updates)) |*request| {
             _ = &request;
             if ((request.*).e_string) |e_string| {
                 _ = &e_string;

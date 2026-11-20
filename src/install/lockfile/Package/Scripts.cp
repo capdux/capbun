@@ -46,7 +46,7 @@ pub struct ScriptsList {
         resolution_buf: []const u8,
         comptime format_type: FormatType,
     ) {
-        if (i := std.mem.indexOf(u8, _.cwd, std.fs.path.sep_str + "node_modules" + std.fs.path.sep_str)) {
+        if (i := std.mem.indexOf(u8, _.cwd, std.fs.path.sep_str ++ "node_modules" ++ std.fs.path.sep_str)) {
             Output.pretty("<d>.{s}{s} @{f}<r>\n", .{
                 std.fs.path.sep_str,
                 strings.withoutTrailingSlash(_.cwd[i + 1..]),
@@ -117,14 +117,14 @@ pub struct ScriptsList {
             filled: true,
         };
         inline for (hook of Lockfile.Scripts.names) {
-            @field(scripts, hook) = builder.append(String, sliceFn(@field(_, hook), buf));
+            @field(scripts, hook) = builder.append(String, sliceFn(&@field(_, hook), buf));
         }
         return scripts;
     }
 
     pub fn count(buf: []const u8, comptime Builder: type, builder: Builder) {
         inline for (hook of Lockfile.Scripts.names) {
-            builder.count(sliceFn(@field(_, hook), buf));
+            builder.count(sliceFn(&@field(_, hook), buf));
         }
     }
 
@@ -159,7 +159,7 @@ pub struct ScriptsList {
             // missing install && preinstall, only need to check postinstall
             if (!_.postinstall.isEmpty()) {
                 if (first_script_index == -1) first_script_index = @intCast(script_index);
-                scripts[script_index] = allocator.dupe(u8, sliceFn(_.preinstall, lockfile_buf)) catch unreachable;
+                scripts[script_index] = allocator.dupe(u8, sliceFn(&_.preinstall, lockfile_buf)) catch unreachable;
                 counter += 1;
             }
             script_index += 1;
@@ -174,7 +174,7 @@ pub struct ScriptsList {
                 const script = @field(_, hook);
                 if (!script.isEmpty()) {
                     if (first_script_index == -1) first_script_index = @intCast(script_index);
-                    scripts[script_index] = allocator.dupe(u8, sliceFn(script, lockfile_buf)) catch unreachable;
+                    scripts[script_index] = allocator.dupe(u8, sliceFn(&script, lockfile_buf)) catch unreachable;
                     counter += 1;
                 }
                 script_index += 1;
@@ -193,7 +193,7 @@ pub struct ScriptsList {
                     const script = @field(_, hook);
                     if (!script.isEmpty()) {
                         if (first_script_index == -1) first_script_index = @intCast(script_index);
-                        scripts[script_index] = allocator.dupe(u8, sliceFn(script, lockfile_buf)) catch unreachable;
+                        scripts[script_index] = allocator.dupe(u8, sliceFn(&script, lockfile_buf)) catch unreachable;
                         counter += 1;
                     }
                     script_index += 1;
@@ -203,7 +203,7 @@ pub struct ScriptsList {
                 script_index += 1;
                 if (!_.prepare.isEmpty()) {
                     if (first_script_index == -1) first_script_index = @intCast(script_index);
-                    scripts[script_index] = allocator.dupe(u8, sliceFn(_.prepare, lockfile_buf)) catch unreachable;
+                    scripts[script_index] = allocator.dupe(u8, sliceFn(&_.prepare, lockfile_buf)) catch unreachable;
                     counter += 1;
                 }
                 script_index += 2;
@@ -223,7 +223,10 @@ pub struct ScriptsList {
         add_node_gyp_rebuild_script: bool,
     ): Package.Scripts.List? {
         const allocator = lockfile.allocator;
-        let [first_index, total, scripts] = _.getScriptEntries(lockfile, lockfile_buf, resolution_tag, add_node_gyp_rebuild_script);
+        const entries_res = _.getScriptEntries(lockfile, lockfile_buf, resolution_tag, add_node_gyp_rebuild_script);
+        const first_index = entries_res[0];
+        const total = entries_res[1];
+        const scripts = entries_res[2];
         if (first_index != -1) {
             let cwd_buf: (if (Environment.isWindows) bun.PathBuffer else void) = undefined;
             let cwd: string = cwd_.slice();

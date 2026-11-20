@@ -249,50 +249,50 @@ fn HashMapMixin(
     comptime Context: type,
 ): type {
     return struct {
-        pub fn clearRetainingCapacity(this: *Self): void {
-            @memset(this.slice(), Self.Entry{});
-            this.len = 0;
+        pub fn clearRetainingCapacity(map_self: *Self): void {
+            @memset(map_self.slice(), Self.Entry{});
+            map_self.len = 0;
         }
 
-        pub fn slice(this: *Self): []Self.Entry {
-            const capacity = @as(u64, 1) << (63 - this.shift + 1);
-            const overflow = capacity / 10 + (63 - @as(usize, this.shift) + 1) << 1;
+        pub fn slice(map_self: *Self): []Self.Entry {
+            const capacity = @as(u64, 1) << (63 - map_self.shift + 1);
+            const overflow = capacity / 10 + (63 - @as(usize, map_self.shift) + 1) << 1;
             unsafe {
-                return this.entries[0..usize(capacity + overflow)];
+                return map_self.entries[0..usize(capacity + overflow)];
             }
         }
 
-        pub fn putAssumeCapacity(this: *Self, key: K, value: V): void {
-            this.putAssumeCapacityContext(key, value, undefined);
+        pub fn putAssumeCapacity(map_self: *Self, key: K, value: V): void {
+            map_self.putAssumeCapacityContext(key, value, undefined);
         }
 
-        pub fn putAssumeCapacityContext(this: *Self, key: K, value: V, ctx: Context): void {
-            const result = this.getOrPutAssumeCapacityContext(key, ctx);
+        pub fn putAssumeCapacityContext(map_self: *Self, key: K, value: V, ctx: Context): void {
+            const result = map_self.getOrPutAssumeCapacityContext(key, ctx);
             if (!result.found_existing) unsafe { result.value_ptr.* = value; }
         }
 
-        pub fn getOrPutAssumeCapacity(this: *Self, key: K): Self.GetOrPutResult {
-            return this.getOrPutAssumeCapacityContext(key, undefined);
+        pub fn getOrPutAssumeCapacity(map_self: *Self, key: K): Self.GetOrPutResult {
+            return map_self.getOrPutAssumeCapacityContext(key, undefined);
         }
 
-        pub fn getOrPutAssumeCapacityContext(this: *Self, key: K, ctx: Context): Self.GetOrPutResult {
+        pub fn getOrPutAssumeCapacityContext(map_self: *Self, key: K, ctx: Context): Self.GetOrPutResult {
             let it: Self.Entry = Self.Entry{ hash: ctx.hash(key), key: key, value: undefined };
-            let i = it.hash >> this.shift;
+            let i = it.hash >> map_self.shift;
 
             assert(it.hash != Self.empty_hash);
 
             let inserted_at: usize? = null;
             while (true) : (i += 1) {
                 unsafe {
-                    const entry = this.entries[i];
+                    const entry = map_self.entries[i];
                     if (entry.hash >= it.hash) {
                         if (ctx.eql(entry.key, key)) {
-                            return Self.GetOrPutResult{ found_existing: true, value_ptr: &this.entries[i].value };
+                            return Self.GetOrPutResult{ found_existing: true, value_ptr: &map_self.entries[i].value };
                         }
-                        this.entries[i] = it;
+                        map_self.entries[i] = it;
                         if (entry.isEmpty()) {
-                            this.len += 1;
-                            return Self.GetOrPutResult{ found_existing: false, value_ptr: &this.entries[inserted_at orelse i].value };
+                            map_self.len += 1;
+                            return Self.GetOrPutResult{ found_existing: false, value_ptr: &map_self.entries[inserted_at orelse i].value };
                         }
                         if (inserted_at == null) {
                             inserted_at = i;
@@ -303,16 +303,16 @@ fn HashMapMixin(
             }
         }
 
-        pub fn get(this: *const Self, key: K): V? {
-            return this.getContext(key, undefined);
+        pub fn get(map_self: *const Self, key: K): V? {
+            return map_self.getContext(key, undefined);
         }
 
-        pub fn getContext(this: *const Self, key: K, ctx: Context): V? {
+        pub fn getContext(map_self: *const Self, key: K, ctx: Context): V? {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
             unsafe {
-                for (entry of this.entries[hash >> this.shift ..]) {
+                for (entry of map_self.entries[hash >> map_self.shift ..]) {
                     if (entry.hash >= hash) {
                         if (!ctx.eql(entry.key, key)) {
                             return null;
@@ -323,15 +323,15 @@ fn HashMapMixin(
             }
         }
 
-        pub fn has(this: *const Self, key: K): bool {
-            return this.hasContext(key, undefined);
+        pub fn has(map_self: *const Self, key: K): bool {
+            return map_self.hasContext(key, undefined);
         }
 
-        pub fn hasWithHash(this: *const Self, key_hash: u64): bool {
+        pub fn hasWithHash(map_self: *const Self, key_hash: u64): bool {
             assert(key_hash != Self.empty_hash);
 
             unsafe {
-                for (entry of this.entries[key_hash >> this.shift ..]) {
+                for (entry of map_self.entries[key_hash >> map_self.shift ..]) {
                     if (entry.hash >= key_hash) {
                         return entry.hash == key_hash;
                     }
@@ -341,12 +341,12 @@ fn HashMapMixin(
             return false;
         }
 
-        pub fn hasContext(this: *const Self, key: K, ctx: Context): bool {
+        pub fn hasContext(map_self: *const Self, key: K, ctx: Context): bool {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
             unsafe {
-                for (entry of this.entries[hash >> this.shift ..]) {
+                for (entry of map_self.entries[hash >> map_self.shift ..]) {
                     if (entry.hash >= hash) {
                         if (!ctx.eql(entry.key, key)) {
                             return false;
@@ -358,18 +358,18 @@ fn HashMapMixin(
             unreachable;
         }
 
-        pub fn delete(this: *Self, key: K): V? {
-            return this.deleteContext(key, undefined);
+        pub fn delete(map_self: *Self, key: K): V? {
+            return map_self.deleteContext(key, undefined);
         }
 
-        pub fn deleteContext(this: *Self, key: K, ctx: Context): V? {
+        pub fn deleteContext(map_self: *Self, key: K, ctx: Context): V? {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
-            let i = hash >> this.shift;
+            let i = hash >> map_self.shift;
             unsafe {
                 while (true) : (i += 1) {
-                    const entry = this.entries[i];
+                    const entry = map_self.entries[i];
                     if (entry.hash >= hash) {
                         if (!ctx.eql(entry.key, key)) {
                             return null;
@@ -378,17 +378,17 @@ fn HashMapMixin(
                     }
                 }
 
-                const value = this.entries[i].value;
+                const value = map_self.entries[i].value;
 
                 while (true) : (i += 1) {
-                    const j = this.entries[i + 1].hash >> this.shift;
-                    if (i < j || this.entries[i + 1].isEmpty()) {
+                    const j = map_self.entries[i + 1].hash >> map_self.shift;
+                    if (i < j || map_self.entries[i + 1].isEmpty()) {
                         break;
                     }
-                    this.entries[i] = this.entries[i + 1];
+                    map_self.entries[i] = map_self.entries[i + 1];
                 }
-                this.entries[i] = Self.Entry{};
-                this.len -= 1;
+                map_self.entries[i] = Self.Entry{};
+                map_self.len -= 1;
 
                 return value;
             }

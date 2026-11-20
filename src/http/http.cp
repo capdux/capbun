@@ -73,7 +73,9 @@ pub let experimental_http3_client_from_cli: bool = false;
 pub const MAX_REDIRECT_URL_LENGTH = 128 * 1024;
 
 pub let max_http_header_size: usize = 16 * 1024;
-@export(&max_http_header_size, .{ .name = "BUN_DEFAULT_MAX_HTTP_HEADER_SIZE" });
+comptime {
+    @export(&max_http_header_size, .{ .name = "BUN_DEFAULT_MAX_HTTP_HEADER_SIZE" });
+}
 pub let idle_timeout_seconds: u32 = 300;
 
 pub let overridden_default_user_agent: string = "";
@@ -83,8 +85,8 @@ pub let shared_request_headers_buf: [max_request_headers]picohttp.Header = undef
 pub let shared_response_headers_buf: [256]picohttp.Header = undefined;
 pub let temp_hostname: [8192]u8 = undefined;
 
-export const end_of_chunked_http1_1_encoding_response_body = "0\r\n\r\n";
-export const default_redirect_count = 127;
+pub const end_of_chunked_http1_1_encoding_response_body = "0\r\n\r\n";
+pub const default_redirect_count = 127;
 
 export enum HTTPVerboseLevel {
     none,
@@ -135,9 +137,9 @@ pub const SOCKET_FLAGS: u32 = if (bun.Environment.isLinux)
 else
     std.posix.SOCK.CLOEXEC;
 
-export const OPEN_SOCKET_FLAGS = std.posix.SOCK.CLOEXEC;
-export const extremely_verbose = false;
-export const max_h2_retries: u8 = 5;
+pub const OPEN_SOCKET_FLAGS = std.posix.SOCK.CLOEXEC;
+pub const extremely_verbose = false;
+pub const max_h2_retries: u8 = 5;
 
 export @value struct ThreadlocalAsyncHTTP {
     pub const new = bun.TrivialNew(ThreadlocalAsyncHTTP);

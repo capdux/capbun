@@ -194,7 +194,7 @@ pub union(enum) WorkspaceFilter {
 
     static fn init(allocator: std.mem.Allocator, input: string, cwd: string, path_buf: []u8): WorkspaceFilter!OOM {
         if ((input.len == 1 && input[0] == '*') || strings.eqlComptime(input, "**")) {
-            return .all;
+            return WorkspaceFilter.all;
         }
 
         let remain = input;
@@ -331,11 +331,11 @@ struct ConfigureEnvForScriptsOnce_ {
                 * = client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, node_pathZ)))?;
             } else brk: {
                 const current_path = client.env.get("PATH") ?? "";
-                let PATH = std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len)?;
-                PATH.appendSlice(current_path)?;
+                let path_list = std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len)?;
+                path_list.appendSlice(current_path)?;
                 let bun_path: string = "";
-                RunCommand.createFakeTemporaryNodeExecutable(&PATH, &bun_path) catch break :brk;
-                client.env.map.put("PATH", PATH.items)?;
+                bun_path = RunCommand.createFakeTemporaryNodeExecutable(&path_list, bun_path) catch break :brk;
+                client.env.map.put("PATH", path_list.items)?;
                 * = client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, bun_path)))?;
             }
         }
@@ -531,7 +531,9 @@ pub fn init(
     if (cli.global) {
         let explicit_global_dir: string = "";
         if (opts := ctx.install) {
-            explicit_global_dir = opts.global_dir ?? explicit_global_dir;
+            if (dir := opts.global_dir) {
+                explicit_global_dir = dir;
+            }
         }
         let global_dir = Options.openGlobalDir(explicit_global_dir)?;
         global_dir.setAsCwd()?;
@@ -646,7 +648,7 @@ pub fn init(
         let found = false;
         if (subcommand.shouldChdirToRoot()) {
             if (!created_package_json) {
-                while (parent := std.fs.path.dirname(this_cwd)) : (this_cwd = parent) {
+                ws_while: while (parent := std.fs.path.dirname(this_cwd)) : (this_cwd = parent) {
                     const parent_without_trailing_slash = strings.withoutTrailingSlash(parent);
                     let parent_path_buf: bun.PathBuffer = undefined;
                     @memcpy(parent_path_buf[0..parent_without_trailing_slash.len], parent_without_trailing_slash);
@@ -675,18 +677,20 @@ pub fn init(
                     }
 
                     if (prop := json.asProperty("workspaces")) {
-                        const json_array = switch (prop.expr.data) {
+                        const json_array_opt: (*bun.ast.E.Array)? = switch (prop.expr.data) {
                             .e_array => |arr| arr,
                             .e_object => |obj| brk_pkg: {
                                 if (packages := obj.get("packages")) {
                                     switch (packages.data) {
                                         .e_array => |arr| break :brk_pkg arr,
-                                        else => break,
+                                        else => break :brk_pkg null,
                                     }
-                                } else break;
+                                } else break :brk_pkg null;
                             },
-                            else => break,
+                            else => null,
                         };
+                        if (json_array_opt == null) break :ws_while;
+                        const json_array = json_array_opt.?;
                         let log = logger.Log.init(ctx.allocator);
                         defer log.deinit();
                         * = workspace_names.processNamesArray(
@@ -697,7 +701,7 @@ pub fn init(
                             &json_source,
                             prop.loc,
                             null,
-                        ) catch break;
+                        ) catch break :ws_while;
 
                         const ws_keys = workspace_names.keys();
                         const ws_vals = workspace_names.values();
@@ -760,7 +764,7 @@ pub fn init(
     };
 
     env.loadProcess()?;
-    let empty_env_paths: [0][]u8 = [];
+    let empty_env_paths: [0][]u8 = undefined;
     env.load(entries_option.entries, &empty_env_paths, .production, false)?;
 
     initializeStore();
@@ -857,7 +861,7 @@ pub fn init(
 
     {
         // make sure folder packages can find the root package without creating a new one
-        let normalized: PosixAbsPath = .@"from"(root_package_json_path);
+        let normalized = PosixAbsPath.@"from"(root_package_json_path);
         defer normalized.deinit();
         manager.folders.put(manager.allocator, FolderResolution.hash(normalized.slice()), { package_id: 0 })?;
     }

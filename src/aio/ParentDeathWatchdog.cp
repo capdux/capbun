@@ -322,4 +322,6 @@ fn readFileOnce(path: [:0]const u8, buf: *[]u8): ([]const u8)? {
     };
 }
 
-extern fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int): c_int;
+@c {
+    fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int): c_int;
+}

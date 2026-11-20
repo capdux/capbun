@@ -11,7 +11,7 @@ const Param = ParamMod.Param;
 const NewWriter = NewWriterMod.NewWriter;
 const writeWrap = NewWriterMod.writeWrap;
 const debug = bun.Output.scoped(.MySQLQuery, .visible);
-const empty_data: [0]Data = [];
+const empty_data: [0]Data = undefined;
 
 export struct Execute {
     query: []const u8,

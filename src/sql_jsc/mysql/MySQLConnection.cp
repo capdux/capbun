@@ -215,7 +215,7 @@ export struct Reader {
             @"#password": password,
             @"#options": options,
             @"#options_buf": options_buf,
-            @"#socket": Socket{ SocketTCP: { socket: { detached: {} } } },
+            @"#socket": Socket{ SocketTCP: { socket: { detached: undefined } } },
             queue: MySQLRequestQueue.init(),
             statements: PreparedStatementsMap{},
             @"#tls_config": tls_config,

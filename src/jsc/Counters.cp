@@ -10,7 +10,8 @@ const jsc = bun.jsc;
     }
 
     fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return (jsc.JSObject.create(_, globalObject)?).toJS();
+        const obj = jsc.JSObject.create(_, globalObject)?;
+        return obj.toJS();
     }
 
     static fn createCountersObject(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {

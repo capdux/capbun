@@ -201,13 +201,18 @@ fn bunxGetBinNameFromSubpath(transpiler: *bun.Transpiler, dir_fd: bun.FD, subpat
         }
 
         if (prop := bin_expr.asProperty("bin")) {
-            return prop.name;
+            if (s := prop.expr.asString(transpiler.allocator)) {
+                return s;
+            }
         }
 
         if (bin_expr.data == .e_object) {
             const properties = bin_expr.data.e_object.properties.slice();
             if (properties.len > 0) {
-                return properties[0].key.asString(transpiler.allocator) ?? error.NoBinFound;
+                if (k := properties[0].key) {
+                    return k.asString(transpiler.allocator) ?? error.NoBinFound;
+                }
+                return error.NoBinFound;
             }
         }
     }
@@ -290,7 +295,7 @@ fn bunxGetBinNameFromTempDirectory(transpiler: *bun.Transpiler, tempdir_name: []
     return bunxGetBinNameFromSubpath(transpiler, bun.FD.cwd(), subpath_z);
 }
 
-fn bunxGetBinName(transpiler: *bun.Transpiler, toplevel_fd: bun.FD, tempdir_name: []const u8, package_name: []const u8): []const u8 ! BinError {
+fn bunxGetBinName(transpiler: *bun.Transpiler, toplevel_fd: bun.FD, tempdir_name: []const u8, package_name: []const u8): BinError![]const u8 {
     bun.assert(toplevel_fd.isValid());
     return bunxGetBinNameFromProjectDirectory(transpiler, toplevel_fd, package_name) catch |e| {
         if (e == error.NoBinFound) {
@@ -587,7 +592,11 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
         const root_dir_fd = root_dir_info.getFileDescriptor();
         bun.assert(root_dir_fd.isValid());
         if (opts.binary_name == null) {
-            if (package_name_for_bin := bunxGetBinName(&this_transpiler, root_dir_fd, bunx_cache_dir, result_package_name) catch null) {
+            const pkg_bin_opt: ([]const u8)? = pkg_bin_blk: {
+                const v = bunxGetBinName(&this_transpiler, root_dir_fd, bunx_cache_dir, result_package_name) catch break :pkg_bin_blk null;
+                break :pkg_bin_blk v;
+            };
+            if (package_name_for_bin := pkg_bin_opt) {
                 if (!strings.eqlLong(package_name_for_bin, initial_bin_name, true)) {
                     absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch unreachable;
 
@@ -675,7 +684,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
         .stdin = .inherit,
         .windows = if (Environment.isWindows) .{
             .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(this_transpiler.env, null)),
-        },
+        } else @as(void, undefined),
     }) catch |e| {
         Output.prettyErrorln("<r><red>error<r>: bunx failed to install <b>{s}<r> due to error <b>{s}<r>", .{ install_param, @errorName(e) });
         Global.exit(1);
@@ -739,7 +748,11 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
     }
 
     if (opts.binary_name == null) {
-        if (package_name_for_bin := bunxGetBinNameFromTempDirectory(&this_transpiler, bunx_cache_dir, result_package_name, false) catch null) {
+        const pkg_bin_opt2: ([]const u8)? = pkg_bin_blk2: {
+            const v = bunxGetBinNameFromTempDirectory(&this_transpiler, bunx_cache_dir, result_package_name, false) catch break :pkg_bin_blk2 null;
+            break :pkg_bin_blk2 v;
+        };
+        if (package_name_for_bin := pkg_bin_opt2) {
             if (!strings.eqlLong(package_name_for_bin, initial_bin_name, true)) {
                 absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, "{s}/node_modules/.bin/{s}{s}", .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch unreachable;
 

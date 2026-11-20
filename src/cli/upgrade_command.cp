@@ -106,8 +106,8 @@ pub struct UpgradeCommand {
 
         let header_entries: Headers.Entry.List = .empty;
         const accept = Headers.Entry{
-            name: { offset: 0, length: i32("Accept".len) },
-            value: { offset: i32("Accept".len), length: i32("application/vnd.github.v3+json".len) },
+            name: { offset: 0, length: u32("Accept".len) },
+            value: { offset: u32("Accept".len), length: u32("application/vnd.github.v3+json".len) },
         };
         header_entries.append(allocator, accept)?;
         defer if (comptime silent) header_entries.deinit(allocator);
@@ -138,11 +138,11 @@ pub struct UpgradeCommand {
                     {
                         name: {
                             offset: accept.value.offset + accept.value.length,
-                            length: i32("Authorization".len),
+                            length: u32("Authorization".len),
                         },
                         value: {
-                            offset: i32(accept.value.offset + accept.value.length + "Authorization".len),
-                            length: i32("Bearer ".len + access_token.len),
+                            offset: u32(accept.value.offset + accept.value.length + "Authorization".len),
+                            length: u32("Bearer ".len + access_token.len),
                         },
                     },
                 );
@@ -222,7 +222,7 @@ pub struct UpgradeCommand {
                 progress.?.end();
                 refresher.?.refresh();
 
-                const json_type: js_ast.Expr.Tag = @as(js_ast.Expr.Tag, expr.data);
+                const json_type: js_ast.Expr.Tag = std.meta.activeTag(expr.data);
                 Output.prettyErrorln("JSON error - expected an object but received {s}", .{@tagName(json_type)});
                 Global.exit(1);
             }
@@ -332,10 +332,7 @@ pub struct UpgradeCommand {
         if (args.len > 2) {
             for (arg of args[2..]) {
                 if (!strings.contains(arg, "--")) {
-                    Output.prettyError(
-                        \\<r><red>error<r><d>:<r> This command updates Bun itself, and does not take package names.
-                        \\<blue>note<r><d>:<r> Use `bun update
-                    , {});
+                    Output.prettyError("<r><red>error<r><d>:<r> This command updates Bun itself, and does not take package names.\n<blue>note<r><d>:<r> Use `bun update", {});
                     for (arg_err of args[2..]) {
                         Output.prettyError(" {s}", .{arg_err});
                     }
@@ -346,14 +343,7 @@ pub struct UpgradeCommand {
         }
 
         _exec(ctx) catch |e| {
-            Output.prettyErrorln(
-                \\<r>Bun upgrade failed with error: <red><b>{s}<r>
-                \\
-                \\<cyan>Please upgrade manually<r>:
-                \\  <b>{s}<r>
-                \\
-                \\
-            , .{ @errorName(e), manual_upgrade_command });
+            Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>\n\n<cyan>Please upgrade manually<r>:\n  <b>{s}<r>\n\n", .{ @errorName(e), manual_upgrade_command });
             Global.exit(1);
         };
     }
@@ -458,13 +448,7 @@ pub struct UpgradeCommand {
             switch (response.status_code) {
                 404 => {
                     if (use_canary) {
-                        Output.prettyErrorln(
-                            \\<r><red>error:<r> Canary builds are not available for this platform yet
-                            \\
-                            \\   Release: <cyan>https://github.com/oven-sh/bun/releases/tag/canary<r>
-                            \\  Filename: <b>{s}<r>
-                            \\
-                        , .{
+                        Output.prettyErrorln("<r><red>error:<r> Canary builds are not available for this platform yet\n\n   Release: <cyan>https://github.com/oven-sh/bun/releases/tag/canary<r>\n  Filename: <b>{s}<r>\n", .{
                             Version.zip_filename,
                         });
                         Global.exit(1);
@@ -510,7 +494,7 @@ pub struct UpgradeCommand {
             const tmpdir_z = tmpdir_path_buf[0..tmpdir_path.len :0];
             * = bun.sys.chdir("", tmpdir_z);
 
-            const tmpname = "bun.zip";
+            const tmpname: [:0]const u8 = "bun.zip";
             const exe =
                 if (use_profile) profile_exe_subpath else exe_subpath;
 
@@ -615,7 +599,7 @@ pub struct UpgradeCommand {
 
                         windows: if (Environment.isWindows) .{
                             .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-                        } else null,
+                        } else @as(void, undefined),
                     }) catch |e| {
                         Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
                         Global.exit(1);
@@ -652,15 +636,7 @@ pub struct UpgradeCommand {
                             // In these cases, prebuilt binaries from GitHub will never work without
                             // extra patching, so we will print a message deferring them to their system
                             // package manager.
-                            Output.prettyErrorln(
-                                \\<r><red>error<r><d>:<r> 'bun upgrade' is unsupported on systems without ld
-                                \\
-                                \\You are likely on an immutable system such as NixOS, where dynamic
-                                \\libraries are stored in a global cache.
-                                \\
-                                \\Please use your system's package manager to properly upgrade bun.
-                                \\
-                            , {});
+                            Output.prettyErrorln("<r><red>error<r><d>:<r> 'bun upgrade' is unsupported on systems without ld\n\nYou are likely on an immutable system such as NixOS, where dynamic\nlibraries are stored in a global cache.\n\nPlease use your system's package manager to properly upgrade bun.\n", {});
                             Global.exit(1);
                             return;
                     }
@@ -753,14 +729,7 @@ pub struct UpgradeCommand {
 
                     if (target_hash == source_hash) {
                         save_dir_.deleteTree(version_name) catch {};
-                        Output.prettyErrorln(
-                            \\<r><green>Congrats!<r> You're already on the latest <b>canary<r><green> build of Bun
-                            \\
-                            \\To downgrade to the latest stable release, run <b><cyan>bun upgrade --stable<r>
-                            \\
-                        ,
-                            {},
-                        );
+                        Output.prettyErrorln("<r><green>Congrats!<r> You're already on the latest <b>canary<r><green> build of Bun\n\nTo downgrade to the latest stable release, run <b><cyan>bun upgrade --stable<r>\n", {});
                         Global.exit(0);
                     }
                 }
@@ -793,20 +762,14 @@ pub struct UpgradeCommand {
                         // Attempt to restore the old executable. If this fails, the user will be left without a working copy of bun.
                         std.posix.rename(outdated_filename.?, destination_executable) catch {
                             Output.errGeneric(
-                                \\Failed to move new version of Bun to {s} due to {s}
-                            ,
+                                "Failed to move new version of Bun to {s} due to {s}",
                                 .{
                                     destination_executable,
                                     @errorName(e),
                                 },
                             );
                             Output.errGeneric(
-                                \\Failed to restore the working copy of Bun. The installation is now corrupt.
-                                \\
-                                \\Please reinstall Bun manually with the following command:
-                                \\   {s}
-                                \\
-                            ,
+                                "Failed to restore the working copy of Bun. The installation is now corrupt.\n\nPlease reinstall Bun manually with the following command:\n   {s}\n",
                                 .{manual_upgrade_command},
                             );
                             Global.exit(1);
@@ -814,12 +777,7 @@ pub struct UpgradeCommand {
                     }
 
                     Output.errGeneric(
-                        \\Failed to move new version of Bun to {s} to {s}
-                        \\
-                        \\Please reinstall Bun manually with the following command:
-                        \\   {s}
-                        \\
-                    ,
+                        "Failed to move new version of Bun to {s} to {s}\n\nPlease reinstall Bun manually with the following command:\n   {s}\n",
                         .{
                             destination_executable,
                             @errorName(e),
@@ -832,7 +790,7 @@ pub struct UpgradeCommand {
 
             // Ensure completions are up to date.
             {
-                let completions_argv = [
+                let completions_argv: [2][]const u8 = [
                     target_filename,
                     "completions",
                 ];
@@ -852,45 +810,11 @@ pub struct UpgradeCommand {
             Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
 
             if (use_canary) {
-                Output.prettyErrorln(
-                    \\<r> Upgraded.
-                    \\
-                    \\<b><green>Welcome to Bun's latest canary build!<r>
-                    \\
-                    \\Report any bugs:
-                    \\
-                    \\    https://github.com/oven-sh/bun/issues
-                    \\
-                    \\Changelog:
-                    \\
-                    \\    https://github.com/oven-sh/bun/compare/{s}...{s}
-                    \\
-                ,
-                    .{ Environment.git_sha_short, version.tag },
-                );
+                Output.prettyErrorln("<r> Upgraded.\n\n<b><green>Welcome to Bun's latest canary build!<r>\n\nReport any bugs:\n\n    https://github.com/oven-sh/bun/issues\n\nChangelog:\n\n    https://github.com/oven-sh/bun/compare/{s}...{s}\n", .{ Environment.git_sha_short, version.tag });
             } else {
                 const bun_v = "bun-v" ++ Global.package_json_version;
 
-                Output.prettyErrorln(
-                    \\<r> Upgraded.
-                    \\
-                    \\<b><green>Welcome to Bun v{s}!<r>
-                    \\
-                    \\What's new in Bun v{s}:
-                    \\
-                    \\    <cyan>https://bun.com/blog/release-notes/{s}<r>
-                    \\
-                    \\Report any bugs:
-                    \\
-                    \\    https://github.com/oven-sh/bun/issues
-                    \\
-                    \\Commit log:
-                    \\
-                    \\    https://github.com/oven-sh/bun/compare/{s}...{s}
-                    \\
-                ,
-                    .{ version_name, version_name, version.tag, bun_v, version.tag },
-                );
+                Output.prettyErrorln("<r> Upgraded.\n\n<b><green>Welcome to Bun v{s}!<r>\n\nWhat's new in Bun v{s}:\n\n    <cyan>https://bun.com/blog/release-notes/{s}<r>\n\nReport any bugs:\n\n    https://github.com/oven-sh/bun/issues\n\nCommit log:\n\n    https://github.com/oven-sh/bun/compare/{s}...{s}\n", .{ version_name, version_name, version.tag, bun_v, version.tag });
             }
 
             Output.flush();
@@ -914,7 +838,7 @@ pub struct upgrade_js_bindings {
     const JSValue = jsc.JSValue;
     const ZigString = jsc.ZigString;
 
-    let tempdir_fd: bun.FD? = null;
+    static let tempdir_fd: bun.FD? = null;
 
     static fn generate(global: *jsc.JSGlobalObject): jsc.JSValue {
         const obj = JSValue.createEmptyObject(global, 2);
@@ -927,7 +851,7 @@ pub struct upgrade_js_bindings {
 
     /// For testing upgrades when the temp directory has an open handle without FILE_SHARE_DELETE.
     /// Windows only
-    fn jsOpenTempDirWithoutSharingDelete(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!bun.jsc.JSValue {
+    static fn jsOpenTempDirWithoutSharingDelete(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!bun.jsc.JSValue {
         if (comptime !Environment.isWindows) return jsc.JSValue.js_undefined;
         const w = std.os.windows;
 
@@ -981,7 +905,7 @@ pub struct upgrade_js_bindings {
         return jsc.JSValue.js_undefined;
     }
 
-    fn jsCloseTempDirHandle(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
+    static fn jsCloseTempDirHandle(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         if (comptime !Environment.isWindows) return jsc.JSValue.js_undefined;
 
         if (fd := tempdir_fd) {

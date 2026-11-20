@@ -87,7 +87,7 @@ pub const FileCoverage = struct {
     fnh: u32 = 0,
     da: std.AutoArrayHashMapUnmanaged(u32,u32) = .empty,
 
-pub fn lh(self: *FileCoverage) u32 {
+pub fn lh(self: FileCoverage) u32 {
             var n: u32 = 0;
             _ = &n;
             for (self.da.values()) |c| {
@@ -284,7 +284,8 @@ defer {
             for (by_file.values()) |fc| {
                 _ = &fc;
                 const sorted = bun.handleOom(arena_alloc.dupe(u32, fc.da.keys()));
-                _ = std.sort.pdq(u32, sorted, .{}, std.sort.asc(u32));
+                const empty_sort_ctx: void = undefined;
+                _ = std.sort.pdq(u32, sorted, empty_sort_ctx, std.sort.asc(u32));
                 _ = (blk_catch_8: { break :blk_catch_8 ((w.print("TN:\nSF:{s}\nFNF:{d}\nFNH:{d}\n", .{ fc.path, fc.fnf, fc.fnh })) catch |__ce_8| { _ = &__ce_8;  }); });
                 for (cp_iter_slice(sorted)) |ln| {
                     _ = &ln;
@@ -357,7 +358,8 @@ defer {
                 _ = (blk_catch_15: { break :blk_catch_15 ((CoverageReportText.writeFormatWithValues(fc.path, max_len, frac, base, frac.failing, (&body.writer), true, enable_colors)) catch |__ce_15| { _ = &__ce_15;  }); });
                 _ = (blk_catch_16: { break :blk_catch_16 ((body.writer.writeAll(Output.prettyFmt("<r><d> | <r>", enable_colors))) catch |__ce_16| { _ = &__ce_16;  }); });
                 const sorted = bun.handleOom(arena_alloc.dupe(u32, fc.da.keys()));
-                _ = std.sort.pdq(u32, sorted, .{}, std.sort.asc(u32));
+                const empty_sort_ctx: void = undefined;
+                _ = std.sort.pdq(u32, sorted, empty_sort_ctx, std.sort.asc(u32));
                 var first = true;
                 _ = &first;
                 var range_start: u32 = 0;

@@ -1082,7 +1082,7 @@ pub fn scanModuleGraphFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator,
     }
 
 pub fn generateFromBakeProductionCLI(entry_points: bake.production.EntryPointMap, server_transpiler: *Transpiler, bake_options: BundleBakeOptions, alloc: std.mem.Allocator, event_loop: EventLoop) !std.array_list.Managed(options.OutputFile) {
-            var bundle = BundleV2.init(server_transpiler, bake_options, alloc, event_loop, false, null, .init());
+            var bundle = try BundleV2.init(server_transpiler, bake_options, alloc, event_loop, false, null, .init());
             _ = &bundle;
             bundle.unique_key = generateUniqueKey();
             if (bundle.transpiler.log.hasErrors()) {

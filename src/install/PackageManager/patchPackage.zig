@@ -284,10 +284,12 @@ pub fn pkgInfoForNameAndVersion(lockfile: *Lockfile, iterator: *Lockfile.Tree.It
             const pkg = lockfile.packages.get(pkgid);
             _ = Output.prettyError("  {s}@<blue>{f}<r>\n", .{ (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name).slice(strbuf), pkg.resolution.fmt(strbuf, .posix) });
             if (((i + 1) < pairs.items.len)) {
-                for (cp_mut_slice(&pairs.items[(i + 1)..])) |*p| {
-                    _ = &p;
-                    if (((p.*)[1] == pkgid)) {
-                        (p.*)[cp_cast_int(usize, 1)] = invalid_package_id;
+                var j: usize = (i + 1);
+                _ = &j;
+                while ((j < pairs.items.len)) : (j = (j + 1)) {
+                    if ((pairs.items[@as(usize, @intCast(j))][1] == pkgid)) {
+                        const pair_key = pairs.items[@as(usize, @intCast(j))][0];
+                        pairs.items[cp_cast_int(usize, j)] = .{ pair_key, invalid_package_id };
                     }
                 }
             }
@@ -409,7 +411,7 @@ _ = Output.prettyError("<r><red>error<r> migrating lockfile:<r> {s}\n<r>", .{ @e
 };
         var resolver: void = undefined;
         _ = &resolver;
-        var package = Lockfile.Package;
+        var package: Lockfile.Package = .{};
         _ = &package;
         _ = try package.parseWithJSON(lockfile, manager, manager.allocator, manager.log, package_json_source, json, void, (&resolver), Features.folder);
         const name = lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name)));
@@ -691,8 +693,7 @@ pub fn initEscapeTable() [256]EscapeVal {
             table[cp_cast_int(usize, i)] = .other;
         }
         const ty = @typeInfo(EscapeVal);
-        for (cp_iter_slice(ty.@"enum".fields)) |field| {
-            _ = &field;
+        inline for (ty.@"enum".fields) |field| {
             if (((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name).len == 1)) {
                 const c = (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)[0];
                 table[cp_cast_int(usize, c)] = @enumFromInt((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value));
@@ -797,7 +798,7 @@ pub fn preparePatch(manager: *PackageManager) !void {
 };
         var resolver: void = undefined;
         _ = &resolver;
-        var package = Lockfile.Package;
+        var package: Lockfile.Package = .{};
         _ = &package;
         _ = try package.parseWithJSON(lockfile, manager, manager.allocator, manager.log, package_json_source, json, void, (&resolver), Features.folder);
         const name = lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name)));
@@ -939,7 +940,7 @@ pub fn detachModuleFolderFromSharedStore(module_folder: []const u8) void {
             } else {
                 if (bun.sys.lstat(path.sliceZ()).asValue()) |st| {
                     _ = &st;
-                    is_symlink = std.posix.S.ISLNK((if (comptime @typeInfo(@TypeOf(st.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(st.mode)) else cp_cast_int(i32, st.mode)));
+                    is_symlink = std.posix.S.ISLNK(@as(std.posix.mode_t, @intCast(st.mode)));
                 } else {
                     return;
                 }

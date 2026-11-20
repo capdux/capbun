@@ -146,7 +146,8 @@ extern "c" fn set_process_priority(pid: i32, priority: i32) callconv(.c) i32;
 extern "c" fn Bun__Os__getFreeMemory() callconv(.c) u64;
 
 pub fn createNodeOsBinding(global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return try jsc.JSObject.create(.{ .hostCpuCount = @max(1, bun_sysconf__SC_NPROCESSORS_ONLN()), .cpus = gen.createCpusCallback(global), .freemem = gen.createFreememCallback(global), .getPriority = gen.createGetPriorityCallback(global), .homedir = gen.createHomedirCallback(global), .hostname = gen.createHostnameCallback(global), .loadavg = gen.createLoadavgCallback(global), .networkInterfaces = gen.createNetworkInterfacesCallback(global), .release = gen.createReleaseCallback(global), .totalmem = gen.createTotalmemCallback(global), .uptime = gen.createUptimeCallback(global), .userInfo = gen.createUserInfoCallback(global), .version = gen.createVersionCallback(global), .setPriority = gen.createSetPriorityCallback(global) }, global).toJS();
+        const obj = try jsc.JSObject.create(.{ .hostCpuCount = @max(1, bun_sysconf__SC_NPROCESSORS_ONLN()), .cpus = gen.createCpusCallback(global), .freemem = gen.createFreememCallback(global), .getPriority = gen.createGetPriorityCallback(global), .homedir = gen.createHomedirCallback(global), .hostname = gen.createHostnameCallback(global), .loadavg = gen.createLoadavgCallback(global), .networkInterfaces = gen.createNetworkInterfacesCallback(global), .release = gen.createReleaseCallback(global), .totalmem = gen.createTotalmemCallback(global), .uptime = gen.createUptimeCallback(global), .userInfo = gen.createUserInfoCallback(global), .version = gen.createVersionCallback(global), .setPriority = gen.createSetPriorityCallback(global) }, global);
+        return obj.toJS();
 }
 
 pub fn cpus(global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {

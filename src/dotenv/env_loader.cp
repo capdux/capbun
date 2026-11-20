@@ -364,10 +364,10 @@
             }
         }
 
-        pub let has_no_clear_screen_cli_flag: ?bool = null;
+        static let has_no_clear_screen_cli_flag: bool? = null;
         /// Returns whether the `BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD` env var is set to something truthy
         pub fn hasSetNoClearTerminalOnReload(this: *const Loader, default_value: bool) bool {
-            return (has_no_clear_screen_cli_flag orelse this.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")) orelse default_value;
+            return (@This().has_no_clear_screen_cli_flag orelse this.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")) orelse default_value;
         }
 
         pub fn get(this: *const Loader, key: string) ?string {

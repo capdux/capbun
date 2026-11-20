@@ -147,7 +147,7 @@ pub fn fromUTF8(allocator: std.mem.Allocator, pattern: []const u8) OOM!?Pattern 
             return Pattern{ .glob = CowString.initOwned(buf[0..end], allocator), .flags = PatternFlags{ .rel_path = has_leading_or_middle_slash, .@"leading **/" = has_leading_glob_star, .dirs_only = has_trailing_slash, .negated = add_negate } };
     }
 
-pub fn asPositive(self: *Pattern) Pattern {
+pub fn asPositive(self: Pattern) Pattern {
             _ = bun.assertWithLocation((self.flags.negated and (self.glob.length() > 0)), @src());
             return Pattern{ .glob = self.glob.borrowSubslice(1, null), .flags = PatternFlags{ .rel_path = self.flags.rel_path, .dirs_only = self.flags.dirs_only, .@"leading **/" = self.flags.@"leading **/", .negated = false } };
     }
@@ -374,7 +374,8 @@ pub fn iterateIncludedProjectTree(allocator: std.mem.Allocator, pack_queue: *Pac
             _ = subpath_dedupe.deinit();
             }
             while (dirs.pop()) |dir_info| {
-                const dir = dir_info[0];
+                var dir = dir_info[0];
+                _ = &dir;
                 const dir_subpath = dir_info[1];
                 const dir_depth = dir_info[2];
                 defer {
@@ -521,7 +522,8 @@ pub fn addEntireTree(allocator: std.mem.Allocator, bins: []const BinInfo, exclud
                 _ = try ignores.append(allocator, IgnorePatterns{ .list = negated_excludes.items, .kind = .@"package.json", .depth = 1, .has_rel_path = false });
             }
             while (dirs.pop()) |dir_info| {
-                const dir = dir_info[0];
+                var dir = dir_info[0];
+                _ = &dir;
                 const dir_subpath = dir_info[1];
                 const dir_depth = dir_info[2];
                 defer {
@@ -619,7 +621,8 @@ pub fn entryNameZ(entry_name: []const u8, entry_subpath: stringZ) stringZ {
     }
 
 pub fn iterateBundledDeps(ctx: *Context, root_dir: std.fs.Dir, log_level: LogLevel) OOM!PackQueue {
-            var bundled_pack_queue = PackQueue.init(ctx.allocator, .{});
+            const void_val: void = undefined;
+            var bundled_pack_queue = PackQueue.init(ctx.allocator, void_val);
             _ = &bundled_pack_queue;
             if ((ctx.bundled_deps.items.len == 0)) {
                 return bundled_pack_queue;
@@ -731,7 +734,8 @@ pub fn addBundledDep(ctx: *Context, root_dir: std.fs.Dir, bundled_dir_info: DirI
             }
             _ = try dirs.append(ctx.allocator, bundled_dir_info);
             while (dirs.pop()) |dir_info| {
-                const dir = dir_info[0];
+                var dir = dir_info[0];
+                _ = &dir;
                 const dir_subpath = dir_info[1];
                 const dir_depth = dir_info[2];
                 defer {
@@ -754,7 +758,8 @@ pub fn addBundledDep(ctx: *Context, root_dir: std.fs.Dir, bundled_dir_info: DirI
                             const source = (&(blk_catch_16: { break :blk_catch_16 ((File.toSourceAt(dir, entryNameZ(entry_name, entry_subpath), ctx.allocator, .{}).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to read package.json: \"{s}\"", .{ entry_subpath });
                             break :blk_catch_16 Global.crash(); }); }));
                             const json = (blk_catch_17: { break :blk_catch_17 ((JSON.parsePackageJSONUTF8(source, ctx.manager.log, ctx.allocator)) catch |__ce_17| { _ = &__ce_17; break :root_depth; }); });
-                            for (cp_iter_slice(.{ "dependencies", "optionalDependencies" })) |dependency_group| {
+                            const bundled_dep_groups: [2][]const u8 = .{ "dependencies", "optionalDependencies" };
+                            for (cp_iter_slice(bundled_dep_groups[0..])) |dependency_group| {
                                 _ = &dependency_group;
                                 const maybe_deps_expr = json.get(dependency_group);
                                 if ((maybe_deps_expr == null)) {
@@ -785,7 +790,8 @@ pub fn addBundledDep(ctx: *Context, root_dir: std.fs.Dir, bundled_dir_info: DirI
                                     _ = &dep_subpath;
                                     var dep_dir_depth: usize = (bundled_dir_info[2] + 2);
                                     _ = &dep_dir_depth;
-                                    if (root_dir.openDirZ(dep_subpath, .{ .iterate = true })) |dep_dir| {
+                                    const dep_dir_opt: ?std.fs.Dir = (blk_catch_18: { break :blk_catch_18 ((root_dir.openDirZ(dep_subpath, .{ .iterate = true })) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 @as(?std.fs.Dir, null); }); });
+                                    if (dep_dir_opt) |dep_dir| {
                                         _ = &dep_dir;
                                         const dedupe_entry = try dedupe.getOrPut(dep_subpath);
                                         if (dedupe_entry.found_existing) {
@@ -803,7 +809,7 @@ pub fn addBundledDep(ctx: *Context, root_dir: std.fs.Dir, bundled_dir_info: DirI
                                             dep_subpath[cp_cast_int(usize, ((node_modules_end + 1) + dep_name.len))] = 0;
                                             const parent_dep_subpath = dep_subpath[0..((node_modules_end + 1) + dep_name.len) :0];
                                             remain = remain[0..node_modules_start];
-                                            const parent_dep_dir = (blk_catch_18: { break :blk_catch_18 ((root_dir.openDirZ(parent_dep_subpath, .{ .iterate = true })) catch |__ce_18| { _ = &__ce_18; continue; }); });
+                                            const parent_dep_dir = (blk_catch_19: { break :blk_catch_19 ((root_dir.openDirZ(parent_dep_subpath, .{ .iterate = true })) catch |__ce_19| { _ = &__ce_19; continue; }); });
                                             const dedupe_entry = try dedupe.getOrPut(parent_dep_subpath);
                                             if (dedupe_entry.found_existing) {
                                                 continue :next_dep;
@@ -860,7 +866,8 @@ pub fn iterateProjectTree(allocator: std.mem.Allocator, pack_queue: *PackQueue, 
             }
             _ = try dirs.append(allocator, root_dir);
             while (dirs.pop()) |dir_info| {
-                const dir = dir_info[0];
+                var dir = dir_info[0];
+                _ = &dir;
                 const dir_subpath = dir_info[1];
                 const dir_depth = dir_info[2];
                 defer {
@@ -895,7 +902,7 @@ pub fn iterateProjectTree(allocator: std.mem.Allocator, pack_queue: *PackQueue, 
                 }
                 var dir_iter = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), .@"u8");
                 _ = &dir_iter;
-                next_entry: while ((blk_catch_19: { break :blk_catch_19 ((dir_iter.next().unwrap()) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 null; }); })) |entry| {
+                next_entry: while ((blk_catch_20: { break :blk_catch_20 ((dir_iter.next().unwrap()) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 null; }); })) |entry| {
                     if (((entry.kind != .file) and (entry.kind != .directory))) {
                         continue;
                     }
@@ -966,7 +973,7 @@ const maybe_iter = bundled_deps.asArray();
             var iter = maybe_iter.?;
             _ = &iter;
             while (iter.next()) |bundled_dep_item| {
-                const maybe_bdep = bundled_dep_item.asStringCloned(allocator);
+                const maybe_bdep = try bundled_dep_item.asStringCloned(allocator);
                 if ((maybe_bdep == null)) {
                     break :invalid_field;
                 }
@@ -995,7 +1002,7 @@ for (cp_mut_slice(&dependencies.properties.slice())) |*dependency| {
                     if (((if (@typeInfo(@TypeOf((dependency.*))) == .@"enum") @intFromEnum((dependency.*)) else (dependency.*).value) == null)) {
                         continue;
                     }
-                    const maybe_bdep = (blk_catch_20: { break :blk_catch_20 (((dependency.*).key.?.asStringCloned(allocator)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 null; }); });
+                    const maybe_bdep = (blk_catch_21: { break :blk_catch_21 (((dependency.*).key.?.asStringCloned(allocator)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); });
                     if ((maybe_bdep == null)) {
                         break :invalid_field;
                     }
@@ -1105,8 +1112,7 @@ pub fn isExcluded(entry: DirIterator.IteratorResult, entry_subpath: stringZ, dir
                 if ((isUnconditionallyIncludedFile(entry_name) or isSpecialFileOrVariant(entry_name, "CHANGELOG"))) {
                     return null;
                 }
-                for (cp_iter_slice(root_default_ignore_patterns)) |pattern| {
-                    _ = &pattern;
+                inline for (root_default_ignore_patterns) |pattern| {
                     switch (glob.match(pattern, entry_name)) {
 .match => {
 return ExcludedInfo{ .pattern = pattern, .kind = .default };
@@ -1129,8 +1135,7 @@ _ = unreachable;
             _ = &ignore_kind;
             var ignored = false;
             _ = &ignored;
-            for (cp_iter_slice(default_ignore_patterns)) |pattern_info| {
-                _ = &pattern_info;
+            inline for (default_ignore_patterns) |pattern_info| {
                 const pattern = pattern_info.pattern;
                 const can_override = pattern_info.can_override;
                 switch (glob.match(pattern, entry_name)) {
@@ -1162,8 +1167,8 @@ _ = unreachable;
                     {
                         var depth_idx: i32 = 1;
                         _ = &depth_idx;
-                        const __end_25 = ignore.depth;
-                        while (depth_idx < __end_25) : (depth_idx += 1) {
+                        const __end_23 = ignore.depth;
+                        while (depth_idx < __end_23) : (depth_idx += 1) {
                             if (strings.indexOfChar(rel, 47)) |sep| {
                                 _ = &sep;
                                 rel = rel[(sep + 1)..];
@@ -1211,7 +1216,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
 .parse_err => |e| {
 {
                 _ = Output.err(e, "failed to parse package.json: {s}", .{ abs_package_json_path });
-                _ = (blk_catch_21: { break :blk_catch_21 ((manager.log.print(Output.errorWriter())) catch |__ce_21| { _ = &__ce_21;  }); });
+                _ = (blk_catch_22: { break :blk_catch_22 ((manager.log.print(Output.errorWriter())) catch |__ce_22| { _ = &__ce_22;  }); });
                 _ = Global.crash();
             }
 },
@@ -1246,7 +1251,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             }
             var package_name_expr: Expr = maybe_pne.?;
             _ = &package_name_expr;
-            const maybe_pn = (blk_catch_22: { break :blk_catch_22 ((package_name_expr.asStringCloned(ctx.allocator)) catch |__ce_22| { _ = &__ce_22; return error.InvalidPackageName; }); });
+            const maybe_pn = (blk_catch_23: { break :blk_catch_23 ((package_name_expr.asStringCloned(ctx.allocator)) catch |__ce_23| { _ = &__ce_23; return error.InvalidPackageName; }); });
             if ((maybe_pn == null)) {
                 return error.InvalidPackageName;
             }
@@ -1275,7 +1280,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             }
             var package_version_expr: Expr = maybe_pve.?;
             _ = &package_version_expr;
-            const maybe_pv = (blk_catch_23: { break :blk_catch_23 ((package_version_expr.asStringCloned(ctx.allocator)) catch |__ce_23| { _ = &__ce_23; return error.InvalidPackageVersion; }); });
+            const maybe_pv = (blk_catch_24: { break :blk_catch_24 ((package_version_expr.asStringCloned(ctx.allocator)) catch |__ce_24| { _ = &__ce_24; return error.InvalidPackageVersion; }); });
             if ((maybe_pv == null)) {
                 return error.InvalidPackageVersion;
             }
@@ -1302,8 +1307,8 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             }
             var this_transpiler: bun.transpiler.Transpiler = undefined;
             _ = &this_transpiler;
-            _ = (blk_catch_24: { break :blk_catch_24 ((RunCommand.configureEnvForRun(ctx.command_ctx, (&this_transpiler), manager.env, (manager.options.log_level != .silent), false)) catch |e| { _ = &e; break :blk_catch_24 (__sw_blk_27: { const __disc_27 = e; _ = &__disc_27; if ((!cp_has_ok_val(__disc_27) and !cp_is_null_val(__disc_27))) { const __err_v_27 = cp_unwrap_err_val(__disc_27); _ = &__err_v_27; if (cp_match_tag(__err_v_27, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{ @errorName(e) });
-            break :__sw_blk_27 cp_val(Global.crash()); }  unreachable; }); }); });
+            _ = (blk_catch_25: { break :blk_catch_25 ((RunCommand.configureEnvForRun(ctx.command_ctx, (&this_transpiler), manager.env, (manager.options.log_level != .silent), false)) catch |e| { _ = &e; break :blk_catch_25 (__sw_blk_25: { const __disc_25 = e; _ = &__disc_25; if ((!cp_has_ok_val(__disc_25) and !cp_is_null_val(__disc_25))) { const __err_v_25 = cp_unwrap_err_val(__disc_25); _ = &__err_v_25; if (cp_match_tag(__err_v_25, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{ @errorName(e) });
+            break :__sw_blk_25 cp_val(Global.crash()); }  unreachable; }); }); });
             const abs_workspace_path: []const u8 = strings.withoutTrailingSlash(strings.withoutSuffixComptime(abs_package_json_path, "package.json"));
             _ = try manager.env.map.put("npm_command", "pack");
             const post_scripts_res = post_scripts: {
@@ -1326,8 +1331,8 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                     if (prepublish_only_script_str.asString(ctx.allocator)) |prepublish_only| {
                         _ = &prepublish_only;
                         did_run_scripts = true;
-                        _ = (blk_catch_25: { break :blk_catch_25 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepublish_only, "prepublishOnly", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_25 (__sw_blk_28: { const __disc_28 = e; _ = &__disc_28; if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepublishOnly script", .{});
-                        break :__sw_blk_28 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                        _ = (blk_catch_26: { break :blk_catch_26 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepublish_only, "prepublishOnly", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_26 (__sw_blk_26: { const __disc_26 = e; _ = &__disc_26; if ((!cp_has_ok_val(__disc_26) and !cp_is_null_val(__disc_26))) { const __err_v_26 = cp_unwrap_err_val(__disc_26); _ = &__err_v_26; if (cp_match_tag(__err_v_26, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepublishOnly script", .{});
+                        break :__sw_blk_26 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_26) and !cp_is_null_val(__disc_26))) { const __err_v_26 = cp_unwrap_err_val(__disc_26); _ = &__err_v_26; if (cp_match_tag(__err_v_26, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                     }
                 }
             }
@@ -1336,8 +1341,8 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                 if (prepack_script.asString(ctx.allocator)) |prepack_script_str| {
                     _ = &prepack_script_str;
                     did_run_scripts = true;
-                    _ = (blk_catch_26: { break :blk_catch_26 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepack_script_str, "prepack", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_26 (__sw_blk_29: { const __disc_29 = e; _ = &__disc_29; if ((!cp_has_ok_val(__disc_29) and !cp_is_null_val(__disc_29))) { const __err_v_29 = cp_unwrap_err_val(__disc_29); _ = &__err_v_29; if (cp_match_tag(__err_v_29, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepack script", .{});
-                    break :__sw_blk_29 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_29) and !cp_is_null_val(__disc_29))) { const __err_v_29 = cp_unwrap_err_val(__disc_29); _ = &__err_v_29; if (cp_match_tag(__err_v_29, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_27: { break :blk_catch_27 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepack_script_str, "prepack", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_27: { const __disc_27 = e; _ = &__disc_27; if ((!cp_has_ok_val(__disc_27) and !cp_is_null_val(__disc_27))) { const __err_v_27 = cp_unwrap_err_val(__disc_27); _ = &__err_v_27; if (cp_match_tag(__err_v_27, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepack script", .{});
+                    break :__sw_blk_27 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_27) and !cp_is_null_val(__disc_27))) { const __err_v_27 = cp_unwrap_err_val(__disc_27); _ = &__err_v_27; if (cp_match_tag(__err_v_27, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                 }
             }
             if (scripts.expr.get("prepare")) |prepare_script| {
@@ -1345,8 +1350,8 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                 if (prepare_script.asString(ctx.allocator)) |prepare_script_str| {
                     _ = &prepare_script_str;
                     did_run_scripts = true;
-                    _ = (blk_catch_27: { break :blk_catch_27 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepare_script_str, "prepare", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_30: { const __disc_30 = e; _ = &__disc_30; if ((!cp_has_ok_val(__disc_30) and !cp_is_null_val(__disc_30))) { const __err_v_30 = cp_unwrap_err_val(__disc_30); _ = &__err_v_30; if (cp_match_tag(__err_v_30, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepare script", .{});
-                    break :__sw_blk_30 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_30) and !cp_is_null_val(__disc_30))) { const __err_v_30 = cp_unwrap_err_val(__disc_30); _ = &__err_v_30; if (cp_match_tag(__err_v_30, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_28: { break :blk_catch_28 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepare_script_str, "prepare", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_28 (__sw_blk_28: { const __disc_28 = e; _ = &__disc_28; if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepare script", .{});
+                    break :__sw_blk_28 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                 }
             }
             var postpack_script: ?[]const u8 = null;
@@ -1395,7 +1400,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
 .parse_err => |e| {
 {
                     _ = Output.err(e, "failed to parse package.json: {s}", .{ abs_package_json_path });
-                    _ = (blk_catch_28: { break :blk_catch_28 ((manager.log.print(Output.errorWriter())) catch |__ce_28| { _ = &__ce_28;  }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((manager.log.print(Output.errorWriter())) catch |__ce_29| { _ = &__ce_29;  }); });
                     _ = Global.crash();
                 }
 },
@@ -1417,7 +1422,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                     return error.MissingPackageName;
                 }
                 package_name_expr = maybe_pne2.?;
-                const maybe_pn2 = (blk_catch_29: { break :blk_catch_29 ((package_name_expr.asStringCloned(ctx.allocator)) catch |__ce_29| { _ = &__ce_29; return error.InvalidPackageName; }); });
+                const maybe_pn2 = (blk_catch_30: { break :blk_catch_30 ((package_name_expr.asStringCloned(ctx.allocator)) catch |__ce_30| { _ = &__ce_30; return error.InvalidPackageName; }); });
                 if ((maybe_pn2 == null)) {
                     return error.InvalidPackageName;
                 }
@@ -1430,7 +1435,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                     return error.MissingPackageVersion;
                 }
                 package_version_expr = maybe_pve2.?;
-                const maybe_pv2 = (blk_catch_30: { break :blk_catch_30 ((package_version_expr.asStringCloned(ctx.allocator)) catch |__ce_30| { _ = &__ce_30; return error.InvalidPackageVersion; }); });
+                const maybe_pv2 = (blk_catch_31: { break :blk_catch_31 ((package_version_expr.asStringCloned(ctx.allocator)) catch |__ce_31| { _ = &__ce_31; return error.InvalidPackageVersion; }); });
                 if ((maybe_pv2 == null)) {
                     return error.InvalidPackageVersion;
                 }
@@ -1445,16 +1450,27 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             _ = &path_buf;
             _ = @memcpy(path_buf[0..abs_workspace_path.len], abs_workspace_path);
             path_buf[cp_cast_int(usize, abs_workspace_path.len)] = 0;
-            break :root_dir (blk_catch_31: { break :blk_catch_31 ((std.fs.openDirAbsoluteZ(path_buf[0..abs_workspace_path.len :0], .{ .iterate = true })) catch |e| { _ = &e; _ = Output.err(e, "failed to open root directory: {s}\n", .{ abs_workspace_path });
-            break :blk_catch_31 Global.crash(); }); });
+            break :root_dir (blk_catch_32: { break :blk_catch_32 ((std.fs.openDirAbsoluteZ(path_buf[0..abs_workspace_path.len :0], .{ .iterate = true })) catch |e| { _ = &e; _ = Output.err(e, "failed to open root directory: {s}\n", .{ abs_workspace_path });
+            break :blk_catch_32 Global.crash(); }); });
 };
             _ = &root_dir;
             defer {
             _ = root_dir.close();
             }
-            const workspace_readme: if (for_publish) ?Publish.ReadmeInfo else void = (if (comptime for_publish) try Publish.findWorkspaceReadme(ctx.allocator, abs_workspace_path) else null);
-            if (ctx.bundled_deps == null) { ctx.bundled_deps = ((try getBundledDeps(ctx.allocator, json.root, "bundleDependencies")) orelse (.{})); }
-            var pack_queue: PackQueue = .init(ctx.allocator, .{});
+            const void_val: void = undefined;
+            const workspace_readme: if (for_publish) ?Publish.ReadmeInfo else void = (if (comptime for_publish) try Publish.findWorkspaceReadme(ctx.allocator, abs_workspace_path) else void_val);
+            if (try getBundledDeps(ctx.allocator, json.root, "bundledDependencies")) |bd| {
+                _ = &bd;
+                ctx.bundled_deps = bd;
+            } else {
+                if (try getBundledDeps(ctx.allocator, json.root, "bundleDependencies")) |bd2| {
+                    _ = &bd2;
+                    ctx.bundled_deps = bd2;
+                } else {
+                    ctx.bundled_deps = .{};
+                }
+            }
+            var pack_queue: PackQueue = .init(ctx.allocator, void_val);
             _ = &pack_queue;
             defer {
             _ = pack_queue.deinit();
@@ -1473,7 +1489,7 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
 _ = try pack_queue.add(.{ .path = bin.path, .optional = true });
 },
 .dir => {
-const bin_dir = (blk_catch_32: { break :blk_catch_32 ((root_dir.openDir(bin.path, .{ .iterate = true })) catch |__ce_32| { _ = &__ce_32; continue; }); });
+const bin_dir = (blk_catch_33: { break :blk_catch_33 ((root_dir.openDir(bin.path, .{ .iterate = true })) catch |__ce_33| { _ = &__ce_33; continue; }); });
                 _ = try iterateProjectTree(ctx.allocator, (&pack_queue), &.{}, .{ bin_dir, bin.path, 2 }, log_level);
 },
 }
@@ -1502,7 +1518,7 @@ const bin_dir = (blk_catch_32: { break :blk_catch_32 ((root_dir.openDir(bin.path
                         if (files_entry.asString(ctx.allocator)) |file_entry_str| {
                             _ = &file_entry_str;
                             const normalized = bun.path.normalizeBuf(file_entry_str, (&path_buf), .posix);
-                            const maybe_p = (blk_catch_33: { break :blk_catch_33 ((Pattern.fromUTF8(ctx.allocator, normalized)) catch |__ce_33| { _ = &__ce_33; continue; }); });
+                            const maybe_p = (blk_catch_34: { break :blk_catch_34 ((Pattern.fromUTF8(ctx.allocator, normalized)) catch |__ce_34| { _ = &__ce_34; continue; }); });
                             if ((maybe_p == null)) {
                                 continue;
                             }
@@ -1549,8 +1565,8 @@ const bin_dir = (blk_catch_32: { break :blk_catch_32 ((root_dir.openDir(bin.path
                 _ = Context.printSummary(ctx.stats, null, null, log_level);
                 if (postpack_script) |postpack_script_str| {
                     _ = &postpack_script_str;
-                    _ = (blk_catch_34: { break :blk_catch_34 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_34 (__sw_blk_33: { const __disc_33 = e; _ = &__disc_33; if ((!cp_has_ok_val(__disc_33) and !cp_is_null_val(__disc_33))) { const __err_v_33 = cp_unwrap_err_val(__disc_33); _ = &__err_v_33; if (cp_match_tag(__err_v_33, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
-                    break :__sw_blk_33 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_33) and !cp_is_null_val(__disc_33))) { const __err_v_33 = cp_unwrap_err_val(__disc_33); _ = &__err_v_33; if (cp_match_tag(__err_v_33, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_35: { break :blk_catch_35 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_35 (__sw_blk_31: { const __disc_31 = e; _ = &__disc_31; if ((!cp_has_ok_val(__disc_31) and !cp_is_null_val(__disc_31))) { const __err_v_31 = cp_unwrap_err_val(__disc_31); _ = &__err_v_31; if (cp_match_tag(__err_v_31, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
+                    break :__sw_blk_31 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_31) and !cp_is_null_val(__disc_31))) { const __err_v_31 = cp_unwrap_err_val(__disc_31); _ = &__err_v_31; if (cp_match_tag(__err_v_31, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
                 }
                 if (comptime for_publish) {
                     var dest_buf: bun.PathBuffer = undefined;
@@ -1626,7 +1642,7 @@ else => {
                 const most_likely_a_slash = dest_buf[@as(usize, @intCast(abs_tarball_dest_dir_end))];
                 dest_buf[cp_cast_int(usize, abs_tarball_dest_dir_end)] = 0;
                 const abs_tarball_dest_dir = dest_buf[0..abs_tarball_dest_dir_end :0];
-                _ = (blk_catch_35: { break :blk_catch_35 ((bun.makePath(std.fs.cwd(), abs_tarball_dest_dir)) catch |__ce_35| { _ = &__ce_35;  }); });
+                _ = (blk_catch_36: { break :blk_catch_36 ((bun.makePath(std.fs.cwd(), abs_tarball_dest_dir)) catch |__ce_36| { _ = &__ce_36;  }); });
                 dest_buf[cp_cast_int(usize, abs_tarball_dest_dir_end)] = most_likely_a_slash;
             }
             switch (archive.writeOpenFilename(abs_tarball_dest)) {
@@ -1678,20 +1694,20 @@ else => {
                         _ = node.completeOne();
                     }
                     }
-                    const file = (blk_catch_36: { break :blk_catch_36 ((bun.sys.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if (item.optional) {
+                    const file = (blk_catch_37: { break :blk_catch_37 ((bun.sys.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if (item.optional) {
                         ctx.stats.total_files = (ctx.stats.total_files - 1);
                         continue;
                     }
                     _ = Output.err(e, "failed to open file: \"{s}\"", .{ item.path });
-                    break :blk_catch_36 Global.crash(); }); });
-                    const fd = (blk_catch_37: { break :blk_catch_37 ((file.makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to open file: \"{s}\"", .{ item.path });
                     break :blk_catch_37 Global.crash(); }); });
+                    const fd = (blk_catch_38: { break :blk_catch_38 ((file.makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to open file: \"{s}\"", .{ item.path });
+                    break :blk_catch_38 Global.crash(); }); });
                     defer {
                     _ = fd.close();
                     }
-                    const stat = (blk_catch_38: { break :blk_catch_38 ((bun.sys.sys_uv.fstat(fd).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{s}\"", .{ item.path });
-                    break :blk_catch_38 Global.crash(); }); });
-                    _ = try pack_list.append(ctx.allocator, .{ .subpath = item.path, .size = (if (comptime @typeInfo(@TypeOf(stat.size)) == .@"enum") cp_cast_int(i32, @intFromEnum(stat.size)) else cp_cast_int(i32, stat.size)) });
+                    const stat = (blk_catch_39: { break :blk_catch_39 ((bun.sys.sys_uv.fstat(fd).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{s}\"", .{ item.path });
+                    break :blk_catch_39 Global.crash(); }); });
+                    _ = try pack_list.append(ctx.allocator, .{ .subpath = item.path, .size = @as(usize, @intCast(stat.size)) });
                     entry = try addArchiveEntry(ctx, fd, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf), bins);
                 }
                 while (bundled_pack_queue.removeOrNull()) |item| {
@@ -1700,17 +1716,17 @@ else => {
                         _ = node.completeOne();
                     }
                     }
-                    const file = (blk_catch_39: { break :blk_catch_39 ((File.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if (item.optional) {
+                    const file = (blk_catch_40: { break :blk_catch_40 ((File.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; if (item.optional) {
                         ctx.stats.total_files = (ctx.stats.total_files - 1);
                         continue;
                     }
                     _ = Output.err(e, "failed to open file: \"{s}\"", .{ item.path });
-                    break :blk_catch_39 Global.crash(); }); });
+                    break :blk_catch_40 Global.crash(); }); });
                     defer {
                     _ = file.close();
                     }
-                    const stat = (blk_catch_40: { break :blk_catch_40 ((file.stat().unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{f}\"", .{ file.handle });
-                    break :blk_catch_40 Global.crash(); }); });
+                    const stat = (blk_catch_41: { break :blk_catch_41 ((file.stat().unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{f}\"", .{ file.handle });
+                    break :blk_catch_41 Global.crash(); }); });
                     entry = try addArchiveEntry(ctx, file.handle, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf), bins);
                 }
             }
@@ -1738,8 +1754,8 @@ else => {
             var integrity: sha.SHA512.Digest = undefined;
             _ = &integrity;
             const tarball_bytes = tarball_bytes: {
-            const tarball_file = (blk_catch_41: { break :blk_catch_41 ((File.open(abs_tarball_dest, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to open tarball at: \"{s}\"", .{ abs_tarball_dest });
-            break :blk_catch_41 Global.crash(); }); });
+            const tarball_file = (blk_catch_42: { break :blk_catch_42 ((File.open(abs_tarball_dest, bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to open tarball at: \"{s}\"", .{ abs_tarball_dest });
+            break :blk_catch_42 Global.crash(); }); });
             defer {
             _ = tarball_file.close();
             }
@@ -1754,8 +1770,8 @@ else => {
             _ = sha512.deinit();
             }
             if (comptime for_publish) {
-                const tarball_bytes = (blk_catch_42: { break :blk_catch_42 ((tarball_file.readToEnd(ctx.allocator).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
-                break :blk_catch_42 Global.crash(); }); });
+                const tarball_bytes = (blk_catch_43: { break :blk_catch_43 ((tarball_file.readToEnd(ctx.allocator).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
+                break :blk_catch_43 Global.crash(); }); });
                 _ = sha1.update(tarball_bytes);
                 _ = sha512.update(tarball_bytes);
                 _ = sha1.final((&shasum));
@@ -1766,22 +1782,22 @@ else => {
             file_reader.* = .{ .unbuffered_reader = tarball_file.reader(), .buf = undefined };
             var size: usize = 0;
             _ = &size;
-            var read = (blk_catch_43: { break :blk_catch_43 ((file_reader.read((&read_buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
-            break :blk_catch_43 Global.crash(); }); });
+            var read = (blk_catch_44: { break :blk_catch_44 ((file_reader.read((&read_buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
+            break :blk_catch_44 Global.crash(); }); });
             _ = &read;
             while ((read > 0)) {
                 _ = sha1.update(read_buf[0..read]);
                 _ = sha512.update(read_buf[0..read]);
                 size = (size + read);
-                read = (blk_catch_44: { break :blk_catch_44 ((file_reader.read((&read_buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
-                break :blk_catch_44 Global.crash(); }); });
+                read = (blk_catch_45: { break :blk_catch_45 ((file_reader.read((&read_buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to read tarball: \"{s}\"", .{ abs_tarball_dest });
+                break :blk_catch_45 Global.crash(); }); });
             }
             _ = sha1.final((&shasum));
             _ = sha512.final((&integrity));
             ctx.stats.packed_size = size;
             break :tarball_bytes;
 };
-            const normalized_pkg_info: if (for_publish) []const u8 else void = (if (comptime for_publish) try Publish.normalizedPackage(ctx.allocator, manager, package_name, package_version, (&json.root), (&json.source), shasum, integrity, workspace_readme) else null);
+            const normalized_pkg_info: if (for_publish) []const u8 else void = (if (comptime for_publish) try Publish.normalizedPackage(ctx.allocator, manager, package_name, package_version, (&json.root), (&json.source), shasum, integrity, workspace_readme) else void_val);
             _ = printArchivedFilesAndPackages(ctx, root_dir, false, pack_list, edited_package_json.len);
             if (comptime (!for_publish)) {
                 if (((manager.options.pack_destination.len == 0) and (manager.options.pack_filename.len == 0))) {
@@ -1797,8 +1813,8 @@ else => {
             if (postpack_script) |postpack_script_str| {
                 _ = &postpack_script_str;
                 _ = Output.pretty("\n", .{});
-                _ = (blk_catch_45: { break :blk_catch_45 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_45 (__sw_blk_34: { const __disc_34 = e; _ = &__disc_34; if ((!cp_has_ok_val(__disc_34) and !cp_is_null_val(__disc_34))) { const __err_v_34 = cp_unwrap_err_val(__disc_34); _ = &__err_v_34; if (cp_match_tag(__err_v_34, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
-                break :__sw_blk_34 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_34) and !cp_is_null_val(__disc_34))) { const __err_v_34 = cp_unwrap_err_val(__disc_34); _ = &__err_v_34; if (cp_match_tag(__err_v_34, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                _ = (blk_catch_46: { break :blk_catch_46 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_46 (__sw_blk_32: { const __disc_32 = e; _ = &__disc_32; if ((!cp_has_ok_val(__disc_32) and !cp_is_null_val(__disc_32))) { const __err_v_32 = cp_unwrap_err_val(__disc_32); _ = &__err_v_32; if (cp_match_tag(__err_v_32, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
+                break :__sw_blk_32 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_32) and !cp_is_null_val(__disc_32))) { const __err_v_32 = cp_unwrap_err_val(__disc_32); _ = &__err_v_32; if (cp_match_tag(__err_v_32, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
             }
             if (comptime for_publish) {
                 return .{ .allocator = ctx.allocator, .command_ctx = ctx.command_ctx, .manager = manager, .package_name = package_name, .package_version = package_version, .abs_tarball_path = try ctx.allocator.dupeZ(u8, abs_tarball_dest), .tarball_bytes = tarball_bytes, .shasum = shasum, .integrity = integrity, .uses_workspaces = false, .publish_script = publish_script, .postpublish_script = postpublish_script, .script_env = this_transpiler.env, .normalized_pkg_info = normalized_pkg_info };
@@ -1811,13 +1827,13 @@ pub fn tarballDestination(pack_destination: []const u8, pack_filename: []const u
                 _ = Global.crash();
             }
             if ((pack_filename.len > 0)) {
-                const tarball_name = (blk_catch_46: { break :blk_catch_46 ((std.fmt.bufPrint(dest_buf[0..], "{s}\x00", .{ pack_filename })) catch |__ce_46| { _ = &__ce_46; _ = Output.errGeneric("archive filename too long: \"{s}\"", .{ pack_filename });
-                break :blk_catch_46 Global.crash(); }); });
+                const tarball_name = (blk_catch_47: { break :blk_catch_47 ((std.fmt.bufPrint(dest_buf[0..], "{s}\x00", .{ pack_filename })) catch |__ce_47| { _ = &__ce_47; _ = Output.errGeneric("archive filename too long: \"{s}\"", .{ pack_filename });
+                break :blk_catch_47 Global.crash(); }); });
                 return TarballDest{ .dest = dest_buf[0..(tarball_name.len - 1) :0], .dir_end = 0 };
             } else {
                 const tarball_destination_dir = bun.path.joinAbsStringBuf(abs_workspace_path, dest_buf, (&.{ pack_destination }), .auto);
-                const tarball_name = (blk_catch_47: { break :blk_catch_47 ((std.fmt.bufPrint(dest_buf[strings.withoutTrailingSlash(tarball_destination_dir).len..], "/{f}\x00", .{ fmtTarballFilename(package_name, package_version, .normalize) })) catch |__ce_47| { _ = &__ce_47; _ = Output.errGeneric("archive destination name too long: \"{s}/{f}\"", .{ strings.withoutTrailingSlash(tarball_destination_dir), fmtTarballFilename(package_name, package_version, .normalize) });
-                break :blk_catch_47 Global.crash(); }); });
+                const tarball_name = (blk_catch_48: { break :blk_catch_48 ((std.fmt.bufPrint(dest_buf[strings.withoutTrailingSlash(tarball_destination_dir).len..], "/{f}\x00", .{ fmtTarballFilename(package_name, package_version, .normalize) })) catch |__ce_48| { _ = &__ce_48; _ = Output.errGeneric("archive destination name too long: \"{s}/{f}\"", .{ strings.withoutTrailingSlash(tarball_destination_dir), fmtTarballFilename(package_name, package_version, .normalize) });
+                break :blk_catch_48 Global.crash(); }); });
                 return TarballDest{ .dest = dest_buf[0..((strings.withoutTrailingSlash(tarball_destination_dir).len + tarball_name.len) - 1) :0], .dir_end = tarball_destination_dir.len };
             }
     }
@@ -1827,12 +1843,12 @@ pub fn fmtTarballFilename(package_name: []const u8, package_version: []const u8,
     }
 
 pub fn archivePackageJSON(ctx: *Context, archive: *Archive, entry: *Archive.Entry, root_dir: std.fs.Dir, edited_package_json: []const u8) OOM!*Archive.Entry {
-            const stat = (blk_catch_48: { break :blk_catch_48 ((bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat package.json", .{});
-            break :blk_catch_48 Global.crash(); }); });
+            const stat = (blk_catch_49: { break :blk_catch_49 ((bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat package.json", .{});
+            break :blk_catch_49 Global.crash(); }); });
             _ = entry.setPathname((package_prefix ++ "package.json"));
             _ = entry.setSize((if (comptime @typeInfo(@TypeOf(edited_package_json.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(edited_package_json.len)) else cp_cast_int(i32, edited_package_json.len)));
             _ = entry.setFiletype(32768);
-            _ = entry.setPerm((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(stat.mode)) else cp_cast_int(i32, stat.mode)));
+            _ = entry.setPerm(@as(bun.Mode, @intCast(stat.mode)));
             _ = entry.setMtime(499162500, 0);
             switch (archive.writeHeader(entry)) {
 .failed, .fatal, .warn => {
@@ -1843,7 +1859,7 @@ else => {
 
 },
 }
-            ctx.stats.unpacked_size = (ctx.stats.unpacked_size + (if (comptime @typeInfo(@TypeOf(archive.writeData(edited_package_json))) == .@"enum") cp_cast_int(i32, @intFromEnum(archive.writeData(edited_package_json))) else cp_cast_int(i32, archive.writeData(edited_package_json))));
+            ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(archive.writeData(edited_package_json))));
             return entry.clear();
     }
 
@@ -1876,20 +1892,20 @@ else => {
 },
 }
             file_reader.* = .{ .unbuffered_reader = File.@"from"(file).reader(), .buf = undefined };
-            var read = (blk_catch_49: { break :blk_catch_49 ((file_reader.read(read_buf)) catch |e| { _ = &e; _ = Output.err(e, "failed to read file: \"{s}\"", .{ filename });
-            break :blk_catch_49 Global.crash(); }); });
+            var read = (blk_catch_50: { break :blk_catch_50 ((file_reader.read(read_buf)) catch |e| { _ = &e; _ = Output.err(e, "failed to read file: \"{s}\"", .{ filename });
+            break :blk_catch_50 Global.crash(); }); });
             _ = &read;
             while ((read > 0)) {
-                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + (if (comptime @typeInfo(@TypeOf(archive.writeData(read_buf[0..read]))) == .@"enum") cp_cast_int(i32, @intFromEnum(archive.writeData(read_buf[0..read]))) else cp_cast_int(i32, archive.writeData(read_buf[0..read]))));
-                read = (blk_catch_50: { break :blk_catch_50 ((file_reader.read(read_buf)) catch |e| { _ = &e; _ = Output.err(e, "failed to read file: \"{s}\"", .{ filename });
-                break :blk_catch_50 Global.crash(); }); });
+                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(archive.writeData(read_buf[0..read]))));
+                read = (blk_catch_51: { break :blk_catch_51 ((file_reader.read(read_buf)) catch |e| { _ = &e; _ = Output.err(e, "failed to read file: \"{s}\"", .{ filename });
+                break :blk_catch_51 Global.crash(); }); });
             }
             return entry.clear();
     }
 
 pub fn editRootPackageJSON(allocator: std.mem.Allocator, maybe_lockfile: ?*Lockfile, json: *PackageManager.WorkspacePackageJSONCache.MapEntry) OOM![]const u8 {
-            for (cp_iter_slice(.{ "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" })) |dependency_group| {
-                _ = &dependency_group;
+            const dep_groups: [4][]const u8 = .{ "dependencies", "devDependencies", "peerDependencies", "optionalDependencies" };
+            inline for (dep_groups) |dependency_group| {
                 if (json.root.get(dependency_group)) |dependencies_expr| {
                     _ = &dependencies_expr;
                     switch (dependencies_expr.data) {
@@ -1982,8 +1998,8 @@ else => {
             buffer_writer.append_newline = has_trailing_newline;
             var package_json_writer = js_printer.BufferPrinter.init(buffer_writer);
             _ = &package_json_writer;
-            const written = (blk_catch_51: { break :blk_catch_51 ((js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), json.root, (&json.source), .{ .indent = json.indentation, .mangled_props = null })) catch |e| { _ = &e; return (__sw_blk_37: { const __disc_37 = e; _ = &__disc_37; if ((!cp_has_ok_val(__disc_37) and !cp_is_null_val(__disc_37))) { const __err_v_37 = cp_unwrap_err_val(__disc_37); _ = &__err_v_37; if (cp_match_tag(__err_v_37, .OutOfMemory)) {  break :__sw_blk_37 cp_val(error.OutOfMemory); } } {  _ = Output.errGeneric("failed to print edited package.json: {s}", .{ @errorName(e) });
-            break :__sw_blk_37 cp_val(Global.crash()); }  unreachable; }); }); });
+            const written = (blk_catch_52: { break :blk_catch_52 ((js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), json.root, (&json.source), .{ .indent = json.indentation, .mangled_props = null })) catch |e| { _ = &e; return (__sw_blk_34: { const __disc_34 = e; _ = &__disc_34; if ((!cp_has_ok_val(__disc_34) and !cp_is_null_val(__disc_34))) { const __err_v_34 = cp_unwrap_err_val(__disc_34); _ = &__err_v_34; if (cp_match_tag(__err_v_34, .OutOfMemory)) {  break :__sw_blk_34 cp_val(error.OutOfMemory); } } {  _ = Output.errGeneric("failed to print edited package.json: {s}", .{ @errorName(e) });
+            break :__sw_blk_34 cp_val(Global.crash()); }  unreachable; }); }); });
             _ = &written;
             return package_json_writer.ctx.writtenWithoutTrailingZero();
     }
@@ -1995,18 +2011,18 @@ pub fn printArchivedFilesAndPackages(ctx: *Context, root_dir_std: std.fs.Dir, co
             }
             const packed_fmt: []const u8 = "<r><b><cyan>packed<r> {f} {s}";
             if (comptime is_dry_run) {
-                const package_json_stat = (blk_catch_52: { break :blk_catch_52 ((root_dir.statat("package.json").unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat package.json", .{});
-                break :blk_catch_52 Global.crash(); }); });
-                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + (if (comptime @typeInfo(@TypeOf(package_json_stat.size)) == .@"enum") cp_cast_int(i32, @intFromEnum(package_json_stat.size)) else cp_cast_int(i32, package_json_stat.size)));
+                const package_json_stat = (blk_catch_53: { break :blk_catch_53 ((root_dir.statat("package.json").unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat package.json", .{});
+                break :blk_catch_53 Global.crash(); }); });
+                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(package_json_stat.size)));
                 _ = Output.prettyln(("\n" ++ packed_fmt), .{ bun.fmt.size(package_json_stat.size, .{ .space_between_number_and_unit = false }), "package.json" });
                 while (pack_list.removeOrNull()) |item| {
-                    const stat = (blk_catch_53: { break :blk_catch_53 ((root_dir.statat(item.path).unwrap()) catch |e| { _ = &e; if (item.optional) {
+                    const stat = (blk_catch_54: { break :blk_catch_54 ((root_dir.statat(item.path).unwrap()) catch |e| { _ = &e; if (item.optional) {
                         ctx.stats.total_files = (ctx.stats.total_files - 1);
                         continue;
                     }
                     _ = Output.err(e, "failed to stat file: \"{s}\"", .{ item.path });
-                    break :blk_catch_53 Global.crash(); }); });
-                    ctx.stats.unpacked_size = (ctx.stats.unpacked_size + (if (comptime @typeInfo(@TypeOf(stat.size)) == .@"enum") cp_cast_int(i32, @intFromEnum(stat.size)) else cp_cast_int(i32, stat.size)));
+                    break :blk_catch_54 Global.crash(); }); });
+                    ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(stat.size)));
                     _ = Output.prettyln(packed_fmt, .{ bun.fmt.size(stat.size, .{ .space_between_number_and_unit = false }), item.path });
                 }
                 for (ctx.bundled_deps.items) |dep| {
@@ -2128,7 +2144,7 @@ pub fn isSpecialFileOrVariant(filename: []const u8, comptime name: []const u8) c
         package_version: []const u8,
         style: Style,
     
-    pub fn format(self: *@This(), writer: *std.Io.Writer) !void {
+    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
                 if ((self.style == .raw)) {
                     return writer.print("{s}-{s}.tgz", .{ self.package_name, self.package_version });
                 }
@@ -2166,11 +2182,11 @@ pub fn jsReadTarball(global: *JSGlobalObject, callFrame: *CallFrame) bun.JSError
             defer {
             _ = tarball_path.deinit();
             }
-            const tarball_file = File.@"from"((blk_catch_54: { break :blk_catch_54 ((std.fs.cwd().openFile(tarball_path.slice(), .{})) catch |e| { _ = &e; return global.throw("failed to open tarball file \"{s}\": {s}", .{ tarball_path.slice(), @errorName(e) }); }); }));
+            const tarball_file = File.@"from"((blk_catch_55: { break :blk_catch_55 ((std.fs.cwd().openFile(tarball_path.slice(), .{})) catch |e| { _ = &e; return global.throw("failed to open tarball file \"{s}\": {s}", .{ tarball_path.slice(), @errorName(e) }); }); }));
             defer {
             _ = tarball_file.close();
             }
-            const tarball = (blk_catch_55: { break :blk_catch_55 ((tarball_file.readToEnd(bun.default_allocator).unwrap()) catch |e| { _ = &e; return global.throw("failed to read tarball contents \"{s}\": {s}", .{ tarball_path.slice(), @errorName(e) }); }); });
+            const tarball = (blk_catch_56: { break :blk_catch_56 ((tarball_file.readToEnd(bun.default_allocator).unwrap()) catch |e| { _ = &e; return global.throw("failed to read tarball contents \"{s}\": {s}", .{ tarball_path.slice(), @errorName(e) }); }); });
             defer {
             _ = bun.default_allocator.free(tarball);
             }
@@ -2193,7 +2209,7 @@ pub fn jsReadTarball(global: *JSGlobalObject, callFrame: *CallFrame) bun.JSError
             }
             _ = sha512.update(tarball);
             _ = sha512.final((&sha512_digest));
-            const base64_size = std.base64.standard.Encoder.calcSize(sha.SHA512.digest);
+            const base64_size = (comptime std.base64.standard.Encoder.calcSize(sha.SHA512.digest));
             _ = &base64_size;
             var base64_buf: [base64_size]u8 = undefined;
             _ = &base64_buf;
@@ -2252,16 +2268,17 @@ else => {
 
 },
 }
-            var archive_entry: *Archive.Entry = undefined;
-            _ = &archive_entry;
-            var header_status = archive.readNextHeader(archive_entry);
+            var archive_entry_buf: [1]*Archive.Entry = undefined;
+            _ = &archive_entry_buf;
+            var header_status = archive.readNextHeader(archive_entry_buf[0..1].ptr);
             _ = &header_status;
             var read_buf = std.array_list.Managed(u8).init(bun.default_allocator);
             _ = &read_buf;
             defer {
             _ = read_buf.deinit();
             }
-            while ((header_status != .eof)) : (header_status = archive.readNextHeader(archive_entry)) {
+            while ((header_status != .eof)) : (header_status = archive.readNextHeader(archive_entry_buf[0..1].ptr)) {
+                const archive_entry = archive_entry_buf[0];
                 switch (header_status) {
 .eof => {
 _ = unreachable;
@@ -2301,7 +2318,7 @@ const pathname_string = (if (bun.Environment.isWindows) blk: {
                         }
                         return global.throw("failed to read archive entry \"{s}\": {s}", .{ pathname_utf8.slice(), Archive.errorString(@ptrCast(archive)) });
                     }
-                    read_buf.items.len = (if (comptime @typeInfo(@TypeOf(read)) == .@"enum") cp_cast_int(i32, @intFromEnum(read)) else cp_cast_int(i32, read));
+                    read_buf.items.len = @as(usize, @intCast(read));
                     entry_info.contents = String.cloneUTF8(read_buf.items);
                 }
                 _ = bun.handleOom(entries_info.append(entry_info));
@@ -2337,7 +2354,7 @@ else => {
                     _ = &contents;
                     _ = obj.put(global, "contents", try contents.toJS(global));
                 }
-                _ = try entries.putIndex(global, @as(i32, @intCast(entry_idx)), obj);
+                _ = try entries.putIndex(global, @as(u32, @intCast(entry_idx)), obj);
             }
             const result = JSValue.createEmptyObject(global, 4);
             _ = result.put(global, "entries", entries);

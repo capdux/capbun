@@ -131,7 +131,7 @@ pub fn getLatestVersion(allocator: std.mem.Allocator, env_loader: *DotEnv.Loader
             }
             var header_entries: Headers.Entry.List = .empty;
             _ = &header_entries;
-            const accept = Headers.Entry{ .name = .{ .offset = 0, .length = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("Accept".len)) else cp_cast_int(i32, "Accept".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("Accept".len)) else cp_cast_int(i32, "Accept".len)), .length = (if (comptime @typeInfo(@TypeOf("application/vnd.github.v3+json".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("application/vnd.github.v3+json".len)) else cp_cast_int(i32, "application/vnd.github.v3+json".len)) } };
+            const accept = Headers.Entry{ .name = .{ .offset = 0, .length = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Accept".len)) else cp_cast_int(u32, "Accept".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Accept".len)) else cp_cast_int(u32, "Accept".len)), .length = (if (comptime @typeInfo(@TypeOf("application/vnd.github.v3+json".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("application/vnd.github.v3+json".len)) else cp_cast_int(u32, "application/vnd.github.v3+json".len)) } };
             _ = try header_entries.append(allocator, accept);
             defer {
             if (comptime silent) {
@@ -151,7 +151,7 @@ pub fn getLatestVersion(allocator: std.mem.Allocator, env_loader: *DotEnv.Loader
                 _ = &access_token;
                 if ((access_token.len > 0)) {
                     headers_buf = try std.fmt.allocPrint(allocator, (default_github_headers ++ "AuthorizationBearer {s}"), .{ access_token });
-                    _ = try header_entries.append(allocator, .{ .name = .{ .offset = ((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length), .length = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(i32, @intFromEnum("Authorization".len)) else cp_cast_int(i32, "Authorization".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) else cp_cast_int(i32, (((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))), .length = (if (comptime @typeInfo(@TypeOf(("Bearer ".len + access_token.len))) == .@"enum") cp_cast_int(i32, @intFromEnum(("Bearer ".len + access_token.len))) else cp_cast_int(i32, ("Bearer ".len + access_token.len))) } });
+                    _ = try header_entries.append(allocator, .{ .name = .{ .offset = ((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length), .length = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Authorization".len)) else cp_cast_int(u32, "Authorization".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) == .@"enum") cp_cast_int(u32, @intFromEnum((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) else cp_cast_int(u32, (((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))), .length = (if (comptime @typeInfo(@TypeOf(("Bearer ".len + access_token.len))) == .@"enum") cp_cast_int(u32, @intFromEnum(("Bearer ".len + access_token.len))) else cp_cast_int(u32, ("Bearer ".len + access_token.len))) } });
                 }
             }
             const http_proxy: ?URL = env_loader.getHttpProxyFor(api_url);
@@ -222,7 +222,7 @@ return error.HTTPError;
                 if ((!silent)) {
                     _ = progress.?.end();
                     _ = refresher.?.refresh();
-                    const json_type: js_ast.Expr.Tag = (if (comptime @typeInfo(js_ast.Expr.Tag) == .@"enum") @as(js_ast.Expr.Tag, @enumFromInt(expr.data)) else @as(js_ast.Expr.Tag, expr.data));
+                    const json_type: js_ast.Expr.Tag = std.meta.activeTag(expr.data);
                     _ = Output.prettyErrorln("JSON error - expected an object but received {s}", .{ @tagName(json_type) });
                     _ = Global.exit(1);
                 }
@@ -326,7 +326,7 @@ pub fn exec(ctx: Command.Context) !void {
                 for (cp_iter_slice(args[2..])) |arg| {
                     _ = &arg;
                     if ((!strings.contains(arg, "--"))) {
-                        _ = Output.prettyError("<r><red>error<r><d>:<r> This command updates Bun itself, and does not take package names.", "<blue>note<r><d>:<r> Use `bun update", .{});
+                        _ = Output.prettyError("<r><red>error<r><d>:<r> This command updates Bun itself, and does not take package names.\n<blue>note<r><d>:<r> Use `bun update", .{});
                         for (cp_iter_slice(args[2..])) |arg_err| {
                             _ = &arg_err;
                             _ = Output.prettyError(" {s}", .{ arg_err });
@@ -336,7 +336,7 @@ pub fn exec(ctx: Command.Context) !void {
                     }
                 }
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((_exec(ctx)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>", "", "<cyan>Please upgrade manually<r>:", "  <b>{s}<r>", "", "", .{ @errorName(e), manual_upgrade_command });
+            _ = (blk_catch_2: { break :blk_catch_2 ((_exec(ctx)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>\n\n<cyan>Please upgrade manually<r>:\n  <b>{s}<r>\n\n", .{ @errorName(e), manual_upgrade_command });
             break :blk_catch_2 @as(void, Global.exit(1)); }); });
     }
 
@@ -407,7 +407,7 @@ pub fn _exec(ctx: Command.Context) !void {
                 switch (response.status_code) {
 404 => {
 if (use_canary) {
-                    _ = Output.prettyErrorln("<r><red>error:<r> Canary builds are not available for this platform yet", "", "   Release: <cyan>https://github.com/oven-sh/bun/releases/tag/canary<r>", "  Filename: <b>{s}<r>", "", .{ Version.zip_filename });
+                    _ = Output.prettyErrorln("<r><red>error:<r> Canary builds are not available for this platform yet\n\n   Release: <cyan>https://github.com/oven-sh/bun/releases/tag/canary<r>\n  Filename: <b>{s}<r>\n", .{ Version.zip_filename });
                     _ = Global.exit(1);
                 }
                 return error.HTTP404;
@@ -447,7 +447,7 @@ return error.HTTPError;
                 tmpdir_path_buf[cp_cast_int(usize, tmpdir_path.len)] = 0;
                 const tmpdir_z = tmpdir_path_buf[0..tmpdir_path.len :0];
                 _ = bun.sys.chdir("", tmpdir_z);
-                const tmpname: []const u8 = "bun.zip";
+                const tmpname: [:0]const u8 = "bun.zip";
                 const exe = (if (use_profile) profile_exe_subpath else exe_subpath);
                 var zip_file = (blk_catch_6: { break :blk_catch_6 ((save_dir.createFileZ(tmpname, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to open temp file {s}", .{ @errorName(e) });
                 break :blk_catch_6 Global.exit(1); }); });
@@ -505,7 +505,7 @@ return error.HTTPError;
 }));
                             var unzip_argv = .{ powershell_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", unzip_script };
                             _ = &unzip_argv;
-                            _ = (blk_catch_16: { break :blk_catch_16 (((blk_catch_14: { break :blk_catch_14 ((bun.spawnSync((&.{ .argv = (&unzip_argv), .envp = null, .cwd = tmpdir_path, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
+                            _ = (blk_catch_16: { break :blk_catch_16 (((blk_catch_14: { break :blk_catch_14 ((bun.spawnSync((&.{ .argv = (&unzip_argv), .envp = null, .cwd = tmpdir_path, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
                             break :blk_catch_14 Global.exit(1); }); }).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to run Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
                             break :blk_catch_16 Global.exit(1); }); });
                         }
@@ -523,7 +523,7 @@ return error.HTTPError;
                         break :brk true;
 };
                         if (access_ok) {
-                            _ = Output.prettyErrorln("<r><red>error<r><d>:<r> 'bun upgrade' is unsupported on systems without ld", "", "You are likely on an immutable system such as NixOS, where dynamic", "libraries are stored in a global cache.", "", "Please use your system's package manager to properly upgrade bun.", "", .{});
+                            _ = Output.prettyErrorln("<r><red>error<r><d>:<r> 'bun upgrade' is unsupported on systems without ld\n\nYou are likely on an immutable system such as NixOS, where dynamic\nlibraries are stored in a global cache.\n\nPlease use your system's package manager to properly upgrade bun.\n", .{});
                             _ = Global.exit(1);
                             return;
                         }
@@ -586,7 +586,7 @@ return error.HTTPError;
                         break :blk_catch_31 Global.exit(1); }); }));
                         if ((target_hash == source_hash)) {
                             _ = (blk_catch_33: { break :blk_catch_33 ((save_dir_.deleteTree(version_name)) catch |__ce_33| { _ = &__ce_33;  }); });
-                            _ = Output.prettyErrorln("<r><green>Congrats!<r> You're already on the latest <b>canary<r><green> build of Bun", "", "To downgrade to the latest stable release, run <b><cyan>bun upgrade --stable<r>", "", .{});
+                            _ = Output.prettyErrorln("<r><green>Congrats!<r> You're already on the latest <b>canary<r><green> build of Bun\n\nTo downgrade to the latest stable release, run <b><cyan>bun upgrade --stable<r>\n", .{});
                             _ = Global.exit(0);
                         }
                     }
@@ -607,14 +607,14 @@ return error.HTTPError;
                     }
                     if (comptime Environment.isWindows) {
                         _ = (blk_catch_38: { break :blk_catch_38 ((std.posix.rename(outdated_filename.?, destination_executable)) catch |__ce_38| { _ = &__ce_38; _ = Output.errGeneric("Failed to move new version of Bun to {s} due to {s}", .{ destination_executable, @errorName(e) });
-                        _ = Output.errGeneric("Failed to restore the working copy of Bun. The installation is now corrupt.", "", "Please reinstall Bun manually with the following command:", "   {s}", "", .{ manual_upgrade_command });
+                        _ = Output.errGeneric("Failed to restore the working copy of Bun. The installation is now corrupt.\n\nPlease reinstall Bun manually with the following command:\n   {s}\n", .{ manual_upgrade_command });
                         break :blk_catch_38 Global.exit(1); }); });
                     }
-                    _ = Output.errGeneric("Failed to move new version of Bun to {s} to {s}", "", "Please reinstall Bun manually with the following command:", "   {s}", "", .{ destination_executable, @errorName(e), manual_upgrade_command });
+                    _ = Output.errGeneric("Failed to move new version of Bun to {s} to {s}\n\nPlease reinstall Bun manually with the following command:\n   {s}\n", .{ destination_executable, @errorName(e), manual_upgrade_command });
                     break :blk_catch_36 Global.exit(1); }); });
                 }
                 {
-                    var completions_argv: []bun.PathBuffer = .{ target_filename, "completions" };
+                    var completions_argv: [2][]const u8 = .{ target_filename, "completions" };
                     _ = &completions_argv;
                     _ = bun.handleOom(env_loader.map.put("IS_BUN_AUTO_UPDATE", "true"));
                     var std_map = try env_loader.map.stdEnvMap(ctx.allocator);
@@ -626,10 +626,10 @@ return error.HTTPError;
                 }
                 _ = Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
                 if (use_canary) {
-                    _ = Output.prettyErrorln("<r> Upgraded.", "", "<b><green>Welcome to Bun's latest canary build!<r>", "", "Report any bugs:", "", "    https://github.com/oven-sh/bun/issues", "", "Changelog:", "", "    https://github.com/oven-sh/bun/compare/{s}...{s}", "", .{ Environment.git_sha_short, version.tag });
+                    _ = Output.prettyErrorln("<r> Upgraded.\n\n<b><green>Welcome to Bun's latest canary build!<r>\n\nReport any bugs:\n\n    https://github.com/oven-sh/bun/issues\n\nChangelog:\n\n    https://github.com/oven-sh/bun/compare/{s}...{s}\n", .{ Environment.git_sha_short, version.tag });
                 } else {
                     const bun_v = ("bun-v" ++ Global.package_json_version);
-                    _ = Output.prettyErrorln("<r> Upgraded.", "", "<b><green>Welcome to Bun v{s}!<r>", "", "What's new in Bun v{s}:", "", "    <cyan>https://bun.com/blog/release-notes/{s}<r>", "", "Report any bugs:", "", "    https://github.com/oven-sh/bun/issues", "", "Commit log:", "", "    https://github.com/oven-sh/bun/compare/{s}...{s}", "", .{ version_name, version_name, version.tag, bun_v, version.tag });
+                    _ = Output.prettyErrorln("<r> Upgraded.\n\n<b><green>Welcome to Bun v{s}!<r>\n\nWhat's new in Bun v{s}:\n\n    <cyan>https://bun.com/blog/release-notes/{s}<r>\n\nReport any bugs:\n\n    https://github.com/oven-sh/bun/issues\n\nCommit log:\n\n    https://github.com/oven-sh/bun/compare/{s}...{s}\n", .{ version_name, version_name, version.tag, bun_v, version.tag });
                 }
                 _ = Output.flush();
                 if (Environment.isWindows) {
@@ -653,7 +653,7 @@ return error.HTTPError;
 };
 
 pub const upgrade_js_bindings = struct {
-    tempdir_fd: ?bun.FD = null,
+    pub var tempdir_fd: ?bun.FD = null;
 
 pub fn generate(global: *jsc.JSGlobalObject) jsc.JSValue {
             const obj = JSValue.createEmptyObject(global, 2);
@@ -664,7 +664,7 @@ pub fn generate(global: *jsc.JSGlobalObject) jsc.JSValue {
             return obj;
     }
 
-pub fn jsOpenTempDirWithoutSharingDelete(self: *upgrade_js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!bun.jsc.JSValue {
+pub fn jsOpenTempDirWithoutSharingDelete(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!bun.jsc.JSValue {
             if (comptime (!Environment.isWindows)) {
                 return jsc.JSValue.js_undefined;
             }
@@ -691,7 +691,7 @@ return jsc.JSValue.js_undefined;
             const rc = std.os.windows.ntdll.NtCreateFile((&fd), flags, (&attr), (&io), null, 0, (w.FILE_SHARE_READ | w.FILE_SHARE_WRITE), w.FILE_OPEN, ((w.FILE_DIRECTORY_FILE | w.FILE_SYNCHRONOUS_IO_NONALERT) | w.FILE_OPEN_FOR_BACKUP_INTENT), null, 0);
             switch (bun.windows.Win32Error.fromNTStatus(rc)) {
 .SUCCESS => {
-self.tempdir_fd = .fromNative(fd);
+tempdir_fd = .fromNative(fd);
 },
 else => {
 
@@ -700,11 +700,11 @@ else => {
             return jsc.JSValue.js_undefined;
     }
 
-pub fn jsCloseTempDirHandle(self: *upgrade_js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+pub fn jsCloseTempDirHandle(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             if (comptime (!Environment.isWindows)) {
                 return jsc.JSValue.js_undefined;
             }
-            if (self.tempdir_fd) |fd| {
+            if (tempdir_fd) |fd| {
                 _ = &fd;
                 _ = fd.close();
             }

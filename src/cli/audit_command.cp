@@ -90,12 +90,12 @@ pub struct VulnCounts {
 }
 
 pub struct AuditCommand {
-    static fn exec(ctx: Command.Context)!noreturn {
+    static fn exec(ctx: Command.Context): !noreturn {
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .audit)?;
         const init_res = PackageManager.init(ctx, cli, .audit) catch |e| {
             if (e == error.MissingPackageJSON) {
                 let cwd_buf: bun.PathBuffer = undefined;
-                if (cwd := bun.getcwd(&cwd_buf)) {
+                if (cwd := bun.getcwd(&cwd_buf) catch null) {
                     Output.errGeneric("No package.json was found for directory \"{s}\"", .{ cwd });
                 } else {
                     Output.errGeneric("No package.json was found", .{});
@@ -252,13 +252,14 @@ fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManager, 
     const dep_slice = root_deps.get(dependencies);
     const res_slice = root_resolutions.get(resolutions);
 
+    const void_val: void = undefined;
     let dep_i: usize = 0;
     while (dep_i < res_slice.len) : (dep_i += 1) {
         const dep = dep_slice[dep_i];
         const resolved_pkg_id = res_slice[dep_i];
         if (!dep.behavior.isDev() && resolved_pkg_id < packages.len) {
             const pkg_name = pkg_names[resolved_pkg_id].slice(buf);
-            prod_set.put(pkg_name, {})?;
+            prod_set.put(pkg_name, void_val)?;
             queue.writeItem(resolved_pkg_id)?;
         }
     }
@@ -276,7 +277,7 @@ fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManager, 
 
             const pkg_name = pkg_names[resolved_pkg_id].slice(buf);
             if (!prod_set.contains(pkg_name)) {
-                prod_set.put(pkg_name, {})?;
+                prod_set.put(pkg_name, void_val)?;
                 queue.writeItem(resolved_pkg_id)?;
             }
         }
@@ -407,7 +408,9 @@ fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager, pr
 
 fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []const u8): bun.OOM![]u8 {
     libdeflate.load();
-    let compressor = libdeflate.Compressor.alloc(6) ?? return error.OutOfMemory;
+    const compressor_opt = libdeflate.Compressor.alloc(6);
+    if (compressor_opt == null) return error.OutOfMemory;
+    let compressor = compressor_opt.?;
     defer compressor.deinit();
 
     const max_compressed_size = compressor.maxBytesNeeded(body, .gzip);
@@ -586,9 +589,10 @@ fn findDependencyPaths(
         }
     }
 
+    const void_val: void = undefined;
     while (current := queue.readItem()) {
         if (visited.contains(current)) continue;
-        visited.put(current, {})?;
+        visited.put(current, void_val)?;
 
         let is_root_dep = false;
         for (dependency of dep_slice) {
@@ -634,7 +638,7 @@ fn findDependencyPaths(
                 }
 
                 pth.path.insert(0, allocator.dupe(u8, trace)?)?;
-                seen_in_trace.put(trace, {})?;
+                seen_in_trace.put(trace, void_val)?;
 
                 if (parent := parent_map.get(trace)) {
                     trace = parent;

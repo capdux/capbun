@@ -1170,7 +1170,7 @@ const StringOutOfRangeFormatter = NewOutOfRangeFormatter(string);
 const BunStringOutOfRangeFormatter = NewOutOfRangeFormatter(bun.String);
 
 pub fn Table(comptime column_color: []const u8, comptime column_left_pad: usize, comptime column_right_pad: usize, comptime enable_ansi_colors: bool) type {
-        const symbols = TableSymbols{ .enable_ansi_colors = enable_ansi_colors };
+        const table_symbols = TableSymbols{ .enable_ansi_colors = enable_ansi_colors };
         return struct {
     column_names: []const []const u8,
     column_inside_lengths: []const usize,
@@ -1180,11 +1180,11 @@ pub fn init(column_names_: []const []const u8, column_inside_lengths_: []const u
     }
 
 pub fn printTopLineSeparator(self: @This()) void {
-            _ = self.printLine(symbols.topLeftSep(), symbols.topRightSep(), symbols.topColumnSep());
+            _ = self.printLine(table_symbols.topLeftSep(), table_symbols.topRightSep(), table_symbols.topColumnSep());
     }
 
 pub fn printBottomLineSeparator(self: @This()) void {
-            _ = self.printLine(symbols.bottomLeftSep(), symbols.bottomRightSep(), symbols.bottomColumnSep());
+            _ = self.printLine(table_symbols.bottomLeftSep(), table_symbols.bottomRightSep(), table_symbols.bottomColumnSep());
     }
 
 pub fn printLineSeparator(self: @This()) void {
@@ -1236,13 +1236,10 @@ pub fn printColumnNames(self: @This()) void {
                         }
                     }
                     _ = Output.pretty(col_fmt, .{ self.column_names[@as(usize, @intCast(i))] });
-                    {
-                        var j: i32 = self.column_names[@as(usize, @intCast(i))].len;
-                        _ = &j;
-                        const __end_4 = (column_inside_length + column_right_pad);
-                        while (j < __end_4) : (j += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var j: usize = self.column_names[@as(usize, @intCast(i))].len;
+                    _ = &j;
+                    while ((j < (column_inside_length + column_right_pad))) : (j = (j + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                     if ((i == (self.column_inside_lengths.len - 1))) {
                         _ = Output.pretty("{s}\n", .{ symbols.verticalEdge() });
@@ -1250,6 +1247,7 @@ pub fn printColumnNames(self: @This()) void {
                 }
             }
     }
+    pub const symbols = table_symbols;
 };
 }
 

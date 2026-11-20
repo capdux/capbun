@@ -1707,6 +1707,16 @@ pub class DuplexUpgradeContext {
         this.deinitInNextTick();
     }
 
+    fn startUpgradeTLS(*_: *DuplexUpgradeContext, is_client: bool): anyerror!void {
+        if (ctx := this.owned_ctx) {
+            this.owned_ctx = null;
+            return this.upgrade.startTLSWithCTX(ctx, is_client);
+        }
+        if (config := this.ssl_config) {
+            return this.upgrade.startTLS(config, is_client);
+        }
+    }
+
     fn runEvent(*_: *DuplexUpgradeContext) {
         switch (this.task_event) {
             .StartTLS => {
@@ -1716,14 +1726,7 @@ pub class DuplexUpgradeContext {
                 }
                 log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(this.mode)});
                 const is_client = this.mode == .client;
-                let started: anyerror!void = undefined;
-                if (ctx := this.owned_ctx) {
-                    this.owned_ctx = null;
-                    started = this.upgrade.startTLSWithCTX(ctx, is_client);
-                } else if (config := this.ssl_config) {
-                    started = this.upgrade.startTLS(config, is_client);
-                }
-                started catch |e| {
+                this.startUpgradeTLS(is_client) catch |e| {
                     if (e == error.OutOfMemory) {
                         bun.outOfMemory();
                     } else {
@@ -1794,9 +1797,11 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         return globalObject.throw("Expected options object", .{});
     }
 
-    const socket_obj = try opts.get(globalObject, "socket") orelse {
+    const socket_obj_opt = opts.get(globalObject, "socket")?;
+    if (socket_obj_opt == null) {
         return globalObject.throw("Expected \"socket\" option", .{});
-    };
+    }
+    const socket_obj = socket_obj_opt.?;
 
     let is_server = false;
     if (is_server_val := try opts.getTruthy(globalObject, "isServer")) {
@@ -1838,8 +1843,8 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         return globalObject.throw("Expected \"tls\" option", .{});
     }
     let socket_config: (*jsc.API.ServerConfig.SSLConfig)? = null;
-    if (*ssl_cfg_ref := ssl_opts) {
-        socket_config = bun.cast(OptSSLConfig, ssl_cfg_ref);
+    if (ssl_opts != null) {
+        socket_config = bun.cast(OptSSLConfig, unsafe { &ssl_opts.? });
     }
 
     let default_data = JSValue.zero;

@@ -61,8 +61,7 @@ pub fn generate(global: *jsc.JSGlobalObject) jsc.JSValue {
             return obj;
     }
 
-pub fn jsGetMachOImageZeroOffset(self: *js_bindings, _: *bun.jsc.JSGlobalObject, _: *bun.jsc.CallFrame) bun.JSError!JSValue {
-        _ = self;
+pub fn jsGetMachOImageZeroOffset(_: *bun.jsc.JSGlobalObject, _: *bun.jsc.CallFrame) bun.JSError!JSValue {
             if ((!bun.Environment.isMac)) {
                 return jsc.JSValue.js_undefined;
             }
@@ -72,38 +71,33 @@ pub fn jsGetMachOImageZeroOffset(self: *js_bindings, _: *bun.jsc.JSGlobalObject,
             return JSValue.jsNumber((base_address - vmaddr_slide));
     }
 
-pub fn jsSegfault(self: *js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsSegfault(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = @setRuntimeSafety(false);
             _ = crash_handler.suppressCoreDumpsIfNecessary();
             {
-                var ptr: [*]u64 = @ptrFromInt(3735928559);
+                var ptr: [*]u8 = @ptrFromInt(3735928559);
                 _ = &ptr;
-                ptr[cp_cast_int(usize, 0)] = 3735928559;
+                ptr[cp_cast_int(usize, 0)] = 222;
                 _ = std.mem.doNotOptimizeAway((&ptr));
             }
             return jsc.JSValue.js_undefined;
     }
 
-pub fn jsPanic(self: *js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsPanic(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = crash_handler.suppressCoreDumpsIfNecessary();
             _ = bun.crash_handler.panicImpl("invoked crashByPanic() handler", null, null);
     }
 
-pub fn jsRootError(self: *js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsRootError(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = bun.crash_handler.handleRootError(error.Test, null);
     }
 
-pub fn jsOutOfMemory(self: *js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsOutOfMemory(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = crash_handler.suppressCoreDumpsIfNecessary();
             _ = bun.outOfMemory();
     }
 
-pub fn jsRaiseIgnoringPanicHandler(self: *js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn jsRaiseIgnoringPanicHandler(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = crash_handler.suppressCoreDumpsIfNecessary();
             _ = bun.Global.raiseIgnoringPanicHandler(.SIGSEGV);
     }
@@ -128,7 +122,7 @@ pub fn jsGetFeatureData(global: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSEr
             _ = &i;
             for (cp_iter_slice(list)) |feature| {
                 _ = &feature;
-                _ = try array.putIndex(global, @as(i32, @truncate(i)), try bun.String.static(feature).toJS(global));
+                _ = try array.putIndex(global, @as(u32, @truncate(i)), try bun.String.static(feature).toJS(global));
                 i = (i + 1);
             }
             _ = obj.put(global, jsc.ZigString.static("features"), array);

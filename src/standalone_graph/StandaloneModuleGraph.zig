@@ -1173,7 +1173,7 @@ pub fn fromExecutable(allocator: std.mem.Allocator) !?*StandaloneModuleGraph {
                 var mut_bytes: []u8 = undefined;
                 _ = &mut_bytes;
                 {
-                    mut_bytes = @as([*]u8, @ptrCast(@alignCast(macho_bytes.ptr)))[0..macho_bytes.len];
+                    mut_bytes = @constCast(macho_bytes);
                 }
                 return try fromBytesAlloc(allocator, mut_bytes, offsets);
             }
@@ -1193,7 +1193,7 @@ pub fn fromExecutable(allocator: std.mem.Allocator) !?*StandaloneModuleGraph {
                 var mut_bytes: []u8 = undefined;
                 _ = &mut_bytes;
                 {
-                    mut_bytes = @as([*]u8, @ptrCast(@alignCast(pe_bytes.ptr)))[0..pe_bytes.len];
+                    mut_bytes = @constCast(pe_bytes);
                 }
                 return try fromBytesAlloc(allocator, mut_bytes, offsets);
             }
@@ -1213,7 +1213,7 @@ pub fn fromExecutable(allocator: std.mem.Allocator) !?*StandaloneModuleGraph {
                 var mut_bytes: []u8 = undefined;
                 _ = &mut_bytes;
                 {
-                    mut_bytes = @as([*]u8, @ptrCast(@alignCast(elf_bytes.ptr)))[0..elf_bytes.len];
+                    mut_bytes = @constCast(elf_bytes);
                 }
                 return try fromBytesAlloc(allocator, mut_bytes, offsets);
             }

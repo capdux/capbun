@@ -229,7 +229,7 @@ pub fn createMemfdForTesting(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.
     const arguments = callFrame.arguments_old(1);
 
     if (arguments.len < 1) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     if (comptime !bun.Environment.isLinux) {

@@ -542,7 +542,7 @@ const VisitMap = std.AutoHashMapUnmanaged(jsc.JSValue, Expr);
 const JavaScript = bun.jsc;
 const jsc = bun.jsc;
 const js = bun.jsc.C;
-const empty_imports: [0]SImport = &.{};
+const empty_imports: [0]SImport = undefined;
 const TopLevelMacroError = ((error{ MacroFailed, OutOfMemory } || ToJSError) || bun.JSError);
 
 extern "c" fn Bun__startMacro(function: *const anyopaque, arg1: *anyopaque) callconv(.c) void;

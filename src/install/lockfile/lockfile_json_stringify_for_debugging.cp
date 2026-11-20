@@ -251,7 +251,8 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
         w.beginArray()?;
         defer w.endArray() catch {};
 
-        for (i of 0..client.packages.len) {
+        let i: usize = 0;
+        while (i < client.packages.len) : (i += 1) {
             const pkg: Package = client.packages.get(i);
             w.beginObject()?;
             defer w.endObject() catch {};
@@ -286,7 +287,9 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
                 w.beginArray()?;
                 defer w.endArray() catch {};
 
-                for (dep_id of pkg.dependencies.off..pkg.dependencies.off + pkg.dependencies.len) {
+                let dep_id: u32 = pkg.dependencies.off;
+                const dep_end = pkg.dependencies.off + pkg.dependencies.len;
+                while (dep_id < dep_end) : (dep_id += 1) {
                     w.write(dep_id)?;
                 }
             }

@@ -109,7 +109,7 @@ pub fn unlink(ctx: Command.Context) !void {
             _ = &lockfile;
             var name: []const u8 = "";
             _ = &name;
-            var package = Lockfile.Package;
+            var package: Lockfile.Package = .{};
             _ = &package;
             {
                 const package_json_source = (&(blk_catch_1: { break :blk_catch_1 ((bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap()) catch |e| { _ = &e; _ = Output.errGeneric("failed to read \"{s}\" for unlinking: {s}", .{ manager.original_package_json_path, @errorName(e) });
@@ -151,7 +151,10 @@ _ = Output.prettyErrorln("<r><green>success:<r> package \"{s}\" is not globally 
             _ = &explicit_global_dir;
             if (ctx.install) |install_| {
                 _ = &install_;
-                if (explicit_global_dir == null) { explicit_global_dir = explicit_global_dir; }
+                if (install_.global_dir) |gd| {
+                    _ = &gd;
+                    explicit_global_dir = gd;
+                }
             }
             manager.global_dir = try Options.openGlobalDir(explicit_global_dir);
             _ = try manager.setupGlobalDir(ctx);

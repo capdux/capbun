@@ -471,7 +471,7 @@ pub struct DependencyVersion {
 
     static fn isLessThan(string_buf: []const u8, lhs: Dependency.Version, rhs: Dependency.Version): bool {
         if (comptime Environment.allow_assert) bun.assert(lhs.tag == rhs.tag);
-        return strings.cmpStringsAsc({}, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
+        return strings.cmpStringsAsc(undefined, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
     }
 
     static fn isLessThanWithTag(string_buf: []const u8, lhs: Dependency.Version, rhs: Dependency.Version): bool {
@@ -479,7 +479,7 @@ pub struct DependencyVersion {
         if (tag_order != .eq)
             return tag_order == .lt;
 
-        return strings.cmpStringsAsc({}, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
+        return strings.cmpStringsAsc(undefined, lhs.literal.slice(string_buf), rhs.literal.slice(string_buf));
     }
 
     pub const External = [9]u8;

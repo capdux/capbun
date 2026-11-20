@@ -48,8 +48,8 @@ pub fn myersDiff(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     return assert.myersDiff(
         allocator,
         global,
-        &actual_str,
-        &expected_str,
+        unsafe { &actual_str },
+        unsafe { &expected_str },
         check_comma_disparity,
         lines,
     );

@@ -1,6 +1,6 @@
 comptime {
     if (bun.Environment.isWindows) {
-        @export(&Bun__ZigGlobalObject__uvLoop, { name: "Bun__ZigGlobalObject__uvLoop" });
+        @export(&@field(@This(), "Bun__ZigGlobalObject__uvLoop"), { name: "Bun__ZigGlobalObject__uvLoop" });
     }
 }
 
@@ -51,8 +51,8 @@ comptime {
 }
 
 comptime {
-    const Bun__Process__send = jsc.toJSHostFn(Bun__Process__send_);
-    @export(&Bun__Process__send, { name: "Bun__Process__send" });
+    const process_send = jsc.toJSHostFn(Bun__Process__send_);
+    @export(&process_send, { name: "Bun__Process__send" });
 }
 pub fn Bun__Process__send_(globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());

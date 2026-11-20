@@ -12,7 +12,6 @@ pub const fromJSDirect = js.fromJSDirect;
 
 const ssl_ctx_base_cost: usize = 50 * 1024;
 
-pub const c = uws.SocketContext.c;
 
 struct cpp {
     pub extern fn Bun__SecureContextCache__get(global: *jsc.JSGlobalObject, key: u64): jsc.JSValue;
@@ -141,6 +140,6 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
     /// Exposed via `bun:internal-for-testing` so churn tests can assert
     /// `SSL_CTX_new` was called O(1) times, not O(connections).
     pub static fn jsLiveCount(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumber(c.us_ssl_ctx_live_count());
+        return jsc.JSValue.jsNumber(uws.SocketContext.BunSocketContextOptions.liveCount());
     }
 }

@@ -249,9 +249,11 @@ pub struct PackageFilterIterator {
         let arena_ = std.heap.ArenaAllocator.init(_.allocator);
         errdefer arena_.deinit();
         const cwd = arena_.allocator().dupe(u8, _.root_dir)?;
-        (_.walker.initWithCwd(&arena_, pattern, cwd, true, true, false, true, true)?.unwrap())?;
+        let walker_res = _.walker.initWithCwd(&arena_, pattern, cwd, true, true, false, true, true)?;
+        walker_res.unwrap()?;
         _.iter = GlobWalker.Iterator{ walker: &_.walker };
-        (_.iter.init()?.unwrap())?;
+        let iter_res = _.iter.init()?;
+        iter_res.unwrap()?;
     }
 
     fn deinitWalker(*_) {

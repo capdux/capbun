@@ -147,7 +147,7 @@ pub struct TopStorePathFormatter {
         if (!_.repo.owner.isEmpty()) {
             writer.print("{f}", .{ _.repo.owner.fmtStorePath(_.string_buf) })?;
             writer.writeByte('+')?;
-        } else if (Dependency.isSCPLikePath(_.repo.repo.slice(_.string_buf))) {
+        } else if (Dependency.isSCPLikePath(String.slice(&_.repo.repo, _.string_buf))) {
             writer.writeAll("ssh++")?;
         }
 
@@ -155,7 +155,7 @@ pub struct TopStorePathFormatter {
 
         if (!_.repo.resolved.isEmpty()) {
             writer.writeByte('+')?;
-            let resolved = _.repo.resolved.slice(_.string_buf);
+            let resolved = String.slice(&_.repo.resolved, _.string_buf);
             if (i := strings.lastIndexOfChar(resolved, '-')) {
                 resolved = resolved[i + 1 ..];
             }
@@ -313,20 +313,22 @@ pub struct TopFormatter {
     }
 
     pub fn count(buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) {
-        builder.count(_.owner.slice(buf));
-        builder.count(_.repo.slice(buf));
-        builder.count(_.committish.slice(buf));
-        builder.count(_.resolved.slice(buf));
-        builder.count(_.package_name.slice(buf));
+        const slice_fn = String.slice;
+        builder.count(slice_fn(&_.owner, buf));
+        builder.count(slice_fn(&_.repo, buf));
+        builder.count(slice_fn(&_.committish, buf));
+        builder.count(slice_fn(&_.resolved, buf));
+        builder.count(slice_fn(&_.package_name, buf));
     }
 
     pub fn clone(buf: []const u8, comptime StringBuilder: type, builder: StringBuilder): Repository {
+        const slice_fn = String.slice;
         return {
-            owner: builder.append(String, _.owner.slice(buf)),
-            repo: builder.append(String, _.repo.slice(buf)),
-            committish: builder.append(String, _.committish.slice(buf)),
-            resolved: builder.append(String, _.resolved.slice(buf)),
-            package_name: builder.append(String, _.package_name.slice(buf)),
+            owner: builder.append(String, slice_fn(&_.owner, buf)),
+            repo: builder.append(String, slice_fn(&_.repo, buf)),
+            committish: builder.append(String, slice_fn(&_.committish, buf)),
+            resolved: builder.append(String, slice_fn(&_.resolved, buf)),
+            package_name: builder.append(String, slice_fn(&_.package_name, buf)),
         };
     }
 

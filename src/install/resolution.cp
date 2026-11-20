@@ -306,7 +306,7 @@ pub @c struct ResolutionType<SemverIntType> {
         }
 
         const StorePathFormatter = struct {
-            res: *const This,
+            res: This,
             string_buf: string,
             // opts: String.StorePathFormatter.Options,
 

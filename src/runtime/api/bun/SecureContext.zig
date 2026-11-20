@@ -117,7 +117,7 @@ pub fn memoryCost(self: *SecureContext) usize {
 }
 
 pub fn jsLiveCount(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumber(c.us_ssl_ctx_live_count());
+        return jsc.JSValue.jsNumber(uws.SocketContext.BunSocketContextOptions.liveCount());
 }
 const jsc = bun.jsc;
 const uws = bun.uws;
@@ -128,7 +128,6 @@ pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 const ssl_ctx_base_cost: usize = (50 * 1024);
-pub const c = uws.SocketContext.c;
 
 pub fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8) bun.JSError!*SecureContext {
         var e: uws.create_bun_socket_error_t = .none;

@@ -223,7 +223,7 @@ const CreateMatcherError = (OOM || error{InvalidRegExp});
 pub fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating) CreateMatcherError!Matcher {
         _ = buf.clearRetainingCapacity();
         const writer = (&buf.writer);
-        var trimmed = strings.trim(raw, (&strings.whitespace_chars));
+        var trimmed = strings.trim(raw, strings.whitespace_chars);
         _ = &trimmed;
         var is_exclude = false;
         _ = &is_exclude;

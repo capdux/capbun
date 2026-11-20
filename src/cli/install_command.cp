@@ -60,7 +60,9 @@ fn install(ctx: Command.Context)! {
             onFetch: @ptrCast(&Analyzer.onAnalyze),
         };
 
-        bun.cli.BuildCommand.exec(bun.cli.Command.get(), &fetcher)?;
+        const fetcher_ptr: *bun.bundle_v2.BundleV2.DependenciesScanner = &fetcher;
+        const exec_fn = bun.cli.BuildCommand.exec;
+        exec_fn(bun.cli.Command.get(), fetcher_ptr)?;
         return;
     }
 

@@ -177,7 +177,7 @@ fn runInstall(argv: [][]const u8) !void {
 
         windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-        },
+        } else @as(void, undefined),
     }) catch |e| {
         Output.err(e, "failed to install dependencies", {});
         Global.crash();
@@ -227,7 +227,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
     }
 
     // Generate files based on template type
-    switch (@as(Template.Tag, template)) {
+    switch (std.meta.activeTag(template)) {
         inline else => |active| {
             const current = @field(SourceFileProjectGenerator, @tagName(active));
             const files: []const TemplateFile = current.files;
@@ -377,7 +377,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
 
         windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
-        },
+        } else @as(void, undefined),
     }) catch |e| {
         Output.err(e, "failed to start app", {});
         Global.crash();
@@ -478,7 +478,7 @@ fn hasAnyTailwindClassesInSourceFiles(bundler: *BundleV2, reachable_files: []con
 }
 
 // Get list of shadcn components used in source files
-fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index) !bun.StringSet {
+fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index): bun.StringSet! {
     const input_files = bundler.graph.input_files.slice();
     const loaders = input_files.items(.loader);
     const all = bundler.graph.ast.items(.import_records);

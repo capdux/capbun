@@ -75,15 +75,15 @@ pub fn exec(ctx: Command.Context) !void {
 .result => |p| p,
 .err => |e| {
 {
-                _ = Output.err(e, "failed to run script <b>{s}<r>", .{ .script = script });
+                _ = Output.err(e, "failed to run script <b>{s}<r>", .{ script });
                 _ = Global.exit(1);
             }
 },
 });
             const mini = bun.jsc.MiniEventLoop.initGlobal(bundle.env, cwd);
-            const parts: []const []const u8 = .{ cwd, "[eval]" };
-            const script_path = bun.path.join(parts, .auto);
-            const code = (blk_catch_0: { break :blk_catch_0 ((bun.shell.Interpreter.initAndRunFromSource(ctx, mini, script_path, script, null)) catch |e| { _ = &e; _ = Output.err(e, "failed to run script <b>{s}<r>", .{ .script_path = script_path });
+            const parts: [2][]const u8 = .{ cwd, "[eval]" };
+            const script_path = bun.path.join((&parts), .auto);
+            const code = (blk_catch_0: { break :blk_catch_0 ((bun.shell.Interpreter.initAndRunFromSource(ctx, mini, script_path, script, null)) catch |e| { _ = &e; _ = Output.err(e, "failed to run script <b>{s}<r>", .{ script_path });
             break :blk_catch_0 Global.exit(1); }); });
             _ = Global.exit(code);
     }

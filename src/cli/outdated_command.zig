@@ -219,7 +219,7 @@ if ((pattern.len == 0)) {
 .root => FileSystem.instance.top_level_dir,
 else => unreachable,
 });
-                const res_paths = .{ res_path };
+                const res_paths: [1][]const u8 = .{ res_path };
                 const abs_res_path = path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&path_buf), res_paths[0..1], .posix);
                 if ((!glob.match(pattern, strings.withoutTrailingSlash(abs_res_path)).matches())) {
                     is_filter_matched = false;
@@ -278,7 +278,7 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
                 const name_hash = bun.hash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf));
                 const catalog_name = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf);
                 const catalog_name_hash = bun.hash(catalog_name);
-                const entry = try catalog_map.getOrPut(allocator, CatalogKey{ .name_hash = name_hash, .catalog_name_hash = catalog_name_hash, .behavior = dep.behavior });
+                const entry = try catalog_map.getOrPut(CatalogKey{ .name_hash = name_hash, .catalog_name_hash = catalog_name_hash, .behavior = dep.behavior });
                 if ((!entry.found_existing)) {
                     entry.value_ptr.* = try std.array_list.Managed(PackageID).initCapacity(allocator, 1);
                 }
@@ -298,7 +298,7 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
                 _ = &item;
                 if (item.is_catalog) {
                     const dep = dependencies[@as(usize, @intCast(item.dep_id))];
-                    if ((((bun.hash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf)) == key.name_hash) and (bun.hash((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf)) == key.catalog_name_hash)) and dep.behavior.eql(key.behavior))) {
+                    if ((((bun.hash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf)) == key.name_hash) and (bun.hash((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf)) == key.catalog_name_hash)) and std.meta.eql(dep.behavior, key.behavior))) {
                         first_item = item;
                         break;
                     }
@@ -460,8 +460,12 @@ if ((name_pattern.len == 0)) {
                 var expired = false;
                 _ = &expired;
                 const manifest = ((manager.manifests.byNameAllowExpired(manager, manager.scopeForPackageName(package_name), package_name, (&expired), .load_from_memory_fallback_to_disk, (manager.options.minimum_release_age_ms != null))) orelse continue);
+                const actual_latest = ((manifest.findByDistTag("latest")) orelse continue);
                 const latest = manifest.findByDistTagWithFilter("latest", manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes);
                 const update_version = (if ((resolved_version.tag == .npm)) manifest.findBestVersionWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).npm.version, string_buf, manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes) else manifest.findByDistTagWithFilter((if (@typeInfo(@TypeOf(resolved_version)) == .@"enum") @intFromEnum(resolved_version) else resolved_version.value).dist_tag.tag.slice(string_buf), manager.options.minimum_release_age_ms, manager.options.minimum_release_age_excludes));
+                if (((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.order(actual_latest.version, string_buf, manifest.string_buf) != .lt)) {
+                    continue;
+                }
                 if (update_version.latestIsFiltered()) {
                     has_filtered_update = true;
                     has_filtered_versions = true;
@@ -469,9 +473,6 @@ if ((name_pattern.len == 0)) {
                 if (latest.latestIsFiltered()) {
                     has_filtered_latest = true;
                     has_filtered_versions = true;
-                }
-                if (((!latest.isOutdated((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, string_buf, manifest.string_buf)) and (!update_version.isOutdated((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, string_buf, manifest.string_buf)))) {
-                    continue;
                 }
                 const behavior_str_len = (if (dep.behavior.dev) " (dev)".len else (if (dep.behavior.peer) " (peer)".len else (if (dep.behavior.optional) " (optional)".len else 0)));
                 const name_len = (package_name.len + behavior_str_len);
@@ -542,23 +543,23 @@ if ((name_pattern.len == 0)) {
         const workspace_column_inside_length = @max("Workspace".len, new_max_workspace);
         const column_left_pad: i32 = 1;
         const column_right_pad: i32 = 1;
-        const headers_with_workspace: [][]const u8 = .{ "Package", "Current", "Update", "Latest", "Workspace" };
-        const headers_without_workspace: [][]const u8 = .{ "Package", "Current", "Update", "Latest" };
+        const headers_with_workspace: [5][]const u8 = .{ "Package", "Current", "Update", "Latest", "Workspace" };
+        const headers_without_workspace: [4][]const u8 = .{ "Package", "Current", "Update", "Latest" };
         const headers: []const []const u8 = (if (show_workspace_column) headers_with_workspace[0..5] else headers_without_workspace[0..4]);
-        const lengths_with_workspace = .{ package_column_inside_length, current_column_inside_length, update_column_inside_length, latest_column_inside_length, workspace_column_inside_length };
-        const lengths_without_workspace = .{ package_column_inside_length, current_column_inside_length, update_column_inside_length, latest_column_inside_length };
+        const lengths_with_workspace: [5]usize = .{ package_column_inside_length, current_column_inside_length, update_column_inside_length, latest_column_inside_length, workspace_column_inside_length };
+        const lengths_without_workspace: [4]usize = .{ package_column_inside_length, current_column_inside_length, update_column_inside_length, latest_column_inside_length };
         const lengths: []const usize = (if (show_workspace_column) lengths_with_workspace[0..5] else lengths_without_workspace[0..4]);
         const table = Table("blue", column_left_pad, column_right_pad, enable_ansi_colors).init(headers, lengths);
         _ = table.printTopLineSeparator();
         _ = table.printColumnNames();
-        const group_behaviors: []Behavior = .{ Behavior{ .prod = true }, Behavior{ .dev = true }, Behavior{ .peer = true }, Behavior{ .optional = true } };
+        const group_behaviors: [4]Behavior = .{ Behavior{ .prod = true }, Behavior{ .dev = true }, Behavior{ .peer = true }, Behavior{ .optional = true } };
         inline for (group_behaviors) |group_behavior| {
             for (grouped_ids.items) |item| {
                 _ = &item;
                 const package_id = item.package_id;
                 const dep_id = item.dep_id;
                 const dep = (&dependencies[@as(usize, @intCast(dep_id))]);
-                if ((!cp_includes(dep.behavior, group_behavior))) {
+                if ((!Behavior.includes(dep.behavior, group_behavior))) {
                     continue;
                 }
                 const package_name = pkg_names[@as(usize, @intCast(package_id))].slice(string_buf);
@@ -572,7 +573,7 @@ if ((name_pattern.len == 0)) {
                 _ = table.printLineSeparator();
                 {
                     const behavior_str = (if (dep.behavior.dev) " (dev)" else (if (dep.behavior.peer) " (peer)" else (if (dep.behavior.optional) " (optional)" else "")));
-                    _ = Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                    _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                     {
                         var pad_i: i32 = 0;
                         _ = &pad_i;
@@ -582,44 +583,38 @@ if ((name_pattern.len == 0)) {
                         }
                     }
                     _ = Output.pretty("{s}<d>{s}<r>", .{ package_name, behavior_str });
-                    {
-                        var pad_i: i32 = (package_name.len + behavior_str.len);
-                        _ = &pad_i;
-                        const __end_10 = (package_column_inside_length + column_right_pad);
-                        while (pad_i < __end_10) : (pad_i += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var pad_i: usize = (package_name.len + behavior_str.len);
+                    _ = &pad_i;
+                    while ((pad_i < (package_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                 }
                 {
-                    _ = Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                    _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                     {
                         var pad_i: i32 = 0;
                         _ = &pad_i;
-                        const __end_11 = column_left_pad;
-                        while (pad_i < __end_11) : (pad_i += 1) {
+                        const __end_10 = column_left_pad;
+                        while (pad_i < __end_10) : (pad_i += 1) {
                             _ = Output.pretty(" ", .{});
                         }
                     }
                     _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) }));
                     _ = Output.pretty("{s}", .{ version_buf.items });
-                    {
-                        var pad_i: i32 = version_buf.items.len;
-                        _ = &pad_i;
-                        const __end_12 = (current_column_inside_length + column_right_pad);
-                        while (pad_i < __end_12) : (pad_i += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var pad_i: usize = version_buf.items.len;
+                    _ = &pad_i;
+                    while ((pad_i < (current_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                     _ = version_buf.clearRetainingCapacity();
                 }
                 {
-                    _ = Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                    _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                     {
                         var pad_i: i32 = 0;
                         _ = &pad_i;
-                        const __end_13 = column_left_pad;
-                        while (pad_i < __end_13) : (pad_i += 1) {
+                        const __end_11 = column_left_pad;
+                        while (pad_i < __end_11) : (pad_i += 1) {
                             _ = Output.pretty(" ", .{});
                         }
                     }
@@ -637,23 +632,20 @@ if ((name_pattern.len == 0)) {
                         _ = Output.pretty(" <blue>*<r>", .{});
                         update_version_len = (update_version_len + " *".len);
                     }
-                    {
-                        var pad_i: i32 = update_version_len;
-                        _ = &pad_i;
-                        const __end_14 = (update_column_inside_length + column_right_pad);
-                        while (pad_i < __end_14) : (pad_i += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var pad_i: usize = update_version_len;
+                    _ = &pad_i;
+                    while ((pad_i < (update_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                     _ = version_buf.clearRetainingCapacity();
                 }
                 {
-                    _ = Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                    _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                     {
                         var pad_i: i32 = 0;
                         _ = &pad_i;
-                        const __end_15 = column_left_pad;
-                        while (pad_i < __end_15) : (pad_i += 1) {
+                        const __end_12 = column_left_pad;
+                        while (pad_i < __end_12) : (pad_i += 1) {
                             _ = Output.pretty(" ", .{});
                         }
                     }
@@ -671,23 +663,20 @@ if ((name_pattern.len == 0)) {
                         _ = Output.pretty(" <blue>*<r>", .{});
                         latest_version_len = (latest_version_len + " *".len);
                     }
-                    {
-                        var pad_i: i32 = latest_version_len;
-                        _ = &pad_i;
-                        const __end_16 = (latest_column_inside_length + column_right_pad);
-                        while (pad_i < __end_16) : (pad_i += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var pad_i: usize = latest_version_len;
+                    _ = &pad_i;
+                    while ((pad_i < (latest_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                     _ = version_buf.clearRetainingCapacity();
                 }
                 if (show_workspace_column) {
-                    _ = Output.pretty("{s}", .{ table.symbols.verticalEdge() });
+                    _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
                     {
                         var pad_i: i32 = 0;
                         _ = &pad_i;
-                        const __end_17 = column_left_pad;
-                        while (pad_i < __end_17) : (pad_i += 1) {
+                        const __end_13 = column_left_pad;
+                        while (pad_i < __end_13) : (pad_i += 1) {
                             _ = Output.pretty(" ", .{});
                         }
                     }
@@ -698,16 +687,13 @@ if ((name_pattern.len == 0)) {
                         workspace_name = names;
                     }
                     _ = Output.pretty("{s}", .{ workspace_name });
-                    {
-                        var pad_i: i32 = workspace_name.len;
-                        _ = &pad_i;
-                        const __end_18 = (workspace_column_inside_length + column_right_pad);
-                        while (pad_i < __end_18) : (pad_i += 1) {
-                            _ = Output.pretty(" ", .{});
-                        }
+                    var pad_i: usize = workspace_name.len;
+                    _ = &pad_i;
+                    while ((pad_i < (workspace_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
+                        _ = Output.pretty(" ", .{});
                     }
                 }
-                _ = Output.pretty("{s}\n", .{ table.symbols.verticalEdge() });
+                _ = Output.pretty("{s}\n", .{ @TypeOf(table).symbols.verticalEdge() });
             }
         }
         _ = table.printBottomLineSeparator();
@@ -782,7 +768,7 @@ pub fn outdatedWithColor(manager: *PackageManager, original_cwd: []const u8, com
                 if ((root_pkg_id == invalid_package_id)) {
                     return;
                 }
-                const root_arr = .{ root_pkg_id };
+                const root_arr: [1]PackageID = .{ root_pkg_id };
                 const root_slice = root_arr[0..1];
                 _ = try manager.populateManifestCache(.{ .ids = root_slice });
                 _ = try printOutdatedInfoTable(manager, root_slice, false, enable_ansi_colors);

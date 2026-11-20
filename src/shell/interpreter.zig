@@ -530,7 +530,7 @@ else => {
 
 },
 }
-            _ = mini.tick((&is_done), @as(*const fn (*anyopaque) bool, @ptrCast(IsDone.isDone)));
+            _ = mini.tick((&is_done), (&IsDone.isDone));
             const code = interp.exit_code.?;
             _ = interp.deinitFromExec();
             return code;
@@ -582,7 +582,7 @@ else => {
 
 },
 }
-            _ = mini.tick((&is_done), @as(*const fn (*anyopaque) bool, @ptrCast(IsDone.isDone)));
+            _ = mini.tick((&is_done), (&IsDone.isDone));
             const code = interp.exit_code.?;
             _ = interp.deinitFromExec();
             return code;
@@ -758,7 +758,7 @@ _ = self.root_io.deref();
             _ = self.allocator.destroy(self);
     }
 
-pub fn #deinitFromExec(self: *Interpreter, _: *ThisInterpreter) void {
+pub fn deinitFromExec(self: *Interpreter) void {
             _ = log("deinit interpreter", .{});
             self.this_jsvalue = .zero;
             _ = self.root_io.deref();
@@ -1413,7 +1413,7 @@ pub const StateKind = enum(u8) {
     subshell,
 };
 pub const EnvStr = @import("./EnvStr.zig").EnvStr;
-const empty_bun_strings: [0]bun.String = &.{};
+const empty_bun_strings: [0]bun.String = undefined;
 pub const AssignCtx = Interpreter.Assigns.AssignCtx;
 pub const IOWriterChildPtr = Interpreter.IOWriter.ChildPtr;
 pub const OutputSrc = union(enum) {

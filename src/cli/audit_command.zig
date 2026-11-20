@@ -121,12 +121,12 @@ pub const VulnCounts = struct {
 
 pub const AuditCommand = struct {
 
-pub fn exec(ctx: Command.Context) noreturn!void {
+pub fn exec(ctx: Command.Context) !noreturn {
             const cli = try PackageManager.CommandLineArguments.parse(ctx.allocator, .audit);
             const init_res = (blk_catch_0: { break :blk_catch_0 ((PackageManager.init(ctx, cli, .audit)) catch |e| { _ = &e; if ((e == error.MissingPackageJSON)) {
                 var cwd_buf: bun.PathBuffer = undefined;
                 _ = &cwd_buf;
-                if (bun.getcwd((&cwd_buf))) |cwd| {
+                if ((blk_catch_1: { break :blk_catch_1 ((bun.getcwd((&cwd_buf))) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |cwd| {
                     _ = &cwd;
                     _ = Output.errGeneric("No package.json was found for directory \"{s}\"", .{ cwd });
                 } else {
@@ -169,8 +169,8 @@ pub fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit
             _ = ctx.allocator.free(response_text);
             }
             if (json_output) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((Output.writer().writeAll(response_text)) catch |__ce_1| { _ = &__ce_1;  }); });
-                _ = (blk_catch_2: { break :blk_catch_2 ((Output.writer().writeByte(10)) catch |__ce_2| { _ = &__ce_2;  }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((Output.writer().writeAll(response_text)) catch |__ce_2| { _ = &__ce_2;  }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((Output.writer().writeByte(10)) catch |__ce_3| { _ = &__ce_3;  }); });
                 if ((response_text.len > 0)) {
                     const source = (&logger.Source.initPathString("audit-response.json", response_text));
                     var log = logger.Log.init(ctx.allocator);
@@ -178,7 +178,7 @@ pub fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit
                     defer {
                     _ = log.deinit();
                     }
-                    const expr = (blk_catch_3: { break :blk_catch_3 ((bun.json.parse(source, (&log), ctx.allocator, true)) catch |__ce_3| { _ = &__ce_3; _ = Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
+                    const expr = (blk_catch_4: { break :blk_catch_4 ((bun.json.parse(source, (&log), ctx.allocator, true)) catch |__ce_4| { _ = &__ce_4; _ = Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
                     return 1; }); });
                     if (((expr.data == .e_object) and (expr.data.e_object.properties.len == 0))) {
                         return 0;
@@ -297,6 +297,7 @@ pub fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManag
         const root_resolutions = pkg_resolutions[@as(usize, @intCast(root_id))];
         const dep_slice = root_deps.get(dependencies);
         const res_slice = root_resolutions.get(resolutions);
+        const void_val: void = undefined;
         var dep_i: usize = 0;
         _ = &dep_i;
         while ((dep_i < res_slice.len)) : (dep_i = (dep_i + 1)) {
@@ -304,7 +305,7 @@ pub fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManag
             const resolved_pkg_id = res_slice[@as(usize, @intCast(dep_i))];
             if (((!dep.behavior.isDev()) and (resolved_pkg_id < packages.len))) {
                 const pkg_name = pkg_names[@as(usize, @intCast(resolved_pkg_id))].slice(buf);
-                _ = try prod_set.put(pkg_name, .{});
+                _ = try prod_set.put(pkg_name, void_val);
                 _ = try queue.writeItem(resolved_pkg_id);
             }
         }
@@ -323,7 +324,7 @@ pub fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManag
                 }
                 const pkg_name = pkg_names[@as(usize, @intCast(resolved_pkg_id))].slice(buf);
                 if ((!prod_set.contains(pkg_name))) {
-                    _ = try prod_set.put(pkg_name, .{});
+                    _ = try prod_set.put(pkg_name, void_val);
                     _ = try queue.writeItem(resolved_pkg_id);
                 }
             }
@@ -431,41 +432,45 @@ pub fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager
         }
         var body = try MutableString.init(allocator, 1024);
         _ = &body;
-        _ = (blk_catch_4: { break :blk_catch_4 ((body.appendChar(123)) catch |__ce_4| { _ = &__ce_4;  }); });
+        _ = (blk_catch_5: { break :blk_catch_5 ((body.appendChar(123)) catch |__ce_5| { _ = &__ce_5;  }); });
         var pkg_i: usize = 0;
         _ = &pkg_i;
         for (packages_list.items) |package| {
             _ = &package;
             if ((pkg_i > 0)) {
-                _ = (blk_catch_5: { break :blk_catch_5 ((body.appendChar(44)) catch |__ce_5| { _ = &__ce_5;  }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((body.appendChar(44)) catch |__ce_6| { _ = &__ce_6;  }); });
             }
             pkg_i = (pkg_i + 1);
-            _ = (blk_catch_6: { break :blk_catch_6 ((body.appendChar(34)) catch |__ce_6| { _ = &__ce_6;  }); });
-            _ = (blk_catch_7: { break :blk_catch_7 ((body.appendSlice((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))) catch |__ce_7| { _ = &__ce_7;  }); });
-            _ = (blk_catch_8: { break :blk_catch_8 ((body.appendChar(34)) catch |__ce_8| { _ = &__ce_8;  }); });
-            _ = (blk_catch_9: { break :blk_catch_9 ((body.appendChar(58)) catch |__ce_9| { _ = &__ce_9;  }); });
-            _ = (blk_catch_10: { break :blk_catch_10 ((body.appendChar(91)) catch |__ce_10| { _ = &__ce_10;  }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((body.appendChar(34)) catch |__ce_7| { _ = &__ce_7;  }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((body.appendSlice((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))) catch |__ce_8| { _ = &__ce_8;  }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((body.appendChar(34)) catch |__ce_9| { _ = &__ce_9;  }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((body.appendChar(58)) catch |__ce_10| { _ = &__ce_10;  }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((body.appendChar(91)) catch |__ce_11| { _ = &__ce_11;  }); });
             var ver_i: usize = 0;
             _ = &ver_i;
             for (package.versions.items) |version| {
                 _ = &version;
                 if ((ver_i > 0)) {
-                    _ = (blk_catch_11: { break :blk_catch_11 ((body.appendChar(44)) catch |__ce_11| { _ = &__ce_11;  }); });
+                    _ = (blk_catch_12: { break :blk_catch_12 ((body.appendChar(44)) catch |__ce_12| { _ = &__ce_12;  }); });
                 }
                 ver_i = (ver_i + 1);
-                _ = (blk_catch_12: { break :blk_catch_12 ((body.appendChar(34)) catch |__ce_12| { _ = &__ce_12;  }); });
-                _ = (blk_catch_13: { break :blk_catch_13 ((body.appendSlice(version)) catch |__ce_13| { _ = &__ce_13;  }); });
-                _ = (blk_catch_14: { break :blk_catch_14 ((body.appendChar(34)) catch |__ce_14| { _ = &__ce_14;  }); });
+                _ = (blk_catch_13: { break :blk_catch_13 ((body.appendChar(34)) catch |__ce_13| { _ = &__ce_13;  }); });
+                _ = (blk_catch_14: { break :blk_catch_14 ((body.appendSlice(version)) catch |__ce_14| { _ = &__ce_14;  }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((body.appendChar(34)) catch |__ce_15| { _ = &__ce_15;  }); });
             }
-            _ = (blk_catch_15: { break :blk_catch_15 ((body.appendChar(93)) catch |__ce_15| { _ = &__ce_15;  }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((body.appendChar(93)) catch |__ce_16| { _ = &__ce_16;  }); });
         }
-        _ = (blk_catch_16: { break :blk_catch_16 ((body.appendChar(125)) catch |__ce_16| { _ = &__ce_16;  }); });
+        _ = (blk_catch_17: { break :blk_catch_17 ((body.appendChar(125)) catch |__ce_17| { _ = &__ce_17;  }); });
         return PackagesForAuditResult{ .audit_body = try allocator.dupe(u8, body.slice()), .skipped_packages = skipped_packages };
 }
 
 pub fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []const u8) bun.OOM![]u8 {
         _ = libdeflate.load();
-        var compressor = ((libdeflate.Compressor.alloc(6)) orelse { return .{ .ok = error.OutOfMemory }; });
+        const compressor_opt = libdeflate.Compressor.alloc(6);
+        if ((compressor_opt == null)) {
+            return error.OutOfMemory;
+        }
+        var compressor = compressor_opt.?;
         _ = &compressor;
         defer {
         _ = compressor.deinit();
@@ -512,8 +517,8 @@ pub fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body:
         _ = &response_buf;
         var req = http.AsyncHTTP.initSync(allocator, .POST, url, headers.entries, headers.content.ptr.?[0..headers.content.len], (&response_buf), final_compressed_body, http_proxy, null, .follow);
         _ = &req;
-        const res = (blk_catch_17: { break :blk_catch_17 ((req.sendSync()) catch |e| { _ = &e; _ = Output.err(e, "audit request failed", .{});
-        break :blk_catch_17 Global.crash(); }); });
+        const res = (blk_catch_18: { break :blk_catch_18 ((req.sendSync()) catch |e| { _ = &e; _ = Output.err(e, "audit request failed", .{});
+        break :blk_catch_18 Global.crash(); }); });
         if ((res.status_code >= 400)) {
             _ = Output.prettyErrorln("<red>error<r>: audit request failed (status {d})", .{ res.status_code });
             _ = Global.crash();
@@ -641,11 +646,12 @@ pub fn findDependencyPaths(allocator: std.mem.Allocator, target_package: []const
                 _ = try parent_map.put(dependent, target_package);
             }
         }
+        const void_val: void = undefined;
         while (queue.readItem()) |current| {
             if (visited.contains(current)) {
                 continue;
             }
-            _ = try visited.put(current, .{});
+            _ = try visited.put(current, void_val);
             var is_root_dep = false;
             _ = &is_root_dep;
             for (cp_iter_slice(dep_slice)) |dependency| {
@@ -695,7 +701,7 @@ pub fn findDependencyPaths(allocator: std.mem.Allocator, target_package: []const
                         break;
                     }
                     _ = try pth.path.insert(0, try allocator.dupe(u8, trace));
-                    _ = try seen_in_trace.put(trace, .{});
+                    _ = try seen_in_trace.put(trace, void_val);
                     if (parent_map.get(trace)) |parent| {
                         _ = &parent;
                         trace = parent;
@@ -732,8 +738,8 @@ pub fn printEnhancedAuditReport(allocator: std.mem.Allocator, response_text: []c
         defer {
         _ = log.deinit();
         }
-        const expr = (blk_catch_18: { break :blk_catch_18 ((bun.json.parse(source, (&log), allocator, true)) catch |__ce_18| { _ = &__ce_18; _ = (blk_catch_19: { break :blk_catch_19 ((Output.writer().writeAll(response_text)) catch |__ce_19| { _ = &__ce_19;  }); });
-        _ = (blk_catch_20: { break :blk_catch_20 ((Output.writer().writeByte(10)) catch |__ce_20| { _ = &__ce_20;  }); });
+        const expr = (blk_catch_19: { break :blk_catch_19 ((bun.json.parse(source, (&log), allocator, true)) catch |__ce_19| { _ = &__ce_19; _ = (blk_catch_20: { break :blk_catch_20 ((Output.writer().writeAll(response_text)) catch |__ce_20| { _ = &__ce_20;  }); });
+        _ = (blk_catch_21: { break :blk_catch_21 ((Output.writer().writeByte(10)) catch |__ce_21| { _ = &__ce_21;  }); });
         return 1; }); });
         if (((expr.data == .e_object) and (expr.data.e_object.properties.len == 0))) {
             _ = Output.prettyln("<green>No vulnerabilities found<r>", .{});
@@ -920,8 +926,8 @@ pub fn printEnhancedAuditReport(allocator: std.mem.Allocator, response_text: []c
                 return 1;
             }
         } else {
-            _ = (blk_catch_21: { break :blk_catch_21 ((Output.writer().writeAll(response_text)) catch |__ce_21| { _ = &__ce_21;  }); });
-            _ = (blk_catch_22: { break :blk_catch_22 ((Output.writer().writeByte(10)) catch |__ce_22| { _ = &__ce_22;  }); });
+            _ = (blk_catch_22: { break :blk_catch_22 ((Output.writer().writeAll(response_text)) catch |__ce_22| { _ = &__ce_22;  }); });
+            _ = (blk_catch_23: { break :blk_catch_23 ((Output.writer().writeByte(10)) catch |__ce_23| { _ = &__ce_23;  }); });
         }
         return 0;
 }

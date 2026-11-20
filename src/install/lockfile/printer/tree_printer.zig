@@ -114,6 +114,7 @@ const invalid_package_id = bun.install.invalid_package_id;
 const Lockfile = install.Lockfile;
 const Package = Lockfile.Package;
 const Printer = Lockfile.Printer;
+pub const print = printImpl;
 
 pub fn printInstalledWorkspaceSection(printer: *const Printer, manager: *PackageManager, comptime Writer: type, writer: Writer, comptime enable_ansi_colors: bool, workspace_package_id: PackageID, installed: *const Bitset, comptime print_section_header: PrintSectionHeader, printed_new_install: *bool, id_map: ?[]DependencyID) !void {
         const lockfile = printer.lockfile;
@@ -135,38 +136,33 @@ pub fn printInstalledWorkspaceSection(printer: *const Printer, manager: *Package
         defer {
         _ = dep_dedupe.deinit();
         }
-        {
-            var _dep_id: i32 = resolutions_list[@as(usize, @intCast(workspace_package_id))].begin();
-            _ = &_dep_id;
-            const __end_0 = resolutions_list[@as(usize, @intCast(workspace_package_id))].end();
-            while (_dep_id < __end_0) : (_dep_id += 1) {
-                const dep_id: DependencyID = @intCast(_dep_id);
-                switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
+        var _upd_dep_id: u32 = resolutions_list[@as(usize, @intCast(workspace_package_id))].begin();
+        _ = &_upd_dep_id;
+        while ((_upd_dep_id < resolutions_list[@as(usize, @intCast(workspace_package_id))].end())) : (_upd_dep_id = (_upd_dep_id + 1)) {
+            const dep_id: DependencyID = @intCast(_upd_dep_id);
+            switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
 .yes, .no, .@"return" => {
 
 },
 .update => |update_info| {
 printed_new_install.* = true;
-                printed_update = true;
-                if (comptime (print_section_header == .print_section_header)) {
-                    if ((!printed_section_header)) {
-                        printed_section_header = true;
-                        const workspace_name = sliceFn(names[@as(usize, @intCast(workspace_package_id))], string_buf);
-                        _ = try writer.print((comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors)), .{ workspace_name });
-                    }
+            printed_update = true;
+            if (comptime (print_section_header == .print_section_header)) {
+                if ((!printed_section_header)) {
+                    printed_section_header = true;
+                    const workspace_name = sliceFn((&names[@as(usize, @intCast(workspace_package_id))]), string_buf);
+                    _ = try writer.print((comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors)), .{ workspace_name });
                 }
-                _ = try printUpdatedPackage(printer, update_info, enable_ansi_colors, Writer, writer);
+            }
+            _ = try printUpdatedPackage(printer, update_info, enable_ansi_colors, Writer, writer);
 },
 }
-            }
         }
-        {
-            var _dep_id: i32 = resolutions_list[@as(usize, @intCast(workspace_package_id))].begin();
-            _ = &_dep_id;
-            const __end_1 = resolutions_list[@as(usize, @intCast(workspace_package_id))].end();
-            while (_dep_id < __end_1) : (_dep_id += 1) {
-                const dep_id: DependencyID = @intCast(_dep_id);
-                switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
+        var _dep_id: u32 = resolutions_list[@as(usize, @intCast(workspace_package_id))].begin();
+        _ = &_dep_id;
+        while ((_dep_id < resolutions_list[@as(usize, @intCast(workspace_package_id))].end())) : (_dep_id = (_dep_id + 1)) {
+            const dep_id: DependencyID = @intCast(_dep_id);
+            switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
 .@"return" => {
 return;
 },
@@ -177,29 +173,29 @@ return;
 continue;
 },
 }
-                const dep = dependencies[@as(usize, @intCast(dep_id))];
-                const package_id = resolutions[@as(usize, @intCast(dep_id))];
-                if (try dep_dedupe.getOrPut(dep.name_hash).found_existing) {
-                    continue;
-                }
-                printed_new_install.* = true;
-                if (comptime (print_section_header == .print_section_header)) {
-                    if ((!printed_section_header)) {
-                        printed_section_header = true;
-                        const workspace_name = sliceFn(names[@as(usize, @intCast(workspace_package_id))], string_buf);
-                        _ = try writer.print((comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors)), .{ workspace_name });
-                    }
-                }
-                if (printed_update) {
-                    printed_update = false;
-                    _ = try writer.writeAll("\n");
-                }
-                _ = try printInstalledPackage(printer, manager, (&dep), package_id, enable_ansi_colors, Writer, writer);
+            const dep = dependencies[@as(usize, @intCast(dep_id))];
+            const package_id = resolutions[@as(usize, @intCast(dep_id))];
+            const gop = try dep_dedupe.getOrPut(dep.name_hash);
+            if (gop.found_existing) {
+                continue;
             }
+            printed_new_install.* = true;
+            if (comptime (print_section_header == .print_section_header)) {
+                if ((!printed_section_header)) {
+                    printed_section_header = true;
+                    const workspace_name = sliceFn((&names[@as(usize, @intCast(workspace_package_id))]), string_buf);
+                    _ = try writer.print((comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors)), .{ workspace_name });
+                }
+            }
+            if (printed_update) {
+                printed_update = false;
+                _ = try writer.writeAll("\n");
+            }
+            _ = try printInstalledPackage(printer, manager, (&dep), package_id, enable_ansi_colors, Writer, writer);
         }
 }
 
-pub fn shouldPrintPackageInstall(printer: *const Printer, manager: *PackageManager, dep_id: DependencyID, installed: *const Bitset, id_map: ?[]DependencyID, pkg_metas: []const Package.Meta) *ShouldPrintPackageInstallResult {
+pub fn shouldPrintPackageInstall(printer: *const Printer, manager: *PackageManager, dep_id: DependencyID, installed: *const Bitset, id_map: ?[]DependencyID, pkg_metas: []const Package.Meta) ShouldPrintPackageInstallResult {
         const dependencies = printer.lockfile.buffers.dependencies.items;
         const resolutions = printer.lockfile.buffers.resolutions.items;
         const dependency = dependencies[@as(usize, @intCast(dep_id))];
@@ -212,8 +208,8 @@ pub fn shouldPrintPackageInstall(printer: *const Printer, manager: *PackageManag
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_2 = printer.updates.len;
-                while (i < __end_2) : (i += 1) {
+                const __end_0 = printer.updates.len;
+                while (i < __end_0) : (i += 1) {
                     const update = printer.updates[@as(usize, @intCast(i))];
                     var update_dependency_id = (&map[@as(usize, @intCast(i))]);
                     _ = &update_dependency_id;
@@ -237,7 +233,7 @@ pub fn shouldPrintPackageInstall(printer: *const Printer, manager: *PackageManag
         }
         const resolution = printer.lockfile.packages.items(.resolution)[@as(usize, @intCast(package_id))];
         if ((resolution.tag == .npm)) {
-            const name = sliceFn((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name), printer.lockfile.buffers.string_bytes.items);
+            const name = sliceFn((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name)), printer.lockfile.buffers.string_bytes.items);
             if (manager.updating_packages.get(name)) |entry| {
                 _ = &entry;
                 if (entry.original_version) |original_version| {
@@ -255,15 +251,15 @@ pub fn printUpdatedPackage(printer: *const Printer, update_info: PackageUpdatePr
         const string_buf = printer.lockfile.buffers.string_bytes.items;
         const dependency = printer.lockfile.buffers.dependencies.items[@as(usize, @intCast(update_info.dependency_id))];
         const fmt = (comptime (if (enable_ansi_colors) Output.prettyFmt("<r><cyan>↑<r> <b>{s}<r><d> <b>{f} →<r> <b><cyan>{f}<r>\n", enable_ansi_colors) else Output.prettyFmt("<r>^ <b>{s}<r><d> <b>{f} -\\><r> <b>{f}<r>\n", enable_ansi_colors)));
-        _ = try writer.print(fmt, .{ sliceFn((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name), string_buf), update_info.version.fmt(update_info.version_buf), (if (@typeInfo(@TypeOf(update_info.resolution)) == .@"enum") @intFromEnum(update_info.resolution) else update_info.resolution.value).npm.version.fmt(string_buf) });
+        _ = try writer.print(fmt, .{ sliceFn((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name)), string_buf), update_info.version.fmt(update_info.version_buf), (if (@typeInfo(@TypeOf(update_info.resolution)) == .@"enum") @intFromEnum(update_info.resolution) else update_info.resolution.value).npm.version.fmt(string_buf) });
 }
 
 pub fn printInstalledPackage(printer: *const Printer, manager: *PackageManager, dependency: *const Dependency, package_id: PackageID, comptime enable_ansi_colors: bool, comptime Writer: type, writer: Writer) !void {
         const string_buf = printer.lockfile.buffers.string_bytes.items;
         const packages_slice = printer.lockfile.packages.slice();
         const resolution: Resolution = packages_slice.items(.resolution)[@as(usize, @intCast(package_id))];
-        const name = sliceFn((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name), string_buf);
-        const package_name = sliceFn(packages_slice.items(.name)[@as(usize, @intCast(package_id))], string_buf);
+        const name = sliceFn((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name)), string_buf);
+        const package_name = sliceFn((&packages_slice.items(.name)[@as(usize, @intCast(package_id))]), string_buf);
         if (manager.formatLaterVersionInCache(package_name, dependency.name_hash, resolution)) |later_version_fmt| {
             _ = &later_version_fmt;
             const fmt = (comptime (if (enable_ansi_colors) Output.prettyFmt("<r><green>+<r> <b>{s}<r><d>@{f}<r> <d>(<blue>v{f} available<r><d>)<r>\n", enable_ansi_colors) else Output.prettyFmt("<r>+ {s}<r><d>@{f}<r> <d>(v{f} available)<r>\n", enable_ansi_colors)));
@@ -272,4 +268,180 @@ pub fn printInstalledPackage(printer: *const Printer, manager: *PackageManager, 
         }
         const fmt = (comptime (if (enable_ansi_colors) Output.prettyFmt("<r><green>+<r> <b>{s}<r><d>@{f}<r>\n", enable_ansi_colors) else Output.prettyFmt("<r>+ {s}<r><d>@{f}<r>\n", enable_ansi_colors)));
         _ = try writer.print(fmt, .{ name, resolution.fmt(string_buf, .posix) });
+}
+
+pub fn printImpl(printer: *const Printer, manager: *PackageManager, comptime Writer: type, writer: Writer, comptime enable_ansi_colors: bool, log_level: PackageManager.Options.LogLevel) !void {
+        _ = try writer.writeAll("\n");
+        const allocator = printer.lockfile.allocator;
+        var slice = printer.lockfile.packages.slice();
+        _ = &slice;
+        const bins: []const Bin = slice.items(.bin);
+        const resolved: []const Resolution = slice.items(.resolution);
+        if ((resolved.len == 0)) {
+            return;
+        }
+        const string_buf = printer.lockfile.buffers.string_bytes.items;
+        const resolutions_list = slice.items(.resolutions);
+        const pkg_metas = slice.items(.@"meta");
+        const resolutions_buffer: []const PackageID = printer.lockfile.buffers.resolutions.items;
+        const dependencies_buffer: []const Dependency = printer.lockfile.buffers.dependencies.items;
+        if ((dependencies_buffer.len == 0)) {
+            return;
+        }
+        const id_map = try default_allocator.alloc(DependencyID, printer.updates.len);
+        _ = @memset(id_map, invalid_package_id);
+        defer {
+        if ((id_map.len > 0)) {
+            _ = default_allocator.free(id_map);
+        }
+        }
+        const end = @as(PackageID, @truncate(resolved.len));
+        var had_printed_new_install = false;
+        _ = &had_printed_new_install;
+        if (printer.successfully_installed) |installed| {
+            _ = &installed;
+            if (log_level.isVerbose()) {
+                var workspaces_to_print: std.ArrayListUnmanaged(DependencyID) = .{};
+                _ = &workspaces_to_print;
+                defer {
+                _ = workspaces_to_print.deinit(allocator);
+                }
+                var dep_id: u32 = resolutions_list[0].begin();
+                _ = &dep_id;
+                while ((dep_id < resolutions_list[0].end())) : (dep_id = (dep_id + 1)) {
+                    const dep = dependencies_buffer[@as(usize, @intCast(dep_id))];
+                    if (dep.behavior.isWorkspace()) {
+                        _ = bun.handleOom(workspaces_to_print.append(allocator, @intCast(dep_id)));
+                    }
+                }
+                var found_workspace_to_print = false;
+                _ = &found_workspace_to_print;
+                for (workspaces_to_print.items) |workspace_dep_id| {
+                    _ = &workspace_dep_id;
+                    const workspace_package_id = resolutions_buffer[@as(usize, @intCast(workspace_dep_id))];
+                    var inner_dep_id: u32 = resolutions_list[@as(usize, @intCast(workspace_package_id))].begin();
+                    _ = &inner_dep_id;
+                    while ((inner_dep_id < resolutions_list[@as(usize, @intCast(workspace_package_id))].end())) : (inner_dep_id = (inner_dep_id + 1)) {
+                        switch (shouldPrintPackageInstall(printer, manager, @intCast(inner_dep_id), (&installed), id_map, pkg_metas)) {
+.yes => {
+found_workspace_to_print = true;
+},
+else => {
+
+},
+}
+                    }
+                }
+                _ = try printInstalledWorkspaceSection(printer, manager, Writer, writer, enable_ansi_colors, 0, (&installed), .dont_print_section_header, (&had_printed_new_install), null);
+                for (workspaces_to_print.items) |workspace_dep_id| {
+                    _ = &workspace_dep_id;
+                    _ = try printInstalledWorkspaceSection(printer, manager, Writer, writer, enable_ansi_colors, resolutions_buffer[@as(usize, @intCast(workspace_dep_id))], (&installed), .print_section_header, (&had_printed_new_install), null);
+                }
+            } else {
+                var workspace_package_id: PackageID = (if (comptime @typeInfo(PackageID) == .@"enum") @as(PackageID, @enumFromInt(0)) else @as(PackageID, 0));
+                _ = &workspace_package_id;
+                if (manager.workspace_name_hash) |workspace_name_hash| {
+                    _ = &workspace_name_hash;
+                    var dep_id: u32 = resolutions_list[0].begin();
+                    _ = &dep_id;
+                    while ((dep_id < resolutions_list[0].end())) : (dep_id = (dep_id + 1)) {
+                        const dep = dependencies_buffer[@as(usize, @intCast(dep_id))];
+                        if ((dep.behavior.isWorkspace() and (dep.name_hash == workspace_name_hash))) {
+                            workspace_package_id = resolutions_buffer[@as(usize, @intCast(dep_id))];
+                            break;
+                        }
+                    }
+                }
+                _ = try printInstalledWorkspaceSection(printer, manager, Writer, writer, enable_ansi_colors, workspace_package_id, (&installed), .dont_print_section_header, (&had_printed_new_install), id_map);
+            }
+        } else {
+            var dep_id: usize = 0;
+            _ = &dep_id;
+            outer: while ((dep_id < dependencies_buffer.len)) : (dep_id = (dep_id + 1)) {
+                const dependency = dependencies_buffer[@as(usize, @intCast(dep_id))];
+                const package_id = resolutions_buffer[@as(usize, @intCast(dep_id))];
+                if ((package_id >= end)) {
+                    continue;
+                }
+                if (dependency.behavior.isPeer()) {
+                    continue;
+                }
+                const package_name = sliceFn((&(if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name)), string_buf);
+                if ((printer.updates.len > 0)) {
+                    {
+                        var u: i32 = 0;
+                        _ = &u;
+                        const __end_3 = printer.updates.len;
+                        while (u < __end_3) : (u += 1) {
+                            const update = printer.updates[@as(usize, @intCast(u))];
+                            var dependency_id = (&id_map[@as(usize, @intCast(u))]);
+                            _ = &dependency_id;
+                            if (update.failed) {
+                                return;
+                            }
+                            if (update.matches(dependency, string_buf)) {
+                                if ((dependency_id.* == invalid_package_id)) {
+                                    dependency_id.* = @as(DependencyID, @truncate(dep_id));
+                                }
+                                continue :outer;
+                            }
+                        }
+                    }
+                }
+                _ = try writer.print((comptime Output.prettyFmt(" <r><b>{s}<r><d>@<b>{f}<r>\n", enable_ansi_colors)), .{ package_name, resolved[@as(usize, @intCast(package_id))].fmt(string_buf, .auto) });
+            }
+        }
+        if (had_printed_new_install) {
+            _ = try writer.writeAll("\n");
+        }
+        if (bun.Environment.allow_assert) {
+            had_printed_new_install = false;
+        }
+        var printed_installed_update_request = false;
+        _ = &printed_installed_update_request;
+        for (cp_iter_slice(id_map)) |dependency_id| {
+            _ = &dependency_id;
+            if ((dependency_id == invalid_package_id)) {
+                continue;
+            }
+            if (bun.Environment.allow_assert) {
+                had_printed_new_install = true;
+            }
+            const name = (if (@typeInfo(@TypeOf(dependencies_buffer[@as(usize, @intCast(dependency_id))])) == .@"enum" or @typeInfo(@TypeOf(dependencies_buffer[@as(usize, @intCast(dependency_id))])) == .@"union") @tagName(dependencies_buffer[@as(usize, @intCast(dependency_id))]) else dependencies_buffer[@as(usize, @intCast(dependency_id))].name);
+            const package_id = resolutions_buffer[@as(usize, @intCast(dependency_id))];
+            const bin = bins[@as(usize, @intCast(package_id))];
+            const package_name = sliceFn((&name), string_buf);
+            switch (bin.tag) {
+.none, .dir => {
+printed_installed_update_request = true;
+            const fmt = (comptime Output.prettyFmt("<r><green>installed<r> <b>{s}<r><d>@{f}<r>\n", enable_ansi_colors));
+            _ = try writer.print(fmt, .{ package_name, resolved[@as(usize, @intCast(package_id))].fmt(string_buf, .posix) });
+},
+.map, .file, .named_file => {
+printed_installed_update_request = true;
+            var iterator = Bin.NamesIterator{ .bin = bin, .package_name = name, .string_buffer = string_buf, .extern_string_buf = printer.lockfile.buffers.extern_strings.items };
+            _ = &iterator;
+            {
+                const fmt = (comptime Output.prettyFmt("<r><green>installed<r> {s}<r><d>@{f}<r> with binaries:\n", enable_ansi_colors));
+                _ = try writer.print(fmt, .{ package_name, resolved[@as(usize, @intCast(package_id))].fmt(string_buf, .posix) });
+            }
+            {
+                const fmt = (comptime Output.prettyFmt("<r> <d>- <r><b>{s}<r>\n", enable_ansi_colors));
+                if ((manager.track_installed_bin == .pending)) {
+                    if ((blk_catch_0: { break :blk_catch_0 ((iterator.next()) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |bin_name| {
+                        _ = &bin_name;
+                        manager.track_installed_bin = .{ .basename = bun.handleOom(bun.default_allocator.dupe(u8, bin_name)) };
+                        _ = try writer.print(fmt, .{ bin_name });
+                    }
+                }
+                while ((blk_catch_1: { break :blk_catch_1 ((iterator.next()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |bin_name| {
+                    _ = try writer.print(fmt, .{ bin_name });
+                }
+            }
+},
+}
+        }
+        if (printed_installed_update_request) {
+            _ = try writer.writeAll("\n");
+        }
 }

@@ -19,12 +19,13 @@ pub fn editPatchedDependencies(
 )! {
 
     // const pkg_to_patch = manager.
-    let patched_dependencies = brk: {
+    let patched_dependencies: E.Object = brk: {
+        const empty_obj: E.Object = {};
         if (query := package_json.asProperty("patchedDependencies")) {
             if (query.expr.data == .e_object)
                 break :brk query.expr.data.e_object.*;
         }
-        break :brk E.Object{};
+        break :brk empty_obj;
     };
 
     const patchfile_expr = try Expr.init(
@@ -51,13 +52,14 @@ pub fn editPatchedDependencies(
 pub fn editTrustedDependencies(allocator: std.mem.Allocator, package_json: *Expr, names_to_add: []string)! {
     let len = names_to_add.len;
 
-    let original_trusted_dependencies = brk: {
+    let original_trusted_dependencies: E.Array = brk: {
+        const empty_arr: E.Array = {};
         if (query := package_json.asProperty(trusted_dependencies_string)) {
             if (query.expr.data == .e_array) {
                 break :brk query.expr.data.e_array.*;
             }
         }
-        break :brk E.Array{};
+        break :brk empty_arr;
     };
 
     for (i of 0..len) {
@@ -213,14 +215,14 @@ pub fn editUpdateNoArgs(
                         const value = dep.value ?? continue;
                         if (value.data != .e_string) continue;
 
-                        const version_literal = value.asStringCloned(allocator) ?? bun.outOfMemory()?;
+                        const version_literal = (value.asStringCloned(allocator)?) ?? bun.outOfMemory()?;
                         let tag = Dependency.Version.Tag.infer(version_literal);
 
                         // only updating dependencies with npm versions, dist-tags if `--latest`, and catalog versions.
                         if (tag != .npm && (tag != .dist_tag || !manager.options.do.update_to_latest) && tag != .catalog) continue;
 
                         let alias_at_index: usize? = null;
-                        if (strings.hasPrefixComptime(strings.trim(version_literal, &strings.whitespace_chars), "npm:")) {
+                        if (strings.hasPrefixComptime(strings.trim(version_literal, strings.whitespace_chars), "npm:")) {
                             // negative because the real package might have a scope
                             // e.g. "dep": "npm:@foo/bar@1.2.3"
                             if (at_index := strings.lastIndexOfChar(version_literal, '@')) {
@@ -230,7 +232,7 @@ pub fn editUpdateNoArgs(
                             }
                         }
 
-                        const key_str = key.asStringCloned(allocator) ?? unreachable;
+                        const key_str = (key.asStringCloned(allocator)?) ?? unreachable;
                         const entry = bun.handleOom(manager.updating_packages.getOrPut(allocator, key_str));
 
                         // If a dependency is present in more than one dependency group, only one of it's versions
@@ -359,11 +361,12 @@ pub fn editUpdateNoArgs(
 /// if options.add_trusted_dependencies is true, gets list from PackageManager.trusted_deps_to_add_to_package_json
 pub fn edit(
     manager: *PackageManager,
-    updates: *[]UpdateRequest,
+    updates_in: []UpdateRequest,
     current_package_json: *Expr,
     dependency_list: string,
     options: EditOptions,
 )! {
+    let updates = updates_in;
     // using data store is going to result in undefined memory issues as
     // the store is cleared in some workspace situations. the solution
     // is to always avoid the store
@@ -381,15 +384,16 @@ pub fn edit(
     // 3. There is a "dependencies" (or equivalent list), and the package name exists in multiple lists
     // Try to use the existing spot in the dependencies list if possible
     {
-        let original_trusted_dependencies = brk: {
-            if (!options.add_trusted_dependencies) break :brk E.Array{};
+        let original_trusted_dependencies: E.Array = brk: {
+            const empty_arr: E.Array = {};
+            if (!options.add_trusted_dependencies) break :brk empty_arr;
             if (query := current_package_json.asProperty(trusted_dependencies_string)) {
                 if (query.expr.data == .e_array) {
                     // not modifying
                     break :brk query.expr.data.e_array.*;
                 }
             }
-            break :brk E.Array{};
+            break :brk empty_arr;
         };
 
         if (options.add_trusted_dependencies) {
@@ -410,7 +414,7 @@ pub fn edit(
         }
         {
             let i: usize = 0;
-            const dep_lists = [ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" ];
+            const dep_lists: [4]string = [ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" ];
             loop: while (i < updates.len) {
                 let request = &updates[i];
                 inline for (list of dep_lists) {
@@ -437,7 +441,7 @@ pub fn edit(
                                             if (entry.found_existing) break :add_packages_to_update;
 
                                             let is_alias = false;
-                                            if (strings.hasPrefixComptime(strings.trim(version_literal, &strings.whitespace_chars), "npm:")) {
+                                            if (strings.hasPrefixComptime(strings.trim(version_literal, strings.whitespace_chars), "npm:")) {
                                                 if (at_index := strings.lastIndexOfChar(version_literal, '@')) {
                                                     tag = Dependency.Version.Tag.infer(version_literal[at_index + 1 ..]);
                                                     if (tag != .npm && tag != .dist_tag) break :add_packages_to_update;
@@ -502,7 +506,8 @@ pub fn edit(
         new_dependencies.expandToCapacity();
 
         bun.copy(G.Property, new_dependencies.items, dependencies);
-        @memset(new_dependencies.items[dependencies.len..], G.Property{});
+        const empty_prop: G.Property = {};
+        @memset(new_dependencies.items[dependencies.len..], empty_prop);
 
         let trusted_dependencies: []Expr = [];
         if (options.add_trusted_dependencies) {
@@ -549,7 +554,7 @@ pub fn edit(
             break :brk .fromOwnedSlice(deps);
         };
 
-        for (*request of updates.*) {
+        for (*request of updates) {
             if (request.e_string != null) continue;
             defer if (comptime Environment.allow_assert) bun.assert(request.e_string != null);
 
@@ -684,7 +689,7 @@ pub fn edit(
     }
 
     const resolutions = if (!options.before_install) manager.lockfile.packages.items(.resolution) else [];
-    for (*request of updates.*) {
+    for (*request of updates) {
         if (e_string := request.e_string) {
             if (request.package_id >= resolutions.len || resolutions[request.package_id].tag == .uninitialized) {
                 e_string.data = uninitialized: {

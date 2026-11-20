@@ -1348,6 +1348,7 @@ pub struct PosixSpawnResult {
 pub const SpawnOptions = if (Environment.isPosix) PosixSpawnOptions else WindowsSpawnOptions;
 pub const SpawnProcessResult = if (Environment.isPosix) PosixSpawnResult else WindowsSpawnResult;
 type OptCStr = ([*:0]const u8)?;
+type PollFdSlice = []std.c.pollfd;
 pub fn spawnProcess(
     options: *const SpawnOptions,
     argv: [*:null]OptCStr,
@@ -1686,8 +1687,8 @@ pub fn spawnProcessPosix(
 
 pub fn spawnProcessWindows(
     options: *const WindowsSpawnOptions,
-    argv: [*:null][*:0]const u8?,
-    envp: [*:null][*:0]const u8?,
+    argv: [*:null]OptCStr,
+    envp: [*:null]OptCStr,
 ): !bun.sys.Maybe(WindowsSpawnResult) {
     bun.markWindowsOnly();
     bun.analytics.Features.spawn += 1;
@@ -1921,7 +1922,7 @@ pub fn spawnProcessWindows(
     };
 
     const StdioResult = WindowsSpawnResult.StdioResult;
-    const result_stdios = [ &result.stdin, &result.stdout, &result.stderr ];
+    const result_stdios: [3]*const StdioResult = [ &result.stdin, &result.stdout, &result.stderr ];
     inline for (i of 0..3) {
         const stdio = stdio_containers.items[i];
         const result_stdio = result_stdios[i];
@@ -1997,7 +1998,7 @@ struct SyncJobControl {
         ttouBlocked(_.prev);
         * = std.c.raise(std.posix.SIG.TSTP);
         if (tcgetpgrp(0) == getpgrp()) ttouBlocked(_.script_pgid);
-        * = std.c.kill(-_.script_pgid, std.posix.SIG.CONT);
+        * = std.c.kill(0 - _.script_pgid, std.posix.SIG.CONT);
     }
 
     static fn ttouBlocked(pgid: std.c.pid_t) {
@@ -2042,12 +2043,12 @@ pub struct sync {
 
         argv: []const []const u8,
         /// null = inherit parent env
-        envp: ([*:null][*:0]const u8?)?,
+        envp: ([*:null]OptCStr)?,
 
         use_execve_on_macos: bool = false,
         argv0: [*:0]const u8? = null,
 
-        windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = if (Environment.isWindows) {},
+        windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = if (Environment.isWindows) {} else undefined,
 
         pub const Stdio = SyncOptionsStdio;
 
@@ -2064,7 +2065,7 @@ pub struct sync {
                 stream: false,
                 argv0: _.argv0,
                 new_process_group: new_process_group,
-                windows: if (Environment.isWindows) _.windows,
+                windows: if (Environment.isWindows) _.windows else undefined,
             };
         }
     };
@@ -2184,8 +2185,8 @@ pub struct sync {
 
     static fn spawnWindowsWithoutPipes(
         options: *const Options,
-        argv: [*:null][*:0]const u8?,
-        envp: [*:null][*:0]const u8?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): !Maybe(Result) {
         let loop = options.windows.loop.platformEventLoop();
         let spawned = switch (spawnProcessWindows(&options.toSpawnOptions(false), argv, envp)?) {
@@ -2213,8 +2214,8 @@ pub struct sync {
 
     static fn spawnWindowsWithPipes(
         options: *const Options,
-        argv: [*:null][*:0]const u8?,
-        envp: [*:null][*:0]const u8?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): !Maybe(Result) {
         let loop: jsc.EventLoopHandle = options.windows.loop;
         let spawned = switch (spawnProcessWindows(&options.toSpawnOptions(false), argv, envp)?) {
@@ -2269,8 +2270,8 @@ pub struct sync {
 
     static fn spawnWithArgv(
         options: *const Options,
-        argv: [*:null][*:0]const u8?,
-        envp: [*:null][*:0]const u8?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): !Maybe(Result) {
         if (comptime Environment.isWindows) {
             if (options.stdin != .buffer && options.stderr != .buffer && options.stdout != .buffer) {
@@ -2288,7 +2289,7 @@ pub struct sync {
     ): !Maybe(Result) {
         // [*:null]?[*:0]const u8
         // [*:null]?[*:0]u8
-        const envp = options.envp ?? @as([*:null][*:0]const u8?, @ptrCast(std.c.environ));
+        const envp = options.envp ?? @as([*:null]OptCStr, @ptrCast(std.c.environ));
         const argv = options.argv;
         let string_builder = bun.StringBuilder{};
         defer string_builder.deinit(bun.default_allocator);
@@ -2313,8 +2314,8 @@ pub struct sync {
 
     static fn spawnPosix(
         options: *const Options,
-        argv: [*:null][*:0]const u8?,
-        envp: [*:null][*:0]const u8?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): !Maybe(Result) {
         // --no-orphans: put the script in its own process group so we can
         // `kill(-pgid, SIGKILL)` on every exit path. Pgroup membership is
@@ -2465,7 +2466,7 @@ pub struct sync {
             // let's make sure to clean up the output buffers
             // and kill the process
             if (!success) {
-                for (*array_list of &out) {
+                for (*array_list of out) {
                     array_list.clearAndFree();
                 }
                 * = std.c.kill(process.pid, 1);
@@ -2542,7 +2543,7 @@ pub struct sync {
                 }
                 if (poll_fds.len == 0) break;
 
-                const rc = std.c.poll(poll_fds.ptr, i32(poll_fds.len), -1);
+                const rc = std.c.poll(poll_fds.ptr, @as(usize, @intCast(poll_fds.len)), -1);
                 switch (bun.sys.getErrno(rc)) {
                     .SUCCESS => {},
                     .AGAIN, .INTR => continue,
@@ -2873,7 +2874,7 @@ pub struct sync {
             let buf: [4]std.c.pollfd = undefined;
             let pfds: []std.c.pollfd = buf[0..0];
             const push = struct {
-                static fn f(l: *[]std.c.pollfd, fd: bun.FD) {
+                static fn f(l: *PollFdSlice, fd: bun.FD) {
                     l.len += 1;
                     l.*[l.len - 1] = {
                         fd: i32(fd.cast()),
@@ -2888,7 +2889,7 @@ pub struct sync {
             const chld_idx = pfds.len;
             if (chld_fd != bun.invalid_fd) push(&pfds, chld_fd);
 
-            const rc = std.c.poll(pfds.ptr, i32(pfds.len), timeout_ms);
+            const rc = std.c.poll(pfds.ptr, @as(usize, @intCast(pfds.len)), timeout_ms);
             switch (bun.sys.getErrno(rc)) {
                 .SUCCESS => {},
                 .AGAIN, .INTR => {},

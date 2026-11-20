@@ -853,10 +853,10 @@ pub const RealFSEntriesOption = union(Tag) {
 @tls let temp_entries_option: RealFSEntriesOption = undefined;
 
 pub const PathContentsPair = struct { path: Path, contents: string };
-pub const ModKeyError = error{
+pub const RealFSModKeyError = error{
             Unusable,
         };
-        pub const ModKey = struct {
+        pub struct RealFSModKey {
             inode: std.fs.File.INode = 0,
             size: u64 = 0,
             mtime: i128 = 0,
@@ -869,14 +869,14 @@ pub const ModKeyError = error{
             ): !string {
                 const hex_int = _.hash();
 
-                return try std.fmt.bufPrint(
-                    &hash_name_buf,
+                return std.fmt.bufPrint(
+                    &RealFSModKey.hash_name_buf,
                     "{s}-{f}",
                     .{
                         basename,
                         bun.fmt.hexIntLower(hex_int),
                     },
-                );
+                )?;
             }
 
             fn hash(
@@ -897,7 +897,7 @@ pub const ModKeyError = error{
                 return bun.hash(&hash_bytes);
             }
 
-            static fn generate(_: *RealFS, _: string, file: std.fs.File): anyerror!ModKey {
+            static fn generate(_: *RealFS, _: string, file: std.fs.File): anyerror!RealFSModKey {
                 const stat = file.stat()?;
 
                 const seconds = @divTrunc(stat.mtime, @as(@TypeOf(stat.mtime), std.time.ns_per_s));
@@ -914,7 +914,7 @@ pub const ModKeyError = error{
                     return error.Unusable;
                 }
 
-                return ModKey{
+                return RealFSModKey{
                     inode: stat.inode,
                     size: stat.size,
                     mtime: stat.mtime,
@@ -923,9 +923,107 @@ pub const ModKeyError = error{
                 };
             }
             pub const SafetyGap = 3;
-        };
+        }
+        pub struct RealFSTmpfilePosix {
+            fd: bun.FD = bun.invalid_fd,
+            dir_fd: bun.FD = bun.invalid_fd,
+
+            pub inline fn dir(*_): std.fs.Dir {
+                return _.dir_fd.stdDir();
+            }
+
+            pub inline fn file(*_): std.fs.File {
+                return _.fd.stdFile();
+            }
+
+            fn close(*_) {
+                if (_.fd.isValid()) _.fd.close();
+            }
+
+            fn create(*_, _: *RealFS, name: [:0]const u8)! {
+                // We originally used a temporary directory, but it caused EXDEV.
+                const cwd_fd = bun.FD.cwd();
+                _.dir_fd = cwd_fd;
+
+                const flags = bun.O.CREAT | bun.O.RDWR | bun.O.CLOEXEC;
+                _.fd = bun.sys.openat(_.dir_fd, name, flags, std.posix.S.IRWXU).unwrap()?;
+            }
+
+            fn promoteToCWD(*_, from_name: [*:0]const u8, name: [*:0]const u8)! {
+                bun.assert(_.fd != bun.invalid_fd);
+                bun.assert(_.dir_fd != bun.invalid_fd);
+
+                bun.sys.moveFileZWithHandle(_.fd, _.dir_fd, bun.sliceTo(from_name, 0), bun.FD.cwd(), bun.sliceTo(name, 0))?;
+                _.close();
+            }
+
+            fn closeAndDelete(*_, name: [*:0]const u8) {
+                _.close();
+
+                if (comptime !Environment.isLinux) {
+                    if (_.dir_fd == bun.invalid_fd) return;
+
+                    _.dir().deleteFileZ(name) catch {};
+                }
+            }
+        }
+
+        pub struct RealFSTmpfileWindows {
+            fd: bun.FD = bun.invalid_fd,
+            existing_path: []const u8 = "",
+
+            pub inline fn dir(): std.fs.Dir {
+                return Fs.FileSystem.instance.tmpdir();
+            }
+
+            pub inline fn file(*_): std.fs.File {
+                return _.fd.stdFile();
+            }
+
+            fn close(*_) {
+                if (_.fd.isValid()) _.fd.close();
+            }
+
+            fn create(*_, rfs: *RealFS, name: [:0]const u8)! {
+                const tmp_dir = RealFS.openTmpDir(rfs)?;
+
+                const flags = bun.O.CREAT | bun.O.WRONLY | bun.O.CLOEXEC;
+
+                _.fd = bun.sys.openat(.fromStdDir(tmp_dir), name, flags, 0).unwrap()?;
+                let buf: bun.PathBuffer = undefined;
+                const fd_path = bun.getFdPath(_.fd, &buf)?;
+                _.existing_path = bun.default_allocator.dupe(u8, fd_path)?;
+            }
+
+            fn promoteToCWD(*_, from_name: [*:0]const u8, name: [*:0]const u8)! {
+                * = from_name;
+                let existing_buf: bun.WPathBuffer = undefined;
+                let new_buf: bun.WPathBuffer = undefined;
+                _.close();
+                const existing = bun.strings.toExtendedPathNormalized(&new_buf, _.existing_path);
+                const new_dest = if (std.fs.path.isAbsoluteWindows(name))
+                    bun.strings.toExtendedPathNormalized(&existing_buf, name)
+                else
+                    bun.strings.toWPathNormalized(&existing_buf, name);
+                if (comptime Environment.allow_assert) {
+                    debug("moveFileExW({f}, {f})", .{ bun.fmt.utf16(existing), bun.fmt.utf16(new_dest) });
+                }
+
+                if (bun.windows.kernel32.MoveFileExW(existing.ptr, new_dest.ptr, bun.windows.MOVEFILE_COPY_ALLOWED | bun.windows.MOVEFILE_REPLACE_EXISTING | bun.windows.MOVEFILE_WRITE_THROUGH) == bun.windows.FALSE) {
+                    bun.windows.Win32Error.get().unwrap()?;
+                }
+            }
+
+            fn closeAndDelete(*_, name: [*:0]const u8) {
+                * = name;
+                _.close();
+            }
+        }
+
 pub struct RealFS {
         pub const EntriesOption = RealFSEntriesOption;
+        pub const ModKey = RealFSModKey;
+        pub const ModKeyError = RealFSModKeyError;
         entries_mutex: Mutex = {},
         entries: *RealFSEntriesOption.Map,
         cwd: string,
@@ -1041,101 +1139,8 @@ pub struct RealFS {
             return bun.env_var.BUN_TMPDIR.get() ?? platformTempDir();
         }
 
-        pub struct TmpfilePosix {
-            fd: bun.FD = bun.invalid_fd,
-            dir_fd: bun.FD = bun.invalid_fd,
-
-            pub inline fn dir(*_): std.fs.Dir {
-                return _.dir_fd.stdDir();
-            }
-
-            pub inline fn file(*_): std.fs.File {
-                return _.fd.stdFile();
-            }
-
-            fn close(*_) {
-                if (_.fd.isValid()) _.fd.close();
-            }
-
-            fn create(*_, _: *RealFS, name: [:0]const u8)! {
-                // We originally used a temporary directory, but it caused EXDEV.
-                const cwd_fd = bun.FD.cwd();
-                _.dir_fd = cwd_fd;
-
-                const flags = bun.O.CREAT | bun.O.RDWR | bun.O.CLOEXEC;
-                _.fd = bun.sys.openat(dir_fd, name, flags, std.posix.S.IRWXU).unwrap()?;
-            }
-
-            fn promoteToCWD(*_, from_name: [*:0]const u8, name: [*:0]const u8)! {
-                bun.assert(_.fd != bun.invalid_fd);
-                bun.assert(_.dir_fd != bun.invalid_fd);
-
-                bun.sys.moveFileZWithHandle(_.fd, _.dir_fd, bun.sliceTo(from_name, 0), bun.FD.cwd(), bun.sliceTo(name, 0))?;
-                _.close();
-            }
-
-            fn closeAndDelete(*_, name: [*:0]const u8) {
-                _.close();
-
-                if (comptime !Environment.isLinux) {
-                    if (_.dir_fd == bun.invalid_fd) return;
-
-                    _.dir().deleteFileZ(name) catch {};
-                }
-            }
-        }
-
-        pub struct TmpfileWindows {
-            fd: bun.FD = bun.invalid_fd,
-            existing_path: []const u8 = "",
-
-            pub inline fn dir(): std.fs.Dir {
-                return Fs.FileSystem.instance.tmpdir();
-            }
-
-            pub inline fn file(*_): std.fs.File {
-                return _.fd.stdFile();
-            }
-
-            fn close(*_) {
-                if (_.fd.isValid()) _.fd.close();
-            }
-
-            fn create(*_, rfs: *RealFS, name: [:0]const u8)! {
-                const tmp_dir = RealFS.openTmpDir(rfs)?;
-
-                const flags = bun.O.CREAT | bun.O.WRONLY | bun.O.CLOEXEC;
-
-                _.fd = bun.sys.openat(.fromStdDir(tmp_dir), name, flags, 0).unwrap()?;
-                let buf: bun.PathBuffer = undefined;
-                const fd_path = bun.getFdPath(_.fd, &buf)?;
-                _.existing_path = bun.default_allocator.dupe(u8, fd_path)?;
-            }
-
-            fn promoteToCWD(*_, from_name: [*:0]const u8, name: [:0]const u8)! {
-                * = from_name;
-                let existing_buf: bun.WPathBuffer = undefined;
-                let new_buf: bun.WPathBuffer = undefined;
-                _.close();
-                const existing = bun.strings.toExtendedPathNormalized(&new_buf, _.existing_path);
-                const new_dest = if (std.fs.path.isAbsoluteWindows(name))
-                    bun.strings.toExtendedPathNormalized(&existing_buf, name)
-                else
-                    bun.strings.toWPathNormalized(&existing_buf, name);
-                if (comptime Environment.allow_assert) {
-                    debug("moveFileExW({f}, {f})", .{ bun.fmt.utf16(existing), bun.fmt.utf16(new_dest) });
-                }
-
-                if (bun.windows.kernel32.MoveFileExW(existing.ptr, new_dest.ptr, bun.windows.MOVEFILE_COPY_ALLOWED | bun.windows.MOVEFILE_REPLACE_EXISTING | bun.windows.MOVEFILE_WRITE_THROUGH) == bun.windows.FALSE) {
-                    bun.windows.Win32Error.get().unwrap()?;
-                }
-            }
-
-            fn closeAndDelete(*_, name: [*:0]const u8) {
-                * = name;
-                _.close();
-            }
-        }
+        pub const TmpfilePosix = RealFSTmpfilePosix;
+        pub const TmpfileWindows = RealFSTmpfileWindows;
 
         static fn needToCloseFiles(rfs: *const RealFS): bool {
             if (!FeatureFlags.store_file_descriptors) {

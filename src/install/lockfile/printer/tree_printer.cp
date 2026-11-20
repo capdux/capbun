@@ -72,8 +72,9 @@ fn printInstalledWorkspaceSection(
     defer dep_dedupe.deinit();
 
     // find the updated packages
-    for (_dep_id of resolutions_list[workspace_package_id].begin()..resolutions_list[workspace_package_id].end()) {
-        const dep_id: DependencyID = @intCast(_dep_id);
+    let _upd_dep_id: u32 = resolutions_list[workspace_package_id].begin();
+    while (_upd_dep_id < resolutions_list[workspace_package_id].end()) : (_upd_dep_id += 1) {
+        const dep_id: DependencyID = @intCast(_upd_dep_id);
 
         switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
             .yes, .no, .@"return" => {},
@@ -84,7 +85,7 @@ fn printInstalledWorkspaceSection(
                 if (comptime print_section_header == .print_section_header) {
                     if (!printed_section_header) {
                         printed_section_header = true;
-                        const workspace_name = sliceFn(names[workspace_package_id], string_buf);
+                        const workspace_name = sliceFn(&names[workspace_package_id], string_buf);
                         writer.print(comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors), .{
                             workspace_name,
                         })?;
@@ -96,7 +97,8 @@ fn printInstalledWorkspaceSection(
         }
     }
 
-    for (_dep_id of resolutions_list[workspace_package_id].begin()..resolutions_list[workspace_package_id].end()) {
+    let _dep_id: u32 = resolutions_list[workspace_package_id].begin();
+    while (_dep_id < resolutions_list[workspace_package_id].end()) : (_dep_id += 1) {
         const dep_id: DependencyID = @intCast(_dep_id);
 
         switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), installed, id_map, pkg_metas)) {
@@ -112,7 +114,8 @@ fn printInstalledWorkspaceSection(
         const dep = dependencies[dep_id];
         const package_id = resolutions[dep_id];
 
-        if ((dep_dedupe.getOrPut(dep.name_hash)?).found_existing) {
+        const gop = dep_dedupe.getOrPut(dep.name_hash)?;
+        if (gop.found_existing) {
             continue;
         }
 
@@ -121,7 +124,7 @@ fn printInstalledWorkspaceSection(
         if (comptime print_section_header == .print_section_header) {
             if (!printed_section_header) {
                 printed_section_header = true;
-                const workspace_name = sliceFn(names[workspace_package_id], string_buf);
+                const workspace_name = sliceFn(&names[workspace_package_id], string_buf);
                 writer.print(comptime Output.prettyFmt("<r>\n<cyan>{s}<r><d>:<r>\n", enable_ansi_colors), .{
                     workspace_name,
                 })?;
@@ -183,7 +186,7 @@ fn shouldPrintPackageInstall(
 
     const resolution = printer.lockfile.packages.items(.resolution)[package_id];
     if (resolution.tag == .npm) {
-        const name = sliceFn(dependency.name, printer.lockfile.buffers.string_bytes.items);
+        const name = sliceFn(&dependency.name, printer.lockfile.buffers.string_bytes.items);
         if (entry := manager.updating_packages.get(name)) {
             if (original_version := entry.original_version) {
                 if (!original_version.eql(resolution.value.npm.version)) {
@@ -221,7 +224,7 @@ fn printUpdatedPackage(
     writer.print(
         fmt,
         .{
-            sliceFn(dependency.name, string_buf),
+            sliceFn(&dependency.name, string_buf),
             update_info.version.fmt(update_info.version_buf),
             update_info.resolution.value.npm.version.fmt(string_buf),
         },
@@ -240,9 +243,9 @@ fn printInstalledPackage(
     const string_buf = printer.lockfile.buffers.string_bytes.items;
     const packages_slice = printer.lockfile.packages.slice();
     const resolution: Resolution = packages_slice.items(.resolution)[package_id];
-    const name = sliceFn(dependency.name, string_buf);
+    const name = sliceFn(&dependency.name, string_buf);
 
-    const package_name = sliceFn(packages_slice.items(.name)[package_id], string_buf);
+    const package_name = sliceFn(&packages_slice.items(.name)[package_id], string_buf);
     if (later_version_fmt := manager.formatLaterVersionInCache(package_name, dependency.name_hash, resolution)) {
         const fmt = comptime if (enable_ansi_colors)
             Output.prettyFmt("<r><green>+<r> <b>{s}<r><d>@{f}<r> <d>(<blue>v{f} available<r><d>)<r>\n", enable_ansi_colors)
@@ -277,14 +280,16 @@ fn printInstalledPackage(
 
 /// - Prints an empty newline with no diffs
 /// - Prints a leading && trailing blank newline with diffs
-pub fn print(
+pub const print = printImpl;
+
+pub fn printImpl(
     printer: *const Printer,
     manager: *PackageManager,
     comptime Writer: type,
     writer: Writer,
     comptime enable_ansi_colors: bool,
     log_level: PackageManager.Options.LogLevel,
-): !void {
+)! {
     writer.writeAll("\n")?;
     const allocator = printer.lockfile.allocator;
     let slice = printer.lockfile.packages.slice();
@@ -309,7 +314,8 @@ pub fn print(
             let workspaces_to_print: std.ArrayListUnmanaged(DependencyID) = .{};
             defer workspaces_to_print.deinit(allocator);
 
-            for (dep_id of resolutions_list[0].begin()..resolutions_list[0].end()) {
+            let dep_id: u32 = resolutions_list[0].begin();
+            while (dep_id < resolutions_list[0].end()) : (dep_id += 1) {
                 const dep = dependencies_buffer[dep_id];
                 if (dep.behavior.isWorkspace()) {
                     bun.handleOom(workspaces_to_print.append(allocator, @intCast(dep_id)));
@@ -319,8 +325,9 @@ pub fn print(
             let found_workspace_to_print = false;
             for (workspace_dep_id of workspaces_to_print.items) {
                 const workspace_package_id = resolutions_buffer[workspace_dep_id];
-                for (dep_id of resolutions_list[workspace_package_id].begin()..resolutions_list[workspace_package_id].end()) {
-                    switch (shouldPrintPackageInstall(printer, manager, @intCast(dep_id), &installed, id_map, pkg_metas)) {
+                let inner_dep_id: u32 = resolutions_list[workspace_package_id].begin();
+                while (inner_dep_id < resolutions_list[workspace_package_id].end()) : (inner_dep_id += 1) {
+                    switch (shouldPrintPackageInstall(printer, manager, @intCast(inner_dep_id), &installed, id_map, pkg_metas)) {
                         .yes => found_workspace_to_print = true,
                         else => {},
                     }
@@ -358,7 +365,8 @@ pub fn print(
             // just print installed packages for the current workspace
             let workspace_package_id: PackageID = @as(PackageID, 0);
             if (workspace_name_hash := manager.workspace_name_hash) {
-                for (dep_id of resolutions_list[0].begin()..resolutions_list[0].end()) {
+                let dep_id: u32 = resolutions_list[0].begin();
+            while (dep_id < resolutions_list[0].end()) : (dep_id += 1) {
                     const dep = dependencies_buffer[dep_id];
                     if (dep.behavior.isWorkspace() && dep.name_hash == workspace_name_hash) {
                         workspace_package_id = resolutions_buffer[dep_id];
@@ -381,12 +389,13 @@ pub fn print(
             )?;
         }
     } else {
-        outer: for (dep_id of 0..dependencies_buffer.len) {
+        let dep_id: usize = 0;
+        outer: while (dep_id < dependencies_buffer.len) : (dep_id += 1) {
             const dependency = dependencies_buffer[dep_id];
             const package_id = resolutions_buffer[dep_id];
             if (package_id >= end) continue;
             if (dependency.behavior.isPeer()) continue;
-            const package_name = sliceFn(dependency.name, string_buf);
+            const package_name = sliceFn(&dependency.name, string_buf);
 
             if (printer.updates.len > 0) {
                 for (u of 0..printer.updates.len) {
@@ -428,7 +437,7 @@ pub fn print(
         const package_id = resolutions_buffer[dependency_id];
         const bin = bins[package_id];
 
-        const package_name = sliceFn(name, string_buf);
+        const package_name = sliceFn(&name, string_buf);
 
         switch (bin.tag) {
             .none, .dir => {

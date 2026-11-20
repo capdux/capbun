@@ -73,51 +73,38 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         headers.content.cap += "Basic ".len + scope.auth.len;
     }
 
-    let response_buf: std.array_list.Managed(u8) = brk: {
-        let headers_buf: [4096]u8 = undefined;
-        let buf = headers.init(&headers_buf);
-        buf.put("Accept", "application/json");
-        if (scope.token.len > 0) {
-            buf.put("Authorization", "Bearer ");
-            buf.append(scope.token);
-        } else if (scope.auth.len > 0) {
-            buf.put("Authorization", "Basic ");
-            buf.append(scope.auth);
-        }
+    headers.allocate(allocator)?;
+    headers.append("Accept", "application/json");
+    if (scope.token.len > 0) {
+        headers.appendFmt("Authorization", "Bearer {s}", .{ scope.token });
+    } else if (scope.auth.len > 0) {
+        headers.appendFmt("Authorization", "Basic {s}", .{ scope.auth });
+    }
 
-        let response = manager.http_client.fetch(
-            allocator,
-            .GET,
-            url,
-            buf.get(),
-            null,
-            null,
-            false,
-            false,
-            .npm,
-        ) catch |e| {
-            Output.err(e, "failed to fetch package manifest for {s}", .{ name });
-            Global.exit(1);
-        };
-        defer response.deinit();
-
-        if (response.status_code != 200) {
-            if (response.status_code == 404) {
-                Output.errGeneric("package <b>{s}<r> not found", .{ name });
-            } else {
-                Output.errGeneric("failed to fetch package manifest for {s}: HTTP {d}", .{ name, response.status_code });
-            }
-            Global.exit(1);
-        }
-
-        let body = response.body orelse {
-            Output.errGeneric("failed to fetch package manifest for {s}: empty body", .{ name });
-            Global.exit(1);
-        };
-
-        break :brk body;
-    };
+    let response_buf = MutableString.init(allocator, 2048)?;
     defer response_buf.deinit();
+    let req = http.AsyncHTTP.initSync(
+        allocator,
+        .GET,
+        url,
+        headers.entries,
+        headers.content.ptr.?[0..headers.content.len],
+        &response_buf,
+        "",
+        manager.httpProxy(url),
+        null,
+        .follow,
+    );
+    req.client.flags.reject_unauthorized = manager.tlsRejectUnauthorized();
+
+    const res = req.sendSync() catch |e| {
+        Output.err(e, "view request failed to send", .{});
+        Global.crash();
+    };
+
+    if (res.status_code >= 400) {
+        npm.responseError(allocator, &req, &res, .{ name, version }, &response_buf, false)?;
+    }
 
     let log = logger.Log.init(allocator);
     const source = &logger.Source.initPathString(url.href, response_buf.list.items);
@@ -126,7 +113,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         Global.exit(1);
     };
 
-    const parsed_manifest_opt = manager.parseRegistryPackageManifest(
+    const parsed_manifest_opt = PackageManifest.parse(
         allocator,
         scope,
         &log,
@@ -180,7 +167,8 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
                 const version_str = prop.key.?.asString(allocator) ?? continue;
                 const sliced_version = Semver.SlicedString.init(version_str, version_str);
                 const parsed_version = Semver.Version.parse(sliced_version);
-                if (parsed_version.valid && parsed_version.version.max().eql(wanted_version)) {
+                const max_fn = @TypeOf(parsed_version.version).max;
+                if (parsed_version.valid && max_fn(parsed_version.version).eql(wanted_version)) {
                     break :brk .{ version_str, prop.value.? };
                 }
             }
@@ -313,9 +301,9 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         return;
     }
 
-    const pkg_name = manifest.getStringCloned(allocator, "name") catch null ?? name;
-    const pkg_version = manifest.getStringCloned(allocator, "version") catch null ?? version;
-    const license = manifest.getStringCloned(allocator, "license") catch null ?? "";
+    const pkg_name = (manifest.getStringCloned(allocator, "name") catch null) ?? name;
+    const pkg_version = (manifest.getStringCloned(allocator, "version") catch null) ?? version;
+    const license = (manifest.getStringCloned(allocator, "license") catch null) ?? "";
     let dep_count: usize = 0;
     const dependencies_object = manifest.getObject("dependencies");
     if (deps := dependencies_object) {
@@ -408,8 +396,8 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         Output.prettyln("\nmaintainers<r><d>:<r>", .{});
         let iter = maint_iter;
         while (m := iter.next()) {
-            const nm = m.getStringCloned(allocator, "name") catch null ?? "";
-            const em = m.getStringCloned(allocator, "email") catch null ?? "";
+            const nm = (m.getStringCloned(allocator, "name") catch null) ?? "";
+            const em = (m.getStringCloned(allocator, "email") catch null) ?? "";
             if (em.len > 0) {
                 Output.prettyln("<d>-<r> {s} <d>\\<{s}\\><r>", .{ nm, em });
             } else if (nm.len > 0) {

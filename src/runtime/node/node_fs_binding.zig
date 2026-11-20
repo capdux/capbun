@@ -293,7 +293,7 @@ pub fn createBinding(globalObject: *jsc.JSGlobalObject) jsc.JSValue {
 pub fn createMemfdForTesting(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callFrame.arguments_old(1);
         if ((arguments.len < 1)) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         if (comptime (!bun.Environment.isLinux)) {
             return globalObject.throw("memfd_create is not implemented on this platform", .{});

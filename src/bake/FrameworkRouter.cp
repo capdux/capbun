@@ -937,7 +937,9 @@ pub struct JSFrameworkRouter {
         if (frame.argumentsCount() < 2)
             return global.throwInvalidArguments("parseRoutePattern takes two arguments", {});
 
-        let [style_js, filepath_js] = frame.argumentsAsArray(2);
+        const args = frame.argumentsAsArray(2);
+        const style_js = args[0];
+        const filepath_js = args[1];
         const filepath = filepath_js.toSlice(global, alloc)?;
         defer filepath.deinit();
         let style = Style.fromJS(style_js, global)?;
@@ -948,7 +950,7 @@ pub struct JSFrameworkRouter {
             if (e == error.InvalidRoutePattern) {
                 return global.throw("{s} ({d}:{d})", .{ log.msg.slice(), log.cursor_at, log.cursor_len });
             }
-            return e;
+            return error.OutOfMemory;
         };
         if (parsed_opt == null) return JSValue.jsNull();
         const parsed = parsed_opt.?;

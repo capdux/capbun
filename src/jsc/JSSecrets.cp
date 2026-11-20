@@ -73,7 +73,8 @@ pub struct SecretsJob {
 
 // Prevent dead code elimination
 pub fn fixDeadCodeElimination() {
-    std.mem.doNotOptimizeAway(&Bun__Secrets__scheduleJob);
+    const f = Bun__Secrets__scheduleJob;
+    std.mem.doNotOptimizeAway(&f);
 }
 
 import bun from "bun";

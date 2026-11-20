@@ -106,7 +106,7 @@ pub struct TestingAPIs {
 
         const patchfile_js_opt = arguments.nextEat();
         if (patchfile_js_opt == null) {
-            globalThis.throw("apply: expected at least 1 argument, got 0", {}) catch {};
+            if (globalThis.throw("apply: expected at least 1 argument, got 0", {}) == error.JSError) {}
             return .initErr(.js_undefined);
         }
         const patchfile_js = patchfile_js_opt.?;
@@ -120,7 +120,7 @@ pub struct TestingAPIs {
 
             dir_fd = switch (bun.sys.open(path, bun.O.DIRECTORY | bun.O.RDONLY, 0)) {
                 .err e => {
-                    globalThis.throwValue((e.withPath(path).toJS(globalThis) catch return .initErr(.js_undefined))) catch {};
+                    if (globalThis.throwValue((e.withPath(path).toJS(globalThis) catch return .initErr(.js_undefined))) == error.JSError) {}
                     return .initErr(.js_undefined);
                 },
                 .result fd => fd,
@@ -138,7 +138,7 @@ pub struct TestingAPIs {
             }
 
             patchfile_src.deinit();
-            globalThis.throwError(e, "failed to parse patchfile") catch {};
+            if (globalThis.throwError(e, "failed to parse patchfile") == error.JSError) {}
             return .initErr(.js_undefined);
         };
 

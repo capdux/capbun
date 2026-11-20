@@ -169,8 +169,9 @@ pub const default_scale_up_after_ms = 5;
 var worker_frame: Frame = .{};
 var worker_cmds: ?*WorkerCommands = null;
 
-pub fn printZ(a: std.mem.Allocator, comptime fmt: []const u8, args: anytype) ![*:0]u8 {
-        return try std.fmt.allocPrintSentinel(a, fmt, args, 0).ptr;
+pub fn printZ(a: std.mem.Allocator, comptime fmt: []const u8, args: anytype) ![*:0]const u8 {
+        const s = try std.fmt.allocPrintSentinel(a, fmt, args, 0);
+        return s.ptr;
 }
 
 pub fn runAsCoordinator(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine, files: []const PathString, ctx: Command.Context, coverage_opts: *TestCommand.CodeCoverageOptions) !bool {
@@ -213,7 +214,7 @@ pub fn runAsCoordinator(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine,
                 reporter.reporters.junit = null;
             }
         }
-        var envps = try arena_alloc.alloc(@TypeOf(Coordinator.argv), K);
+        var envps = try arena_alloc.alloc(@FieldType(Coordinator, "argv"), K);
         _ = &envps;
         var i_env: usize = 0;
         _ = &i_env;
@@ -229,7 +230,8 @@ pub fn runAsCoordinator(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine,
         const argv = try buildWorkerArgv(arena_alloc, ctx);
         const sorted = try arena_alloc.dupe(PathString, files);
         if ((!ctx.test_options.randomize)) {
-            _ = std.sort.pdq(PathString, sorted, .{}, PathStringLt.lt);
+            const empty_ctx: void = undefined;
+            _ = std.sort.pdq(PathString, sorted, empty_ctx, PathStringLt.lt);
         }
         var workers = try allocator.alloc(Worker, K);
         _ = &workers;
@@ -279,8 +281,13 @@ _ = aggregate.mergeCoverageFragments(coord.coverage_fragments.items, coverage_op
         return true;
 }
 
-pub fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context) !@TypeOf(Coordinator.argv) {
-        var argv: std.ArrayListUnmanaged(std.meta.Child(@TypeOf(Coordinator.argv))) = .empty;
+pub fn dupeZPtr(a: std.mem.Allocator, s: []const u8) ![*:0]const u8 {
+        const z = try a.dupeZ(u8, s);
+        return z.ptr;
+}
+
+pub fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context) !@FieldType(Coordinator,"argv") {
+        var argv: std.ArrayListUnmanaged(std.meta.Child(@FieldType(Coordinator,"argv"))) = .empty;
         _ = &argv;
         const opts = (&ctx.test_options);
         _ = try argv.append(arena_alloc, (blk_catch_4: { break :blk_catch_4 ((bun.selfExePath()) catch |__ce_4| { _ = &__ce_4; return error.SelfExePathFailed; }); }).ptr);
@@ -323,12 +330,12 @@ pub fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context) !@T
         if (opts.test_filter_pattern) |pattern| {
             _ = &pattern;
             _ = try argv.append(arena_alloc, "-t");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, pattern).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, pattern));
         }
         for (cp_iter_slice(ctx.preloads)) |preload| {
             _ = &preload;
             _ = try argv.append(arena_alloc, "--preload");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, preload).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, preload));
         }
         if (ctx.args.define) |define| {
             _ = &define;
@@ -361,37 +368,37 @@ pub fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context) !@T
         if (ctx.args.tsconfig_override) |tsconfig| {
             _ = &tsconfig;
             _ = try argv.append(arena_alloc, "--tsconfig-override");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, tsconfig).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, tsconfig));
         }
         for (cp_iter_slice(ctx.args.conditions)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--conditions");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         for (cp_iter_slice(ctx.args.drop)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--drop");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         for (cp_iter_slice(ctx.args.main_fields)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--main-fields");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         for (cp_iter_slice(ctx.args.extension_order)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--extension-order");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         for (cp_iter_slice(ctx.args.env_files)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--env-file");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         for (cp_iter_slice(ctx.args.feature_flags)) |value| {
             _ = &value;
             _ = try argv.append(arena_alloc, "--feature");
-            _ = try argv.append(arena_alloc, try arena_alloc.dupeZ(u8, value).ptr);
+            _ = try argv.append(arena_alloc, try dupeZPtr(arena_alloc, value));
         }
         if (((ctx.args.preserve_symlinks) orelse (false))) {
             _ = try argv.append(arena_alloc, "--preserve-symlinks");
@@ -483,29 +490,27 @@ pub fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMac
                 if ((junit.current_file.len > 0)) {
                     _ = (blk_catch_7: { break :blk_catch_7 ((junit.endTestSuite()) catch |__ce_7| { _ = &__ce_7;  }); });
                 }
-                switch (junit.writeToFile(path)) {
-.result => {
-_ = worker_frame.begin(.junit_file);
-                _ = worker_frame.str(path);
-                _ = cmds.send(worker_frame.finish());
-},
-.err => |e| {
-_ = Output.err(e, "failed to write JUnit fragment to {s}", .{ path });
-},
-}
+                var junit_ok = true;
+                _ = &junit_ok;
+                _ = (blk_catch_8: { break :blk_catch_8 ((junit.writeToFile(path)) catch |e| { _ = &e; junit_ok = false;
+                break :blk_catch_8 Output.err(e, "failed to write JUnit fragment to {s}", .{ path }); }); });
+                if (junit_ok) {
+                    _ = worker_frame.begin(.junit_file);
+                    _ = worker_frame.str(path);
+                    _ = cmds.send(worker_frame.finish());
+                }
             }
             if (ctx.test_options.coverage.enabled) {
                 const path = bun.handleOom(std.fmt.allocPrintSentinel(bun.default_allocator, "{s}/cov{d}.lcov", .{ dir, id }, 0));
-                switch (reporter.writeLcovOnly(vm, (&ctx.test_options.coverage), path)) {
-.result => {
-_ = worker_frame.begin(.coverage_file);
-                _ = worker_frame.str(path);
-                _ = cmds.send(worker_frame.finish());
-},
-.err => |e| {
-_ = Output.err(e, "failed to write coverage fragment to {s}", .{ path });
-},
-}
+                var lcov_ok = true;
+                _ = &lcov_ok;
+                _ = (blk_catch_9: { break :blk_catch_9 ((reporter.writeLcovOnly(vm, (&ctx.test_options.coverage), path)) catch |e| { _ = &e; lcov_ok = false;
+                break :blk_catch_9 Output.err(e, "failed to write coverage fragment to {s}", .{ path }); }); });
+                if (lcov_ok) {
+                    _ = worker_frame.begin(.coverage_file);
+                    _ = worker_frame.str(path);
+                    _ = cmds.send(worker_frame.finish());
+                }
             }
         }
 }

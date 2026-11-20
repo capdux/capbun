@@ -85,7 +85,8 @@ pub fn jsFromUrl(go: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValu
     const maybe_parsed = hgi.HostedGitInfo.fromUrl(allocator, as_utf8.mut()) catch e => {
         return go.throw("Invalid Git URL: {}", [e]);
     };
-    const parsed = maybe_parsed ?? return .@"null";
+    if (maybe_parsed == null) return jsc.JSValue.@"null";
+    const parsed = maybe_parsed.?;
 
     return parsed.toJS(go);
 }

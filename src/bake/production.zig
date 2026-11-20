@@ -32,10 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn CpOptType(comptime __T: type) type { if (@typeInfo(__T) == .optional) return __T; return ?__T; }
-fn CpUnwrapOpt(comptime __T: type) type { if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn cp_opt_is_null(v: anytype) bool { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) return v == null; return false; }
-fn cp_opt_unwrap(v: anytype) CpUnwrapOpt(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -214,10 +210,10 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const log = bun.Output.scoped(.production, .visible);
-const empty_input_files: [0]EntryPointInputFile = &.{};
-const empty_bundled_outputs: [0]OutputFile = &.{};
-const empty_output_indexes: [0]OutputFile.Index = &.{};
-const empty_module_keys: [0]bun.String = &.{};
+const empty_input_files: [0]EntryPointInputFile = undefined;
+const empty_bundled_outputs: [0]OutputFile = undefined;
+const empty_output_indexes: [0]OutputFile.Index = undefined;
+const empty_module_keys: [0]bun.String = undefined;
 
 extern "c" fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, key: JSValue) callconv(.c) JSValue;
 
@@ -249,10 +245,11 @@ pub fn registerProductionChunk(global: *jsc.JSGlobalObject, key: bun.String, sou
 }
 
 pub fn loadModule(vm: *VirtualMachine, global: *jsc.JSGlobalObject, key: JSValue) !JSValue {
-        const promise = (blk_om_0: { const __o_0 = BakeLoadModuleByKey(global, key).asAnyPromise(); const __R_0 = CpOptType(@TypeOf(cp_opt_unwrap(__o_0).internal)); if (cp_opt_is_null(__o_0)) break :blk_om_0 @as(__R_0, null); break :blk_om_0 @as(__R_0, cp_opt_unwrap(__o_0).internal); });
+        const any_promise = (BakeLoadModuleByKey(global, key).asAnyPromise()).?;
+        const promise = any_promise.internal;
         _ = promise.setHandled();
         _ = vm.waitForPromise(.{ .internal = promise });
-        _ = (blk_catch_1: { break :blk_catch_1 ((vm.eventLoop().drainMicrotasks()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 bun.Global.crash(); }); });
+        _ = (blk_catch_0: { break :blk_catch_0 ((vm.eventLoop().drainMicrotasks()) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 bun.Global.crash(); }); });
         switch (promise.unwrap(vm.jsc_vm, .mark_handled)) {
 .pending => {
 _ = unreachable;
@@ -287,8 +284,8 @@ pub fn buildCommand(ctx: bun.cli.Command.Context) !void {
         }
         var cwd_buf: bun.PathBuffer = undefined;
         _ = &cwd_buf;
-        const cwd = (blk_catch_2: { break :blk_catch_2 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; _ = Output.err(e, "Could not query current working directory", .{});
-        break :blk_catch_2 bun.Global.crash(); }); });
+        const cwd = (blk_catch_1: { break :blk_catch_1 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; _ = Output.err(e, "Could not query current working directory", .{});
+        break :blk_catch_1 bun.Global.crash(); }); });
         _ = bun.jsc.initialize(false);
         _ = bun.ast.Expr.Data.Store.create();
         _ = bun.ast.Stmt.Data.Store.create();
@@ -337,18 +334,19 @@ b.options.macro_remap = macros;
 
 },
 }
-        _ = (blk_catch_3: { break :blk_catch_3 ((b.configureDefines()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 bun.bun_js.failWithBuildError(vm); }); });
+        _ = (blk_catch_2: { break :blk_catch_2 ((b.configureDefines()) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 bun.bun_js.failWithBuildError(vm); }); });
         _ = bun.http.AsyncHTTP.loadEnv(vm.allocator, vm.log, b.env);
         _ = vm.loadExtraEnvAndSourceCodePrinter();
         vm.is_main_thread = true;
         jsc.VirtualMachine.is_main_thread_vm = true;
-        const api_lock = vm.jsc_vm.getAPILock();
+        var api_lock = vm.jsc_vm.getAPILock();
+        _ = &api_lock;
         defer {
         _ = (if (comptime @typeInfo(@TypeOf(api_lock)) == .pointer) (api_lock) else &(api_lock)).release();
         }
         var pt: PerThread = PerThread{ .input_files = empty_input_files[0..0], .bundled_outputs = empty_bundled_outputs[0..0], .output_indexes = empty_output_indexes[0..0], .module_keys = empty_module_keys[0..0], .module_map = .{}, .source_maps = .{}, .vm = vm, .loaded_files = ((bun.bit_set.AutoBitSet.initEmpty(vm.allocator, 0)) catch unreachable), .all_server_files = JSValue.null };
         _ = &pt;
-        _ = (blk_catch_5: { break :blk_catch_5 ((buildWithVm(ctx, cwd, vm, (&pt))) catch |e| { _ = &e; break :blk_catch_5 @as(void, (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSError)) {  _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        _ = (blk_catch_4: { break :blk_catch_4 ((buildWithVm(ctx, cwd, vm, (&pt))) catch |e| { _ = &e; break :blk_catch_4 @as(void, (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSError)) {  _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         const err_value = vm.global.takeException(error.JSError);
         _ = vm.printErrorLikeObjectToConsole(((err_value.toError()) orelse (err_value)));
         if ((vm.exit_handler.exit_code == 0)) {
@@ -370,14 +368,14 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         if (bun.resolver.isPackagePath(unresolved_config_entry_point)) {
             unresolved_config_entry_point = try std.fmt.allocPrint(ctx.allocator, "./{s}", .{ unresolved_config_entry_point });
         }
-        const config_entry_point = (blk_catch_6: { break :blk_catch_6 ((b.resolver.resolve(cwd, unresolved_config_entry_point, .entry_point_build)) catch |e| { _ = &e; if ((e == error.ModuleNotFound)) {
+        const config_entry_point = (blk_catch_5: { break :blk_catch_5 ((b.resolver.resolve(cwd, unresolved_config_entry_point, .entry_point_build)) catch |e| { _ = &e; if ((e == error.ModuleNotFound)) {
             if ((ctx.args.entry_points.len == 0)) {
                 _ = Output.err(e, "'bun build --app' cannot find your application's config file\n\nThe default location for this is `bun.app.ts`\n\nTODO: insert a link to `bun.com/docs`", .{});
                 _ = bun.Global.crash();
             }
         }
         _ = Output.err(e, "could not resolve application config file '{s}'", .{ unresolved_config_entry_point });
-        break :blk_catch_6 bun.Global.crash(); }); });
+        break :blk_catch_5 bun.Global.crash(); }); });
         const config_entry_point_string = bun.String.cloneUTF8((config_entry_point.pathConst()).?.text);
         defer {
         _ = config_entry_point_string.deref();
@@ -444,7 +442,7 @@ return global.throwValue(((e.toError()) orelse (e)));
             _ = try framework.initTranspilerWithOptions(allocator, vm.log, .production_static, .ssr, (&ssr_transpiler), (&options.bundler_options.ssr), bun.options.SourceMapOption.fromApi(options.bundler_options.ssr.source_map), options.bundler_options.ssr.minify_whitespace, options.bundler_options.ssr.minify_syntax, options.bundler_options.ssr.minify_identifiers);
         }
         if (ctx.bundler_options.bake_debug_disable_minify) {
-            const transpilers: []*const bun.transpiler.Transpiler = .{ (&client_transpiler), (&server_transpiler), (&ssr_transpiler) };
+            const transpilers: [3]*bun.transpiler.Transpiler = .{ (&client_transpiler), (&server_transpiler), (&ssr_transpiler) };
             for (cp_iter_slice(transpilers)) |transpiler| {
                 _ = &transpiler;
                 transpiler.options.minify_syntax = false;
@@ -456,13 +454,13 @@ return global.throwValue(((e.toError()) orelse (e)));
             }
         }
         _ = bun.assert((server_transpiler.env == client_transpiler.env));
-        framework.* = (blk_catch_7: { break :blk_catch_7 ((framework.resolve((&server_transpiler.resolver), (&client_transpiler.resolver), allocator)) catch |__ce_7| { _ = &__ce_7; if (framework.is_built_in_react) {
+        framework.* = (blk_catch_6: { break :blk_catch_6 ((framework.resolve((&server_transpiler.resolver), (&client_transpiler.resolver), allocator)) catch |__ce_6| { _ = &__ce_6; if (framework.is_built_in_react) {
             _ = try bake.Framework.addReactInstallCommandNote(server_transpiler.log);
         }
         _ = Output.errGeneric("Failed to resolve all imports required by the framework", .{});
         _ = Output.flush();
-        _ = (blk_catch_8: { break :blk_catch_8 ((server_transpiler.log.print(Output.errorWriter())) catch |__ce_8| { _ = &__ce_8;  }); });
-        break :blk_catch_7 bun.Global.crash(); }); });
+        _ = (blk_catch_7: { break :blk_catch_7 ((server_transpiler.log.print(Output.errorWriter())) catch |__ce_7| { _ = &__ce_7;  }); });
+        break :blk_catch_6 bun.Global.crash(); }); });
         _ = Output.prettyErrorln("Bundling routes", .{});
         _ = Output.flush();
         const public_path: []const u8 = "/";
@@ -478,11 +476,12 @@ return global.throwValue(((e.toError()) orelse (e)));
             const joined_root = bun.path.joinAbs(cwd, .auto, fsr.root);
             const maybe_entry = server_transpiler.resolver.readDirInfoIgnoreError(joined_root);
             const entry = ((maybe_entry) orelse continue);
-            var client_file = FrameworkRouter.ClientFile.none;
+            var client_file: FrameworkRouter.OpaqueFileId.Optional = .none;
             _ = &client_file;
             if (fsr.entry_client) |client| {
                 _ = &client;
-                client_file = try entry_points.getOrPutEntryPoint(client, .client).toOptional();
+                const cf = try entry_points.getOrPutEntryPoint(client, .client);
+                client_file = cf.toOptional();
             }
             _ = try router_types.append(allocator, FrameworkRouter.Type{ .abs_root = bun.strings.withoutTrailingSlashWindowsPath(entry.abs_path), .prefix = fsr.prefix, .ignore_underscores = fsr.ignore_underscores, .ignore_dirs = fsr.ignore_dirs, .extensions = fsr.extensions, .style = fsr.style, .allow_layouts = fsr.allow_layouts, .server_file = try entry_points.getOrPutEntryPoint(fsr.entry_server, .server), .client_file = client_file, .server_file_string = .empty });
         }
@@ -533,9 +532,9 @@ return global.throwValue(((e.toError()) orelse (e)));
                 _ = log("src_index={?f} side={s} src={s} dest={s} - {?d}\n", .{ file.source_index.unwrap(), side_tag, file.src_path.text, file.dest_path, file.entry_point_index });
                 if (file.loader.isCSS()) {
                     if ((css_chunks_count == 0)) {
-                        css_chunks_first = i;
+                        css_chunks_first = @as(usize, @intCast(i));
                     } else {
-                        css_chunks_first = @min(css_chunks_first, i);
+                        css_chunks_first = @min(css_chunks_first, @as(usize, @intCast(i)));
                     }
                     css_chunks_count = (css_chunks_count + 1);
                 }
@@ -554,13 +553,13 @@ return global.throwValue(((e.toError()) orelse (e)));
                 const file_side = ((file.side) orelse continue);
                 switch (file_side) {
 .client => {
-_ = (blk_catch_9: { break :blk_catch_9 ((file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                break :blk_catch_9 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(file.dest_path) }); }); });
+_ = (blk_catch_8: { break :blk_catch_8 ((file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                break :blk_catch_8 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(file.dest_path) }); }); });
 },
 .server => {
 if (ctx.bundler_options.bake_debug_dump_server) {
-                    _ = (blk_catch_10: { break :blk_catch_10 ((file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                    break :blk_catch_10 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(file.dest_path) }); }); });
+                    _ = (blk_catch_9: { break :blk_catch_9 ((file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                    break :blk_catch_9 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(file.dest_path) }); }); });
                 }
                 if ((file.source_map_index != std.math.maxInt(u32))) {
                     _ = try writeSourcemapToDisk(allocator, file, bundled_outputs, (&source_maps));
@@ -625,9 +624,9 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
                 }
             }
             if (any_client_chunks) {
-                const runtime_file: *const OutputFile = (&bundled_outputs[@as(usize, @intCast(runtime_file_index))]);
-                _ = (blk_catch_11: { break :blk_catch_11 ((runtime_file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                break :blk_catch_11 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(runtime_file.dest_path) }); }); });
+                const runtime_file: *OutputFile = (&bundled_outputs[@as(usize, @intCast(runtime_file_index))]);
+                _ = (blk_catch_10: { break :blk_catch_10 ((runtime_file.writeToDisk(root_dir, ".")) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                break :blk_catch_10 Output.err(e, "Failed to write {f} to output directory", .{ bun.fmt.quote(runtime_file.dest_path) }); }); });
             }
         }
         const per_thread_options = PerThreadOptions{ .input_files = entry_points.files.keys(), .bundled_outputs = bundled_outputs, .output_indexes = output_indexes, .module_keys = module_keys, .module_map = output_module_map, .source_maps = source_maps };
@@ -644,7 +643,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
                 const router_type = router.types[@as(usize, @intCast(i))];
                 if (router_type.client_file.unwrap()) |client_file| {
                     _ = &client_file;
-                    const str = try try bun.String.createFormat("{s}{s}", .{ public_path, pt.outputFile(client_file).dest_path }).toJS(global);
+                    const fmt_str = try bun.String.createFormat("{s}{s}", .{ public_path, pt.outputFile(client_file).dest_path });
+                    const str = try fmt_str.toJS(global);
                     _ = try client_entry_urls.putIndex(global, @intCast(i), str);
                 } else {
                     _ = try client_entry_urls.putIndex(global, @intCast(i), JSValue.null);
@@ -713,10 +713,11 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
             _ = &i;
             const __end_7 = css_chunks_count;
             while (i < __end_7) : (i += 1) {
-                const output_file = bundled_outputs[@as(usize, @intCast((css_chunks_first + i)))];
+                const output_file = bundled_outputs[@as(usize, @intCast((css_chunks_first + @as(usize, @intCast(i)))))];
                 _ = bun.assert((output_file.dest_path[0] != 46));
                 _ = bun.assert(output_file.loader.isCSS());
-                css_chunk_js_strings[cp_cast_int(usize, i)] = try try bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path }).toJS(global);
+                const fmt_str = try bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path });
+                css_chunk_js_strings[cp_cast_int(usize, i)] = try fmt_str.toJS(global);
             }
         }
         const route_patterns = try JSValue.createEmptyArray(global, navigatable_routes.items.len);
@@ -845,7 +846,7 @@ else => {
                         const __end_12 = params_buf.items.len;
                         while (i < __end_12) : (i += 1) {
                             const param = params_buf.items[@as(usize, @intCast(i))];
-                            _ = try param_info_array.putIndex(global, @intCast(((params_buf.items.len - i) - 1)), try bun.String.createUTF8ForJS(global, param));
+                            _ = try param_info_array.putIndex(global, @intCast(((params_buf.items.len - @as(usize, @intCast(i))) - 1)), try bun.String.createUTF8ForJS(global, param));
                         }
                     }
                     _ = try route_param_info.putIndex(global, @intCast(nav_index), param_info_array);
@@ -918,7 +919,7 @@ pub export fn BakeProdResolve(global: *jsc.JSGlobalObject, a_str: bun.String, sp
             _ = bun.assert(bun.strings.hasPrefix(referrer.slice(), "bake:"));
         }
         const base_dir = ((bun.Dirname.dirname(u8, referrer.slice()[5..])) orelse (referrer.slice()[5..]));
-        return (blk_catch_16: { break :blk_catch_16 ((bun.String.createFormat("bake:{s}", .{ bun.path.joinAbs(base_dir, .posix, specifier.slice()) })) catch |__ce_16| { _ = &__ce_16; return bun.String.dead; }); });
+        return (blk_catch_15: { break :blk_catch_15 ((bun.String.createFormat("bake:{s}", .{ bun.path.joinAbs(base_dir, .posix, specifier.slice()) })) catch |__ce_15| { _ = &__ce_15; return bun.String.dead; }); });
 }
 
 pub export fn BakeProdLoad(pt: *PerThread, key: bun.String) callconv(.c) bun.String {

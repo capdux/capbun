@@ -564,18 +564,16 @@ pub struct LifecycleScriptSubprocess {
         });
 
         if (log_level.isVerbose()) {
-            const start_args = .{ list.package_name };
-            Output.prettyErrorln("<d>[Scripts]<r> Starting scripts for <b>\"{s}\"<r>", start_args);
+            Output.prettyErrorln("<d>[Scripts]<r> Starting scripts for <b>\"{s}\"<r>", .{ list.package_name });
         }
 
         lifecycle_subprocess.incrementPendingScriptTasks();
 
         lifecycle_subprocess.spawnNextScript(list.first_index) catch |e| {
-            const fail_args = .{
+            Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{
                 Lockfile.Scripts.names[list.first_index],
                 @errorName(e),
-            };
-            Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", fail_args);
+            });
             Global.exit(1);
         };
     }

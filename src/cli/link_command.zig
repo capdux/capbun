@@ -112,7 +112,7 @@ pub fn link(ctx: Command.Context) !void {
             _ = &lockfile;
             var name: []const u8 = "";
             _ = &name;
-            var package = Lockfile.Package;
+            var package: Lockfile.Package = .{};
             _ = &package;
             {
                 const package_json_source = (&(blk_catch_1: { break :blk_catch_1 ((bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap()) catch |e| { _ = &e; _ = Output.errGeneric("failed to read \"{s}\" for linking: {s}", .{ manager.original_package_json_path, @errorName(e) });
@@ -142,7 +142,10 @@ pub fn link(ctx: Command.Context) !void {
             _ = &explicit_global_dir;
             if (ctx.install) |install_| {
                 _ = &install_;
-                if (explicit_global_dir == null) { explicit_global_dir = explicit_global_dir; }
+                if (install_.global_dir) |gd| {
+                    _ = &gd;
+                    explicit_global_dir = gd;
+                }
             }
             manager.global_dir = try Options.openGlobalDir(explicit_global_dir);
             _ = try manager.setupGlobalDir(ctx);
@@ -222,7 +225,7 @@ _ = Output.prettyErrorln("<r><red>error:<r> failed to create junction to node_mo
             }
             _ = Output.flush();
             if ((manager.options.log_level != .silent)) {
-                _ = Output.prettyln("<r><green>Success!<r> Registered \"{[name]s}\"", "", "To use {[name]s} in a project, run:", "  <cyan>bun link {[name]s}<r>", "", "Or add it in dependencies in your package.json file:", "  <cyan>\"{[name]s}\": \"link:{[name]s}\"<r>", "", .{ .name = name });
+                _ = Output.prettyln("<r><green>Success!<r> Registered \"{[name]s}\"\n\nTo use {[name]s} in a project, run:\n  <cyan>bun link {[name]s}<r>\n\nOr add it in dependencies in your package.json file:\n  <cyan>\"{[name]s}\": \"link:{[name]s}\"<r>\n", .{ .name = name });
             }
             _ = Output.flush();
             _ = Global.exit(0);

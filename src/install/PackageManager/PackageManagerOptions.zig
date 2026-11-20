@@ -235,7 +235,7 @@ pub fn openGlobalBinDir(opts_: ?*const Api.BunInstall) !std.fs.Dir {
             _ = &home_dir;
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const parts: [][]const u8 = .{ "bin" };
+            const parts: [1][]const u8 = .{ "bin" };
             const path = Path.joinAbsStringBuf(home_dir, (&buf), (&parts), .auto);
             return try std.fs.cwd().makeOpenPath(path, .{});
         }
@@ -243,7 +243,7 @@ pub fn openGlobalBinDir(opts_: ?*const Api.BunInstall) !std.fs.Dir {
             _ = &home_dir;
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const parts: [][]const u8 = .{ ".bun", "bin" };
+            const parts: [2][]const u8 = .{ ".bun", "bin" };
             const path = Path.joinAbsStringBuf(home_dir, (&buf), (&parts), .auto);
             return try std.fs.cwd().makeOpenPath(path, .{});
         }

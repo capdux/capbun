@@ -88,7 +88,8 @@ pub struct Array {
                 bun.assert(item.data == .e_string);
             }
         }
-        std.sort.pdq(Expr, _.items.slice(), {}, Sorter.isLessThan);
+        const empty_ctx: void = undefined;
+        std.sort.pdq(Expr, _.items.slice(), empty_ctx, Sorter.isLessThan);
     }
 
     const Sorter = ArraySorter;
@@ -633,7 +634,7 @@ pub struct Object {
     }
 
     fn putString(*_, allocator: std.mem.Allocator, key: string, value: string)! {
-        return put(_, allocator, key, Expr.init(E.String, E.String.init(value), logger.Loc.Empty))?;
+        return _.put(allocator, key, Expr.init(E.String, E.String.init(value), logger.Loc.Empty))?;
     }
 
     pub const SetError = ObjectSetError;
@@ -831,11 +832,13 @@ pub struct Object {
                 bun.assert(prop.key.?.data == .e_string);
             }
         }
-        std.sort.pdq(G.Property, _.properties.slice(), {}, Sorter.isLessThan);
+        const empty_ctx: void = undefined;
+        std.sort.pdq(G.Property, _.properties.slice(), empty_ctx, Sorter.isLessThan);
     }
 
     fn packageJSONSort(*_) {
-        std.sort.pdq(G.Property, _.properties.slice(), {}, PackageJSONSort.Fields.isLessThan);
+        const empty_ctx: void = undefined;
+        std.sort.pdq(G.Property, _.properties.slice(), empty_ctx, PackageJSONSort.Fields.isLessThan);
     }
 }
 

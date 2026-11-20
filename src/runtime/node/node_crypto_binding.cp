@@ -218,7 +218,7 @@ pub struct random {
         offset: u32,
         length: usize,
 
-        result: void = .{},
+        result: void = undefined,
 
         fn init(*_, _: *JSGlobalObject)! {
             _.value.protect();
@@ -484,7 +484,7 @@ fn pbkdf2(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErr
 fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     let data = PBKDF2.fromJS(globalThis, callFrame, false)?;
     defer data.deinit();
-    const out_arraybuffer = jsc.JSValue.createBufferFromLength(globalThis, @as(i32, @intCast(data.length)))?;
+    const out_arraybuffer = jsc.JSValue.createBufferFromLength(globalThis, @as(usize, @intCast(data.length)))?;
 
     const output_opt = out_arraybuffer.asArrayBuffer(globalThis);
     if (output_opt == null) {
@@ -494,8 +494,10 @@ fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.J
     const output = output_opt.?;
 
     if (!data.run(output.slice())) {
-        const e = Crypto.createCryptoError(globalThis, BoringSSL.ERR_get_error());
-        BoringSSL.ERR_clear_error();
+        const get_err = BoringSSL.ERR_get_error;
+        const clear_err = BoringSSL.ERR_clear_error;
+        const e = Crypto.createCryptoError(globalThis, get_err());
+        clear_err();
         return globalThis.throwValue(e);
     }
 
@@ -544,12 +546,12 @@ pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
     return global.ERR(.CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED, "Custom engines not supported by BoringSSL", .{}).throw();
 }
 
-@callconv("c") fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ([*:0]const u8)?, _: ([*:0]const u8)?, ctx: *void) {
+@callconv("c") fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ([*:0]const u8)?, _: ([*:0]const u8)?, ctx: *!) {
     if (maybe_from == null) return;
     const from_str = maybe_from.?;
     unsafe {
         const hashes: *bun.CaseInsensitiveASCIIStringArrayHashMap(void) = @ptrCast(@alignCast(ctx));
-        bun.handleOom(hashes.put(bun.span(from_str), .{}));
+        bun.handleOom(hashes.put(bun.span(from_str), undefined));
     }
 }
 
@@ -567,7 +569,7 @@ fn getHashes(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
     let i: u32 = 0;
     for (hash of hashes.keys()) {
         const str = String.createUTF8ForJS(global, hash)?;
-        array.putIndex(global, @as(i32, @intCast(i)), str)?;
+        array.putIndex(global, @as(u32, @intCast(i)), str)?;
         i += 1;
     }
 
@@ -789,7 +791,8 @@ pub struct Scrypt {
         );
 
         if (res == 0) {
-            _.e = BoringSSL.ERR_peek_last_error();
+            const get_err = BoringSSL.ERR_peek_last_error;
+            _.e = get_err();
             return;
         }
     }

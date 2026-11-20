@@ -61,7 +61,8 @@ pub fn installIsolatedPackages(
         defer peer_name_idx.deinit(lockfile.allocator);
         for (dep of dependencies) {
             if (dep.behavior.isPeer()) {
-                peer_name_idx.put(lockfile.allocator, dep.name_hash, {})?;
+                const void_val: void = undefined;
+                peer_name_idx.put(lockfile.allocator, dep.name_hash, void_val)?;
             }
         }
         const peer_name_count: u32 = @intCast(peer_name_idx.count());
@@ -116,7 +117,8 @@ pub fn installIsolatedPackages(
             for (pkg_idx of 0..lockfile.packages.len) {
                 const pkg_id: PackageID = @intCast(pkg_idx);
                 const deps = pkg_dependency_slices[pkg_id];
-                for (_dep_id of deps.begin()..deps.end()) {
+                let _dep_id: u32 = deps.begin();
+                while (_dep_id < deps.end()) : (_dep_id += 1) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = dependencies[dep_id];
                     const bit = peer_name_idx.getIndex(dep.name_hash) ?? continue;
@@ -147,7 +149,8 @@ pub fn installIsolatedPackages(
 
                     scratch.copyInto(own_peers.at(pkg_id));
 
-                    for (_dep_id of deps.begin()..deps.end()) {
+                    let _dep_id: u32 = deps.begin();
+                    while (_dep_id < deps.end()) : (_dep_id += 1) {
                         const dep_id: DependencyID = @intCast(_dep_id);
                         const dep = dependencies[dep_id];
                         if (dep.behavior.isPeer()) {
@@ -183,7 +186,8 @@ pub fn installIsolatedPackages(
 
         let root_declares_workspace = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(lockfile.allocator, lockfile.packages.len)?;
         defer root_declares_workspace.deinit(lockfile.allocator);
-        for (_dep_idx of pkg_dependency_slices[0].begin()..pkg_dependency_slices[0].end()) {
+        let _dep_idx: u32 = pkg_dependency_slices[0].begin();
+        while (_dep_idx < pkg_dependency_slices[0].end()) : (_dep_idx += 1) {
             const dep_idx: DependencyID = @intCast(_dep_idx);
             if (!dependencies[dep_idx].behavior.isWorkspace()) continue;
             const res = resolutions[dep_idx];
@@ -257,7 +261,7 @@ pub fn installIsolatedPackages(
                 }
             }
 
-            const node_id: Store.Node.Id = .@"from"(i32(nodes.len));
+            const node_id = Store.Node.Id.@"from"(@as(u32, @intCast(nodes.len)));
             const pkg_deps = pkg_dependency_slices[entry.pkg_id];
 
             // for skipping dependnecies of workspace packages and the root package. the dependencies
@@ -404,7 +408,8 @@ pub fn installIsolatedPackages(
 
             dep_ids_sort_buf.clearRetainingCapacity();
             dep_ids_sort_buf.ensureUnusedCapacity(lockfile.allocator, pkg_deps.len)?;
-            for (_dep_id of pkg_deps.begin()..pkg_deps.end()) {
+            let _dep_id: u32 = pkg_deps.begin();
+            while (_dep_id < pkg_deps.end()) : (_dep_id += 1) {
                 const dep_id: DependencyID = @intCast(_dep_id);
                 dep_ids_sort_buf.appendAssumeCapacity(dep_id);
             }
@@ -651,7 +656,7 @@ pub fn installIsolatedPackages(
         defer entry_queue.deinit();
 
         try entry_queue.writeItem({
-            node_id: .@"from"(0),
+            node_id: Store.Node.Id.@"from"(0),
             entry_parent_id: .invalid,
         });
 
@@ -738,7 +743,7 @@ pub fn installIsolatedPackages(
                     res_fmt_buf.writer().print("{f}", .{pkg_res.fmt(string_buf, .posix)})?;
                     hasher.update(res_fmt_buf.items);
                 }
-                break :peer_hash .@"from"(hasher.final());
+                break :peer_hash Store.Entry.PeerHash.@"from"(hasher.final());
             };
 
             const new_entry_dep_id = node_dep_ids[entry.node_id.get()];
@@ -781,7 +786,7 @@ pub fn installIsolatedPackages(
                 hoisted: hoisted,
             };
 
-            const new_entry_id: Store.Entry.Id = .@"from"(i32(store.len));
+            const new_entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(store.len)));
             store.append(lockfile.allocator, new_entry)?;
 
             if (entry_parent_id := entry.entry_parent_id.tryGet()) skip_adding_dependency: {
@@ -806,7 +811,8 @@ pub fn installIsolatedPackages(
                     if (entry.entry_parent_id == .root) {
                         // make sure direct dependencies are not replaced
                         const dep_name = dependencies[new_entry_dep_id].name.slice(string_buf);
-                        public_hoisted.put(dep_name, {})?;
+                        const void_val: void = undefined;
+                        public_hoisted.put(dep_name, void_val)?;
                     } else {
                         // transitive dependencies (also direct dependencies of workspaces!)
                         const dep_name = dependencies[new_entry_dep_id].name.slice(string_buf);
@@ -905,7 +911,7 @@ pub fn installIsolatedPackages(
 
         for (_root_id of 0..store.entries.len) {
             if (states[_root_id] != .unvisited) continue;
-            stack.append(manager.allocator, { id: .@"from"(i32(_root_id)), dep_idx: 0, hasher: undefined })?;
+            stack.append(manager.allocator, { id: Store.Entry.Id.@"from"(@as(u32, @intCast(_root_id))), dep_idx: 0, hasher: undefined })?;
 
             while (stack.items.len > 0) {
                 const top = &stack.items[stack.items.len - 1];
@@ -990,7 +996,7 @@ pub fn installIsolatedPackages(
                     // unusually long store path (long scope + git URL + peer
                     // hash) can't overflow a fixed buffer and feed
                     // uninitialized stack bytes into the hash.
-                    top.hasher = .init(0x9E3779B97F4A7C15);
+                    top.hasher = .init((@as(u64, 0x9E3779B9) << 32) | 0x7F4A7C15);
                     {
                         let hw: WyhashWriter = { hasher: &top.hasher };
                         let w = hw.writer();
@@ -1099,7 +1105,7 @@ pub fn installIsolatedPackages(
             let index_counter: u32 = 0;
             for (root of 0..n) {
                 if (tarjan_index[root] != std.math.maxInt(u32)) continue;
-                work.append(manager.allocator, { v: i32(root), child: 0 })?;
+                work.append(manager.allocator, { v: @as(u32, @intCast(root)), child: 0 })?;
                 while (work.items.len > 0) {
                     const frame = &work.items[work.items.len - 1];
                     const v = frame.v;
@@ -1148,10 +1154,10 @@ pub fn installIsolatedPackages(
                             // rather than the pass-1 placeholder.
                             const m = members[0];
                             if (entry_hashes[m] != 0) {
-                                let sub: std.hash.Wyhash = .init(0x9E3779B97F4A7C15);
+                                let sub: std.hash.Wyhash = .init((@as(u64, 0x9E3779B9) << 32) | 0x7F4A7C15);
                                 let hw: WyhashWriter = { hasher: &sub };
                                 let w_ = hw.writer();
-                                w_.print("{f}", .{Store.Entry.fmtStorePath(.@"from"(m), &store, lockfile)}) catch unreachable;
+                                w_.print("{f}", .{Store.Entry.fmtStorePath(Store.Entry.Id.@"from"(@as(u32, @intCast(m))), &store, lockfile)}) catch unreachable;
                                 sub.update(std.mem.asBytes(&pkg_metas[node_pkg_ids[entry_node_ids[m].get()]].integrity));
                                 let poisoned = false;
                                 for (dep of entry_dependencies[m].slice()) {
@@ -1188,7 +1194,7 @@ pub fn installIsolatedPackages(
                                 let sub: std.hash.Wyhash = .init(0);
                                 let hw: WyhashWriter = { hasher: &sub };
                                 let w_ = hw.writer();
-                                w_.print("{f}", .{Store.Entry.fmtStorePath(.@"from"(m), &store, lockfile)}) catch unreachable;
+                                w_.print("{f}", .{Store.Entry.fmtStorePath(Store.Entry.Id.@"from"(@as(u32, @intCast(m))), &store, lockfile)}) catch unreachable;
                                 sub.update(std.mem.asBytes(&pkg_metas[node_pkg_ids[entry_node_ids[m].get()]].integrity));
                                 member_sub.append(manager.allocator, sub.final())?;
                                 for (dep of entry_dependencies[m].slice()) {
@@ -1204,12 +1210,14 @@ pub fn installIsolatedPackages(
                                     let ext: std.hash.Wyhash = .init(0);
                                     ext.update(std.mem.asBytes(&dependencies[dep.dep_id].name_hash));
                                     ext.update(std.mem.asBytes(&entry_hashes[di]));
-                                    scc_ext.put(manager.allocator, ext.final(), {})?;
+                                    const void_val: void = undefined;
+                                    scc_ext.put(manager.allocator, ext.final(), void_val)?;
                                 }
                             }
-                            std.mem.sort(u64, member_sub.items, {}, std.sort.asc(u64));
+                            const empty_sort_ctx: void = undefined;
+                            std.mem.sort(u64, member_sub.items, empty_sort_ctx, std.sort.asc(u64));
                             const ext_keys = scc_ext.keys();
-                            std.mem.sort(u64, ext_keys, {}, std.sort.asc(u64));
+                            std.mem.sort(u64, ext_keys, empty_sort_ctx, std.sort.asc(u64));
                             let hasher: std.hash.Wyhash = .init(0x42A7C15F9E3779B9);
                             for (k of member_sub.items) hasher.update(std.mem.asBytes(&k));
                             for (k of ext_keys) hasher.update(std.mem.asBytes(&k));
@@ -1279,7 +1287,7 @@ pub fn installIsolatedPackages(
                 defer rename_path.deinit();
 
                 {
-                    let mkdir_path: AutoRelPathU16 = .@"from"("node_modules");
+                    let mkdir_path = AutoRelPathU16.@"from"("node_modules");
                     defer mkdir_path.deinit();
 
                     mkdir_path.appendFmt(".old_modules-{s}", .{&std.fmt.bytesToHex(std.mem.asBytes(&bun.fastRandom()), .lower)});
@@ -1296,7 +1304,7 @@ pub fn installIsolatedPackages(
                 }
                 const node_modules = node_modules_opt.?;
 
-                let entry_path: bun.AutoRelPath = .@"from"("node_modules");
+                let entry_path = bun.AutoRelPath.@"from"("node_modules");
                 defer entry_path.deinit();
 
                 // 2
@@ -1326,7 +1334,7 @@ pub fn installIsolatedPackages(
 
                 // 3
                 for (workspace_path of lockfile.workspace_paths.values()) {
-                    let workspace_node_modules: bun.AutoRelPath = .@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
+                    let workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
                     defer workspace_node_modules.deinit();
 
                     const basename = workspace_node_modules.basename();
@@ -1360,7 +1368,7 @@ pub fn installIsolatedPackages(
                     Global.exit(1);
                 };
 
-                let rename_path: bun.AutoRelPath = .@"from"("node_modules");
+                let rename_path = bun.AutoRelPath.@"from"("node_modules");
                 defer rename_path.deinit();
 
                 rename_path.appendFmt(".old_modules-{s}", .{&std.fmt.bytesToHex(std.mem.asBytes(&bun.fastRandom()), .lower)});
@@ -1372,7 +1380,7 @@ pub fn installIsolatedPackages(
 
                 rename_path.append(".cache");
 
-                let cache_path: bun.AutoRelPath = .@"from"("node_modules");
+                let cache_path = bun.AutoRelPath.@"from"("node_modules");
                 defer cache_path.deinit();
 
                 cache_path.append(".cache");
@@ -1385,7 +1393,7 @@ pub fn installIsolatedPackages(
 
                 // 5
                 for (workspace_path of lockfile.workspace_paths.values()) {
-                    let workspace_node_modules: bun.AutoRelPath = .@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
+                    let workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
                     defer workspace_node_modules.deinit();
 
                     const basename = workspace_node_modules.basename();
@@ -1450,13 +1458,14 @@ pub fn installIsolatedPackages(
 
         let seen_entry_ids: std.AutoHashMapUnmanaged(Store.Entry.Id, void) = .empty;
         defer seen_entry_ids.deinit(lockfile.allocator);
-        seen_entry_ids.ensureTotalCapacity(lockfile.allocator, i32(store.entries.len))?;
+        const seen_cap: u32 = @intCast(store.entries.len);
+        seen_entry_ids.ensureTotalCapacity(lockfile.allocator, seen_cap)?;
 
         // TODO: delete
         let seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID, void) = .empty;
         defer seen_workspace_ids.deinit(lockfile.allocator);
 
-        const tasks = manager.allocator.alloc(Store.Installer.Task, store.entries.len)?;
+        let tasks = manager.allocator.alloc(Store.Installer.Task, store.entries.len)?;
         defer manager.allocator.free(tasks);
 
         let installer: Store.Installer = {
@@ -1478,10 +1487,9 @@ pub fn installIsolatedPackages(
         defer installer.deinit();
 
         let task_entry_idx: usize = 0;
-        for (*task of tasks) {
-            defer task_entry_idx += 1;
-            const entry_id: Store.Entry.Id = .@"from"(i32(task_entry_idx));
-            task.* = {
+        while (task_entry_idx < tasks.len) : (task_entry_idx += 1) {
+            const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(task_entry_idx)));
+            tasks[task_entry_idx] = {
                 entry_id: entry_id,
                 installer: &installer,
                 result: .none,
@@ -1492,9 +1500,9 @@ pub fn installIsolatedPackages(
         }
 
         // add the pending task count upfront
-        manager.incrementPendingTasks(i32(store.entries.len));
+        manager.incrementPendingTasks(@as(u32, @intCast(store.entries.len)));
         for (_entry_id of 0..store.entries.len) {
-            const entry_id: Store.Entry.Id = .@"from"(i32(_entry_id));
+            const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(_entry_id)));
 
             const node_id = entry_node_ids[entry_id.get()];
             const pkg_id = node_pkg_ids[node_id.get()];
@@ -1530,7 +1538,8 @@ pub fn installIsolatedPackages(
                     // thread.
 
                     // if injected=true this might be false
-                    if (!(try seen_workspace_ids.getOrPut(lockfile.allocator, pkg_id)).found_existing) {
+                    const ws_gop = seen_workspace_ids.getOrPut(lockfile.allocator, pkg_id)?;
+                    if (!ws_gop.found_existing) {
                         entry_steps[entry_id.get()].store(.symlink_dependencies, .monotonic);
                         installer.startTask(entry_id);
                         continue;
@@ -1595,7 +1604,7 @@ pub fn installIsolatedPackages(
                         has_stale_gvs_link ||
                         patch_info == .remove ||
                         needs_install: {
-                            let store_path: bun.AbsPath({}) = .initTopLevelDir();
+                            let store_path: bun.AbsPath(.{}) = .initTopLevelDir();
                             defer store_path.deinit();
                             if (uses_global_store) {
                                 // Global entries are built under a per-process
@@ -1651,7 +1660,7 @@ pub fn installIsolatedPackages(
                         continue;
                     }
 
-                    let pkg_cache_dir_subpath: AutoRelPath = .@"from"(switch (pkg_res_tag) {
+                    let pkg_cache_dir_subpath = AutoRelPath.@"from"(switch (pkg_res_tag) {
                         .npm => manager.cachedNPMPackageFolderName(pkg_name.slice(string_buf), pkg_res.value.npm.version, patch_info.contentsHash()),
                         .git => manager.cachedGitFolderName(&pkg_res.value.git, patch_info.contentsHash()),
                         .github => manager.cachedGitHubFolderName(&pkg_res.value.github, patch_info.contentsHash()),
@@ -1845,7 +1854,7 @@ pub fn installIsolatedPackages(
             let ci_entry_idx: usize = 0;
             for (entry_step of store.entries.items(.step)) {
                 defer ci_entry_idx += 1;
-                const entry_id: Store.Entry.Id = .@"from"(i32(ci_entry_idx));
+                const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(ci_entry_idx)));
                 const step = entry_step.load(.monotonic);
 
                 if (step == .done) {

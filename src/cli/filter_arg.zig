@@ -31,10 +31,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn CpOptType(comptime __T: type) type { if (@typeInfo(__T) == .optional) return __T; return ?__T; }
-fn CpUnwrapOpt(comptime __T: type) type { if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn cp_opt_is_null(v: anytype) bool { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) return v == null; return false; }
-fn cp_opt_unwrap(v: anytype) CpUnwrapOpt(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -205,9 +201,13 @@ pub fn initWalker(self: *PackageFilterIterator) !void {
             _ = arena_.deinit();
             }
             const cwd = try arena_.allocator().dupe(u8, self.root_dir);
-            _ = try (blk_oc_0: { const __o_0 = self.walker.initWithCwd((&arena_), pattern, cwd, true, true, false, true, true); const __R_0 = CpOptType(@TypeOf(cp_opt_unwrap(__o_0).unwrap())); if (cp_opt_is_null(__o_0)) break :blk_oc_0 @as(__R_0, null); break :blk_oc_0 @as(__R_0, cp_opt_unwrap(__o_0).unwrap()); });
+            var walker_res = try self.walker.initWithCwd((&arena_), pattern, cwd, true, true, false, true, true);
+            _ = &walker_res;
+            _ = try walker_res.unwrap();
             self.iter = GlobWalker.Iterator{ .walker = (&self.walker) };
-            _ = try (blk_oc_1: { const __o_1 = self.iter.init(); const __R_1 = CpOptType(@TypeOf(cp_opt_unwrap(__o_1).unwrap())); if (cp_opt_is_null(__o_1)) break :blk_oc_1 @as(__R_1, null); break :blk_oc_1 @as(__R_1, cp_opt_unwrap(__o_1).unwrap()); });
+            var iter_res = try self.iter.init();
+            _ = &iter_res;
+            _ = try iter_res.unwrap();
     }
 
 pub fn deinitWalker(self: *PackageFilterIterator) void {

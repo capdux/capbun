@@ -130,14 +130,16 @@ pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lock
             _ = &builder_;
             var builder = (&builder_);
             _ = &builder;
-            _ = debug("Clone: {s}@{f} ({s}, {d} dependencies)", .{ cp_iter_slice(self.name)[@intCast(old_string_buf)..], self.resolution.fmt(old_string_buf, .auto), @tagName(self.resolution.tag), self.dependencies.len });
-            _ = builder.count(cp_iter_slice(self.name)[@intCast(old_string_buf)..]);
+            const name_slice = @TypeOf(self.name).slice((&self.name), old_string_buf);
+            _ = debug("Clone: {s}@{f} ({s}, {d} dependencies)", .{ name_slice, self.resolution.fmt(old_string_buf, .auto), @tagName(self.resolution.tag), self.dependencies.len });
+            _ = builder.count(name_slice);
             _ = self.resolution.count(old_string_buf, *Lockfile.StringBuilder, builder);
             _ = self.@"meta".count(old_string_buf, *Lockfile.StringBuilder, builder);
             _ = self.scripts.count(old_string_buf, *Lockfile.StringBuilder, builder);
             for (old.patched_dependencies.values()) |patched_dep| {
                 _ = &patched_dep;
-                _ = builder.count(patched_dep.path.slice(old.buffers.string_bytes.items));
+                const pslice = @TypeOf(patched_dep.path).slice((&patched_dep.path), old.buffers.string_bytes.items);
+                _ = builder.count(pslice);
             }
             const new_extern_string_count = self.bin.count(old_string_buf, old_extern_string_buf, *Lockfile.StringBuilder, builder);
             const old_dependencies: []const Dependency = self.dependencies.get(old.buffers.dependencies.items);
@@ -160,7 +162,7 @@ pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lock
             const dependencies: []Dependency = new_lockfile.buffers.dependencies.items[prev_len..end];
             const resolutions: []PackageID = new_lockfile.buffers.resolutions.items[prev_len..end];
             const id = @as(PackageID, @truncate(new_lockfile.packages.len));
-            const new_package = try new_lockfile.appendPackageWithID(.{ .name = builder.appendWithHash(String, cp_iter_slice(self.name)[@intCast(old_string_buf)..], self.name_hash), .bin = self.bin.clone(old_string_buf, old_extern_string_buf, new_lockfile.buffers.extern_strings.items, new_extern_strings, *Lockfile.StringBuilder, builder), .name_hash = self.name_hash, .@"meta" = self.@"meta".clone(id, old_string_buf, *Lockfile.StringBuilder, builder), .resolution = self.resolution.clone(old_string_buf, *Lockfile.StringBuilder, builder), .scripts = self.scripts.clone(old_string_buf, *Lockfile.StringBuilder, builder), .dependencies = .{ .off = prev_len, .len = (end - prev_len) }, .resolutions = .{ .off = prev_len, .len = (end - prev_len) } }, id);
+            const new_package = try new_lockfile.appendPackageWithID(.{ .name = builder.appendWithHash(String, name_slice, self.name_hash), .bin = self.bin.clone(old_string_buf, old_extern_string_buf, new_lockfile.buffers.extern_strings.items, new_extern_strings, *Lockfile.StringBuilder, builder), .name_hash = self.name_hash, .@"meta" = self.@"meta".clone(id, old_string_buf, *Lockfile.StringBuilder, builder), .resolution = self.resolution.clone(old_string_buf, *Lockfile.StringBuilder, builder), .scripts = self.scripts.clone(old_string_buf, *Lockfile.StringBuilder, builder), .dependencies = .{ .off = prev_len, .len = (end - prev_len) }, .resolutions = .{ .off = prev_len, .len = (end - prev_len) } }, id);
             package_id_mapping[cp_cast_int(usize, self.@"meta".id)] = new_package.@"meta".id;
             if ((cloner.manager.preinstall_state.items.len > 0)) {
                 cloner.manager.preinstall_state.items[cp_cast_int(usize, new_package.@"meta".id)] = cloner.old_preinstall_state.items[@as(usize, @intCast(self.@"meta".id))];
@@ -172,17 +174,17 @@ pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lock
             }
             _ = builder.clamp();
             cloner.trees_count = (cloner.trees_count + (if (comptime @typeInfo(@TypeOf(@intFromBool((old_resolutions.len > 0)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool((old_resolutions.len > 0)))) else cp_cast_int(u32, @intFromBool((old_resolutions.len > 0)))));
-            for (old_resolutions, resolutions, 0..) |old_resolution, *resolution, i| {
-                _ = &old_resolution;
-                _ = &resolution;
-                _ = &i;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < old_resolutions.len)) : (i = (i + 1)) {
+                const old_resolution = old_resolutions[@as(usize, @intCast(i))];
                 if ((old_resolution >= max_package_id)) {
-                    self.resolution.* = invalid_package_id;
+                    resolutions[cp_cast_int(usize, i)] = invalid_package_id;
                     continue;
                 }
                 const mapped = package_id_mapping[@as(usize, @intCast(old_resolution))];
                 if ((mapped < max_package_id)) {
-                    self.resolution.* = mapped;
+                    resolutions[cp_cast_int(usize, i)] = mapped;
                 } else {
                     _ = try cloner.clone_queue.append(.{ .old_resolution = old_resolution, .parent = new_package.@"meta".id, .resolve_id = (new_package.resolutions.off + @as(PackageID, @intCast(i))) });
                 }
@@ -887,12 +889,12 @@ _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, q.loc, alloca
                 }
             }
             if (comptime features.is_main) {
-                _ = lockfile.overrides.parseCount(lockfile, json, (&string_builder));
+                _ = @TypeOf(lockfile.overrides).parseCount(lockfile, json, (&string_builder));
                 if (json.get("workspaces")) |workspaces_expr| {
                     _ = &workspaces_expr;
-                    _ = lockfile.catalogs.parseCount(lockfile, workspaces_expr, (&string_builder));
+                    _ = @TypeOf(lockfile.catalogs).parseCount(lockfile, workspaces_expr, (&string_builder));
                 }
-                _ = lockfile.catalogs.parseCount(lockfile, json, (&string_builder));
+                _ = @TypeOf(lockfile.catalogs).parseCount(lockfile, json, (&string_builder));
                 _ = try install.PostinstallOptimizer.fromPackageJSON((&pm.postinstall_optimizer), (&json), allocator);
             }
             _ = try string_builder.allocate();
@@ -1356,7 +1358,8 @@ _ = unreachable;
                         while (from_trusted_iter.next()) |entry| {
                             const from_trusted = entry.key_ptr.*;
                             if ((!to_trusted_dependencies.contains(from_trusted))) {
-                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, .{});
+                                const void_val: void = undefined;
+                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
                             }
                         }
                     }
@@ -1378,7 +1381,8 @@ _ = unreachable;
                         while (from_trusted_iter.next()) |entry| {
                             const from_trusted = entry.key_ptr.*;
                             if ((!default_trusted_dependencies.hasWithHash(@intCast(from_trusted)))) {
-                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, .{});
+                                const void_val: void = undefined;
+                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
                             }
                         }
                     }
@@ -1491,7 +1495,7 @@ _ = unreachable;
                             _ = package_json_path.append("package.json");
                             var source_file: bun.logger.Source = undefined;
                             _ = &source_file;
-                            if (bun.sys.File.toSource(package_json_path.sliceZ(), allocator, .{}).unwrap()) |src_opt| {
+                            if ((blk_catch_0: { break :blk_catch_0 ((bun.sys.File.toSource(package_json_path.sliceZ(), allocator, .{}).unwrap()) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |src_opt| {
                                 _ = &src_opt;
                                 source_file = src_opt;
                             } else {
@@ -1500,17 +1504,17 @@ _ = unreachable;
                             const source = (&source_file);
                             var workspace_pkg: PackageType = .{};
                             _ = &workspace_pkg;
-                            var json: bun.PackageJSON = undefined;
-                            _ = &json;
-                            if (pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, .{}).unwrap()) |json_opt| {
+                            var json_root: bun.ast.Expr = undefined;
+                            _ = &json_root;
+                            if ((blk_catch_1: { break :blk_catch_1 ((pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, .{}).unwrap()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |json_opt| {
                                 _ = &json_opt;
-                                json = json_opt;
+                                json_root = json_opt.root;
                             } else {
                                 break :update_mapping false;
                             }
-                            var resolver: void = .{};
+                            var resolver: void = undefined;
                             _ = &resolver;
-                            _ = try workspace_pkg.parseWithJSON(to_lockfile, pm, allocator, log, source, json.root, void, (&resolver), Features.workspace);
+                            _ = try workspace_pkg.parseWithJSON(to_lockfile, pm, allocator, log, source, json_root, void, (&resolver), Features.workspace);
                             to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
                             var from_pkg = from_lockfile.packages.get(from_resolutions[@as(usize, @intCast(i))]);
                             _ = &from_pkg;

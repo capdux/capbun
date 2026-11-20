@@ -414,27 +414,22 @@ pub const DefaultAtRuleParser = struct {
     const This = @This();
     pub const CustomAtRuleParser = struct {
     
-    pub fn parsePrelude(self: *@This(), name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
-            _ = self;
+    pub fn parsePrelude(_: *This, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
                 return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
     
-    pub fn parseBlock(self: *@This(), _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
-            _ = self;
+    pub fn parseBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
                 return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(self: *@This(), _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
-            _ = self;
+    pub fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
                 return .{ .err = undefined };
         }
     
-    pub fn onImportRule(self: *@This(), _: *ImportRule, _: u32, _: u32) void {
-            _ = self;
+    pub fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) void {
         }
     
-    pub fn onLayerRule(self: *@This(), _: *const bun.css.SmallList(LayerName,1)) void {
-            _ = self;
+    pub fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName,1)) void {
         }
     
     pub fn enclosingLayerLength(_: *This) u32 {
@@ -686,11 +681,13 @@ pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, imp
             _ = s.appendAssumeCapacity(options.filename);
             break :sources s;
 };
-            const ParseErr = .ParserError;
             return .{ .result = StyleAttribute{ .declarations = (switch (DeclarationBlock.parse((&parser), (&options))) {
 .result => |v| v,
 .err => |e| {
-return .{ .err = ParseErr.fromParseError(e, "") };
+{
+                const ParseErr = errors_.Err(ParserError);
+                return .{ .err = ParseErr.fromParseError(e, "") };
+            }
 },
 }), .sources = sources } };
     }

@@ -87,7 +87,7 @@ const AnyServer = jsc.API.AnyServer;
 const JSBundler = jsc.API.JSBundler;
 const uws = bun.uws;
 const HTTPResponse = bun.uws.AnyResponse;
-const empty_paths: [0][]const u8 = &.{};
+const empty_paths: [0][]const u8 = undefined;
 pub const HTMLBundleRoute = Route;
 pub const Route = struct {
     /// One HTMLBundle.Route can be specified multiple times

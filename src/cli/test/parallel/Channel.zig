@@ -309,54 +309,54 @@ pub fn markDone(self: *@This()) void {
             };
     const PosixHandlers = struct {
     
-    pub fn onData(self: @This(), _: *uws.us_socket_t, data: []const u8) void {
-                _ = self.*.ingest(data);
+    pub fn onData(ch: Ext, _: *uws.us_socket_t, data: []const u8) void {
+                _ = ch.*.ingest(data);
         }
     
-    pub fn onWritable(self: @This(), _: *uws.us_socket_t) void {
-                _ = self.*.flush();
+    pub fn onWritable(ch: Ext, _: *uws.us_socket_t) void {
+                _ = ch.*.flush();
         }
     
-    pub fn onClose(self: @This(), _: *uws.us_socket_t, _: i32, _: ?*void) void {
-                self.*.backend.socket = .detached;
-                _ = self.*.markDone();
+    pub fn onClose(ch: Ext, _: *uws.us_socket_t, _: i32, _: ?*anyopaque) void {
+                ch.*.backend.socket = .detached;
+                _ = ch.*.markDone();
         }
     
-    pub fn onEnd(self: @This(), _: Ext, s: *uws.us_socket_t) void {
-            _ = self;
+    pub fn onEnd(_: Ext, s: *uws.us_socket_t) void {
                 _ = s.close(.normal);
         }
-        pub const Ext = *Self;
+        const SelfPtr = *Self;
+        pub const Ext = *SelfPtr;
     };
     const WindowsHandlers = struct {
     
-    pub fn onAlloc(self: *@This(), _: usize) []u8 {
-                return self.backend.read_chunk[0..];
+    pub fn onAlloc(ch: *Self, _: usize) []u8 {
+                return ch.backend.read_chunk[0..];
         }
     
-    pub fn onRead(self: *@This(), data: []const u8) void {
-                _ = self.ingest(data);
+    pub fn onRead(ch: *Self, data: []const u8) void {
+                _ = ch.ingest(data);
         }
     
-    pub fn onError(self: *@This(), _: bun.sys.E) void {
-                if (self.backend.pipe) |p| {
+    pub fn onError(ch: *Self, _: bun.sys.E) void {
+                if (ch.backend.pipe) |p| {
                     _ = &p;
-                    self.backend.pipe = null;
+                    ch.backend.pipe = null;
                     _ = p.closeAndDestroy();
                 }
-                _ = self.markDone();
+                _ = ch.markDone();
         }
     
-    pub fn onWrite(self: *@This(), status: uv.ReturnCode) void {
-                _ = self.backend.inflight.clearRetainingCapacity();
-                if (self.done) {
+    pub fn onWrite(ch: *Self, status: uv.ReturnCode) void {
+                _ = ch.backend.inflight.clearRetainingCapacity();
+                if (ch.done) {
                     return;
                 }
                 if (status.toError(.write)) |_| {
-                    _ = self.markDone();
+                    _ = ch.markDone();
                     return;
                 }
-                _ = self.submitWindowsWrite();
+                _ = ch.submitWindowsWrite();
         }
     };
 };

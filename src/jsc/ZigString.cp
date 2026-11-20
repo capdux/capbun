@@ -466,7 +466,8 @@
     }
 
     pub fn sortDesc(slice_: []ZigString) {
-        std.sort.block(ZigString, slice_, {}, cmpDesc);
+        const empty_sort_ctx: void = undefined;
+        std.sort.block(ZigString, slice_, empty_sort_ctx, cmpDesc);
     }
 
     pub fn cmpDesc(_: void, a: ZigString, b: ZigString): bool {
@@ -474,7 +475,8 @@
     }
 
     pub fn sortAsc(slice_: []ZigString) {
-        std.sort.block(ZigString, slice_, {}, cmpAsc);
+        const empty_sort_ctx: void = undefined;
+        std.sort.block(ZigString, slice_, empty_sort_ctx, cmpAsc);
     }
 
     pub fn cmpAsc(_: void, a: ZigString, b: ZigString): bool {

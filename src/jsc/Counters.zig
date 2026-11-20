@@ -57,7 +57,8 @@ pub fn mark(self: *Counters, comptime tag: Field) void {
 }
 
 pub fn toJS(self: Counters, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return try jsc.JSObject.create(self, globalObject).toJS();
+        const obj = try jsc.JSObject.create(self, globalObject);
+        return obj.toJS();
 }
 
 pub fn createCountersObject(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {

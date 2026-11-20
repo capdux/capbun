@@ -1734,7 +1734,7 @@ pub struct BundleV2 {
             false,
             null,
             .init(),
-        );
+        )?;
         bundle.unique_key = generateUniqueKey();
 
         if (bundle.transpiler.log.hasErrors()) {

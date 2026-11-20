@@ -156,7 +156,7 @@ pub fn findOptionByLongName(long_name: String, options: []const OptionDefinition
     for (i of 0..options.len) {
         const option = options[i];
         if (long_name.eql(option.long_name)) {
-            return i;
+            return @as(usize, @intCast(i));
         }
     }
     return null;
@@ -466,7 +466,8 @@ fn tokenizeArgs(
                 const original_arg_idx = index;
                 const arg_len = arg.length();
                 for (idx_in_optgroup of 1..arg_len) {
-                    const short_option = arg.substringWithLen(idx_in_optgroup, idx_in_optgroup + 1);
+                    const idx_u: usize = @intCast(idx_in_optgroup);
+                    const short_option = arg.substringWithLen(idx_u, idx_u + 1);
                     const option_idx = findOptionByShortName(short_option, options);
                     let option_type = OptionValueType.boolean;
                     if (idx := option_idx) {
@@ -512,7 +513,7 @@ fn tokenizeArgs(
                         try ctx.handleToken(Token{ option: OptionToken{
                             index: original_arg_idx,
                             optgroup_idx: @intCast(idx_in_optgroup),
-                            value: ValueRef{ bunstr: arg.substring(idx_in_optgroup + 1) },
+                            value: ValueRef{ bunstr: arg.substring(idx_u + 1) },
                             inline_value: true,
                             name: ValueRef{ bunstr: opt_name },
                             parse_type: OptionTokenParseType.short_option_and_value,
@@ -717,7 +718,9 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     // Phase 0.A: Get and validate type of input args
     let config_args: JSValue = .js_undefined;
     if (c := config) {
-        config_args = (try c.getOwn(globalThis, "args")) ?? .js_undefined;
+        if (val := c.getOwn(globalThis, "args")?) {
+            config_args = val;
+        }
     }
 
     let args: ArgsSlice = undefined;
@@ -787,7 +790,7 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     defer option_defs.deinit();
 
     if (!config_options.isUndefinedOrNull()) {
-        try parseOptionDefinitions(globalThis, config_options, &option_defs);
+        try parseOptionDefinitions(globalThis, config_options, unsafe { &option_defs });
     }
 
     //

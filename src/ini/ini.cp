@@ -734,7 +734,8 @@ pub const Parser = struct {
                     if (bun.strings.hasPrefixComptime(key, "//")) {
                         const optnames = comptime brk: {
                             const names = std.meta.fieldNames(Item.Opt);
-                            let names2: [names.len]StrZ = undefined;
+                            const names_len = names.len;
+                            let names2: [names_len]StrZ = undefined;
                             // we need to make sure to reverse this
                             // because _auth could match when it actually had _authToken
                             // so go backwards since _authToken is last
@@ -824,7 +825,7 @@ pub const Parser = struct {
                                                 break :brk try parser.parseRegistryURLStringImpl(str);
                                             }
                                         }
-                                        return .none;
+                                        return Option(Item).none;
                                     },
                                 },
                             };
@@ -833,7 +834,7 @@ pub const Parser = struct {
                 }
             }
 
-            return .none;
+            return Option(Item).none;
         }
     };
 
@@ -938,7 +939,8 @@ const _Internal = struct {
                 let list = try allocator.alloc(Str, arr.items.len);
                 let i: usize = 0;
                 for (arr.items.slice()) |item| {
-                    list[i] = try item.asStringCloned(allocator) orelse continue;
+                    const cloned = item.asStringCloned(allocator)?;
+                    list[i] = cloned ?? continue;
                     i += 1;
                 }
 
@@ -1216,7 +1218,7 @@ const _Internal = struct {
                 {
                     // Apply config to default registry
                     const v: *bun.schema.api.NpmRegistry = brk: {
-                        if (install.default_registry) |*r| break :brk r;
+                        if (install.default_registry != null) break :brk &install.default_registry.?;
                         install.default_registry = bun.schema.api.NpmRegistry{
                             .password = "",
                             .token = "",

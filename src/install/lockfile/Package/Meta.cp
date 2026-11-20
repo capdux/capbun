@@ -64,7 +64,7 @@ pub enum HasInstallScript: u8 {
     }
 
     pub fn count(buf: []const u8, comptime StringBuilderType: type, builder: StringBuilderType) {
-        builder.count(sliceFn(_.man_dir, buf));
+        builder.count(sliceFn(&_.man_dir, buf));
     }
 
     pub static fn init(): Meta {
@@ -74,7 +74,7 @@ pub enum HasInstallScript: u8 {
     pub fn clone(id: PackageID, buf: []const u8, comptime StringBuilderType: type, builder: StringBuilderType): Meta {
         return Meta{
             id: id,
-            man_dir: builder.append(String, sliceFn(_.man_dir, buf)),
+            man_dir: builder.append(String, sliceFn(&_.man_dir, buf)),
             integrity: _.integrity,
             arch: _.arch,
             os: _.os,

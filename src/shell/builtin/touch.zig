@@ -73,7 +73,7 @@ pub const ExecState = struct {
     output_done: usize = 0,
     output_waiting: usize = 0,
     started_output_queue: bool = false,
-    args: []const [*:0]u8,
+    args: []const [*:0]const u8,
     err: ?jsc.SystemError = null,
 };
 
@@ -87,7 +87,7 @@ pub const Opts = struct {
     timestamp: ?[]const u8 = null,
     time: ?[]const u8 = null,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]const u8) Result(FilepathArgs,ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -268,7 +268,7 @@ pub inline fn bltn(self: *Touch) *Builtin {
         const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("touch", self));
         return @fieldParentPtr("impl", impl_);
 }
-pub const FilepathArgs = ?[]const [*:0]u8;
+pub const FilepathArgs = ?[]const [*:0]const u8;
 const FlagParser = interpreter.FlagParser;
 const Interpreter = interpreter.Interpreter;
 const OutputSrc = interpreter.OutputSrc;

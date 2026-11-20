@@ -61,14 +61,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const options = @import("../bundler/options.zig");
@@ -156,8 +148,25 @@ _ = try self.addError(expr.loc, "Expected registry to be a URL string or an obje
 pub fn loadLogLevel(self: *BunfigParser, expr: js_ast.Expr) !void {
             _ = try self.expectString(expr);
             const Matcher = strings.ExactSizeMatcher(8);
-            self.bunfig.log_level = (__sw_blk_0: { const __disc_0 = Matcher.match((expr.asString(self.allocator)).?); _ = &__disc_0; { if ((cp_match_tag(__disc_0, .case) and cp_eq(@field(__disc_0, "case"), "debug"))) {  break :__sw_blk_0 cp_val(api.MessageLevel.debug); } } { if ((cp_match_tag(__disc_0, .case) and cp_eq(@field(__disc_0, "case"), "error"))) {  break :__sw_blk_0 cp_val(api.MessageLevel.err); } } { if ((cp_match_tag(__disc_0, .case) and cp_eq(@field(__disc_0, "case"), "warn"))) {  break :__sw_blk_0 cp_val(api.MessageLevel.warn); } } { if ((cp_match_tag(__disc_0, .case) and cp_eq(@field(__disc_0, "case"), "info"))) {  break :__sw_blk_0 cp_val(api.MessageLevel.info); } } {  _ = try self.addError(expr.loc, "Invalid log level, must be one of debug, error, or warn");
-            break :__sw_blk_0 cp_val(unreachable); }  unreachable; });
+            const log_level_m = Matcher.match((expr.asString(self.allocator)).?);
+            if ((log_level_m == Matcher.case("debug"))) {
+                self.bunfig.log_level = api.MessageLevel.debug;
+            } else {
+                if ((log_level_m == Matcher.case("error"))) {
+                    self.bunfig.log_level = api.MessageLevel.err;
+                } else {
+                    if ((log_level_m == Matcher.case("warn"))) {
+                        self.bunfig.log_level = api.MessageLevel.warn;
+                    } else {
+                        if ((log_level_m == Matcher.case("info"))) {
+                            self.bunfig.log_level = api.MessageLevel.info;
+                        } else {
+                            _ = try self.addError(expr.loc, "Invalid log level, must be one of debug, error, or warn");
+                            _ = unreachable;
+                        }
+                    }
+                }
+            }
     }
 
 pub fn loadPreload(self: *BunfigParser, allocator: std.mem.Allocator, expr: js_ast.Expr) !void {
@@ -314,7 +323,12 @@ pub fn parse(self: *BunfigParser, comptime cmd: Command.Tag) !void {
                     _ = &test_;
                     if (test_.get("root")) |root| {
                         _ = &root;
-                        if (self.ctx.debug.test_directory == null) { self.ctx.debug.test_directory = ""; }
+                        if (root.asString(self.allocator)) |td| {
+                            _ = &td;
+                            self.ctx.debug.test_directory = td;
+                        } else {
+                            self.ctx.debug.test_directory = "";
+                        }
                     }
                     if (test_.get("preload")) |expr| {
                         _ = &expr;
@@ -1232,11 +1246,7 @@ _ = try self.addError(env.loc, "Invalid env behavior, must be 'inline', 'disable
                             if ((!resolver.isPackagePath(path))) {
                                 _ = try self.addError(prop.key.?.loc, "Expected package name");
                             }
-                            _ = self.ctx.debug.package_bundle_map.putAssumeCapacity(path, (switch ((((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asBool()) orelse (false))) {
-true => options.BundlePackage.always,
-false => options.BundlePackage.never,
-else => unreachable,
-}));
+                            _ = self.ctx.debug.package_bundle_map.putAssumeCapacity(path, (if ((((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asBool()) orelse (false))) options.BundlePackage.always else options.BundlePackage.never));
                         }
                     }
                 }
@@ -1328,7 +1338,7 @@ else => unreachable,
                 _ = &expr;
                 if ((expr.data == .e_boolean)) {
                     if (((if (@typeInfo(@TypeOf(expr.data.e_boolean)) == .@"enum") @intFromEnum(expr.data.e_boolean) else expr.data.e_boolean.value) == false)) {
-                        self.ctx.debug.macros = .{ .disable = .{} };
+                        self.ctx.debug.macros = .{ .disable = undefined };
                     }
                 } else {
                     self.ctx.debug.macros = .{ .map = PackageJSON.parseMacrosJSON(allocator, expr, self.log, self.source) };
@@ -1403,15 +1413,15 @@ pub fn expectString(self: *BunfigParser, expr: js_ast.Expr) !void {
 
 },
 else => {
-_ = ((self.log.addErrorFmtOpts(self.allocator, "expected string but received {f}", .{ (if (comptime @typeInfo(js_ast.Expr.Tag) == .@"enum") @as(js_ast.Expr.Tag, @enumFromInt(expr.data)) else @as(js_ast.Expr.Tag, expr.data)) }, .{ .source = self.source, .loc = expr.loc, .redact_sensitive_information = true })) catch unreachable);
+_ = ((self.log.addErrorFmtOpts(self.allocator, "expected string but received {f}", .{ std.meta.activeTag(expr.data) }, .{ .source = self.source, .loc = expr.loc, .redact_sensitive_information = true })) catch unreachable);
             return error.@"Invalid Bunfig";
 },
 }
     }
 
 pub fn expect(self: *BunfigParser, expr: js_ast.Expr, token: js_ast.Expr.Tag) !void {
-            if (((if (comptime @typeInfo(js_ast.Expr.Tag) == .@"enum") @as(js_ast.Expr.Tag, @enumFromInt(expr.data)) else @as(js_ast.Expr.Tag, expr.data)) != token)) {
-                _ = ((self.log.addErrorFmtOpts(self.allocator, "expected {f} but received {f}", .{ token, (if (comptime @typeInfo(js_ast.Expr.Tag) == .@"enum") @as(js_ast.Expr.Tag, @enumFromInt(expr.data)) else @as(js_ast.Expr.Tag, expr.data)) }, .{ .source = self.source, .loc = expr.loc, .redact_sensitive_information = true })) catch unreachable);
+            if ((std.meta.activeTag(expr.data) != token)) {
+                _ = ((self.log.addErrorFmtOpts(self.allocator, "expected {f} but received {f}", .{ token, std.meta.activeTag(expr.data) }, .{ .source = self.source, .loc = expr.loc, .redact_sensitive_information = true })) catch unreachable);
                 return error.@"Invalid Bunfig";
             }
     }
@@ -1432,7 +1442,7 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, ctx: Co
             _ = &parser;
             _ = try parser.parse(cmd);
     }
-    const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
+    pub const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
     const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
     const Parser = BunfigParser;
 };

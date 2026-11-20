@@ -391,7 +391,7 @@ buf = try bun.jsc.fromJSHostCall(global, @src(), Bun__allocUint8ArrayForCopy, .{
 },
 .ArrayBuffer => {
 buf = try bun.jsc.fromJSHostCall(global, @src(), Bun__allocArrayBufferForCopy, .{ global, len, (blk: {
-            break :blk @as(**[*]u8, @ptrCast(@alignCast(&(ptr))));
+            break :blk @ptrCast((&ptr));
 
 }) });
 },

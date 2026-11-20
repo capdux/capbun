@@ -31,6 +31,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -257,7 +258,7 @@ pub fn verifyGit(cwd: []const u8, pm: *PackageManager) !void {
                 pm.options.git_tag_version = false;
                 return;
             }
-            if (((!pm.options.force) and try (!isGitClean(cwd)))) {
+            if (((!pm.options.force) and (!try isGitClean(cwd)))) {
                 _ = Output.errGeneric("Git working directory not clean.", .{});
                 _ = Global.exit(1);
             }
@@ -322,13 +323,7 @@ pub fn showHelp(ctx: Command.Context, pm: *PackageManager, cwd: []const u8) bun.
             defer {
             _ = ctx.allocator.free(prerelease_version);
             }
-            const increment_help_text: []const u8 = "";
-            _ = "<b>Increment<r>:";
-            _ = "  <cyan>patch<r>      <d>{s} → {s}<r>";
-            _ = "  <cyan>minor<r>      <d>{s} → {s}<r>";
-            _ = "  <cyan>major<r>      <d>{s} → {s}<r>";
-            _ = "  <cyan>prerelease<r> <d>{s} → {s}<r>";
-            _ = "";
+            const increment_help_text: []const u8 = "\n<b>Increment<r>:\n  <cyan>patch<r>      <d>{s} → {s}<r>\n  <cyan>minor<r>      <d>{s} → {s}<r>\n  <cyan>major<r>      <d>{s} → {s}<r>\n  <cyan>prerelease<r> <d>{s} → {s}<r>\n";
             _ = Output.pretty(increment_help_text, .{ current_version, patch_version, current_version, minor_version, current_version, major_version, current_version, prerelease_version });
             if (((strings.indexOfChar(current_version, 45) != null) or (pm.options.preid.len > 0))) {
                 const prepatch_version = try calculateNewVersion(ctx.allocator, current_version, .prepatch, null, pm.options.preid, cwd);
@@ -343,33 +338,14 @@ pub fn showHelp(ctx: Command.Context, pm: *PackageManager, cwd: []const u8) bun.
                 defer {
                 _ = ctx.allocator.free(premajor_version);
                 }
-                const prerelease_help_text: []const u8 = "  <cyan>prepatch<r>   <d>{s} → {s}<r>";
-                _ = "  <cyan>preminor<r>   <d>{s} → {s}<r>";
-                _ = "  <cyan>premajor<r>   <d>{s} → {s}<r>";
-                _ = "";
+                const prerelease_help_text: []const u8 = "  <cyan>prepatch<r>   <d>{s} → {s}<r>\n  <cyan>preminor<r>   <d>{s} → {s}<r>\n  <cyan>premajor<r>   <d>{s} → {s}<r>\n";
                 _ = Output.pretty(prerelease_help_text, .{ current_version, prepatch_version, current_version, preminor_version, current_version, premajor_version });
             }
             const beta_prerelease_version = try calculateNewVersion(ctx.allocator, current_version, .prerelease, null, "beta", cwd);
             defer {
             _ = ctx.allocator.free(beta_prerelease_version);
             }
-            const set_specific_version_help_text: []const u8 = "  <cyan>from-git<r>   <d>Use version from latest git tag<r>";
-            _ = "  <blue>1.2.3<r>      <d>Set specific version<r>";
-            _ = "";
-            _ = "<b>Options<r>:";
-            _ = "  <cyan>--no-git-tag-version<r> <d>Skip git operations<r>";
-            _ = "  <cyan>--allow-same-version<r> <d>Prevents throwing error if version is the same<r>";
-            _ = "  <cyan>--message<d>=\\<val\\><r>, <cyan>-m<r>  <d>Custom commit message, use %s for version substitution<r>";
-            _ = "  <cyan>--preid<d>=\\<val\\><r>        <d>Prerelease identifier (i.e beta → {s})<r>";
-            _ = "  <cyan>--force<r>, <cyan>-f<r>          <d>Bypass dirty git history check<r>";
-            _ = "";
-            _ = "<b>Examples<r>:";
-            _ = "  <d>$<r> <b><green>bun pm version<r> <cyan>patch<r>";
-            _ = "  <d>$<r> <b><green>bun pm version<r> <blue>1.2.3<r> <cyan>--no-git-tag-version<r>";
-            _ = "  <d>$<r> <b><green>bun pm version<r> <cyan>prerelease<r> <cyan>--preid<r> <blue>beta<r> <cyan>--message<r> <blue>\"Release beta: %s\"<r>";
-            _ = "";
-            _ = "More info: <magenta>https://bun.com/docs/cli/pm#version<r>";
-            _ = "";
+            const set_specific_version_help_text: []const u8 = "  <cyan>from-git<r>   <d>Use version from latest git tag<r>\n  <blue>1.2.3<r>      <d>Set specific version<r>\n\n<b>Options<r>:\n  <cyan>--no-git-tag-version<r> <d>Skip git operations<r>\n  <cyan>--allow-same-version<r> <d>Prevents throwing error if version is the same<r>\n  <cyan>--message<d>=\\<val\\><r>, <cyan>-m<r>  <d>Custom commit message, use %s for version substitution<r>\n  <cyan>--preid<d>=\\<val\\><r>        <d>Prerelease identifier (i.e beta → {s})<r>\n  <cyan>--force<r>, <cyan>-f<r>          <d>Bypass dirty git history check<r>\n\n<b>Examples<r>:\n  <d>$<r> <b><green>bun pm version<r> <cyan>patch<r>\n  <d>$<r> <b><green>bun pm version<r> <blue>1.2.3<r> <cyan>--no-git-tag-version<r>\n  <d>$<r> <b><green>bun pm version<r> <cyan>prerelease<r> <cyan>--preid<r> <blue>beta<r> <cyan>--message<r> <blue>\"Release beta: %s\"<r>\n\nMore info: <magenta>https://bun.com/docs/cli/pm#version<r>\n";
             _ = Output.pretty(set_specific_version_help_text, .{ beta_prerelease_version });
             _ = Output.flush();
     }
@@ -415,37 +391,37 @@ pub fn calculateNewVersion(allocator: std.mem.Allocator, current_str: []const u8
     }
 
 pub fn incrementVersion(allocator: std.mem.Allocator, current_str: []const u8, current: Semver.Version.ParseResult, version_type: PmVersionType, preid: []const u8) bun.OOM![]const u8 {
-            var new_version = current.version.min();
+            var new_version: Semver.Version = current.version.min();
             _ = &new_version;
             switch (version_type) {
 .patch => {
-return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ (new_version).?.major, (new_version).?.minor, ((new_version).?.patch + 1) });
+return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ new_version.major, new_version.minor, (new_version.patch + 1) });
 },
 .minor => {
-return std.fmt.allocPrint(allocator, "{d}.{d}.0", .{ (new_version).?.major, ((new_version).?.minor + 1) });
+return std.fmt.allocPrint(allocator, "{d}.{d}.0", .{ new_version.major, (new_version.minor + 1) });
 },
 .major => {
-return std.fmt.allocPrint(allocator, "{d}.0.0", .{ ((new_version).?.major + 1) });
+return std.fmt.allocPrint(allocator, "{d}.0.0", .{ (new_version.major + 1) });
 },
 .prepatch => {
 if ((preid.len > 0)) {
-                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ (new_version).?.major, (new_version).?.minor, ((new_version).?.patch + 1), preid });
+                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ new_version.major, new_version.minor, (new_version.patch + 1), preid });
             } else {
-                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-0", .{ (new_version).?.major, (new_version).?.minor, ((new_version).?.patch + 1) });
+                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-0", .{ new_version.major, new_version.minor, (new_version.patch + 1) });
             }
 },
 .preminor => {
 if ((preid.len > 0)) {
-                return std.fmt.allocPrint(allocator, "{d}.{d}.0-{s}.0", .{ (new_version).?.major, ((new_version).?.minor + 1), preid });
+                return std.fmt.allocPrint(allocator, "{d}.{d}.0-{s}.0", .{ new_version.major, (new_version.minor + 1), preid });
             } else {
-                return std.fmt.allocPrint(allocator, "{d}.{d}.0-0", .{ (new_version).?.major, ((new_version).?.minor + 1) });
+                return std.fmt.allocPrint(allocator, "{d}.{d}.0-0", .{ new_version.major, (new_version.minor + 1) });
             }
 },
 .premajor => {
 if ((preid.len > 0)) {
-                return std.fmt.allocPrint(allocator, "{d}.0.0-{s}.0", .{ ((new_version).?.major + 1), preid });
+                return std.fmt.allocPrint(allocator, "{d}.0.0-{s}.0", .{ (new_version.major + 1), preid });
             } else {
-                return std.fmt.allocPrint(allocator, "{d}.0.0-0", .{ ((new_version).?.major + 1) });
+                return std.fmt.allocPrint(allocator, "{d}.0.0-0", .{ (new_version.major + 1) });
             }
 },
 .prerelease => {
@@ -456,26 +432,26 @@ if (current.version.tag.hasPre()) {
                     _ = &dot_index;
                     const number_str = current_prerelease[(dot_index + 1)..];
                     const next_num = (blk_catch_7: { break :blk_catch_7 ((std.fmt.parseInt(u32, number_str, 10)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 0; }); });
-                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch, identifier, (next_num + 1) });
+                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ new_version.major, new_version.minor, new_version.patch, identifier, (next_num + 1) });
                 } else {
                     const num = (blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(u32, current_prerelease, 10)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); });
                     if (num) |n| {
                         _ = &n;
                         if ((preid.len > 0)) {
-                            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch, preid, (n + 1) });
+                            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ new_version.major, new_version.minor, new_version.patch, preid, (n + 1) });
                         } else {
-                            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{d}", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch, (n + 1) });
+                            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{d}", .{ new_version.major, new_version.minor, new_version.patch, (n + 1) });
                         }
                     } else {
-                        return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.1", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch, identifier });
+                        return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.1", .{ new_version.major, new_version.minor, new_version.patch, identifier });
                     }
                 }
             } else {
-                (new_version).?.patch = ((new_version).?.patch + 1);
+                new_version.patch = (new_version.patch + 1);
                 if ((preid.len > 0)) {
-                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch, preid });
+                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ new_version.major, new_version.minor, new_version.patch, preid });
                 } else {
-                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-0", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch });
+                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-0", .{ new_version.major, new_version.minor, new_version.patch });
                 }
             }
 },
@@ -483,7 +459,7 @@ else => {
 
 },
 }
-            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ (new_version).?.major, (new_version).?.minor, (new_version).?.patch });
+            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ new_version.major, new_version.minor, new_version.patch });
     }
 
 pub fn isGitClean(cwd: []const u8) bun.OOM!bool {
@@ -493,7 +469,7 @@ pub fn isGitClean(cwd: []const u8) bun.OOM!bool {
             _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             _ = Global.exit(1);
 });
-            const proc = (blk_catch_9: { break :blk_catch_9 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "status", "--porcelain" }), .stdout = .buffer, .stderr = .ignore, .stdin = .ignore, .cwd = cwd, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
+            const proc = (blk_catch_9: { break :blk_catch_9 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "status", "--porcelain" }), .stdout = .buffer, .stderr = .ignore, .stdin = .ignore, .cwd = cwd, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             break :blk_catch_9 Global.exit(1); }); });
             switch (proc) {
 .err => |e| {
@@ -513,7 +489,7 @@ pub fn getVersionFromGit(allocator: std.mem.Allocator, cwd: []const u8) bun.OOM!
             _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             _ = Global.exit(1);
 });
-            const proc = (blk_catch_10: { break :blk_catch_10 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "describe", "--tags", "--abbrev=0" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
+            const proc = (blk_catch_10: { break :blk_catch_10 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "describe", "--tags", "--abbrev=0" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             break :blk_catch_10 Global.exit(1); }); });
             switch (proc) {
 .err => |e| {
@@ -546,7 +522,7 @@ pub fn gitCommitAndTag(allocator: std.mem.Allocator, version: []const u8, custom
             _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             _ = Global.exit(1);
 });
-            const stage_proc = (blk_catch_11: { break :blk_catch_11 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "add", "package.json" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to stage package.json: {s}", .{ @errorName(e) });
+            const stage_proc = (blk_catch_11: { break :blk_catch_11 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "add", "package.json" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to stage package.json: {s}", .{ @errorName(e) });
             break :blk_catch_11 Global.exit(1); }); });
             switch (stage_proc) {
 .err => |e| {
@@ -571,7 +547,7 @@ if ((!result.isOK())) {
                     }
                     var index: usize = 0;
                     _ = &index;
-                    while (strings.indexOfPos(custom, index, "%s")) |pos| {
+                    while (std.mem.indexOfPos(u8, custom, index, "%s")) |pos| {
                         _ = try replaced.appendSlice(custom[index..pos]);
                         _ = try replaced.appendSlice(version);
                         index = (pos + 2);
@@ -588,7 +564,7 @@ if ((!result.isOK())) {
             defer {
             _ = allocator.free(commit_message);
             }
-            const commit_proc = (blk_catch_12: { break :blk_catch_12 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "commit", "-m", commit_message }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("Git commit failed: {s}", .{ @errorName(e) });
+            const commit_proc = (blk_catch_12: { break :blk_catch_12 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "commit", "-m", commit_message }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Git commit failed: {s}", .{ @errorName(e) });
             break :blk_catch_12 Global.exit(1); }); });
             switch (commit_proc) {
 .err => |e| {
@@ -606,7 +582,7 @@ if ((!result.isOK())) {
             defer {
             _ = allocator.free(tag_name);
             }
-            const tag_proc = (blk_catch_13: { break :blk_catch_13 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "tag", tag_name }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |e| { _ = &e; _ = Output.errGeneric("Git tag failed: {s}", .{ @errorName(e) });
+            const tag_proc = (blk_catch_13: { break :blk_catch_13 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "tag", tag_name }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Git tag failed: {s}", .{ @errorName(e) });
             break :blk_catch_13 Global.exit(1); }); });
             switch (tag_proc) {
 .err => |e| {

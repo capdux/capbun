@@ -87,7 +87,7 @@ pub const Loader = struct {
     aws_credentials: ?s3.S3Credentials = null,
     did_load_ccache_path: bool = false,
     node_path_to_use_set_once: []const u8 = "",
-    has_no_clear_screen_cli_flag: ?bool = null,
+    pub var has_no_clear_screen_cli_flag: ?bool = null;
 
 pub fn iterator(self: *const @This()) Map.HashTable.Iterator {
             return self.map.iterator();
@@ -431,7 +431,7 @@ _ = @compileError("Implement getAs for this type");
     }
 
 pub fn hasSetNoClearTerminalOnReload(self: *const @This(), default_value: bool) bool {
-            return ((((self.has_no_clear_screen_cli_flag) orelse (self.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")))) orelse (default_value));
+            return ((((@This().has_no_clear_screen_cli_flag) orelse (self.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")))) orelse (default_value));
     }
 
 pub fn get(self: *const @This(), key: []const u8) ?[]const u8 {

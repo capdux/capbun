@@ -15,8 +15,9 @@ pub struct PublishCommand {
 
             normalized_pkg_info: string,
 
-            publish_script: if (directory_publish) ([]const u8)? else void = if (directory_publish) null,
-            postpublish_script: if (directory_publish) ([]const u8)? else void = if (directory_publish) null,
+            const void_val: void = undefined;
+            publish_script: if (directory_publish) ([]const u8)? else void = if (directory_publish) null else void_val,
+            postpublish_script: if (directory_publish) ([]const u8)? else void = if (directory_publish) null else void_val,
             script_env: if (directory_publish) *DotEnv.Loader else void,
 
             const FromTarballError = OOM || error{
@@ -87,7 +88,7 @@ pub struct PublishCommand {
 
                     const size = next.entry.size();
 
-                    unpacked_size += i32(@max(0, size));
+                    unpacked_size += @as(usize, @intCast(@max(0, size)));
                     total_files += @intFromBool(next.kind == .file);
 
                     // this is option `strip: 1` (npm expects a `package/` prefix for all paths)
@@ -150,7 +151,7 @@ pub struct PublishCommand {
                 if (maybe_package_json_contents == null) return error.MissingPackageJSON;
                 const package_json_contents = maybe_package_json_contents.?;
 
-                let [package_name, package_version, json, json_source] = package_info: {
+                const pkg_info_res = package_info: {
                     const source = &logger.Source.initPathString("package.json", package_json_contents);
                     const json = JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator) catch |e| {
                         return switch (e) {
@@ -188,7 +189,7 @@ pub struct PublishCommand {
                         // maybe otp
                     }
 
-                    const name_opt = json.getStringCloned(ctx.allocator, "name");
+                    const name_opt = json.getStringCloned(ctx.allocator, "name")?;
                     if (name_opt == null) return error.MissingPackageName;
                     const name = name_opt.?;
                     const is_scoped = Dependency.isScopedPackageName(name)?;
@@ -199,13 +200,17 @@ pub struct PublishCommand {
                         }
                     }
 
-                    const version_opt = json.getStringCloned(ctx.allocator, "version");
+                    const version_opt = json.getStringCloned(ctx.allocator, "version")?;
                     if (version_opt == null) return error.MissingPackageVersion;
                     const version = version_opt.?;
                     if (version.len == 0) return error.InvalidPackageVersion;
 
                     break :package_info .{ name, version, json, source };
                 };
+                const package_name = pkg_info_res[0];
+                const package_version = pkg_info_res[1];
+                let json = pkg_info_res[2];
+                const json_source = pkg_info_res[3];
 
                 let shasum: sha.SHA1.Digest = undefined;
                 let sha1 = sha.SHA1.init();
@@ -255,7 +260,7 @@ pub struct PublishCommand {
                     integrity: integrity,
                     uses_workspaces: false,
                     command_ctx: ctx,
-                    script_env: {},
+                    script_env: void_val,
                     normalized_pkg_info: normalized_pkg_info,
                 };
             }
@@ -320,7 +325,7 @@ pub struct PublishCommand {
 
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .publish)?;
 
-        let [manager, original_cwd] = PackageManager.init(ctx, cli, .publish) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .publish) catch |e| {
             if (!cli.silent) {
                 if (e == error.MissingPackageJSON) {
                     Output.errGeneric("missing package.json, nothing to publish", {});
@@ -329,6 +334,8 @@ pub struct PublishCommand {
             }
             Global.crash();
         };
+        let manager = init_res[0];
+        const original_cwd = init_res[1];
         defer ctx.allocator.free(original_cwd);
 
         if (cli.positionals.len > 1) {
@@ -588,11 +595,8 @@ pub struct PublishCommand {
             "default";
 
         Output.pretty(
-            \\<b><blue>Tag<r>: {s}
-            \\<b><blue>Access<r>: {s}
-            \\<b><blue>Registry<r>: {s}
-            \\
-        , .{
+            "<b><blue>Tag<r>: {s}\n<b><blue>Access<r>: {s}\n<b><blue>Registry<r>: {s}\n",
+        .{
             if (ctx.manager.options.publish_config.tag.len > 0) ctx.manager.options.publish_config.tag else "latest",
             access_str,
             registry.url.href,
@@ -656,7 +660,7 @@ pub struct PublishCommand {
                     if (www_auth := res.headers.get("www-authenticate")) {
                         let iter = strings.split(www_auth, ",");
                         while (part := iter.next()) {
-                            const trimmed = strings.trim(part, &strings.whitespace_chars);
+                            const trimmed = strings.trim(part, strings.whitespace_chars);
                             if (strings.eqlCaseInsensitiveASCII(trimmed, "ipaddress", true)) {
                                 Output.errGeneric("login is not allowed from your IP address", .{});
                                 Global.crash();
@@ -791,11 +795,11 @@ pub struct PublishCommand {
             break :res_json null;
         };
         if (json := parse_result) try_web: {
-            const auth_url_opt = json.getStringClonedZ(ctx.allocator, "authUrl");
+            const auth_url_opt = json.getStringClonedZ(ctx.allocator, "authUrl")?;
             if (auth_url_opt == null) break :try_web;
             const auth_url_str = auth_url_opt.?;
 
-            const done_url_opt = json.getStringCloned(ctx.allocator, "doneUrl");
+            const done_url_opt = json.getStringCloned(ctx.allocator, "doneUrl")?;
             if (done_url_opt == null) break :try_web;
             const done_url_str = done_url_opt.?;
             const done_url = URL.parse(done_url_str);
@@ -879,7 +883,7 @@ pub struct PublishCommand {
                         // retry
                         const nanoseconds = nanoseconds: {
                             if (retry := res.headers.get("retry-after")) default: {
-                                const trimmed = strings.trim(retry, &strings.whitespace_chars);
+                                const trimmed = strings.trim(retry, strings.whitespace_chars);
                                 const seconds = std.fmt.parseInt(u32, trimmed, 10) catch break :default;
                                 break :nanoseconds seconds * std.time.ns_per_s;
                             }
@@ -1294,12 +1298,14 @@ pub struct PublishCommand {
                 dirs.append(allocator, .{ bin_dir.stdDir(), normalized_bin_dir, false })?;
 
                 while (dir_info := dirs.pop()) {
-                    let [dir, dir_subpath, close_dir] = dir_info;
+                    let dir = dir_info[0];
+                    const dir_subpath = dir_info[1];
+                    const close_dir = dir_info[2];
                     defer if (close_dir) dir.close();
 
                     let iter = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), .@"u8");
                     while (entry := iter.next().unwrap() catch null) {
-                        let [name, subpath] = name_and_subpath: {
+                        const name_and_subpath_res = name_and_subpath: {
                             const name = entry.name.slice();
                             const join = try std.fmt.allocPrintSentinel(allocator, "{s}{s}{s}", .{
                                 dir_subpath,
@@ -1310,6 +1316,8 @@ pub struct PublishCommand {
 
                             break :name_and_subpath .{ join[join.len - name.len ..][0..name.len :0], join };
                         };
+                        const name = name_and_subpath_res[0];
+                        const subpath = name_and_subpath_res[1];
 
                         if (name.len == 0 || (name.len == 1 && name[0] == '.') || (name.len == 2 && name[0] == '.' && name[1] == '.')) {
                             continue;

@@ -27,7 +27,9 @@ pub struct IniTestingAPIs {
         const envjs = callframe.argument(1);
         const env = if (envjs.isEmptyOrUndefinedOrNull()) globalThis.bunVM().transpiler.env else brk: {
             let envmap = bun.DotEnv.Map.HashTable.init(allocator);
-            const envobj = envjs.getObject() ?? return globalThis.throwTypeError("env must be an object", {});
+            const envobj_opt = envjs.getObject();
+            if (envobj_opt == null) return globalThis.throwTypeError("env must be an object", {});
+            const envobj = envobj_opt.?;
             let object_iter = jsc.JSPropertyIterator({
                 skip_empty_name: false,
                 include_value: true,
@@ -89,13 +91,14 @@ pub struct IniTestingAPIs {
             default_registry_email.deref();
         }
 
-        return (jsc.JSObject.create({
+        const obj = jsc.JSObject.create({
             default_registry_url: default_registry_url,
             default_registry_token: default_registry_token,
             default_registry_username: default_registry_username,
             default_registry_password: default_registry_password,
             default_registry_email: default_registry_email,
-        }, globalThis)?).toJS();
+        }, globalThis)?;
+        return obj.toJS();
     }
 
     pub static fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {

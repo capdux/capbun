@@ -137,7 +137,7 @@ pub const StaticRouteEntry = struct {
         return this.path.len + this.route.memoryCost();
     }
 
-    pub fn clone(this: StaticRouteEntry) !StaticRouteEntry {
+    pub fn clone(this: StaticRouteEntry): StaticRouteEntry! {
         this.route.ref();
 
         return .{

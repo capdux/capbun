@@ -143,7 +143,8 @@ pub struct RuntimeImports {
                 return std.mem.order(u8, a, b) == .lt;
             }
         };
-        std.sort.pdq(string, &list, {}, Sorter.compare);
+        const empty_sort_ctx: void = undefined;
+        std.sort.pdq(string, &list, empty_sort_ctx, Sorter.compare);
         break :brk list;
     };
 

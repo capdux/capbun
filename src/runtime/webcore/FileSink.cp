@@ -656,7 +656,7 @@ pub struct TestingAPIs {
 }
 
 @c pub export unsafe fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) {
-    const this_sink: *FileSink = FileSink.JSSink.fromJS(jsvalue) orelse return;
+    const this_sink: *FileSink = @ptrCast(@alignCast(FileSink.JSSink.fromJS(jsvalue) orelse return));
 
     if (!Environment.isWindows) {
         this_sink.force_sync = true;
@@ -693,4 +693,11 @@ fn onRejectStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue !
     defer this_sink.deref();
     this_sink.handleRejectStream(globalThis, e);
     return JSValue.js_undefined;
+}
+
+comptime {
+    const resolve_fn = jsc.toJSHostFn(onResolveStream);
+    @export(&resolve_fn, .{ name: "Bun__FileSink__onResolveStream" });
+    const reject_fn = jsc.toJSHostFn(onRejectStream);
+    @export(&reject_fn, .{ name: "Bun__FileSink__onRejectStream" });
 }

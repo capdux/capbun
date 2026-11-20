@@ -92,13 +92,13 @@ pub fn fromStringArrayGroup(list: *List, expr: *const ast.Expr, allocator: std.m
     }
 
 pub fn fromPackageJSON(list: *List, expr: *const ast.Expr, allocator: std.mem.Allocator) !void {
-            if (expr.get("nativeDependencies")) |*native_deps_expr| {
+            if (expr.get("nativeDependencies")) |native_deps_expr| {
                 _ = &native_deps_expr;
-                list.disable_default_native_binlinks = try PostinstallOptimizer.fromStringArrayGroup(list, (native_deps_expr.*), allocator, .native_binlink);
+                list.disable_default_native_binlinks = try PostinstallOptimizer.fromStringArrayGroup(list, (&native_deps_expr), allocator, .native_binlink);
             }
-            if (expr.get("ignoreScripts")) |*ignored_scripts_expr| {
+            if (expr.get("ignoreScripts")) |ignored_scripts_expr| {
                 _ = &ignored_scripts_expr;
-                list.disable_default_ignore = try PostinstallOptimizer.fromStringArrayGroup(list, (ignored_scripts_expr.*), allocator, .ignore);
+                list.disable_default_ignore = try PostinstallOptimizer.fromStringArrayGroup(list, (&ignored_scripts_expr), allocator, .ignore);
             }
     }
 
