@@ -202,13 +202,13 @@ pub const S3HttpSimpleTask = struct {
     response_buffer: bun.MutableString = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } },
     result: bun.http.HTTPClientResult = .{},
     concurrent_task: jsc.ConcurrentTask = .{},
-    range: []const ?u8,
+    range: ?[]const u8 = null,
     proxy_url: []const u8 = "",
     poll_ref: bun.Async.KeepAlive = bun.Async.KeepAlive.init(),
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }; self_ptr.result = .{}; self_ptr.concurrent_task = .{}; self_ptr.proxy_url = ""; self_ptr.poll_ref = bun.Async.KeepAlive.init(); return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }; self_ptr.result = .{}; self_ptr.concurrent_task = .{}; self_ptr.range = null; self_ptr.proxy_url = ""; self_ptr.poll_ref = bun.Async.KeepAlive.init(); return self_ptr; }
 
-pub fn init(self: *S3HttpSimpleTask, http: bun.http.AsyncHTTP, vm: *jsc.VirtualMachine, sign_result: SignResult, headers: bun.http.Headers, callback_context: *anyopaque, callback: Callback, response_buffer: bun.MutableString, result: bun.http.HTTPClientResult, concurrent_task: jsc.ConcurrentTask, range: []const ?u8, proxy_url: []const u8, poll_ref: bun.Async.KeepAlive) void {
+pub fn init(self: *S3HttpSimpleTask, http: bun.http.AsyncHTTP, vm: *jsc.VirtualMachine, sign_result: SignResult, headers: bun.http.Headers, callback_context: *anyopaque, callback: Callback, response_buffer: bun.MutableString, result: bun.http.HTTPClientResult, concurrent_task: jsc.ConcurrentTask, range: ?[]const u8, proxy_url: []const u8, poll_ref: bun.Async.KeepAlive) void {
         var __http_moved = false; _ = &__http_moved;
         defer if (!__http_moved) { const __T = @TypeOf(http); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = http.release() catch {}; } else { http.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = http; _drop_val.release(); } };
         var __sign_result_moved = false; _ = &__sign_result_moved;
@@ -393,7 +393,7 @@ _ = try self.errorWithBody(.failure);
 .delete => |cb| {
 switch (response.status_code) {
 200, 204 => {
-_ = try cb(.{ .success = .{} }, self.callback_context);
+_ = try cb(.{ .success = undefined }, self.callback_context);
 },
 404 => {
 _ = try self.errorWithBody(.not_found);
@@ -428,7 +428,7 @@ _ = try self.errorWithBody(.failure);
 .upload => |cb| {
 switch (response.status_code) {
 200 => {
-_ = try cb(.{ .success = .{} }, self.callback_context);
+_ = try cb(.{ .success = undefined }, self.callback_context);
 },
 else => {
 _ = try self.errorWithBody(.failure);
@@ -452,7 +452,7 @@ _ = try self.errorWithBody(.failure);
 },
 .commit => |cb| {
 if (try (!self.failIfContainsError(response.status_code))) {
-                _ = try cb(.{ .success = .{} }, self.callback_context);
+                _ = try cb(.{ .success = undefined }, self.callback_context);
             }
 },
 .part => |cb| {
@@ -517,7 +517,7 @@ const strings = bun.strings;
 const JSTerminatedError = bun.JSTerminated;
 
 pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleRequestOptions, callback: S3HttpSimpleTask.Callback, callback_context: *anyopaque) JSTerminatedError!void {
-        const sign_options: __CpObj_path___const_u8_method_bun_http_Method_search_params__OptStr_content_disposition__OptStr_content_encoding__OptStr_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = options.path, .method = options.method, .search_params = options.search_params, .content_disposition = options.content_disposition, .content_encoding = options.content_encoding, .acl = options.acl, .storage_class = options.storage_class, .request_payer = options.request_payer };
+        const sign_options: S3Credentials.SignOptions = .{ .path = options.path, .method = options.method, .search_params = options.search_params, .content_disposition = options.content_disposition, .content_encoding = options.content_encoding, .acl = options.acl, .storage_class = options.storage_class, .request_payer = options.request_payer };
         var result = (blk_catch_2: { break :blk_catch_2 ((self.signRequest(sign_options, false, null)) catch |sign_err| { _ = &sign_err; if (options.range) |range_| {
             _ = &range_;
             _ = bun.default_allocator.free(range_);
@@ -569,4 +569,3 @@ pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleReque
         _ = task.http.schedule(bun.default_allocator, (&batch));
         _ = bun.http.http_thread.schedule(batch);
 }
-pub const __CpObj_path___const_u8_method_bun_http_Method_search_params__OptStr_content_disposition__OptStr_content_encoding__OptStr_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: bun.http.Method, search_params: ?OptStr, content_disposition: ?OptStr, content_encoding: ?OptStr, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };

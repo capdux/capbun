@@ -294,12 +294,11 @@ pub fn spawnMaybeSync(
 
                 override_env = true;
                 // If the env object does not include a $PATH, it must disable path lookup for argv[0]
-                let NEW_PATH: []const u8 = "";
+                let new_path_buf: [1][]const u8 = [""];
                 let envp_managed = env_array.toManaged(allocator);
-                let new_path_ptr = unsafe { &NEW_PATH };
-                appendEnvpFromJS(globalThis, object, &envp_managed, new_path_ptr)?;
+                appendEnvpFromJS(globalThis, object, &envp_managed, unsafe { @ptrCast(new_path_buf.ptr) })?;
                 env_array = envp_managed.moveToUnmanaged();
-                PATH = NEW_PATH;
+                PATH = new_path_buf[0];
             }
 
             getArgv(globalThis, cmd_value, PATH, cwd, &argv0, allocator, &argv)?;

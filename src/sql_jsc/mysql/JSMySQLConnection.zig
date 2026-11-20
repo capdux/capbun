@@ -803,7 +803,7 @@ if (self.#js_value.tryGet()) |value| {
         _ = request.reject(self.getQueriesArray(), @errorCast(e));
         return; }); });
         const pending_value = ((request.getPendingValue()) orelse (.js_undefined));
-        const row_value = try row.toJS(self.#globalObject, pending_value, structure, statement.fields_flags, result_mode, cached_structure);
+        const row_value = (blk_catch_5: { break :blk_catch_5 ((row.toJS(self.#globalObject, pending_value, structure, statement.fields_flags, result_mode, cached_structure)) catch |e| { _ = &e; return @errorCast(e); }); });
         if (self.#globalObject.tryTakeException()) |e| {
             _ = &e;
             _ = self.#connection.queue.markCurrentRequestAsFinished(request);

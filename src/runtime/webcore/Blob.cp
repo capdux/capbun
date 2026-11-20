@@ -2035,6 +2035,27 @@ pub struct BlobExternalSharedDescriptor {
         return null;
     }
 
+    fn getMimeTypeOrContentType(): bun.http.MimeType? {
+        if (_.content_type_was_set) {
+            return bun.http.MimeType.init(_.content_type, null, null);
+        }
+        if (store := _.store) {
+            return store.mime_type;
+        }
+        return null;
+    }
+
+    fn getLoader(jsc_vm: *VirtualMachine): bun.options.Loader? {
+        if (filename := _.getFileName()) {
+            const current_path = bun.fs.Path.init(filename);
+            return current_path.loader(&jsc_vm.transpiler.options.loaders) ?? .tsx;
+        } else if (mime_type := _.getMimeTypeOrContentType()) {
+            return .fromMimeType(mime_type);
+        } else {
+            return .tsx;
+        }
+    }
+
     fn needsToReadFile(): bool {
         if (store := _.store) {
             return store.data == .file;

@@ -279,9 +279,9 @@ done_count = (done_count + 1);
                     }
                     const package = pm.lockfile.packages.get(package_id);
                     _ = bun.assert((package.resolution.tag != .root));
-                    var name_and_version_hash: ?u64 = null;
+                    var name_and_version_hash: u64 = 0;
                     _ = &name_and_version_hash;
-                    var patchfile_hash: ?u64 = null;
+                    var patchfile_hash: u64 = 0;
                     _ = &patchfile_hash;
                     switch (pm.determinePreinstallState(package, pm.lockfile, (&name_and_version_hash), (&patchfile_hash))) {
 .done => {
@@ -342,7 +342,7 @@ pub const AsyncModule = struct {
     loader: api.Loader,
     hash: u32 = std.math.maxInt(u32),
     globalThis: *JSGlobalObject = undefined,
-    @"arena": *bun.ArenaAllocator,
+    @"arena": ?*bun.ArenaAllocator,
     poll_ref: Async.KeepAlive = .{},
     any_task: jsc.AnyTask = undefined,
 
@@ -449,14 +449,14 @@ pub fn fulfill(globalThis: *JSGlobalObject, promise: JSValue, resolved_source: *
 
 pub fn resolveError(self: *AsyncModule, vm: *VirtualMachine, import_record_id: u32, result: PackageResolveError) !void {
             const globalThis = self.globalThis;
-            const msg: []u8 = (if ((result.err == error.PackageManifestHTTP400)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 400 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.err == error.PackageManifestHTTP401)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 401 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.err == error.PackageManifestHTTP402)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 402 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.err == error.PackageManifestHTTP403)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 403 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.err == error.PackageManifestHTTP404)) try std.fmt.allocPrint(bun.default_allocator, "Package '{s}' was not found", .{ result.name }) else (if ((result.err == error.PackageManifestHTTP4xx)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 4xx while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.err == error.PackageManifestHTTP5xx)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 5xx while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if (((result.err == error.DistTagNotFound) or (result.err == error.NoMatchingVersion))) brk: {
-            const prefix: []const u8 = (if ((((result.err == error.NoMatchingVersion) and (result.version.tag == .npm)) and (if (@typeInfo(@TypeOf(result.version)) == .@"enum") @intFromEnum(result.version) else result.version.value).npm.version.isExact())) "Version not found" else (if (((result.version.tag == .npm) and (!(if (@typeInfo(@TypeOf(result.version)) == .@"enum") @intFromEnum(result.version) else result.version.value).npm.version.isExact()))) "No matching version found" else "No match found"));
+            const msg: []u8 = (if ((result.e == error.PackageManifestHTTP400)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 400 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.e == error.PackageManifestHTTP401)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 401 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.e == error.PackageManifestHTTP402)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 402 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.e == error.PackageManifestHTTP403)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 403 while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.e == error.PackageManifestHTTP404)) try std.fmt.allocPrint(bun.default_allocator, "Package '{s}' was not found", .{ result.name }) else (if ((result.e == error.PackageManifestHTTP4xx)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 4xx while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if ((result.e == error.PackageManifestHTTP5xx)) try std.fmt.allocPrint(bun.default_allocator, "HTTP 5xx while resolving package '{s}' at '{s}'", .{ result.name, result.url }) else (if (((result.e == error.DistTagNotFound) or (result.e == error.NoMatchingVersion))) brk: {
+            const prefix: []const u8 = (if ((((result.e == error.NoMatchingVersion) and (result.version.tag == .npm)) and (if (@typeInfo(@TypeOf(result.version)) == .@"enum") @intFromEnum(result.version) else result.version.value).npm.version.isExact())) "Version not found" else (if (((result.version.tag == .npm) and (!(if (@typeInfo(@TypeOf(result.version)) == .@"enum") @intFromEnum(result.version) else result.version.value).npm.version.isExact()))) "No matching version found" else "No match found"));
             break :brk try std.fmt.allocPrint(bun.default_allocator, "{s} '{s}' for package '{s}' (but package exists)", .{ prefix, vm.packageManager().lockfile.str((&result.version.literal)), result.name });
-} else try std.fmt.allocPrint(bun.default_allocator, "{s} resolving package '{s}' at '{s}'", .{ bun.asByteSlice(@errorName(result.err)), result.name, result.url })))))))));
+} else try std.fmt.allocPrint(bun.default_allocator, "{s} resolving package '{s}' at '{s}'", .{ bun.asByteSlice(@errorName(result.e)), result.name, result.url })))))))));
             defer {
             _ = bun.default_allocator.free(msg);
             }
-            const name: []const u8 = (__sw_blk_1: { const __disc_1 = result.err; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .NoMatchingVersion)) {  break :__sw_blk_1 cp_val("PackageVersionNotFound"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .DistTagNotFound)) {  break :__sw_blk_1 cp_val("PackageTagNotFound"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .PackageManifestHTTP403)) {  break :__sw_blk_1 cp_val("PackageForbidden"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .PackageManifestHTTP404)) {  break :__sw_blk_1 cp_val("PackageNotFound"); } } {  break :__sw_blk_1 cp_val("PackageResolveError"); }  unreachable; });
+            const name: []const u8 = (if ((result.e == error.NoMatchingVersion)) "PackageVersionNotFound" else (if ((result.e == error.DistTagNotFound)) "PackageTagNotFound" else (if ((result.e == error.PackageManifestHTTP403)) "PackageForbidden" else (if ((result.e == error.PackageManifestHTTP404)) "PackageNotFound" else "PackageResolveError"))));
             var error_instance = ZigString.init(msg).withEncoding().toErrorInstance(globalThis);
             _ = &error_instance;
             if ((result.url.len > 0)) {
@@ -492,7 +492,7 @@ pub fn downloadError(self: *AsyncModule, vm: *VirtualMachine, import_record_id: 
             defer {
             _ = bun.default_allocator.free(msg);
             }
-            const name: []const u8 = (__sw_blk_2: { const __disc_2 = result.err; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .TarballFailedToExtract)) {  break :__sw_blk_2 cp_val("PackageExtractionError"); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .TarballHTTP403)) {  break :__sw_blk_2 cp_val("TarballForbiddenError"); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .TarballHTTP404)) {  break :__sw_blk_2 cp_val("TarballNotFoundError"); } } {  break :__sw_blk_2 cp_val("TarballDownloadError"); }  unreachable; });
+            const name: []const u8 = (__sw_blk_1: { const __disc_1 = result.err; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .TarballFailedToExtract)) {  break :__sw_blk_1 cp_val("PackageExtractionError"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .TarballHTTP403)) {  break :__sw_blk_1 cp_val("TarballForbiddenError"); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .TarballHTTP404)) {  break :__sw_blk_1 cp_val("TarballNotFoundError"); } } {  break :__sw_blk_1 cp_val("TarballDownloadError"); }  unreachable; });
             var error_instance = ZigString.init(msg).withEncoding().toErrorInstance(globalThis);
             _ = &error_instance;
             if ((result.url.len > 0)) {
@@ -576,8 +576,11 @@ pub fn resumeLoadingModule(self: *AsyncModule, log: *logger.Log) !ResolvedSource
 pub fn deinit(self: *AsyncModule) void {
             _ = self.promise.deinit();
             _ = self.parse_result.deinit();
-            _ = self.@"arena".deinit();
-            _ = self.globalThis.bunVM().allocator.destroy(self.@"arena");
+            if (self.@"arena") |a| {
+                _ = &a;
+                _ = a.deinit();
+                _ = self.globalThis.bunVM().allocator.destroy(a);
+            }
             _ = bun.default_allocator.free(self.string_buf);
     }
     pub const Id = u32;

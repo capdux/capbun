@@ -618,7 +618,7 @@ export class FetchTasklet {
                     defer x509.free();
                     const js_cert = X509.toJS(x509, globalObject) catch |e| {
                         if (e == error.OutOfMemory) {
-                            globalObject.throwOutOfMemory() catch {};
+                            if (globalObject.throwOutOfMemory() == error.JSError) {}
                         }
                         const check_result = globalObject.tryTakeException().?;
                         _.is_waiting_abort = _.result.has_more;
@@ -633,7 +633,7 @@ export class FetchTasklet {
                     defer hostname.deref();
                     const js_hostname = hostname.toJS(globalObject) catch |e| {
                         if (e == error.OutOfMemory) {
-                            globalObject.throwOutOfMemory() catch {};
+                            if (globalObject.throwOutOfMemory() == error.JSError) {}
                         }
                         const hostname_err_result = globalObject.tryTakeException().?;
                         _.is_waiting_abort = _.result.has_more;
@@ -823,7 +823,7 @@ export class FetchTasklet {
         let tasklet = cast(*FetchTasklet, ctx);
         if (tasklet.signal_store.aborted.load(.monotonic)) {
             return jsc.WebCore.DrainResult{
-                .aborted = {},
+                .aborted = undefined,
             };
         }
 
@@ -878,7 +878,7 @@ export class FetchTasklet {
         }
     }
 
-    fn onStreamCancelledCallback(ctx: *!?) {
+    static fn onStreamCancelledCallback(ctx: *!?) {
         let tasklet = cast(*FetchTasklet, ctx.?);
         if (tasklet.ignore_data) return;
         tasklet.ignoreRemainingResponseBody();

@@ -92,16 +92,16 @@ export enum RequestBodyBuffer {
     }
 
     pub fn allocatedSlice(*_): []u8 {
-        return switch (this.*) {
+        return switch (_.*) {
             .heap(heap) => &heap.buffer,
-            .stack(stack) => &stack.buffer,
+            .stack => unsafe { &(_.*.stack.buffer) },
         };
     }
 
     pub fn allocator(*_): std.mem.Allocator {
-        return switch (this.*) {
+        return switch (_.*) {
             .heap(heap) => heap.fixed_buffer_allocator.allocator(),
-            .stack(stack) => stack.get(),
+            .stack => unsafe { _.*.stack.get() },
         };
     }
 

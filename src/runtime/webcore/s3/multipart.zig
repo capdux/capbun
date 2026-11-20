@@ -349,7 +349,7 @@ pub fn deinit(self: *MultiPartUpload) void {
             _ = destroy(self);
     }
 
-pub fn singleSendUploadResponse(result: S3SimpleRequest.S3UploadResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn singleSendUploadResponse(result: S3SimpleRequest.S3UploadResult, self_any: *anyopaque) JSTerminatedError!void {
             const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
             if ((upload.state == .finished)) {
                 return;
@@ -565,7 +565,7 @@ defer {
 }
     }
 
-pub fn onRollbackMultiPartRequest(result: S3SimpleRequest.S3UploadResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn onRollbackMultiPartRequest(result: S3SimpleRequest.S3UploadResult, self_any: *anyopaque) JSTerminatedError!void {
             const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
             _ = log("onRollbackMultiPartRequest {s}", .{ upload.upload_id });
             switch (result) {

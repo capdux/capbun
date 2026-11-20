@@ -110,14 +110,20 @@ pub fn deinit(self: *RequestBodyBuffer) void {
 pub fn allocatedSlice(self: *RequestBodyBuffer) []u8 {
             return (switch (self.*) {
 .heap => |heap| (&heap.buffer),
-.stack => |stack| (&stack.buffer),
+.stack => (blk: {
+            break :blk (&self.*.stack.buffer);
+
+}),
 });
     }
 
 pub fn allocator(self: *RequestBodyBuffer) std.mem.Allocator {
             return (switch (self.*) {
 .heap => |heap| heap.fixed_buffer_allocator.allocator(),
-.stack => |stack| stack.get(),
+.stack => (blk: {
+            break :blk self.*.stack.get();
+
+}),
 });
     }
 

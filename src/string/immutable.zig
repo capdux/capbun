@@ -954,10 +954,9 @@ pub fn indexOfSigned(client: []const u8, str: []const u8) i32 {
         return (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))));
 }
 
-pub fn lastIndexBeforeChar(@"in": []const u8, char: u8, before: u8) ?usize {
-    _ = @"in";
-    _ = char;
-    _ = before;
+pub fn lastIndexBeforeChar(str: []const u8, char: u8, before: u8) ?usize {
+        const before_pos = ((indexOfChar(str, before)) orelse (str.len));
+        return lastIndexOfChar(str[0..before_pos], char);
 }
 
 pub fn lastIndexOfChar(self: []const u8, char: u8) ?usize {
@@ -1833,10 +1832,8 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
         if ((remaining.len == 0)) {
             return .{};
         }
-        var ranges = bun.BoundedArray(LineRange, line_range_count);
+        var ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
         _ = &ranges;
-        {
-        }
         var current_line: u32 = 0;
         _ = &current_line;
         const first_newline_or_nonascii_i = ((strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true)) orelse {
@@ -1912,10 +1909,9 @@ else => continue,
 
 };
             if (((ranges.len == line_range_count) and (current_line <= target_line))) {
-                var new_ranges = bun.BoundedArray(LineRange, line_range_count);
+                var new_ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
                 _ = &new_ranges;
-                {
-                }
+                _ = new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
                 ranges = new_ranges;
             }
             _ = ranges.appendAssumeCapacity(current_line_range);

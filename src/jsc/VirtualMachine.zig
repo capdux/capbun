@@ -1542,10 +1542,7 @@ pub fn fetchWithoutOnLoadPlugins(jsc_vm: *VirtualMachine, globalObject: *JSGloba
             _ = (blob.*).deinit();
         }
         }
-        const lr = (blk_catch_35: { break :blk_catch_35 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (blk: {
-        break :blk @as(?*jsc.WebCore.Blob, @ptrCast((&blob_to_deinit)));
-
-}), null)) catch |__ce_35| { _ = &__ce_35; return error.ModuleNotFound; }); });
+        const lr = (blk_catch_35: { break :blk_catch_35 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (&blob_to_deinit), null)) catch |__ce_35| { _ = &__ce_35; return error.ModuleNotFound; }); });
         var module_type: options.ModuleType = .unknown;
         _ = &module_type;
         if (lr.package_json) |pkg| {
@@ -2784,7 +2781,7 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
         if ((frames.len > 1)) {
             for (cp_mut_slice(&frames)) |*frame| {
                 _ = &frame;
-                if ((((frame.*) == top) or (frame.*).position.isInvalid())) {
+                if (((@intFromPtr((frame.*)) == @intFromPtr(top)) or (frame.*).position.isInvalid())) {
                     continue;
                 }
                 const source_url = (frame.*).source_url.toUTF8(bun.default_allocator);
@@ -2826,7 +2823,8 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         .js => JSValue,
         .zig_exception => *ZigException,
     }, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) !void {
-        const exception_holder = (if ((mode == .js)) ZigException.Holder.init() else null);
+        var exception_holder = (if ((mode == .js)) ZigException.Holder.init() else null);
+        _ = &exception_holder;
         var exception = (if ((mode == .js)) exception_holder.zigException() else error_instance);
         _ = &exception;
         defer {
@@ -2933,7 +2931,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                         continue;
                     }
                     top_frame = (blk: {
-                    break :blk (&(frame.*).*);
+                    break :blk @ptrFromInt(@intFromPtr((frame.*)));
 
 });
                     break;

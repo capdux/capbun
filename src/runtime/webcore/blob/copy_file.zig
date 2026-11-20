@@ -178,7 +178,7 @@ pub fn reject(self: *CopyFile, promise: *JSPromise) !void {
     }
 
 pub fn then(self: *CopyFile, promise: *JSPromise) !void {
-            _ = (self.source_store.?).?.deref();
+            _ = self.source_store.?.deref();
             if ((self.system_error != null)) {
                 _ = try self.reject(promise);
                 return;
@@ -332,7 +332,7 @@ pub fn doCopyFileRange(self: *CopyFile, use: TryWith, clear_append_if_invalid: b
             var has_unset_append = false;
             _ = &has_unset_append;
             if ((!canUseCopyFileRangeSyscall())) {
-                switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+                switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                 return errnoToZigErr(err.errno);
@@ -355,7 +355,7 @@ _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_writt
 
 },
 .NOSYS, .XDEV, .OPNOTSUPP => {
-switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                 return errnoToZigErr(err.errno);
@@ -379,7 +379,7 @@ if (clear_append_if_invalid) {
                     }
                 }
                 if ((total_written == 0)) {
-                    switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
@@ -413,7 +413,7 @@ switch (errno.getErrno()) {
 .BADF => {
 var total_written: u64 = 0;
             _ = &total_written;
-            switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", self.source_fd, self.destination_fd, 0, (&total_written))) {
+            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", self.source_fd, self.destination_fd, 0, (&total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
             return errnoToZigErr(err.errno);
@@ -615,7 +615,7 @@ self.system_error = err.toSystemError();
                 if (Environment.isFreeBSD) {
                     var total_written: u64 = 0;
                     _ = &total_written;
-                    switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", self.source_fd, self.destination_fd, 0, (&total_written))) {
+                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", self.source_fd, self.destination_fd, 0, (&total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                     _ = self.doClose();
@@ -934,7 +934,7 @@ pub fn resolvePromise(self: *CopyFileWindows, written: usize) void {
     }
 
 pub fn truncate(self: *CopyFileWindows) void {
-            var node_fs: WebCore.Node.fs.NodeFS = .{};
+            var node_fs: jsc.Node.fs.NodeFS = .{};
             _ = &node_fs;
             _ = node_fs.truncate(.{ .path = self.destination_file_store.data.file.pathlike, .len = @intCast(self.size) }, .sync);
     }

@@ -1408,7 +1408,8 @@ if ((!self.canPrepareQuery())) {
                     _ = self.requests.discard(1);
                     _ = debug("write query failed: {s}", .{ @errorName(e) });
                     continue; }); });
-                    _ = (blk_catch_19: { break :blk_catch_19 ((connection_writer.write(*const protocol.Sync)) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
+                    const sync_val = protocol.Sync;
+                    _ = (blk_catch_19: { break :blk_catch_19 ((connection_writer.write((&sync_val))) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
                         _ = &err_;
                         _ = req.onJSError(err_, self.globalObject);
                     } else {
@@ -1502,7 +1503,12 @@ const request_opt = self.current();
         switch (request.flags.result_mode) {
 .objects => {
 cached_structure = statement.structure(self.js_value, self.globalObject);
-        if (structure == null) { structure = .js_undefined; }
+        if (cached_structure.?.jsValue()) |s| {
+            _ = &s;
+            structure = s;
+        } else {
+            structure = .js_undefined;
+        }
 },
 .raw, .values => {
 
@@ -1724,7 +1730,9 @@ if ((self.authentication_state != .SASL)) {
         _ = self.flushData();
 },
 .SASLContinue => {
-var cont = *const auth.SASLContinue;
+var sasl_cont = auth.SASLContinue;
+        _ = &sasl_cont;
+        var cont = (&sasl_cont);
         _ = &cont;
         if ((self.authentication_state != .SASL)) {
             _ = debug("Unexpected SASLContinue for authentiation state: {s}", .{ @tagName(std.meta.activeTag(self.authentication_state)) });

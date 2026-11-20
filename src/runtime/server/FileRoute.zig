@@ -144,15 +144,18 @@ pub const FileRoute = struct {
             }
         }
 
-        if (this.stat_hash.etag()) |etag| {
-            resp.writeHeader("etag", etag);
+        if (this.has_content_length_header) {
+            resp.markWroteContentLengthHeader();
         }
     }
 
     pub fn writeStatusCode(_: *FileRoute, status_code: u16, resp: AnyResponse) void {
         switch (resp) {
-            inline else => |s, tag| {
-                writeStatus(tag == .TLS, s, status_code);
+            .SSL => |r| writeStatus(true, r, status_code),
+            .TCP => |r| writeStatus(false, r, status_code),
+            .H3 => |r| {
+                var b: [16]u8 = undefined;
+                r.writeStatus(std.fmt.bufPrint(&b, "{d}", .{status_code}) catch unreachable);
             },
         }
     }

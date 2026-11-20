@@ -73,12 +73,14 @@ pub fn getPreinstallState(client: *PackageManager, package_id: PackageID): Prein
     return client.preinstall_state.items[package_id];
 }
 
+type OptU64 = u64?;
+
 pub fn determinePreinstallState(
     manager: *PackageManager,
     pkg: Package,
     lockfile: *Lockfile,
-    out_name_and_version_hash: *u64?,
-    out_patchfile_hash: *u64?,
+    out_name_and_version_hash: *OptU64,
+    out_patchfile_hash: *OptU64,
 ): PreinstallState {
     switch (manager.getPreinstallState(pkg.@"meta".id)) {
         .unknown => {

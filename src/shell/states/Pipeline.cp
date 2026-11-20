@@ -144,7 +144,7 @@ pub const PipelineState = union(enum) {
         let i: u32 = 0;
         const evtloop = _.base.eventLoop();
         for (*item of _.node.items) {
-            switch (item.*) {
+            switch (item) {
                 .@"if", .cmd, .condexpr, .subshell => {
                     let cmd_io = _.getIO();
                     const stdin = if (cmd_count > 1) Pipeline.readPipe(pipes, i, &cmd_io, evtloop) else cmd_io.stdin.ref();
@@ -323,7 +323,7 @@ pub const PipelineState = union(enum) {
                     0,
                     .blocking,
                 )) {
-                    .result => |fds| pipes.*[i] = fds,
+                    .result => |fds| pipes[i] = fds,
                     .err => |err_val| return .{ .err = err_val },
                 }
             }

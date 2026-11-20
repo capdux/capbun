@@ -60,8 +60,8 @@ pub struct ZigSourceLineIterator {
 
     pub const SourceLineIterator = ZigSourceLineIterator;
 
-    static let empty_strings: [0]bun.String = [];
-    static let empty_i32s: [0]i32 = [];
+    static let empty_strings: [0]bun.String = .{};
+    static let empty_i32s: [0]i32 = .{};
 
     static fn fromFrames(frames_slice: []ZigStackFrame): ZigStackTrace {
         return .{

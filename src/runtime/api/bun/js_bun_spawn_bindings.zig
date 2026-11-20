@@ -362,18 +362,16 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                     }
                     const object = maybe_object.?;
                     override_env = true;
-                    var NEW_PATH: []const u8 = "";
-                    _ = &NEW_PATH;
+                    var new_path_buf: [1][]const u8 = .{ "" };
+                    _ = &new_path_buf;
                     var envp_managed = env_array.toManaged(allocator);
                     _ = &envp_managed;
-                    var new_path_ptr = (blk: {
-                    break :blk NEW_PATH;
+                    _ = try appendEnvpFromJS(globalThis, object, (&envp_managed), (blk: {
+                    break :blk @ptrCast(new_path_buf.ptr);
 
-});
-                    _ = &new_path_ptr;
-                    _ = try appendEnvpFromJS(globalThis, object, (&envp_managed), new_path_ptr);
+}));
                     env_array = envp_managed.moveToUnmanaged();
-                    PATH = NEW_PATH;
+                    PATH = new_path_buf[0];
                 }
                 _ = try getArgv(globalThis, cmd_value, PATH, cwd, (&argv0), allocator, (&argv));
                 if (try args.get(globalThis, "stdio")) |stdio_val| {

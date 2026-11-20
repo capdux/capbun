@@ -135,9 +135,9 @@ pub fn writeWrap(comptime Container: type, comptime writeFn: anytype): type {
         pub fn write(target: *Container, context: anytype) AnyMySQLError.Error!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
-                writeFn(target.*, Context, context) catch |e| return @errorCast(e);
+                writeFn(target, Context, context) catch |e| return @errorCast(e);
             } else {
-                writeFn(target.*, Context, .{ .wrapped = context }) catch |e| return @errorCast(e);
+                writeFn(target, Context, .{ .wrapped = context }) catch |e| return @errorCast(e);
             }
         }
     };

@@ -262,7 +262,7 @@ export struct Row {
 
             const column = this.columns[i];
             unsafe {
-                value.* = decodeBinaryValue(this.globalObject, column.column_type, column.column_length, this.raw, this.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader)?;
+                value.* = decodeBinaryValue(this.globalObject, column.column_type, column.column_length, this.raw, this.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader) catch |e| return @errorCast(e);
             }
             value.index = switch (column.name_or_index) {
                 .index idx => idx,

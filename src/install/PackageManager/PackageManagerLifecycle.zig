@@ -113,6 +113,7 @@ pub fn printAndDeinit(log: *LifecycleScriptTimeLog, allocator: std.mem.Allocator
     };
 };
 
+const OptU64 = ?u64;
 const Environment = bun.Environment;
 const Output = bun.Output;
 const Path = bun.path;
@@ -154,7 +155,7 @@ pub fn getPreinstallState(client: *PackageManager, package_id: PackageID) Preins
         return client.preinstall_state.items[@as(usize, @intCast(package_id))];
 }
 
-pub fn determinePreinstallState(manager: *PackageManager, pkg: Package, lockfile: *Lockfile, out_name_and_version_hash: ?*u64, out_patchfile_hash: ?*u64) PreinstallState {
+pub fn determinePreinstallState(manager: *PackageManager, pkg: Package, lockfile: *Lockfile, out_name_and_version_hash: *OptU64, out_patchfile_hash: *OptU64) PreinstallState {
         switch (manager.getPreinstallState(pkg.@"meta".id)) {
 .unknown => {
 if (pkg.isDisabled(manager.options.cpu, manager.options.os)) {

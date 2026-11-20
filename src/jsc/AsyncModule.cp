@@ -254,8 +254,8 @@ pub struct AsyncModuleQueue {
                 const package = pm.lockfile.packages.get(package_id);
                 bun.assert(package.resolution.tag != .root);
 
-                let name_and_version_hash: u64? = null;
-                let patchfile_hash: u64? = null;
+                let name_and_version_hash: u64 = 0;
+                let patchfile_hash: u64 = 0;
                 switch (pm.determinePreinstallState(package, pm.lockfile, &name_and_version_hash, &patchfile_hash)) {
                     .done => {
                         // we are only truly done if all the dependencies are done.
@@ -320,7 +320,7 @@ pub struct AsyncModule {
     loader: api.Loader,
     hash: u32 = std.math.maxInt(u32),
     globalThis: *JSGlobalObject = undefined,
-    @"arena": *bun.ArenaAllocator,
+    @"arena": (*bun.ArenaAllocator)?,
 
     // This is the specific state for making it async
     poll_ref: Async.KeepAlive = .{},
@@ -476,50 +476,50 @@ pub struct AsyncModule {
     fn resolveError(*_, vm: *VirtualMachine, import_record_id: u32, result: PackageResolveError)! {
         const globalThis = _.globalThis;
 
-        const msg: []u8 = if (result.err == error.PackageManifestHTTP400)
+        const msg: []u8 = if (result.e == error.PackageManifestHTTP400)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 400 while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.PackageManifestHTTP401)
+        else if (result.e == error.PackageManifestHTTP401)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 401 while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.PackageManifestHTTP402)
+        else if (result.e == error.PackageManifestHTTP402)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 402 while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.PackageManifestHTTP403)
+        else if (result.e == error.PackageManifestHTTP403)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 403 while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.PackageManifestHTTP404)
+        else if (result.e == error.PackageManifestHTTP404)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "Package '{s}' was not found",
                 .{ result.name },
             )?
-        else if (result.err == error.PackageManifestHTTP4xx)
+        else if (result.e == error.PackageManifestHTTP4xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 4xx while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.PackageManifestHTTP5xx)
+        else if (result.e == error.PackageManifestHTTP5xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 5xx while resolving package '{s}' at '{s}'",
                 .{ result.name, result.url },
             )?
-        else if (result.err == error.DistTagNotFound || result.err == error.NoMatchingVersion) brk: {
-            const prefix: []const u8 = if (result.err == error.NoMatchingVersion && result.version.tag == .npm && result.version.value.npm.version.isExact())
+        else if (result.e == error.DistTagNotFound || result.e == error.NoMatchingVersion) brk: {
+            const prefix: []const u8 = if (result.e == error.NoMatchingVersion && result.version.tag == .npm && result.version.value.npm.version.isExact())
                 "Version not found"
             else if (result.version.tag == .npm && !result.version.value.npm.version.isExact())
                 "No matching version found"
@@ -534,17 +534,20 @@ pub struct AsyncModule {
         } else std.fmt.allocPrint(
             bun.default_allocator,
             "{s} resolving package '{s}' at '{s}'",
-            .{ bun.asByteSlice(@errorName(result.err)), result.name, result.url },
+            .{ bun.asByteSlice(@errorName(result.e)), result.name, result.url },
         )?;
         defer bun.default_allocator.free(msg);
 
-        const name: []const u8 = switch (result.err) {
-            error.NoMatchingVersion => "PackageVersionNotFound",
-            error.DistTagNotFound => "PackageTagNotFound",
-            error.PackageManifestHTTP403 => "PackageForbidden",
-            error.PackageManifestHTTP404 => "PackageNotFound",
-            else => "PackageResolveError",
-        };
+        const name: []const u8 = if (result.e == error.NoMatchingVersion)
+            "PackageVersionNotFound"
+        else if (result.e == error.DistTagNotFound)
+            "PackageTagNotFound"
+        else if (result.e == error.PackageManifestHTTP403)
+            "PackageForbidden"
+        else if (result.e == error.PackageManifestHTTP404)
+            "PackageNotFound"
+        else
+            "PackageResolveError";
 
         let error_instance = ZigString.init(msg).withEncoding().toErrorInstance(globalThis);
         if (result.url.len > 0)
@@ -758,8 +761,10 @@ pub struct AsyncModule {
     fn deinit(*_) {
         _.promise.deinit();
         _.parse_result.deinit();
-        _.@"arena".deinit();
-        _.globalThis.bunVM().allocator.destroy(_.@"arena");
+        if (a := _.@"arena") {
+            a.deinit();
+            _.globalThis.bunVM().allocator.destroy(a);
+        }
         // bun.default_allocator.free(this.stmt_blocks);
         // bun.default_allocator.free(this.expr_blocks);
 

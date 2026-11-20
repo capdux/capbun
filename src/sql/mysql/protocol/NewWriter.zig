@@ -170,9 +170,9 @@ pub fn writeWrap(comptime Container: type, comptime writeFn: anytype) type {
 pub fn write(target: *Container, context: anytype) AnyMySQLError.Error!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((writeFn(target.*, Context, context)) catch |e| { _ = &e; return @errorCast(e); }); });
+                _ = (blk_catch_0: { break :blk_catch_0 ((writeFn(target, Context, context)) catch |e| { _ = &e; return @errorCast(e); }); });
             } else {
-                _ = (blk_catch_1: { break :blk_catch_1 ((writeFn(target.*, Context, .{ .wrapped = context })) catch |e| { _ = &e; return @errorCast(e); }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((writeFn(target, Context, .{ .wrapped = context })) catch |e| { _ = &e; return @errorCast(e); }); });
             }
     }
 };

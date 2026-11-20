@@ -221,7 +221,7 @@ self.errno = errnoToZigErr(err.getErrno());
             return true;
     }
 
-pub fn then(self: *WriteFile, _: *JSGlobalObject) !void {
+pub fn then(self: *WriteFile, _: *JSGlobalObject) bun.JSTerminated!void {
             var cb = self.onCompleteCallback;
             _ = &cb;
             var cb_ctx = self.onCompleteCtx;
@@ -676,7 +676,7 @@ pub fn thenWrap(this_opaque: *anyopaque, value: *Body.Value) void {
             _ = (blk_catch_5: { break :blk_catch_5 ((self.then(value)) catch |__ce_5| { _ = &__ce_5;  }); });
     }
 
-pub fn then(self: *WriteFileWaitFromLockedValueTask, value: *Body.Value) !void {
+pub fn then(self: *WriteFileWaitFromLockedValueTask, value: *Body.Value) bun.JSTerminated!void {
             var promise = self.promise.get();
             _ = &promise;
             var globalThis = self.globalThis;

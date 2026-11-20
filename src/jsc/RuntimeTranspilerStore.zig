@@ -313,21 +313,19 @@ else => .unknown,
                 _ = self.resolved_source.source_code.ensureHash();
                 return;
             }
-            for (cp_mut_slice(&parse_result.ast.import_records.slice())) |*import_record_| {
-                _ = &import_record_;
-                var import_record: *bun.ImportRecord = (import_record_.*);
+            for (cp_mut_slice(&parse_result.ast.import_records.slice())) |*import_record| {
                 _ = &import_record;
-                if (HardcodedModule.Alias.get(import_record.path.text, transpiler.options.target, .{ .rewrite_jest_for_tests = transpiler.options.rewrite_jest_for_tests })) |replacement| {
+                if (HardcodedModule.Alias.get((import_record.*).path.text, transpiler.options.target, .{ .rewrite_jest_for_tests = transpiler.options.rewrite_jest_for_tests })) |replacement| {
                     _ = &replacement;
-                    import_record.path.text = replacement.path;
-                    import_record.tag = replacement.tag;
-                    import_record.flags.is_external_without_side_effects = true;
+                    (import_record.*).path.text = replacement.path;
+                    (import_record.*).tag = replacement.tag;
+                    (import_record.*).flags.is_external_without_side_effects = true;
                     continue;
                 }
-                if (strings.hasPrefixComptime(import_record.path.text, "bun:")) {
-                    import_record.path = Fs.Path.init(import_record.path.text["bun:".len..]);
-                    import_record.path.namespace = "bun";
-                    import_record.flags.is_external_without_side_effects = true;
+                if (strings.hasPrefixComptime((import_record.*).path.text, "bun:")) {
+                    (import_record.*).path = Fs.Path.init((import_record.*).path.text["bun:".len..]);
+                    (import_record.*).path.namespace = "bun";
+                    (import_record.*).flags.is_external_without_side_effects = true;
                 }
             }
             if ((source_code_printer == null)) {
@@ -559,7 +557,7 @@ else => "/".len,
                 var bufw = file.writerStreaming((&bufw_buffer));
                 _ = &bufw;
                 const w = (&bufw.interface);
-                _ = try w.print("{{", "  \"version\": 3,", "  \"file\": {f},", "  \"sourceRoot\": \"\",", "  \"sources\": [{f}],", "  \"sourcesContent\": [{f}],", "  \"names\": [],", "  \"mappings\": \"{f}\"", "}}", .{ bun.fmt.formatJSONStringUTF8(std.fs.path.basename(specifier), .{}), bun.fmt.formatJSONStringUTF8(specifier, .{}), bun.fmt.formatJSONStringUTF8(source_file, .{}), mappings.formatVLQs() });
+                _ = try w.print("{{\n  \"version\": 3,\n  \"file\": {f},\n  \"sourceRoot\": \"\",\n  \"sources\": [{f}],\n  \"sourcesContent\": [{f}],\n  \"names\": [],\n  \"mappings\": \"{f}\"\n}}", .{ bun.fmt.formatJSONStringUTF8(std.fs.path.basename(specifier), .{}), bun.fmt.formatJSONStringUTF8(specifier, .{}), bun.fmt.formatJSONStringUTF8(source_file, .{}), mappings.formatVLQs() });
                 _ = try w.flush();
             }
         } else {

@@ -65,15 +65,15 @@ pub const PortalOrPreparedStatement = union(enum) {
     portal: []const u8,
     prepared_statement: []const u8,
 
-pub fn slice(self: *const PortalOrPreparedStatement) []const u8 {
-            return (switch (self) {
+pub fn slice(self: PortalOrPreparedStatement) []const u8 {
+            return (switch (self.*) {
 .portal => self.portal,
 .prepared_statement => self.prepared_statement,
 });
     }
 
-pub fn tag(self: *const PortalOrPreparedStatement) u8 {
-            return (switch (self) {
+pub fn tag(self: PortalOrPreparedStatement) u8 {
+            return (switch (self.*) {
 .portal => 80,
 .prepared_statement => 83,
 });

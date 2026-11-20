@@ -135,7 +135,7 @@ export @root struct CompileTarget {
         return dest;
     }
 
-    pub fn downloadToPath(*_, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
+    pub fn downloadToPath(env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
         const _init_opts = HTTP.HTTPThread.InitOpts{};
         HTTP.HTTPThread.init(&_init_opts);
         let refresher = bun.Progress{};
@@ -150,7 +150,7 @@ export @root struct CompileTarget {
                 compressed_archive_bytes.* = MutableString.init(allocator, 24 * 1024 * 1024)?;
             }
             let url_buffer: [2048]u8 = undefined;
-            const url_str = this.toNPMRegistryURL(&url_buffer) catch err_val => {
+            const url_str = _.toNPMRegistryURL(&url_buffer) catch err_val => {
                 // Return error without printing - let caller decide how to handle
                 return err_val;
             };
@@ -491,8 +491,8 @@ enum Libc {
         };
     }
 
-    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        writer.writeAll(this.npmName())?;
+    static fn format(val: Libc, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        writer.writeAll(val.npmName())?;
     }
 }
 

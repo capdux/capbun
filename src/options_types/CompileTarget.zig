@@ -81,8 +81,8 @@ pub fn npmName(self: Libc) []const u8 {
 });
     }
 
-pub fn format(self: *Libc, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            _ = try writer.writeAll(self.npmName());
+pub fn format(val: Libc, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            _ = try writer.writeAll(val.npmName());
     }
 };
 
@@ -177,7 +177,7 @@ pub fn exePath(self: CompileTarget, buf: *bun.PathBuffer, version_str: [:0]const
         return dest;
 }
 
-pub fn downloadToPath(self: *CompileTarget, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8) !void {
+pub fn downloadToPath(self: CompileTarget, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8) !void {
         const _init_opts = HTTP.HTTPThread.InitOpts{  };
         _ = HTTP.HTTPThread.init((&_init_opts));
         var refresher = bun.Progress{  };

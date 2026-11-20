@@ -31,7 +31,7 @@ export class CopyFile {
     destination_file_store: Store.File;
     source_file_store: Store.File;
     store: *Store? = null;
-    source_store: *Store? = null;
+    source_store: (*Store)? = null;
     offset: SizeType = 0;
     size: SizeType = 0;
     max_length: SizeType = Blob.max_size;
@@ -261,7 +261,7 @@ export class CopyFile {
 
         let has_unset_append = false;
         if (!canUseCopyFileRangeSyscall()) {
-            switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
                 .err => |err| {
                     this.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
@@ -283,7 +283,7 @@ export class CopyFile {
             switch (sys.getErrno(written)) {
                 .SUCCESS => {},
                 .NOSYS, .XDEV, .OPNOTSUPP => {
-                    switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
                         .err => |err| {
                             this.system_error = err.toSystemError();
                             return errnoToZigErr(err.errno);
@@ -306,7 +306,7 @@ export class CopyFile {
                         }
                     }
                     if (total_written == 0) {
-                        switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
                             .err => |err| {
                                 this.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
@@ -337,7 +337,7 @@ export class CopyFile {
                 switch (errno.getErrno()) {
                     .BADF => {
                         let total_written: u64 = 0;
-                        switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
+                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
                             .err => |err| {
                                 this.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
@@ -524,7 +524,7 @@ export class CopyFile {
             this.doClose();
         } else if (Environment.isFreeBSD) {
             let total_written: u64 = 0;
-            switch (WebCore.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
+            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
                 .err => |err| {
                     this.system_error = err.toSystemError();
                     this.doClose();
@@ -793,7 +793,7 @@ export class CopyFileWindows {
     }
 
     fn truncate(*_) {
-        let node_fs: WebCore.Node.fs.NodeFS = .{};
+        let node_fs: jsc.Node.fs.NodeFS = .{};
         * = node_fs.truncate(.{
             .path = this.destination_file_store.data.file.pathlike,
             .len = @intCast(this.size),

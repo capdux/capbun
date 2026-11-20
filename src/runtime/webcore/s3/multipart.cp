@@ -259,7 +259,7 @@ export class MultiPartUpload {
         destroy(this);
     }
 
-    @c static fn singleSendUploadResponse(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
+    static fn singleSendUploadResponse(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
         const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
         if (upload.state == .finished) return;
         switch (result) {
@@ -481,7 +481,7 @@ export class MultiPartUpload {
         }
     }
 
-    @c static fn onRollbackMultiPartRequest(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
+    static fn onRollbackMultiPartRequest(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
         const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
         log("onRollbackMultiPartRequest {s}", .{ upload.upload_id });
         switch (result) {

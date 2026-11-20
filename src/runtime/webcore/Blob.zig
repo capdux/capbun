@@ -1147,6 +1147,34 @@ pub fn getFileName(self: Blob) ?[]const u8 {
         return null;
 }
 
+pub fn getMimeTypeOrContentType(self: Blob) ?bun.http.MimeType {
+        if (self.content_type_was_set) {
+            return bun.http.MimeType.init(self.content_type, null, null);
+        }
+        if (self.store) |store| {
+            _ = &store;
+            return store.mime_type;
+        }
+        return null;
+}
+
+pub fn getLoader(self: Blob, jsc_vm: *VirtualMachine) ?bun.options.Loader {
+        if (self.getFileName()) |filename| {
+            _ = &filename;
+            const current_path = bun.fs.Path.init(filename);
+            var __current_path_moved = false; _ = &__current_path_moved;
+            defer if (!__current_path_moved) { const __T = @TypeOf(current_path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = current_path.release() catch {}; } else { current_path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = current_path; _drop_val.release(); } };
+            return ((current_path.loader((&jsc_vm.transpiler.options.loaders))) orelse (.tsx));
+        } else {
+            if (self.getMimeTypeOrContentType()) |mime_type| {
+                _ = &mime_type;
+                return .fromMimeType(mime_type);
+            } else {
+                return .tsx;
+            }
+        }
+}
+
 pub fn needsToReadFile(self: Blob) bool {
         if (self.store) |store| {
             _ = &store;

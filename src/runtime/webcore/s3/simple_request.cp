@@ -198,7 +198,7 @@ export class S3HttpSimpleTask {
     };
     result: bun.http.HTTPClientResult = .{};
     concurrent_task: jsc.ConcurrentTask = .{};
-    range: []const u8?;
+    range: ([]const u8)? = null;
     proxy_url: []const u8 = "";
     poll_ref: bun.Async.KeepAlive = bun.Async.KeepAlive.init();
 
@@ -340,7 +340,7 @@ export class S3HttpSimpleTask {
             .delete(cb) => {
                 switch (response.status_code) {
                     200, 204 => {
-                        cb(.{ .success = {} }, this.callback_context)?;
+                        cb(.{ .success = undefined }, this.callback_context)?;
                     },
                     404 => {
                         this.errorWithBody(.not_found)?;
@@ -374,7 +374,7 @@ export class S3HttpSimpleTask {
             .upload(cb) => {
                 switch (response.status_code) {
                     200 => {
-                        cb(.{ .success = {} }, this.callback_context)?;
+                        cb(.{ .success = undefined }, this.callback_context)?;
                     },
                     else => {
                         this.errorWithBody(.failure)?;
@@ -409,7 +409,7 @@ export class S3HttpSimpleTask {
             },
             .commit(cb) => {
                 if (!this.failIfContainsError(response.status_code)?) {
-                    cb(.{ .success = {} }, this.callback_context)?;
+                    cb(.{ .success = undefined }, this.callback_context)?;
                 }
             },
             .part(cb) => {
@@ -458,7 +458,7 @@ pub fn executeSimpleS3Request(
     callback: S3HttpSimpleTask.Callback,
     callback_context: *!,
 ): JSTerminatedError!void {
-    const sign_options = .{
+    const sign_options: S3Credentials.SignOptions = .{
         .path = options.path,
         .method = options.method,
         .search_params = options.search_params,

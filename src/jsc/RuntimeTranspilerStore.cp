@@ -103,16 +103,8 @@ pub fn dumpSourceStringFailiable(vm: *VirtualMachine, specifier: string, written
             let bufw = file.writerStreaming(&bufw_buffer);
             const w = &bufw.interface;
             w.print(
-                \\{{
-                \\  "version": 3,
-                \\  "file": {f},
-                \\  "sourceRoot": "",
-                \\  "sources": [{f}],
-                \\  "sourcesContent": [{f}],
-                \\  "names": [],
-                \\  "mappings": "{f}"
-                \\}}
-            , .{ 
+                "{{\n  \"version\": 3,\n  \"file\": {f},\n  \"sourceRoot\": \"\",\n  \"sources\": [{f}],\n  \"sourcesContent\": [{f}],\n  \"names\": [],\n  \"mappings\": \"{f}\"\n}}",
+                .{ 
                 bun.fmt.formatJSONStringUTF8(std.fs.path.basename(specifier), .{}),
                 bun.fmt.formatJSONStringUTF8(specifier, .{}),
                 bun.fmt.formatJSONStringUTF8(source_file, .{}),
@@ -462,8 +454,7 @@ pub struct TranspilerJobInternal {
             return;
         }
 
-        for (*import_record_ of parse_result.ast.import_records.slice()) {
-            let import_record: *bun.ImportRecord = import_record_;
+        for (*import_record of parse_result.ast.import_records.slice()) {
 
             if (replacement := HardcodedModule.Alias.get(import_record.path.text, transpiler.options.target, .{ .rewrite_jest_for_tests = transpiler.options.rewrite_jest_for_tests })) {
                 import_record.path.text = replacement.path;

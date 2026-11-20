@@ -99,8 +99,8 @@ pub const ZigStackTrace = extern struct {
     frames_len: u8,
     frames_cap: u8,
     referenced_source_provider: ?*SourceProvider = null,
-    pub var empty_strings: [0]bun.String = &.{};
-    pub var empty_i32s: [0]i32 = &.{};
+    pub var empty_strings: [0]bun.String = .{};
+    pub var empty_i32s: [0]i32 = .{};
 
 pub fn fromFrames(frames_slice: []ZigStackFrame) ZigStackTrace {
             return .{ .source_lines_ptr = (&empty_strings), .source_lines_numbers = (&empty_i32s), .source_lines_len = 0, .source_lines_to_collect = 0, .frames_ptr = frames_slice.ptr, .frames_len = @min(frames_slice.len, std.math.maxInt(u8)), .frames_cap = @min(frames_slice.len, std.math.maxInt(u8)), .referenced_source_provider = null };

@@ -1409,7 +1409,8 @@ export struct SocketHandlerSSL {
                                         debug("write query failed: {s}", .{@errorName(e)});
                                         continue;
                                     };
-                                    connection_writer.write(&protocol.Sync) catch |e| {
+                                    const sync_val = protocol.Sync;
+                                    connection_writer.write(&sync_val) catch |e| {
                                         if (err_ := this.globalObject.tryTakeException()) {
                                             req.onJSError(err_, this.globalObject);
                                         } else {
@@ -1500,7 +1501,11 @@ export struct SocketHandlerSSL {
                 switch (request.flags.result_mode) {
                     .objects => {
                         cached_structure = statement.structure(this.js_value, this.globalObject);
-                        structure = cached_structure.?.jsValue() orelse .js_undefined;
+                        if (s := cached_structure.?.jsValue()) {
+                            structure = s;
+                        } else {
+                            structure = .js_undefined;
+                        }
                     },
                     .raw, .values => {},
                 }
@@ -1702,7 +1707,8 @@ export struct SocketHandlerSSL {
                         this.flushData();
                     },
                     .SASLContinue => {
-                        let cont = &auth.SASLContinue;
+                        let sasl_cont = auth.SASLContinue;
+                        let cont = &sasl_cont;
                         if (this.authentication_state != .SASL) {
                             debug("Unexpected SASLContinue for authentiation state: {s}", .{@tagName(std.meta.activeTag(this.authentication_state))});
                             return error.UnexpectedMessage;

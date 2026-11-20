@@ -185,7 +185,7 @@ export class WriteFile {
         return true;
     }
 
-    pub fn then(*_, _: *JSGlobalObject): !void {
+    pub fn then(*_, _: *JSGlobalObject): void!bun.JSTerminated {
         let cb = this.onCompleteCallback;
         let cb_ctx = this.onCompleteCtx;
 
@@ -631,7 +631,7 @@ export class WriteFileWaitFromLockedValueTask {
         self.then(value) catch {};
     }
 
-    pub fn then(*_, value: *Body.Value): !void {
+    pub fn then(*_, value: *Body.Value): void!bun.JSTerminated {
         let promise = this.promise.get();
         let globalThis = this.globalThis;
         let file_blob = this.file_blob;

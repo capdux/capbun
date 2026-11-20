@@ -1245,7 +1245,7 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
 
     let envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
     defer envp_arena.deinit();
-    const envp: ([*:null]OptConstCString)? = if (comptime bun.Environment.isPosix)
+    const envp: [*:null]OptConstCString = if (comptime bun.Environment.isPosix)
         @ptrCast(@constCast(std.c.environ))
     else
         @ptrCast(@constCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator()) catch {

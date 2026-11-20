@@ -143,7 +143,7 @@ else => true,
         const evtloop = self.base.eventLoop();
         for (self.node.items) |*item| {
             _ = &item;
-            switch ((item.*).*) {
+            switch ((item.*)) {
 .@"if", .cmd, .condexpr, .subshell => {
 var cmd_io = self.getIO();
             _ = &cmd_io;
@@ -352,7 +352,7 @@ return .{ .err = e };
                 } else {
                     switch (bun.sys.socketpairForShell(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking)) {
 .result => |fds| {
-pipes.*[cp_cast_int(usize, i)] = fds;
+pipes[cp_cast_int(usize, i)] = fds;
 },
 .err => |err_val| {
 return .{ .err = err_val };

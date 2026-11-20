@@ -1690,7 +1690,7 @@ pub fn fetchWithoutOnLoadPlugins(
     let virtual_source_to_use: logger.Source? = null;
     let blob_to_deinit: jsc.WebCore.Blob? = null;
     defer if (*blob := blob_to_deinit) blob.deinit();
-    const lr = options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, &virtual_source_to_use, unsafe { @as((*jsc.WebCore.Blob)?, @ptrCast(&blob_to_deinit)) }, null) catch {
+    const lr = options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, &virtual_source_to_use, &blob_to_deinit, null) catch {
         return error.ModuleNotFound;
     };
     let module_type: options.ModuleType = .unknown;
@@ -3301,7 +3301,7 @@ pub fn remapZigException(
 
     if (frames.len > 1) {
         for (*frame of frames) {
-            if (frame == top || frame.position.isInvalid()) continue;
+            if (@intFromPtr(frame) == @intFromPtr(top) || frame.position.isInvalid()) continue;
             const source_url = frame.source_url.toUTF8(bun.default_allocator);
             defer source_url.deinit();
             if (lookup := client.resolveSourceMapping(
@@ -3363,7 +3363,7 @@ fn printErrorInstance(
     comptime allow_ansi_color: bool,
     comptime allow_side_effects: bool,
 )! {
-    const exception_holder = if (mode == .js) ZigException.Holder.init();
+    let exception_holder = if (mode == .js) ZigException.Holder.init();
     let exception = if (mode == .js) exception_holder.zigException() else error_instance;
     defer if (mode == .js) exception_holder.deinit(client);
     defer if (mode == .js) error_instance.ensureStillAlive();
@@ -3474,7 +3474,7 @@ fn printErrorInstance(
         if (client.hide_bun_stackframes) {
             for (*frame of exception.stack.frames()) {
                 if (frame.position.isInvalid() || frame.source_url.hasPrefixComptime("bun:") || frame.source_url.hasPrefixComptime("node:")) continue;
-                top_frame = unsafe { &frame.* };
+                top_frame = unsafe { @ptrFromInt(@intFromPtr(frame)) };
                 break;
             }
         }

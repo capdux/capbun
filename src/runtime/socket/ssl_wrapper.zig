@@ -82,13 +82,15 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
                 _ = BoringSSL.SSL_set_renegotiate_mode(ssl, BoringSSL.ssl_renegotiate_never);
                 _ = BoringSSL.SSL_set_accept_state(ssl);
             }
-            const input = ((BoringSSL.BIO_new(BoringSSL.BIO_s_mem)) orelse {
+            const bio_method_in = BoringSSL.BIO_s_mem;
+            const input = ((BoringSSL.BIO_new(bio_method_in)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });
             errdefer {
             _ = BoringSSL.BIO_free(input);
             }
-            const output = ((BoringSSL.BIO_new(BoringSSL.BIO_s_mem)) orelse {
+            const bio_method_out = BoringSSL.BIO_s_mem;
+            const output = ((BoringSSL.BIO_new(bio_method_out)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });
             _ = BoringSSL.BIO_set_mem_eof_return(input, -1);

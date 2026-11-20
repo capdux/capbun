@@ -736,7 +736,7 @@ fn hasNullByte(s: []const u8): bool {
             statement.fields_flags,
             result_mode,
             cached_structure,
-        )?;
+        ) catch |e| return @errorCast(e);
         if (e := this.#globalObject.tryTakeException()) {
             this.#connection.queue.markCurrentRequestAsFinished(request);
             request.rejectWithJSValue(this.getQueriesArray(), e);

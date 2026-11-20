@@ -345,7 +345,7 @@ pub fn decodeBinary(self: *Row, allocator: std.mem.Allocator, comptime Context: 
                 }
                 const column = self.columns[@as(usize, @intCast(i))];
                 {
-                    value.* = try decodeBinaryValue(self.globalObject, column.column_type, column.column_length, self.raw, self.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader);
+                    value.* = (blk_catch_10: { break :blk_catch_10 ((decodeBinaryValue(self.globalObject, column.column_type, column.column_length, self.raw, self.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader)) catch |e| { _ = &e; return @errorCast(e); }); });
                 }
                 value.index = (switch (column.name_or_index) {
 .index => |idx| idx,

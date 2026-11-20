@@ -459,9 +459,9 @@ pub fn indexOfSigned(client: string, str: string): i32 {
 }
 
 /// Returns last index of `char` before a character `before`.
-pub fn lastIndexBeforeChar(@"in": []const u8, char: u8, before: u8): usize? {
-    const before_pos = indexOfChar(@"in", before) ?? @"in".len;
-    return lastIndexOfChar(@"in"[0..before_pos], char);
+pub fn lastIndexBeforeChar(str: []const u8, char: u8, before: u8): usize? {
+    const before_pos = indexOfChar(str, before) ?? str.len;
+    return lastIndexOfChar(str[0..before_pos], char);
 }
 
 pub fn lastIndexOfChar(self: []const u8, char: u8): usize? {
@@ -1622,7 +1622,7 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
     const remaining = text;
     if (remaining.len == 0) return {};
 
-    let ranges = bun.BoundedArray(LineRange, line_range_count){};
+    let ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
 
     let current_line: u32 = 0;
     const first_newline_or_nonascii_i = strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true) orelse {
@@ -1716,7 +1716,7 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
         };
 
         if (ranges.len == line_range_count && current_line <= target_line) {
-            let new_ranges = bun.BoundedArray(LineRange, line_range_count){};
+            let new_ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
             new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
             ranges = new_ranges;
         }

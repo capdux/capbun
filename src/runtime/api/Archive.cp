@@ -32,9 +32,9 @@ fn countFilesInArchive(data: []const u8): u32 {
     }
 
     let count: u32 = 0;
-    let entry: *libarchive.lib.Archive.Entry = undefined;
-    let entry_ptr = &entry;
-    while (archive.readNextHeader(entry_ptr) == .ok) {
+    let entry_buf: [1]*libarchive.lib.Archive.Entry = [undefined];
+    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+        const entry = entry_buf[0];
         if (entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular)) {
             count += 1;
         }
@@ -155,10 +155,9 @@ fn extractToDiskFiltered(
     defer * = dir_fd.close();
 
     let count: u32 = 0;
-    let entry: *lib.Archive.Entry = undefined;
-
-    let entry_ptr = &entry;
-    while (archive.readNextHeader(entry_ptr) == .ok) {
+    let entry_buf: [1]*lib.Archive.Entry = [undefined];
+    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+        const entry = entry_buf[0];
         const pathname = entry.pathnameUtf8();
 
         // Validate path safety (reject absolute paths, path traversal)
@@ -632,9 +631,9 @@ struct FilesContext {
         let entries: FileEntryList = .empty;
         errdefer freeEntries(&entries);
 
-        let entry: *lib.Archive.Entry = undefined;
-    let entry_ptr = &entry;
-    while (archive.readNextHeader(entry_ptr) == .ok) {
+        let entry_buf: [1]*lib.Archive.Entry = [undefined];
+    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+        const entry = entry_buf[0];
             if (entry.filetype() != @intFromEnum(lib.FileType.regular)) continue;
 
             const pathname = entry.pathnameUtf8();
