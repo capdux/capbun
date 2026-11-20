@@ -51,9 +51,9 @@ pub struct Opts {
     date: ([]const u8)? = null,
     no_dereference: bool = false,
     modification_time_only: bool = false,
-    reference: []const u8? = null,
-    timestamp: []const u8? = null,
-    time: []const u8? = null,
+    reference: ([]const u8)? = null,
+    timestamp: ([]const u8)? = null,
+    time: ([]const u8)? = null,
 
     pub fn parse(*_, args: []const [*:0]const u8): Result(FilepathArgs, ParseError) {
         const Parse = FlagParser(*Opts);

@@ -380,10 +380,10 @@ else => {
     }
 
 pub fn writeEncoded(self_opt: ?StackLine, writer: anytype) !void {
-            const known = ((self_opt) orelse (({
+            const known = ((self_opt) orelse {
             _ = try writer.writeAll("_");
             return;
-})));
+});
             if (known.object) |object| {
                 _ = &object;
                 _ = try VLQ.encode(1).writeTo(writer);
@@ -398,10 +398,10 @@ pub fn format(line: StackLine, writer: *std.Io.Writer) !void {
     }
 
 pub fn writeDecoded(self_opt: ?StackLine, writer: anytype) !void {
-            const known = ((self_opt) orelse (({
+            const known = ((self_opt) orelse {
             _ = try writer.print("???", .{});
             return;
-})));
+});
             _ = try known.format(writer);
     }
 };
@@ -500,8 +500,10 @@ const default_report_base_url = "https://bun.report";
 const sep_line = "============================================================\n";
 const empty_u8_slice: []u8 = &.{};
 const empty_str_slice: []const []const u8 = &.{};
-const windows_programs: []const [:0]const u8 = .{ "pdb-addr2line" };
-const posix_programs: []const [:0]const u8 = .{ "llvm-symbolizer", "llvm-symbolizer-21" };
+const windows_programs_arr: [1][:0]const u8 = .{ "pdb-addr2line" };
+const posix_programs_arr: [2][:0]const u8 = .{ "llvm-symbolizer", "llvm-symbolizer-21" };
+const windows_programs: []const [:0]const u8 = (&windows_programs_arr);
+const posix_programs: []const [:0]const u8 = (&posix_programs_arr);
 var has_printed_message: bool = false;
 var panicking = std.atomic.Value(u8).init(0);
 var panic_mutex = bun.Mutex{  };

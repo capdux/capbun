@@ -47,46 +47,45 @@ fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T 
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const MaxHeapAllocator = struct {
-    array_list: ArrayList,
+pub const MaxHeapAllocator = @This();
+
+array_list: ArrayList,
 
 pub fn alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
-            _ = bun.assert((alignment.toByteUnits() <= @alignOf(std.c.max_align_t)));
-            {
-                const inst: *MaxHeapAllocator = bun.cast(*MaxHeapAllocator, ptr);
-                inst.array_list.items.len = 0;
-                _ = (blk_catch_0: { break :blk_catch_0 ((inst.array_list.ensureTotalCapacity(len)) catch |__ce_0| { _ = &__ce_0; return null; }); });
-                inst.array_list.items.len = len;
-                return inst.array_list.items.ptr;
-            }
-    }
+        _ = bun.assert((alignment.toByteUnits() <= @alignOf(std.c.max_align_t)));
+        {
+            const inst: *MaxHeapAllocator = bun.cast(*MaxHeapAllocator, ptr);
+            inst.array_list.items.len = 0;
+            _ = (blk_catch_0: { break :blk_catch_0 ((inst.array_list.ensureTotalCapacity(len)) catch |__ce_0| { _ = &__ce_0; return null; }); });
+            inst.array_list.items.len = len;
+            return inst.array_list.items.ptr;
+        }
+}
 
 pub fn resize(_: *anyopaque, buf: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
-            _ = &new_len;
-            _ = &buf;
-            _ = @panic("not implemented");
-    }
+        _ = &new_len;
+        _ = &buf;
+        _ = @panic("not implemented");
+}
 
 pub fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {
-    }
+}
 
 pub fn reset(self: *MaxHeapAllocator) void {
-            self.array_list.items.len = 0;
-    }
+        self.array_list.items.len = 0;
+}
 
 pub fn deinit(self: *MaxHeapAllocator) void {
-            _ = self.array_list.deinit();
-    }
+        _ = self.array_list.deinit();
+}
 
 pub fn init(self: *MaxHeapAllocator, allocator: std.mem.Allocator) std.mem.Allocator {
-            self.array_list = ArrayList.init(allocator);
-            return std.mem.Allocator{ .ptr = self, .vtable = (&MaxHeapAllocator.vtable) };
-    }
+        self.array_list = ArrayList.init(allocator);
+        return std.mem.Allocator{ .ptr = self, .vtable = (&MaxHeapAllocator.vtable) };
+}
 
 pub fn isInstance(allocator: std.mem.Allocator) bool {
-            return (allocator.vtable == (&MaxHeapAllocator.vtable));
-    }
-    pub const ArrayList = std.array_list.AlignedManaged(u8, .of(std.c.max_align_t));
-    pub const vtable = std.mem.Allocator.VTable{ .alloc = (&alloc), .free = (&free), .resize = (&resize), .remap = (&std.mem.Allocator.noRemap) };
-};
-
+        return (allocator.vtable == (&MaxHeapAllocator.vtable));
+}
+pub const ArrayList = std.array_list.AlignedManaged(u8, .of(std.c.max_align_t));
+pub const vtable = std.mem.Allocator.VTable{ .alloc = (&alloc), .free = (&free), .resize = (&resize), .remap = (&std.mem.Allocator.noRemap) };

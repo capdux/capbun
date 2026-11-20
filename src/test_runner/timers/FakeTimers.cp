@@ -11,7 +11,7 @@ const TimerHeap = bun.api.Timer.TimerHeap;
     /// - peek/takeFirst (provided by TimerHeap)
     /// - peekLast (cannot be implemented efficiently with TimerHeap)
     /// - count (cannot be implemented efficiently with TimerHeap)
-    timers: TimerHeap = .{ .context = {} },
+    timers: TimerHeap = .{ .context = @as(void, undefined) },
 }
 
 const min_timespec: bun.timespec = { sec: std.math.minInt(i64), nsec: std.math.minInt(i64) };

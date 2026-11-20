@@ -1468,7 +1468,7 @@ const len = try value.getLength(self.globalThis);
                         }
                         const empty_count = (i - empty);
                         if ((empty_count == 1)) {
-                            _ = writer.pretty("<r><d>empty item<r>", enable_ansi_colors, &.{});
+                            _ = writer.pretty("<r><d>empty item<r>", enable_ansi_colors, .{});
                         } else {
                             self.estimated_line_length = (self.estimated_line_length + bun.fmt.fastDigitCount(empty_count));
                             _ = writer.pretty("<r><d>{d} x empty items<r>", enable_ansi_colors, .{ empty_count });
@@ -1506,7 +1506,7 @@ const len = try value.getLength(self.globalThis);
                     empty_start = null;
                     const empty_count = (len - empty);
                     if ((empty_count == 1)) {
-                        _ = writer.pretty("<r><d>empty item<r>", enable_ansi_colors, &.{});
+                        _ = writer.pretty("<r><d>empty item<r>", enable_ansi_colors, .{});
                     } else {
                         self.estimated_line_length = (self.estimated_line_length + bun.fmt.fastDigitCount(empty_count));
                         _ = writer.pretty("<r><d>{d} x empty items<r>", enable_ansi_colors, .{ empty_count });

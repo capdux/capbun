@@ -303,7 +303,9 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         const client = client_opt.?;
         const line_no = jsc.Jest.captureTestLineNumber(callFrame, globalThis);
 
-        const bunTest = bun_test.BunTest.get();
+        let buntest_strong = bun_test.js_fns.cloneActiveStrong(globalThis, .{ .signature = .{ .scope_functions = client }, .allow_in_preload = false })?;
+        defer buntest_strong.deinit();
+        const bunTest = buntest_strong.get();
 
         const args = parseArguments(globalThis, callFrame, switch (client.mode) {
             .describe => .describe,

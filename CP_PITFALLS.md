@@ -116,3 +116,5 @@
 - **`import { A as B }` 成员名误映射**：会误生成 `.B` 而非 `.A`，改用 `import * as M from "..."; const B = M.A;`。
 - **字段默认值 `&UpperCase.Const` 误解析为指针类型**：先用小写绑定 `const _v = UpperCase.Const;` 再取 `&_v`。
 - **函数体内 `*UpperCaseType` 作为类型实参**：会被误解析为 `(&UpperCaseType)`，先在顶层声明 `type Ptr = *UpperCaseType;`。
+
+- **[2026-11-20 工具链广播 `syntax-tooling-20261120-cap-cpc-fast-modular`]**：`cap` (ReleaseFast) 与 `cpc` (Release) 已支持全工程递归 mtime 感知、`-d/--debug` 原生后端、原子二进制覆写、`-o <dir>` 并发工作区隔离以及 `-m/--modular` (`cpc --emit-dir`) 按文件 FNV-1a 增量发射（0 改动 ~13ms）。

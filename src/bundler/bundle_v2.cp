@@ -3884,7 +3884,7 @@ pub struct ImportData {
     // then this may not be the result of a single chain but may instead form
     // a diamond shape if this same symbol was re-exported multiple times from
     // different files.
-    re_exports: Dependency.List = Dependency.List{},
+    re_exports: Dependency.List = .{},
 
     data: ImportTracker = {},
 }

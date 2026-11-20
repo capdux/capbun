@@ -5,10 +5,12 @@ import immutable from "./immutable.zig";
 import HashedString from "./HashedString.zig";
 import MutableString from "./MutableString.zig";
 import PathStringMod from "./PathString.zig";
-import { SmolStr } from "./SmolStr.zig";
+import SmolStrMod from "./SmolStr.zig";
 import StringBuilder from "./StringBuilder.zig";
 import StringJoiner from "./StringJoiner.zig";
 import wtf from "./wtf.zig";
+
+pub const SmolStr = SmolStrMod.SmolStr;
 
 pub const PathString = PathStringMod.PathString;
 pub const WTFString = wtf.WTFString;
@@ -126,15 +128,17 @@ export @c struct String {
     pub const transferToJS = string_jsc.transferToJS;
 
     pub fn toOwnedSlice(allocator: std.mem.Allocator): OOM!MutableBytes {
-        const [bytes, _unused] = this.toOwnedSliceImpl(allocator)?;
-        return bytes;
+        const res = this.toOwnedSliceImpl(allocator)?;
+        return res[0];
     }
 
     /// Returns `.{ utf8_bytes, is_all_ascii }`.
     ///
     /// `false` means the string contains at least one non-ASCII character.
     pub fn toOwnedSliceReturningAllASCII(allocator: std.mem.Allocator): OOM!OwnedSliceAscii {
-        const [bytes, ascii_status] = this.toOwnedSliceImpl(allocator)?;
+        const res = this.toOwnedSliceImpl(allocator)?;
+        const bytes = res[0];
+        const ascii_status = res[1];
         const is_ascii = switch (ascii_status) {
             .all_ascii => true,
             .non_ascii => false,
@@ -289,7 +293,9 @@ export @c struct String {
         }
 
         if (_.isUTF16()) {
-            const [new_str, bytes] = String.createUninitialized(.utf16, _.length());
+            const uninit_res = String.createUninitialized(.utf16, _.length());
+            const new_str = uninit_res[0];
+            const bytes = uninit_res[1];
             if (new_str.tag != .Dead) {
                 @memcpy(bytes, _.value.ZigString.utf16Slice());
             }

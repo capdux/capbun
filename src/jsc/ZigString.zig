@@ -638,7 +638,7 @@ pub fn toExternalValue(self: ZigString, global: *JSGlobalObject) JSValue {
                 _ = (&_err);
                 return .zero;
             }
-            return bun.cpp.ZigString__toExternalValue(self, global);
+            return bun.cpp.ZigString__toExternalValue((&self), global);
     }
 
 pub extern "c" fn ZigString__toExternalValueWithCallback(this_str: *const ZigString, global: *JSGlobalObject, callback: *const fn (?*anyopaque, ?*anyopaque, usize) void) callconv(.c) JSValue;

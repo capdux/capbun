@@ -6,8 +6,10 @@ import bun from "bun";
 import protocol from "../../sql/postgres/PostgresProtocol.zig";
 import std from "std";
 import { CommandTag } from "../../sql/postgres/CommandTag.zig";
-import { SQLQueryResultMode as PostgresSQLQueryResultMode } from "../../sql/shared/SQLQueryResultMode.zig";
+import SQLQueryResultModeMod from "../../sql/shared/SQLQueryResultMode.zig";
 import { AnyPostgresError, postgresErrorToJS } from "../../sql/postgres/AnyPostgresError.zig";
+
+const PostgresSQLQueryResultMode = SQLQueryResultModeMod.SQLQueryResultMode;
 
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

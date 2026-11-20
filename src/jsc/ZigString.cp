@@ -742,7 +742,7 @@
             * = &_err; // TODO: propagate?
             return .zero;
         }
-        return bun.cpp.ZigString__toExternalValue(_, global);
+        return bun.cpp.ZigString__toExternalValue(&_, global);
     }
 
     extern fn ZigString__toExternalValueWithCallback(

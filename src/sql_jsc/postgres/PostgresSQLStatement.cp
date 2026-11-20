@@ -2,10 +2,12 @@ import PostgresCachedStructure from "../../sql_jsc/shared/CachedStructure.zig";
 import Signature from "../../sql_jsc/postgres/Signature.zig";
 import protocol from "../../sql/postgres/PostgresProtocol.zig";
 import std from "std";
-import { SQLDataCell as DataCell } from "./DataCell.zig";
+import DataCellMod from "./DataCell.zig";
 import { AnyPostgresError, postgresErrorToJS } from "../../sql/postgres/AnyPostgresError.zig";
 import types from "../../sql/postgres/PostgresTypes.zig";
 import bun from "bun";
+
+const DataCell = DataCellMod.SQLDataCell;
 
 const int4 = types.int4;
 const JSError = bun.JSError;

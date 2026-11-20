@@ -1381,3 +1381,5 @@
 - **[2026-11-20] Wave 5 `@root struct` 批量升级经验**：将 `ServerWebSocket`/`TimeoutObject`/`Listener`/`SocketAddress`/`ImmediateObject`/`TextDecoder`/`TextEncoderStreamEncoder`/`HTMLBundle` 及 `Crypto` 从旧式 `export class`/`pub const X = struct` 升级为 `@root struct X`（辅助类型提顶层、静态构造与工厂函数标 `static fn`、实例方法区分 `*_` 与只读省略接收者），集中打通 `codegen/ZigGeneratedClasses.zig` 87 处绑定导出。
 
 - **[2026-11-20] Wave 5 `RefPtr(T)` 惰性求值根因**：`src/ptr/ref_count.cp` 中 `@FieldType(T, "ref_count")` 移回 `return struct` 内部避免与队列自引用形成循环依赖；`src/runtime/node/types.cp` 按值只读方法 `switch (_.*)` 修正为 `switch (_)`。
+
+- **[2026-11-20] Wave 6 Batch B 典型修复**：`MaxHeapAllocator` 升级 `@root struct` 导出 `isInstance`；`wyhash` 3 个超 `i64::MAX` 的 `u64` 素数改位移构造；`ls`/`touch`/`ErrorPacket` 可选切片/数组加括号 `([]const u8)?`/`([5]u8)?`；`ConsoleObject`/`fmt` 剩余 `writer.print(..., [])` 改 `.{}`；`workaround_missing_symbols` 补 `@callconv("c")`；`url` `**bool?` 改 `(*bool)?`。

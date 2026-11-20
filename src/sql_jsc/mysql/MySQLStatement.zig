@@ -67,7 +67,7 @@ pub const ErrorPacket = @import("../../sql/mysql/protocol/ErrorPacket.zig");
 pub const Signature = @import("./protocol/Signature.zig");
 pub const types = @import("../../sql/mysql/MySQLTypes.zig");
 const SQLDataCell = @import("../shared/SQLDataCell.zig").SQLDataCell;
-const Param = @import("../../sql/mysql/MySQLParam.zig").Param;
+pub const MySQLParamMod = @import("../../sql/mysql/MySQLParam.zig");
 pub const bun = @import("bun");
 pub const StatementStatus = enum {
     pending,
@@ -246,6 +246,7 @@ const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
 pub const Status = StatementStatus;
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
+pub const Param = MySQLParamMod.Param;
 const String = bun.String;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;

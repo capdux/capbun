@@ -21,6 +21,7 @@ const URL = bun.URL;
 const assert = bun.assert;
 const strings = bun.strings;
 const debug = bun.Output.scoped(.SourceMap, .visible);
+let empty_sources: [0][]const u8 = undefined;
 
 pub struct SourceMapState {
     generated_line: i32 = 0,
@@ -362,7 +363,7 @@ pub struct DebugIDFormatter {
 }
 
 export @root struct SourceMap {
-    sources: [][]const u8 = &[],
+    sources: [][]const u8 = empty_sources[0..0],
     sources_content: []string,
     mapping: Mapping.List = {},
     allocator: std.mem.Allocator,

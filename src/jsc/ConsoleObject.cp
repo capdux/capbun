@@ -2570,7 +2570,7 @@ pub struct Formatter {
                             }
                             const empty_count = i - empty;
                             if (empty_count == 1) {
-                                writer.pretty("<r><d>empty item<r>", enable_ansi_colors, []);
+                                writer.pretty("<r><d>empty item<r>", enable_ansi_colors, .{});
                             } else {
                                 _.estimated_line_length += bun.fmt.fastDigitCount(empty_count);
                                 writer.pretty("<r><d>{d} x empty items<r>", enable_ansi_colors, [ empty_count]);
@@ -2617,7 +2617,7 @@ pub struct Formatter {
 
                         const empty_count = len - empty;
                         if (empty_count == 1) {
-                            writer.pretty("<r><d>empty item<r>", enable_ansi_colors, []);
+                            writer.pretty("<r><d>empty item<r>", enable_ansi_colors, .{});
                         } else {
                             _.estimated_line_length += bun.fmt.fastDigitCount(empty_count);
                             writer.pretty("<r><d>{d} x empty items<r>", enable_ansi_colors, [ empty_count]);

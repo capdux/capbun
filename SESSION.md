@@ -3046,3 +3046,7 @@ Options:
 - **[2026-11-20 17:50] Wave 5 Batch 2+3 验收提交（21 模块全绿）**：完成 Crypto/WebCore/Shell 13 模块（`sha`/`EVP`/`Crypto`/`boringssl`/`Image`/`codecs`/`streams`/`multipart`/`BunObject`/`filesystem_router`/`dns`/`ls`/`touch`）与 `ZigGeneratedClasses` 8 个 `@root struct` 核心类（`ServerWebSocket`/`TimeoutObject`/`Listener`/`SocketAddress`/`ImmediateObject`/`TextDecoder`/`TextEncoderStreamEncoder`/`HTMLBundle`，消除 87 处生成类错误）的独立验收（21/21 PASS，ratio 0.728x~1.069x）并原子提交；已派发新子智能体收尾剩余 5 外部根因 + 4 Node 单错模块。
 
 - **[2026-11-20 17:56] Wave 5 收尾提交（10 模块全绿）+ Wave 6 `zig:check` 体检**：完成 `HMAC`/`Sink`/`fetch`/`RefCountedStr`/`ScopeFunctions`/`node_fs_stat_watcher`/`ref_count`/`types`/`NativeBrotli`/`NativeZstd` 10 模块验收（10/10 PASS，ratio 0.258x~1.089x）；Wave 6 `bun run zig:check` 总报错从 **199 骤降至 93**（`ZigGeneratedClasses.zig` 91→4，`Io/Writer.zig` 23→4）。
+
+- **[2026-11-20 18:03] 收到 `cp_agy` 语法/工具链广播 `syntax-tooling-20261120-cap-cpc-fast-modular` 并已完成 `ack`**：`cap` (ReleaseFast) 与 `cpc` (Release) 极速构建与模块级增量编译已全线部署（commit `cc47f07`），含递归 mtime 感知、`-d/--debug` 原生后端加速、原子 tmp+rename 消除 ETXTBSY、`-o <dir>` 隔离 `.cap/ws/<name>` 防并发 flock、`-m/--modular` 对接 `cpc --emit-dir` 按文件 FNV-1a 增量发射；无破坏性语法变更，已同步登记至 `CP_PITFALLS.md`。
+
+- **[2026-11-20 18:04] Wave 6 Batch B 验收提交（30 模块全绿）**：完成 JSC/Core/String/SQL/TestRunner/Shell/Sourcemap/Bundler 30 个模块独立验收（30/30 PASS，ratio 0.739x~1.096x）并原子提交；静待专家 A 组（`e16cc16e`）完成后跑 Wave 7 `zig:check` 冲刺 0 错误。

@@ -37,12 +37,12 @@ export @packed struct ColumnFlags {
 }
 
 @root struct ColumnDefinition41 {
-    catalog: Data = Data{ empty: {} },
-    schema: Data = Data{ empty: {} },
-    table: Data = Data{ empty: {} },
-    org_table: Data = Data{ empty: {} },
-    name: Data = Data{ empty: {} },
-    org_name: Data = Data{ empty: {} },
+    catalog: Data = Data.Empty,
+    schema: Data = Data.Empty,
+    table: Data = Data.Empty,
+    org_table: Data = Data.Empty,
+    name: Data = Data.Empty,
+    org_name: Data = Data.Empty,
     fixed_length_fields_length: u64 = 0,
     character_set: u16 = 0,
     column_length: u32 = 0,

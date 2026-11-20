@@ -970,7 +970,7 @@ pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             return buf[0..len];
     }
 
-pub fn decodeFaultTolerant(comptime Writer: type, writer: Writer, input: []const u8, needs_redirect: *?*bool, comptime fault_tolerant: bool) !u32 {
+pub fn decodeFaultTolerant(comptime Writer: type, writer: Writer, input: []const u8, needs_redirect: ?*bool, comptime fault_tolerant: bool) !u32 {
             var i: usize = 0;
             _ = &i;
             var written: u32 = 0;

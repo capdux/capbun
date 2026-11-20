@@ -74,9 +74,7 @@ pub const Signature = @import("../../sql_jsc/postgres/Signature.zig");
 pub const bun = @import("bun");
 pub const protocol = @import("../../sql/postgres/PostgresProtocol.zig");
 const CommandTag = @import("../../sql/postgres/CommandTag.zig").CommandTag;
-const SQLQueryResultMode = @import("../../sql/shared/SQLQueryResultMode.zig").SQLQueryResultMode;
-const as = @import("../../sql/shared/SQLQueryResultMode.zig").as;
-const PostgresSQLQueryResultMode = @import("../../sql/shared/SQLQueryResultMode.zig").PostgresSQLQueryResultMode;
+pub const SQLQueryResultModeMod = @import("../../sql/shared/SQLQueryResultMode.zig");
 const AnyPostgresError = @import("../../sql/postgres/AnyPostgresError.zig").AnyPostgresError;
 const postgresErrorToJS = @import("../../sql/postgres/AnyPostgresError.zig").postgresErrorToJS;
 pub const QueryStatus = enum(u8) {
@@ -250,12 +248,12 @@ pub fn call(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSEr
         defer {
         _ = args.deinit();
         }
-        const query = ((args.nextEat()) orelse (({
+        const query = ((args.nextEat()) orelse {
         return globalThis.throw("query must be a string", .{});
-})));
-        const values = ((args.nextEat()) orelse (({
+});
+        const values = ((args.nextEat()) orelse {
         return globalThis.throw("values must be an array", .{});
-})));
+});
         if ((!query.isString())) {
             return globalThis.throw("query must be a string", .{});
         }
@@ -323,9 +321,9 @@ pub fn setModeFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject,
 pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         var arguments = callframe.arguments();
         _ = &arguments;
-        var connection = ((arguments[0].as(PostgresSQLConnection)) orelse (({
+        var connection = ((arguments[0].as(PostgresSQLConnection)) orelse {
         return globalObject.throw("connection must be a PostgresSQLConnection", .{});
-})));
+});
         _ = &connection;
         _ = connection.poll_ref.ref(globalObject.bunVM());
         var query = arguments[1];
@@ -542,6 +540,7 @@ pub const js = jsc.Codegen.JSPostgresSQLQuery;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const toJS = js.toJS;
+const PostgresSQLQueryResultMode = SQLQueryResultModeMod.SQLQueryResultMode;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSRef = jsc.JSRef;

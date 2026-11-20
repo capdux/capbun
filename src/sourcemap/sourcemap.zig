@@ -401,7 +401,7 @@ pub fn format(self: *DebugIDFormatter, writer: *std.Io.Writer) !void {
 
 pub const SourceMap = @This();
 
-sources: [][]const u8 = (&&.{}),
+sources: [][]const u8 = empty_sources[0..0],
 sources_content: [][]const u8,
 mapping: Mapping.List = .{},
 allocator: std.mem.Allocator,
@@ -468,9 +468,9 @@ pub fn parseJSON(alloc: std.mem.Allocator, arena_alloc: std.mem.Allocator, sourc
                 return error.UnsupportedVersion;
             }
         }
-        const mappings_str = ((json.get("mappings")) orelse (({
+        const mappings_str = ((json.get("mappings")) orelse {
         return error.UnsupportedVersion;
-})));
+});
         if ((mappings_str.data != .e_string)) {
             return error.InvalidSourceMap;
         }
@@ -807,6 +807,7 @@ const URL = bun.URL;
 const assert = bun.assert;
 const strings = bun.strings;
 const debug = bun.Output.scoped(.SourceMap, .visible);
+var empty_sources: [0][]const u8 = undefined;
 
 extern "c" fn ZigSourceProvider__getSourceSlice(provider: *SourceProviderMap) callconv(.c) bun.String;
 

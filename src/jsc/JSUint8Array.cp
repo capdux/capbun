@@ -19,7 +19,7 @@ pub const JSUint8Array = opaque {
 
     extern fn Bun__createUint8ArrayForCopy(*jsc.JSGlobalObject, ptr: ?*const void, len: usize, buffer: bool): JSValue ;
     pub fn fromBytesCopy(globalThis: *JSGlobalObject, bytes: []const u8): JSValue {
-        return Bun__createUint8ArrayForCopy(globalThis, bytes.ptr, bytes.len, false);
+        return Bun__createUint8ArrayForCopy(globalThis, @ptrCast(bytes.ptr), bytes.len, false);
     }
 
     pub fn createEmpty(globalThis: *JSGlobalObject): JSValue {

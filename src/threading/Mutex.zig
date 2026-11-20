@@ -137,7 +137,7 @@ pub fn unlock(self: *FutexImpl) void {
     pub const Type = u32;
 };
 
-pub const Impl = if (((builtin.mode == true) and true)) DebugImpl else ReleaseImpl;
+pub const Impl = if (((builtin.mode == std.builtin.OptimizeMode.Debug) and true)) DebugImpl else ReleaseImpl;
 pub const ReleaseImpl = if ((builtin.os.tag == std.Target.Os.Tag.windows)) WindowsImpl else if (true) DarwinImpl else FutexImpl;
 pub const ExternImpl = ReleaseImpl.Type;
 const builtin = @import("builtin");

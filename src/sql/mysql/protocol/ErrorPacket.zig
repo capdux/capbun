@@ -52,7 +52,7 @@ pub const NewReaderMod = @import("./NewReader.zig");
 pub const MySQLErrorOptions = struct {
     code: []const u8,
     errno: ?u16 = null,
-    sqlState: [5]?u8 = null,
+    sqlState: ?[5]u8 = null,
 };
 
 pub const ErrorPacket = @This();
@@ -60,8 +60,8 @@ pub const ErrorPacket = @This();
 header: u8 = 255,
 error_code: u16 = 0,
 sql_state_marker: ?u8 = null,
-sql_state: [5]?u8 = null,
-error_message: Data = Data{ .empty = .{} },
+sql_state: ?[5]u8 = null,
+error_message: Data = Data.Empty,
 
 pub fn deinit(self: *ErrorPacket) void {
         _ = self.error_message.deinit();

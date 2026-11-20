@@ -846,7 +846,7 @@ export class PercentEncoding {
         comptime Writer: type,
         writer: Writer,
         input: string,
-        needs_redirect: **bool?,
+        needs_redirect: (*bool)?,
         comptime fault_tolerant: bool,
     ): !u32 {
         let i: usize = 0;

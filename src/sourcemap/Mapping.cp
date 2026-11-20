@@ -70,7 +70,7 @@ struct SortContext {
 
 pub struct List {
     impl: Value = Value.initDefault(),
-    names: []const bun.Semver.String = &[],
+    names: []const bun.Semver.String = [],
     names_buffer: bun.ByteList = {},
 
     pub const Value = ListValue;

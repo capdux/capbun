@@ -83,11 +83,11 @@ pub const Generator = struct {
 
 pub fn do(self: *Generator, blocks_ptr: [*]const BasicBlockRange, blocks_len: usize, function_start_offset: usize, ignore_sourcemap: bool) callconv(.c) void {
             const blocks = (blk: {
-            break :blk @as([]const BasicBlockRange, @ptrCast(&(blocks_ptr[0..function_start_offset])));
+            break :blk blocks_ptr[0..function_start_offset];
 
 });
             var function_blocks = (blk: {
-            break :blk @as([]const BasicBlockRange, @ptrCast(&(blocks_ptr[function_start_offset..blocks_len])));
+            break :blk blocks_ptr[function_start_offset..blocks_len];
 
 });
             _ = &function_blocks;
@@ -379,9 +379,9 @@ pub fn find(path: bun.String) callconv(.c) ?*ByteRangeMapping {
             defer {
             _ = slice.deinit();
             }
-            var map_ = ((map) orelse (({
+            var map_ = ((map) orelse {
             return null;
-})));
+});
             _ = &map_;
             const hash = bun.hash(slice.slice());
             return map_.getPtr(hash);
@@ -701,16 +701,16 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
     }
 
 pub fn findExecutedLines(globalThis: *bun.jsc.JSGlobalObject, source_url: bun.String, blocks_ptr: [*]const BasicBlockRange, blocks_len: usize, function_start_offset: usize, ignore_sourcemap: bool) callconv(.c) bun.jsc.JSValue {
-            var mapping = ((ByteRangeMapping.find(source_url)) orelse (({
+            var mapping = ((ByteRangeMapping.find(source_url)) orelse {
             return bun.jsc.JSValue.@"null";
-})));
+});
             _ = &mapping;
             const blocks = (blk: {
-            break :blk @as([]const BasicBlockRange, @ptrCast(&(blocks_ptr[0..function_start_offset])));
+            break :blk blocks_ptr[0..function_start_offset];
 
 });
             var function_blocks = (blk: {
-            break :blk @as([]const BasicBlockRange, @ptrCast(&(blocks_ptr[function_start_offset..blocks_len])));
+            break :blk blocks_ptr[function_start_offset..blocks_len];
 
 });
             _ = &function_blocks;

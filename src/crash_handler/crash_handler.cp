@@ -19,8 +19,10 @@ const default_report_base_url = "https://bun.report";
 const sep_line = "============================================================\n";
 const empty_u8_slice: []u8 = [];
 const empty_str_slice: []const []const u8 = [];
-const windows_programs: []const cstring = ["pdb-addr2line"];
-const posix_programs: []const cstring = ["llvm-symbolizer", "llvm-symbolizer-21"];
+const windows_programs_arr: [1]cstring = ["pdb-addr2line"];
+const posix_programs_arr: [2]cstring = ["llvm-symbolizer", "llvm-symbolizer-21"];
+const windows_programs: []const cstring = &windows_programs_arr;
+const posix_programs: []const cstring = &posix_programs_arr;
 
 type TraceStrBuf = bun.BoundedArray(u8, 1024);
 type CmdLineU16 = bun.BoundedArray(u16, 4096);

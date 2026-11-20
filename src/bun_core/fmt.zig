@@ -965,7 +965,7 @@ prev_keyword = null;
                         txt = txt[len..];
                         continue;
                     }
-                    _ = try writer.print(Output.prettyFmt("<r><d>;<r>", true), &.{});
+                    _ = try writer.print(Output.prettyFmt("<r><d>;<r>", true), .{});
                     txt = txt[1..];
 },
 '.' => {
@@ -1232,7 +1232,7 @@ pub fn printColumnNames(self: @This()) void {
                         _ = &j;
                         const __end_3 = column_left_pad;
                         while (j < __end_3) : (j += 1) {
-                            _ = Output.pretty(" ", &.{});
+                            _ = Output.pretty(" ", .{});
                         }
                     }
                     _ = Output.pretty(col_fmt, .{ self.column_names[@as(usize, @intCast(i))] });
@@ -1241,7 +1241,7 @@ pub fn printColumnNames(self: @This()) void {
                         _ = &j;
                         const __end_4 = (column_inside_length + column_right_pad);
                         while (j < __end_4) : (j += 1) {
-                            _ = Output.pretty(" ", &.{});
+                            _ = Output.pretty(" ", .{});
                         }
                     }
                     if ((i == (self.column_inside_lengths.len - 1))) {

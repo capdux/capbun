@@ -113,23 +113,24 @@ pub struct Summary {
     }
 }
 
-pub struct File {
+pub struct TestRunnerFile {
     source: logger.Source = logger.Source.initEmptyFile(""),
     log: logger.Log = logger.Log.initComptime(default_allocator),
 
-    pub const List = std.MultiArrayList(File);
+    pub const List = std.MultiArrayList(TestRunnerFile);
     pub const ID = u32;
     pub const Map = std.ArrayHashMapUnmanaged(u32, u32, ArrayIdentityContext, false);
 }
 
 pub struct FileIdResult {
-    file_id: File.ID,
+    file_id: TestRunnerFile.ID,
 }
 
 pub struct TestRunner {
+    pub const File = TestRunnerFile;
     current_file: CurrentFile = CurrentFile{},
-    files: File.List = .{},
-    index: File.Map = File.Map{},
+    files: TestRunnerFile.List = .{},
+    index: TestRunnerFile.Map = TestRunnerFile.Map{},
     only: bool = false,
     run_todo: bool = false,
     concurrent: bool = false,
@@ -199,7 +200,7 @@ pub struct TestRunner {
 }
 
 pub struct Jest {
-    pub let runner: (*TestRunner)? = null;
+    static let runner: (*TestRunner)? = null;
 
     @callconv("c")
     pub static fn Bun__Jest__createTestModuleObject(globalObject: *JSGlobalObject): JSValue {

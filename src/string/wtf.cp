@@ -258,7 +258,7 @@ export struct StringImplAllocator {
 
     pub const VTable = string_impl_vtable;
 
-    pub const VTablePtr = &StringImplAllocator.VTable;
+    pub const VTablePtr = &string_impl_vtable;
 }
 
 const string_impl_vtable = std.mem.Allocator.VTable{

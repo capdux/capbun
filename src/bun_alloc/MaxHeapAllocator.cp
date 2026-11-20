@@ -4,7 +4,7 @@
 import bun from "bun";
 import std from "std";
 
-export struct MaxHeapAllocator {
+@root struct MaxHeapAllocator {
     pub const ArrayList = std.array_list.AlignedManaged(u8, .of(std.c.max_align_t));
     array_list: ArrayList,
 

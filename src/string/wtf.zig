@@ -229,7 +229,7 @@ pub fn free(ptr: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
             _ = inst.deref();
     }
     pub const VTable = string_impl_vtable;
-    pub const VTablePtr = *const StringImplAllocator.VTable;
+    pub const VTablePtr = (&string_impl_vtable);
 };
 
 const jsc = bun.jsc;

@@ -45,8 +45,8 @@ struct Generator {
         function_start_offset: usize,
         ignore_sourcemap: bool,
     ) {
-        const blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[0..function_start_offset]) };
-        let function_blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[function_start_offset..blocks_len]) };
+        const blocks = unsafe { blocks_ptr[0..function_start_offset] };
+        let function_blocks = unsafe { blocks_ptr[function_start_offset..blocks_len] };
         if (function_blocks.len > 1) {
             function_blocks = function_blocks[1..];
         }
@@ -647,8 +647,8 @@ pub struct ByteRangeMapping {
             return bun.jsc.JSValue.@"null";
         };
 
-        const blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[0..function_start_offset]) };
-        let function_blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[function_start_offset..blocks_len]) };
+        const blocks = unsafe { blocks_ptr[0..function_start_offset] };
+        let function_blocks = unsafe { blocks_ptr[function_start_offset..blocks_len] };
         if (function_blocks.len > 1) {
             function_blocks = function_blocks[1..];
         }

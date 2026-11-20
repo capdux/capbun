@@ -5,8 +5,10 @@ import Signature from "./protocol/Signature.zig";
 import std from "std";
 import types from "../../sql/mysql/MySQLTypes.zig";
 import { SQLDataCell } from "../shared/SQLDataCell.zig";
-import { Param } from "../../sql/mysql/MySQLParam.zig";
+import MySQLParamMod from "../../sql/mysql/MySQLParam.zig";
 import bun from "bun";
+
+pub const Param = MySQLParamMod.Param;
 
 const String = bun.String;
 const jsc = bun.jsc;

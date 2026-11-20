@@ -113,11 +113,11 @@ pub fn Table(
                 const column_inside_length = this.column_inside_lengths[i];
                 Output.pretty("{s}", [symbols.verticalEdge()]);
                 for (j of 0..column_left_pad) {
-                    Output.pretty(" ", []);
+                    Output.pretty(" ", .{});
                 }
                 Output.pretty(col_fmt, [this.column_names[i]]);
                 for (j of this.column_names[i].len..(column_inside_length + column_right_pad)) {
-                    Output.pretty(" ", []);
+                    Output.pretty(" ", .{});
                 }
                 if (i == this.column_inside_lengths.len - 1) {
                     Output.pretty("{s}\n", [symbols.verticalEdge()]);
@@ -1299,7 +1299,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                             txt = txt[len..];
                             continue;
                         }
-                        writer.print(Output.prettyFmt("<r><d>;<r>", true), [])?;
+                        writer.print(Output.prettyFmt("<r><d>;<r>", true), .{})?;
                         txt = txt[1..];
                     },
                     '.' => {

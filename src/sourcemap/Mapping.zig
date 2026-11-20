@@ -127,7 +127,7 @@ pub fn lessThan(self: SortContext, a_index: usize, b_index: usize) bool {
 
 pub const List = struct {
     impl: Value = Value.initDefault(),
-    names: []const bun.Semver.String = (&&.{}),
+    names: []const bun.Semver.String = &.{},
     names_buffer: bun.ByteList = .{},
 
 pub fn ensureWithNames(self: *List, allocator: std.mem.Allocator) !void {

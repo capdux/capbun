@@ -305,7 +305,7 @@ pub const JSPromise = opaque {
     }
 
     /// **DEPRECATED** use `JSPromise.toJS` instead
-    pub fn asValue(self: *const JSPromise, _: *JSGlobalObject) JSValue {
+    pub fn asValue(self: *JSPromise, _: *JSGlobalObject) JSValue {
         return self.toJS();
     }
 

@@ -36,7 +36,7 @@ export @root struct Mutex {
 const windows = std.os.windows;
 const c = std.c;
 
-pub type Impl = @if (builtin.mode == .Debug and !builtin.single_threaded) DebugImpl else ReleaseImpl;
+pub type Impl = @if (builtin.mode == std.builtin.OptimizeMode.Debug && !builtin.single_threaded) DebugImpl else ReleaseImpl;
 
 pub type ReleaseImpl = @if (builtin.os.tag == std.Target.Os.Tag.windows) WindowsImpl else @if (builtin.os.tag.isDarwin()) DarwinImpl else FutexImpl;
 

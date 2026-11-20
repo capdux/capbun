@@ -2590,7 +2590,7 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
 };
 
 pub const ImportData = struct {
-    re_exports: Dependency.List = Dependency.List,
+    re_exports: Dependency.List = .{},
     data: ImportTracker = .{},
 };
 

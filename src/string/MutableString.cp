@@ -8,6 +8,7 @@ const strings = bun.strings;
 const DynamicOwned = bun.ptr.DynamicOwned;
 const Owned = bun.ptr.Owned;
 const buffered_writer_max = 2048;
+type MutableStringPtr = *MutableString;
 
 pub struct MutableStringBufferedWriter {
     context: *MutableString,
@@ -163,7 +164,7 @@ pub struct MutableStringBufferedWriter {
         return MutableString.initCopy(this.allocator, this.list.items);
     }
 
-    pub const Writer = std.Io.GenericWriter(*@This(), Allocator.Error, MutableString.writeAll);
+    pub const Writer = std.Io.GenericWriter(MutableStringPtr, Allocator.Error, MutableString.writeAll);
     pub fn writer(*_): Writer {
         return Writer{
             context: this,

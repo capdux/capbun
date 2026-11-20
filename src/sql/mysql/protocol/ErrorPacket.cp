@@ -9,15 +9,15 @@ const decoderWrap = NewReaderMod.decoderWrap;
 export struct MySQLErrorOptions {
     code: []const u8,
     errno: u16? = null,
-    sqlState: [5]u8? = null,
+    sqlState: ([5]u8)? = null,
 }
 
 @root struct ErrorPacket {
     header: u8 = 0xff,
     error_code: u16 = 0,
     sql_state_marker: u8? = null,
-    sql_state: [5]u8? = null,
-    error_message: Data = Data{ empty: {} },
+    sql_state: ([5]u8)? = null,
+    error_message: Data = Data.Empty,
 
     pub const createMySQLError = ErrorPacketJsc.createMySQLError;
     pub const toJS = ErrorPacketJsc.toJS;

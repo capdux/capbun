@@ -487,8 +487,9 @@ pub fn writeAll(self: *MutableString, bytes: []const u8) Allocator.Error!usize {
         return bytes.len;
 }
 pub const BufferedWriter = MutableStringBufferedWriter;
-pub const Writer = std.Io.GenericWriter((&@This()), Allocator.Error, MutableString.writeAll);
+pub const Writer = std.Io.GenericWriter(MutableStringPtr, Allocator.Error, MutableString.writeAll);
 pub const ensureUnusedCapacity = MutableString.growIfNeeded;
+const MutableStringPtr = *MutableString;
 const Allocator = std.mem.Allocator;
 const js_lexer = bun.js_lexer;
 const strings = bun.strings;
