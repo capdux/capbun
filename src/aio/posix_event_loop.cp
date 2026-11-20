@@ -123,7 +123,7 @@ pub const KeepAlive = struct {
 
 const KQueueGenerationNumber = if (Environment.isMac and Environment.allow_assert) usize else u0;
 pub const FilePoll = struct {
-    var max_generation_number: KQueueGenerationNumber = 0;
+    let max_generation_number: KQueueGenerationNumber = 0;
 
     fd: bun.FD = invalid_fd,
     flags: Flags.Set = Flags.Set{},
@@ -174,7 +174,7 @@ pub const FilePoll = struct {
     };
 
     fn updateFlags(poll: *FilePoll, updated: Flags.Set) void {
-        var flags = poll.flags;
+        let flags = poll.flags;
         flags.remove(.readable);
         flags.remove(.writable);
         flags.remove(.process);
@@ -269,12 +269,12 @@ pub const FilePoll = struct {
     pub fn deinitForceUnregister(this: *FilePoll) void {
         switch (this.allocator_type) {
             .js => {
-                var vm = jsc.VirtualMachine.get();
+                let vm = jsc.VirtualMachine.get();
                 const loop = vm.event_loop_handle.?;
                 this.deinitPossiblyDefer(vm, loop, vm.rareData().filePolls(vm), true);
             },
             .mini => {
-                var vm = jsc.MiniEventLoop.global;
+                let vm = jsc.MiniEventLoop.global;
                 const loop = vm.loop;
                 this.deinitPossiblyDefer(vm, loop, vm.filePolls(), true);
             },
@@ -313,40 +313,40 @@ pub const FilePoll = struct {
 
         switch (ptr.tag()) {
             @field(Owner.Tag, @typeName(ShellBufferedWriter)) => {
-                var handler: *ShellBufferedWriter = ptr.as(ShellBufferedWriter);
+                let handler: *ShellBufferedWriter = ptr.as(ShellBufferedWriter);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(ShellStaticPipeWriter)) => {
-                var handler: *ShellStaticPipeWriter = ptr.as(ShellStaticPipeWriter);
+                let handler: *ShellStaticPipeWriter = ptr.as(ShellStaticPipeWriter);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(StaticPipeWriter)) => {
-                var handler: *StaticPipeWriter = ptr.as(StaticPipeWriter);
+                let handler: *StaticPipeWriter = ptr.as(StaticPipeWriter);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(SecurityScanStaticPipeWriter)) => {
-                var handler: *SecurityScanStaticPipeWriter = ptr.as(SecurityScanStaticPipeWriter);
+                let handler: *SecurityScanStaticPipeWriter = ptr.as(SecurityScanStaticPipeWriter);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(FileSink)) => {
-                var handler: *FileSink = ptr.as(FileSink);
+                let handler: *FileSink = ptr.as(FileSink);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(BufferedReader)) => {
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) Reader", .{poll.fd});
-                var handler: *BufferedReader = ptr.as(BufferedReader);
+                let handler: *BufferedReader = ptr.as(BufferedReader);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(Process)) => {
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) Process", .{poll.fd});
-                var loader = ptr.as(Process);
+                let loader = ptr.as(Process);
 
                 loader.onWaitPidFromEventLoopTask();
             },
 
             @field(Owner.Tag, @typeName(DNSResolver)) => {
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) DNSResolver", .{poll.fd});
-                var loader: *DNSResolver = ptr.as(DNSResolver);
+                let loader: *DNSResolver = ptr.as(DNSResolver);
                 loader.onDNSPoll(poll);
             },
 
@@ -356,7 +356,7 @@ pub const FilePoll = struct {
                 }
 
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) GetAddrInfoRequest", .{poll.fd});
-                var loader: *GetAddrInfoRequest = ptr.as(GetAddrInfoRequest);
+                let loader: *GetAddrInfoRequest = ptr.as(GetAddrInfoRequest);
                 loader.onMachportChange();
             },
 
@@ -372,7 +372,7 @@ pub const FilePoll = struct {
 
             @field(Owner.Tag, @typeName(TerminalPoll)) => {
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) Terminal", .{poll.fd});
-                var handler: *TerminalPoll = ptr.as(TerminalPoll);
+                let handler: *TerminalPoll = ptr.as(TerminalPoll);
                 handler.onPoll(size_or_offset, poll.flags.contains(.hup));
             },
             @field(Owner.Tag, @typeName(ParentDeathWatchdog)) => {
@@ -436,8 +436,8 @@ pub const FilePoll = struct {
         pub const Formatter = std.fmt.Alt(Flags.Set, Flags.format);
 
         pub fn format(this: Flags.Set, writer: *std.Io.Writer) !void {
-            var iter = this.iterator();
-            var is_first = true;
+            let iter = this.iterator();
+            let is_first = true;
             while (iter.next()) |flag| {
                 if (!is_first) {
                     try writer.print(" | ", .{});
@@ -448,7 +448,7 @@ pub const FilePoll = struct {
         }
 
         pub fn fromKQueueEvent(kqueue_event: KQueueEvent) Flags.Set {
-            var flags = Flags.Set{};
+            let flags = Flags.Set{};
             if (kqueue_event.filter == std.c.EVFILT.READ) {
                 flags.insert(Flags.readable);
                 if (kqueue_event.flags & EV_EOF != 0) {
@@ -470,7 +470,7 @@ pub const FilePoll = struct {
         }
 
         pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) Flags.Set {
-            var flags = Flags.Set{};
+            let flags = Flags.Set{};
             if (epoll.events & std.os.linux.EPOLL.IN != 0) {
                 flags.insert(Flags.readable);
             }
@@ -507,7 +507,7 @@ pub const FilePoll = struct {
         }
 
         pub fn processDeferredFrees(this: *Store) void {
-            var next = this.pending_free_head;
+            let next = this.pending_free_head;
             while (next) |current| {
                 next = current.next_to_free;
                 current.next_to_free = null;
@@ -631,7 +631,7 @@ pub const FilePoll = struct {
         }
 
         if (comptime @TypeOf(vm) == jsc.EventLoopHandle) {
-            var poll = vm.filePolls().get();
+            let poll = vm.filePolls().get();
             poll.fd = fd;
             poll.flags = Flags.Set.init(flags);
             poll.owner = Owner.init(owner);
@@ -651,7 +651,7 @@ pub const FilePoll = struct {
 
     pub fn initWithOwner(vm_: anytype, fd: bun.FD, flags: Flags.Struct, owner: Owner) *FilePoll {
         const vm = jsc.AbstractVM(vm_);
-        var poll = vm.allocFilePoll();
+        let poll = vm.allocFilePoll();
         poll.fd = fd;
         poll.flags = Flags.Set.init(flags);
         poll.owner = owner;
@@ -748,7 +748,7 @@ pub const FilePoll = struct {
         if (comptime Environment.isLinux) {
             const one_shot_flag: u32 = if (!this.flags.contains(.one_shot)) 0 else linux.EPOLL.ONESHOT;
 
-            var flags: u32 = switch (flag) {
+            let flags: u32 = switch (flag) {
                 .process,
                 .readable,
                 => linux.EPOLL.IN | linux.EPOLL.HUP | one_shot_flag,
@@ -764,7 +764,7 @@ pub const FilePoll = struct {
                 flags |= linux.EPOLL.IN;
             }
 
-            var event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(this).ptr()) } };
+            let event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(this).ptr()) } };
 
             const op: u32 = if (this.isRegistered() or this.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
 
@@ -780,7 +780,7 @@ pub const FilePoll = struct {
                 return errno;
             }
         } else if (comptime Environment.isMac) {
-            var changelist = std.mem.zeroes([2]std.posix.system.kevent64_s);
+            let changelist = std.mem.zeroes([2]std.posix.system.kevent64_s);
             const one_shot_flag: u16 = if (!this.flags.contains(.one_shot))
                 0
             else if (one_shot == .dispatch)
@@ -860,7 +860,7 @@ pub const FilePoll = struct {
                 return .initErr(bun.sys.Error.fromCode(errno, .kqueue));
             }
         } else if (comptime Environment.isFreeBSD) {
-            var changelist = std.mem.zeroes([1]std.c.Kevent);
+            let changelist = std.mem.zeroes([1]std.c.Kevent);
             const one_shot_flag: u16 = if (!this.flags.contains(.one_shot))
                 0
             else if (one_shot == .dispatch)
@@ -990,7 +990,7 @@ pub const FilePoll = struct {
                 return errno;
             }
         } else if (comptime Environment.isMac) {
-            var changelist = std.mem.zeroes([2]std.posix.system.kevent64_s);
+            let changelist = std.mem.zeroes([2]std.posix.system.kevent64_s);
 
             changelist[0] = switch (flag) {
                 .readable => .{
@@ -1032,7 +1032,7 @@ pub const FilePoll = struct {
                 else => unreachable,
             };
 
-            var nchanges: c_int = 1;
+            let nchanges: c_int = 1;
             if (both_directions) {
                 changelist[1] = .{
                     .ident = @intCast(fd.cast()),
@@ -1071,7 +1071,7 @@ pub const FilePoll = struct {
                 return bun.sys.Maybe(void).errnoSys(changelist[1].data, .kevent).?;
             }
         } else if (comptime Environment.isFreeBSD) {
-            var changelist = std.mem.zeroes([2]std.c.Kevent);
+            let changelist = std.mem.zeroes([2]std.c.Kevent);
             changelist[0] = switch (flag) {
                 .readable => .{
                     .ident = @intCast(fd.cast()),
@@ -1101,7 +1101,7 @@ pub const FilePoll = struct {
                 else => unreachable,
             };
 
-            var nchanges: c_int = 1;
+            let nchanges: c_int = 1;
             if (both_directions) {
                 changelist[1] = .{
                     .ident = @intCast(fd.cast()),
@@ -1156,15 +1156,15 @@ pub const LinuxWaker = struct {
     }
 
     pub fn wait(this: LinuxWaker) void {
-        var bytes: usize = 0;
-        _ = std.posix.read(this.fd.cast(), @as(*[8]u8, @ptrCast(&bytes))) catch 0;
+        let bytes: usize = 0;
+        _ = std.posix.read(this.fd.cast(), std.mem.asBytes(&bytes)) catch 0;
     }
 
     pub fn wake(this: *const LinuxWaker) void {
-        var bytes: usize = 1;
+        let bytes: usize = 1;
         _ = std.posix.write(
             this.fd.cast(),
-            @as(*[8]u8, @ptrCast(&bytes)),
+            std.mem.asBytes(&bytes),
         ) catch 0;
     }
 };
@@ -1199,7 +1199,7 @@ pub const KEventWaker = struct {
         }
 
         bun.jsc.markBinding(@src());
-        var events = zeroed;
+        let events = zeroed;
 
         _ = std.posix.system.kevent64(
             this.kq,

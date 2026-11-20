@@ -1,8 +1,7 @@
 // Intrusive lock-free unbounded queue in CP
-const bun = @import("bun");
+import bun from "bun";
 const assertf = bun.assertf;
 
-const std = @import("std");
 const atomic = std.atomic;
 const builtin = std.builtin;
 const meta = std.meta;
@@ -99,7 +98,7 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
         pub fn pushBatch(self: *Self, first: *T, last: *T) void {
             setNext(last, null);
             if (comptime bun.Environment.allow_assert) {
-                var item = first;
+                let item = first;
                 while (getNext(item)) |next_item| {
                     item = next_item;
                 }
@@ -113,7 +112,7 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
         }
 
         pub fn pop(self: *Self) ?*T {
-            var first = self.front.load(.acquire) orelse return null;
+            let first = self.front.load(.acquire) orelse return null;
             const next_item = while (true) {
                 const next_ptr = atomicLoadNext(first, .acquire);
                 const maybe_first = self.front.cmpxchgWeak(
@@ -147,7 +146,7 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
         }
 
         pub fn popBatch(self: *Self) Self.Batch {
-            var batch: Self.Batch = .{};
+            let batch: Self.Batch = .{};
 
             // Not .acq_rel because another thread that sees this `null` doesn't depend on any
             // visible side-effects from this thread.
@@ -158,7 +157,7 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
             // pushed *after* `first`, because the .acquire load of `self.front` synchronizes-with
             // the .release store in push/pushBatch. So we know it's reachable from `first`.
             const last = self.back.swap(null, .monotonic).?;
-            var next_item = first;
+            let next_item = first;
             while (next_item != last) : (batch.count += 1) {
                 next_item = while (true) : (atomic.spinLoopHint()) {
                     // Wait for push/pushBatch to set `next`.

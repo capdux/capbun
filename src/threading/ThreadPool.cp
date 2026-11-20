@@ -84,20 +84,20 @@ pub const Config = struct {
 };
 
 /// Statically initialize the thread pool using the configuration.
-pub fn init(config: Config) ThreadPool {
+pub fn init(config: Config): ThreadPool {
     return .{
         .stack_size = @max(1, config.stack_size),
         .max_threads = @max(1, config.max_threads),
     };
 }
 
-pub fn wakeForIdleEvents(*this): void {
+pub fn wakeForIdleEvents(*_) {
     // Wake all the threads to check for idle events.
     this.idle_event.wake(Event.NOTIFIED, std.math.maxInt(u32));
 }
 
 /// Shut down the thread pool and stop the worker threads.
-pub fn deinit(*this): void {
+pub fn deinit(*_) {
     this.shutdown();
     this.join();
     this.* = undefined;
@@ -164,7 +164,7 @@ pub const Batch = struct {
 ///
 /// This function does not shut down or deinit the thread pool.
 pub fn each(
-    *this,
+    *_,
     allocator: std.mem.Allocator,
     ctx: anytype,
     comptime run_fn: anytype,
@@ -175,7 +175,7 @@ pub fn each(
 
 /// Like `each`, but calls `run_fn` with a pointer to the value.
 pub fn eachPtr(
-    *this,
+    *_,
     allocator: std.mem.Allocator,
     ctx: anytype,
     comptime run_fn: anytype,
@@ -185,7 +185,7 @@ pub fn eachPtr(
 }
 
 fn eachImpl(
-    *this,
+    *_,
     allocator: std.mem.Allocator,
     ctx: anytype,
     comptime run_fn: anytype,
@@ -208,24 +208,24 @@ fn eachImpl(
         i: usize = 0,
 
         pub fn call(task: *Task) void {
-            var runner_task: *@This() = @fieldParentPtr("task", task);
+            let runner_task: *@This() = @fieldParentPtr("task", task);
             const i = runner_task.i;
             const value = &runner_task.ctx.values[i];
             run_fn(runner_task.ctx.ctx, if (comptime as_ptr) value else value.*, i);
         }
     };
 
-    var wait_context = WaitContext{
+    let wait_context = WaitContext{
         .ctx = ctx,
         .values = values,
     };
 
     const tasks = allocator.alloc(RunnerTask, values.len) catch unreachable;
     defer allocator.free(tasks);
-    var batch: Batch = .{};
-    var offset = tasks.len;
+    let batch: Batch = .{};
+    let offset = tasks.len;
 
-    for (tasks) |*runner_task| {
+    for (*runner_task of tasks) {
         offset -= 1;
         runner_task.* = .{
             .i = offset,
@@ -238,14 +238,14 @@ fn eachImpl(
     this.waitForAll();
 }
 
-fn scheduleImpl(*this, batch: Batch, try_current: bool): void {
+fn scheduleImpl(*_, batch: Batch, try_current: bool) {
     // Sanity check
     if (batch.len == 0) {
         return;
     }
 
     // Extract out the `Node`s from the `Task`s
-    var list = Node.List{
+    let list = Node.List{
         .head = &batch.head.?.node,
         .tail = &batch.tail.?.node,
     };
@@ -271,7 +271,7 @@ fn scheduleImpl(*this, batch: Batch, try_current: bool): void {
         // Make sure thread is part of this thread pool, not a different one.
         break :blk if (current.thread_pool == this) current else null;
     };
-    if (current) |thread| {
+    if (thread := current) {
         thread.run_buffer.push(&list) catch thread.run_queue.push(list);
     } else {
         this.run_queue.push(list);
@@ -280,33 +280,33 @@ fn scheduleImpl(*this, batch: Batch, try_current: bool): void {
 }
 
 /// Schedule a batch of tasks to be executed by some thread on the thread pool.
-pub fn schedule(*this, batch: Batch): void {
+pub fn schedule(*_, batch: Batch) {
     this.scheduleImpl(batch, false);
 }
 
 /// This function should only be called from threads that are part of the thread pool.
-pub fn scheduleInsideThreadPool(*this, batch: Batch): void {
+pub fn scheduleInsideThreadPool(*_, batch: Batch) {
     this.scheduleImpl(batch, true);
 }
 
 /// Wait for all tasks to complete. This does not shut down or deinit the thread pool.
-pub fn waitForAll(*this): void {
+pub fn waitForAll(*_) {
     this.wait_group.wait();
 }
 
 /// Wait for all tasks to complete, then shut down and deinit the thread pool.
-pub fn waitAndDeinit(*this): void {
+pub fn waitAndDeinit(*_) {
     this.waitForAll();
     this.deinit();
 }
 
-fn forceSpawn(*this): void {
+fn forceSpawn(*_) {
     // Try to notify a thread
     const is_waking = false;
     return this.notify(is_waking);
 }
 
-@inline fn notify(*this, is_waking: bool): void {
+@inline fn notify(*_, is_waking: bool) {
     // Fast path to check the Sync state to avoid calling into notifySlow().
     // If we're waking, then we need to update the state regardless
     if (!is_waking) {
@@ -340,14 +340,14 @@ pub const default_thread_stack_size = brk: {
 
 /// Warm the thread pool up to the given number of threads.
 /// https://www.youtube.com/watch?v=ys3qcbO5KWw
-pub fn warm(*this, count: u14): void {
+pub fn warm(*_, count: u14) {
     self.is_running.store(true, .monotonic);
     const target = @min(count, @as(u14, @truncate(this.max_threads)));
-    var sync = this.sync.load(.monotonic);
+    let sync = this.sync.load(.monotonic);
     while (sync.spawned < target) {
-        var new_sync = sync;
+        let new_sync = sync;
         new_sync.spawned += 1;
-        if (this.sync.cmpxchgWeak(sync, new_sync, .release, .monotonic)) |current| {
+        if (current := this.sync.cmpxchgWeak(sync, new_sync, .release, .monotonic)) {
             sync = current;
             continue;
         }
@@ -358,16 +358,16 @@ pub fn warm(*this, count: u14): void {
     }
 }
 
-@noinline fn notifySlow(*this, is_waking: bool): void {
+@noinline fn notifySlow(*_, is_waking: bool) {
     self.is_running.store(true, .monotonic);
-    var sync = this.sync.load(.monotonic);
+    let sync = this.sync.load(.monotonic);
     while (sync.state != .shutdown) {
         const can_wake = is_waking or (sync.state == .pending);
         if (is_waking) {
             assert(sync.state == .waking);
         }
 
-        var new_sync = sync;
+        let new_sync = sync;
         new_sync.notified = true;
         if (can_wake and sync.idle > 0) { // wake up an idle thread
             new_sync.state = .signaled;
@@ -382,12 +382,12 @@ pub fn warm(*this, count: u14): void {
 
         // Release barrier synchronizes with Acquire in wait()
         // to ensure pushes to run queues happen before observing a posted notification.
-        if (this.sync.cmpxchgWeak(
+        if (current := this.sync.cmpxchgWeak(
             sync,
             new_sync,
             .release,
             .monotonic,
-        )) |current| {
+        )) {
             sync = current;
             continue;
         }
@@ -408,10 +408,10 @@ pub fn warm(*this, count: u14): void {
     }
 }
 
-@noinline fn wait(*this, _is_waking: bool): !bool {
-    var is_idle = false;
-    var is_waking = _is_waking;
-    var sync = this.sync.load(.monotonic);
+@noinline fn wait(*_, _is_waking: bool): !bool {
+    let is_idle = false;
+    let is_waking = _is_waking;
+    let sync = this.sync.load(.monotonic);
 
     while (true) {
         if (sync.state == .shutdown) return error.Shutdown;
@@ -419,7 +419,7 @@ pub fn warm(*this, count: u14): void {
 
         // Consume a notification made by notify().
         if (sync.notified) {
-            var new_sync = sync;
+            let new_sync = sync;
             new_sync.notified = false;
             if (is_idle)
                 new_sync.idle -= 1;
@@ -437,7 +437,7 @@ pub fn warm(*this, count: u14): void {
                 return is_waking or (sync.state == .signaled);
             };
         } else if (!is_idle) {
-            var new_sync = sync;
+            let new_sync = sync;
             new_sync.idle += 1;
             if (is_waking)
                 new_sync.state = .pending;
@@ -453,7 +453,7 @@ pub fn warm(*this, count: u14): void {
                 continue;
             };
         } else {
-            if (Thread.current) |current| {
+            if (current := Thread.current) {
                 current.drainIdleEvents();
             }
 
@@ -464,10 +464,10 @@ pub fn warm(*this, count: u14): void {
 }
 
 /// Marks the thread pool as shutdown
-@noinline pub fn shutdown(*this): void {
-    var sync = this.sync.load(.monotonic);
+@noinline pub fn shutdown(*_) {
+    let sync = this.sync.load(.monotonic);
     while (sync.state != .shutdown) {
-        var new_sync = sync;
+        let new_sync = sync;
         new_sync.notified = true;
         new_sync.state = .shutdown;
         new_sync.idle = 0;
@@ -487,9 +487,9 @@ pub fn warm(*this, count: u14): void {
     }
 }
 
-fn register(*this, worker: *Thread): void {
+fn register(*_, worker: *Thread) {
     // Push the thread onto the threads stack in a lock-free manner.
-    var threads = this.threads.load(.monotonic);
+    let threads = this.threads.load(.monotonic);
     while (true) {
         worker.next = threads;
         threads = this.threads.cmpxchgWeak(
@@ -501,7 +501,7 @@ fn register(*this, worker: *Thread): void {
     }
 }
 
-fn unregister(*this, maybe_thread: ?*Thread): void {
+fn unregister(*_, maybe_thread: *Thread?) {
     // Un-spawn one thread, either due to a failed OS thread spawning or the thread is exiting.
     const one_spawned: Sync = .{ .spawned = 1 };
     const sync = this.sync.fetchSub(one_spawned, .release);
@@ -524,9 +524,9 @@ fn unregister(*this, maybe_thread: ?*Thread): void {
     next_thread.join_event.notify();
 }
 
-fn join(*this): void {
+fn join(*_) {
     // Wait for the thread pool to be shutdown() then for all threads to enter a joinable state
-    var sync = this.sync.load(.monotonic);
+    let sync = this.sync.load(.monotonic);
     if (!(sync.state == .shutdown and sync.spawned == 0)) {
         this.join_event.wait();
         sync = this.sync.load(.monotonic);
@@ -550,7 +550,7 @@ pub const Thread = struct {
     run_buffer: Node.Buffer = .{},
     thread_pool: *ThreadPool,
 
-    pub threadlocal var current: ?*Thread = null;
+    pub threadlocal let current: ?*Thread = null;
 
     pub fn pushIdleTask(self: *Thread, task: *Task) void {
         const list = Node.List{
@@ -559,28 +559,28 @@ pub const Thread = struct {
         };
         self.idle_queue.push(list);
     }
-    var counter: std.atomic.Value(u32) = .init(0);
+    let counter: std.atomic.Value(u32) = .init(0);
 
     /// Thread entry point which runs a worker for the ThreadPool
     fn run(thread_pool: *ThreadPool) void {
         bun.mimalloc.mi_thread_set_in_threadpool();
 
         {
-            var counter_buf: [100]u8 = undefined;
+            let counter_buf: [100]u8 = undefined;
             const int = counter.fetchAdd(1, .seq_cst);
             const named = std.fmt.bufPrintZ(&counter_buf, "Bun Pool {d}", .{int}) catch "Bun Pool";
             Output.Source.configureNamedThread(named);
         }
 
-        var self_ = Thread{ .thread_pool = thread_pool };
-        var self = &self_;
+        let self_ = Thread{ .thread_pool = thread_pool };
+        let self = &self_;
         current = self;
         defer current = null;
 
         thread_pool.register(self);
         defer thread_pool.unregister(self);
 
-        var is_waking = false;
+        let is_waking = false;
         while (true) {
             is_waking = thread_pool.wait(is_waking) catch return;
 
@@ -600,7 +600,7 @@ pub const Thread = struct {
     }
 
     pub fn drainIdleEvents(noalias self: *Thread) void {
-        var consumer = self.idle_queue.tryAcquireConsumer() catch return;
+        let consumer = self.idle_queue.tryAcquireConsumer() catch return;
         defer self.idle_queue.releaseConsumer(consumer);
         while (self.idle_queue.pop(&consumer)) |node| {
             const task: *Task = @fieldParentPtr("node", node);
@@ -630,7 +630,7 @@ pub const Thread = struct {
         }
 
         // Then try work stealing from other threads
-        var num_threads = thread_pool.sync.load(.monotonic).spawned;
+        let num_threads = thread_pool.sync.load(.monotonic).spawned;
         while (num_threads > 0) : (num_threads -= 1) {
             // Traverse the stack of registered threads on the thread pool
             const target = self.target orelse thread_pool.threads.load(.acquire) orelse unreachable;
@@ -671,9 +671,9 @@ const Event = struct {
     /// Wait for and consume a notification
     /// or wait for the event to be shutdown entirely
     noinline fn wait(self: *Event) void {
-        var acquire_with: u32 = EMPTY;
-        var state = self.state.load(.monotonic);
-        var has_shrunk_memory: bool = false;
+        let acquire_with: u32 = EMPTY;
+        let state = self.state.load(.monotonic);
+        let has_shrunk_memory: bool = false;
 
         while (true) {
             // If we're shutdown then exit early.
@@ -772,14 +772,14 @@ pub const Node = struct {
         }
 
         fn push(noalias self: *Queue, list: List) void {
-            var stack = self.stack.load(.monotonic);
+            let stack = self.stack.load(.monotonic);
             while (true) {
                 // Attach the list to the stack (pt. 1)
                 list.tail.next = @as(?*Node, @ptrFromInt(stack & PTR_MASK));
 
                 // Update the stack with the list (pt. 2).
                 // Don't change the HAS_CACHE and IS_CONSUMING bits of the consumer.
-                var new_stack = @intFromPtr(list.head);
+                let new_stack = @intFromPtr(list.head);
                 assert(new_stack & ~PTR_MASK == 0);
                 new_stack |= (stack & ~PTR_MASK);
 
@@ -794,7 +794,7 @@ pub const Node = struct {
         }
 
         fn tryAcquireConsumer(self: *Queue) error{ Empty, Contended }!?*Node {
-            var stack = self.stack.load(.monotonic);
+            let stack = self.stack.load(.monotonic);
             while (true) {
                 if (stack & IS_CONSUMING != 0)
                     return error.Contended; // The queue already has a consumer.
@@ -802,7 +802,7 @@ pub const Node = struct {
                     return error.Empty; // The queue is empty when there's nothing cached and nothing in the stack.
 
                 // When we acquire the consumer, also consume the pushed stack if the cache is empty.
-                var new_stack = stack | HAS_CACHE | IS_CONSUMING;
+                let new_stack = stack | HAS_CACHE | IS_CONSUMING;
                 if (stack & HAS_CACHE == 0) {
                     assert(stack & PTR_MASK != 0);
                     new_stack &= ~PTR_MASK;
@@ -822,7 +822,7 @@ pub const Node = struct {
         fn releaseConsumer(noalias self: *Queue, noalias consumer: ?*Node) void {
             // Stop consuming and remove the HAS_CACHE bit as well if the consumer's cache is empty.
             // When HAS_CACHE bit is zeroed, the next consumer will acquire the pushed stack nodes.
-            var remove = IS_CONSUMING;
+            let remove = IS_CONSUMING;
             if (consumer == null)
                 remove |= HAS_CACHE;
 
@@ -841,7 +841,7 @@ pub const Node = struct {
             }
 
             // Load the stack to see if there was anything pushed that we could grab.
-            var stack = self.stack.load(.monotonic);
+            let stack = self.stack.load(.monotonic);
             assert(stack & IS_CONSUMING != 0);
             if (stack & PTR_MASK == 0) {
                 return null;
@@ -872,16 +872,16 @@ pub const Node = struct {
         }
 
         fn push(noalias self: *Buffer, noalias list: *List) error{Overflow}!void {
-            var head = self.head.load(.monotonic);
-            var tail = self.tail.raw; // we're the only thread that can change this
+            let head = self.head.load(.monotonic);
+            let tail = self.tail.raw; // we're the only thread that can change this
 
             while (true) {
-                var size = tail -% head;
+                let size = tail -% head;
                 assert(size <= capacity);
 
                 // Push nodes from the list to the buffer if it's not empty.
                 if (size < capacity) {
-                    var nodes: ?*Node = list.head;
+                    let nodes: ?*Node = list.head;
                     while (size < capacity) : (size += 1) {
                         const node = nodes orelse break;
                         nodes = node.next;
@@ -904,7 +904,7 @@ pub const Node = struct {
                 // Try to steal/overflow half of the tasks in the buffer to make room for future push()es.
                 // Migrating half amortizes the cost of stealing while requiring future pops to still use the buffer.
                 // Acquire barrier to ensure the linked list creation after the steal only happens after we successfully steal.
-                var migrate = size / 2;
+                let migrate = size / 2;
                 head = self.head.cmpxchgWeak(
                     head,
                     head +% migrate,
@@ -932,7 +932,7 @@ pub const Node = struct {
         }
 
         fn pop(self: *Buffer) ?*Node {
-            var head = self.head.load(.monotonic);
+            let head = self.head.load(.monotonic);
             const tail = self.tail.raw; // we're the only thread that can change this
 
             while (true) {
@@ -960,7 +960,7 @@ pub const Node = struct {
         };
 
         fn consume(noalias self: *Buffer, noalias queue: *Queue) ?Stole {
-            var consumer = queue.tryAcquireConsumer() catch return null;
+            let consumer = queue.tryAcquireConsumer() catch return null;
             defer queue.releaseConsumer(consumer);
 
             const head = self.head.load(.monotonic);
@@ -972,7 +972,7 @@ pub const Node = struct {
 
             // Pop nodes from the queue and push them to our array.
             // Atomic stores to the array as steal() threads may be atomically reading from it.
-            var pushed: Index = 0;
+            let pushed: Index = 0;
             while (pushed < capacity) : (pushed += 1) {
                 const node = queue.pop(&consumer) orelse break;
                 self.array[(tail +% pushed) % capacity].store(node, .unordered);

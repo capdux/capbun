@@ -1,5 +1,4 @@
 import bun from "bun";
-import std from "std";
 import Posix from "./posix_event_loop.zig";
 
 const Environment = bun.Environment;
@@ -10,53 +9,50 @@ const uv = bun.windows.libuv;
 
 pub const Loop = uv.Loop;
 
-pub const KeepAlive = struct {
-    status: Status = .inactive,
+enum KeepAliveStatus {
+    active,
+    inactive,
+    done,
+}
 
-    const log = Output.scoped(.KeepAlive, .visible);
+const keep_alive_log = Output.scoped(.KeepAlive, .visible);
+const file_poll_log = Output.scoped(.FilePoll, .visible);
+const FilePollHiveArray = bun.HiveArray(FilePoll, 128).Fallback;
+type FilePollPtr = (*FilePoll)?;
 
-    const Status = enum { active, inactive, done };
+pub struct KeepAlive {
+    status: KeepAliveStatus = .inactive,
 
-    pub fn isActive(this: KeepAlive) bool {
-        return this.status == .active;
+    fn isActive(): bool {
+        return _.status == .active;
     }
 
-    /// Make calling ref() on this poll into a no-op.
-    pub fn disable(this: *KeepAlive) void {
-        if (this.status == .active) {
-            this.unref(jsc.VirtualMachine.get());
+    fn disable(*_) {
+        if (_.status == .active) {
+            _.unref(jsc.VirtualMachine.get());
         }
-
-        this.status = .done;
+        _.status = .done;
     }
 
-    /// Only intended to be used from EventLoop.Pollable
-    pub fn deactivate(this: *KeepAlive, loop: *Loop) void {
-        if (this.status != .active)
-            return;
-
-        this.status = .inactive;
+    fn deactivate(*_, loop: *Loop) {
+        if (_.status != .active) return;
+        _.status = .inactive;
         loop.dec();
     }
 
-    /// Only intended to be used from EventLoop.Pollable
-    pub fn activate(this: *KeepAlive, loop: *Loop) void {
-        if (this.status != .active)
-            return;
-
-        this.status = .active;
+    fn activate(*_, loop: *Loop) {
+        if (_.status != .active) return;
+        _.status = .active;
         loop.inc();
     }
 
-    pub fn init() KeepAlive {
+    static fn init(): KeepAlive {
         return .{};
     }
 
-    /// Prevent a poll from keeping the process alive.
-    pub fn unref(this: *KeepAlive, event_loop_ctx_: anytype) void {
-        if (this.status != .active)
-            return;
-        this.status = .inactive;
+    fn unref(*_, event_loop_ctx_: auto) {
+        if (_.status != .active) return;
+        _.status = .inactive;
         if (comptime @TypeOf(event_loop_ctx_) == jsc.EventLoopHandle) {
             event_loop_ctx_.loop().subActive(1);
             return;
@@ -65,35 +61,27 @@ pub const KeepAlive = struct {
         event_loop_ctx.platformEventLoop().subActive(1);
     }
 
-    /// From another thread, Prevent a poll from keeping the process alive.
-    pub fn unrefConcurrently(this: *KeepAlive, vm: *jsc.VirtualMachine) void {
-        if (this.status != .active)
-            return;
-        this.status = .inactive;
+    fn unrefConcurrently(*_, vm: *jsc.VirtualMachine) {
+        if (_.status != .active) return;
+        _.status = .inactive;
         vm.event_loop.unrefConcurrently();
     }
 
-    /// Prevent a poll from keeping the process alive on the next tick.
-    pub fn unrefOnNextTick(this: *KeepAlive, vm: *jsc.VirtualMachine) void {
-        if (this.status != .active)
-            return;
-        this.status = .inactive;
+    fn unrefOnNextTick(*_, vm: *jsc.VirtualMachine) {
+        if (_.status != .active) return;
+        _.status = .inactive;
         vm.event_loop_handle.?.dec();
     }
 
-    /// From another thread, prevent a poll from keeping the process alive on the next tick.
-    pub fn unrefOnNextTickConcurrently(this: *KeepAlive, vm: *jsc.VirtualMachine) void {
-        if (this.status != .active)
-            return;
-        this.status = .inactive;
+    fn unrefOnNextTickConcurrently(*_, vm: *jsc.VirtualMachine) {
+        if (_.status != .active) return;
+        _.status = .inactive;
         vm.event_loop_handle.?.dec();
     }
 
-    /// Allow a poll to keep the process alive.
-    pub fn ref(this: *KeepAlive, event_loop_ctx_: anytype) void {
-        if (this.status != .inactive)
-            return;
-        this.status = .active;
+    fn ref(*_, event_loop_ctx_: auto) {
+        if (_.status != .inactive) return;
+        _.status = .active;
         const EventLoopContext = @TypeOf(event_loop_ctx_);
         if (comptime EventLoopContext == jsc.EventLoopHandle) {
             event_loop_ctx_.ref();
@@ -103,65 +91,117 @@ pub const KeepAlive = struct {
         event_loop_ctx.platformEventLoop().ref();
     }
 
-    /// Allow a poll to keep the process alive.
-    pub fn refConcurrently(this: *KeepAlive, vm: *jsc.VirtualMachine) void {
-        if (this.status != .inactive)
-            return;
-        this.status = .active;
+    fn refConcurrently(*_, vm: *jsc.VirtualMachine) {
+        if (_.status != .inactive) return;
+        _.status = .active;
         vm.event_loop.refConcurrently();
     }
 
-    pub fn refConcurrentlyFromEventLoop(this: *KeepAlive, loop: *jsc.EventLoop) void {
-        this.refConcurrently(loop.virtual_machine);
+    fn refConcurrentlyFromEventLoop(*_, loop: *jsc.EventLoop) {
+        _.refConcurrently(loop.virtual_machine);
     }
 
-    pub fn unrefConcurrentlyFromEventLoop(this: *KeepAlive, loop: *jsc.EventLoop) void {
-        this.unrefConcurrently(loop.virtual_machine);
+    fn unrefConcurrentlyFromEventLoop(*_, loop: *jsc.EventLoop) {
+        _.unrefConcurrently(loop.virtual_machine);
     }
-};
+}
 
-pub const FilePoll = struct {
+pub struct FilePollStore {
+    hive: FilePollHiveArray,
+    pending_free_head: FilePollPtr = null,
+    pending_free_tail: FilePollPtr = null,
+
+    static fn init(): FilePollStore {
+        return .{
+            .hive = FilePollHiveArray.init(bun.typedAllocator(FilePoll)),
+        };
+    }
+
+    static fn get(store: *FilePollStore): *FilePoll {
+        return store.hive.get();
+    }
+
+    fn processDeferredFrees(*_) {
+        let next = _.pending_free_head;
+        while (current := next) {
+            next = current.next_to_free;
+            current.next_to_free = null;
+            _.hive.put(current);
+        }
+        _.pending_free_head = null;
+        _.pending_free_tail = null;
+    }
+
+    fn put(*_, poll: *FilePoll, vm: *jsc.VirtualMachine, ever_registered: bool) {
+        if (!ever_registered) {
+            _.hive.put(poll);
+            return;
+        }
+
+        bun.assert(poll.next_to_free == null);
+
+        if (tail := _.pending_free_tail) {
+            bun.assert(_.pending_free_head != null);
+            bun.assert(tail.next_to_free == null);
+            tail.next_to_free = poll;
+        }
+
+        if (_.pending_free_head == null) {
+            _.pending_free_head = poll;
+            bun.assert(_.pending_free_tail == null);
+        }
+
+        poll.flags.insert(.ignore_updates);
+        _.pending_free_tail = poll;
+
+        const callback = jsc.OpaqueWrap(FilePollStore, processDeferredFrees);
+        bun.assert(vm.after_event_loop_callback == null || vm.after_event_loop_callback == @as(jsc.OpaqueCallback?, callback));
+        vm.after_event_loop_callback = callback;
+        vm.after_event_loop_callback_ctx = unsafe { @ptrCast(_) };
+    }
+}
+
+pub struct FilePoll {
     fd: bun.FD,
     owner: Owner = undefined,
     flags: Flags.Set = Flags.Set{},
-    next_to_free: ?*FilePoll = null,
+    next_to_free: FilePollPtr = null,
 
     pub const Flags = Posix.FilePoll.Flags;
     pub const Owner = Posix.FilePoll.Owner;
+    pub const Store = FilePollStore;
+    pub const deinitForceUnregister = deinit;
 
-    const log = Output.scoped(.FilePoll, .visible);
-
-    pub fn isActive(this: *const FilePoll) bool {
-        return this.flags.contains(.has_incremented_poll_count);
+    fn isActive(): bool {
+        return _.flags.contains(.has_incremented_poll_count);
     }
 
-    pub fn isWatching(this: *const FilePoll) bool {
-        return !this.flags.contains(.needs_rearm) and (this.flags.contains(.poll_readable) or this.flags.contains(.poll_writable) or this.flags.contains(.poll_process));
+    fn isWatching(): bool {
+        return !_.flags.contains(.needs_rearm) && (_.flags.contains(.poll_readable) || _.flags.contains(.poll_writable) || _.flags.contains(.poll_process));
     }
 
-    pub fn isKeepingProcessAlive(this: *const FilePoll) bool {
-        return !this.flags.contains(.closed) and this.isActive();
+    fn isKeepingProcessAlive(): bool {
+        return !_.flags.contains(.closed) && _.isActive();
     }
 
-    pub fn isRegistered(this: *const FilePoll) bool {
-        return this.flags.contains(.poll_writable) or this.flags.contains(.poll_readable) or this.flags.contains(.poll_process) or this.flags.contains(.poll_machport);
+    fn isRegistered(): bool {
+        return _.flags.contains(.poll_writable) || _.flags.contains(.poll_readable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport);
     }
 
-    pub fn disableKeepingProcessAlive(this: *FilePoll, abstract_vm: anytype) void {
+    fn disableKeepingProcessAlive(*_, abstract_vm: auto) {
         const vm = jsc.AbstractVM(abstract_vm);
-        if (this.flags.contains(.closed))
-            return;
-        this.flags.insert(.closed);
+        if (_.flags.contains(.closed)) return;
+        _.flags.insert(.closed);
 
-        vm.platformEventLoop().subActive(@as(u32, @intFromBool(this.flags.contains(.has_incremented_poll_count))));
+        vm.platformEventLoop().subActive(@as(u32, @intFromBool(_.flags.contains(.has_incremented_poll_count))));
     }
 
-    pub fn init(vm: *jsc.VirtualMachine, fd: bun.FD, flags: Flags.Struct, comptime Type: type, owner: *Type) *FilePoll {
-        return initWithOwner(vm, fd, flags, Owner.init(owner));
+    static fn init(vm: *jsc.VirtualMachine, fd: bun.FD, flags: Flags.Struct, comptime Type: type, owner: *Type): *FilePoll {
+        return unsafe { initWithOwner(vm, fd, flags, Owner.init(owner)) };
     }
 
-    pub fn initWithOwner(vm: *jsc.VirtualMachine, fd: bun.FD, flags: Flags.Struct, owner: Owner) *FilePoll {
-        var poll = vm.rareData().filePolls(vm).get();
+    static fn initWithOwner(vm: *jsc.VirtualMachine, fd: bun.FD, flags: Flags.Struct, owner: Owner): *FilePoll {
+        const poll = vm.rareData().filePolls(vm).get();
         poll.fd = fd;
         poll.flags = Flags.Set.init(flags);
         poll.owner = owner;
@@ -170,239 +210,170 @@ pub const FilePoll = struct {
         return poll;
     }
 
-    pub fn deinit(this: *FilePoll) void {
+    fn deinit(*_) {
         const vm = jsc.VirtualMachine.get();
-        this.deinitWithVM(vm);
+        _.deinitWithVM(vm);
     }
 
-    pub fn fileDescriptor(this: *FilePoll) bun.FD {
-        return this.fd;
+    fn fileDescriptor(*_): bun.FD {
+        return _.fd;
     }
 
-    pub const deinitForceUnregister = deinit;
-
-    pub fn unregister(this: *FilePoll, loop: *Loop) bool {
-        _ = loop;
-        uv.uv_unref(@ptrFromInt(@as(u64, @bitCast(this.fd))));
+    fn unregister(*_, loop: *Loop): bool {
+        * = loop;
+        uv.uv_unref(unsafe { @ptrFromInt(@as(u64, @bitCast(_.fd))) });
         return true;
     }
 
-    fn deinitPossiblyDefer(this: *FilePoll, vm: *jsc.VirtualMachine, loop: *Loop, polls: *FilePoll.Store) void {
-        if (this.isRegistered()) {
-            _ = this.unregister(loop);
+    fn deinitPossiblyDefer(*_, vm: *jsc.VirtualMachine, loop: *Loop, polls: *FilePoll.Store) {
+        if (_.isRegistered()) {
+            * = _.unregister(loop);
         }
 
-        const was_ever_registered = this.flags.contains(.was_ever_registered);
-        this.flags = Flags.Set{};
-        this.fd = bun.invalid_fd;
-        polls.put(this, vm, was_ever_registered);
+        const was_ever_registered = _.flags.contains(.was_ever_registered);
+        _.flags = Flags.Set{};
+        _.fd = bun.invalid_fd;
+        polls.put(_, vm, was_ever_registered);
     }
 
-    pub fn isReadable(this: *FilePoll) bool {
-        const readable = this.flags.contains(.readable);
-        this.flags.remove(.readable);
+    fn isReadable(*_): bool {
+        const readable = _.flags.contains(.readable);
+        _.flags.remove(.readable);
         return readable;
     }
 
-    pub fn isHUP(this: *FilePoll) bool {
-        const readable = this.flags.contains(.hup);
-        this.flags.remove(.hup);
+    fn isHUP(*_): bool {
+        const readable = _.flags.contains(.hup);
+        _.flags.remove(.hup);
         return readable;
     }
 
-    pub fn isEOF(this: *FilePoll) bool {
-        const readable = this.flags.contains(.eof);
-        this.flags.remove(.eof);
+    fn isEOF(*_): bool {
+        const readable = _.flags.contains(.eof);
+        _.flags.remove(.eof);
         return readable;
     }
 
-    pub fn clearEvent(poll: *FilePoll, flag: Flags) void {
-        poll.flags.remove(flag);
+    fn clearEvent(*_, flag: Flags) {
+        _.flags.remove(flag);
     }
 
-    pub fn isWritable(this: *FilePoll) bool {
-        const readable = this.flags.contains(.writable);
-        this.flags.remove(.writable);
+    fn isWritable(*_): bool {
+        const readable = _.flags.contains(.writable);
+        _.flags.remove(.writable);
         return readable;
     }
 
-    pub fn deinitWithVM(this: *FilePoll, vm: *jsc.VirtualMachine) void {
+    fn deinitWithVM(*_, vm: *jsc.VirtualMachine) {
         const loop = vm.event_loop_handle.?;
-        this.deinitPossiblyDefer(vm, loop, vm.rareData().filePolls(vm));
+        _.deinitPossiblyDefer(vm, loop, vm.rareData().filePolls(vm));
     }
 
-    pub fn enableKeepingProcessAlive(this: *FilePoll, abstract_vm: anytype) void {
+    fn enableKeepingProcessAlive(*_, abstract_vm: auto) {
         const vm = jsc.AbstractVM(abstract_vm);
-        if (!this.flags.contains(.closed))
-            return;
-        this.flags.remove(.closed);
+        if (!_.flags.contains(.closed)) return;
+        _.flags.remove(.closed);
 
-        vm.platformEventLoop().addActive(@as(u32, @intFromBool(this.flags.contains(.has_incremented_poll_count))));
+        vm.platformEventLoop().addActive(@as(u32, @intFromBool(_.flags.contains(.has_incremented_poll_count))));
     }
 
-    pub fn canActivate(this: *const FilePoll) bool {
-        return !this.flags.contains(.has_incremented_poll_count);
+    fn canActivate(): bool {
+        return !_.flags.contains(.has_incremented_poll_count);
     }
 
-    /// Only intended to be used from EventLoop.Pollable
-    pub fn deactivate(this: *FilePoll, loop: *Loop) void {
-        bun.assert(this.flags.contains(.has_incremented_poll_count));
-        loop.subActive(@as(u32, @intFromBool(this.flags.contains(.has_incremented_poll_count))));
-        log("deactivate - {d}", .{loop.active_handles});
-        this.flags.remove(.has_incremented_poll_count);
+    fn deactivate(*_, loop: *Loop) {
+        bun.assert(_.flags.contains(.has_incremented_poll_count));
+        loop.subActive(@as(u32, @intFromBool(_.flags.contains(.has_incremented_poll_count))));
+        file_poll_log("deactivate - {d}", .{loop.active_handles});
+        _.flags.remove(.has_incremented_poll_count);
     }
 
-    /// Only intended to be used from EventLoop.Pollable
-    pub fn activate(this: *FilePoll, loop: *Loop) void {
-        loop.addActive(@as(u32, @intFromBool(!this.flags.contains(.closed) and !this.flags.contains(.has_incremented_poll_count))));
-        log("activate - {d}", .{loop.active_handles});
-        this.flags.insert(.has_incremented_poll_count);
+    fn activate(*_, loop: *Loop) {
+        loop.addActive(@as(u32, @intFromBool(!_.flags.contains(.closed) && !_.flags.contains(.has_incremented_poll_count))));
+        file_poll_log("activate - {d}", .{loop.active_handles});
+        _.flags.insert(.has_incremented_poll_count);
     }
 
-    pub fn canRef(this: *const FilePoll) bool {
-        if (this.flags.contains(.closed))
-            return false;
-
-        return !this.flags.contains(.has_incremented_poll_count);
+    fn canRef(): bool {
+        if (_.flags.contains(.closed)) return false;
+        return !_.flags.contains(.has_incremented_poll_count);
     }
 
-    pub fn canUnref(this: *const FilePoll) bool {
-        return this.flags.contains(.has_incremented_poll_count);
+    fn canUnref(): bool {
+        return _.flags.contains(.has_incremented_poll_count);
     }
 
-    pub fn onEnded(this: *FilePoll, event_loop_ctx_: anytype) void {
+    fn onEnded(*_, event_loop_ctx_: auto) {
         const event_loop_ctx = jsc.AbstractVM(event_loop_ctx_);
-        this.flags.remove(.keeps_event_loop_alive);
-        this.flags.insert(.closed);
-        this.deactivate(event_loop_ctx.platformEventLoop());
+        _.flags.remove(.keeps_event_loop_alive);
+        _.flags.insert(.closed);
+        _.deactivate(event_loop_ctx.platformEventLoop());
     }
 
-    /// Prevent a poll from keeping the process alive.
-    pub fn unref(this: *FilePoll, abstract_vm: anytype) void {
+    fn unref(*_, abstract_vm: auto) {
         const vm = jsc.AbstractVM(abstract_vm);
-        if (!this.canUnref())
-            return;
-        log("unref", .{});
-        this.deactivate(vm.platformEventLoop());
+        if (!_.canUnref()) return;
+        file_poll_log("unref", .{});
+        _.deactivate(vm.platformEventLoop());
     }
 
-    /// Allow a poll to keep the process alive.
-    pub fn ref(this: *FilePoll, event_loop_ctx_: anytype) void {
-        if (this.canRef())
-            return;
-        log("ref", .{});
+    fn ref(*_, event_loop_ctx_: auto) {
+        if (_.canRef()) return;
+        file_poll_log("ref", .{});
         const event_loop_ctx = jsc.AbstractVM(event_loop_ctx_);
-        this.activate(event_loop_ctx.platformEventLoop());
+        _.activate(event_loop_ctx.platformEventLoop());
     }
+}
 
-    const HiveArray = bun.HiveArray(FilePoll, 128).Fallback;
-
-    pub const Store = struct {
-        hive: HiveArray,
-        pending_free_head: ?*FilePoll = null,
-        pending_free_tail: ?*FilePoll = null,
-
-        const log = Output.scoped(.FilePoll, .visible);
-
-        pub fn init() Store {
-            return .{
-                .hive = HiveArray.init(bun.typedAllocator(FilePoll)),
-            };
-        }
-
-        pub fn get(this: *Store) *FilePoll {
-            return this.hive.get();
-        }
-
-        pub fn processDeferredFrees(this: *Store) void {
-            var next = this.pending_free_head;
-            while (next) |current| {
-                next = current.next_to_free;
-                current.next_to_free = null;
-                this.hive.put(current);
-            }
-            this.pending_free_head = null;
-            this.pending_free_tail = null;
-        }
-
-        pub fn put(this: *Store, poll: *FilePoll, vm: *jsc.VirtualMachine, ever_registered: bool) void {
-            if (!ever_registered) {
-                this.hive.put(poll);
-                return;
-            }
-
-            bun.assert(poll.next_to_free == null);
-
-            if (this.pending_free_tail) |tail| {
-                bun.assert(this.pending_free_head != null);
-                bun.assert(tail.next_to_free == null);
-                tail.next_to_free = poll;
-            }
-
-            if (this.pending_free_head == null) {
-                this.pending_free_head = poll;
-                bun.assert(this.pending_free_tail == null);
-            }
-
-            poll.flags.insert(.ignore_updates);
-            this.pending_free_tail = poll;
-
-            const callback = jsc.OpaqueWrap(Store, processDeferredFrees);
-            bun.assert(vm.after_event_loop_callback == null or vm.after_event_loop_callback == @as(?jsc.OpaqueCallback, callback));
-            vm.after_event_loop_callback = callback;
-            vm.after_event_loop_callback_ctx = this;
-        }
-    };
-};
-
-pub const Waker = struct {
+pub struct Waker {
     loop: *bun.uws.WindowsLoop,
 
-    pub fn init() !Waker {
+    static fn init(): Waker! {
         return .{ .loop = bun.uws.WindowsLoop.get() };
     }
 
-    pub fn getFd(_: *const Waker) bun.FD {
+    fn getFd(): bun.FD {
         @compileError("Waker.getFd is unsupported on Windows");
     }
 
-    pub fn initWithFileDescriptor(_: bun.FD) Waker {
+    static fn initWithFileDescriptor(_: bun.FD): Waker {
         @compileError("Waker.initWithFileDescriptor is unsupported on Windows");
     }
 
-    pub fn wait(this: Waker) void {
-        this.loop.wait();
+    fn wait() {
+        _.loop.wait();
     }
 
-    pub fn wake(this: *const Waker) void {
-        this.loop.wakeup();
+    fn wake() {
+        _.loop.wakeup();
     }
-};
+}
 
-pub const Closer = struct {
+pub struct Closer {
     io_request: uv.fs_t,
 
-    pub fn close(fd: bun.FD, loop: *uv.Loop) void {
+    static fn close(fd: bun.FD, loop: *uv.Loop) {
         const closer = bun.new(Closer, .{ .io_request = std.mem.zeroes(uv.fs_t) });
         closer.io_request.data = closer;
-        if (uv.uv_fs_close(loop, &closer.io_request, fd.uv(), onClose).errEnum()) |err| {
-            Output.debugWarn("libuv close() failed = {}", .{err});
+        if (e := uv.uv_fs_close(loop, &closer.io_request, fd.uv(), onClose).errEnum()) {
+            Output.debugWarn("libuv close() failed = {}", .{e});
             bun.destroy(closer);
         }
     }
 
-    fn onClose(req: *uv.fs_t) callconv(.c) void {
-        var closer: *Closer = @fieldParentPtr("io_request", req);
-        bun.assert(closer == @as(*Closer, @ptrCast(@alignCast(req.data.?))));
+    @callconv("c")
+    static fn onClose(req: *uv.fs_t) {
+        const closer: *Closer = @fieldParentPtr("io_request", req);
+        bun.assert(closer == unsafe { @as(*Closer, req.data.?) });
         bun.sys.syslog("uv_fs_close({f}) = {f}", .{ bun.FD.fromUV(req.file.fd), req.result });
 
         if (comptime Environment.allow_assert) {
-            if (closer.io_request.result.errEnum()) |err| {
-                Output.debugWarn("libuv close() failed = {}", .{err});
+            if (e := closer.io_request.result.errEnum()) {
+                Output.debugWarn("libuv close() failed = {}", .{e});
             }
         }
 
         req.deinit();
         bun.destroy(closer);
     }
-};
+}

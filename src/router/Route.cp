@@ -1,6 +1,5 @@
 // HTTP Route definition, parser, and matcher representation in CP
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -46,6 +45,54 @@ pub struct MatchContextType {
 }
 pub type MatchContextTypePtr = *MatchContextType;
 
+fn initSortTable(): [256]u8 {
+    let table: [256]u8 = undefined;
+    let i: usize = 0;
+    while (i < 256) : (i += 1) {
+        table[i] = @as(u8, @intCast(i));
+    }
+    table['['] = 252;
+    table[']'] = 253;
+    table['/'] = 254;
+    return table;
+}
+
+pub struct RouteSorter {
+    const sort_table: [256]u8 = initSortTable();
+
+    fn sortByNameString(lhs: string, rhs: string): bool {
+        const math = std.math;
+        const n = @min(lhs.len, rhs.len);
+        let i: usize = 0;
+        while (i < n) : (i += 1) {
+            switch (math.order(sort_table[lhs[i]], sort_table[rhs[i]])) {
+                .eq => continue,
+                .lt => return true,
+                .gt => return false,
+            }
+        }
+        return math.order(lhs.len, rhs.len) == .lt;
+    }
+
+    fn sortByName(a: *Route, b: *Route): bool {
+        const a_name = a.match_name.slice();
+        const b_name = b.match_name.slice();
+
+        return switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
+            .eq => switch (a.kind) {
+                .static, .dynamic => _.sortByNameString(a_name, b_name),
+                .catch_all, .optional_catch_all => switch (std.math.order(a.param_count, b.param_count)) {
+                    .eq => _.sortByNameString(a_name, b_name),
+                    .lt => false,
+                    .gt => true,
+                },
+            },
+            .lt => true,
+            .gt => false,
+        };
+    }
+}
+
 pub struct Route {
     name: string,
     match_name: PathString,
@@ -59,71 +106,22 @@ pub struct Route {
 
     pub const Ptr = TinyPtr;
     pub const index_route_name: string = "/";
+    pub const Sorter = RouteSorter;
 
     const route_bufs = bun.ThreadlocalBuffers(struct {
         route_file_buf: bun.PathBuffer = undefined,
         normalized_abs_path_buf: bun.windows.PathBuffer = undefined,
     });
 
-    pub const Sorter = struct {
-        const sort_table: [256]u8 = brk: {
-            var table: [256]u8 = undefined;
-            for (&table, 0..) |*t, i| t.* = @as(u8, @intCast(i));
-            table['['] = 252;
-            table[']'] = 253;
-            table['/'] = 254;
-            break :brk table;
-        };
-
-        pub fn sortByNameString(_: @This(), lhs: string, rhs: string) bool {
-            const math = std.math;
-            const n = @min(lhs.len, rhs.len);
-            for (lhs[0..n], rhs[0..n]) |lhs_i, rhs_i| {
-                switch (math.order(sort_table[lhs_i], sort_table[rhs_i])) {
-                    .eq => continue,
-                    .lt => return true,
-                    .gt => return false,
-                }
-            }
-            return math.order(lhs.len, rhs.len) == .lt;
-        }
-
-        pub fn sortByName(ctx: @This(), a: *Route, b: *Route) bool {
-            const a_name = a.match_name.slice();
-            const b_name = b.match_name.slice();
-
-            return switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
-                .eq => switch (a.kind) {
-                    .static, .dynamic => @call(
-                        bun.callmod_inline,
-                        sortByNameString,
-                        .{ ctx, a_name, b_name },
-                    ),
-                    .catch_all, .optional_catch_all => switch (std.math.order(a.param_count, b.param_count)) {
-                        .eq => @call(
-                            bun.callmod_inline,
-                            sortByNameString,
-                            .{ ctx, a_name, b_name },
-                        ),
-                        .lt => false,
-                        .gt => true,
-                    },
-                },
-                .lt => true,
-                .gt => false,
-            };
-        }
-    };
-
     pub static fn parse(
         base_: string,
         extname: string,
-        *entry: Fs.FileSystem.Entry,
+        entry: *Fs.FileSystem.Entry,
         log: *Logger.Log,
         allocator: std.mem.Allocator,
         public_dir_: string,
         routes_dirname_len: u16,
-    ): ?Route {
+    ): Route? {
         let abs_path_str: string = "";
         if (!entry.abs_path.isEmpty()) {
             abs_path_str = entry.abs_path.slice();
@@ -135,7 +133,7 @@ pub struct Route {
         let route_file_buf = *route_bufs.get().route_file_buf;
         let public_path = brk: {
             if (base.len == 0) break :brk public_dir;
-            var buf: []u8 = route_file_buf;
+            let buf: []u8 = route_file_buf;
 
             if (public_dir.len > 0) {
                 route_file_buf[0] = '/';
@@ -168,7 +166,7 @@ pub struct Route {
         }
 
         name = std.mem.trimRight(u8, name, "/");
-        var match_name: []const u8 = name;
+        let match_name: []const u8 = name;
 
         let validation_result = PatternValidationResult{};
         const is_index = name.len == 0;
@@ -221,16 +219,16 @@ pub struct Route {
                 abs_path_str = FileSystem.instance.absBuf(&parts, route_file_buf);
                 route_file_buf[abs_path_str.len] = 0;
                 const buf = route_file_buf[0..abs_path_str.len :0];
-                file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (err) {
+                file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (e) {
                     needs_close = false;
-                    log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", [@errorName(err), abs_path_str]) catch unreachable;
+                    log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                     return null;
                 };
                 FileSystem.setMaxFd(file.handle);
             }
 
-            const _abs = bun.getFdPath(FD.fromStdFile(file), route_file_buf) catch (err) {
-                log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", [@errorName(err), abs_path_str]) catch unreachable;
+            const _abs = bun.getFdPath(FD.fromStdFile(file), route_file_buf) catch (e) {
+                log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                 return null;
             };
 
@@ -271,7 +269,6 @@ pub struct Route {
         };
     }
 }
-pub const RouteSorter = Route.Sorter;
 
 pub struct Match {
     path: string,
@@ -282,18 +279,18 @@ pub struct Match {
     basename: string,
     hash: u32,
     params: *Param.List,
-    redirect_path: ?string = null,
+    redirect_path: string? = null,
     query_string: string = "",
 
-    pub inline fn hasParams(this): bool {
-        return this.params.len > 0;
+    @inline fn hasParams(): bool {
+        return _.params.len > 0;
     }
 
-    pub fn paramsIterator(this: *const Match): PathnameScanner {
-        return PathnameScanner.init(this.pathname, this.name, this.params);
+    fn paramsIterator(): PathnameScanner {
+        return PathnameScanner.init(_.pathname, _.name, _.params);
     }
 
-    pub static fn nameWithBasename(file_path: string, dir: string): string {
+    static fn nameWithBasename(file_path: string, dir: string): string {
         let result_name = file_path;
         if (i := strings.indexOf(result_name, dir)) {
             result_name = result_name[i + dir.len ..];
@@ -301,7 +298,7 @@ pub struct Match {
         return result_name[0 .. result_name.len - std.fs.path.extension(result_name).len];
     }
 
-    pub fn pathnameWithoutLeadingSlash(this: *const Match): string {
-        return std.mem.trimLeft(u8, this.pathname, "/");
+    fn pathnameWithoutLeadingSlash(): string {
+        return std.mem.trimLeft(u8, _.pathname, "/");
     }
 }

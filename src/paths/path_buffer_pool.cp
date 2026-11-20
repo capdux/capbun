@@ -14,7 +14,7 @@ fn PathBufferPoolT(comptime T: type): type {
         }
 
         pub fn put(buffer: *const T) void {
-            var node: *Pool.Node = @alignCast(@fieldParentPtr("data", @constCast(buffer)));
+            const node: *Pool.Node = @alignCast(@fieldParentPtr("data", @constCast(buffer)));
             node.release();
         }
 

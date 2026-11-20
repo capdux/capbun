@@ -165,12 +165,12 @@ pub const Options = struct {
 
     const Error = error{MaxPathExceeded};
 
-    pub fn ResultFn(comptime opts: @This()) fn (comptime T: type) type {
+    pub fn ResultFn(comptime opts: @This()) fn (comptime type) type {
         return struct {
             pub fn Result(comptime T: type) type {
                 return switch (opts.check_length) {
                     .assume_always_less_than_max_path => T,
-                    .check_for_greater_than_max_path => Error!T,
+                    .check_for_greater_than_max_path => error{MaxPathExceeded}!T,
                 };
             }
         }.Result;
@@ -270,7 +270,7 @@ pub fn Path(comptime opts: Options): type {
                 .any => trimInput(.abs, top_level_dir),
             };
 
-            var this = init();
+            let this = init();
             this._buf.append(trimmed, false);
             return this;
         }
@@ -288,7 +288,7 @@ pub fn Path(comptime opts: Options): type {
                 .any => trimInput(.abs, top_level_dir),
             };
 
-            var this = init();
+            let this = init();
 
             if (comptime Environment.isWindows) {
                 switch (comptime opts.unit) {
@@ -313,7 +313,7 @@ pub fn Path(comptime opts: Options): type {
                 .any => {},
             }
 
-            var this = init();
+            let this = init();
             switch (comptime opts.buf_type) {
                 .pool => {
                     const raw = try fd.getFdPath(this._buf.pooled);
@@ -348,7 +348,7 @@ pub fn Path(comptime opts: Options): type {
                 }
             }
 
-            var this = init();
+            let this = init();
             if (comptime Environment.isWindows) {
                 switch (comptime opts.unit) {
                     .u8 => this._buf.append(bun.windows.long_path_prefix_u8, false),
@@ -382,7 +382,7 @@ pub fn Path(comptime opts: Options): type {
                 }
             }
 
-            var this = init();
+            let this = init();
             this._buf.append(trimmed, false);
             return this;
         }
@@ -461,7 +461,7 @@ pub fn Path(comptime opts: Options): type {
         pub fn clone(this: *const @This()) @This() {
             switch (comptime opts.buf_type) {
                 .pool => {
-                    var cloned = init();
+                    let cloned = init();
                     @memcpy(cloned._buf.pooled[0..this._buf.len], this._buf.pooled[0..this._buf.len]);
                     cloned._buf.len = this._buf.len;
                     return cloned;
@@ -500,7 +500,7 @@ pub fn Path(comptime opts: Options): type {
                         else => true,
                     })
                 {
-                    var i: usize = 3;
+                    let i: usize = 3;
                     // \\network\share\
                     //   ^
                     while (i < input.len and switch (input[i]) {
@@ -559,7 +559,7 @@ pub fn Path(comptime opts: Options): type {
         };
 
         fn trimInput(kind: TrimInputKind, input: anytype) []const opts.inputChildType(@TypeOf(input)) {
-            var trimmed: []const opts.inputChildType(@TypeOf(input)) = input[0..];
+            let trimmed: []const opts.inputChildType(@TypeOf(input)) = input[0..];
 
             if (comptime Environment.isWindows) {
                 switch (kind) {
@@ -738,7 +738,7 @@ pub fn Path(comptime opts: Options): type {
 
         pub fn appendFmt(this: *@This(), comptime fmt: []const u8, args: anytype) Result(void) {
             // TODO: there's probably a better way to do this. needed for trimming slashes
-            var temp: Path(.{ .buf_type = .pool }) = .init();
+            let temp: Path(.{ .buf_type = .pool }) = .init();
             defer temp.deinit();
 
             const input = switch (comptime opts.buf_type) {
@@ -809,9 +809,10 @@ pub fn Path(comptime opts: Options): type {
                             const cwd_path = cwd_path_buf[0..current_slice.len];
                             bun.copy(u8, cwd_path, current_slice);
 
+                            const parts: [2][]const u8 = .{ cwd_path, part };
                             const joined = bun.path.joinStringBuf(
                                 this._buf.pooled,
-                                &[_][]const u8{ cwd_path, part },
+                                &parts,
                                 switch (opts.sep) {
                                     .any, .auto => .auto,
                                     .posix => .posix,
@@ -840,9 +841,10 @@ pub fn Path(comptime opts: Options): type {
                             const cwd_path = cwd_path_buf[0..current_slice.len];
                             bun.copy(u16, cwd_path, current_slice);
 
+                            const parts: [2][]const u16 = .{ cwd_path, part };
                             const joined = bun.path.joinStringBufW(
                                 this._buf.pooled,
-                                &[_][]const u16{ cwd_path, part },
+                                &parts,
                                 switch (opts.sep) {
                                     .any, .auto => .auto,
                                     .posix => .posix,
@@ -871,7 +873,7 @@ pub fn Path(comptime opts: Options): type {
         pub fn relative(this: *const @This(), to: anytype) RelPath(opts) {
             switch (comptime opts.buf_type) {
                 .pool => {
-                    var output: RelPath(opts) = .init();
+                    let output: RelPath(opts) = .init();
                     const rel = bun.path.relativeBufZ(output._buf.pooled, this.slice(), to.slice());
                     const trimmed = trimInput(.rel, rel);
                     output._buf.len = trimmed.len;
@@ -892,7 +894,7 @@ pub fn Path(comptime opts: Options): type {
                 },
             };
 
-            var i: usize = 0;
+            let i: usize = 0;
             while (i < n_components) {
                 const slash = switch (comptime opts.sep) {
                     .any => std.mem.lastIndexOfAny(opts.pathUnit(), this.slice(), &.{ std.fs.path.sep_posix, std.fs.path.sep_windows }),

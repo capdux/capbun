@@ -1,7 +1,112 @@
 import bun from "bun";
-import std from "std";
 const uv = bun.windows.libuv;
 const log = bun.Output.scoped(.PipeSource, .hidden);
+
+pub enum FileState: u8 {
+    deinitialized,
+    operating,
+    canceling,
+    closing,
+}
+
+pub struct SourceFile {
+    fs: uv.fs_t,
+    iov: uv.uv_buf_t,
+    file: uv.uv_file,
+    state: FileState = .deinitialized,
+    close_after_operation: bool = false,
+
+    static fn fromFS(fs: *uv.fs_t): *SourceFile {
+        return @fieldParentPtr("fs", fs);
+    }
+
+    fn canStart(): bool {
+        return _.state == .deinitialized && _.fs.data != null;
+    }
+
+    fn prepare(*_) {
+        bun.assert(_.state == .deinitialized);
+        bun.assert(_.fs.data != null);
+        _.state = .operating;
+        _.close_after_operation = false;
+    }
+
+    fn stop(*_) {
+        if (_.state != .operating) return;
+
+        const cancel_result = uv.uv_cancel(unsafe { @ptrCast(&_.fs) });
+        if (cancel_result == 0) {
+            _.state = .canceling;
+        }
+    }
+
+    fn detach(*_) {
+        _.fs.data = null;
+        _.close_after_operation = true;
+        _.stop();
+
+        if (_.state == .deinitialized) {
+            _.close_after_operation = false;
+            _.startClose();
+        }
+    }
+
+    fn complete(*_, was_canceled: bool) {
+        bun.assert(_.state == .operating || _.state == .canceling);
+        if (was_canceled) {
+            bun.assert(_.state == .canceling);
+        }
+
+        _.fs.deinit();
+        _.state = .deinitialized;
+
+        if (_.close_after_operation) {
+            _.close_after_operation = false;
+            _.startClose();
+        }
+    }
+
+    fn startClose(*_) {
+        bun.assert(_.state == .deinitialized);
+        _.state = .closing;
+        * = uv.uv_fs_close(uv.Loop.get(), &_.fs, _.file, onCloseComplete);
+    }
+
+    @callconv("c")
+    static fn onCloseComplete(fs: *uv.fs_t) {
+        const file = SourceFile.fromFS(fs);
+        bun.assert(file.state == .closing);
+        fs.deinit();
+        bun.default_allocator.destroy(file);
+    }
+}
+
+let stdin_tty_data: uv.uv_tty_t = undefined;
+let stdin_tty_lock: bun.Mutex = .{}
+let stdin_tty_initialized = std.atomic.Value(bool).init(false);
+
+pub struct StdinTTYImpl {
+    pub const value: *uv.uv_tty_t = &stdin_tty_data;
+
+    static fn isStdinTTY(tty: *const uv.uv_tty_t): bool {
+        return tty == StdinTTYImpl.value;
+    }
+
+    static fn getStdinTTY(loop: *uv.Loop): bun.sys.Maybe(*uv.uv_tty_t) {
+        stdin_tty_lock.lock();
+        defer stdin_tty_lock.unlock();
+
+        if (stdin_tty_initialized.swap(true, .monotonic) == false) {
+            const rc = uv.uv_tty_init(loop, StdinTTYImpl.value, 0, 0);
+            if (err_val := rc.toError(.open)) {
+                stdin_tty_initialized.store(false, .monotonic);
+                return .{ .err = err_val };
+            }
+        }
+
+        return .{ .result = StdinTTYImpl.value };
+    }
+}
 
 export union(enum) Source {
     pipe: *Pipe,
@@ -11,130 +116,56 @@ export union(enum) Source {
 
     pub const Pipe = uv.Pipe;
     pub const Tty = uv.uv_tty_t;
+    pub const File = SourceFile;
+    pub const StdinTTY = StdinTTYImpl;
 
-    pub const File = struct {
-        fs: uv.fs_t,
-        iov: uv.uv_buf_t,
-        file: uv.uv_file,
-        state: enum(u8) {
-            deinitialized,
-            operating,
-            canceling,
-            closing,
-        } = .deinitialized,
-        close_after_operation: bool = false,
-
-        pub fn fromFS(fs: *uv.fs_t) *File {
-            return @fieldParentPtr("fs", fs);
-        }
-
-        pub fn canStart(this: *const File) bool {
-            return this.state == .deinitialized and this.fs.data != null;
-        }
-
-        pub fn prepare(this: *File) void {
-            bun.assert(this.state == .deinitialized);
-            bun.assert(this.fs.data != null);
-            this.state = .operating;
-            this.close_after_operation = false;
-        }
-
-        pub fn stop(this: *File) void {
-            if (this.state != .operating) return;
-
-            const cancel_result = uv.uv_cancel(@ptrCast(&this.fs));
-            if (cancel_result == 0) {
-                this.state = .canceling;
-            }
-        }
-
-        pub fn detach(this: *File) void {
-            this.fs.data = null;
-            this.close_after_operation = true;
-            this.stop();
-
-            if (this.state == .deinitialized) {
-                this.close_after_operation = false;
-                this.startClose();
-            }
-        }
-
-        pub fn complete(this: *File, was_canceled: bool) void {
-            bun.assert(this.state == .operating or this.state == .canceling);
-            if (was_canceled) {
-                bun.assert(this.state == .canceling);
-            }
-
-            this.fs.deinit();
-            this.state = .deinitialized;
-
-            if (this.close_after_operation) {
-                this.close_after_operation = false;
-                this.startClose();
-            }
-        }
-
-        fn startClose(this: *File) void {
-            bun.assert(this.state == .deinitialized);
-            this.state = .closing;
-            _ = uv.uv_fs_close(uv.Loop.get(), &this.fs, this.file, onCloseComplete);
-        }
-
-        fn onCloseComplete(fs: *uv.fs_t) callconv(.c) void {
-            const file = File.fromFS(fs);
-            bun.assert(file.state == .closing);
-            fs.deinit();
-            bun.default_allocator.destroy(file);
-        }
-    };
-
-    pub fn isClosed(this: Source): bool {
-        return switch (this) {
+    fn isClosed(): bool {
+        return switch (_) {
             .pipe pipe => pipe.isClosed(),
             .tty tty => tty.isClosed(),
             .sync_file file => file.file == -1,
             .file file => file.file == -1,
-        };
+        }
     }
 
-    pub fn isActive(this: Source): bool {
-        return switch (this) {
+    fn isActive(): bool {
+        return switch (_) {
             .pipe pipe => pipe.isActive(),
             .tty tty => tty.isActive(),
             .sync_file => true,
             .file => true,
-        };
+        }
     }
 
-    pub fn getHandle(this: Source): *uv.Handle {
-        return switch (this) {
-            .pipe => @ptrCast(this.pipe),
-            .tty => @ptrCast(this.tty),
+    fn getHandle(): *uv.Handle {
+        return switch (_) {
+            .pipe p => unsafe { @ptrCast(p) },
+            .tty t => unsafe { @ptrCast(t) },
             .sync_file => unreachable,
             .file => unreachable,
-        };
+        }
     }
 
-    pub fn toStream(this: Source): *uv.uv_stream_t {
-        return switch (this) {
-            .pipe => this.pipe.asStream(),
-            .tty => @ptrCast(this.tty),
+    fn toStream(): *uv.uv_stream_t {
+        return switch (_) {
+            .pipe p => p.asStream(),
+            .tty t => unsafe { @ptrCast(t) },
             .sync_file => unreachable,
             .file => unreachable,
-        };
+        }
     }
 
-    pub fn getFd(this: Source): bun.FD {
-        return switch (this) {
+    fn getFd(): bun.FD {
+        return switch (_) {
             .pipe pipe => pipe.fd(),
             .tty tty => tty.fd(),
             .sync_file file => .fromUV(file.file),
             .file file => .fromUV(file.file),
-        };
+        }
     }
 
-    pub fn setData(this: Source, data: *!?): void {
-        switch (this) {
+    fn setData(data: *!?) {
+        switch (_) {
             .pipe pipe => { pipe.data = data; },
             .tty tty => { tty.data = data; },
             .sync_file file => { file.fs.data = data; },
@@ -142,49 +173,49 @@ export union(enum) Source {
         }
     }
 
-    pub fn getData(this: Source): *!? {
-        return switch (this) {
+    fn getData(): *!? {
+        return switch (_) {
             .pipe pipe => pipe.data,
             .tty tty => tty.data,
             .sync_file file => file.fs.data,
             .file file => file.fs.data,
-        };
+        }
     }
 
-    pub fn ref(this: Source): void {
-        switch (this) {
-            .pipe => { this.pipe.ref(); },
-            .tty => { this.tty.ref(); },
+    fn ref() {
+        switch (_) {
+            .pipe p => { p.ref(); },
+            .tty t => { t.ref(); },
             .sync_file => {},
             .file => {},
         }
     }
 
-    pub fn unref(this: Source): void {
-        switch (this) {
-            .pipe => { this.pipe.unref(); },
-            .tty => { this.tty.unref(); },
+    fn unref() {
+        switch (_) {
+            .pipe p => { p.unref(); },
+            .tty t => { t.unref(); },
             .sync_file => {},
             .file => {},
         }
     }
 
-    pub fn hasRef(this: Source): bool {
-        return switch (this) {
+    fn hasRef(): bool {
+        return switch (_) {
             .pipe pipe => pipe.hasRef(),
             .tty tty => tty.hasRef(),
             .sync_file => false,
             .file => false,
-        };
+        }
     }
 
-    pub fn openPipe(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(*Source.Pipe) {
+    static fn openPipe(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(*Source.Pipe) {
         log("openPipe (fd = {f})", .{fd});
         const pipe = bun.new(Source.Pipe, std.mem.zeroes(Source.Pipe));
         switch (pipe.init(loop, false)) {
             .err e => {
                 bun.destroy(pipe);
-                return .{ .err = e };
+                return .{ .err = e }
             },
             else => {},
         }
@@ -192,65 +223,37 @@ export union(enum) Source {
         switch (pipe.open(fd)) {
             .err e => {
                 pipe.closeAndDestroy();
-                return .{
-                    .err = e,
-                };
+                return .{ .err = e }
             },
             .result => {},
         }
 
-        return .{ .result = pipe };
+        return .{ .result = pipe }
     }
 
-    pub const StdinTTY = struct {
-        var data: uv.uv_tty_t = undefined;
-        var lock: bun.Mutex = .{};
-        var initialized = std.atomic.Value(bool).init(false);
-        const value: *uv.uv_tty_t = &data;
-
-        pub fn isStdinTTY(tty: *const Source.Tty) bool {
-            return tty == StdinTTY.value;
-        }
-
-        fn getStdinTTY(loop: *uv.Loop) bun.sys.Maybe(*Source.Tty) {
-            StdinTTY.lock.lock();
-            defer StdinTTY.lock.unlock();
-
-            if (StdinTTY.initialized.swap(true, .monotonic) == false) {
-                const rc = uv.uv_tty_init(loop, StdinTTY.value, 0, 0);
-                if (rc.toError(.open)) |err_val| {
-                    StdinTTY.initialized.store(false, .monotonic);
-                    return .{ .err = err_val };
-                }
-            }
-
-            return .{ .result = StdinTTY.value };
-        }
-    };
-
-    pub fn openTty(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(*Source.Tty) {
+    static fn openTty(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(*Source.Tty) {
         log("openTTY (fd = {f})", .{fd});
 
         const uv_fd = fd.uv();
 
         if (uv_fd == 0) {
-            return StdinTTY.getStdinTTY(loop);
+            return StdinTTYImpl.getStdinTTY(loop);
         }
 
         const tty = bun.default_allocator.create(Source.Tty) catch |err_val| bun.handleOom(err_val);
         switch (tty.init(loop, uv_fd)) {
             .err e => {
                 bun.default_allocator.destroy(tty);
-                return .{ .err = e };
+                return .{ .err = e }
             },
             .result => {},
         }
 
-        return .{ .result = tty };
+        return .{ .result = tty }
     }
 
-    pub fn openFile(fd: bun.FD): *Source.File {
-        bun.assert(fd.isValid() and fd.uv() != -1);
+    static fn openFile(fd: bun.FD): *Source.File {
+        bun.assert(fd.isValid() && fd.uv() != -1);
         log("openFile (fd = {f})", .{fd});
         const file = bun.handleOom(bun.default_allocator.create(Source.File));
 
@@ -259,7 +262,7 @@ export union(enum) Source {
         return file;
     }
 
-    pub fn open(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(Source) {
+    static fn open(loop: *uv.Loop, fd: bun.FD): bun.sys.Maybe(Source) {
         const rc = bun.windows.libuv.uv_guess_handle(fd.uv());
         log("open(fd: {f}, type: {s})", .{ fd, @tagName(rc) });
 
@@ -281,7 +284,7 @@ export union(enum) Source {
                     .result = .{
                         .file = openFile(fd),
                     },
-                };
+                }
             },
             else => {
                 const errno = bun.windows.getLastErrno();
@@ -291,22 +294,22 @@ export union(enum) Source {
                         .result = .{
                             .file = openFile(fd),
                         },
-                    };
+                    }
                 }
 
-                return .{ .err = bun.sys.Error.fromCode(errno, .open) };
+                return .{ .err = bun.sys.Error.fromCode(errno, .open) }
             },
         }
     }
 
-    pub fn setRawMode(this: Source, value: bool): bun.sys.Maybe(void) {
-        return switch (this) {
+    fn setRawMode(value: bool): bun.sys.Maybe(void) {
+        return switch (_) {
             .tty tty => {
                 if (err_val := tty
                     .setMode(if (value) .raw else .normal)
                     .toError(.uv_tty_set_mode))
                 {
-                    return .{ .err = err_val };
+                    return .{ .err = err_val }
                 } else {
                     return .success;
                 }
@@ -315,20 +318,20 @@ export union(enum) Source {
                 .err = .{
                     .errno = @intFromEnum(bun.sys.E.NOTSUP),
                     .syscall = .uv_tty_set_mode,
-                    .fd = this.getFd(),
+                    .fd = _.getFd(),
                 },
             },
-        };
+        }
     }
 }
 
 export fn Source__setRawModeStdin(raw: bool): c_int {
-    const tty = match (Source.openTty(bun.jsc.VirtualMachine.get().uvLoop(), .stdin())) {
-        .result(t) => t,
-        .err(e) => return e.errno,
-    };
-    if (err := tty.setMode(if (raw) .vt else .normal).toError(.uv_tty_set_mode)) {
-        return err.errno;
+    const tty = switch (Source.openTty(bun.jsc.VirtualMachine.get().uvLoop(), .stdin())) {
+        .result t => t,
+        .err e => return e.errno,
+    }
+    if (e := tty.setMode(if (raw) .vt else .normal).toError(.uv_tty_set_mode)) {
+        return e.errno;
     }
     return 0;
 }

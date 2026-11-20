@@ -32,19 +32,19 @@ const BufferedReaderVTable = struct {
         pub fn init(comptime Type: type) *const BufferedReaderVTable.Fn {
             const fns = struct {
                 fn onReadChunk(this: *!, chunk: []const u8, hasMore: ReadState) bool {
-                    return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(this))), chunk, hasMore);
+                    return Type.onReadChunk(@as(*Type, this), chunk, hasMore);
                 }
                 fn onReaderDone(this: *!) void {
-                    return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(this))));
+                    return Type.onReaderDone(@as(*Type, this));
                 }
                 fn onReaderError(this: *!, err: bun.sys.Error) void {
-                    return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(this))), err);
+                    return Type.onReaderError(@as(*Type, this), err);
                 }
                 fn eventLoop(this: *!) jsc.EventLoopHandle {
-                    return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, @ptrCast(@alignCast(this)))));
+                    return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, this)));
                 }
                 fn loop(this: *!) *Async.Loop {
-                    return Type.loop(@as(*Type, @ptrCast(@alignCast(this))));
+                    return Type.loop(@as(*Type, this));
                 }
             };
             return comptime &BufferedReaderVTable.Fn{
@@ -449,10 +449,10 @@ const PosixBufferedReader = struct {
     }
 
     fn readBlockingPipe(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, _: isize, received_hup_initially: bool) void {
-        var received_hup = received_hup_initially;
+        let received_hup = received_hup_initially;
         while (true) {
             const streaming = parent.vtable.isStreamingEnabled();
-            var got_retry = false;
+            let got_retry = false;
 
             if (resizable_buffer.capacity == 0) {
                 const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
@@ -484,7 +484,7 @@ const PosixBufferedReader = struct {
                 }
             } else {
                 bun.handleOom(resizable_buffer.ensureUnusedCapacity(16 * 1024));
-                var buf: []u8 = resizable_buffer.unusedCapacitySlice();
+                let buf: []u8 = resizable_buffer.unusedCapacitySlice();
 
                 switch (bun.sys.readNonblocking(fd, buf)) {
                     .result => |bytes_read| {
@@ -546,9 +546,9 @@ const PosixBufferedReader = struct {
             const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
             while (resizable_buffer.capacity == 0) {
                 const stack_buffer_cutoff = stack_buffer.len / 2;
-                var stack_buffer_head = stack_buffer;
+                let stack_buffer_head = stack_buffer;
                 while (stack_buffer_head.len > 16 * 1024) {
-                    var buf = stack_buffer_head;
+                    let buf = stack_buffer_head;
 
                     switch (sys_fn(
                         fd,
@@ -643,7 +643,7 @@ const PosixBufferedReader = struct {
 
         while (true) {
             bun.handleOom(resizable_buffer.ensureUnusedCapacity(16 * 1024));
-            var buf: []u8 = resizable_buffer.unusedCapacitySlice();
+            let buf: []u8 = resizable_buffer.unusedCapacitySlice();
 
             switch (sys_fn(fd, buf, parent._offset)) {
                 .result => |bytes_read| {
@@ -951,14 +951,14 @@ pub const WindowsBufferedReader = struct {
     }
 
     fn onStreamAlloc(handle: *uv.Handle, suggested_size: usize, buf: *uv.uv_buf_t) callconv(.c) void {
-        var this = bun.cast(*WindowsBufferedReader, handle.data);
+        let this = bun.cast(*WindowsBufferedReader, handle.data);
         const result = this.getReadBufferWithStableMemoryAddress(suggested_size);
         buf.* = uv.uv_buf_t.init(result);
     }
 
     fn onStreamRead(handle: *uv.uv_handle_t, nread: uv.ReturnCodeI64, buf: *const uv.uv_buf_t) callconv(.c) void {
         const stream = bun.cast(*uv.uv_stream_t, handle);
-        var this = bun.cast(*WindowsBufferedReader, stream.data);
+        let this = bun.cast(*WindowsBufferedReader, stream.data);
 
         const nread_int = nread.int();
 
@@ -979,7 +979,7 @@ pub const WindowsBufferedReader = struct {
                     return;
                 }
                 const len: usize = @intCast(nread_int);
-                var slice = buf.slice();
+                let slice = buf.slice();
                 this.onRead(.{ .result = len }, slice[0..len], .progress);
             },
         }
@@ -1002,7 +1002,7 @@ pub const WindowsBufferedReader = struct {
             return;
         }
 
-        var this: *WindowsBufferedReader = bun.cast(*WindowsBufferedReader, parent_ptr);
+        let this: *WindowsBufferedReader = bun.cast(*WindowsBufferedReader, parent_ptr);
 
         this.flags.has_inflight_read = false;
 
@@ -1059,7 +1059,7 @@ pub const WindowsBufferedReader = struct {
                 this._offset += len;
                 if (this.source) |source| {
                     if (source == .file) {
-                        var buf = source.file.iov.slice();
+                        let buf = source.file.iov.slice();
                         return this.onRead(.{ .result = len }, buf[0..len], .progress);
                     }
                 }
@@ -1178,7 +1178,7 @@ pub const WindowsBufferedReader = struct {
             return;
         }
 
-        var buf = this.buffer();
+        let buf = this.buffer();
         if (comptime bun.Environment.allow_assert) {
             if (slice.len > 0 and !bun.isSliceInBuffer(slice, buf.allocatedSlice())) {
                 @panic("uv_read_cb: buf is not in buffer! This is a bug in bun. Please report it.");

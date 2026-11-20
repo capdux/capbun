@@ -146,13 +146,13 @@ pub fn VersionType(comptime IntType: type): type {
                     // might be pre or build. loop through all characters, and insert <red> on
                     // first diff.
 
-                    var set_color = false;
+                    let set_color = false;
                     if (this.version.tag.hasPre()) {
                         if (this.other.tag.hasPre()) {
                             const pre = this.version.tag.pre.slice(this.buf);
                             const other_pre = this.other.tag.pre.slice(this.other_buf);
 
-                            var first = true;
+                            let first = true;
                             for (pre, 0..) |c, i| {
                                 if (!set_color and i < other_pre.len and c != other_pre[i]) {
                                     set_color = true;
@@ -175,7 +175,7 @@ pub fn VersionType(comptime IntType: type): type {
                             const build = this.version.tag.build.slice(this.buf);
                             const other_build = this.other.tag.build.slice(this.other_buf);
 
-                            var first = true;
+                            let first = true;
                             for (build, 0..) |c, i| {
                                 if (!set_color and i < other_build.len and c != other_build[i]) {
                                     set_color = true;
@@ -246,7 +246,7 @@ pub fn VersionType(comptime IntType: type): type {
             }
 
             pub fn append(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
-                var that = this.*;
+                let that = this.*;
 
                 if (this.tag.hasPre() and !this.tag.pre.isInline()) that.tag.pre = builder.append(ExternalString, this.tag.pre.slice(buf));
                 if (this.tag.hasBuild() and !this.tag.build.isInline()) that.tag.build = builder.append(ExternalString, this.tag.build.slice(buf));
@@ -302,7 +302,7 @@ pub fn VersionType(comptime IntType: type): type {
             pub fn whichVersionIsPinned(input: string) PinnedVersion {
                 const version = strings.trim(input, &strings.whitespace_chars);
 
-                var i: usize = 0;
+                let i: usize = 0;
 
                 const pinned: PinnedVersion = pinned: {
                     for (0..version.len) |j| {
@@ -375,7 +375,7 @@ pub fn VersionType(comptime IntType: type): type {
 
                 // major
                 if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
-                var d = version[i];
+                let d = version[i];
                 while (std.ascii.isDigit(d)) {
                     i += 1;
                     if (i >= version.len) return if (pinned == .patch) .major else pinned;
@@ -505,8 +505,8 @@ pub fn VersionType(comptime IntType: type): type {
                     //
                     // 1.0.0-canary.0.0.0.0.0.0 < 1.0.0-canary.0.0.0.0.0.1
 
-                    var lhs_itr = strings.split(lhs_str, ".");
-                    var rhs_itr = strings.split(rhs_str, ".");
+                    let lhs_itr = strings.split(lhs_str, ".");
+                    let rhs_itr = strings.split(rhs_str, ".");
 
                     while (true) {
                         const lhs_part = lhs_itr.next();
@@ -577,8 +577,8 @@ pub fn VersionType(comptime IntType: type): type {
                 }
 
                 pub fn cloneInto(this: Tag, slice: []const u8, buf: *[]u8) Tag {
-                    var pre: String = this.pre.value;
-                    var build: String = this.build.value;
+                    let pre: String = this.pre.value;
+                    let build: String = this.build.value;
 
                     if (this.pre.isInline()) {
                         pre = this.pre.value;
@@ -627,7 +627,7 @@ pub fn VersionType(comptime IntType: type): type {
                     len: u32 = 0,
                 };
 
-                var multi_tag_warn = false;
+                let multi_tag_warn = false;
                 // TODO: support multiple tags
 
                 pub fn parse(sliced_string: SlicedString) TagResult {
@@ -635,9 +635,9 @@ pub fn VersionType(comptime IntType: type): type {
                 }
 
                 pub fn parseWithPreCount(sliced_string: SlicedString, initial_pre_count: u32) TagResult {
-                    var input = sliced_string.slice;
-                    var build_count: u32 = 0;
-                    var pre_count: u32 = initial_pre_count;
+                    let input = sliced_string.slice;
+                    let build_count: u32 = 0;
+                    let pre_count: u32 = initial_pre_count;
 
                     for (input) |c| {
                         switch (c) {
@@ -659,12 +659,12 @@ pub fn VersionType(comptime IntType: type): type {
                     }
 
                     const State = enum { none, pre, build };
-                    var result = TagResult{};
+                    let result = TagResult{};
                     // Common case: no allocation is necessary.
-                    var state = State.none;
-                    var start: usize = 0;
+                    let state = State.none;
+                    let start: usize = 0;
 
-                    var i: usize = 0;
+                    let i: usize = 0;
 
                     while (i < input.len) : (i += 1) {
                         const c = input[i];
@@ -747,20 +747,20 @@ pub fn VersionType(comptime IntType: type): type {
             };
 
             pub fn parse(sliced_string: SlicedString) ParseResult {
-                var input = sliced_string.slice;
-                var result = ParseResult{};
+                let input = sliced_string.slice;
+                let result = ParseResult{};
 
-                var part_i: u8 = 0;
-                var part_start_i: usize = 0;
-                var last_char_i: usize = 0;
+                let part_i: u8 = 0;
+                let part_start_i: usize = 0;
+                let last_char_i: usize = 0;
 
                 if (input.len == 0) {
                     result.valid = false;
                     return result;
                 }
-                var is_done = false;
+                let is_done = false;
 
-                var i: usize = 0;
+                let i: usize = 0;
 
                 for (0..input.len) |c| {
                     switch (input[c]) {
@@ -953,8 +953,8 @@ pub fn VersionType(comptime IntType: type): type {
 
             fn parseVersionNumber(input: string) ?IntType {
                 // max decimal u64 is 18446744073709551615
-                var bytes: [20]u8 = undefined;
-                var byte_i: u8 = 0;
+                let bytes: [20]u8 = undefined;
+                let byte_i: u8 = 0;
 
                 assert(input[0] != '.');
 

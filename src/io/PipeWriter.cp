@@ -29,11 +29,12 @@ pub fn PosixPipeWriter(
     comptime getFd: fn (*This) bun.FD,
     comptime getBuffer: fn (*This) []const u8,
     comptime onWrite: fn (*This, written: usize, status: WriteStatus) void,
-    comptime registerPoll: ?fn (*This) void,
+    comptime registerPoll: *const fn (*This) anyerror!void,
     comptime onError: fn (*This, bun.sys.Error) void,
-    comptime _: fn (*This) void,
+    comptime _unused: fn (*This) void,
     comptime getFileType: *const fn (*This) FileType,
 ): type {
+    * = _unused;
     return struct {
         fn tryWrite(this: *This, force_sync: bool, buf_: []const u8) WriteResult {
             return switch (if (!force_sync) getFileType(this) else .file) {
@@ -44,7 +45,7 @@ pub fn PosixPipeWriter(
         fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: *const fn (bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
             const fd = getFd(this);
 
-            var offset: usize = 0;
+            let offset: usize = 0;
 
             while (offset < buf.len) {
                 switch (write_fn(fd, buf[offset..])) {
@@ -131,7 +132,7 @@ pub fn PosixPipeWriter(
 
             const trimmed = if (max_write_size < buf.len and max_write_size > 0) buf[0..max_write_size] else buf;
 
-            var drained: usize = 0;
+            let drained: usize = 0;
 
             while (drained < trimmed.len) {
                 const attempt = tryWrite(parent, parent.getForceSync(), trimmed[drained..]);
@@ -189,7 +190,7 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
         }
 
         pub fn createPoll(this: *@This(), fd: bun.FD) *Async.FilePoll {
-            return Async.FilePoll.init(@as(*Parent, @ptrCast(this.parent)).eventLoop(), fd, .{}, PosixWriter, this);
+            return Async.FilePoll.init(@as(*Parent, this.parent).eventLoop(), fd, .{}, PosixWriter, this);
         }
 
         pub fn getPoll(this: *const @This()) ?*Async.FilePoll {
@@ -250,7 +251,7 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
         }
 
         pub fn registerPoll(this: *PosixWriter) void {
-            var poll = this.getPoll() orelse return;
+            let poll = this.getPoll() orelse return;
             const loop = this.parent.eventLoop().loop();
             switch (poll.registerWithFd(loop, .writable, .dispatch, poll.fd)) {
                 .err => |err| {
@@ -346,18 +347,18 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
                 this.handle = .{ .fd = fd };
                 return .success;
             }
-            var poll = this.getPoll() orelse brk: {
+            let poll = this.getPoll() orelse brk: {
                 this.handle = .{ .poll = this.createPoll(fd) };
                 break :brk this.handle.poll;
             };
-            const loop = @as(*Parent, @ptrCast(this.parent)).eventLoop().loop();
+            const loop = @as(*Parent, this.parent).eventLoop().loop();
 
             switch (poll.registerWithFd(loop, .writable, .dispatch, fd)) {
                 .err => |err| {
                     return .initErr(err);
                 },
                 .result => {
-                    this.enableKeepingProcessAlive(@as(*Parent, @ptrCast(this.parent)).eventLoop());
+                    this.enableKeepingProcessAlive(@as(*Parent, this.parent).eventLoop());
                 },
             }
 
@@ -547,7 +548,8 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
         fn tryWriteNewlyBufferedData(this: *PosixWriter, buf: []const u8) WriteResult {
             bun.assert(!this.is_done);
 
-            const rc = internals.tryWrite(this, this.force_sync, buf);
+            const tryWriteFn = internals.tryWrite;
+            const rc = tryWriteFn(this, this.force_sync, buf);
 
             switch (rc) {
                 .wrote => |amt| {
@@ -601,7 +603,8 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
                 return this.tryWriteNewlyBufferedData(this.outgoing.slice());
             }
 
-            const rc = internals.tryWrite(this, this.force_sync, buf);
+            const tryWriteFn = internals.tryWrite;
+            const rc = tryWriteFn(this, this.force_sync, buf);
 
             switch (rc) {
                 .pending => |amt| {
@@ -731,14 +734,14 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
             }
 
             const loop = this.parent.eventLoop();
-            var poll = this.getPoll() orelse brk: {
+            let poll = this.getPoll() orelse brk: {
                 this.handle = .{ .poll = Async.FilePoll.init(loop, fd, .{}, PosixWriter, this) };
                 break :brk this.handle.poll;
             };
 
             switch (poll.registerWithFd(loop.loop(), .writable, .dispatch, fd)) {
                 .err => |err| {
-                    return bun.sys.Maybe(void){ .err = err };
+                    return .{ .err = err };
                 },
                 .result => {},
             }
@@ -1111,7 +1114,7 @@ pub const StreamBuffer = struct {
     }
 
     pub fn writeTypeAsBytesAssumeCapacity(this: *StreamBuffer, comptime T: type, data: T) void {
-        var byte_list = bun.ByteList.moveFromList(&this.list);
+        let byte_list = bun.ByteList.moveFromList(&this.list);
         defer this.list = byte_list.moveToListManaged(this.list.allocator);
         byte_list.writeTypeAsBytesAssumeCapacity(T, data);
     }
@@ -1123,7 +1126,7 @@ pub const StreamBuffer = struct {
             }
 
             {
-                var byte_list = bun.ByteList.moveFromList(&this.list);
+                let byte_list = bun.ByteList.moveFromList(&this.list);
                 defer this.list = byte_list.moveToListManaged(this.list.allocator);
                 _ = try byte_list.writeLatin1(this.list.allocator, buffer);
             }
@@ -1131,7 +1134,7 @@ pub const StreamBuffer = struct {
             return this.list.items[this.cursor..];
         } else if (comptime @TypeOf(writeFn) == @TypeOf(&writeUTF16) and writeFn == &writeUTF16) {
             {
-                var byte_list = bun.ByteList.moveFromList(&this.list);
+                let byte_list = bun.ByteList.moveFromList(&this.list);
                 defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
                 _ = try byte_list.writeUTF16(this.list.allocator, buffer);
@@ -1152,14 +1155,14 @@ pub const StreamBuffer = struct {
             }
         }
 
-        var byte_list = bun.ByteList.moveFromList(&this.list);
+        let byte_list = bun.ByteList.moveFromList(&this.list);
         defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
         _ = try byte_list.writeLatin1(this.list.allocator, buffer);
     }
 
     pub fn writeUTF16(this: *StreamBuffer, buffer: []const u16) OOM!void {
-        var byte_list = bun.ByteList.moveFromList(&this.list);
+        let byte_list = bun.ByteList.moveFromList(&this.list);
         defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
         _ = try byte_list.writeUTF16(this.list.allocator, buffer);
@@ -1318,7 +1321,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                 return;
             }
 
-            var pipe = this.source orelse {
+            let pipe = this.source orelse {
                 const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
                 this.last_write_result = .{ .err = err };
                 onError(this.parent, err);
@@ -1385,7 +1388,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
 
             if (this.source != null and this.source.? == .sync_file) {
                 defer this.outgoing.reset();
-                var remain = StreamBuffer.writeOrFallback(&this.outgoing, buffer, comptime writeFn) catch {
+                let remain = StreamBuffer.writeOrFallback(&this.outgoing, buffer, comptime writeFn) catch {
                     return .{ .err = bun.sys.Error.oom };
                 };
                 const initial_len = remain.len;

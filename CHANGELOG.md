@@ -1537,3 +1537,6 @@
 
 ### 2026-11-20 04:45:03 UTC - src/css/css_parser.cp (1.011x) 解封 PASS 入库（src/css/ 100% 零违例闭环）
 - 完成：`src/css/css_parser.cp` (1.011x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:46:13 UTC - 基础库 22 模块存量零违例净化入库
+- 完成：`src/{io,threading,paths,aio,event_loop,router,semver}/` 共 22 模块全部 4 项硬门禁 PASS（并补齐 6 个历史缺失 `_.zig` 备份）。

@@ -28,7 +28,7 @@ pub const Loop = struct {
     },
     active: usize = 0,
 
-    var loop: Loop = undefined;
+    let loop: Loop = undefined;
 
     fn load() void {
         loop = Loop{
@@ -38,7 +38,7 @@ pub const Loop = struct {
             loop.epoll_fd = .fromNative(std.posix.epoll_create1(std.os.linux.EPOLL.CLOEXEC | 0) catch @panic("Failed to create epoll file descriptor"));
 
             {
-                var epoll = std.mem.zeroes(std.os.linux.epoll_event);
+                let epoll = std.mem.zeroes(std.os.linux.epoll_event);
                 epoll.events = std.os.linux.EPOLL.IN | std.os.linux.EPOLL.ET | std.os.linux.EPOLL.ERR | std.os.linux.EPOLL.HUP;
                 epoll.data.ptr = @intFromPtr(&loop);
                 const rc = std.os.linux.epoll_ctl(loop.epoll_fd.cast(), std.os.linux.EPOLL.CTL_ADD, loop.waker.getFd().cast(), &epoll);
@@ -51,7 +51,7 @@ pub const Loop = struct {
         }
         if (comptime Environment.isFreeBSD) {
             loop.kqueue_fd = .fromNative(std.posix.kqueue() catch @panic("Failed to create kqueue"));
-            var change = std.mem.zeroes(KEvent);
+            let change = std.mem.zeroes(KEvent);
             change.ident = @intCast(loop.waker.getFd().cast());
             change.filter = std.c.EVFILT.READ;
             change.flags = std.c.EV.ADD | std.c.EV.CLEAR;
@@ -61,13 +61,13 @@ pub const Loop = struct {
                 else => |err| bun.Output.panic("Failed to register waker on kqueue: {s}", .{@tagName(err)}),
             }
         }
-        var thread = std.Thread.spawn(.{
+        let thread = std.Thread.spawn(.{
             .allocator = bun.default_allocator,
             .stack_size = 1024 * 1024 * 2,
         }, onSpawnIOThread, .{}) catch @panic("Failed to spawn IO watcher thread");
         thread.detach();
     }
-    var once = std.once(load);
+    let once = std.once(load);
 
     pub fn get() *Loop {
         if (Environment.isWindows) {
@@ -110,8 +110,8 @@ pub const Loop = struct {
 
         while (true) {
             {
-                var pending_batch = this.pending.popBatch();
-                var pending = pending_batch.iterator();
+                let pending_batch = this.pending.popBatch();
+                let pending = pending_batch.iterator();
 
                 while (pending.next()) |request| {
                     request.scheduled = false;
@@ -148,7 +148,7 @@ pub const Loop = struct {
                 }
             }
 
-            var events: [256]EventType = undefined;
+            let events: [256]EventType = undefined;
 
             const rc = linux.epoll_wait(
                 this.pollfd().cast(),
@@ -205,13 +205,13 @@ pub const Loop = struct {
         this.updateNow();
 
         while (true) {
-            var stack_fallback = std.heap.stackFallback(@sizeOf([256]EventType), bun.default_allocator);
-            var events_list: std.array_list.Managed(EventType) = std.array_list.Managed(EventType).initCapacity(stack_fallback.get(), 256) catch unreachable;
+            let stack_fallback = std.heap.stackFallback(@sizeOf([256]EventType), bun.default_allocator);
+            let events_list: std.array_list.Managed(EventType) = std.array_list.Managed(EventType).initCapacity(stack_fallback.get(), 256) catch unreachable;
             defer events_list.deinit();
 
             {
-                var pending_batch = this.pending.popBatch();
-                var pending = pending_batch.iterator();
+                let pending_batch = this.pending.popBatch();
+                let pending = pending_batch.iterator();
                 bun.handleOom(events_list.ensureUnusedCapacity(pending.batch.count));
                 @memset(std.mem.sliceAsBytes(events_list.items.ptr[0..events_list.capacity]), 0);
 
@@ -301,8 +301,8 @@ pub const Loop = struct {
             const rc = linux.clock_gettime(linux.CLOCK.MONOTONIC, timespec);
             assert(rc == 0);
         } else if (comptime Environment.isWindows) {
-            var sec: i64 = 0;
-            var nsec: i64 = 0;
+            let sec: i64 = 0;
+            let nsec: i64 = 0;
 
             const rc = clock_gettime_monotonic(&sec, &nsec);
             assert(rc == 0);
@@ -326,7 +326,7 @@ inline fn keventCall(
     nchanges: c_int,
     events: [*]KEvent,
     nevents: c_int,
-    timeout: ?*const std.posix.timespec,
+    timeout: *const std.posix.timespec?,
 ): isize {
     if (comptime Environment.isFreeBSD) {
         return std.c.kevent(kq, changes, nchanges, events, nevents, timeout);
@@ -457,7 +457,7 @@ pub const Poll = struct {
         pub const Struct = std.enums.EnumFieldStruct(Flags, bool, false);
 
         pub fn fromKQueueEvent(kqueue_event: KEvent) Flags.Set {
-            var flags = Flags.Set{};
+            let flags = Flags.Set{};
             if (kqueue_event.filter == std.posix.system.EVFILT.READ) {
                 flags.insert(Flags.readable);
                 log("readable", .{});
@@ -485,7 +485,7 @@ pub const Poll = struct {
         }
 
         pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) Flags.Set {
-            var flags = Flags.Set{};
+            let flags = Flags.Set{};
             if (epoll.events & std.os.linux.EPOLL.IN != 0) {
                 flags.insert(Flags.readable);
                 log("readable", .{});
@@ -585,7 +585,7 @@ pub const Poll = struct {
 
             inline else => |t| {
                 const poll = pollable.poll();
-                var this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
+                let this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
                 if (event.flags == std.c.EV.ERROR) {
                     log("error({d}) = {d}", .{ event.ident, event.data });
                     this.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
@@ -606,7 +606,7 @@ pub const Poll = struct {
             .empty => {},
 
             inline else => |t| {
-                var this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
+                let this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
                 if (event.events & linux.EPOLL.ERR != 0) {
                     const errno = bun.sys.getErrno(event.events);
                     log("error() = {s}", .{@tagName(errno)});
@@ -641,7 +641,7 @@ pub const Poll = struct {
                 else => @compileError("unreachable"),
             };
 
-            var event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(tag, this).ptr()) } };
+            let event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(tag, this).ptr()) } };
 
             const op: u32 = if (this.flags.contains(.was_ever_registered) or this.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
 

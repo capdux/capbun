@@ -1,6 +1,5 @@
 // Thread-safe buffered channel in CP
-const bun = @import("bun");
-const std = @import("std");
+import bun from "bun";
 
 const Condition = bun.threading.Condition;
 const Mutex = bun.threading.Mutex;
@@ -83,7 +82,7 @@ pub fn Channel(
         }
 
         pub fn tryReadItem(self: *Self) !?T {
-            var items: [1]T = undefined;
+            let items: [1]T = undefined;
             if ((try self.read(&items)) != 1) {
                 return null;
             }
@@ -91,7 +90,7 @@ pub fn Channel(
         }
 
         pub fn readItem(self: *Self) !T {
-            var items: [1]T = undefined;
+            let items: [1]T = undefined;
             try self.readAll(&items);
             return items[0];
         }
@@ -112,21 +111,16 @@ pub fn Channel(
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            var pushed: usize = 0;
+            let pushed: usize = 0;
             while (pushed < items.len) {
-                const did_push = blk: {
-                    if (self.is_closed) return error.Closed;
-
-                    self.buffer.write(items) catch |err| {
-                        if (buffer_type == .Dynamic) return err;
-                        break :blk false;
-                    };
-
-                    self.getters.signal();
-                    break :blk true;
+                if (self.is_closed) return error.Closed;
+                let did_push = true;
+                self.buffer.write(items) catch |e| {
+                    if (buffer_type == .Dynamic) return e;
+                    did_push = false;
                 };
-
                 if (did_push) {
+                    self.getters.signal();
                     pushed += 1;
                 } else if (should_block) {
                     self.putters.wait(&self.mutex);
@@ -142,7 +136,7 @@ pub fn Channel(
             self.mutex.lock();
             defer self.mutex.unlock();
 
-            var popped: usize = 0;
+            let popped: usize = 0;
             while (popped < items.len) {
                 const new_item = blk: {
                     // Buffer can contain null items but readItem will return null if the buffer is empty.

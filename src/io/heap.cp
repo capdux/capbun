@@ -36,7 +36,7 @@ pub fn Intrusive(
 
         fn countInternal(node: ?*T) usize {
             const current = node orelse return 0;
-            var result: usize = 1;
+            let result: usize = 1;
 
             result += countInternal(current.heap.child);
             result += countInternal(current.heap.next);
@@ -50,7 +50,7 @@ pub fn Intrusive(
         }
 
         fn findMaxInternal(ctx: Context, node: *T, current_max: *T) *T {
-            var max_so_far = current_max;
+            let max_so_far = current_max;
 
             if (less(ctx, max_so_far, node)) {
                 max_so_far = node;
@@ -134,10 +134,10 @@ pub fn Intrusive(
         fn combine_siblings(self: *Self, left: *T) *T {
             left.heap.prev = null;
 
-            var a: *T = left;
-            var root: *T = left;
+            let a: *T = left;
+            let root: *T = left;
             while (true) {
-                var b = a.heap.next orelse {
+                let b = a.heap.next orelse {
                     root = a;
                     break;
                 };
@@ -151,7 +151,7 @@ pub fn Intrusive(
             }
 
             while (true) {
-                var b = root.heap.prev orelse return root;
+                let b = root.heap.prev orelse return root;
                 b.heap.next = null;
                 root = self.meld(b, root);
             }

@@ -81,7 +81,7 @@ export class Router {
         return _.routes.list.items(.public_path);
     }
 
-    pub fn routeIndexByHash(_: *const Router, hash: u32): ?usize {
+    pub fn routeIndexByHash(_: *const Router, hash: u32): usize? {
         if (hash == index_route_hash) {
             return _.routes.index_id;
         }
@@ -152,7 +152,7 @@ export class Router {
     }
 }
 
-threadlocal var params_list: Router.Param.List = undefined;
+threadlocal let params_list: Router.Param.List = undefined;
 
 pub struct RouteIndex {
     route: *Route,
@@ -177,8 +177,8 @@ pub struct Routes {
     dynamic_names: []string = &[],
     dynamic_match_names: []string = &[],
     static: bun.StringHashMap(RoutePtr),
-    index: ?*Route = null,
-    index_id: ?usize = 0,
+    index: *Route? = null,
+    index_id: usize? = 0,
     allocator: std.mem.Allocator,
     config: Options.RouteConfig,
     client_framework_enabled: bool = false,
@@ -198,7 +198,7 @@ pub struct Routes {
         url_path: URLPath,
         params: *Router.Param.List,
         allocator: std.mem.Allocator,
-    ): ?Match {
+    ): Match? {
         let path = url_path.path;
         let redirect = false;
 
@@ -264,7 +264,7 @@ pub struct Routes {
         return null;
     }
 
-    pub fn matchPage(_: *Routes, __: string, url_path: URLPath, params: *Router.Param.List): ?Match {
+    pub fn matchPage(_: *Routes, __: string, url_path: URLPath, params: *Router.Param.List): Match? {
         return _.matchPageWithAllocator("", url_path, params, _.allocator);
     }
 
@@ -274,7 +274,7 @@ pub struct Routes {
         path: string,
         comptime MatchContext: type,
         ctx: MatchContext,
-    ): ?*Route {
+    ): (*Route)? {
         let i: usize = 0;
         while (i < _.dynamic.len) {
             const case_sensitive_name = _.dynamic_names[i];
@@ -294,7 +294,7 @@ pub struct Routes {
         pathname_: string,
         comptime MatchContext: type,
         ctx: MatchContext,
-    ): ?*Route {
+    ): (*Route)? {
         const pathname = std.mem.trimLeft(u8, pathname_, "/");
         if (pathname.len == 0) {
             return _.index;
@@ -311,11 +311,11 @@ pub struct RouteLoader {
     route_dirname_len: u16 = 0,
     dedupe_dynamic: std.AutoArrayHashMap(u32, string),
     log: *Logger.Log,
-    index: ?*Route = null,
+    index: *Route? = null,
     static_list: bun.StringHashMap(*Route),
     all_routes: std.ArrayListUnmanaged(*Route),
 
-    pub fn appendRoute(_: *RouteLoader, route: Route): void {
+    pub fn appendRoute(_: *RouteLoader, route: Route) {
         if (route.full_hash == index_route_hash) {
             let new_route = _.allocator.create(Route) catch unreachable;
             _.index = new_route;
@@ -426,8 +426,8 @@ pub struct RouteLoader {
         let route_list = RouteIndexList{};
         route_list.setCapacity(allocator, loader.all_routes.items.len) catch unreachable;
 
-        let dynamic_start: ?usize = null;
-        let index_id: ?usize = null;
+        let dynamic_start: usize? = null;
+        let index_id: usize? = null;
 
         let i: usize = 0;
         while (i < loader.all_routes.items.len) {
@@ -486,7 +486,7 @@ pub struct RouteLoader {
         resolver: *ResolverType,
         root_dir_info: *const DirInfo,
         base_dir: []const u8,
-    ): void {
+    ) {
         let fs = _.fs;
 
         if (entries := root_dir_info.getEntriesConst()) {
@@ -620,7 +620,7 @@ pub struct Route {
 
     pub const Sorter = struct {
         const sort_table: [256]u8 = brk: {
-            var table: [256]u8 = undefined;
+            let table: [256]u8 = undefined;
             for (&table, 0..) |*t, i| t.* = @as(u8, @intCast(i));
             table['['] = 252;
             table[']'] = 253;
@@ -671,12 +671,12 @@ pub struct Route {
     pub static fn parse(
         base_: string,
         extname: string,
-        *entry: Fs.FileSystem.Entry,
+        entry: *Fs.FileSystem.Entry,
         log: *Logger.Log,
         allocator: std.mem.Allocator,
         public_dir_: string,
         routes_dirname_len: u16,
-    ): ?Route {
+    ): Route? {
         let abs_path_str: string = "";
         if (!entry.abs_path.isEmpty()) {
             abs_path_str = entry.abs_path.slice();
@@ -688,7 +688,7 @@ pub struct Route {
         let route_file_buf = *route_bufs.get().route_file_buf;
         let public_path = brk: {
             if (base.len == 0) break :brk public_dir;
-            var buf: []u8 = route_file_buf;
+            let buf: []u8 = route_file_buf;
 
             if (public_dir.len > 0) {
                 route_file_buf[0] = '/';
@@ -721,7 +721,7 @@ pub struct Route {
         }
 
         name = std.mem.trimRight(u8, name, "/");
-        var match_name: []const u8 = name;
+        let match_name: []const u8 = name;
 
         let validation_result = PatternValidationResult{};
         const is_index = name.len == 0;
@@ -774,16 +774,16 @@ pub struct Route {
                 abs_path_str = FileSystem.instance.absBuf(&parts, route_file_buf);
                 route_file_buf[abs_path_str.len] = 0;
                 const buf = route_file_buf[0..abs_path_str.len :0];
-                file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (err) {
+                file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (e) {
                     needs_close = false;
-                    log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", [@errorName(err), abs_path_str]) catch unreachable;
+                    log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                     return null;
                 };
                 FileSystem.setMaxFd(file.handle);
             }
 
-            const _abs = bun.getFdPath(FD.fromStdFile(file), route_file_buf) catch (err) {
-                log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", [@errorName(err), abs_path_str]) catch unreachable;
+            const _abs = bun.getFdPath(FD.fromStdFile(file), route_file_buf) catch (e) {
+                log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                 return null;
             };
 
@@ -835,7 +835,7 @@ pub struct Match {
     basename: string,
     hash: u32,
     params: *Router.Param.List,
-    redirect_path: ?string = null,
+    redirect_path: string? = null,
     query_string: string = "",
 
     pub inline fn hasParams(_: Match): bool {
@@ -996,7 +996,7 @@ pub struct Pattern {
         return false;
     }
 
-    pub static fn validate(input: string, allocator: std.mem.Allocator, log: *Logger.Log): ?ValidationResult {
+    pub static fn validate(input: string, allocator: std.mem.Allocator, log: *Logger.Log): ValidationResult? {
         if (CodepointIterator.needsUTF8Decoding(input)) {
             const source: Logger.Source = Logger.Source.initEmptyFile(input);
             log.addErrorFmt(
@@ -1015,9 +1015,9 @@ pub struct Pattern {
         let kind: u4 = @intFromEnum(Tag.static);
         const end = (input.len - 1) as u32;
         while (offset < end) {
-            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch (err) {
+            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch (e) {
                 const source: Logger.Source = Logger.Source.initEmptyFile(input);
-                switch (err) {
+                switch (e) {
                     error.CatchAllMustBeAtTheEnd => {
                         log.addErrorFmt(
                             &source,

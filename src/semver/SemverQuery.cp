@@ -32,16 +32,16 @@ class Query {
         query: *const Query,
         buffer: []const u8,
         pub fn format(formatter: Formatter, writer: *std.Io.Writer) !void {
-            const this = formatter.query;
+            const q = formatter.query;
 
-            if (this.next) |ptr| {
+            if (q.next) |ptr| {
                 if (ptr.range.hasLeft() or ptr.range.hasRight()) {
-                    try writer.print("{f} && {f}", .{ this.range.fmt(formatter.buffer), ptr.range.fmt(formatter.buffer) });
+                    try writer.print("{f} && {f}", .{ q.range.fmt(formatter.buffer), ptr.range.fmt(formatter.buffer) });
                     return;
                 }
             }
 
-            try writer.print("{f}", .{this.range.fmt(formatter.buffer)});
+            try writer.print("{f}", .{q.range.fmt(formatter.buffer)});
         }
     };
 
@@ -64,12 +64,12 @@ class Query {
             list: *const List,
             buffer: []const u8,
             pub fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                const this = formatter.list;
+                const l = formatter.list;
 
-                if (this.next) |ptr| {
-                    try writer.print("{f} || {f}", .{ this.head.fmt(formatter.buffer), ptr.fmt(formatter.buffer) });
+                if (l.next) |ptr| {
+                    try writer.print("{f} || {f}", .{ l.head.fmt(formatter.buffer), ptr.fmt(formatter.buffer) });
                 } else {
-                    try writer.print("{f}", .{this.head.fmt(formatter.buffer)});
+                    try writer.print("{f}", .{l.head.fmt(formatter.buffer)});
                 }
             }
         };
@@ -100,7 +100,7 @@ class Query {
             // - if it does, also needs to match major, minor, patch with at least one of the other versions
             //   with a prerelease
             // https://github.com/npm/node-semver/blob/ac9b35769ab0ddfefd5a3af4a3ecaf3da2012352/classes/range.js#L505
-            var pre_matched = false;
+            let pre_matched = false;
             return (list.head.satisfiesPre(
                 version,
                 list_buf,
@@ -128,13 +128,13 @@ class Query {
                 return;
             }
 
-            var tail = try allocator.create(Query);
+            let tail = try allocator.create(Query);
             tail.* = Query{
                 .range = range,
             };
             tail.range = range;
 
-            var last_tail = self.tail orelse &self.head;
+            let last_tail = self.tail orelse &self.head;
             last_tail.next = tail;
             self.tail = tail;
         }
@@ -157,18 +157,18 @@ class Query {
             buf: string,
 
             pub fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                const this = formatter.group;
+                const g = formatter.group;
 
-                if (this.tail == null and this.head.tail == null and !this.head.head.range.hasLeft()) {
+                if (g.tail == null and g.head.tail == null and !g.head.head.range.hasLeft()) {
                     return;
                 }
 
-                if (this.tail == null and this.head.tail == null) {
-                    try writer.print("{f}", .{this.head.fmt(formatter.buf)});
+                if (g.tail == null and g.head.tail == null) {
+                    try writer.print("{f}", .{g.head.fmt(formatter.buf)});
                     return;
                 }
 
-                var list = &this.head;
+                let list = &g.head;
                 while (list.next) |next| {
                     try writer.print("{f} && ", .{list.fmt(formatter.buf)});
                     list = next;
@@ -192,11 +192,11 @@ class Query {
         }
 
         pub fn deinit(this: *const Group) void {
-            var list = this.head;
-            var allocator = this.allocator;
+            let list = this.head;
+            let allocator = this.allocator;
 
             while (list.next) |next| {
-                var query = list.head;
+                let query = list.head;
                 while (query.next) |next_query| {
                     query = next_query.*;
                     allocator.destroy(next_query);
@@ -271,18 +271,18 @@ class Query {
                 return;
             }
 
-            var new_tail = try self.allocator.create(List);
+            let new_tail = try self.allocator.create(List);
             new_tail.* = List{};
             new_tail.head.range.left.version = version;
             new_tail.head.range.left.op = .eql;
 
-            var prev_tail = self.tail orelse &self.head;
+            let prev_tail = self.tail orelse &self.head;
             prev_tail.next = new_tail;
             self.tail = new_tail;
         }
 
         pub fn andRange(self: *Group, range: Range) !void {
-            var tail = self.tail orelse &self.head;
+            let tail = self.tail orelse &self.head;
             try tail.andRange(self.allocator, range);
         }
 
@@ -292,11 +292,11 @@ class Query {
                 return;
             }
 
-            var new_tail = try self.allocator.create(List);
+            let new_tail = try self.allocator.create(List);
             new_tail.* = List{};
             new_tail.head.range = range;
 
-            var prev_tail = self.tail orelse &self.head;
+            let prev_tail = self.tail orelse &self.head;
             prev_tail.next = new_tail;
             self.tail = new_tail;
         }
@@ -361,8 +361,8 @@ class Query {
                 // Allows changes that do not modify the left-most non-zero element in the [major, minor, patch] tuple
                 .caret => {
                     // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L302-L353
-                    var range = Range{};
-                    if (version.major) |major| done: {
+                    let range = Range{};
+                    if (version.major) |major| {
                         range.left = .{
                             .op = .gte,
                             .version = .{
@@ -372,6 +372,7 @@ class Query {
                         range.right = .{
                             .op = .lt,
                         };
+                        let done_caret = false;
                         if (version.minor) |minor| {
                             range.left.version.minor = minor;
                             if (version.patch) |patch| {
@@ -383,21 +384,23 @@ class Query {
                                     } else {
                                         range.right.version.minor = minor +| 1;
                                     }
-                                    break :done;
+                                    done_caret = true;
                                 }
                             } else if (major == 0) {
                                 range.right.version.minor = minor +| 1;
-                                break :done;
+                                done_caret = true;
                             }
                         }
-                        range.right.version.major = major +| 1;
+                        if (!done_caret) {
+                            range.right.version.major = major +| 1;
+                        }
                     }
                     return range;
                 },
                 .tilda => {
                     // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L261-L287
-                    var range = Range{};
-                    if (version.major) |major| done: {
+                    let range = Range{};
+                    if (version.major) |major| {
                         range.left = .{
                             .op = .gte,
                             .version = .{
@@ -415,9 +418,9 @@ class Query {
                             }
                             range.right.version.major = major;
                             range.right.version.minor = minor +| 1;
-                            break :done;
+                        } else {
+                            range.right.version.major = major +| 1;
                         }
-                        range.right.version.major = major +| 1;
                     }
                     return range;
                 },
@@ -573,18 +576,18 @@ class Query {
         input: string,
         sliced: SlicedString,
     ) bun.OOM!Group {
-        var i: usize = 0;
-        var list = Group{
+        let i: usize = 0;
+        let list = Group{
             .allocator = allocator,
             .input = input,
         };
 
-        var token = Token{};
-        var prev_token = Token{};
+        let token = Token{};
+        let prev_token = Token{};
 
-        var count: u8 = 0;
-        var skip_round = false;
-        var is_or = false;
+        let count: u8 = 0;
+        let skip_round = false;
+        let is_or = false;
 
         while (i < input.len) {
             skip_round = false;
@@ -705,7 +708,7 @@ class Query {
 
                 if (hyphenate) {
                     const second_parsed = Version.parse(sliced.sub(input[i..]));
-                    var second_version = second_parsed.version.min();
+                    let second_version = second_parsed.version.min();
                     if (second_version.tag.hasBuild()) list.flags.setValue(Group.Flags.build, true);
                     if (second_version.tag.hasPre()) list.flags.setValue(Group.Flags.pre, true);
                     const range: Range = brk: {
