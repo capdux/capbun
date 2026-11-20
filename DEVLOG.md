@@ -1212,3 +1212,6 @@
 
 ### 2026-11-20 03:18:05 UTC - js_parser/ast 核心解析批次经验
 - 规避 `extends`/`dec` 等 CP 关键字冲突与 `if (comptime ...)` 内 `break :brk`，4 模块膨胀率稳定在 1.000x~1.005x。
+
+### 2026-11-20 03:24:04 UTC - src/js_parser/ 顶层模块迁移经验
+- 发现 `const x: T = @intFromFloat/@bitCast(...)` 被静默丢弃并写入 `CP_PITFALLS.md`；`src/js_parser/` 顶层仅余 `lexer.zig`。

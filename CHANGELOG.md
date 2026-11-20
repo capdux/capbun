@@ -1482,3 +1482,6 @@
 
 ### 2026-11-20 03:18:05 UTC - src/js_parser/ast/ 4 核心解析与访问模块迁移入库
 - 完成：`skipTypescript.cp` (1.005x), `parse.cp` (1.001x), `parseStmt.cp` (1.000x), `visit.cp` (1.000x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:24:04 UTC - src/js_parser/ 4 顶层核心模块迁移入库
+- 完成：`runtime.cp` (1.015x), `js_parser.cp` (1.007x), `lexer_tables.cp` (1.000x), `parser.cp` (1.039x)，4 项硬门禁全 PASS。

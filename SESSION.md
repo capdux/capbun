@@ -2924,3 +2924,5 @@ Options:
 - [2026-11-20 03:15:21 UTC] 验收并提交 `src/cli/` 3 模块：`bunfig.cp` (1.025x), `cli.cp` (1.009x), `Arguments.cp` (1.016x)；已更新 `CP_PITFALLS.md`；接力派发 `src/cli/` 最后 3 模块（`repl`/`update_interactive_command`/`test_command`）。
 
 - [2026-11-20 03:18:05 UTC] 验收并提交 `src/js_parser/ast/` 4 模块：`skipTypescript.cp` (1.005x), `parse.cp` (1.001x), `parseStmt.cp` (1.000x), `visit.cp` (1.000x)；接力派发 `lowerDecorators`/`visitStmt`/`Parser`/`visitExpr`。
+
+- [2026-11-20 03:24:04 UTC] 验收并提交 `src/js_parser/` 4 模块：`runtime.cp` (1.015x), `js_parser.cp` (1.007x), `lexer_tables.cp` (1.000x), `parser.cp` (1.039x)；接力派发 `src/install/` 3 模块（`PackageManager`/`PackageInstaller`/`isolated_install`）。
