@@ -153,7 +153,7 @@ _ = buf.allocator.free(buf.bytes);
     }
 
 pub fn asSlice(self: Value) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 .buffer => |buf| buf.bytes,
 else => "",
 });

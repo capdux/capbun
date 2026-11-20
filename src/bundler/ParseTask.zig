@@ -673,7 +673,7 @@ if ((transpiler.options.target == .browser)) {
         var require_args = ((allocator.alloc(Expr, 1)) catch unreachable);
         _ = &require_args;
         require_args[cp_cast_int(usize, 0)] = import_path;
-        const root = Expr.init(E.Call, E.Call{ .target = .{ .data = .{ .e_require_call_target = .{} }, .loc = .{ .start = 0 } }, .args = BabyList(Expr).fromOwnedSlice(require_args) }, Logger.Loc{ .start = 0 });
+        const root = Expr.init(E.Call, E.Call{ .target = .{ .data = .{ .e_require_call_target = undefined }, .loc = .{ .start = 0 } }, .args = BabyList(Expr).fromOwnedSlice(require_args) }, Logger.Loc{ .start = 0 });
         unique_key_for_additional_file.* = .{ .key = unique_key, .content_hash = ContentHasher.run(source.contents) };
         return JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
 },

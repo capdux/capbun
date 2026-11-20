@@ -99,19 +99,19 @@ pub struct ModuleInfoDeserialized {
         const res = gpa.create(ModuleInfoDeserialized)?;
         errdefer gpa.destroy(res);
 
-        const record_kinds_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(unsafe { &rem }, record_kinds_len * @sizeOf(RecordKind))?);
-        * = eat(unsafe { &rem }, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
+        const record_kinds_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(&rem, record_kinds_len * @sizeOf(RecordKind))?);
+        * = eat(&rem, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
 
-        const buffer_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const buffer = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, buffer_len * @sizeOf(StringID))?);
+        const buffer_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const buffer = std.mem.bytesAsSlice(StringID, eat(&rem, buffer_len * @sizeOf(StringID))?);
 
-        const requested_modules_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, requested_modules_len * @sizeOf(StringID))?);
-        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(unsafe { &rem }, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
+        const requested_modules_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(&rem, requested_modules_len * @sizeOf(StringID))?);
+        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(&rem, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
 
-        const flags: Flags = @bitCast((eatC(unsafe { &rem }, 1)?)[0]);
-        * = eat(unsafe { &rem }, 3)?; // alignment padding
+        const flags: Flags = @bitCast((eatC(&rem, 1)?)[0]);
+        * = eat(&rem, 3)?; // alignment padding
 
         const strings_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
         const strings_lens = std.mem.bytesAsSlice(u32, eat(unsafe { &rem }, strings_len * @sizeOf(u32))?);
@@ -274,7 +274,7 @@ pub struct ModuleInfo {
     }
 
     fn _hasOrAddExportedName(*_, name: StringID): bool! {
-        if ((_.exported_names.fetchPut(_.gpa, name, {})?) != null) return true;
+        if ((_.exported_names.fetchPut(_.gpa, name, undefined)?) != null) return true;
         return false;
     }
 

@@ -100,7 +100,7 @@ const cache_line = std.atomic.cache_line;
         if (comptime Environment.allow_assert) {
             const dbg_event = _.dbg_watcher_event ?? std.debug.panic(
                 "must call `watcherAcquireEvent` before `watcherReleaseAndSubmitEvent`",
-                [],
+                .{},
             );
             bun.assertf(
                 dbg_event == ev,

@@ -250,14 +250,16 @@ pub struct DotDefine {
     data: DefineData,
 }
 
-let empty_dot_defines: [0]DotDefine = [];
+let empty_dot_defines: [0]DotDefine = undefined;
 
 // var nan_val = try allocator.create(js_ast.E.Number);
 const nan_val = js_ast.E.Number{ value: std.math.nan(f64) };
 
+pub type DotDefineSlice = []DotDefine;
+
 pub struct Define {
     identifiers: bun.StringHashMap(IdentifierDefine),
-    dots: bun.StringHashMap([]DotDefine),
+    dots: bun.StringHashMap(DotDefineSlice),
     drop_debugger: bool,
     allocator: std.mem.Allocator,
 
@@ -359,7 +361,7 @@ pub struct Define {
         define.* = {
             allocator: allocator,
             identifiers: bun.StringHashMap(IdentifierDefine).init(allocator),
-            dots: bun.StringHashMap([]DotDefine).init(allocator),
+            dots: bun.StringHashMap(DotDefineSlice).init(allocator),
             drop_debugger: drop_debugger,
         };
         define.dots.ensureTotalCapacity(124)?;

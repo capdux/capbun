@@ -505,9 +505,9 @@ pub struct JunitReporter {
                 _.contents.appendSlice(bun.default_allocator, ">\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.writer(bun.default_allocator).print(
-                    \\  <failure message="Expected more assertions, but only received {d}" type="AssertionError"/>
-                    \\
-                , .{assertions})?;
+                    "  <failure message=\"Expected more assertions, but only received {d}\" type=\"AssertionError\"/>\n",
+                    .{assertions},
+                )?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },
@@ -518,9 +518,9 @@ pub struct JunitReporter {
                 _.contents.appendSlice(bun.default_allocator, ">\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.writer(bun.default_allocator).print(
-                    \\  <failure message="TODO passed" type="AssertionError"/>
-                    \\
-                , {})?;
+                    "  <failure message=\"TODO passed\" type=\"AssertionError\"/>\n",
+                    .{},
+                )?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },

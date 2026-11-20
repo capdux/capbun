@@ -1380,10 +1380,12 @@ pub fn initServerRuntime(dev: *DevServer) void {
         if ((!hmr_interface.isObject())) {
             _ = @panic("Internal assertion failure: expected interface from HMR runtime to be an object");
         }
-        const fetch_function = (blk_catch_15: { break :blk_catch_15 ((hmr_interface.get(dev.vm.global, "handleRequest")) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 ((null) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain handleRequest"))); }); });
+        const fetch_opt = (blk_catch_15: { break :blk_catch_15 ((hmr_interface.get(dev.vm.global, "handleRequest")) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
+        const fetch_function = ((fetch_opt) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain handleRequest")));
         _ = bun.assert(fetch_function.isCallable());
         dev.server_fetch_function_callback = .create(fetch_function, dev.vm.global);
-        const register_update = (blk_catch_16: { break :blk_catch_16 ((hmr_interface.get(dev.vm.global, "registerUpdate")) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 ((null) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain registerUpdate"))); }); });
+        const register_opt = (blk_catch_16: { break :blk_catch_16 ((hmr_interface.get(dev.vm.global, "registerUpdate")) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
+        const register_update = ((register_opt) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain registerUpdate")));
         dev.server_register_update_callback = .create(register_update, dev.vm.global);
         _ = fetch_function.ensureStillAlive();
         _ = register_update.ensureStillAlive();
@@ -2057,7 +2059,7 @@ pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, r
             _ = dev.allocator().free(payload);
             }
             route_bundle.client_bundle = StaticRoute.initFromAnyBlob((&.fromOwnedSlice(dev.allocator(), payload)), .{ .mime_type = (&.javascript), .server = ((dev.server) orelse (unreachable)) });
-            client_bundle = route_bundle.client_bundle.unwrap();
+            client_bundle = route_bundle.client_bundle.?;
         }
         _ = dev.source_maps.addWeakRef(route_bundle.sourceMapId());
         _ = client_bundle.onWithMethod(method, resp);
@@ -3827,9 +3829,10 @@ pub fn shouldReceiveConsoleLogFromBrowser(dev: *const DevServer) bool {
 
 pub fn dumpStateDueToCrash(dev: *DevServer) !void {
         _ = (comptime assert(bun.FeatureFlags.bake_debugging_features));
-        var filepath_buf: struct { @min(4096,bun.MAX_PATH_BYTES) } = undefined;
+        const max_path_len = (comptime @min(4096, bun.MAX_PATH_BYTES));
+        _ = &max_path_len;
+        var filepath_buf: [max_path_len]u8 = undefined;
         _ = &filepath_buf;
-        u8 = undefined;
         const filepath = (blk_catch_38: { break :blk_catch_38 ((std.fmt.bufPrintZ((&filepath_buf), "incremental-graph-crash-dump.{d}.html", .{ std.time.timestamp() })) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 "incremental-graph-crash-dump.html"; }); });
         const file = (blk_catch_39: { break :blk_catch_39 ((std.fs.cwd().createFileZ(filepath, .{})) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         _ = Output.warn("Could not open file for dumping incremental graph: {}", .{ e });

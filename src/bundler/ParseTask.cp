@@ -574,7 +574,7 @@ fn getAST(
             require_args[0] = import_path;
 
             const root = Expr.init(E.Call, E.Call{
-                target: { data: { e_require_call_target: {} }, loc: { start: 0 } },
+                target: { data: { e_require_call_target: undefined }, loc: { start: 0 } },
                 args: BabyList(Expr).fromOwnedSlice(require_args),
             }, Logger.Loc{ start: 0 });
 

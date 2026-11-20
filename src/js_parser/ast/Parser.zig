@@ -453,7 +453,8 @@ var sliced = try ListManaged(Stmt).initCapacity(p.allocator, 1);
             if ((self.log.errors > orig_error_count)) {
                 return error.SyntaxError;
             }
-            const postvisit_tracer = bun.perf.trace("JSParser.postvisit");
+            var postvisit_tracer = bun.perf.trace("JSParser.postvisit");
+            _ = &postvisit_tracer;
             defer {
             _ = postvisit_tracer.end();
             }

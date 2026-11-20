@@ -431,9 +431,9 @@ const empty_stmts: [0]Stmt = undefined;
 
                         // Is this an identifier reference and not a require() call?
                         if (val := value) {
-                            if (@as(Expr.Tag, val.data) == .e_identifier) {
+                            if (std.meta.activeTag(val.data) == .e_identifier) {
                                 // Is this import statement unused?
-                                if (@as(Binding.Tag, decl.binding.data) == .b_identifier && p.symbols.items[decl.binding.data.b_identifier.ref.innerIndex()].use_count_estimate == 0) {
+                                if (std.meta.activeTag(decl.binding.data) == .b_identifier && p.symbols.items[decl.binding.data.b_identifier.ref.innerIndex()].use_count_estimate == 0) {
                                     p.ignoreUsage(val.data.e_identifier.ref);
 
                                     scanner.removed_import_equals = true;

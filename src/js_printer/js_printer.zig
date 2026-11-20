@@ -706,8 +706,8 @@ const first_high_surrogate = 55296;
 const first_low_surrogate = 56320;
 const last_low_surrogate = 57343;
 const ascii_only_always_on_unless_minifying = true;
-const indentation_space_buf = [1]u8;
-const indentation_tab_buf = [1]u8;
+const indentation_space_buf: [128]u8 = @splat(32);
+const indentation_tab_buf: [128]u8 = @splat(9);
 pub const BufferPrinter = NewWriter(BufferWriter, BufferWriter.writeByte, BufferWriter.writeAll, BufferWriter.getLastByte, BufferWriter.getLastLastByte, BufferWriter.reserveNext, BufferWriter.advanceBy);
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -1494,7 +1494,7 @@ pub fn printFnArgs(p: *Printer, open_paren_loc: ?logger.Loc, args: []G.Arg, has_
                 if (arg.default) |default| {
                     _ = &default;
                     _ = p.printWhitespacer(ws(" = "));
-                    _ = p.printExpr(default, .comma, ExprFlag.None);
+                    _ = p.printExpr(default, .comma, ExprFlag.Set.initEmpty());
                 }
             }
             if (wrap) {
@@ -1513,7 +1513,7 @@ pub fn printClass(p: *Printer, cls: G.Class) void {
                 _ = &ext;
                 _ = p.print(" ext");
                 _ = p.printSpace();
-                _ = p.printExpr(ext, Level.new.sub(1), ExprFlag.None);
+                _ = p.printExpr(ext, Level.new.sub(1), ExprFlag.Set.initEmpty());
             }
             _ = p.printSpace();
             _ = p.addSourceMapping(cls.body_loc);
@@ -2022,7 +2022,7 @@ pub fn printRawTemplateLiteral(p: *Printer, bytes: []const u8) void {
             _ = &is_ascii;
             var iter = CodepointIterator.init(bytes);
             _ = &iter;
-            var cursor = CodepointIterator.Cursor;
+            var cursor: CodepointIterator.Cursor = .{};
             _ = &cursor;
             while (iter.next((&cursor))) {
                 switch (cursor.c) {
@@ -2085,7 +2085,7 @@ _ = p.printSpaceBeforeIdentifier();
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
             _ = p.print("..");
-            const none_flag = ExprFlag.None;
+            const none_flag = ExprFlag.Set.initEmpty();
             _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, none_flag);
 },
 .e_new_target => {
@@ -2256,12 +2256,12 @@ const has_pure_comment = ((e.can_be_unwrapped_if_unused == .if_unused) and p.opt
             if (((args.len > 0) or level.gte(.postfix))) {
                 _ = p.print("(");
                 if ((args.len > 0)) {
-                    _ = p.printExpr(args[0], .comma, ExprFlag.None);
+                    _ = p.printExpr(args[0], .comma, ExprFlag.Set.initEmpty());
                     for (cp_iter_slice(args[1..])) |arg| {
                         _ = &arg;
                         _ = p.print(",");
                         _ = p.printSpace();
-                        _ = p.printExpr(arg, .comma, ExprFlag.None);
+                        _ = p.printExpr(arg, .comma, ExprFlag.Set.initEmpty());
                     }
                 }
                 if ((e.close_parens_loc.start > expr.loc.start)) {
@@ -2276,7 +2276,7 @@ const has_pure_comment = ((e.can_be_unwrapped_if_unused == .if_unused) and p.opt
 .e_call => |e| {
 var wrap = (level.gte(.@"new") or flags.contains(.forbid_call));
             _ = &wrap;
-            var target_flags = ExprFlag.None;
+            var target_flags = ExprFlag.Set.initEmpty();
             _ = &target_flags;
             if ((e.optional_chain == null)) {
                 target_flags = ExprFlag.HasNonOptionalChainParent;
@@ -2304,7 +2304,7 @@ var wrap = (level.gte(.@"new") or flags.contains(.forbid_call));
             if (is_unbound_eval) {
                 _ = p.print("(0,");
                 _ = p.printSpace();
-                _ = p.printExpr(e.target, .postfix, ExprFlag.None);
+                _ = p.printExpr(e.target, .postfix, ExprFlag.Set.initEmpty());
                 _ = p.print(")");
             } else {
                 _ = p.printExpr(e.target, .postfix, target_flags);
@@ -2315,12 +2315,12 @@ var wrap = (level.gte(.@"new") or flags.contains(.forbid_call));
             _ = p.print("(");
             const args = e.args.slice();
             if ((args.len > 0)) {
-                _ = p.printExpr(args[0], .comma, ExprFlag.None);
+                _ = p.printExpr(args[0], .comma, ExprFlag.Set.initEmpty());
                 for (cp_iter_slice(args[1..])) |arg| {
                     _ = &arg;
                     _ = p.print(",");
                     _ = p.printSpace();
-                    _ = p.printExpr(arg, .comma, ExprFlag.None);
+                    _ = p.printExpr(arg, .comma, ExprFlag.Set.initEmpty());
                 }
             }
             if ((e.close_paren_loc.start > expr.loc.start)) {
@@ -2421,7 +2421,7 @@ if (e.isImportRecordNull()) {
                 } else {
                     _ = p.print("import(");
                 }
-                _ = p.printExpr(e.expr, .comma, ExprFlag.None);
+                _ = p.printExpr(e.expr, .comma, ExprFlag.Set.initEmpty());
                 if ((!e.options.isMissing())) {
                     _ = p.printWhitespacer(ws(", "));
                     _ = p.printExpr(e.options, .comma, .{});
@@ -2518,7 +2518,7 @@ const priv_id = e.index.data.e_private_identifier;
 else => {
 _ = p.print("[");
             _ = p.addSourceMapping(e.index.loc);
-            _ = p.printExpr(e.index, .lowest, ExprFlag.None);
+            _ = p.printExpr(e.index, .lowest, ExprFlag.Set.initEmpty());
             _ = p.print("]");
 },
 }
@@ -2536,7 +2536,7 @@ const wrap = level.gte(.conditional);
             _ = p.printSpace();
             _ = p.print("?");
             _ = p.printSpace();
-            _ = p.printExpr(e.yes, .yield, ExprFlag.None);
+            _ = p.printExpr(e.yes, .yield, ExprFlag.Set.initEmpty());
             _ = p.printSpace();
             _ = p.print(":");
             _ = p.printSpace();
@@ -2655,7 +2655,7 @@ _ = p.addSourceMapping(expr.loc);
                         _ = p.printNewline();
                         _ = p.printIndent();
                     }
-                    _ = p.printExpr(item, .comma, ExprFlag.None);
+                    _ = p.printExpr(item, .comma, ExprFlag.Set.initEmpty());
                     if (((i == (items.len - 1)) and (item.data == .e_missing))) {
                         _ = p.print(",");
                     }
@@ -2809,10 +2809,10 @@ else => {
                 _ = p.addSourceMapping(expr.loc);
                 if (expr.isOptionalChain()) {
                     _ = p.print("(");
-                    _ = p.printExpr(tag, .lowest, ExprFlag.None);
+                    _ = p.printExpr(tag, .lowest, ExprFlag.Set.initEmpty());
                     _ = p.print(")");
                 } else {
-                    _ = p.printExpr(tag, .postfix, ExprFlag.None);
+                    _ = p.printExpr(tag, .postfix, ExprFlag.Set.initEmpty());
                 }
             } else {
                 _ = p.addSourceMapping(expr.loc);
@@ -2834,7 +2834,7 @@ var cooked = (&e.head.cooked);
             for (cp_mut_slice(&e.parts)) |*part| {
                 _ = &part;
                 _ = p.print("${");
-                _ = p.printExpr((if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value), .lowest, ExprFlag.None);
+                _ = p.printExpr((if (@typeInfo(@TypeOf((part.*))) == .@"enum") @intFromEnum((part.*)) else (part.*).value), .lowest, ExprFlag.Set.initEmpty());
                 _ = p.print("}");
                 switch ((part.*).tail) {
 .raw => |raw| {
@@ -2965,7 +2965,7 @@ const wrap = level.gte(.prefix);
             _ = p.addSourceMapping(expr.loc);
             _ = p.print("await");
             _ = p.printSpace();
-            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Level.sub(.prefix, 1), ExprFlag.None);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
             if (wrap) {
                 _ = p.print(")");
             }
@@ -2984,7 +2984,7 @@ const wrap = level.gte(.assign);
                     _ = p.print("*");
                 }
                 _ = p.printSpace();
-                _ = p.printExpr(val, .yield, ExprFlag.None);
+                _ = p.printExpr(val, .yield, ExprFlag.Set.initEmpty());
             }
             if (wrap) {
                 _ = p.print(")");
@@ -2997,7 +2997,7 @@ const entry: *const Op = Op.Table.getPtrConst(e.op);
                 _ = p.print("(");
             }
             if ((!e.op.isPrefix())) {
-                _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.postfix, 1), ExprFlag.None);
+                _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.postfix, 1), ExprFlag.Set.initEmpty());
             }
             if (entry.is_keyword) {
                 _ = p.printSpaceBeforeIdentifier();
@@ -3017,10 +3017,10 @@ const entry: *const Op = Op.Table.getPtrConst(e.op);
                 if (((((e.op == .un_typeof) and (!e.flags.was_originally_typeof_identifier)) and p.isUnboundIdentifier((&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)))) or (((e.op == .un_delete) and (!e.flags.was_originally_delete_of_identifier_or_property_access)) and isIdentifierOrNumericConstantOrPropertyAccess((&(if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)))))) {
                     _ = p.print("(0,");
                     _ = p.printSpace();
-                    _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.prefix, 1), ExprFlag.None);
+                    _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
                     _ = p.print(")");
                 } else {
-                    _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.prefix, 1), ExprFlag.None);
+                    _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), Op.Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
                 }
             }
             if (wrap) {
@@ -3126,7 +3126,7 @@ pub fn printRegExpLiteral(p: *Printer, e: *const E.RegExp) void {
                 _ = &is_ascii;
                 var iter = CodepointIterator.init((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value));
                 _ = &iter;
-                var cursor = CodepointIterator.Cursor;
+                var cursor: CodepointIterator.Cursor = .{};
                 _ = &cursor;
                 while (iter.next((&cursor))) {
                     switch (cursor.c) {
@@ -3176,7 +3176,7 @@ pub fn printProperty(p: *Printer, item_in: G.Property) void {
                         _ = unreachable;
                     }
                     _ = p.print("..");
-                    _ = p.printExpr((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?, .comma, ExprFlag.None);
+                    _ = p.printExpr((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?, .comma, ExprFlag.Set.initEmpty());
                     return;
                 }
                 if ((p.options.minify_syntax and item.flags.contains(.is_computed))) {
@@ -3254,7 +3254,7 @@ else => {
 },
 }
                     if ((item.key == null)) {
-                        _ = p.printExpr(val, .comma, ExprFlag.None);
+                        _ = p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
                         return;
                     }
                 }
@@ -3262,7 +3262,7 @@ else => {
             const _key = item.key.?;
             if (((!is_json) and item.flags.contains(.is_computed))) {
                 _ = p.print("[");
-                _ = p.printExpr(_key, .comma, ExprFlag.None);
+                _ = p.printExpr(_key, .comma, ExprFlag.Set.initEmpty());
                 _ = p.print("]");
                 if ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value)) |val| {
                     _ = &val;
@@ -3279,7 +3279,7 @@ else => {
 }
                     _ = p.print(":");
                     _ = p.printSpace();
-                    _ = p.printExpr(val, .comma, ExprFlag.None);
+                    _ = p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
                 }
                 if (item.initializer) |initial| {
                     _ = &initial;
@@ -3440,7 +3440,7 @@ pub fn printInitializer(p: *Printer, initial: Expr) void {
             _ = p.printSpace();
             _ = p.print("=");
             _ = p.printSpace();
-            _ = p.printExpr(initial, .comma, ExprFlag.None);
+            _ = p.printExpr(initial, .comma, ExprFlag.Set.initEmpty());
     }
 
 pub fn printBinding(p: *Printer, binding: Binding, tlm: TopLevelAndIsExport) void {
@@ -3535,7 +3535,7 @@ _ = p.print("{");
                     } else {
                         if ((property.*).flags.contains(.is_computed)) {
                             _ = p.print("[");
-                            _ = p.printExpr((property.*).key, .comma, ExprFlag.None);
+                            _ = p.printExpr((property.*).key, .comma, ExprFlag.Set.initEmpty());
                             _ = p.print("]:");
                             _ = p.printSpace();
                             _ = p.printBinding((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value), tlm);
@@ -3607,12 +3607,12 @@ else => {
 },
 }
                             } else {
-                                _ = p.printExpr((property.*).key, .lowest, ExprFlag.None);
+                                _ = p.printExpr((property.*).key, .lowest, ExprFlag.Set.initEmpty());
                             }
                         }
 },
 else => {
-_ = p.printExpr((property.*).key, .lowest, ExprFlag.None);
+_ = p.printExpr((property.*).key, .lowest, ExprFlag.Set.initEmpty());
 },
 }
                         _ = p.print(":");
@@ -3640,7 +3640,7 @@ pub fn maybePrintDefaultBindingValue(p: *Printer, property: anytype) void {
                 _ = p.printSpace();
                 _ = p.print("=");
                 _ = p.printSpace();
-                _ = p.printExpr(default, .comma, ExprFlag.None);
+                _ = p.printExpr(default, .comma, ExprFlag.Set.initEmpty());
             }
     }
 
@@ -3761,7 +3761,7 @@ _ = p.printIndent();
             switch ((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value)) {
 .expr => |expr| {
 p.export_default_start = p.writer.written;
-            _ = p.printExpr(expr, .comma, ExprFlag.None);
+            _ = p.printExpr(expr, .comma, ExprFlag.Set.initEmpty());
             _ = p.printSemicolonAfterStatement();
             if (may_have_module_info) {
                 if (p.moduleInfo()) |mi| {
@@ -4139,7 +4139,7 @@ _ = p.printNewline();
             _ = p.print("while");
             _ = p.printSpace();
             _ = p.print("(");
-            _ = p.printExpr(s.test_, .lowest, ExprFlag.None);
+            _ = p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printSemicolonAfterStatement();
 },
@@ -4155,7 +4155,7 @@ _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
             _ = p.print("in");
             _ = p.printSpace();
-            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.None);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printBody(s.body, tlmtlo.subVar());
 },
@@ -4175,7 +4175,7 @@ _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
             _ = p.print("of");
             _ = p.printSpace();
-            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .comma, ExprFlag.None);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .comma, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printBody(s.body, tlmtlo.subVar());
 },
@@ -4186,7 +4186,7 @@ _ = p.printIndent();
             _ = p.print("while");
             _ = p.printSpace();
             _ = p.print("(");
-            _ = p.printExpr(s.test_, .lowest, ExprFlag.None);
+            _ = p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printBody(s.body, tlmtlo.subVar());
 },
@@ -4197,7 +4197,7 @@ _ = p.printIndent();
             _ = p.print("with");
             _ = p.printSpace();
             _ = p.print("(");
-            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.None);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printBody(s.body, tlmtlo.subVar());
 },
@@ -4257,13 +4257,13 @@ _ = p.printIndent();
             _ = p.print(";");
             if (s.test_) |test_| {
                 _ = &test_;
-                _ = p.printExpr(test_, .lowest, ExprFlag.None);
+                _ = p.printExpr(test_, .lowest, ExprFlag.Set.initEmpty());
             }
             _ = p.print(";");
             _ = p.printSpace();
             if (s.update) |update| {
                 _ = &update;
-                _ = p.printExpr(update, .lowest, ExprFlag.None);
+                _ = p.printExpr(update, .lowest, ExprFlag.Set.initEmpty());
             }
             _ = p.print(")");
             _ = p.printBody(s.body, tlmtlo.subVar());
@@ -4275,7 +4275,7 @@ _ = p.printIndent();
             _ = p.print("switch");
             _ = p.printSpace();
             _ = p.print("(");
-            _ = p.printExpr(s.test_, .lowest, ExprFlag.None);
+            _ = p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             _ = p.printSpace();
             _ = p.print("{");
@@ -4289,7 +4289,7 @@ _ = p.printIndent();
                     _ = &val;
                     _ = p.print("case");
                     _ = p.printSpace();
-                    _ = p.printExpr(val, .logical_and, ExprFlag.None);
+                    _ = p.printExpr(val, .logical_and, ExprFlag.Set.initEmpty());
                 } else {
                     _ = p.print("default");
                 }
@@ -4652,7 +4652,7 @@ _ = p.printIndent();
             if ((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value)) |value| {
                 _ = &value;
                 _ = p.printSpace();
-                _ = p.printExpr(value, .lowest, ExprFlag.None);
+                _ = p.printExpr(value, .lowest, ExprFlag.Set.initEmpty());
             }
             _ = p.printSemicolonAfterStatement();
 },
@@ -4662,7 +4662,7 @@ _ = p.printIndent();
             _ = p.addSourceMapping(stmt.loc);
             _ = p.print("throw");
             _ = p.printSpace();
-            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.None);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.Set.initEmpty());
             _ = p.printSemicolonAfterStatement();
 },
 .s_expr => |s| {
@@ -4887,7 +4887,7 @@ pub fn printIf(p: *Printer, s: *const S.If, loc: logger.Loc, tlmtlo: TopLevel) v
             _ = p.print("if");
             _ = p.printSpace();
             _ = p.print("(");
-            _ = p.printExpr(s.test_, .lowest, ExprFlag.None);
+            _ = p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
             _ = p.print(")");
             switch (s.yes.data) {
 .s_block => |block| {
@@ -5033,7 +5033,7 @@ pub fn printDeclStmt(p: *Printer, is_export: bool, comptime keyword: []const u8,
             }
             const tlm: TopLevelAndIsExport = (if (may_have_module_info) TopLevelAndIsExport{ .is_export = is_export, .is_top_level = (if (comptime strings.eqlComptime(keyword, "var")) (if (tlmtlo.isTopLevel()) .declared else null) else (if ((tlmtlo.is_top_level == .yes)) .lexical else null)) } else ({
 }));
-            _ = p.printDecls(keyword, decls, ExprFlag.None, tlm);
+            _ = p.printDecls(keyword, decls, ExprFlag.Set.initEmpty(), tlm);
             _ = p.printSemicolonAfterStatement();
             if (((rewrite_esm_to_cjs and is_export) and (decls.len > 0))) {
                 for (cp_iter_slice(decls)) |decl| {
@@ -5107,7 +5107,7 @@ pub fn printIdentifierAsciiOnly(p: *Printer, identifier: []const u8) void {
             _ = &is_ascii;
             var iter = CodepointIterator.init(identifier);
             _ = &iter;
-            var cursor = CodepointIterator.Cursor;
+            var cursor: CodepointIterator.Cursor = .{};
             _ = &cursor;
             while (iter.next((&cursor))) {
                 switch (cursor.c) {

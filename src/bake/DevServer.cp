@@ -842,11 +842,13 @@ fn initServerRuntime(dev: *DevServer) {
     };
 
     if (!hmr_interface.isObject()) @panic("Internal assertion failure: expected interface from HMR runtime to be an object");
-    const fetch_function = hmr_interface.get(dev.vm.global, "handleRequest") catch null ??
+    const fetch_opt = hmr_interface.get(dev.vm.global, "handleRequest") catch null;
+    const fetch_function = fetch_opt ??
         @panic("Internal assertion failure: expected interface from HMR runtime to contain handleRequest");
     bun.assert(fetch_function.isCallable());
     dev.server_fetch_function_callback = .create(fetch_function, dev.vm.global);
-    const register_update = hmr_interface.get(dev.vm.global, "registerUpdate") catch null ??
+    const register_opt = hmr_interface.get(dev.vm.global, "registerUpdate") catch null;
+    const register_update = register_opt ??
         @panic("Internal assertion failure: expected interface from HMR runtime to contain registerUpdate");
     dev.server_register_update_callback = .create(register_update, dev.vm.global);
 
@@ -1769,7 +1771,7 @@ pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, r
                 server: dev.server ?? unreachable,
             },
         );
-        client_bundle = route_bundle.client_bundle.unwrap();
+        client_bundle = route_bundle.client_bundle.?;
     }
     dev.source_maps.addWeakRef(route_bundle.sourceMapId());
     client_bundle.onWithMethod(method, resp);
@@ -4374,7 +4376,8 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     comptime assert(bun.FeatureFlags.bake_debugging_features);
 
     // being conservative about how much stuff is put on the stack.
-    let filepath_buf: [@min(4096, bun.MAX_PATH_BYTES)]u8 = undefined;
+    const max_path_len = comptime @min(4096, bun.MAX_PATH_BYTES);
+    let filepath_buf: [max_path_len]u8 = undefined;
     const filepath = std.fmt.bufPrintZ(&filepath_buf, "incremental-graph-crash-dump.{d}.html", .{std.time.timestamp()}) catch "incremental-graph-crash-dump.html";
     const file = std.fs.cwd().createFileZ(filepath, {}) catch |e| {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());

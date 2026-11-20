@@ -202,7 +202,7 @@ pub const DotDefine = struct {
 
 pub const Define = struct {
     identifiers: bun.StringHashMap(IdentifierDefine),
-    dots: bun.StringHashMap([]DotDefine),
+    dots: bun.StringHashMap(DotDefineSlice),
     drop_debugger: bool,
     allocator: std.mem.Allocator,
 
@@ -213,7 +213,7 @@ pub fn forIdentifier(self: Define, name: []const u8) ?*const IdentifierDefine {
             }
             if (table.pure_global_identifier_map.get(name)) |id| {
                 _ = &id;
-                return (if (@typeInfo(@TypeOf(id)) == .@"enum") @intFromEnum(id) else id.value)();
+                return id.value();
             }
             return null;
     }
@@ -288,7 +288,7 @@ pub fn init(allocator: std.mem.Allocator, _user_defines: ?UserDefines, string_de
             errdefer {
             _ = allocator.destroy(define);
             }
-            define.* = .{ .allocator = allocator, .identifiers = bun.StringHashMap(IdentifierDefine).init(allocator), .dots = bun.StringHashMap(&.{}, DotDefine).init(allocator), .drop_debugger = drop_debugger };
+            define.* = .{ .allocator = allocator, .identifiers = bun.StringHashMap(IdentifierDefine).init(allocator), .dots = bun.StringHashMap(DotDefineSlice).init(allocator), .drop_debugger = drop_debugger };
             _ = try define.dots.ensureTotalCapacity(124);
             const value_define = (&DefineData{ .value = .{ .e_undefined = .{} }, .flags = .{ .valueless = true, .can_be_removed_if_unused = true } });
             for (cp_iter_slice(global_no_side_effect_property_accesses)) |global| {
@@ -335,13 +335,14 @@ pub fn deinit(self: *Define) void {
     pub const Data = DefineData;
 };
 
+pub const DotDefineSlice = []DotDefine;
 const string = []const u8;
 const defines_path = fs.Path.initWithNamespace("defines.json", "internal");
 pub const RawDefines = bun.StringArrayHashMap(string);
 pub const UserDefines = bun.StringHashMap(DefineData);
 pub const UserDefinesArray = bun.StringArrayHashMap(DefineData);
 pub const IdentifierDefine = DefineData;
-var empty_dot_defines: [0]DotDefine = &.{};
+var empty_dot_defines: [0]DotDefine = undefined;
 const nan_val = js_ast.E.Number{ .value = std.math.nan(f64) };
 const global_no_side_effect_function_calls_safe_for_to_string = table.global_no_side_effect_function_calls_safe_for_to_string;
 const global_no_side_effect_property_accesses = table.global_no_side_effect_property_accesses;

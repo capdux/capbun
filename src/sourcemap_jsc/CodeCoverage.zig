@@ -530,7 +530,7 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         }
                         _ = try functions.append(allocator, .{ .start_line = min_line, .end_line = max_line });
                         if (did_fn_execute) {
-                            _ = functions_which_have_executed.set(i);
+                            _ = functions_which_have_executed.set(@intCast(i));
                         }
                     }
                 }
@@ -671,7 +671,7 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             }
                             _ = try functions.append(allocator, .{ .start_line = min_line, .end_line = max_line });
                             if (did_fn_execute) {
-                                _ = functions_which_have_executed.set(i);
+                                _ = functions_which_have_executed.set(@intCast(i));
                             }
                         }
                     }

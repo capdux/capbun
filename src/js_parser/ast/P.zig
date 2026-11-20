@@ -3132,9 +3132,8 @@ for (cp_mut_slice(&ex.properties.slice())) |*property| {
                 if (((((property.*).kind == .spread) or ((property.*).flags.contains(.is_computed) and (!(property.*).key.?.isPrimitiveLiteral()))) or (property.*).flags.contains(.is_spread))) {
                     return false;
                 }
-                if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |*val| {
-                    _ = &val;
-                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((val.*)))) {
+                if (((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) {
+                    if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?)))) {
                         return false;
                     }
                 }

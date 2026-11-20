@@ -282,8 +282,8 @@ if (st.is_export) {
                 }
                 if (value) |val| {
                     _ = &val;
-                    if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(val.data)) else @as(Expr.Tag, val.data)) == .e_identifier)) {
-                        if ((((if (comptime @typeInfo(Binding.Tag) == .@"enum") @as(Binding.Tag, @enumFromInt(decl.binding.data)) else @as(Binding.Tag, decl.binding.data)) == .b_identifier) and (p.symbols.items[@as(usize, @intCast(decl.binding.data.b_identifier.ref.innerIndex()))].use_count_estimate == 0))) {
+                    if ((std.meta.activeTag(val.data) == .e_identifier)) {
+                        if (((std.meta.activeTag(decl.binding.data) == .b_identifier) and (p.symbols.items[@as(usize, @intCast(decl.binding.data.b_identifier.ref.innerIndex()))].use_count_estimate == 0))) {
                             _ = p.ignoreUsage(val.data.e_identifier.ref);
                             scanner.removed_import_equals = true;
                             continue;

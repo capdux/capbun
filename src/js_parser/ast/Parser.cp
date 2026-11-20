@@ -641,7 +641,7 @@ pub struct Parser {
             return error.SyntaxError;
         }
 
-        const postvisit_tracer = bun.perf.trace("JSParser.postvisit");
+        let postvisit_tracer = bun.perf.trace("JSParser.postvisit");
         defer postvisit_tracer.end();
 
         let uses_dirname = p.symbols.items[p.dirname_ref.innerIndex()].use_count_estimate > 0;

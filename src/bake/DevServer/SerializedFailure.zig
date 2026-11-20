@@ -140,11 +140,15 @@ pub fn encode(self: FailureOwner) OwnerPacked {
 
 pub const FailureArrayHashContextViaOwner = struct {
 
-pub fn hash(k: SerializedFailure) u32 {
+pub fn hash(self: FailureArrayHashContextViaOwner, k: SerializedFailure) u32 {
+            const self_ref = self;
+            _ = &self_ref;
             return std.hash.int(@as(u32, @bitCast(k.getOwner().encode())));
     }
 
-pub fn eql(a: SerializedFailure, b: SerializedFailure, _: usize) bool {
+pub fn eql(self: FailureArrayHashContextViaOwner, a: SerializedFailure, b: SerializedFailure, _: usize) bool {
+            const self_ref = self;
+            _ = &self_ref;
             return (@as(u32, @bitCast(a.getOwner().encode())) == @as(u32, @bitCast(b.getOwner().encode())));
     }
 };

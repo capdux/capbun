@@ -44,10 +44,14 @@ comptime {
 /// This is okay since SerializedFailure can contain more than one error.
 pub struct FailureArrayHashContextViaOwner {
     pub fn hash(k: SerializedFailure): u32 {
+        const self_ref = _;
+        * = self_ref;
         return std.hash.int(@as(u32, @bitCast(k.getOwner().encode())));
     }
 
     pub fn eql(a: SerializedFailure, b: SerializedFailure, _: usize): bool {
+        const self_ref = _;
+        * = self_ref;
         return @as(u32, @bitCast(a.getOwner().encode())) == @as(u32, @bitCast(b.getOwner().encode()));
     }
 }

@@ -4493,8 +4493,8 @@ pub fn NewParser_(
                             return false;
                         }
 
-                        if (*val := property.value) {
-                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(val)) {
+                        if (property.value != null) {
+                            if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.value.?)) {
                                 return false;
                             }
                         }

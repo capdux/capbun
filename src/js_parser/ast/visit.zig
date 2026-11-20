@@ -773,17 +773,17 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 if ((p.scopes_in_order_for_enum.count() > 0)) {
                     var found: usize = 0;
                     _ = &found;
-                    for (stmts.items) |stmt| {
+                    for (stmts.items) |*stmt| {
                         _ = &stmt;
-                        if ((stmt.data == .s_enum)) {
+                        if (((stmt.*).data == .s_enum)) {
                             const old_scopes_in_order = p.scope_order_to_visit;
                             defer {
                             p.scope_order_to_visit = old_scopes_in_order;
                             }
-                            p.scope_order_to_visit = (p.scopes_in_order_for_enum.get(stmt.loc)).?;
+                            p.scope_order_to_visit = (p.scopes_in_order_for_enum.get((stmt.*).loc)).?;
                             var temp = ListManaged(Stmt).init(p.allocator);
                             _ = &temp;
-                            _ = try p.visitAndAppendStmt((&temp), (&stmt));
+                            _ = try p.visitAndAppendStmt((&temp), (stmt.*));
                             _ = try preprocessed_enums.append(p.allocator, temp.items);
                             found = (found + 1);
                         }

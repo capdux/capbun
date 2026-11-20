@@ -445,13 +445,13 @@ pub fn defineKeys(self: CompileTarget) []const []const u8 {
 }
 
 pub fn makeDefineValues(comptime os: Environment.OperatingSystem, comptime arch: Environment.Architecture, comptime libc: Libc) []const []const u8 {
-        const plat: []const u8 = (if ((libc == .android)) "\"android\"" else std.fmt.comptimePrint("\"{s}\"", .{ os.nameString() }));
+        const plat: []const u8 = (if ((libc == .android)) "\"android\"" else (("\"" ++ os.nameString()) ++ "\""));
         const arch_str: []const u8 = (switch (arch) {
 .x64 => "\"x64\"",
 .arm64 => "\"arm64\"",
 .wasm => @compileError("TODO"),
 });
-        const ver: []const u8 = std.fmt.comptimePrint("\"{s}\"", .{ Global.package_json_version });
+        const ver: []const u8 = (("\"" ++ Global.package_json_version) ++ "\"");
         const arr: [3][]const u8 = .{ plat, arch_str, ver };
         const S = struct {
     pub const values = arr;

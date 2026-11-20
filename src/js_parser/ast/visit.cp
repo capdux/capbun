@@ -799,7 +799,7 @@ pub fn Visit(
                 defer preprocessed_enums.deinit(p.allocator);
                 if (p.scopes_in_order_for_enum.count() > 0) {
                     let found: usize = 0;
-                    for (stmt of stmts.items) {
+                    for (*stmt of stmts.items) {
                         if (stmt.data == .s_enum) {
                             const old_scopes_in_order = p.scope_order_to_visit;
                             defer p.scope_order_to_visit = old_scopes_in_order;
@@ -807,7 +807,7 @@ pub fn Visit(
                             p.scope_order_to_visit = p.scopes_in_order_for_enum.get(stmt.loc).?;
 
                             let temp = ListManaged(Stmt).init(p.allocator);
-                            p.visitAndAppendStmt(&temp, &stmt)?;
+                            p.visitAndAppendStmt(&temp, stmt)?;
                             preprocessed_enums.append(p.allocator, temp.items)?;
                             found += 1;
                         }

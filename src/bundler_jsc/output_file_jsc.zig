@@ -118,7 +118,7 @@ pub fn toJS(out: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.JS
         } else {
             blob.content_type = (if (@typeInfo(@TypeOf(out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })))) == .@"enum") @intFromEnum(out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) }))) else out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })).value);
         }
-        blob.size = (if (comptime @typeInfo(jsc.WebCore.Blob.SizeType) == .@"enum") @as(jsc.WebCore.Blob.SizeType, @enumFromInt(buffer.bytes.len)) else @as(jsc.WebCore.Blob.SizeType, buffer.bytes.len));
+        blob.size = @intCast(buffer.bytes.len);
         var build_output = (blk_catch_9: { break :blk_catch_9 ((bun.default_allocator.create(jsc.API.BuildArtifact)) catch |__ce_9| { _ = &__ce_9; @panic("Unable to allocate Artifact"); }); });
         _ = &build_output;
         {
@@ -154,7 +154,7 @@ pub fn toBlob(out: *OutputFile, allocator: std.mem.Allocator, globalThis: *jsc.J
             blob.content_type = (if (@typeInfo(@TypeOf(out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })))) == .@"enum") @intFromEnum(out.loader.toMimeType((&.{ out.dest_path, out.src_path.text }))) else out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })).value);
         }
         (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
-        blob.size = (if (comptime @typeInfo(jsc.WebCore.Blob.SizeType) == .@"enum") @as(jsc.WebCore.Blob.SizeType, @enumFromInt(buffer.bytes.len)) else @as(jsc.WebCore.Blob.SizeType, buffer.bytes.len));
+        blob.size = @intCast(buffer.bytes.len);
         break :brk blob;
 },
 });

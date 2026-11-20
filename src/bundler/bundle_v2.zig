@@ -738,7 +738,7 @@ for (cp_iter_slice(data)) |entry_point| {
                         _ = &file_map;
                         if (file_map.resolve("", entry_point)) |file_map_result| {
                             _ = &file_map_result;
-                            _ = self.enqueueEntryItem(file_map_result, true, self.transpiler.options.target);
+                            _ = try self.enqueueEntryItem(file_map_result, true, self.transpiler.options.target);
                             continue;
                         }
                     }
@@ -3058,7 +3058,9 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
         } else {
             var path_clone = path;
             _ = &path_clone;
-            path_clone.pretty = (blk_catch_85: { break :blk_catch_85 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), std.fmt.Alt(string, fmtEscapedNamespace), .{ .data = path.namespace }, path.text })) catch |__ce_85| { _ = &__ce_85; break :blk_catch_85 buf[0..]; }); });
+            const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
+            _ = &NamespaceAlt;
+            path_clone.pretty = (blk_catch_85: { break :blk_catch_85 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_85| { _ = &__ce_85; break :blk_catch_85 buf[0..]; }); });
             return path_clone.dupeAllocFixPretty(allocator);
         }
 }

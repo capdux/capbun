@@ -35,8 +35,8 @@ pub fn canPrintWithoutEscape(comptime CodePointType: type, c: CodePointType, com
     }
 }
 
-const indentation_space_buf = [1]u8{' '} ** 128;
-const indentation_tab_buf = [1]u8{'\t'} ** 128;
+const indentation_space_buf: [128]u8 = @splat(' ');
+const indentation_tab_buf: [128]u8 = @splat('\t');
 
 pub fn bestQuoteCharForString(comptime Type: type, str: []const Type, allow_backtick: bool): u8 {
     let single_cost: usize = 0;
@@ -1015,7 +1015,7 @@ fn NewPrinter(
                         [],
                         Expr.empty,
                         Level.lowest,
-                        ExprFlag.None(),
+                        ExprFlag.Set.initEmpty(),
                     );
                 } else {
                     p.print(statement);
@@ -1037,7 +1037,7 @@ fn NewPrinter(
                         [],
                         Expr.empty,
                         Level.lowest,
-                        ExprFlag.None(),
+                        ExprFlag.Set.initEmpty(),
                     );
                 } else {
                     p.@"print = "();
@@ -1083,7 +1083,7 @@ fn NewPrinter(
 
                 if (import.star_name_loc == null && import.default_name == null) {
                     if (comptime Statement == void) {
-                        p.printRequireOrImportExpr(import.import_record_index, false, [], Expr.empty, Level.lowest, ExprFlag.None());
+                        p.printRequireOrImportExpr(import.import_record_index, false, [], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
                     } else {
                         p.print(statement);
                     }
@@ -1434,7 +1434,7 @@ fn NewPrinter(
 
                 if (default := arg.default) {
                     p.printWhitespacer(ws(" = "));
-                    p.printExpr(default, .comma, ExprFlag.None());
+                    p.printExpr(default, .comma, ExprFlag.Set.initEmpty());
                 }
             }
 
@@ -1453,7 +1453,7 @@ fn NewPrinter(
             if (ext := cls.extends) {
                 p.print(" ext");
                 p.printSpace();
-                p.printExpr(ext, Level.new.sub(1), ExprFlag.None());
+                p.printExpr(ext, Level.new.sub(1), ExprFlag.Set.initEmpty());
             }
 
             p.printSpace();
@@ -2043,7 +2043,7 @@ fn NewPrinter(
             let ascii_start: usize = 0;
             let is_ascii = false;
             let iter = CodepointIterator.init(bytes);
-            let cursor = CodepointIterator.Cursor{};
+            let cursor: CodepointIterator.Cursor = .{};
 
             while (iter.next(&cursor)) {
                 switch (cursor.c) {
@@ -2114,7 +2114,7 @@ fn NewPrinter(
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
                     p.print("..");
-                    const none_flag = ExprFlag.None();
+                    const none_flag = ExprFlag.Set.initEmpty();
                     p.printExpr(e.value, .comma, none_flag);
                 },
                 .e_new_target => {
@@ -2295,12 +2295,12 @@ fn NewPrinter(
                         p.print("(");
 
                         if (args.len > 0) {
-                            p.printExpr(args[0], .comma, ExprFlag.None());
+                            p.printExpr(args[0], .comma, ExprFlag.Set.initEmpty());
 
                             for (arg of args[1..]) {
                                 p.print(",");
                                 p.printSpace();
-                                p.printExpr(arg, .comma, ExprFlag.None());
+                                p.printExpr(arg, .comma, ExprFlag.Set.initEmpty());
                             }
                         }
 
@@ -2317,7 +2317,7 @@ fn NewPrinter(
                 },
                 .e_call e => {
                     let wrap = level.gte(.@"new") || flags.contains(.forbid_call);
-                    let target_flags = ExprFlag.None();
+                    let target_flags = ExprFlag.Set.initEmpty();
                     if (e.optional_chain == null) {
                         target_flags = ExprFlag.HasNonOptionalChainParent();
                     } else if (flags.contains(.has_non_optional_chain_parent)) {
@@ -2350,7 +2350,7 @@ fn NewPrinter(
                     if (is_unbound_eval) {
                         p.print("(0,");
                         p.printSpace();
-                        p.printExpr(e.target, .postfix, ExprFlag.None());
+                        p.printExpr(e.target, .postfix, ExprFlag.Set.initEmpty());
                         p.print(")");
                     } else {
                         p.printExpr(e.target, .postfix, target_flags);
@@ -2363,11 +2363,11 @@ fn NewPrinter(
                     const args = e.args.slice();
 
                     if (args.len > 0) {
-                        p.printExpr(args[0], .comma, ExprFlag.None());
+                        p.printExpr(args[0], .comma, ExprFlag.Set.initEmpty());
                         for (arg of args[1..]) {
                             p.print(",");
                             p.printSpace();
-                            p.printExpr(arg, .comma, ExprFlag.None());
+                            p.printExpr(arg, .comma, ExprFlag.Set.initEmpty());
                         }
                     }
                     if (e.close_paren_loc.start > expr.loc.start) {
@@ -2481,7 +2481,7 @@ fn NewPrinter(
                         //     }
                         //     p.printIndent();
                         // }
-                        p.printExpr(e.expr, .comma, ExprFlag.None());
+                        p.printExpr(e.expr, .comma, ExprFlag.Set.initEmpty());
 
                         if (!e.options.isMissing()) {
                             p.printWhitespacer(ws(", "));
@@ -2607,7 +2607,7 @@ fn NewPrinter(
                         else => {
                             p.print("[");
                             p.addSourceMapping(e.index.loc);
-                            p.printExpr(e.index, .lowest, ExprFlag.None());
+                            p.printExpr(e.index, .lowest, ExprFlag.Set.initEmpty());
                             p.print("]");
                         },
                     }
@@ -2626,7 +2626,7 @@ fn NewPrinter(
                     p.printSpace();
                     p.print("?");
                     p.printSpace();
-                    p.printExpr(e.yes, .yield, ExprFlag.None());
+                    p.printExpr(e.yes, .yield, ExprFlag.Set.initEmpty());
                     p.printSpace();
                     p.print(":");
                     p.printSpace();
@@ -2747,7 +2747,7 @@ fn NewPrinter(
                                 p.printNewline();
                                 p.printIndent();
                             }
-                            p.printExpr(item, .comma, ExprFlag.None());
+                            p.printExpr(item, .comma, ExprFlag.Set.initEmpty());
 
                             if (i == items.len - 1 && item.data == .e_missing) {
                                 // Make sure there's a comma after trailing missing items
@@ -2914,10 +2914,10 @@ fn NewPrinter(
                         // Optional chains are forbidden in template tags
                         if (expr.isOptionalChain()) {
                             p.print("(");
-                            p.printExpr(tag, .lowest, ExprFlag.None());
+                            p.printExpr(tag, .lowest, ExprFlag.Set.initEmpty());
                             p.print(")");
                         } else {
-                            p.printExpr(tag, .postfix, ExprFlag.None());
+                            p.printExpr(tag, .postfix, ExprFlag.Set.initEmpty());
                         }
                     } else {
                         p.addSourceMapping(expr.loc);
@@ -2937,7 +2937,7 @@ fn NewPrinter(
 
                     for (*part of e.parts) {
                         p.print("${");
-                        p.printExpr(part.value, .lowest, ExprFlag.None());
+                        p.printExpr(part.value, .lowest, ExprFlag.Set.initEmpty());
                         p.print("}");
                         switch (part.tail) {
                             .raw raw => p.printRawTemplateLiteral(raw),
@@ -3093,7 +3093,7 @@ fn NewPrinter(
                     p.addSourceMapping(expr.loc);
                     p.print("await");
                     p.printSpace();
-                    p.printExpr(e.value, Level.sub(.prefix, 1), ExprFlag.None());
+                    p.printExpr(e.value, Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
 
                     if (wrap) {
                         p.print(")");
@@ -3114,7 +3114,7 @@ fn NewPrinter(
                             p.print("*");
                         }
                         p.printSpace();
-                        p.printExpr(val, .yield, ExprFlag.None());
+                        p.printExpr(val, .yield, ExprFlag.Set.initEmpty());
                     }
 
                     if (wrap) {
@@ -3131,7 +3131,7 @@ fn NewPrinter(
                     }
 
                     if (!e.op.isPrefix()) {
-                        p.printExpr(e.value, Op.Level.sub(.postfix, 1), ExprFlag.None());
+                        p.printExpr(e.value, Op.Level.sub(.postfix, 1), ExprFlag.Set.initEmpty());
                     }
 
                     if (entry.is_keyword) {
@@ -3156,10 +3156,10 @@ fn NewPrinter(
                         {
                             p.print("(0,");
                             p.printSpace();
-                            p.printExpr(e.value, Op.Level.sub(.prefix, 1), ExprFlag.None());
+                            p.printExpr(e.value, Op.Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
                             p.print(")");
                         } else {
-                            p.printExpr(e.value, Op.Level.sub(.prefix, 1), ExprFlag.None());
+                            p.printExpr(e.value, Op.Level.sub(.prefix, 1), ExprFlag.Set.initEmpty());
                         }
                     }
 
@@ -3309,7 +3309,7 @@ fn NewPrinter(
                 let ascii_start: usize = 0;
                 let is_ascii = false;
                 let iter = CodepointIterator.init(e.value);
-                let cursor = CodepointIterator.Cursor{};
+                let cursor: CodepointIterator.Cursor = .{};
                 while (iter.next(&cursor)) {
                     switch (cursor.c) {
                         first_ascii..last_ascii => {
@@ -3383,7 +3383,7 @@ fn NewPrinter(
                     if (comptime is_json && Environment.allow_assert)
                         unreachable;
                     p.print("..");
-                    p.printExpr(item.value.?, .comma, ExprFlag.None());
+                    p.printExpr(item.value.?, .comma, ExprFlag.Set.initEmpty());
                     return;
                 }
 
@@ -3467,7 +3467,7 @@ fn NewPrinter(
                     //      var { foo } = { foo: 2 };
                     //  }
                     if (item.key == null) {
-                        p.printExpr(val, .comma, ExprFlag.None());
+                        p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
                         return;
                     }
                 }
@@ -3477,7 +3477,7 @@ fn NewPrinter(
 
             if (!is_json && item.flags.contains(.is_computed)) {
                 p.print("[");
-                p.printExpr(_key, .comma, ExprFlag.None());
+                p.printExpr(_key, .comma, ExprFlag.Set.initEmpty());
                 p.print("]");
 
                 if (val := item.value) {
@@ -3493,7 +3493,7 @@ fn NewPrinter(
 
                     p.print(":");
                     p.printSpace();
-                    p.printExpr(val, .comma, ExprFlag.None());
+                    p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
                 }
 
                 if (initial := item.initializer) {
@@ -3666,7 +3666,7 @@ fn NewPrinter(
             p.printSpace();
             p.print("=");
             p.printSpace();
-            p.printExpr(initial, .comma, ExprFlag.None());
+            p.printExpr(initial, .comma, ExprFlag.Set.initEmpty());
         }
 
         static fn printBinding(p: *Printer, binding: Binding, tlm: TopLevelAndIsExport) {
@@ -3757,7 +3757,7 @@ fn NewPrinter(
                             } else {
                                 if (property.flags.contains(.is_computed)) {
                                     p.print("[");
-                                    p.printExpr(property.key, .comma, ExprFlag.None());
+                                    p.printExpr(property.key, .comma, ExprFlag.Set.initEmpty());
                                     p.print("]:");
                                     p.printSpace();
 
@@ -3825,11 +3825,11 @@ fn NewPrinter(
                                                 else => {},
                                             }
                                         } else {
-                                            p.printExpr(property.key, .lowest, ExprFlag.None());
+                                            p.printExpr(property.key, .lowest, ExprFlag.Set.initEmpty());
                                         }
                                     },
                                     else => {
-                                        p.printExpr(property.key, .lowest, ExprFlag.None());
+                                        p.printExpr(property.key, .lowest, ExprFlag.Set.initEmpty());
                                     },
                                 }
 
@@ -3859,7 +3859,7 @@ fn NewPrinter(
                 p.printSpace();
                 p.print("=");
                 p.printSpace();
-                p.printExpr(default, .comma, ExprFlag.None());
+                p.printExpr(default, .comma, ExprFlag.Set.initEmpty());
             }
         }
 
@@ -3987,7 +3987,7 @@ fn NewPrinter(
 
                             // Functions and classes must be wrapped to avoid confusion with their statement forms
                             p.export_default_start = p.writer.written;
-                            p.printExpr(expr, .comma, ExprFlag.None());
+                            p.printExpr(expr, .comma, ExprFlag.Set.initEmpty());
                             p.printSemicolonAfterStatement();
 
                             if (may_have_module_info) {
@@ -4384,7 +4384,7 @@ fn NewPrinter(
                     p.print("while");
                     p.printSpace();
                     p.print("(");
-                    p.printExpr(s.test_, .lowest, ExprFlag.None());
+                    p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
                     p.print(")");
                     p.printSemicolonAfterStatement();
                 },
@@ -4400,7 +4400,7 @@ fn NewPrinter(
                     p.printSpaceBeforeIdentifier();
                     p.print("in");
                     p.printSpace();
-                    p.printExpr(s.value, .lowest, ExprFlag.None());
+                    p.printExpr(s.value, .lowest, ExprFlag.Set.initEmpty());
                     p.print(")");
                     p.printBody(s.body, tlmtlo.subVar());
                 },
@@ -4420,7 +4420,7 @@ fn NewPrinter(
                     p.printSpaceBeforeIdentifier();
                     p.print("of");
                     p.printSpace();
-                    p.printExpr(s.value, .comma, ExprFlag.None());
+                    p.printExpr(s.value, .comma, ExprFlag.Set.initEmpty());
                     p.print(")");
                     p.printBody(s.body, tlmtlo.subVar());
                 },
@@ -4431,7 +4431,7 @@ fn NewPrinter(
                     p.print("while");
                     p.printSpace();
                     p.print("(");
-                    p.printExpr(s.test_, .lowest, ExprFlag.None());
+                    p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
                     p.print(")");
                     p.printBody(s.body, tlmtlo.subVar());
                 },
@@ -4442,7 +4442,7 @@ fn NewPrinter(
                     p.print("with");
                     p.printSpace();
                     p.print("(");
-                    p.printExpr(s.value, .lowest, ExprFlag.None());
+                    p.printExpr(s.value, .lowest, ExprFlag.Set.initEmpty());
                     p.print(")");
                     p.printBody(s.body, tlmtlo.subVar());
                 },
@@ -4503,14 +4503,14 @@ fn NewPrinter(
                     p.print(";");
 
                     if (test_ := s.test_) {
-                        p.printExpr(test_, .lowest, ExprFlag.None());
+                        p.printExpr(test_, .lowest, ExprFlag.Set.initEmpty());
                     }
 
                     p.print(";");
                     p.printSpace();
 
                     if (update := s.update) {
-                        p.printExpr(update, .lowest, ExprFlag.None());
+                        p.printExpr(update, .lowest, ExprFlag.Set.initEmpty());
                     }
 
                     p.print(")");
@@ -4524,7 +4524,7 @@ fn NewPrinter(
                     p.printSpace();
                     p.print("(");
 
-                    p.printExpr(s.test_, .lowest, ExprFlag.None());
+                    p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
 
                     p.print(")");
                     p.printSpace();
@@ -4539,7 +4539,7 @@ fn NewPrinter(
                         if (val := c.value) {
                             p.print("case");
                             p.printSpace();
-                            p.printExpr(val, .logical_and, ExprFlag.None());
+                            p.printExpr(val, .logical_and, ExprFlag.Set.initEmpty());
                         } else {
                             p.print("default");
                         }
@@ -4868,7 +4868,7 @@ fn NewPrinter(
 
                     if (value := s.value) {
                         p.printSpace();
-                        p.printExpr(value, .lowest, ExprFlag.None());
+                        p.printExpr(value, .lowest, ExprFlag.Set.initEmpty());
                     }
                     p.printSemicolonAfterStatement();
                 },
@@ -4878,7 +4878,7 @@ fn NewPrinter(
                     p.addSourceMapping(stmt.loc);
                     p.print("throw");
                     p.printSpace();
-                    p.printExpr(s.value, .lowest, ExprFlag.None());
+                    p.printExpr(s.value, .lowest, ExprFlag.Set.initEmpty());
                     p.printSemicolonAfterStatement();
                 },
                 .s_expr s => {
@@ -5121,7 +5121,7 @@ fn NewPrinter(
             p.print("if");
             p.printSpace();
             p.print("(");
-            p.printExpr(s.test_, .lowest, ExprFlag.None());
+            p.printExpr(s.test_, .lowest, ExprFlag.Set.initEmpty());
             p.print(")");
 
             switch (s.yes.data) {
@@ -5282,7 +5282,7 @@ fn NewPrinter(
                     // not inside blocks where subVar() downgrades to .var_only.
                     (if (tlmtlo.is_top_level == .yes) .lexical else null),
             } else {};
-            p.printDecls(keyword, decls, ExprFlag.None(), tlm);
+            p.printDecls(keyword, decls, ExprFlag.Set.initEmpty(), tlm);
             p.printSemicolonAfterStatement();
             if (rewrite_esm_to_cjs && is_export && decls.len > 0) {
                 for (decl of decls) {
@@ -5348,7 +5348,7 @@ fn NewPrinter(
             let ascii_start: usize = 0;
             let is_ascii = false;
             let iter = CodepointIterator.init(identifier);
-            let cursor = CodepointIterator.Cursor{};
+            let cursor: CodepointIterator.Cursor = .{};
             while (iter.next(&cursor)) {
                 switch (cursor.c) {
                     first_ascii..last_ascii => {

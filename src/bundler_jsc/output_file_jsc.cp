@@ -119,7 +119,7 @@ pub fn toJS(
                 blob.content_type = out.loader.toMimeType(&[owned_pathname ?? ""]).value;
             }
 
-            blob.size = buffer.bytes.len as jsc.WebCore.Blob.SizeType;
+            blob.size = @intCast(buffer.bytes.len);
 
             let build_output = bun.default_allocator.create(jsc.API.BuildArtifact) catch @panic("Unable to allocate Artifact");
             unsafe {
@@ -209,7 +209,7 @@ pub fn toBlob(
                 },
             };
 
-            blob.size = buffer.bytes.len as jsc.WebCore.Blob.SizeType;
+            blob.size = @intCast(buffer.bytes.len);
             break :brk blob;
         },
     };

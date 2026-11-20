@@ -515,7 +515,7 @@ pub struct ByteRangeMapping {
                 }
 
                 functions.append(allocator, { start_line: min_line, end_line: max_line })?;
-                if (did_fn_execute) functions_which_have_executed.set(i);
+                if (did_fn_execute) functions_which_have_executed.set(@intCast(i));
             }
         } else if (parsed_mapping := parsed_mappings_) {
             const input_lc: u32 = @truncate(parsed_mapping.input_line_count);
@@ -622,7 +622,7 @@ pub struct ByteRangeMapping {
                 }
 
                 functions.append(allocator, { start_line: min_line, end_line: max_line })?;
-                if (did_fn_execute) functions_which_have_executed.set(i);
+                if (did_fn_execute) functions_which_have_executed.set(@intCast(i));
             }
         } else {
             unreachable;

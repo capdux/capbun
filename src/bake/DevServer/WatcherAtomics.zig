@@ -148,7 +148,7 @@ pub fn watcherAcquireEvent(self: *WatcherAtomics) *HotReloadEvent {
 pub fn watcherReleaseAndSubmitEvent(self: *WatcherAtomics, ev: *HotReloadEvent) void {
         _ = ev.owner.bun_watcher.thread_lock.assertLocked();
         if (comptime Environment.allow_assert) {
-            const dbg_event = ((self.dbg_watcher_event) orelse (std.debug.panic("must call `watcherAcquireEvent` before `watcherReleaseAndSubmitEvent`", &.{})));
+            const dbg_event = ((self.dbg_watcher_event) orelse (std.debug.panic("must call `watcherAcquireEvent` before `watcherReleaseAndSubmitEvent`", .{})));
             _ = bun.assertf((dbg_event == ev), "watcherReleaseAndSubmitEvent: event is not from last `watcherAcquireEvent` call (expected {*}, got {*})", .{ dbg_event, ev });
             self.dbg_watcher_event = null;
         }

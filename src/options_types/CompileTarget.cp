@@ -443,13 +443,13 @@ export @root struct CompileTarget {
     }
 
     static fn makeDefineValues(comptime os: Environment.OperatingSystem, comptime arch: Environment.Architecture, comptime libc: Libc): []const []const u8 {
-        const plat: string = if (libc == .android) "\"android\"" else std.fmt.comptimePrint("\"{s}\"", [os.nameString()]);
+        const plat: string = if (libc == .android) "\"android\"" else "\"" ++ os.nameString() ++ "\"";
         const arch_str: string = switch (arch) {
             .x64 => "\"x64\"",
             .arm64 => "\"arm64\"",
             .wasm => @compileError("TODO"),
         };
-        const ver: string = std.fmt.comptimePrint("\"{s}\"", [Global.package_json_version]);
+        const ver: string = "\"" ++ Global.package_json_version ++ "\"";
         const arr: [3]string = [plat, arch_str, ver];
         const S = struct {
             pub const values = arr;

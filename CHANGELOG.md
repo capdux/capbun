@@ -1788,3 +1788,5 @@
 - **[2026-11-20] Wave 25 D 组 (4 跨模块根因)**：更新 `bundler/OutputFile`, `http/Headers`, `interchange/json`, `js_parser/ast/P`。
 
 - **[2026-11-20] Wave 26 B 组 (21 模块)**：更新 `bun_alloc/maybe_owned`, `install/{PackageManager/{PackageManagerOptions,runTasks},TarballStream,dependency,extract_tarball,integrity,lockfile,lockfile/{CatalogMap,Package/WorkspaceMap,bun.lock},npm,resolvers/folder_resolver}`, `jsc/{ModuleLoader,NodeModuleModule,VirtualMachine,web_worker}`, `sql/mysql/protocol/{AuthSwitchResponse,PreparedStatement}`, `sql_jsc/postgres/{PostgresRequest,PostgresSQLConnection}`。
+
+- **[2026-11-20] Wave 26 A 组 (20 模块)**：更新 `options_types/CompileTarget`, `bake/DevServer{,/WatcherAtomics,/SerializedFailure}`, `bundler/{bundle_v2,analyze_transpiled_module,defines,OutputFile,ParseTask,entry_points}`, `bundler_jsc/output_file_jsc`, `js_printer/js_printer`, `js_parser/ast/{CharFreq,ImportScanner,P,Parser,visit}`, `cli/test_command`, `standalone_graph/StandaloneModuleGraph`, `sourcemap_jsc/CodeCoverage`。

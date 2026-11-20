@@ -85,10 +85,11 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
     } else {
         // in non-file namespaces, standard filesystem rules do not apply.
         let path_clone = path;
+        const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
         path_clone.pretty = std.fmt.bufPrint(buf, "{s}{f}:{s}", [ 
             if (target == .bake_server_components_ssr) "ssr:" else "",
             // make sure that a namespace including a colon wont collide with anything
-            std.fmt.Alt(string, fmtEscapedNamespace){ data: path.namespace },
+            NamespaceAlt{ data: path.namespace },
             path.text,
         ]) catch buf[0..];
         return path_clone.dupeAllocFixPretty(allocator);
@@ -1121,11 +1122,11 @@ pub struct BundleV2 {
                         // Check FileMap first for in-memory entry points
                         if (file_map := _.file_map) {
                             if (file_map_result := file_map.resolve("", entry_point)) {
-                                * = _.enqueueEntryItem(
+                                _.enqueueEntryItem(
                                     file_map_result,
                                     true,
                                     _.transpiler.options.target,
-                                );
+                                )?;
                                 continue;
                             }
                         }
@@ -1134,7 +1135,7 @@ pub struct BundleV2 {
                         const resolved = _.transpiler.resolveEntryPoint(entry_point) catch
                             continue;
 
-                        * = _.enqueueEntryItem(
+                        _.enqueueEntryItem(
                             resolved,
                             true,
                             brk: {

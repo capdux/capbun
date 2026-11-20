@@ -94,7 +94,7 @@ pub struct FreeContext {
     }
 
     pub fn asSlice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .buffer => |buf| buf.bytes,
             else => "",
         };
