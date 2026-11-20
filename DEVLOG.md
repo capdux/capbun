@@ -1206,3 +1206,6 @@
 
 ### 2026-11-20 03:13:58 UTC - src/ 根目录入口模块迁移经验
 - `main.cp` 中 `pub fn main()` 会被 lower 为异步 actor，需将取址初始化逻辑抽离至独立 helper；`bun.js.cp` 保持 `@callconv(jsc.conv)` 与顶层 `let run: Run`。
+
+### 2026-11-20 03:15:21 UTC - src/cli/ 迁移经验与新坑入表
+- 发现 `cpc` 对多参 `.exec(...)` 误截断为单参及 `static let` 规则，已同步写入 `CP_PITFALLS.md`。

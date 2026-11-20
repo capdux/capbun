@@ -94,3 +94,6 @@
 - ② **编译与 AST 校验**：`cpc --lib <stem>.cp -o <stem>.zig && vendor/zig/zig ast-check <stem>.zig` 0 报错；
 - ③ **静态零违例**：0 `zig {}` 逃逸、0 `var`、0 `.@"0"`/`.@"1"`、0 `*anyopaque`/`?*anyopaque`；
 - ④ **代码膨胀率**：`<stem>.cp` 总行数 $\le 1.20\times$ `<stem>_.zig` 原始行数。
+
+- **多参 `.exec(...)` 被截断**：`cpc` 会将任意 `Obj.exec(a, b, ...)` 误按 `RegExp.exec(str)` 截断为单参；改用 `const fn_exec = Obj.exec; fn_exec(a, b, ...)`。
+- **`struct` 命名空间级静态可变变量**：写 `static let x: T = ...;`（无 `static` 会成为实例字段）。

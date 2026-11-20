@@ -1,1725 +1,100 @@
-pub fn loader_resolver(in: string) !Api.Loader {
-    const option_loader = options.Loader.fromString(in) orelse return error.InvalidLoader;
-    return option_loader.toAPI();
-}
-
-pub fn noop_resolver(in: string) !string {
-    return in;
-}
-
-pub fn fileReadError(err: anyerror, stderr: anytype, filename: string, kind: string) noreturn {
-    stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(err) }) catch {};
-    std.process.exit(1);
-}
-
-pub fn readFile(
-    allocator: std.mem.Allocator,
-    cwd: string,
-    filename: string,
-) ![]u8 {
-    var paths = [_]string{ cwd, filename };
-    const outpath = try std.fs.path.resolve(allocator, &paths);
-    defer allocator.free(outpath);
-    var file = try bun.openFileZ(&try std.posix.toPosixPath(outpath), std.fs.File.OpenFlags{ .mode = .read_only });
-    defer file.close();
-    const size = try file.getEndPos();
-    return try file.readToEndAlloc(allocator, size);
-}
-
-pub fn resolve_jsx_runtime(str: string) !Api.JsxRuntime {
-    if (strings.eqlComptime(str, "automatic")) {
-        return Api.JsxRuntime.automatic;
-    } else if (strings.eqlComptime(str, "fallback") or strings.eqlComptime(str, "classic")) {
-        return Api.JsxRuntime.classic;
-    } else if (strings.eqlComptime(str, "solid")) {
-        return Api.JsxRuntime.solid;
-    } else {
-        return error.InvalidJSXRuntime;
-    }
-}
-
-pub const ParamType = clap.Param(clap.Help);
-
-pub const base_params_ = (if (Environment.show_crash_trace) debug_params else [_]ParamType{}) ++ [_]ParamType{
-    clap.parseParam("--env-file <STR>...               Load environment variables from the specified file(s)") catch unreachable,
-    clap.parseParam("--no-env-file                     Disable automatic loading of .env files") catch unreachable,
-    clap.parseParam("--cwd <STR>                       Absolute path to resolve files & entry points from. This just changes the process' cwd.") catch unreachable,
-    clap.parseParam("-c, --config <PATH>?              Specify path to Bun config file. Default <d>$cwd<r>/bunfig.toml") catch unreachable,
-    clap.parseParam("-h, --help                        Display this menu and exit") catch unreachable,
-} ++ (if (builtin.have_error_return_tracing) [_]ParamType{
-    // This will print more error return traces, as a debug aid
-    clap.parseParam("--verbose-error-trace             Dump error return traces") catch unreachable,
-} else [_]ParamType{}) ++ [_]ParamType{
-    clap.parseParam("<POS>...") catch unreachable,
-};
-
-const debug_params = [_]ParamType{
-    clap.parseParam("--breakpoint-resolve <STR>...     DEBUG MODE: breakpoint when resolving something that includes this string") catch unreachable,
-    clap.parseParam("--breakpoint-print <STR>...       DEBUG MODE: breakpoint when printing something that includes this string") catch unreachable,
-};
-
-pub const transpiler_params_ = [_]ParamType{
-    clap.parseParam("--main-fields <STR>...             Main fields to lookup in package.json. Defaults to --target dependent") catch unreachable,
-    clap.parseParam("--preserve-symlinks               Preserve symlinks when resolving files") catch unreachable,
-    clap.parseParam("--preserve-symlinks-main          Preserve symlinks when resolving the main entry point") catch unreachable,
-    clap.parseParam("--extension-order <STR>...        Defaults to: .tsx,.ts,.jsx,.js,.json ") catch unreachable,
-    clap.parseParam("--tsconfig-override <STR>          Specify custom tsconfig.json. Default <d>$cwd<r>/tsconfig.json") catch unreachable,
-    clap.parseParam("-d, --define <STR>...              Substitute K:V while parsing, e.g. --define process.env.NODE_ENV:\"development\". Values are parsed as JSON.") catch unreachable,
-    clap.parseParam("--drop <STR>...                   Remove function calls, e.g. --drop=console removes all console.* calls.") catch unreachable,
-    clap.parseParam("--feature <STR>...               Enable a feature flag for dead-code elimination, e.g. --feature=SUPER_SECRET") catch unreachable,
-    clap.parseParam("-l, --loader <STR>...             Parse files with .ext:loader, e.g. --loader .js:jsx. Valid loaders: js, jsx, ts, tsx, json, toml, text, file, wasm, napi") catch unreachable,
-    clap.parseParam("--no-macros                       Disable macros from being executed in the bundler, transpiler and runtime") catch unreachable,
-    clap.parseParam("--jsx-factory <STR>               Changes the function called when compiling JSX elements using the classic JSX runtime") catch unreachable,
-    clap.parseParam("--jsx-fragment <STR>              Changes the function called when compiling JSX fragments") catch unreachable,
-    clap.parseParam("--jsx-import-source <STR>         Declares the module specifier to be used for importing the jsx and jsxs factory functions. Default: \"react\"") catch unreachable,
-    clap.parseParam("--jsx-runtime <STR>               \"automatic\" (default) or \"classic\"") catch unreachable,
-    clap.parseParam("--jsx-side-effects                Treat JSX elements as having side effects (disable pure annotations)") catch unreachable,
-    clap.parseParam("--ignore-dce-annotations          Ignore tree-shaking annotations such as @__PURE__") catch unreachable,
-};
-pub const runtime_params_ = [_]ParamType{
-    clap.parseParam("--watch                           Automatically restart the process on file change") catch unreachable,
-    clap.parseParam("--hot                             Enable auto reload in the Bun runtime, test runner, or bundler") catch unreachable,
-    clap.parseParam("--no-clear-screen                 Disable clearing the terminal screen on reload when --hot or --watch is enabled") catch unreachable,
-    clap.parseParam("--smol                            Use less memory, but run garbage collection more often") catch unreachable,
-    clap.parseParam("-r, --preload <STR>...            Import a module before other modules are loaded") catch unreachable,
-    clap.parseParam("--require <STR>...                Alias of --preload, for Node.js compatibility") catch unreachable,
-    clap.parseParam("--import <STR>...                 Alias of --preload, for Node.js compatibility") catch unreachable,
-    clap.parseParam("--inspect <STR>?                  Activate Bun's debugger") catch unreachable,
-    clap.parseParam("--inspect-wait <STR>?             Activate Bun's debugger, wait for a connection before executing") catch unreachable,
-    clap.parseParam("--inspect-brk <STR>?              Activate Bun's debugger, set breakpoint on first line of code and wait") catch unreachable,
-    clap.parseParam("--cpu-prof                        Start CPU profiler and write profile to disk on exit") catch unreachable,
-    clap.parseParam("--cpu-prof-name <STR>             Specify the name of the CPU profile file") catch unreachable,
-    clap.parseParam("--cpu-prof-dir <STR>              Specify the directory where the CPU profile will be saved") catch unreachable,
-    clap.parseParam("--cpu-prof-md                     Output CPU profile in markdown format (grep-friendly, designed for LLM analysis)") catch unreachable,
-    clap.parseParam("--cpu-prof-interval <STR>         Specify the sampling interval in microseconds for CPU profiling (default: 1000)") catch unreachable,
-    clap.parseParam("--heap-prof                       Generate V8 heap snapshot on exit (.heapsnapshot)") catch unreachable,
-    clap.parseParam("--heap-prof-name <STR>            Specify the name of the heap profile file") catch unreachable,
-    clap.parseParam("--heap-prof-dir <STR>             Specify the directory where the heap profile will be saved") catch unreachable,
-    clap.parseParam("--heap-prof-md                    Generate markdown heap profile on exit (for CLI analysis)") catch unreachable,
-    clap.parseParam("--if-present                      Exit without an error if the entrypoint does not exist") catch unreachable,
-    clap.parseParam("--no-install                      Disable auto install in the Bun runtime") catch unreachable,
-    clap.parseParam("--install <STR>                   Configure auto-install behavior. One of \"auto\" (default, auto-installs when no node_modules), \"fallback\" (missing packages only), \"force\" (always).") catch unreachable,
-    clap.parseParam("-i                                Auto-install dependencies during execution. Equivalent to --install=fallback.") catch unreachable,
-    clap.parseParam("-e, --eval <STR>                  Evaluate argument as a script") catch unreachable,
-    clap.parseParam("-p, --print <STR>                 Evaluate argument as a script and print the result") catch unreachable,
-    clap.parseParam("--prefer-offline                  Skip staleness checks for packages in the Bun runtime and resolve from disk") catch unreachable,
-    clap.parseParam("--prefer-latest                   Use the latest matching versions of packages in the Bun runtime, always checking npm") catch unreachable,
-    clap.parseParam("--port <STR>                      Set the default port for Bun.serve") catch unreachable,
-    clap.parseParam("-u, --origin <STR>") catch unreachable,
-    clap.parseParam("--conditions <STR>...             Pass custom conditions to resolve") catch unreachable,
-    clap.parseParam("--fetch-preconnect <STR>...       Preconnect to a URL while code is loading") catch unreachable,
-    clap.parseParam("--experimental-http2-fetch        Offer h2 in fetch() TLS ALPN. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP2_CLIENT=1") catch unreachable,
-    clap.parseParam("--experimental-http3-fetch        Honor Alt-Svc: h3 in fetch() and upgrade to HTTP/3. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP3_CLIENT=1") catch unreachable,
-    clap.parseParam("--max-http-header-size <INT>      Set the maximum size of HTTP headers in bytes. Default is 16KiB") catch unreachable,
-    clap.parseParam("--dns-result-order <STR>          Set the default order of DNS lookup results. Valid orders: verbatim (default), ipv4first, ipv6first") catch unreachable,
-    clap.parseParam("--expose-gc                       Expose gc() on the global object. Has no effect on Bun.gc().") catch unreachable,
-    clap.parseParam("--no-deprecation                  Suppress all reporting of the custom deprecation.") catch unreachable,
-    clap.parseParam("--throw-deprecation               Determine whether or not deprecation warnings result in errors.") catch unreachable,
-    clap.parseParam("--title <STR>                     Set the process title") catch unreachable,
-    clap.parseParam("--zero-fill-buffers                Boolean to force Buffer.allocUnsafe(size) to be zero-filled.") catch unreachable,
-    clap.parseParam("--use-system-ca                   Use the system's trusted certificate authorities") catch unreachable,
-    clap.parseParam("--use-openssl-ca                  Use OpenSSL's default CA store") catch unreachable,
-    clap.parseParam("--use-bundled-ca                  Use bundled CA store") catch unreachable,
-    clap.parseParam("--redis-preconnect                Preconnect to $REDIS_URL at startup") catch unreachable,
-    clap.parseParam("--sql-preconnect                  Preconnect to PostgreSQL at startup") catch unreachable,
-    clap.parseParam("--no-addons                       Throw an error if process.dlopen is called, and disable export condition \"node-addons\"") catch unreachable,
-    clap.parseParam("--unhandled-rejections <STR>      One of \"strict\", \"throw\", \"warn\", \"none\", or \"warn-with-error-code\"") catch unreachable,
-    clap.parseParam("--console-depth <NUMBER>          Set the default depth for console.log object inspection (default: 2)") catch unreachable,
-    clap.parseParam("--user-agent <STR>               Set the default User-Agent header for HTTP requests") catch unreachable,
-    clap.parseParam("--cron-title <STR>               Title for cron execution mode") catch unreachable,
-    clap.parseParam("--cron-period <STR>              Cron period for cron execution mode") catch unreachable,
-};
-
-pub const auto_or_run_params = [_]ParamType{
-    clap.parseParam("-F, --filter <STR>...             Run a script in all workspace packages matching the pattern") catch unreachable,
-    clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)") catch unreachable,
-    clap.parseParam("--no-orphans                      Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.") catch unreachable,
-    clap.parseParam("--shell <STR>                     Control the shell used for package.json scripts. Supports either 'bun' or 'system'") catch unreachable,
-    clap.parseParam("--workspaces                      Run a script in all workspace packages (from the \"workspaces\" field in package.json)") catch unreachable,
-    clap.parseParam("--parallel                        Run multiple scripts concurrently with Foreman-style output") catch unreachable,
-    clap.parseParam("--sequential                      Run multiple scripts sequentially with Foreman-style output") catch unreachable,
-    clap.parseParam("--no-exit-on-error                Continue running other scripts when one fails (with --parallel/--sequential)") catch unreachable,
-};
-
-pub const auto_only_params = [_]ParamType{
-    // clap.parseParam("--all") catch unreachable,
-    clap.parseParam("--silent                          Don't print the script command") catch unreachable,
-    clap.parseParam("--elide-lines <NUMBER>            Number of lines of script output shown when using --filter (default: 10). Set to 0 to show all lines.") catch unreachable,
-    clap.parseParam("-v, --version                     Print version and exit") catch unreachable,
-    clap.parseParam("--revision                        Print version with revision and exit") catch unreachable,
-} ++ auto_or_run_params;
-pub const auto_params = auto_only_params ++ runtime_params_ ++ transpiler_params_ ++ base_params_;
-
-pub const run_only_params = [_]ParamType{
-    clap.parseParam("--silent                          Don't print the script command") catch unreachable,
-    clap.parseParam("--elide-lines <NUMBER>            Number of lines of script output shown when using --filter (default: 10). Set to 0 to show all lines.") catch unreachable,
-} ++ auto_or_run_params;
-pub const run_params = run_only_params ++ runtime_params_ ++ transpiler_params_ ++ base_params_;
-
-pub const bunx_commands = [_]ParamType{
-    clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)") catch unreachable,
-} ++ auto_only_params;
-
-pub const build_only_params = [_]ParamType{
-    clap.parseParam("--production                     Set NODE_ENV=production and enable minification") catch unreachable,
-    clap.parseParam("--compile                        Generate a standalone Bun executable containing your bundled code. Implies --production") catch unreachable,
-    clap.parseParam("--compile-exec-argv <STR>       Prepend arguments to the standalone executable's execArgv") catch unreachable,
-    clap.parseParam("--compile-autoload-dotenv        Enable autoloading of .env files in standalone executable (default: true)") catch unreachable,
-    clap.parseParam("--no-compile-autoload-dotenv     Disable autoloading of .env files in standalone executable") catch unreachable,
-    clap.parseParam("--compile-autoload-bunfig        Enable autoloading of bunfig.toml in standalone executable (default: true)") catch unreachable,
-    clap.parseParam("--no-compile-autoload-bunfig     Disable autoloading of bunfig.toml in standalone executable") catch unreachable,
-    clap.parseParam("--compile-autoload-tsconfig      Enable autoloading of tsconfig.json at runtime in standalone executable (default: false)") catch unreachable,
-    clap.parseParam("--no-compile-autoload-tsconfig   Disable autoloading of tsconfig.json at runtime in standalone executable") catch unreachable,
-    clap.parseParam("--compile-autoload-package-json  Enable autoloading of package.json at runtime in standalone executable (default: false)") catch unreachable,
-    clap.parseParam("--no-compile-autoload-package-json Disable autoloading of package.json at runtime in standalone executable") catch unreachable,
-    clap.parseParam("--compile-executable-path <STR>  Path to a Bun executable to use for cross-compilation instead of downloading") catch unreachable,
-    clap.parseParam("--bytecode                       Use a bytecode cache") catch unreachable,
-    clap.parseParam("--watch                          Automatically restart the process on file change") catch unreachable,
-    clap.parseParam("--no-clear-screen                Disable clearing the terminal screen on reload when --watch is enabled") catch unreachable,
-    clap.parseParam("--target <STR>                   The intended execution environment for the bundle. \"browser\", \"bun\" or \"node\"") catch unreachable,
-    clap.parseParam("--outdir <STR>                   Default to \"dist\" if multiple files") catch unreachable,
-    clap.parseParam("--outfile <STR>                  Write to a file") catch unreachable,
-    clap.parseParam("--metafile <STR>?                Write a JSON file with metadata about the build") catch unreachable,
-    clap.parseParam("--metafile-md <STR>?             Write a markdown file with a visualization of the module graph (LLM-friendly)") catch unreachable,
-    clap.parseParam("--sourcemap <STR>?               Build with sourcemaps - 'linked', 'inline', 'external', or 'none'") catch unreachable,
-    clap.parseParam("--banner <STR>                   Add a banner to the bundled output such as \"use client\"; for a bundle being used with RSCs") catch unreachable,
-    clap.parseParam("--footer <STR>                   Add a footer to the bundled output such as // built with bun!") catch unreachable,
-    clap.parseParam("--format <STR>                   Specifies the module format to build to. \"esm\", \"cjs\" and \"iife\" are supported. Defaults to \"esm\", or \"cjs\" with --bytecode.") catch unreachable,
-    clap.parseParam("--root <STR>                     Root directory used for multiple entry points") catch unreachable,
-    clap.parseParam("--splitting                      Enable code splitting") catch unreachable,
-    clap.parseParam("--public-path <STR>              A prefix to be appended to any import paths in bundled code") catch unreachable,
-    clap.parseParam("-e, --external <STR>...          Exclude module from transpilation (can use * wildcards). ex: -e react") catch unreachable,
-    clap.parseParam("--allow-unresolved <STR>...      Allow unresolved dynamic import()/require() specifiers matching these glob patterns. Use '<empty>' for opaque specifiers. Default is '*' (allow all).") catch unreachable,
-    clap.parseParam("--reject-unresolved              Fail the build on any dynamic import()/require() specifier that cannot be resolved at build time.") catch unreachable,
-    clap.parseParam("--packages <STR>                 Add dependencies to bundle or keep them external. \"external\", \"bundle\" is supported. Defaults to \"bundle\".") catch unreachable,
-    clap.parseParam("--entry-naming <STR>             Customize entry point filenames. Defaults to \"[dir]/[name].[ext]\"") catch unreachable,
-    clap.parseParam("--chunk-naming <STR>             Customize chunk filenames. Defaults to \"[name]-[hash].[ext]\"") catch unreachable,
-    clap.parseParam("--asset-naming <STR>             Customize asset filenames. Defaults to \"[name]-[hash].[ext]\"") catch unreachable,
-    clap.parseParam("--react-fast-refresh             Enable React Fast Refresh transform (does not emit hot-module code, use this for testing)") catch unreachable,
-    clap.parseParam("--no-bundle                      Transpile file only, do not bundle") catch unreachable,
-    clap.parseParam("--emit-dce-annotations           Re-emit DCE annotations in bundles. Enabled by default unless --minify-whitespace is passed.") catch unreachable,
-    clap.parseParam("--minify                         Enable all minification flags") catch unreachable,
-    clap.parseParam("--minify-syntax                  Minify syntax and inline data") catch unreachable,
-    clap.parseParam("--minify-whitespace              Minify whitespace") catch unreachable,
-    clap.parseParam("--minify-identifiers             Minify identifiers") catch unreachable,
-    clap.parseParam("--keep-names                     Preserve original function and class names when minifying") catch unreachable,
-    clap.parseParam("--css-chunking                   Chunk CSS files together to reduce duplicated CSS loaded in a browser. Only has an effect when multiple entrypoints import CSS") catch unreachable,
-    clap.parseParam("--dump-environment-variables") catch unreachable,
-    clap.parseParam("--conditions <STR>...            Pass custom conditions to resolve") catch unreachable,
-    clap.parseParam("--app                            (EXPERIMENTAL) Build a web app for production using Bun Bake.") catch unreachable,
-    clap.parseParam("--server-components              (EXPERIMENTAL) Enable server components") catch unreachable,
-    clap.parseParam("--env <inline|prefix*|disable>   Inline environment variables into the bundle as process.env.${name}. Defaults to 'disable'. To inline environment variables matching a prefix, use my prefix like 'FOO_PUBLIC_*'.") catch unreachable,
-    clap.parseParam("--windows-hide-console           When using --compile targeting Windows, prevent a Command prompt from opening alongside the executable") catch unreachable,
-    clap.parseParam("--windows-icon <STR>             When using --compile targeting Windows, assign an executable icon") catch unreachable,
-    clap.parseParam("--windows-title <STR>            When using --compile targeting Windows, set the executable product name") catch unreachable,
-    clap.parseParam("--windows-publisher <STR>        When using --compile targeting Windows, set the executable company name") catch unreachable,
-    clap.parseParam("--windows-version <STR>          When using --compile targeting Windows, set the executable version (e.g. 1.2.3.4)") catch unreachable,
-    clap.parseParam("--windows-description <STR>      When using --compile targeting Windows, set the executable description") catch unreachable,
-    clap.parseParam("--windows-copyright <STR>        When using --compile targeting Windows, set the executable copyright") catch unreachable,
-} ++ if (FeatureFlags.bake_debugging_features) [_]ParamType{
-    clap.parseParam("--debug-dump-server-files        When --app is set, dump all server files to disk even when building statically") catch unreachable,
-    clap.parseParam("--debug-no-minify                When --app is set, do not minify anything") catch unreachable,
-} else .{};
-pub const build_params = build_only_params ++ transpiler_params_ ++ base_params_;
-
-// TODO: update test completions
-pub const test_only_params = [_]ParamType{
-    clap.parseParam("--no-orphans                     Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.") catch unreachable,
-    clap.parseParam("--timeout <NUMBER>               Set the per-test timeout in milliseconds, default is 5000.") catch unreachable,
-    clap.parseParam("-u, --update-snapshots           Update snapshot files") catch unreachable,
-    clap.parseParam("--rerun-each <NUMBER>            Re-run each test file <NUMBER> times, helps catch certain bugs") catch unreachable,
-    clap.parseParam("--retry <NUMBER>                 Default retry count for all tests, overridden by per-test { retry: N }") catch unreachable,
-    clap.parseParam("--todo                           Include tests that are marked with \"test.todo()\"") catch unreachable,
-    clap.parseParam("--only                           Run only tests that are marked with \"test.only()\" or \"describe.only()\"") catch unreachable,
-    clap.parseParam("--pass-with-no-tests             Exit with code 0 when no tests are found") catch unreachable,
-    clap.parseParam("--concurrent                     Treat all tests as `test.concurrent()` tests") catch unreachable,
-    clap.parseParam("--randomize                      Run tests in random order") catch unreachable,
-    clap.parseParam("--seed <INT>                     Set the random seed for test randomization") catch unreachable,
-    clap.parseParam("--coverage                       Generate a coverage profile") catch unreachable,
-    clap.parseParam("--coverage-reporter <STR>...     Report coverage in 'text' and/or 'lcov'. Defaults to 'text'.") catch unreachable,
-    clap.parseParam("--coverage-dir <STR>             Directory for coverage files. Defaults to 'coverage'.") catch unreachable,
-    clap.parseParam("--bail <NUMBER>?                 Exit the test suite after <NUMBER> failures. If you do not specify a number, it defaults to 1.") catch unreachable,
-    clap.parseParam("-t, --test-name-pattern/--grep <STR>    Run only tests with a name that matches the given regex.") catch unreachable,
-    clap.parseParam("--reporter <STR>                 Test output reporter format. Available: 'junit' (requires --reporter-outfile), 'dots'. Default: console output.") catch unreachable,
-    clap.parseParam("--reporter-outfile <STR>         Output file path for the reporter format (required with --reporter).") catch unreachable,
-    clap.parseParam("--dots                           Enable dots reporter. Shorthand for --reporter=dots.") catch unreachable,
-    clap.parseParam("--only-failures                  Only display test failures, hiding passing tests.") catch unreachable,
-    clap.parseParam("--max-concurrency <NUMBER>        Maximum number of concurrent tests to execute at once. Default is 20.") catch unreachable,
-    clap.parseParam("--path-ignore-patterns <STR>...   Glob patterns for test file paths to ignore.") catch unreachable,
-    clap.parseParam("--changed <STR>?                 Only run test files affected by changed files according to git. Optionally pass a commit or branch to compare against.") catch unreachable,
-    clap.parseParam("--isolate                        Run each test file in a fresh global object. Leaked handles from one file cannot affect another.") catch unreachable,
-    clap.parseParam("--parallel <NUMBER>?             Run test files in parallel using N worker processes. Implies --isolate. Defaults to CPU core count.") catch unreachable,
-    clap.parseParam("--parallel-delay <NUMBER>        Milliseconds the first --parallel worker must be busy before spawning the rest. 0 spawns all immediately. Default 5.") catch unreachable,
-    clap.parseParam("--test-worker                    (internal) Run as a --parallel worker, receiving files over IPC.") catch unreachable,
-    clap.parseParam("--shard <STR>                    Run a subset of test files, e.g. '--shard=1/3' runs the first of three shards. Useful for splitting tests across multiple CI jobs.") catch unreachable,
-};
-pub const test_params = test_only_params ++ runtime_params_ ++ transpiler_params_ ++ base_params_;
-
-fn loadGlobalBunfig(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: Command.Tag) !void {
-    if (ctx.has_loaded_global_config) return;
-
-    ctx.has_loaded_global_config = true;
-
-    var config_buf: bun.PathBuffer = undefined;
-    if (getHomeConfigPath(&config_buf)) |path| {
-        try loadBunfig(allocator, true, path, ctx, comptime cmd);
-    }
-}
-
-pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
-    if (comptime cmd.readGlobalConfig()) {
-        loadGlobalBunfig(allocator, ctx, cmd) catch |err| {
-            if (auto_loaded) return;
-
-            Output.prettyErrorln("{}\nreading global config \"{s}\"", .{
-                err,
-                config_path,
-            });
-            Global.exit(1);
-        };
-    }
-
-    try loadBunfig(allocator, auto_loaded, config_path, ctx, cmd);
-}
-
-fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
-    const source = switch (bun.sys.File.toSource(config_path, allocator, .{ .convert_bom = true })) {
-        .result => |s| s,
-        .err => |err| {
-            if (auto_loaded) return;
-            Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{
-                err,
-                config_path,
-            });
-            Global.exit(1);
-        },
-    };
-    js_ast.Stmt.Data.Store.create();
-    js_ast.Expr.Data.Store.create();
-    defer {
-        js_ast.Stmt.Data.Store.reset();
-        js_ast.Expr.Data.Store.reset();
-    }
-    const original_level = ctx.log.level;
-    defer {
-        ctx.log.level = original_level;
-    }
-    ctx.log.level = logger.Log.Level.warn;
-    ctx.debug.loaded_bunfig = true;
-    try Bunfig.parse(allocator, &source, ctx, cmd);
-}
-
-fn getHomeConfigPath(buf: *bun.PathBuffer) ?[:0]const u8 {
-    var paths = [_]string{".bunfig.toml"};
-
-    if (bun.env_var.XDG_CONFIG_HOME.get()) |data_dir| {
-        return resolve_path.joinAbsStringBufZ(data_dir, buf, &paths, .auto);
-    }
-
-    if (bun.env_var.HOME.get()) |home_dir| {
-        return resolve_path.joinAbsStringBufZ(home_dir, buf, &paths, .auto);
-    }
-
-    return null;
-}
-pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?string, ctx: Command.Context, comptime cmd: Command.Tag) OOM!void {
-    // If running as a standalone executable with autoloadBunfig disabled, skip config loading
-    // unless an explicit config path was provided via --config
-    if (user_config_path_ == null) {
-        if (bun.StandaloneModuleGraph.get()) |graph| {
-            if (graph.flags.disable_autoload_bunfig) {
-                return;
-            }
-        }
-    }
-
-    var config_buf: bun.PathBuffer = undefined;
-    if (comptime cmd.readGlobalConfig()) {
-        if (!ctx.has_loaded_global_config) {
-            ctx.has_loaded_global_config = true;
-
-            if (getHomeConfigPath(&config_buf)) |path| {
-                loadConfigPath(allocator, true, path, ctx, comptime cmd) catch |err| {
-                    if (ctx.log.hasAny()) {
-                        ctx.log.print(Output.errorWriter()) catch {};
-                    }
-                    if (ctx.log.hasAny()) Output.printError("\n", .{});
-                    Output.err(err, "failed to load bunfig", .{});
-                    Global.crash();
-                };
-            }
-        }
-    }
-
-    var config_path_: []const u8 = user_config_path_ orelse "";
-
-    var auto_loaded: bool = false;
-    if (config_path_.len == 0 and (user_config_path_ != null or
-        Command.Tag.always_loads_config.get(cmd) or
-        (cmd == .AutoCommand and
-            // "bun"
-            (ctx.positionals.len == 0 or
-                // "bun file.js"
-                ctx.positionals.len > 0 and options.defaultLoaders.has(std.fs.path.extension(ctx.positionals[0]))))))
-    {
-        config_path_ = "bunfig.toml";
-        auto_loaded = true;
-    }
-
-    if (config_path_.len == 0) {
-        return;
-    }
-    var config_path: [:0]u8 = undefined;
-    if (config_path_[0] == '/') {
-        @memcpy(config_buf[0..config_path_.len], config_path_);
-        config_buf[config_path_.len] = 0;
-        config_path = config_buf[0..config_path_.len :0];
-    } else {
-        if (ctx.args.absolute_working_dir == null) {
-            var secondbuf: bun.PathBuffer = undefined;
-            const cwd = bun.getcwd(&secondbuf) catch return;
-
-            ctx.args.absolute_working_dir = try allocator.dupeZ(u8, cwd);
-        }
-
-        var parts = [_]string{ ctx.args.absolute_working_dir.?, config_path_ };
-        config_path_ = resolve_path.joinAbsStringBuf(
-            ctx.args.absolute_working_dir.?,
-            &config_buf,
-            &parts,
-            .auto,
-        );
-        config_buf[config_path_.len] = 0;
-        config_path = config_buf[0..config_path_.len :0];
-    }
-
-    loadConfigPath(allocator, auto_loaded, config_path, ctx, comptime cmd) catch |err| {
-        if (ctx.log.hasAny()) {
-            ctx.log.print(Output.errorWriter()) catch {};
-        }
-        if (ctx.log.hasAny()) Output.printError("\n", .{});
-        Output.err(err, "failed to load bunfig", .{});
-        Global.crash();
-    };
-}
-
-pub fn loadConfigWithCmdArgs(
-    comptime cmd: Command.Tag,
-    allocator: std.mem.Allocator,
-    args: clap.Args(clap.Help, cmd.params()),
-    ctx: Command.Context,
-) OOM!void {
-    return try loadConfig(allocator, args.option("--config"), ctx, comptime cmd);
-}
-
-pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: Command.Tag) !Api.TransformOptions {
-    var diag = clap.Diagnostic{};
-    const params_to_parse = comptime cmd.params();
-
-    var args = clap.parse(clap.Help, params_to_parse, .{
-        .diagnostic = &diag,
-        .allocator = allocator,
-        .stop_after_positional_at = switch (cmd) {
-            .RunCommand => 2,
-            .AutoCommand, .RunAsNodeCommand => 1,
-            else => 0,
-        },
-    }) catch |err| {
-        // Report useful error and exit
-        diag.report(Output.errorWriter(), err) catch {};
-        cmd.printHelp(false);
-        Global.exit(1);
-    };
-
-    const print_help = args.flag("--help");
-    if (print_help) {
-        cmd.printHelp(true);
-        Output.flush();
-        Global.exit(0);
-    }
-
-    if (cmd == .AutoCommand) {
-        if (args.flag("--version")) {
-            printVersionAndExit();
-        }
-
-        if (args.flag("--revision")) {
-            printRevisionAndExit();
-        }
-    }
-
-    if (builtin.have_error_return_tracing) {
-        if (args.flag("--verbose-error-trace")) {
-            bun.crash_handler.verbose_error_trace = true;
-        }
-    }
-
-    var cwd: [:0]u8 = undefined;
-    if (args.option("--cwd")) |cwd_arg| {
-        cwd = brk: {
-            var outbuf: bun.PathBuffer = undefined;
-            const out = bun.path.joinAbs(try bun.getcwd(&outbuf), .loose, cwd_arg);
-            bun.sys.chdir("", out).unwrap() catch |err| {
-                Output.err(err, "Could not change directory to \"{s}\"\n", .{cwd_arg});
-                Global.exit(1);
-            };
-            break :brk try allocator.dupeZ(u8, out);
-        };
-    } else {
-        cwd = try bun.getcwdAlloc(allocator);
-    }
-
-    // Not gated on .BunxCommand: bunx skips Arguments.parse entirely
-    // (uses_global_options=false). bunx picks up no-orphans via the
-    // BUN_FEATURE_FLAG_NO_ORPHANS env var in main()→install() instead.
-    if (cmd == .RunCommand or cmd == .AutoCommand or cmd == .TestCommand) {
-        if (args.flag("--no-orphans")) bun.ParentDeathWatchdog.enable();
-    }
-
-    if (cmd == .RunCommand or cmd == .AutoCommand) {
-        ctx.filters = args.options("--filter");
-        ctx.workspaces = args.flag("--workspaces");
-        ctx.if_present = args.flag("--if-present");
-        ctx.parallel = args.flag("--parallel");
-        ctx.sequential = args.flag("--sequential");
-        ctx.no_exit_on_error = args.flag("--no-exit-on-error");
-
-        if (args.option("--elide-lines")) |elide_lines| {
-            if (elide_lines.len > 0) {
-                ctx.bundler_options.elide_lines = std.fmt.parseInt(usize, elide_lines, 10) catch {
-                    Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{elide_lines});
-                    Global.exit(1);
-                };
-            }
-        }
-    }
-
-    if (cmd == .TestCommand) {
-        if (args.option("--timeout")) |timeout_ms| {
-            if (timeout_ms.len > 0) {
-                ctx.test_options.default_timeout_ms = std.fmt.parseInt(u32, timeout_ms, 10) catch {
-                    Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{timeout_ms});
-                    Output.flush();
-                    Global.exit(1);
-                };
-            }
-        }
-
-        if (args.option("--max-concurrency")) |max_concurrency| {
-            if (max_concurrency.len > 0) {
-                ctx.test_options.max_concurrency = std.fmt.parseInt(u32, max_concurrency, 10) catch {
-                    Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{max_concurrency});
-                    Global.exit(1);
-                };
-            }
-        }
-
-        if (!ctx.test_options.coverage.enabled) {
-            ctx.test_options.coverage.enabled = args.flag("--coverage");
-        }
-
-        if (args.options("--coverage-reporter").len > 0) {
-            ctx.test_options.coverage.reporters = .{ .text = false, .lcov = false };
-            for (args.options("--coverage-reporter")) |reporter| {
-                if (bun.strings.eqlComptime(reporter, "text")) {
-                    ctx.test_options.coverage.reporters.text = true;
-                } else if (bun.strings.eqlComptime(reporter, "lcov")) {
-                    ctx.test_options.coverage.reporters.lcov = true;
-                } else {
-                    Output.prettyErrorln("<r><red>error<r>: invalid coverage reporter '{s}'. Available options: 'text' (console output), 'lcov' (code coverage file)", .{reporter});
-                    Global.exit(1);
-                }
-            }
-        }
-
-        if (args.option("--reporter-outfile")) |reporter_outfile| {
-            ctx.test_options.reporter_outfile = reporter_outfile;
-        }
-
-        if (args.option("--reporter")) |reporter| {
-            if (strings.eqlComptime(reporter, "junit")) {
-                if (ctx.test_options.reporter_outfile == null) {
-                    Output.errGeneric("--reporter=junit requires --reporter-outfile [file] to specify where to save the XML report", .{});
-                    Global.crash();
-                }
-                ctx.test_options.reporters.junit = true;
-            } else if (strings.eqlComptime(reporter, "dots") or strings.eqlComptime(reporter, "dot")) {
-                ctx.test_options.reporters.dots = true;
-            } else {
-                Output.errGeneric("unsupported reporter format '{s}'. Available options: 'junit' (for XML test results), 'dots'", .{reporter});
-                Global.crash();
-            }
-        }
-
-        // Handle --dots flag as shorthand for --reporter=dots
-        if (args.flag("--dots")) {
-            ctx.test_options.reporters.dots = true;
-        }
-
-        // Handle --only-failures flag
-        if (args.flag("--only-failures")) {
-            ctx.test_options.reporters.only_failures = true;
-        }
-
-        if (args.option("--coverage-dir")) |dir| {
-            ctx.test_options.coverage.reports_directory = dir;
-        }
-
-        if (args.options("--path-ignore-patterns").len > 0) {
-            ctx.test_options.path_ignore_patterns = args.options("--path-ignore-patterns");
-            ctx.test_options.path_ignore_patterns_from_cli = true;
-        }
-
-        if (args.option("--bail")) |bail| {
-            if (bail.len > 0) {
-                ctx.test_options.bail = std.fmt.parseInt(u32, bail, 10) catch |e| {
-                    Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{@errorName(e)});
-                    Output.flush();
-                    Global.exit(1);
-                };
-
-                if (ctx.test_options.bail == 0) {
-                    Output.prettyErrorln("<r><red>error<r>: --bail expects a number greater than 0", .{});
-                    Output.flush();
-                    Global.exit(1);
-                }
-            } else {
-                ctx.test_options.bail = 1;
-            }
-        }
-        if (args.option("--rerun-each")) |repeat_count| {
-            if (repeat_count.len > 0) {
-                ctx.test_options.repeat_count = std.fmt.parseInt(u32, repeat_count, 10) catch |e| {
-                    Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{@errorName(e)});
-                    Global.exit(1);
-                };
-            }
-        }
-        if (args.option("--retry")) |retry_count| {
-            if (retry_count.len > 0) {
-                ctx.test_options.retry = std.fmt.parseInt(u32, retry_count, 10) catch |e| {
-                    Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{@errorName(e)});
-                    Global.exit(1);
-                };
-            }
-        }
-        if (ctx.test_options.retry != 0 and ctx.test_options.repeat_count != 0) {
-            Output.prettyErrorln("<r><red>error<r>: --retry cannot be used with --rerun-each", .{});
-            Global.exit(1);
-        }
-        if (args.option("--test-name-pattern")) |namePattern| {
-            ctx.test_options.test_filter_pattern = namePattern;
-            const regex = RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none) catch {
-                Output.prettyErrorln(
-                    "<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}",
-                    .{
-                        bun.fmt.QuotedFormatter{
-                            .text = namePattern,
-                        },
-                    },
-                );
-                Global.exit(1);
-            };
-            ctx.test_options.test_filter_regex = @ptrCast(regex);
-        }
-        if (args.option("--changed")) |since| {
-            ctx.test_options.changed = since;
-        }
-        if (args.option("--shard")) |shard| {
-            const sep = bun.strings.indexOfChar(shard, '/') orelse {
-                Output.prettyErrorln("<r><red>error<r>: --shard expects <d>'<r>index/count<d>'<r>, e.g. --shard=1/3", .{});
-                Global.exit(1);
-            };
-            const index_str = shard[0..sep];
-            const count_str = shard[sep + 1 ..];
-            const index = std.fmt.parseInt(u32, index_str, 10) catch {
-                Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{index_str});
-                Global.exit(1);
-            };
-            const count = std.fmt.parseInt(u32, count_str, 10) catch {
-                Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{count_str});
-                Global.exit(1);
-            };
-            if (count == 0) {
-                Output.prettyErrorln("<r><red>error<r>: --shard count must be greater than 0", .{});
-                Global.exit(1);
-            }
-            if (index == 0 or index > count) {
-                Output.prettyErrorln("<r><red>error<r>: --shard index must be between 1 and {d}, got {d}", .{ count, index });
-                Global.exit(1);
-            }
-            ctx.test_options.shard = .{ .index = index, .count = count };
-        }
-        ctx.test_options.update_snapshots = args.flag("--update-snapshots");
-        ctx.test_options.run_todo = args.flag("--todo");
-        ctx.test_options.only = args.flag("--only");
-        ctx.test_options.pass_with_no_tests = args.flag("--pass-with-no-tests");
-        ctx.test_options.concurrent = args.flag("--concurrent");
-        ctx.test_options.randomize = args.flag("--randomize");
-        ctx.test_options.isolate = args.flag("--isolate");
-        ctx.test_options.test_worker = args.flag("--test-worker");
-
-        if (args.option("--parallel")) |parallel_str| {
-            const parsed: u32 = if (parallel_str.len > 0)
-                std.fmt.parseInt(u32, parallel_str, 10) catch {
-                    Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{parallel_str});
-                    Global.exit(1);
-                }
-            else
-                @max(bun.getThreadCount(), 1);
-            if (parsed == 0) {
-                Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"0\"", .{});
-                Global.exit(1);
-            }
-            ctx.test_options.parallel = parsed;
-            // --parallel implies --isolate inside each worker.
-            ctx.test_options.isolate = true;
-        }
-
-        if (args.option("--parallel-delay")) |delay_str| {
-            ctx.test_options.parallel_delay_ms = std.fmt.parseInt(u32, delay_str, 10) catch {
-                Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{delay_str});
-                Global.exit(1);
-            };
-        }
-
-        if (args.option("--seed")) |seed_str| {
-            ctx.test_options.randomize = true;
-            ctx.test_options.seed = std.fmt.parseInt(u32, seed_str, 10) catch {
-                Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{seed_str});
-                std.process.exit(1);
-            };
-        }
-    }
-
-    ctx.args.absolute_working_dir = cwd;
-    ctx.positionals = args.positionals();
-
-    if (comptime Command.Tag.loads_config.get(cmd)) {
-        try loadConfigWithCmdArgs(cmd, allocator, args, ctx);
-    }
-
-    var opts: Api.TransformOptions = ctx.args;
-
-    const defines_tuple = try DefineColonList.resolve(allocator, args.options("--define"));
-
-    if (defines_tuple.keys.len > 0) {
-        opts.define = .{
-            .keys = defines_tuple.keys,
-            .values = defines_tuple.values,
-        };
-    }
-
-    opts.drop = args.options("--drop");
-    opts.feature_flags = args.options("--feature");
-
-    // Node added a `--loader` flag (that's kinda like `--register`). It's
-    // completely different from ours.
-    const loader_tuple = if (cmd != .RunAsNodeCommand)
-        try LoaderColonList.resolve(allocator, args.options("--loader"))
-    else
-        .{ .keys = &[_]u8{}, .values = &[_]Api.Loader{} };
-
-    if (loader_tuple.keys.len > 0) {
-        opts.loaders = .{
-            .extensions = loader_tuple.keys,
-            .loaders = loader_tuple.values,
-        };
-    }
-
-    opts.tsconfig_override = if (args.option("--tsconfig-override")) |ts|
-        resolve_path.joinAbsString(cwd, &[_]string{ts}, .auto)
-    else
-        null;
-
-    opts.main_fields = args.options("--main-fields");
-    // we never actually supported inject.
-    // opts.inject = args.options("--inject");
-    opts.env_files = args.options("--env-file");
-    opts.extension_order = args.options("--extension-order");
-
-    if (args.flag("--no-env-file")) {
-        opts.disable_default_env_files = true;
-    }
-
-    if (args.flag("--preserve-symlinks")) {
-        opts.preserve_symlinks = true;
-    }
-    if (args.flag("--preserve-symlinks-main")) {
-        ctx.runtime_options.preserve_symlinks_main = true;
-    }
-
-    ctx.passthrough = args.remaining();
-
-    if (cmd == .AutoCommand or cmd == .RunCommand or cmd == .BuildCommand or cmd == .TestCommand) {
-        if (args.options("--conditions").len > 0) {
-            opts.conditions = args.options("--conditions");
-        }
-    }
-
-    // runtime commands
-    if (cmd == .AutoCommand or cmd == .RunCommand or cmd == .TestCommand or cmd == .RunAsNodeCommand) {
-        {
-            const preloads = args.options("--preload");
-            const preloads2 = args.options("--require");
-            const preloads3 = args.options("--import");
-            const preload4 = bun.env_var.BUN_INSPECT_PRELOAD.get();
-
-            const total_preloads = ctx.preloads.len + preloads.len + preloads2.len + preloads3.len + (if (preload4 != null) @as(usize, 1) else @as(usize, 0));
-            if (total_preloads > 0) {
-                var all = std.array_list.Managed(string).initCapacity(ctx.allocator, total_preloads) catch unreachable;
-                if (ctx.preloads.len > 0) all.appendSliceAssumeCapacity(ctx.preloads);
-                if (preloads.len > 0) all.appendSliceAssumeCapacity(preloads);
-                if (preloads2.len > 0) all.appendSliceAssumeCapacity(preloads2);
-                if (preloads3.len > 0) all.appendSliceAssumeCapacity(preloads3);
-                if (preload4) |p| all.appendAssumeCapacity(p);
-                ctx.preloads = all.items;
-            }
-        }
-
-        if (args.flag("--hot")) {
-            ctx.debug.hot_reload = .hot;
-            if (args.flag("--no-clear-screen")) {
-                bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
-            }
-        } else if (args.flag("--watch")) {
-            ctx.debug.hot_reload = .watch;
-
-            // Windows applies this to the watcher child process.
-            // The parent process is unable to re-launch itself
-            if (!bun.Environment.isWindows)
-                bun.auto_reload_on_crash = true;
-
-            if (args.flag("--no-clear-screen")) {
-                bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
-            }
-        }
-
-        if (args.option("--origin")) |origin| {
-            opts.origin = origin;
-        }
-
-        if (args.flag("--redis-preconnect")) {
-            ctx.runtime_options.redis_preconnect = true;
-        }
-
-        if (args.flag("--sql-preconnect")) {
-            ctx.runtime_options.sql_preconnect = true;
-        }
-
-        if (args.flag("--no-addons")) {
-            // used for disabling process.dlopen and
-            // for disabling export condition "node-addons"
-            opts.allow_addons = false;
-        }
-
-        if (args.option("--unhandled-rejections")) |unhandled_rejections| {
-            opts.unhandled_rejections = Api.UnhandledRejections.map.get(unhandled_rejections) orelse {
-                Output.errGeneric("Invalid value for --unhandled-rejections: \"{s}\". Must be one of \"strict\", \"throw\", \"warn\", \"none\", \"warn-with-error-code\"\n", .{unhandled_rejections});
-                Global.exit(1);
-            };
-        }
-
-        if (args.option("--port")) |port_str| {
-            if (comptime cmd == .RunAsNodeCommand) {
-                // TODO: prevent `node --port <script>` from working
-                ctx.runtime_options.eval.script = port_str;
-                ctx.runtime_options.eval.eval_and_print = true;
-            } else {
-                opts.port = std.fmt.parseInt(u16, port_str, 10) catch {
-                    Output.errFmt(
-                        bun.fmt.outOfRange(port_str, .{
-                            .field_name = "--port",
-                            .min = 0,
-                            .max = std.math.maxInt(u16),
-                        }),
-                    );
-                    Output.note("To evaluate TypeScript here, use 'bun --print'", .{});
-                    Global.exit(1);
-                };
-            }
-        }
-
-        if (args.option("--max-http-header-size")) |size_str| {
-            const size = std.fmt.parseInt(usize, size_str, 10) catch {
-                Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{size_str});
-                Global.exit(1);
-            };
-            if (size == 0) {
-                bun.http.max_http_header_size = 1024 * 1024 * 1024;
-            } else {
-                bun.http.max_http_header_size = size;
-            }
-        }
-
-        if (args.option("--user-agent")) |user_agent| {
-            bun.http.overridden_default_user_agent = user_agent;
-        }
-
-        ctx.debug.offline_mode_setting = if (args.flag("--prefer-offline"))
-            Bunfig.OfflineMode.offline
-        else if (args.flag("--prefer-latest"))
-            Bunfig.OfflineMode.latest
-        else
-            Bunfig.OfflineMode.online;
-
-        if (args.flag("--no-install")) {
-            ctx.debug.global_cache = .disable;
-        } else if (args.flag("-i")) {
-            ctx.debug.global_cache = .fallback;
-        } else if (args.option("--install")) |enum_value| {
-            // -i=auto --install=force, --install=disable
-            if (options.GlobalCache.Map.get(enum_value)) |result| {
-                ctx.debug.global_cache = result;
-                // -i, --install
-            } else if (enum_value.len == 0) {
-                ctx.debug.global_cache = options.GlobalCache.force;
-            } else {
-                Output.errGeneric("Invalid value for --install: \"{s}\". Must be either \"auto\", \"fallback\", \"force\", or \"disable\"\n", .{enum_value});
-                Global.exit(1);
-            }
-        }
-
-        if (args.option("--print")) |script| {
-            ctx.runtime_options.eval.script = script;
-            ctx.runtime_options.eval.eval_and_print = true;
-        } else if (args.option("--eval")) |script| {
-            ctx.runtime_options.eval.script = script;
-        }
-        ctx.runtime_options.if_present = args.flag("--if-present");
-        ctx.runtime_options.smol = args.flag("--smol");
-        ctx.runtime_options.preconnect = args.options("--fetch-preconnect");
-        ctx.runtime_options.experimental_http2_fetch = args.flag("--experimental-http2-fetch");
-        ctx.runtime_options.experimental_http3_fetch = args.flag("--experimental-http3-fetch");
-        ctx.runtime_options.expose_gc = args.flag("--expose-gc");
-
-        if (args.option("--console-depth")) |depth_str| {
-            const depth = std.fmt.parseInt(u16, depth_str, 10) catch {
-                Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{depth_str});
-                Global.exit(1);
-            };
-            // Treat depth=0 as maxInt(u16) for infinite depth
-            ctx.runtime_options.console_depth = if (depth == 0) std.math.maxInt(u16) else depth;
-        }
-
-        if (args.option("--dns-result-order")) |order| {
-            ctx.runtime_options.dns_result_order = order;
-        }
-
-        const has_cron_title = args.option("--cron-title");
-        const has_cron_period = args.option("--cron-period");
-        if (has_cron_title) |t| {
-            ctx.runtime_options.cron_title = t;
-        }
-        if (has_cron_period) |p| {
-            ctx.runtime_options.cron_period = p;
-        }
-        if ((has_cron_title != null) != (has_cron_period != null)) {
-            Output.errGeneric("--cron-title and --cron-period must be provided together", .{});
-            Global.exit(1);
-        }
-        if (has_cron_title != null and (ctx.runtime_options.cron_title.len == 0 or ctx.runtime_options.cron_period.len == 0)) {
-            Output.errGeneric("--cron-title and --cron-period must not be empty", .{});
-            Global.exit(1);
-        }
-
-        if (args.option("--inspect")) |inspect_flag| {
-            ctx.runtime_options.debugger = if (inspect_flag.len == 0)
-                Command.Debugger{ .enable = .{} }
-            else
-                Command.Debugger{ .enable = .{
-                    .path_or_port = inspect_flag,
-                } };
-        } else if (args.option("--inspect-wait")) |inspect_flag| {
-            ctx.runtime_options.debugger = if (inspect_flag.len == 0)
-                Command.Debugger{ .enable = .{
-                    .wait_for_connection = true,
-                } }
-            else
-                Command.Debugger{ .enable = .{
-                    .path_or_port = inspect_flag,
-                    .wait_for_connection = true,
-                } };
-        } else if (args.option("--inspect-brk")) |inspect_flag| {
-            ctx.runtime_options.debugger = if (inspect_flag.len == 0)
-                Command.Debugger{ .enable = .{
-                    .wait_for_connection = true,
-                    .set_breakpoint_on_first_line = true,
-                } }
-            else
-                Command.Debugger{ .enable = .{
-                    .path_or_port = inspect_flag,
-                    .wait_for_connection = true,
-                    .set_breakpoint_on_first_line = true,
-                } };
-        }
-
-        const cpu_prof_flag = args.flag("--cpu-prof");
-        const cpu_prof_md_flag = args.flag("--cpu-prof-md");
-
-        // --cpu-prof-md alone enables profiling with markdown format
-        // --cpu-prof alone enables profiling with JSON format
-        // Both flags together enable profiling with both formats
-        if (cpu_prof_flag or cpu_prof_md_flag) {
-            ctx.runtime_options.cpu_prof.enabled = true;
-            if (args.option("--cpu-prof-name")) |name| {
-                ctx.runtime_options.cpu_prof.name = name;
-            }
-            if (args.option("--cpu-prof-dir")) |dir| {
-                ctx.runtime_options.cpu_prof.dir = dir;
-            }
-            // md_format is true if --cpu-prof-md is passed (regardless of --cpu-prof)
-            ctx.runtime_options.cpu_prof.md_format = cpu_prof_md_flag;
-            // json_format is true if --cpu-prof is passed (regardless of --cpu-prof-md)
-            ctx.runtime_options.cpu_prof.json_format = cpu_prof_flag;
-            if (args.option("--cpu-prof-interval")) |interval_str| {
-                ctx.runtime_options.cpu_prof.interval = std.fmt.parseInt(u32, interval_str, 10) catch 1000;
-            }
-        } else {
-            // Warn if --cpu-prof-name or --cpu-prof-dir is used without a profiler flag
-            if (args.option("--cpu-prof-name")) |_| {
-                Output.warn("--cpu-prof-name requires --cpu-prof or --cpu-prof-md to be enabled", .{});
-            }
-            if (args.option("--cpu-prof-dir")) |_| {
-                Output.warn("--cpu-prof-dir requires --cpu-prof or --cpu-prof-md to be enabled", .{});
-            }
-            if (args.option("--cpu-prof-interval")) |_| {
-                Output.warn("--cpu-prof-interval requires --cpu-prof or --cpu-prof-md to be enabled", .{});
-            }
-        }
-
-        const heap_prof_v8 = args.flag("--heap-prof");
-        const heap_prof_md = args.flag("--heap-prof-md");
-
-        if (heap_prof_v8 and heap_prof_md) {
-            // Both flags specified - warn and use markdown format
-            Output.warn("Both --heap-prof and --heap-prof-md specified; using --heap-prof-md (markdown format)", .{});
-            ctx.runtime_options.heap_prof.enabled = true;
-            ctx.runtime_options.heap_prof.text_format = true;
-            if (args.option("--heap-prof-name")) |name| {
-                ctx.runtime_options.heap_prof.name = name;
-            }
-            if (args.option("--heap-prof-dir")) |dir| {
-                ctx.runtime_options.heap_prof.dir = dir;
-            }
-        } else if (heap_prof_v8 or heap_prof_md) {
-            ctx.runtime_options.heap_prof.enabled = true;
-            ctx.runtime_options.heap_prof.text_format = heap_prof_md;
-            if (args.option("--heap-prof-name")) |name| {
-                ctx.runtime_options.heap_prof.name = name;
-            }
-            if (args.option("--heap-prof-dir")) |dir| {
-                ctx.runtime_options.heap_prof.dir = dir;
-            }
-        } else {
-            // Warn if --heap-prof-name or --heap-prof-dir is used without --heap-prof or --heap-prof-md
-            if (args.option("--heap-prof-name")) |_| {
-                Output.warn("--heap-prof-name requires --heap-prof or --heap-prof-md to be enabled", .{});
-            }
-            if (args.option("--heap-prof-dir")) |_| {
-                Output.warn("--heap-prof-dir requires --heap-prof or --heap-prof-md to be enabled", .{});
-            }
-        }
-
-        if (args.flag("--no-deprecation")) {
-            Bun__Node__ProcessNoDeprecation = true;
-        }
-        if (args.flag("--throw-deprecation")) {
-            Bun__Node__ProcessThrowDeprecation = true;
-        }
-        if (args.option("--title")) |title| {
-            CLI.Bun__Node__ProcessTitle = title;
-        }
-        if (args.flag("--zero-fill-buffers")) {
-            Bun__Node__ZeroFillBuffers = true;
-        }
-        const use_system_ca = args.flag("--use-system-ca");
-        const use_openssl_ca = args.flag("--use-openssl-ca");
-        const use_bundled_ca = args.flag("--use-bundled-ca");
-
-        // Disallow any combination > 1
-        if (@as(u8, @intFromBool(use_system_ca)) + @as(u8, @intFromBool(use_openssl_ca)) + @as(u8, @intFromBool(use_bundled_ca)) > 1) {
-            Output.prettyErrorln("<r><red>error<r>: choose exactly one of --use-system-ca, --use-openssl-ca, or --use-bundled-ca", .{});
-            Global.exit(1);
-        }
-
-        // CLI overrides env var (NODE_USE_SYSTEM_CA)
-        if (use_bundled_ca) {
-            Bun__Node__CAStore = .bundled;
-        } else if (use_openssl_ca) {
-            Bun__Node__CAStore = .openssl;
-        } else if (use_system_ca) {
-            Bun__Node__CAStore = .system;
-        } else {
-            if (bun.env_var.NODE_USE_SYSTEM_CA.get()) {
-                Bun__Node__CAStore = .system;
-            }
-        }
-
-        // Back-compat boolean used by native code until fully migrated
-        Bun__Node__UseSystemCA = (Bun__Node__CAStore == .system);
-    }
-
-    if (opts.port != null and opts.origin == null) {
-        opts.origin = try std.fmt.allocPrint(allocator, "http://localhost:{d}/", .{opts.port.?});
-    }
-
-    const output_dir: ?string = null;
-    const output_file: ?string = null;
-
-    ctx.bundler_options.ignore_dce_annotations = args.flag("--ignore-dce-annotations");
-
-    if (cmd == .BuildCommand) {
-        ctx.bundler_options.transform_only = args.flag("--no-bundle");
-        ctx.bundler_options.bytecode = args.flag("--bytecode");
-
-        const production = args.flag("--production");
-
-        if (args.flag("--app")) {
-            if (!bun.FeatureFlags.bake()) {
-                Output.errGeneric("To use the experimental \"--app\" option, upgrade to the canary build of bun via \"bun upgrade --canary\"", .{});
-                Global.crash();
-            }
-
-            ctx.bundler_options.bake = true;
-            ctx.bundler_options.bake_debug_dump_server = bun.FeatureFlags.bake_debugging_features and
-                args.flag("--debug-dump-server-files");
-            ctx.bundler_options.bake_debug_disable_minify = bun.FeatureFlags.bake_debugging_features and
-                args.flag("--debug-no-minify");
-        }
-
-        if (ctx.bundler_options.bytecode) {
-            ctx.bundler_options.output_format = .cjs;
-            ctx.args.target = .bun;
-        }
-
-        if (args.option("--public-path")) |public_path| {
-            ctx.bundler_options.public_path = public_path;
-        }
-
-        if (args.option("--banner")) |banner| {
-            ctx.bundler_options.banner = banner;
-        }
-
-        if (args.option("--footer")) |footer| {
-            ctx.bundler_options.footer = footer;
-        }
-
-        const minify_flag = args.flag("--minify") or production;
-        ctx.bundler_options.minify_syntax = minify_flag or args.flag("--minify-syntax");
-        ctx.bundler_options.minify_whitespace = minify_flag or args.flag("--minify-whitespace");
-        ctx.bundler_options.minify_identifiers = minify_flag or args.flag("--minify-identifiers");
-        ctx.bundler_options.keep_names = args.flag("--keep-names");
-
-        ctx.bundler_options.css_chunking = args.flag("--css-chunking");
-
-        ctx.bundler_options.emit_dce_annotations = args.flag("--emit-dce-annotations") or
-            !ctx.bundler_options.minify_whitespace;
-
-        if (args.options("--external").len > 0) {
-            var externals = try allocator.alloc([]const u8, args.options("--external").len);
-            for (args.options("--external"), 0..) |external, i| {
-                externals[i] = external;
-            }
-            opts.external = externals;
-        }
-
-        if (args.flag("--reject-unresolved") and args.options("--allow-unresolved").len > 0) {
-            Output.prettyErrorln("<r><red>error<r>: --reject-unresolved and --allow-unresolved cannot be used together", .{});
-            Global.crash();
-        } else if (args.flag("--reject-unresolved")) {
-            ctx.bundler_options.allow_unresolved = &.{};
-        } else if (args.options("--allow-unresolved").len > 0) {
-            const raw = args.options("--allow-unresolved");
-            var allow = try allocator.alloc([]const u8, raw.len);
-            for (raw, 0..) |val, i| {
-                // "<empty>" sentinel represents the empty-string pattern (for matching opaque specifiers)
-                allow[i] = if (strings.eqlComptime(val, "<empty>")) "" else val;
-            }
-            ctx.bundler_options.allow_unresolved = allow;
-        }
-
-        if (args.option("--packages")) |packages| {
-            if (strings.eqlComptime(packages, "bundle")) {
-                opts.packages = .bundle;
-            } else if (strings.eqlComptime(packages, "external")) {
-                opts.packages = .external;
-            } else {
-                Output.prettyErrorln("<r><red>error<r>: Invalid packages setting: \"{s}\"", .{packages});
-                Global.crash();
-            }
-        }
-
-        if (args.option("--env")) |env| {
-            if (strings.indexOfChar(env, '*')) |asterisk| {
-                if (asterisk == 0) {
-                    ctx.bundler_options.env_behavior = .load_all;
-                } else {
-                    ctx.bundler_options.env_behavior = .prefix;
-                    ctx.bundler_options.env_prefix = env[0..asterisk];
-                }
-            } else if (strings.eqlComptime(env, "inline") or strings.eqlComptime(env, "1")) {
-                ctx.bundler_options.env_behavior = .load_all;
-            } else if (strings.eqlComptime(env, "disable") or strings.eqlComptime(env, "0")) {
-                ctx.bundler_options.env_behavior = .load_all_without_inlining;
-            } else {
-                Output.prettyErrorln("<r><red>error<r>: Expected 'env' to be 'inline', 'disable', or a prefix with a '*' character", .{});
-                Global.crash();
-            }
-        }
-
-        const TargetMatcher = strings.ExactSizeMatcher(8);
-        if (args.option("--target")) |_target| brk: {
-            if (comptime cmd == .BuildCommand) {
-                if (args.flag("--compile")) {
-                    if (_target.len > 4 and strings.hasPrefixComptime(_target, "bun-")) {
-                        ctx.bundler_options.compile_target = CLI.Cli.CompileTarget.from(_target[3..]);
-                        if (!ctx.bundler_options.compile_target.isSupported()) {
-                            Output.errGeneric("Unsupported compile target: {f}\n", .{ctx.bundler_options.compile_target});
-                            Global.exit(1);
-                        }
-                        opts.target = .bun;
-                        break :brk;
-                    }
-                }
-            }
-
-            opts.target = opts.target orelse switch (TargetMatcher.match(_target)) {
-                TargetMatcher.case("browser") => Api.Target.browser,
-                TargetMatcher.case("node") => Api.Target.node,
-                TargetMatcher.case("macro") => if (cmd == .BuildCommand) Api.Target.bun_macro else Api.Target.bun,
-                TargetMatcher.case("bun") => Api.Target.bun,
-                else => CLI.invalidTarget(&diag, _target),
-            };
-
-            if (opts.target.? == .bun) {
-                ctx.debug.run_in_bun = opts.target.? == .bun;
-            } else {
-                if (ctx.bundler_options.bytecode) {
-                    Output.errGeneric("target must be 'bun' when bytecode is true. Received: {s}", .{@tagName(opts.target.?)});
-                    Global.exit(1);
-                }
-
-                if (ctx.bundler_options.bake) {
-                    Output.errGeneric("target must be 'bun' when using --app. Received: {s}", .{@tagName(opts.target.?)});
-                }
-            }
-        }
-
-        if (args.flag("--watch")) {
-            ctx.debug.hot_reload = .watch;
-            bun.auto_reload_on_crash = true;
-
-            if (args.flag("--no-clear-screen")) {
-                bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
-            }
-        }
-
-        if (args.flag("--compile")) {
-            ctx.bundler_options.compile = true;
-            ctx.bundler_options.inline_entrypoint_import_meta_main = true;
-        }
-
-        if (args.option("--compile-exec-argv")) |compile_exec_argv| {
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--compile-exec-argv requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.compile_exec_argv = compile_exec_argv;
-        }
-
-        // Handle --compile-autoload-dotenv flags
-        {
-            const has_positive = args.flag("--compile-autoload-dotenv");
-            const has_negative = args.flag("--no-compile-autoload-dotenv");
-
-            if (has_positive or has_negative) {
-                if (!ctx.bundler_options.compile) {
-                    Output.errGeneric("--compile-autoload-dotenv requires --compile", .{});
-                    Global.crash();
-                }
-                if (has_positive and has_negative) {
-                    Output.errGeneric("Cannot use both --compile-autoload-dotenv and --no-compile-autoload-dotenv", .{});
-                    Global.crash();
-                }
-                ctx.bundler_options.compile_autoload_dotenv = has_positive;
-            }
-        }
-
-        // Handle --compile-autoload-bunfig flags
-        {
-            const has_positive = args.flag("--compile-autoload-bunfig");
-            const has_negative = args.flag("--no-compile-autoload-bunfig");
-
-            if (has_positive or has_negative) {
-                if (!ctx.bundler_options.compile) {
-                    Output.errGeneric("--compile-autoload-bunfig requires --compile", .{});
-                    Global.crash();
-                }
-                if (has_positive and has_negative) {
-                    Output.errGeneric("Cannot use both --compile-autoload-bunfig and --no-compile-autoload-bunfig", .{});
-                    Global.crash();
-                }
-                ctx.bundler_options.compile_autoload_bunfig = has_positive;
-            }
-        }
-
-        // Handle --compile-autoload-tsconfig flags (default: false, tsconfig not loaded at runtime)
-        {
-            const has_positive = args.flag("--compile-autoload-tsconfig");
-            const has_negative = args.flag("--no-compile-autoload-tsconfig");
-
-            if (has_positive or has_negative) {
-                if (!ctx.bundler_options.compile) {
-                    Output.errGeneric("--compile-autoload-tsconfig requires --compile", .{});
-                    Global.crash();
-                }
-                if (has_positive and has_negative) {
-                    Output.errGeneric("Cannot use both --compile-autoload-tsconfig and --no-compile-autoload-tsconfig", .{});
-                    Global.crash();
-                }
-                ctx.bundler_options.compile_autoload_tsconfig = has_positive;
-            }
-        }
-
-        // Handle --compile-autoload-package-json flags (default: false, package.json not loaded at runtime)
-        {
-            const has_positive = args.flag("--compile-autoload-package-json");
-            const has_negative = args.flag("--no-compile-autoload-package-json");
-
-            if (has_positive or has_negative) {
-                if (!ctx.bundler_options.compile) {
-                    Output.errGeneric("--compile-autoload-package-json requires --compile", .{});
-                    Global.crash();
-                }
-                if (has_positive and has_negative) {
-                    Output.errGeneric("Cannot use both --compile-autoload-package-json and --no-compile-autoload-package-json", .{});
-                    Global.crash();
-                }
-                ctx.bundler_options.compile_autoload_package_json = has_positive;
-            }
-        }
-
-        if (args.option("--compile-executable-path")) |path| {
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--compile-executable-path requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.compile_executable_path = path;
-        }
-
-        if (args.flag("--windows-hide-console")) {
-            // --windows-hide-console technically doesnt depend on WinAPI, but since since --windows-icon
-            // does, all of these customization options have been gated to windows-only
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-hide-console is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-hide-console requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-hide-console requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.hide_console = true;
-        }
-        if (args.option("--windows-icon")) |path| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-icon is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-icon requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-icon requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.icon = path;
-        }
-        if (args.option("--windows-title")) |title| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-title is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-title requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-title requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.title = title;
-        }
-        if (args.option("--windows-publisher")) |publisher| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-publisher is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-publisher requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-publisher requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.publisher = publisher;
-        }
-        if (args.option("--windows-version")) |version| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-version is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-version requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-version requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.version = version;
-        }
-        if (args.option("--windows-description")) |description| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-description is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-description requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-description requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.description = description;
-        }
-        if (args.option("--windows-copyright")) |copyright| {
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-copyright is only available when compiling on Windows", .{});
-                Global.crash();
-            }
-            if (ctx.bundler_options.compile_target.os != .windows) {
-                Output.errGeneric("--windows-copyright requires a Windows compile target", .{});
-                Global.crash();
-            }
-            if (!ctx.bundler_options.compile) {
-                Output.errGeneric("--windows-copyright requires --compile", .{});
-                Global.crash();
-            }
-            ctx.bundler_options.windows.copyright = copyright;
-        }
-
-        if (args.option("--outdir")) |outdir| {
-            if (outdir.len > 0) {
-                ctx.bundler_options.outdir = outdir;
-            }
-        } else if (args.option("--outfile")) |outfile| {
-            if (outfile.len > 0) {
-                ctx.bundler_options.outfile = outfile;
-            }
-        }
-
-        if (args.option("--metafile")) |metafile| {
-            // If --metafile is passed without a value, default to "meta.json"
-            ctx.bundler_options.metafile = if (metafile.len > 0)
-                bun.handleOom(allocator.dupeZ(u8, metafile))
-            else
-                "meta.json";
-        }
-
-        if (args.option("--metafile-md")) |metafile_md| {
-            // If --metafile-md is passed without a value, default to "meta.md"
-            ctx.bundler_options.metafile_md = if (metafile_md.len > 0)
-                bun.handleOom(allocator.dupeZ(u8, metafile_md))
-            else
-                "meta.md";
-        }
-
-        if (args.option("--root")) |root_dir| {
-            if (root_dir.len > 0) {
-                ctx.bundler_options.root_dir = root_dir;
-            }
-        }
-
-        if (args.option("--format")) |format_str| {
-            const format = options.Format.fromString(format_str) orelse {
-                Output.errGeneric("Invalid format - must be esm, cjs, or iife", .{});
-                Global.crash();
-            };
-
-            switch (format) {
-                .internal_bake_dev => {
-                    bun.Output.warn("--format={s} is for debugging only, and may experience breaking changes at any moment", .{format_str});
-                    bun.Output.flush();
-                },
-                .cjs => {
-                    if (ctx.args.target == null) {
-                        ctx.args.target = .node;
-                    }
-                },
-                else => {},
-            }
-
-            ctx.bundler_options.output_format = format;
-            if (ctx.bundler_options.bytecode) {
-                if (format != .cjs and format != .esm) {
-                    Output.errGeneric("format must be 'cjs' or 'esm' when bytecode is true.", .{});
-                    Global.exit(1);
-                }
-                // ESM bytecode requires --compile because module_info (import/export metadata)
-                // is only available in compiled binaries. Without it, JSC must parse the file
-                // twice (once for module analysis, once for bytecode), which is a deopt.
-                if (format == .esm and !ctx.bundler_options.compile) {
-                    Output.errGeneric("ESM bytecode requires --compile. Use --format=cjs for bytecode without --compile.", .{});
-                    Global.exit(1);
-                }
-            }
-        }
-
-        if (args.flag("--splitting")) {
-            ctx.bundler_options.code_splitting = true;
-        }
-
-        if (args.option("--entry-naming")) |entry_naming| {
-            ctx.bundler_options.entry_naming = try strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(entry_naming) });
-        }
-
-        if (args.option("--chunk-naming")) |chunk_naming| {
-            ctx.bundler_options.chunk_naming = try strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(chunk_naming) });
-        }
-
-        if (args.option("--asset-naming")) |asset_naming| {
-            ctx.bundler_options.asset_naming = try strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(asset_naming) });
-        }
-
-        if (args.flag("--server-components")) {
-            ctx.bundler_options.server_components = true;
-            if (opts.target) |target| {
-                if (!bun.options.Target.from(target).isServerSide()) {
-                    bun.Output.errGeneric("Cannot use client-side --target={s} with --server-components", .{@tagName(target)});
-                    Global.crash();
-                } else {
-                    opts.target = .bun;
-                }
-            }
-        }
-
-        if (args.flag("--react-fast-refresh")) {
-            ctx.bundler_options.react_fast_refresh = true;
-        }
-
-        if (args.option("--sourcemap")) |setting| {
-            if (setting.len == 0) {
-                // In the future, Bun is going to make this default to .linked
-                opts.source_map = .linked;
-            } else if (strings.eqlComptime(setting, "inline")) {
-                opts.source_map = .@"inline";
-            } else if (strings.eqlComptime(setting, "none")) {
-                opts.source_map = .none;
-            } else if (strings.eqlComptime(setting, "external")) {
-                opts.source_map = .external;
-            } else if (strings.eqlComptime(setting, "linked")) {
-                opts.source_map = .linked;
-            } else {
-                Output.prettyErrorln("<r><red>error<r>: Invalid sourcemap setting: \"{s}\"", .{setting});
-                Global.crash();
-            }
-
-            // when using --compile, only `external` works, as we do not
-            // look at the source map comment. so after we validate the
-            // user's choice was in the list, we secretly override it
-            if (ctx.bundler_options.compile) {
-                opts.source_map = .external;
-            }
-        }
-    }
-
-    if (opts.entry_points.len == 0) {
-        var entry_points = ctx.positionals;
-
-        switch (comptime cmd) {
-            .BuildCommand => {
-                if (entry_points.len > 0 and (strings.eqlComptime(
-                    entry_points[0],
-                    "build",
-                ) or strings.eqlComptime(entry_points[0], "bun"))) {
-                    var out_entry = entry_points[1..];
-                    for (entry_points, 0..) |entry, i| {
-                        if (entry.len > 0) {
-                            out_entry = out_entry[i..];
-                            break;
-                        }
-                    }
-                    entry_points = out_entry;
-                }
-            },
-            .RunCommand => {
-                if (entry_points.len > 0 and (strings.eqlComptime(
-                    entry_points[0],
-                    "run",
-                ) or strings.eqlComptime(
-                    entry_points[0],
-                    "r",
-                ))) {
-                    entry_points = entry_points[1..];
-                }
-            },
-            else => {},
-        }
-
-        opts.entry_points = entry_points;
-    }
-
-    const jsx_factory = args.option("--jsx-factory");
-    const jsx_fragment = args.option("--jsx-fragment");
-    const jsx_import_source = args.option("--jsx-import-source");
-    const jsx_runtime = args.option("--jsx-runtime");
-    const jsx_side_effects = args.flag("--jsx-side-effects");
-
-    if (cmd == .AutoCommand or cmd == .RunCommand) {
-        // "run.silent" in bunfig.toml
-        if (args.flag("--silent")) {
-            ctx.debug.silent = true;
-        }
-
-        if (args.option("--elide-lines")) |elide_lines| {
-            if (elide_lines.len > 0) {
-                ctx.bundler_options.elide_lines = std.fmt.parseInt(usize, elide_lines, 10) catch {
-                    Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{elide_lines});
-                    Global.exit(1);
-                };
-            }
-        }
-
-        if (opts.define) |define| {
-            if (define.keys.len > 0)
-                bun.jsc.RuntimeTranspilerCache.is_disabled = true;
-        }
-    }
-
-    if (cmd == .RunCommand or cmd == .AutoCommand or cmd == .BunxCommand) {
-        // "run.bun" in bunfig.toml
-        if (args.flag("--bun")) {
-            ctx.debug.run_in_bun = true;
-        }
-    }
-
-    opts.resolve = Api.ResolveMode.lazy;
-
-    if (jsx_factory != null or
-        jsx_fragment != null or
-        jsx_import_source != null or
-        jsx_runtime != null)
-    {
-        var default_factory = "".*;
-        var default_fragment = "".*;
-        var default_import_source = "".*;
-        if (opts.jsx == null) {
-            opts.jsx = Api.Jsx{
-                .factory = (jsx_factory orelse &default_factory),
-                .fragment = (jsx_fragment orelse &default_fragment),
-                .import_source = (jsx_import_source orelse &default_import_source),
-                .runtime = if (jsx_runtime) |runtime| try resolve_jsx_runtime(runtime) else Api.JsxRuntime.automatic,
-                .development = false,
-                .side_effects = jsx_side_effects,
-            };
-        } else {
-            opts.jsx = Api.Jsx{
-                .factory = (jsx_factory orelse opts.jsx.?.factory),
-                .fragment = (jsx_fragment orelse opts.jsx.?.fragment),
-                .import_source = (jsx_import_source orelse opts.jsx.?.import_source),
-                .runtime = if (jsx_runtime) |runtime| try resolve_jsx_runtime(runtime) else opts.jsx.?.runtime,
-                .development = false,
-                .side_effects = jsx_side_effects,
-            };
-        }
-    }
-
-    if (cmd == .BuildCommand) {
-        if (opts.entry_points.len == 0 and !ctx.bundler_options.bake) {
-            Output.prettyln("<r><b>bun build <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>", .{});
-            Output.pretty("<r><red>error: Missing entrypoints. What would you like to bundle?<r>\n\n", .{});
-            Output.flush();
-            Output.pretty("Usage:\n  <d>$<r> <b><green>bun build<r> \\<entrypoint\\> [...\\<entrypoints\\>] <cyan>[...flags]<r>  \n", .{});
-            Output.pretty("\nTo see full documentation:\n  <d>$<r> <b><green>bun build<r> --help\n", .{});
-            Output.flush();
-            Global.exit(1);
-        }
-
-        if (args.flag("--production")) {
-            const any_html = for (opts.entry_points) |entry_point| {
-                if (strings.hasSuffixComptime(entry_point, ".html")) {
-                    break true;
-                }
-            } else false;
-            if (any_html) {
-                ctx.bundler_options.css_chunking = true;
-            }
-
-            ctx.bundler_options.production = true;
-        }
-    }
-
-    if (opts.log_level) |log_level| {
-        logger.Log.default_log_level = switch (log_level) {
-            .debug => logger.Log.Level.debug,
-            .err => logger.Log.Level.err,
-            .warn => logger.Log.Level.warn,
-            else => logger.Log.Level.err,
-        };
-        ctx.log.level = logger.Log.default_log_level;
-    }
-
-    if (args.flag("--no-macros")) {
-        ctx.debug.macros = .{ .disable = {} };
-    }
-
-    opts.output_dir = output_dir;
-    if (output_file != null)
-        ctx.debug.output_file = output_file.?;
-
-    if (cmd == .RunCommand or cmd == .AutoCommand) {
-        if (args.option("--shell")) |shell| {
-            if (strings.eqlComptime(shell, "bun")) {
-                ctx.debug.use_system_shell = false;
-            } else if (strings.eqlComptime(shell, "system")) {
-                ctx.debug.use_system_shell = true;
-            } else {
-                Output.errGeneric("Expected --shell to be one of 'bun' or 'system'. Received: \"{s}\"", .{shell});
-                Global.exit(1);
-            }
-        }
-    }
-
-    if (Environment.show_crash_trace) {
-        debug_flags.resolve_breakpoints = args.options("--breakpoint-resolve");
-        debug_flags.print_breakpoints = args.options("--breakpoint-print");
-    }
-
-    return opts;
-}
-
-export var Bun__Node__ZeroFillBuffers = false;
-export var Bun__Node__ProcessNoDeprecation = false;
-export var Bun__Node__ProcessThrowDeprecation = false;
-
-pub const BunCAStore = enum(u8) { bundled, openssl, system };
-pub export var Bun__Node__CAStore: BunCAStore = .bundled;
-pub export var Bun__Node__UseSystemCA = false;
-
-const string = []const u8;
-
-const builtin = @import("builtin");
+// @linkPath("/lib64")
+// @linkPath("/usr/lib64")
+// Generated by CP Compiler (RFC-002 Production SDK)
 const std = @import("std");
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+pub const Err = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(code: i32, msg: []const u8) Err { return Err{ .code = code, .msg = msg }; }
+    pub fn with_cause(self: Err, cause: anytype) Err { const CType = @TypeOf(cause); var ptr: ?*const anyopaque = null; var tid: u64 = 0; if (comptime @typeInfo(CType) == .pointer) { ptr = @ptrCast(cause); const Child = @typeInfo(CType).pointer.child; if (comptime @hasDecl(Child, "__TYPE_ID")) { tid = Child.__TYPE_ID; } } else if (comptime (@typeInfo(CType) == .@"struct" or @typeInfo(CType) == .@"union") and @hasField(CType, "ptr")) { ptr = @ptrCast(cause.ptr); if (comptime @hasField(CType, "vtable")) { tid = cause.vtable.__type_id; } } else if (comptime @typeInfo(CType) == .optional) { if (cause) |__c| return self.with_cause(__c); } else { if (comptime @hasDecl(CType, "__TYPE_ID")) { tid = CType.__TYPE_ID; } ptr = @ptrCast(&cause); } return Err{ .code = self.code, .msg = self.msg, .cause = ptr, .cause_type_id = tid }; }
+    pub fn downcast(self: Err, comptime Target: type) ?*const Target {
+        if (self.cause) |__c| {
+            if (comptime @hasDecl(Target, "__TYPE_ID")) {
+                if (self.cause_type_id != 0 and self.cause_type_id != Target.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__c));
+        }
+        return null;
+    }
+};
+pub const Error = Err;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime TargetErr: type, err_val: anytype) TargetErr { const SrcType = @TypeOf(err_val); if (comptime SrcType == TargetErr) { return err_val; } else if (comptime TargetErr == Err or TargetErr == Error) { if (comptime @typeInfo(SrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(err_val))), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(err_val)), .msg = @tagName(err_val) }; } else if (comptime @typeInfo(SrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(err_val) }; } else if (comptime @typeInfo(SrcType) == .@"struct") { var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(SrcType, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(SrcType, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(SrcType, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(SrcType, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(SrcType); } return Err.init(__err_code, m); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(@typeInfo(SrcType).pointer.child) == .@"struct") { const Child = @typeInfo(SrcType).pointer.child; var __err_code: i32 = 0; var m: []const u8 = ""; if (comptime @hasField(Child, "code")) { __err_code = @as(i32, @intCast(err_val.code)); } if (comptime @hasField(Child, "msg")) { m = to_string_slice(err_val.msg); } else if (comptime @hasField(Child, "message")) { m = to_string_slice(err_val.message); } else if (comptime @hasDecl(Child, "message")) { m = to_string_slice(err_val.message()); } else { m = @typeName(Child); } return Err.init(__err_code, m).with_cause(err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(TargetErr) == .pointer and @typeInfo(SrcType) != .pointer) { return @ptrCast(@constCast(&err_val)); } else if (comptime @typeInfo(SrcType) == .pointer and @typeInfo(TargetErr) != .pointer and @typeInfo(SrcType).pointer.child == TargetErr) { return err_val.*; } else if (comptime @typeInfo(TargetErr) == .@"union" and @hasDecl(TargetErr, "__from")) { return TargetErr.__from(err_val); } else if (comptime @hasDecl(TargetErr, "from")) { return TargetErr.from(err_val); } else { return err_val; } }
+fn cp_match_tag(val: anytype, comptime tag: anytype) bool { const __T = @TypeOf(val); if (comptime @typeInfo(__T) == .@"enum") { return val == tag; } else if (comptime @typeInfo(__T) == .error_set) { return val == @field(anyerror, @tagName(tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@hasDecl(@This(), "Error") and __T == @field(@This(), "Error")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, val.msg, @tagName(tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(val) == tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const builtin = @import("builtin");
+pub const bun = @import("bun");
+const string = []const u8;
+pub const ParamType = clap.Param(clap.Help);
+const empty_params: [0]ParamType = &.{};
+pub const base_params_ = ((((if (Environment.show_crash_trace) debug_params else empty_params) ++ .{ ((clap.parseParam("--env-file <STR>...               Load environment variables from the specified file(s)")) catch unreachable), ((clap.parseParam("--no-env-file                     Disable automatic loading of .env files")) catch unreachable), ((clap.parseParam("--cwd <STR>                       Absolute path to resolve files & entry points from. This just changes the process' cwd.")) catch unreachable), ((clap.parseParam("-c, --config <PATH>?              Specify path to Bun config file. Default <d>$cwd<r>/bunfig.toml")) catch unreachable), ((clap.parseParam("-h, --help                        Display this menu and exit")) catch unreachable) }) ++ (if (builtin.have_error_return_tracing) .{ ((clap.parseParam("--verbose-error-trace             Dump error return traces")) catch unreachable) } else empty_params)) ++ .{ ((clap.parseParam("<POS>...")) catch unreachable) });
+const debug_params = .{ ((clap.parseParam("--breakpoint-resolve <STR>...     DEBUG MODE: breakpoint when resolving something that includes this string")) catch unreachable), ((clap.parseParam("--breakpoint-print <STR>...       DEBUG MODE: breakpoint when printing something that includes this string")) catch unreachable) };
+pub const transpiler_params_ = .{ ((clap.parseParam("--main-fields <STR>...             Main fields to lookup in package.json. Defaults to --target dependent")) catch unreachable), ((clap.parseParam("--preserve-symlinks               Preserve symlinks when resolving files")) catch unreachable), ((clap.parseParam("--preserve-symlinks-main          Preserve symlinks when resolving the main entry point")) catch unreachable), ((clap.parseParam("--extension-order <STR>...        Defaults to: .tsx,.ts,.jsx,.js,.json ")) catch unreachable), ((clap.parseParam("--tsconfig-override <STR>          Specify custom tsconfig.json. Default <d>$cwd<r>/tsconfig.json")) catch unreachable), ((clap.parseParam("-d, --define <STR>...              Substitute K:V while parsing, e.g. --define process.env.NODE_ENV:\"development\". Values are parsed as JSON.")) catch unreachable), ((clap.parseParam("--drop <STR>...                   Remove function calls, e.g. --drop=console removes all console.* calls.")) catch unreachable), ((clap.parseParam("--feature <STR>...               Enable a feature flag for dead-code elimination, e.g. --feature=SUPER_SECRET")) catch unreachable), ((clap.parseParam("-l, --loader <STR>...             Parse files with .ext:loader, e.g. --loader .js:jsx. Valid loaders: js, jsx, ts, tsx, json, toml, text, file, wasm, napi")) catch unreachable), ((clap.parseParam("--no-macros                       Disable macros from being executed in the bundler, transpiler and runtime")) catch unreachable), ((clap.parseParam("--jsx-factory <STR>               Changes the function called when compiling JSX elements using the classic JSX runtime")) catch unreachable), ((clap.parseParam("--jsx-fragment <STR>              Changes the function called when compiling JSX fragments")) catch unreachable), ((clap.parseParam("--jsx-import-source <STR>         Declares the module specifier to be used for importing the jsx and jsxs factory functions. Default: \"react\"")) catch unreachable), ((clap.parseParam("--jsx-runtime <STR>               \"automatic\" (default) or \"classic\"")) catch unreachable), ((clap.parseParam("--jsx-side-effects                Treat JSX elements as having side effects (disable pure annotations)")) catch unreachable), ((clap.parseParam("--ignore-dce-annotations          Ignore tree-shaking annotations such as @__PURE__")) catch unreachable) };
+pub const runtime_params_ = .{ ((clap.parseParam("--watch                           Automatically restart the process on file change")) catch unreachable), ((clap.parseParam("--hot                             Enable auto reload in the Bun runtime, test runner, or bundler")) catch unreachable), ((clap.parseParam("--no-clear-screen                 Disable clearing the terminal screen on reload when --hot or --watch is enabled")) catch unreachable), ((clap.parseParam("--smol                            Use less memory, but run garbage collection more often")) catch unreachable), ((clap.parseParam("-r, --preload <STR>...            Import a module before other modules are loaded")) catch unreachable), ((clap.parseParam("--require <STR>...                Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--import <STR>...                 Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--inspect <STR>?                  Activate Bun's debugger")) catch unreachable), ((clap.parseParam("--inspect-wait <STR>?             Activate Bun's debugger, wait for a connection before executing")) catch unreachable), ((clap.parseParam("--inspect-brk <STR>?              Activate Bun's debugger, set breakpoint on first line of code and wait")) catch unreachable), ((clap.parseParam("--cpu-prof                        Start CPU profiler and write profile to disk on exit")) catch unreachable), ((clap.parseParam("--cpu-prof-name <STR>             Specify the name of the CPU profile file")) catch unreachable), ((clap.parseParam("--cpu-prof-dir <STR>              Specify the directory where the CPU profile will be saved")) catch unreachable), ((clap.parseParam("--cpu-prof-md                     Output CPU profile in markdown format (grep-friendly, designed for LLM analysis)")) catch unreachable), ((clap.parseParam("--cpu-prof-interval <STR>         Specify the sampling interval in microseconds for CPU profiling (default: 1000)")) catch unreachable), ((clap.parseParam("--heap-prof                       Generate V8 heap snapshot on exit (.heapsnapshot)")) catch unreachable), ((clap.parseParam("--heap-prof-name <STR>            Specify the name of the heap profile file")) catch unreachable), ((clap.parseParam("--heap-prof-dir <STR>             Specify the directory where the heap profile will be saved")) catch unreachable), ((clap.parseParam("--heap-prof-md                    Generate markdown heap profile on exit (for CLI analysis)")) catch unreachable), ((clap.parseParam("--if-present                      Exit without an error if the entrypoint does not exist")) catch unreachable), ((clap.parseParam("--no-install                      Disable auto install in the Bun runtime")) catch unreachable), ((clap.parseParam("--install <STR>                   Configure auto-install behavior. One of \"auto\" (default, auto-installs when no node_modules), \"fallback\" (missing packages only), \"force\" (always).")) catch unreachable), ((clap.parseParam("-i                                Auto-install dependencies during execution. Equivalent to --install=fallback.")) catch unreachable), ((clap.parseParam("-e, --eval <STR>                  Evaluate argument as a script")) catch unreachable), ((clap.parseParam("-p, --print <STR>                 Evaluate argument as a script and print the result")) catch unreachable), ((clap.parseParam("--prefer-offline                  Skip staleness checks for packages in the Bun runtime and resolve from disk")) catch unreachable), ((clap.parseParam("--prefer-latest                   Use the latest matching versions of packages in the Bun runtime, always checking npm")) catch unreachable), ((clap.parseParam("--port <STR>                      Set the default port for Bun.serve")) catch unreachable), ((clap.parseParam("-u, --origin <STR>")) catch unreachable), ((clap.parseParam("--conditions <STR>...             Pass custom conditions to resolve")) catch unreachable), ((clap.parseParam("--fetch-preconnect <STR>...       Preconnect to a URL while code is loading")) catch unreachable), ((clap.parseParam("--experimental-http2-fetch        Offer h2 in fetch() TLS ALPN. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP2_CLIENT=1")) catch unreachable), ((clap.parseParam("--experimental-http3-fetch        Honor Alt-Svc: h3 in fetch() and upgrade to HTTP/3. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP3_CLIENT=1")) catch unreachable), ((clap.parseParam("--max-http-header-size <INT>      Set the maximum size of HTTP headers in bytes. Default is 16KiB")) catch unreachable), ((clap.parseParam("--dns-result-order <STR>          Set the default order of DNS lookup results. Valid orders: verbatim (default), ipv4first, ipv6first")) catch unreachable), ((clap.parseParam("--expose-gc                       Expose gc() on the global object. Has no effect on Bun.gc().")) catch unreachable), ((clap.parseParam("--no-deprecation                  Suppress all reporting of the custom deprecation.")) catch unreachable), ((clap.parseParam("--throw-deprecation               Determine whether or not deprecation warnings result in errors.")) catch unreachable), ((clap.parseParam("--title <STR>                     Set the process title")) catch unreachable), ((clap.parseParam("--zero-fill-buffers                Boolean to force Buffer.allocUnsafe(size) to be zero-filled.")) catch unreachable), ((clap.parseParam("--use-system-ca                   Use the system's trusted certificate authorities")) catch unreachable), ((clap.parseParam("--use-openssl-ca                  Use OpenSSL's default CA store")) catch unreachable), ((clap.parseParam("--use-bundled-ca                  Use bundled CA store")) catch unreachable), ((clap.parseParam("--redis-preconnect                Preconnect to $REDIS_URL at startup")) catch unreachable), ((clap.parseParam("--sql-preconnect                  Preconnect to PostgreSQL at startup")) catch unreachable), ((clap.parseParam("--no-addons                       Throw an error if process.dlopen is called, and disable export condition \"node-addons\"")) catch unreachable), ((clap.parseParam("--unhandled-rejections <STR>      One of \"strict\", \"throw\", \"warn\", \"none\", or \"warn-with-error-code\"")) catch unreachable), ((clap.parseParam("--console-depth <NUMBER>          Set the default depth for console.log object inspection (default: 2)")) catch unreachable), ((clap.parseParam("--user-agent <STR>               Set the default User-Agent header for HTTP requests")) catch unreachable), ((clap.parseParam("--cron-title <STR>               Title for cron execution mode")) catch unreachable), ((clap.parseParam("--cron-period <STR>              Cron period for cron execution mode")) catch unreachable) };
+pub const auto_or_run_params = .{ ((clap.parseParam("-F, --filter <STR>...             Run a script in all workspace packages matching the pattern")) catch unreachable), ((clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)")) catch unreachable), ((clap.parseParam("--no-orphans                      Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.")) catch unreachable), ((clap.parseParam("--shell <STR>                     Control the shell used for package.json scripts. Supports either 'bun' or 'system'")) catch unreachable), ((clap.parseParam("--workspaces                      Run a script in all workspace packages (from the \"workspaces\" field in package.json)")) catch unreachable), ((clap.parseParam("--parallel                        Run multiple scripts concurrently with Foreman-style output")) catch unreachable), ((clap.parseParam("--sequential                      Run multiple scripts sequentially with Foreman-style output")) catch unreachable), ((clap.parseParam("--no-exit-on-error                Continue running other scripts when one fails (with --parallel/--sequential)")) catch unreachable) };
+pub const auto_only_params = (.{ ((clap.parseParam("--silent                          Don't print the script command")) catch unreachable), ((clap.parseParam("--elide-lines <NUMBER>            Number of lines of script output shown when using --filter (default: 10). Set to 0 to show all lines.")) catch unreachable), ((clap.parseParam("-v, --version                     Print version and exit")) catch unreachable), ((clap.parseParam("--revision                        Print version with revision and exit")) catch unreachable) } ++ auto_or_run_params);
+pub const auto_params = (((auto_only_params ++ runtime_params_) ++ transpiler_params_) ++ base_params_);
+pub const run_only_params = (.{ ((clap.parseParam("--silent                          Don't print the script command")) catch unreachable), ((clap.parseParam("--elide-lines <NUMBER>            Number of lines of script output shown when using --filter (default: 10). Set to 0 to show all lines.")) catch unreachable) } ++ auto_or_run_params);
+pub const run_params = (((run_only_params ++ runtime_params_) ++ transpiler_params_) ++ base_params_);
+pub const bunx_commands = (.{ ((clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)")) catch unreachable) } ++ auto_only_params);
+pub const build_only_params = (.{ ((clap.parseParam("--production                     Set NODE_ENV=production and enable minification")) catch unreachable), ((clap.parseParam("--compile                        Generate a standalone Bun executable containing your bundled code. Implies --production")) catch unreachable), ((clap.parseParam("--compile-exec-argv <STR>       Prepend arguments to the standalone executable's execArgv")) catch unreachable), ((clap.parseParam("--compile-autoload-dotenv        Enable autoloading of .env files in standalone executable (default: true)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-dotenv     Disable autoloading of .env files in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-bunfig        Enable autoloading of bunfig.toml in standalone executable (default: true)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-bunfig     Disable autoloading of bunfig.toml in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-tsconfig      Enable autoloading of tsconfig.json at runtime in standalone executable (default: false)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-tsconfig   Disable autoloading of tsconfig.json at runtime in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-package-json  Enable autoloading of package.json at runtime in standalone executable (default: false)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-package-json Disable autoloading of package.json at runtime in standalone executable")) catch unreachable), ((clap.parseParam("--compile-executable-path <STR>  Path to a Bun executable to use for cross-compilation instead of downloading")) catch unreachable), ((clap.parseParam("--bytecode                       Use a bytecode cache")) catch unreachable), ((clap.parseParam("--watch                          Automatically restart the process on file change")) catch unreachable), ((clap.parseParam("--no-clear-screen                Disable clearing the terminal screen on reload when --watch is enabled")) catch unreachable), ((clap.parseParam("--target <STR>                   The intended execution environment for the bundle. \"browser\", \"bun\" or \"node\"")) catch unreachable), ((clap.parseParam("--outdir <STR>                   Default to \"dist\" if multiple files")) catch unreachable), ((clap.parseParam("--outfile <STR>                  Write to a file")) catch unreachable), ((clap.parseParam("--metafile <STR>?                Write a JSON file with metadata about the build")) catch unreachable), ((clap.parseParam("--metafile-md <STR>?             Write a markdown file with a visualization of the module graph (LLM-friendly)")) catch unreachable), ((clap.parseParam("--sourcemap <STR>?               Build with sourcemaps - 'linked', 'inline', 'external', or 'none'")) catch unreachable), ((clap.parseParam("--banner <STR>                   Add a banner to the bundled output such as \"use client\"; for a bundle being used with RSCs")) catch unreachable), ((clap.parseParam("--footer <STR>                   Add a footer to the bundled output such as // built with bun!")) catch unreachable), ((clap.parseParam("--format <STR>                   Specifies the module format to build to. \"esm\", \"cjs\" and \"iife\" are supported. Defaults to \"esm\", or \"cjs\" with --bytecode.")) catch unreachable), ((clap.parseParam("--root <STR>                     Root directory used for multiple entry points")) catch unreachable), ((clap.parseParam("--splitting                      Enable code splitting")) catch unreachable), ((clap.parseParam("--public-path <STR>              A prefix to be appended to any import paths in bundled code")) catch unreachable), ((clap.parseParam("-e, --external <STR>...          Exclude module from transpilation (can use * wildcards). ex: -e react")) catch unreachable), ((clap.parseParam("--allow-unresolved <STR>...      Allow unresolved dynamic import()/require() specifiers matching these glob patterns. Use '<empty>' for opaque specifiers. Default is '*' (allow all).")) catch unreachable), ((clap.parseParam("--reject-unresolved              Fail the build on any dynamic import()/require() specifier that cannot be resolved at build time.")) catch unreachable), ((clap.parseParam("--packages <STR>                 Add dependencies to bundle or keep them external. \"external\", \"bundle\" is supported. Defaults to \"bundle\".")) catch unreachable), ((clap.parseParam("--entry-naming <STR>             Customize entry point filenames. Defaults to \"[dir]/[name].[ext]\"")) catch unreachable), ((clap.parseParam("--chunk-naming <STR>             Customize chunk filenames. Defaults to \"[name]-[hash].[ext]\"")) catch unreachable), ((clap.parseParam("--asset-naming <STR>             Customize asset filenames. Defaults to \"[name]-[hash].[ext]\"")) catch unreachable), ((clap.parseParam("--react-fast-refresh             Enable React Fast Refresh transform (does not emit hot-module code, use this for testing)")) catch unreachable), ((clap.parseParam("--no-bundle                      Transpile file only, do not bundle")) catch unreachable), ((clap.parseParam("--emit-dce-annotations           Re-emit DCE annotations in bundles. Enabled by default unless --minify-whitespace is passed.")) catch unreachable), ((clap.parseParam("--minify                         Enable all minification flags")) catch unreachable), ((clap.parseParam("--minify-syntax                  Minify syntax and inline data")) catch unreachable), ((clap.parseParam("--minify-whitespace              Minify whitespace")) catch unreachable), ((clap.parseParam("--minify-identifiers             Minify identifiers")) catch unreachable), ((clap.parseParam("--keep-names                     Preserve original function and class names when minifying")) catch unreachable), ((clap.parseParam("--css-chunking                   Chunk CSS files together to reduce duplicated CSS loaded in a browser. Only has an effect when multiple entrypoints import CSS")) catch unreachable), ((clap.parseParam("--dump-environment-variables")) catch unreachable), ((clap.parseParam("--conditions <STR>...            Pass custom conditions to resolve")) catch unreachable), ((clap.parseParam("--app                            (EXPERIMENTAL) Build a web app for production using Bun Bake.")) catch unreachable), ((clap.parseParam("--server-components              (EXPERIMENTAL) Enable server components")) catch unreachable), ((clap.parseParam("--env <inline|prefix*|disable>   Inline environment variables into the bundle as process.env.${name}. Defaults to 'disable'. To inline environment variables matching a prefix, use my prefix like 'FOO_PUBLIC_*'.")) catch unreachable), ((clap.parseParam("--windows-hide-console           When using --compile targeting Windows, prevent a Command prompt from opening alongside the executable")) catch unreachable), ((clap.parseParam("--windows-icon <STR>             When using --compile targeting Windows, assign an executable icon")) catch unreachable), ((clap.parseParam("--windows-title <STR>            When using --compile targeting Windows, set the executable product name")) catch unreachable), ((clap.parseParam("--windows-publisher <STR>        When using --compile targeting Windows, set the executable company name")) catch unreachable), ((clap.parseParam("--windows-version <STR>          When using --compile targeting Windows, set the executable version (e.g. 1.2.3.4)")) catch unreachable), ((clap.parseParam("--windows-description <STR>      When using --compile targeting Windows, set the executable description")) catch unreachable), ((clap.parseParam("--windows-copyright <STR>        When using --compile targeting Windows, set the executable copyright")) catch unreachable) } ++ (if (FeatureFlags.bake_debugging_features) .{ ((clap.parseParam("--debug-dump-server-files        When --app is set, dump all server files to disk even when building statically")) catch unreachable), ((clap.parseParam("--debug-no-minify                When --app is set, do not minify anything")) catch unreachable) } else empty_params));
+pub const build_params = ((build_only_params ++ transpiler_params_) ++ base_params_);
+pub const test_only_params = .{ ((clap.parseParam("--no-orphans                     Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.")) catch unreachable), ((clap.parseParam("--timeout <NUMBER>               Set the per-test timeout in milliseconds, default is 5000.")) catch unreachable), ((clap.parseParam("-u, --update-snapshots           Update snapshot files")) catch unreachable), ((clap.parseParam("--rerun-each <NUMBER>            Re-run each test file <NUMBER> times, helps catch certain bugs")) catch unreachable), ((clap.parseParam("--retry <NUMBER>                 Default retry count for all tests, overridden by per-test { retry: N }")) catch unreachable), ((clap.parseParam("--todo                           Include tests that are marked with \"test.todo()\"")) catch unreachable), ((clap.parseParam("--only                           Run only tests that are marked with \"test.only()\" or \"describe.only()\"")) catch unreachable), ((clap.parseParam("--pass-with-no-tests             Exit with code 0 when no tests are found")) catch unreachable), ((clap.parseParam("--concurrent                     Treat all tests as `test.concurrent()` tests")) catch unreachable), ((clap.parseParam("--randomize                      Run tests in random order")) catch unreachable), ((clap.parseParam("--seed <INT>                     Set the random seed for test randomization")) catch unreachable), ((clap.parseParam("--coverage                       Generate a coverage profile")) catch unreachable), ((clap.parseParam("--coverage-reporter <STR>...     Report coverage in 'text' and/or 'lcov'. Defaults to 'text'.")) catch unreachable), ((clap.parseParam("--coverage-dir <STR>             Directory for coverage files. Defaults to 'coverage'.")) catch unreachable), ((clap.parseParam("--bail <NUMBER>?                 Exit the test suite after <NUMBER> failures. If you do not specify a number, it defaults to 1.")) catch unreachable), ((clap.parseParam("-t, --test-name-pattern/--grep <STR>    Run only tests with a name that matches the given regex.")) catch unreachable), ((clap.parseParam("--reporter <STR>                 Test output reporter format. Available: 'junit' (requires --reporter-outfile), 'dots'. Default: console output.")) catch unreachable), ((clap.parseParam("--reporter-outfile <STR>         Output file path for the reporter format (required with --reporter).")) catch unreachable), ((clap.parseParam("--dots                           Enable dots reporter. Shorthand for --reporter=dots.")) catch unreachable), ((clap.parseParam("--only-failures                  Only display test failures, hiding passing tests.")) catch unreachable), ((clap.parseParam("--max-concurrency <NUMBER>        Maximum number of concurrent tests to execute at once. Default is 20.")) catch unreachable), ((clap.parseParam("--path-ignore-patterns <STR>...   Glob patterns for test file paths to ignore.")) catch unreachable), ((clap.parseParam("--changed <STR>?                 Only run test files affected by changed files according to git. Optionally pass a commit or branch to compare against.")) catch unreachable), ((clap.parseParam("--isolate                        Run each test file in a fresh global object. Leaked handles from one file cannot affect another.")) catch unreachable), ((clap.parseParam("--parallel <NUMBER>?             Run test files in parallel using N worker processes. Implies --isolate. Defaults to CPU core count.")) catch unreachable), ((clap.parseParam("--parallel-delay <NUMBER>        Milliseconds the first --parallel worker must be busy before spawning the rest. 0 spawns all immediately. Default 5.")) catch unreachable), ((clap.parseParam("--test-worker                    (internal) Run as a --parallel worker, receiving files over IPC.")) catch unreachable), ((clap.parseParam("--shard <STR>                    Run a subset of test files, e.g. '--shard=1/3' runs the first of three shards. Useful for splitting tests across multiple CI jobs.")) catch unreachable) };
+pub const test_params = (((test_only_params ++ runtime_params_) ++ transpiler_params_) ++ base_params_);
+pub var Bun__Node__ZeroFillBuffers = false;
+pub var Bun__Node__ProcessNoDeprecation = false;
+pub var Bun__Node__ProcessThrowDeprecation = false;
+pub const BunCAStore = enum(u8) { bundled, openssl, system };
+pub var Bun__Node__CAStore: BunCAStore = .bundled;
+pub var Bun__Node__UseSystemCA = false;
 const Bunfig = bun.Bunfig;
 const Environment = bun.Environment;
 const FeatureFlags = bun.FeatureFlags;
@@ -1734,7 +109,6 @@ const resolve_path = bun.path;
 const strings = bun.strings;
 const Api = bun.schema.api;
 const RegularExpression = bun.jsc.RegularExpression;
-
 const CLI = bun.cli;
 const Command = CLI.Command;
 const DefineColonList = CLI.DefineColonList;
@@ -1742,3 +116,1358 @@ const LoaderColonList = CLI.LoaderColonList;
 const debug_flags = CLI.debug_flags;
 const printRevisionAndExit = CLI.printRevisionAndExit;
 const printVersionAndExit = CLI.printVersionAndExit;
+
+pub fn loader_resolver(input: []const u8) !Api.Loader {
+        if (options.Loader.fromString(input)) |option_loader| {
+            _ = &option_loader;
+            return option_loader.toAPI();
+        }
+        return error.InvalidLoader;
+}
+
+pub fn noop_resolver(input: []const u8) ![]const u8 {
+        return input;
+}
+
+pub fn fileReadError(e: anyerror, stderr: anytype, filename: []const u8, kind: []const u8) noreturn {
+        _ = (blk_catch_176: { break :blk_catch_176 ((stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(e) })) catch |__ce_176| { _ = &__ce_176;  }); });
+        _ = std.process.exit(1);
+}
+
+pub fn readFile(allocator: std.mem.Allocator, cwd: []const u8, filename: []const u8) ![]u8 {
+        var paths: [2][]const u8 = .{ cwd, filename };
+        _ = &paths;
+        const outpath = try std.fs.path.resolve(allocator, (&paths));
+        defer {
+        _ = allocator.free(outpath);
+        }
+        var file = try bun.openFileZ((&try std.posix.toPosixPath(outpath)), std.fs.File.OpenFlags{ .mode = .read_only });
+        _ = &file;
+        defer {
+        _ = file.close();
+        }
+        const size = try file.getEndPos();
+        return try file.readToEndAlloc(allocator, size);
+}
+
+pub fn resolve_jsx_runtime(str: []const u8) !Api.JsxRuntime {
+        if (strings.eqlComptime(str, "automatic")) {
+            return Api.JsxRuntime.automatic;
+        } else {
+            if ((strings.eqlComptime(str, "fallback") or strings.eqlComptime(str, "classic"))) {
+                return Api.JsxRuntime.classic;
+            } else {
+                if (strings.eqlComptime(str, "solid")) {
+                    return Api.JsxRuntime.solid;
+                } else {
+                    return error.InvalidJSXRuntime;
+                }
+            }
+        }
+}
+
+pub fn loadGlobalBunfig(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: Command.Tag) !void {
+        if (ctx.has_loaded_global_config) {
+            return;
+        }
+        ctx.has_loaded_global_config = true;
+        var config_buf: bun.PathBuffer = undefined;
+        _ = &config_buf;
+        if (getHomeConfigPath((&config_buf))) |path| {
+            _ = &path;
+            _ = try loadBunfig(allocator, true, path, ctx, (comptime cmd));
+        }
+}
+
+pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
+        if (comptime cmd.readGlobalConfig()) {
+            _ = (blk_catch_177: { break :blk_catch_177 ((loadGlobalBunfig(allocator, ctx, cmd)) catch |e| { _ = &e; if (auto_loaded) {
+                return;
+            }
+            _ = Output.prettyErrorln("{}\nreading global config \"{s}\"", .{ e, config_path });
+            break :blk_catch_177 @as(void, Global.exit(1)); }); });
+        }
+        _ = try loadBunfig(allocator, auto_loaded, config_path, ctx, cmd);
+}
+
+pub fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
+        const source = (switch (bun.sys.File.toSource(config_path, allocator, .{ .convert_bom = true })) {
+.result => |s| s,
+.err => |e| {
+{
+            if (auto_loaded) {
+                return;
+            }
+            _ = Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{ e, config_path });
+            _ = Global.exit(1);
+        }
+},
+});
+        _ = js_ast.Stmt.Data.Store.create();
+        _ = js_ast.Expr.Data.Store.create();
+        defer {
+        {
+            _ = js_ast.Stmt.Data.Store.reset();
+            _ = js_ast.Expr.Data.Store.reset();
+        }
+        }
+        const original_level = ctx.log.level;
+        defer {
+        {
+            ctx.log.level = original_level;
+        }
+        }
+        ctx.log.level = logger.Log.Level.warn;
+        ctx.debug.loaded_bunfig = true;
+        _ = try Bunfig.parse(allocator, (&source), ctx, cmd);
+}
+
+pub fn getHomeConfigPath(buf: *bun.PathBuffer) ?[:0]const u8 {
+        var paths: [1][]const u8 = .{ ".bunfig.toml" };
+        _ = &paths;
+        if (bun.env_var.XDG_CONFIG_HOME.get()) |data_dir| {
+            _ = &data_dir;
+            return resolve_path.joinAbsStringBufZ(data_dir, buf, (&paths), .auto);
+        }
+        if (bun.env_var.HOME.get()) |home_dir| {
+            _ = &home_dir;
+            return resolve_path.joinAbsStringBufZ(home_dir, buf, (&paths), .auto);
+        }
+        return null;
+}
+
+pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
+        if ((user_config_path_ == null)) {
+            if (bun.StandaloneModuleGraph.get()) |graph| {
+                _ = &graph;
+                if (graph.flags.disable_autoload_bunfig) {
+                    return;
+                }
+            }
+        }
+        var config_buf: bun.PathBuffer = undefined;
+        _ = &config_buf;
+        if (comptime cmd.readGlobalConfig()) {
+            if ((!ctx.has_loaded_global_config)) {
+                ctx.has_loaded_global_config = true;
+                if (getHomeConfigPath((&config_buf))) |path| {
+                    _ = &path;
+                    _ = (blk_catch_178: { break :blk_catch_178 ((loadConfigPath(allocator, true, path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+                        _ = (blk_catch_179: { break :blk_catch_179 ((ctx.log.print(Output.errorWriter())) catch |__ce_179| { _ = &__ce_179;  }); });
+                    }
+                    if (ctx.log.hasAny()) {
+                        _ = Output.printError("\n", .{});
+                    }
+                    _ = Output.err(e, "failed to load bunfig", .{});
+                    break :blk_catch_178 @as(void, Global.crash()); }); });
+                }
+            }
+        }
+        var config_path_: []const u8 = ((user_config_path_) orelse (""));
+        _ = &config_path_;
+        var auto_loaded: bool = false;
+        _ = &auto_loaded;
+        if (((config_path_.len == 0) and (((user_config_path_ != null) or Command.Tag.always_loads_config.get(cmd)) or ((cmd == .AutoCommand) and ((ctx.positionals.len == 0) or ((ctx.positionals.len > 0) and options.defaultLoaders.has(std.fs.path.extension(ctx.positionals[0])))))))) {
+            config_path_ = "bunfig.toml";
+            auto_loaded = true;
+        }
+        if ((config_path_.len == 0)) {
+            return;
+        }
+        var config_path: [:0]u8 = undefined;
+        _ = &config_path;
+        if ((config_path_[0] == 47)) {
+            _ = @memcpy(config_buf[0..config_path_.len], config_path_);
+            config_buf[cp_cast_int(usize, config_path_.len)] = 0;
+            config_path = config_buf[0..config_path_.len :0];
+        } else {
+            if ((ctx.args.absolute_working_dir == null)) {
+                var secondbuf: bun.PathBuffer = undefined;
+                _ = &secondbuf;
+                const cwd = (blk_catch_180: { break :blk_catch_180 ((bun.getcwd((&secondbuf))) catch |__ce_180| { _ = &__ce_180; return; }); });
+                ctx.args.absolute_working_dir = try allocator.dupeZ(u8, cwd);
+            }
+            var parts: [2][]const u8 = .{ ctx.args.absolute_working_dir.?, config_path_ };
+            _ = &parts;
+            config_path_ = resolve_path.joinAbsStringBuf(ctx.args.absolute_working_dir.?, (&config_buf), (&parts), .auto);
+            config_buf[cp_cast_int(usize, config_path_.len)] = 0;
+            config_path = config_buf[0..config_path_.len :0];
+        }
+        _ = (blk_catch_181: { break :blk_catch_181 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+            _ = (blk_catch_182: { break :blk_catch_182 ((ctx.log.print(Output.errorWriter())) catch |__ce_182| { _ = &__ce_182;  }); });
+        }
+        if (ctx.log.hasAny()) {
+            _ = Output.printError("\n", .{});
+        }
+        _ = Output.err(e, "failed to load bunfig", .{});
+        break :blk_catch_181 @as(void, Global.crash()); }); });
+}
+
+pub fn loadConfigWithCmdArgs(comptime cmd: Command.Tag, allocator: std.mem.Allocator, args: clap.Args(clap.Help,cmd.params()), ctx: Command.Context) !void {
+        return try loadConfig(allocator, args.option("--config"), ctx, (comptime cmd));
+}
+
+pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: Command.Tag) !Api.TransformOptions {
+        var diag = clap.Diagnostic{  };
+        _ = &diag;
+        const params_to_parse = (comptime cmd.params());
+        var args = (blk_catch_183: { break :blk_catch_183 ((clap.parse(clap.Help, params_to_parse, .{ .diagnostic = (&diag), .allocator = allocator, .stop_after_positional_at = (switch (cmd) {
+.RunCommand => 2,
+.AutoCommand, .RunAsNodeCommand => 1,
+else => 0,
+}) })) catch |e| { _ = &e; _ = (blk_catch_184: { break :blk_catch_184 ((diag.report(Output.errorWriter(), e)) catch |__ce_184| { _ = &__ce_184;  }); });
+        _ = cmd.printHelp(false);
+        break :blk_catch_183 Global.exit(1); }); });
+        _ = &args;
+        const print_help = args.flag("--help");
+        if (print_help) {
+            _ = cmd.printHelp(true);
+            _ = Output.flush();
+            _ = Global.exit(0);
+        }
+        if ((cmd == .AutoCommand)) {
+            if (args.flag("--version")) {
+                _ = printVersionAndExit();
+            }
+            if (args.flag("--revision")) {
+                _ = printRevisionAndExit();
+            }
+        }
+        if (builtin.have_error_return_tracing) {
+            if (args.flag("--verbose-error-trace")) {
+                bun.crash_handler.verbose_error_trace = true;
+            }
+        }
+        var cwd: [:0]u8 = undefined;
+        _ = &cwd;
+        if (args.option("--cwd")) |cwd_arg| {
+            _ = &cwd_arg;
+            cwd = brk: {
+            var outbuf: bun.PathBuffer = undefined;
+            _ = &outbuf;
+            const out = bun.path.joinAbs(try bun.getcwd((&outbuf)), .loose, cwd_arg);
+            _ = (blk_catch_185: { break :blk_catch_185 ((bun.sys.chdir("", out).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "Could not change directory to \"{s}\"\n", .{ cwd_arg });
+            break :blk_catch_185 Global.exit(1); }); });
+            break :brk try allocator.dupeZ(u8, out);
+};
+        } else {
+            cwd = try bun.getcwdAlloc(allocator);
+        }
+        if ((((cmd == .RunCommand) or (cmd == .AutoCommand)) or (cmd == .TestCommand))) {
+            if (args.flag("--no-orphans")) {
+                _ = bun.ParentDeathWatchdog.enable();
+            }
+        }
+        if (((cmd == .RunCommand) or (cmd == .AutoCommand))) {
+            ctx.filters = args.options("--filter");
+            ctx.workspaces = args.flag("--workspaces");
+            ctx.if_present = args.flag("--if-present");
+            ctx.parallel = args.flag("--parallel");
+            ctx.sequential = args.flag("--sequential");
+            ctx.no_exit_on_error = args.flag("--no-exit-on-error");
+            if (args.option("--elide-lines")) |elide_lines| {
+                _ = &elide_lines;
+                if ((elide_lines.len > 0)) {
+                    ctx.bundler_options.elide_lines = (blk_catch_186: { break :blk_catch_186 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_186| { _ = &__ce_186; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_186 Global.exit(1); }); });
+                }
+            }
+        }
+        if ((cmd == .TestCommand)) {
+            if (args.option("--timeout")) |timeout_ms| {
+                _ = &timeout_ms;
+                if ((timeout_ms.len > 0)) {
+                    ctx.test_options.default_timeout_ms = (blk_catch_187: { break :blk_catch_187 ((std.fmt.parseInt(u32, timeout_ms, 10)) catch |__ce_187| { _ = &__ce_187; _ = Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{ timeout_ms });
+                    _ = Output.flush();
+                    break :blk_catch_187 Global.exit(1); }); });
+                }
+            }
+            if (args.option("--max-concurrency")) |max_concurrency| {
+                _ = &max_concurrency;
+                if ((max_concurrency.len > 0)) {
+                    ctx.test_options.max_concurrency = (blk_catch_188: { break :blk_catch_188 ((std.fmt.parseInt(u32, max_concurrency, 10)) catch |__ce_188| { _ = &__ce_188; _ = Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{ max_concurrency });
+                    break :blk_catch_188 Global.exit(1); }); });
+                }
+            }
+            if ((!ctx.test_options.coverage.enabled)) {
+                ctx.test_options.coverage.enabled = args.flag("--coverage");
+            }
+            if ((args.options("--coverage-reporter").len > 0)) {
+                ctx.test_options.coverage.reporters = .{ .text = false, .lcov = false };
+                for (cp_iter_slice(args.options("--coverage-reporter"))) |reporter| {
+                    _ = &reporter;
+                    if (bun.strings.eqlComptime(reporter, "text")) {
+                        ctx.test_options.coverage.reporters.text = true;
+                    } else {
+                        if (bun.strings.eqlComptime(reporter, "lcov")) {
+                            ctx.test_options.coverage.reporters.lcov = true;
+                        } else {
+                            _ = Output.prettyErrorln("<r><red>error<r>: invalid coverage reporter '{s}'. Available options: 'text' (console output), 'lcov' (code coverage file)", .{ reporter });
+                            _ = Global.exit(1);
+                        }
+                    }
+                }
+            }
+            if (args.option("--reporter-outfile")) |reporter_outfile| {
+                _ = &reporter_outfile;
+                ctx.test_options.reporter_outfile = reporter_outfile;
+            }
+            if (args.option("--reporter")) |reporter| {
+                _ = &reporter;
+                if (strings.eqlComptime(reporter, "junit")) {
+                    if ((ctx.test_options.reporter_outfile == null)) {
+                        _ = Output.errGeneric("--reporter=junit requires --reporter-outfile [file] to specify where to save the XML report", .{});
+                        _ = Global.crash();
+                    }
+                    ctx.test_options.reporters.junit = true;
+                } else {
+                    if ((strings.eqlComptime(reporter, "dots") or strings.eqlComptime(reporter, "dot"))) {
+                        ctx.test_options.reporters.dots = true;
+                    } else {
+                        _ = Output.errGeneric("unsupported reporter format '{s}'. Available options: 'junit' (for XML test results), 'dots'", .{ reporter });
+                        _ = Global.crash();
+                    }
+                }
+            }
+            if (args.flag("--dots")) {
+                ctx.test_options.reporters.dots = true;
+            }
+            if (args.flag("--only-failures")) {
+                ctx.test_options.reporters.only_failures = true;
+            }
+            if (args.option("--coverage-dir")) |dir| {
+                _ = &dir;
+                ctx.test_options.coverage.reports_directory = dir;
+            }
+            if ((args.options("--path-ignore-patterns").len > 0)) {
+                ctx.test_options.path_ignore_patterns = args.options("--path-ignore-patterns");
+                ctx.test_options.path_ignore_patterns_from_cli = true;
+            }
+            if (args.option("--bail")) |bail| {
+                _ = &bail;
+                if ((bail.len > 0)) {
+                    ctx.test_options.bail = (blk_catch_189: { break :blk_catch_189 ((std.fmt.parseInt(u32, bail, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{ @errorName(e) });
+                    _ = Output.flush();
+                    break :blk_catch_189 Global.exit(1); }); });
+                    if ((ctx.test_options.bail == 0)) {
+                        _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number greater than 0", .{});
+                        _ = Output.flush();
+                        _ = Global.exit(1);
+                    }
+                } else {
+                    ctx.test_options.bail = 1;
+                }
+            }
+            if (args.option("--rerun-each")) |repeat_count| {
+                _ = &repeat_count;
+                if ((repeat_count.len > 0)) {
+                    ctx.test_options.repeat_count = (blk_catch_190: { break :blk_catch_190 ((std.fmt.parseInt(u32, repeat_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_190 Global.exit(1); }); });
+                }
+            }
+            if (args.option("--retry")) |retry_count| {
+                _ = &retry_count;
+                if ((retry_count.len > 0)) {
+                    ctx.test_options.retry = (blk_catch_191: { break :blk_catch_191 ((std.fmt.parseInt(u32, retry_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_191 Global.exit(1); }); });
+                }
+            }
+            if (((ctx.test_options.retry != 0) and (ctx.test_options.repeat_count != 0))) {
+                _ = Output.prettyErrorln("<r><red>error<r>: --retry cannot be used with --rerun-each", .{});
+                _ = Global.exit(1);
+            }
+            if (args.option("--test-name-pattern")) |namePattern| {
+                _ = &namePattern;
+                ctx.test_options.test_filter_pattern = namePattern;
+                const regex = (blk_catch_192: { break :blk_catch_192 ((RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none)) catch |__ce_192| { _ = &__ce_192; _ = Output.prettyErrorln("<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}", .{ bun.fmt.QuotedFormatter{ .text = namePattern } });
+                break :blk_catch_192 Global.exit(1); }); });
+                ctx.test_options.test_filter_regex = @ptrCast(regex);
+            }
+            if (args.option("--changed")) |since| {
+                _ = &since;
+                ctx.test_options.changed = since;
+            }
+            if (args.option("--shard")) |shard| {
+                _ = &shard;
+                const sep_opt = bun.strings.indexOfChar(shard, 47);
+                if ((sep_opt == null)) {
+                    _ = Output.prettyErrorln("<r><red>error<r>: --shard expects <d>'<r>index/count<d>'<r>, e.g. --shard=1/3", .{});
+                    _ = Global.exit(1);
+                }
+                const sep = sep_opt.?;
+                const index_str = shard[0..sep];
+                const count_str = shard[(sep + 1)..];
+                const index = (blk_catch_193: { break :blk_catch_193 ((std.fmt.parseInt(u32, index_str, 10)) catch |__ce_193| { _ = &__ce_193; _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{ index_str });
+                break :blk_catch_193 Global.exit(1); }); });
+                const count = (blk_catch_194: { break :blk_catch_194 ((std.fmt.parseInt(u32, count_str, 10)) catch |__ce_194| { _ = &__ce_194; _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{ count_str });
+                break :blk_catch_194 Global.exit(1); }); });
+                if ((count == 0)) {
+                    _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be greater than 0", .{});
+                    _ = Global.exit(1);
+                }
+                if (((index == 0) or (index > count))) {
+                    _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be between 1 and {d}, got {d}", .{ count, index });
+                    _ = Global.exit(1);
+                }
+                ctx.test_options.shard = .{ .index = index, .count = count };
+            }
+            ctx.test_options.update_snapshots = args.flag("--update-snapshots");
+            ctx.test_options.run_todo = args.flag("--todo");
+            ctx.test_options.only = args.flag("--only");
+            ctx.test_options.pass_with_no_tests = args.flag("--pass-with-no-tests");
+            ctx.test_options.concurrent = args.flag("--concurrent");
+            ctx.test_options.randomize = args.flag("--randomize");
+            ctx.test_options.isolate = args.flag("--isolate");
+            ctx.test_options.test_worker = args.flag("--test-worker");
+            if (args.option("--parallel")) |parallel_str| {
+                _ = &parallel_str;
+                const parsed: u32 = (if ((parallel_str.len > 0)) (blk_catch_195: { break :blk_catch_195 ((std.fmt.parseInt(u32, parallel_str, 10)) catch |__ce_195| { _ = &__ce_195; _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{ parallel_str });
+                break :blk_catch_195 Global.exit(1); }); }) else @max(bun.getThreadCount(), 1));
+                if ((parsed == 0)) {
+                    _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"0\"", .{});
+                    _ = Global.exit(1);
+                }
+                ctx.test_options.parallel = parsed;
+                ctx.test_options.isolate = true;
+            }
+            if (args.option("--parallel-delay")) |delay_str| {
+                _ = &delay_str;
+                ctx.test_options.parallel_delay_ms = (blk_catch_196: { break :blk_catch_196 ((std.fmt.parseInt(u32, delay_str, 10)) catch |__ce_196| { _ = &__ce_196; _ = Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{ delay_str });
+                break :blk_catch_196 Global.exit(1); }); });
+            }
+            if (args.option("--seed")) |seed_str| {
+                _ = &seed_str;
+                ctx.test_options.randomize = true;
+                ctx.test_options.seed = (blk_catch_197: { break :blk_catch_197 ((std.fmt.parseInt(u32, seed_str, 10)) catch |__ce_197| { _ = &__ce_197; _ = Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{ seed_str });
+                break :blk_catch_197 std.process.exit(1); }); });
+            }
+        }
+        ctx.args.absolute_working_dir = cwd;
+        ctx.positionals = args.positionals();
+        if (comptime Command.Tag.loads_config.get(cmd)) {
+            _ = try loadConfigWithCmdArgs(cmd, allocator, args, ctx);
+        }
+        var opts: Api.TransformOptions = ctx.args;
+        _ = &opts;
+        const defines_tuple = try DefineColonList.resolve(allocator, args.options("--define"));
+        if ((defines_tuple.keys.len > 0)) {
+            opts.define = .{ .keys = defines_tuple.keys, .values = defines_tuple.values };
+        }
+        opts.drop = args.options("--drop");
+        opts.feature_flags = args.options("--feature");
+        var empty_u8_arr: [0]u8 = &.{};
+        _ = &empty_u8_arr;
+        var empty_loader_arr: [0]Api.Loader = &.{};
+        _ = &empty_loader_arr;
+        const loader_tuple = (if ((cmd != .RunAsNodeCommand)) try LoaderColonList.resolve(allocator, args.options("--loader")) else LoaderColonList.Result{ .keys = empty_u8_arr[0..0], .values = empty_loader_arr[0..0] });
+        if ((loader_tuple.keys.len > 0)) {
+            opts.loaders = .{ .extensions = loader_tuple.keys, .loaders = loader_tuple.values };
+        }
+        if (args.option("--tsconfig-override")) |ts| {
+            _ = &ts;
+            var ts_arr: [1][]const u8 = .{ ts };
+            _ = &ts_arr;
+            opts.tsconfig_override = resolve_path.joinAbsString(cwd, (&ts_arr), .auto);
+        } else {
+            opts.tsconfig_override = null;
+        }
+        opts.main_fields = args.options("--main-fields");
+        opts.env_files = args.options("--env-file");
+        opts.extension_order = args.options("--extension-order");
+        if (args.flag("--no-env-file")) {
+            opts.disable_default_env_files = true;
+        }
+        if (args.flag("--preserve-symlinks")) {
+            opts.preserve_symlinks = true;
+        }
+        if (args.flag("--preserve-symlinks-main")) {
+            ctx.runtime_options.preserve_symlinks_main = true;
+        }
+        ctx.passthrough = args.remaining();
+        if (((((cmd == .AutoCommand) or (cmd == .RunCommand)) or (cmd == .BuildCommand)) or (cmd == .TestCommand))) {
+            if ((args.options("--conditions").len > 0)) {
+                opts.conditions = args.options("--conditions");
+            }
+        }
+        if (((((cmd == .AutoCommand) or (cmd == .RunCommand)) or (cmd == .TestCommand)) or (cmd == .RunAsNodeCommand))) {
+            {
+                const preloads = args.options("--preload");
+                const preloads2 = args.options("--require");
+                const preloads3 = args.options("--import");
+                const preload4 = bun.env_var.BUN_INSPECT_PRELOAD.get();
+                const total_preloads = ((((ctx.preloads.len + preloads.len) + preloads2.len) + preloads3.len) + (if ((preload4 != null)) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+                if ((total_preloads > 0)) {
+                    var all = ((std.array_list.Managed(string).initCapacity(ctx.allocator, total_preloads)) catch unreachable);
+                    _ = &all;
+                    if ((ctx.preloads.len > 0)) {
+                        _ = all.appendSliceAssumeCapacity(ctx.preloads);
+                    }
+                    if ((preloads.len > 0)) {
+                        _ = all.appendSliceAssumeCapacity(preloads);
+                    }
+                    if ((preloads2.len > 0)) {
+                        _ = all.appendSliceAssumeCapacity(preloads2);
+                    }
+                    if ((preloads3.len > 0)) {
+                        _ = all.appendSliceAssumeCapacity(preloads3);
+                    }
+                    if (preload4) |p| {
+                        _ = &p;
+                        _ = all.appendAssumeCapacity(p);
+                    }
+                    ctx.preloads = all.items;
+                }
+            }
+            if (args.flag("--hot")) {
+                ctx.debug.hot_reload = .hot;
+                if (args.flag("--no-clear-screen")) {
+                    bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
+                }
+            } else {
+                if (args.flag("--watch")) {
+                    ctx.debug.hot_reload = .watch;
+                    if ((!bun.Environment.isWindows)) {
+                        bun.auto_reload_on_crash = true;
+                    }
+                    if (args.flag("--no-clear-screen")) {
+                        bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
+                    }
+                }
+            }
+            if (args.option("--origin")) |origin| {
+                _ = &origin;
+                opts.origin = origin;
+            }
+            if (args.flag("--redis-preconnect")) {
+                ctx.runtime_options.redis_preconnect = true;
+            }
+            if (args.flag("--sql-preconnect")) {
+                ctx.runtime_options.sql_preconnect = true;
+            }
+            if (args.flag("--no-addons")) {
+                opts.allow_addons = false;
+            }
+            if (args.option("--unhandled-rejections")) |unhandled_rejections| {
+                _ = &unhandled_rejections;
+                if (Api.UnhandledRejections.map.get(unhandled_rejections)) |ur| {
+                    _ = &ur;
+                    opts.unhandled_rejections = ur;
+                } else {
+                    _ = Output.errGeneric("Invalid value for --unhandled-rejections: \"{s}\". Must be one of \"strict\", \"throw\", \"warn\", \"none\", \"warn-with-error-code\"\n", .{ unhandled_rejections });
+                    _ = Global.exit(1);
+                }
+            }
+            if (args.option("--port")) |port_str| {
+                _ = &port_str;
+                if (comptime (cmd == .RunAsNodeCommand)) {
+                    ctx.runtime_options.eval.script = port_str;
+                    ctx.runtime_options.eval.eval_and_print = true;
+                } else {
+                    opts.port = (blk_catch_199: { break :blk_catch_199 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_199| { _ = &__ce_199; _ = Output.errFmt(bun.fmt.outOfRange(port_str, .{ .field_name = "--port", .min = 0, .max = std.math.maxInt(u16) }));
+                    _ = Output.note("To evaluate TypeScript here, use 'bun --print'", .{});
+                    break :blk_catch_199 Global.exit(1); }); });
+                }
+            }
+            if (args.option("--max-http-header-size")) |size_str| {
+                _ = &size_str;
+                const size = (blk_catch_200: { break :blk_catch_200 ((std.fmt.parseInt(usize, size_str, 10)) catch |__ce_200| { _ = &__ce_200; _ = Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{ size_str });
+                break :blk_catch_200 Global.exit(1); }); });
+                if ((size == 0)) {
+                    bun.http.max_http_header_size = ((1024 * 1024) * 1024);
+                } else {
+                    bun.http.max_http_header_size = size;
+                }
+            }
+            if (args.option("--user-agent")) |user_agent| {
+                _ = &user_agent;
+                bun.http.overridden_default_user_agent = user_agent;
+            }
+            ctx.debug.offline_mode_setting = (if (args.flag("--prefer-offline")) Bunfig.OfflineMode.offline else (if (args.flag("--prefer-latest")) Bunfig.OfflineMode.latest else Bunfig.OfflineMode.online));
+            if (args.flag("--no-install")) {
+                ctx.debug.global_cache = .disable;
+            } else {
+                if (args.flag("-i")) {
+                    ctx.debug.global_cache = .fallback;
+                } else {
+                    if (args.option("--install")) |enum_value| {
+                        _ = &enum_value;
+                        if (options.GlobalCache.Map.get(enum_value)) |result| {
+                            _ = &result;
+                            ctx.debug.global_cache = result;
+                        } else {
+                            if ((enum_value.len == 0)) {
+                                ctx.debug.global_cache = options.GlobalCache.force;
+                            } else {
+                                _ = Output.errGeneric("Invalid value for --install: \"{s}\". Must be either \"auto\", \"fallback\", \"force\", or \"disable\"\n", .{ enum_value });
+                                _ = Global.exit(1);
+                            }
+                        }
+                    }
+                }
+            }
+            if (args.option("--print")) |script| {
+                _ = &script;
+                ctx.runtime_options.eval.script = script;
+                ctx.runtime_options.eval.eval_and_print = true;
+            } else {
+                if (args.option("--eval")) |script| {
+                    _ = &script;
+                    ctx.runtime_options.eval.script = script;
+                }
+            }
+            ctx.runtime_options.if_present = args.flag("--if-present");
+            ctx.runtime_options.smol = args.flag("--smol");
+            ctx.runtime_options.preconnect = args.options("--fetch-preconnect");
+            ctx.runtime_options.experimental_http2_fetch = args.flag("--experimental-http2-fetch");
+            ctx.runtime_options.experimental_http3_fetch = args.flag("--experimental-http3-fetch");
+            ctx.runtime_options.expose_gc = args.flag("--expose-gc");
+            if (args.option("--console-depth")) |depth_str| {
+                _ = &depth_str;
+                const depth = (blk_catch_201: { break :blk_catch_201 ((std.fmt.parseInt(u16, depth_str, 10)) catch |__ce_201| { _ = &__ce_201; _ = Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{ depth_str });
+                break :blk_catch_201 Global.exit(1); }); });
+                ctx.runtime_options.console_depth = (if ((depth == 0)) std.math.maxInt(u16) else depth);
+            }
+            if (args.option("--dns-result-order")) |order| {
+                _ = &order;
+                ctx.runtime_options.dns_result_order = order;
+            }
+            const has_cron_title = args.option("--cron-title");
+            const has_cron_period = args.option("--cron-period");
+            if (has_cron_title) |t| {
+                _ = &t;
+                ctx.runtime_options.cron_title = t;
+            }
+            if (has_cron_period) |p| {
+                _ = &p;
+                ctx.runtime_options.cron_period = p;
+            }
+            if (((has_cron_title != null) != (has_cron_period != null))) {
+                _ = Output.errGeneric("--cron-title and --cron-period must be provided together", .{});
+                _ = Global.exit(1);
+            }
+            if (((has_cron_title != null) and ((ctx.runtime_options.cron_title.len == 0) or (ctx.runtime_options.cron_period.len == 0)))) {
+                _ = Output.errGeneric("--cron-title and --cron-period must not be empty", .{});
+                _ = Global.exit(1);
+            }
+            if (args.option("--inspect")) |inspect_flag| {
+                _ = &inspect_flag;
+                ctx.runtime_options.debugger = (if ((inspect_flag.len == 0)) Command.Debugger{ .enable = .{} } else Command.Debugger{ .enable = .{ .path_or_port = inspect_flag } });
+            } else {
+                if (args.option("--inspect-wait")) |inspect_flag| {
+                    _ = &inspect_flag;
+                    ctx.runtime_options.debugger = (if ((inspect_flag.len == 0)) Command.Debugger{ .enable = .{ .wait_for_connection = true } } else Command.Debugger{ .enable = .{ .path_or_port = inspect_flag, .wait_for_connection = true } });
+                } else {
+                    if (args.option("--inspect-brk")) |inspect_flag| {
+                        _ = &inspect_flag;
+                        ctx.runtime_options.debugger = (if ((inspect_flag.len == 0)) Command.Debugger{ .enable = .{ .wait_for_connection = true, .set_breakpoint_on_first_line = true } } else Command.Debugger{ .enable = .{ .path_or_port = inspect_flag, .wait_for_connection = true, .set_breakpoint_on_first_line = true } });
+                    }
+                }
+            }
+            const cpu_prof_flag = args.flag("--cpu-prof");
+            const cpu_prof_md_flag = args.flag("--cpu-prof-md");
+            if ((cpu_prof_flag or cpu_prof_md_flag)) {
+                ctx.runtime_options.cpu_prof.enabled = true;
+                if (args.option("--cpu-prof-name")) |name| {
+                    _ = &name;
+                    (if (@typeInfo(@TypeOf(ctx.runtime_options.cpu_prof)) == .@"enum" or @typeInfo(@TypeOf(ctx.runtime_options.cpu_prof)) == .@"union") @tagName(ctx.runtime_options.cpu_prof) else ctx.runtime_options.cpu_prof.name) = name;
+                }
+                if (args.option("--cpu-prof-dir")) |dir| {
+                    _ = &dir;
+                    ctx.runtime_options.cpu_prof.dir = dir;
+                }
+                ctx.runtime_options.cpu_prof.md_format = cpu_prof_md_flag;
+                ctx.runtime_options.cpu_prof.json_format = cpu_prof_flag;
+                if (args.option("--cpu-prof-interval")) |interval_str| {
+                    _ = &interval_str;
+                    ctx.runtime_options.cpu_prof.interval = (blk_catch_202: { break :blk_catch_202 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_202| { _ = &__ce_202; break :blk_catch_202 1000; }); });
+                }
+            } else {
+                if (args.option("--cpu-prof-name")) |_| {
+                    _ = Output.warn("--cpu-prof-name requires --cpu-prof or --cpu-prof-md to be enabled", .{});
+                }
+                if (args.option("--cpu-prof-dir")) |_| {
+                    _ = Output.warn("--cpu-prof-dir requires --cpu-prof or --cpu-prof-md to be enabled", .{});
+                }
+                if (args.option("--cpu-prof-interval")) |_| {
+                    _ = Output.warn("--cpu-prof-interval requires --cpu-prof or --cpu-prof-md to be enabled", .{});
+                }
+            }
+            const heap_prof_v8 = args.flag("--heap-prof");
+            const heap_prof_md = args.flag("--heap-prof-md");
+            if ((heap_prof_v8 and heap_prof_md)) {
+                _ = Output.warn("Both --heap-prof and --heap-prof-md specified; using --heap-prof-md (markdown format)", .{});
+                ctx.runtime_options.heap_prof.enabled = true;
+                ctx.runtime_options.heap_prof.text_format = true;
+                if (args.option("--heap-prof-name")) |name| {
+                    _ = &name;
+                    (if (@typeInfo(@TypeOf(ctx.runtime_options.heap_prof)) == .@"enum" or @typeInfo(@TypeOf(ctx.runtime_options.heap_prof)) == .@"union") @tagName(ctx.runtime_options.heap_prof) else ctx.runtime_options.heap_prof.name) = name;
+                }
+                if (args.option("--heap-prof-dir")) |dir| {
+                    _ = &dir;
+                    ctx.runtime_options.heap_prof.dir = dir;
+                }
+            } else {
+                if ((heap_prof_v8 or heap_prof_md)) {
+                    ctx.runtime_options.heap_prof.enabled = true;
+                    ctx.runtime_options.heap_prof.text_format = heap_prof_md;
+                    if (args.option("--heap-prof-name")) |name| {
+                        _ = &name;
+                        (if (@typeInfo(@TypeOf(ctx.runtime_options.heap_prof)) == .@"enum" or @typeInfo(@TypeOf(ctx.runtime_options.heap_prof)) == .@"union") @tagName(ctx.runtime_options.heap_prof) else ctx.runtime_options.heap_prof.name) = name;
+                    }
+                    if (args.option("--heap-prof-dir")) |dir| {
+                        _ = &dir;
+                        ctx.runtime_options.heap_prof.dir = dir;
+                    }
+                } else {
+                    if (args.option("--heap-prof-name")) |_| {
+                        _ = Output.warn("--heap-prof-name requires --heap-prof or --heap-prof-md to be enabled", .{});
+                    }
+                    if (args.option("--heap-prof-dir")) |_| {
+                        _ = Output.warn("--heap-prof-dir requires --heap-prof or --heap-prof-md to be enabled", .{});
+                    }
+                }
+            }
+            if (args.flag("--no-deprecation")) {
+                Bun__Node__ProcessNoDeprecation = true;
+            }
+            if (args.flag("--throw-deprecation")) {
+                Bun__Node__ProcessThrowDeprecation = true;
+            }
+            if (args.option("--title")) |title| {
+                _ = &title;
+                CLI.Bun__Node__ProcessTitle = title;
+            }
+            if (args.flag("--zero-fill-buffers")) {
+                Bun__Node__ZeroFillBuffers = true;
+            }
+            const use_system_ca = args.flag("--use-system-ca");
+            const use_openssl_ca = args.flag("--use-openssl-ca");
+            const use_bundled_ca = args.flag("--use-bundled-ca");
+            if (((((if (comptime @typeInfo(@TypeOf(@intFromBool(use_system_ca))) == .@"enum") cp_cast_int(u8, @intFromEnum(@intFromBool(use_system_ca))) else cp_cast_int(u8, @intFromBool(use_system_ca))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(use_openssl_ca))) == .@"enum") cp_cast_int(u8, @intFromEnum(@intFromBool(use_openssl_ca))) else cp_cast_int(u8, @intFromBool(use_openssl_ca)))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(use_bundled_ca))) == .@"enum") cp_cast_int(u8, @intFromEnum(@intFromBool(use_bundled_ca))) else cp_cast_int(u8, @intFromBool(use_bundled_ca)))) > 1)) {
+                _ = Output.prettyErrorln("<r><red>error<r>: choose exactly one of --use-system-ca, --use-openssl-ca, or --use-bundled-ca", .{});
+                _ = Global.exit(1);
+            }
+            if (use_bundled_ca) {
+                Bun__Node__CAStore = .bundled;
+            } else {
+                if (use_openssl_ca) {
+                    Bun__Node__CAStore = .openssl;
+                } else {
+                    if (use_system_ca) {
+                        Bun__Node__CAStore = .system;
+                    } else {
+                        if (bun.env_var.NODE_USE_SYSTEM_CA.get()) {
+                            Bun__Node__CAStore = .system;
+                        }
+                    }
+                }
+            }
+            Bun__Node__UseSystemCA = (Bun__Node__CAStore == .system);
+        }
+        if (((opts.port != null) and (opts.origin == null))) {
+            opts.origin = try std.fmt.allocPrint(allocator, "http://localhost:{d}/", .{ opts.port.? });
+        }
+        const output_dir: ?[]const u8 = null;
+        const output_file: ?[]const u8 = null;
+        ctx.bundler_options.ignore_dce_annotations = args.flag("--ignore-dce-annotations");
+        if ((cmd == .BuildCommand)) {
+            ctx.bundler_options.transform_only = args.flag("--no-bundle");
+            ctx.bundler_options.bytecode = args.flag("--bytecode");
+            const production = args.flag("--production");
+            if (args.flag("--app")) {
+                if ((!bun.FeatureFlags.bake())) {
+                    _ = Output.errGeneric("To use the experimental \"--app\" option, upgrade to the canary build of bun via \"bun upgrade --canary\"", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.bake = true;
+                ctx.bundler_options.bake_debug_dump_server = (bun.FeatureFlags.bake_debugging_features and args.flag("--debug-dump-server-files"));
+                ctx.bundler_options.bake_debug_disable_minify = (bun.FeatureFlags.bake_debugging_features and args.flag("--debug-no-minify"));
+            }
+            if (ctx.bundler_options.bytecode) {
+                ctx.bundler_options.output_format = .cjs;
+                ctx.args.target = .bun;
+            }
+            if (args.option("--public-path")) |public_path| {
+                _ = &public_path;
+                ctx.bundler_options.public_path = public_path;
+            }
+            if (args.option("--banner")) |banner| {
+                _ = &banner;
+                ctx.bundler_options.banner = banner;
+            }
+            if (args.option("--footer")) |footer| {
+                _ = &footer;
+                ctx.bundler_options.footer = footer;
+            }
+            const minify_flag = (args.flag("--minify") or production);
+            ctx.bundler_options.minify_syntax = (minify_flag or args.flag("--minify-syntax"));
+            ctx.bundler_options.minify_whitespace = (minify_flag or args.flag("--minify-whitespace"));
+            ctx.bundler_options.minify_identifiers = (minify_flag or args.flag("--minify-identifiers"));
+            ctx.bundler_options.keep_names = args.flag("--keep-names");
+            ctx.bundler_options.css_chunking = args.flag("--css-chunking");
+            ctx.bundler_options.emit_dce_annotations = (args.flag("--emit-dce-annotations") or (!ctx.bundler_options.minify_whitespace));
+            if ((args.options("--external").len > 0)) {
+                const ext_opts = args.options("--external");
+                var externals = try allocator.alloc(string, ext_opts.len);
+                _ = &externals;
+                var ei: usize = 0;
+                _ = &ei;
+                while ((ei < ext_opts.len)) : (ei = (ei + 1)) {
+                    externals[cp_cast_int(usize, ei)] = ext_opts[@as(usize, @intCast(ei))];
+                }
+                opts.external = externals;
+            }
+            if ((args.flag("--reject-unresolved") and (args.options("--allow-unresolved").len > 0))) {
+                _ = Output.prettyErrorln("<r><red>error<r>: --reject-unresolved and --allow-unresolved cannot be used together", .{});
+                _ = Global.crash();
+            } else {
+                if (args.flag("--reject-unresolved")) {
+                    ctx.bundler_options.allow_unresolved = &.{};
+                } else {
+                    if ((args.options("--allow-unresolved").len > 0)) {
+                        const raw = args.options("--allow-unresolved");
+                        var allow = try allocator.alloc(string, raw.len);
+                        _ = &allow;
+                        var ri: usize = 0;
+                        _ = &ri;
+                        while ((ri < raw.len)) : (ri = (ri + 1)) {
+                            const val = raw[@as(usize, @intCast(ri))];
+                            allow[cp_cast_int(usize, ri)] = (if (strings.eqlComptime(val, "<empty>")) "" else val);
+                        }
+                        ctx.bundler_options.allow_unresolved = allow;
+                    }
+                }
+            }
+            if (args.option("--packages")) |packages| {
+                _ = &packages;
+                if (strings.eqlComptime(packages, "bundle")) {
+                    opts.packages = .bundle;
+                } else {
+                    if (strings.eqlComptime(packages, "external")) {
+                        opts.packages = .external;
+                    } else {
+                        _ = Output.prettyErrorln("<r><red>error<r>: Invalid packages setting: \"{s}\"", .{ packages });
+                        _ = Global.crash();
+                    }
+                }
+            }
+            if (args.option("--env")) |env| {
+                _ = &env;
+                if (strings.indexOfChar(env, 42)) |asterisk| {
+                    _ = &asterisk;
+                    if ((asterisk == 0)) {
+                        ctx.bundler_options.env_behavior = .load_all;
+                    } else {
+                        ctx.bundler_options.env_behavior = .prefix;
+                        ctx.bundler_options.env_prefix = env[0..asterisk];
+                    }
+                } else {
+                    if ((strings.eqlComptime(env, "inline") or strings.eqlComptime(env, "1"))) {
+                        ctx.bundler_options.env_behavior = .load_all;
+                    } else {
+                        if ((strings.eqlComptime(env, "disable") or strings.eqlComptime(env, "0"))) {
+                            ctx.bundler_options.env_behavior = .load_all_without_inlining;
+                        } else {
+                            _ = Output.prettyErrorln("<r><red>error<r>: Expected 'env' to be 'inline', 'disable', or a prefix with a '*' character", .{});
+                            _ = Global.crash();
+                        }
+                    }
+                }
+            }
+            const TargetMatcher = strings.ExactSizeMatcher(8);
+            if (args.option("--target")) |_target| {
+                _ = &_target;
+                _ = brk: {
+                if (comptime (cmd == .BuildCommand)) {
+                    if (args.flag("--compile")) {
+                        if (((_target.len > 4) and strings.hasPrefixComptime(_target, "bun-"))) {
+                            ctx.bundler_options.compile_target = CLI.Cli.CompileTarget.@"from"(_target[3..]);
+                            if ((!ctx.bundler_options.compile_target.isSupported())) {
+                                _ = Output.errGeneric("Unsupported compile target: {f}\n", .{ ctx.bundler_options.compile_target });
+                                _ = Global.exit(1);
+                            }
+                            opts.target = .bun;
+                            break :brk;
+                        }
+                    }
+                }
+                if (opts.target == null) { opts.target = (__sw_blk_2: { const __disc_2 = TargetMatcher.match(_target); _ = &__disc_2; { if ((cp_match_tag(__disc_2, .case) and cp_eq(@field(__disc_2, "case"), "browser"))) {  break :__sw_blk_2 cp_val(Api.Target.browser); } } { if ((cp_match_tag(__disc_2, .case) and cp_eq(@field(__disc_2, "case"), "node"))) {  break :__sw_blk_2 cp_val(Api.Target.node); } } { if ((cp_match_tag(__disc_2, .case) and cp_eq(@field(__disc_2, "case"), "macro"))) {  break :__sw_blk_2 cp_val((if ((cmd == .BuildCommand)) Api.Target.bun_macro else Api.Target.bun)); } } { if ((cp_match_tag(__disc_2, .case) and cp_eq(@field(__disc_2, "case"), "bun"))) {  break :__sw_blk_2 cp_val(Api.Target.bun); } } {  break :__sw_blk_2 cp_val(CLI.invalidTarget((&diag), _target)); }  unreachable; }); }
+                if ((opts.target.? == .bun)) {
+                    ctx.debug.run_in_bun = (opts.target.? == .bun);
+                } else {
+                    if (ctx.bundler_options.bytecode) {
+                        _ = Output.errGeneric("target must be 'bun' when bytecode is true. Received: {s}", .{ @tagName(opts.target.?) });
+                        _ = Global.exit(1);
+                    }
+                    if (ctx.bundler_options.bake) {
+                        _ = Output.errGeneric("target must be 'bun' when using --app. Received: {s}", .{ @tagName(opts.target.?) });
+                    }
+                }
+};
+            }
+            if (args.flag("--watch")) {
+                ctx.debug.hot_reload = .watch;
+                bun.auto_reload_on_crash = true;
+                if (args.flag("--no-clear-screen")) {
+                    bun.DotEnv.Loader.has_no_clear_screen_cli_flag = true;
+                }
+            }
+            if (args.flag("--compile")) {
+                ctx.bundler_options.compile = true;
+                ctx.bundler_options.inline_entrypoint_import_meta_main = true;
+            }
+            if (args.option("--compile-exec-argv")) |compile_exec_argv| {
+                _ = &compile_exec_argv;
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--compile-exec-argv requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.compile_exec_argv = compile_exec_argv;
+            }
+            {
+                const has_positive = args.flag("--compile-autoload-dotenv");
+                const has_negative = args.flag("--no-compile-autoload-dotenv");
+                if ((has_positive or has_negative)) {
+                    if ((!ctx.bundler_options.compile)) {
+                        _ = Output.errGeneric("--compile-autoload-dotenv requires --compile", .{});
+                        _ = Global.crash();
+                    }
+                    if ((has_positive and has_negative)) {
+                        _ = Output.errGeneric("Cannot use both --compile-autoload-dotenv and --no-compile-autoload-dotenv", .{});
+                        _ = Global.crash();
+                    }
+                    ctx.bundler_options.compile_autoload_dotenv = has_positive;
+                }
+            }
+            {
+                const has_positive = args.flag("--compile-autoload-bunfig");
+                const has_negative = args.flag("--no-compile-autoload-bunfig");
+                if ((has_positive or has_negative)) {
+                    if ((!ctx.bundler_options.compile)) {
+                        _ = Output.errGeneric("--compile-autoload-bunfig requires --compile", .{});
+                        _ = Global.crash();
+                    }
+                    if ((has_positive and has_negative)) {
+                        _ = Output.errGeneric("Cannot use both --compile-autoload-bunfig and --no-compile-autoload-bunfig", .{});
+                        _ = Global.crash();
+                    }
+                    ctx.bundler_options.compile_autoload_bunfig = has_positive;
+                }
+            }
+            {
+                const has_positive = args.flag("--compile-autoload-tsconfig");
+                const has_negative = args.flag("--no-compile-autoload-tsconfig");
+                if ((has_positive or has_negative)) {
+                    if ((!ctx.bundler_options.compile)) {
+                        _ = Output.errGeneric("--compile-autoload-tsconfig requires --compile", .{});
+                        _ = Global.crash();
+                    }
+                    if ((has_positive and has_negative)) {
+                        _ = Output.errGeneric("Cannot use both --compile-autoload-tsconfig and --no-compile-autoload-tsconfig", .{});
+                        _ = Global.crash();
+                    }
+                    ctx.bundler_options.compile_autoload_tsconfig = has_positive;
+                }
+            }
+            {
+                const has_positive = args.flag("--compile-autoload-package-json");
+                const has_negative = args.flag("--no-compile-autoload-package-json");
+                if ((has_positive or has_negative)) {
+                    if ((!ctx.bundler_options.compile)) {
+                        _ = Output.errGeneric("--compile-autoload-package-json requires --compile", .{});
+                        _ = Global.crash();
+                    }
+                    if ((has_positive and has_negative)) {
+                        _ = Output.errGeneric("Cannot use both --compile-autoload-package-json and --no-compile-autoload-package-json", .{});
+                        _ = Global.crash();
+                    }
+                    ctx.bundler_options.compile_autoload_package_json = has_positive;
+                }
+            }
+            if (args.option("--compile-executable-path")) |path| {
+                _ = &path;
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--compile-executable-path requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.compile_executable_path = path;
+            }
+            if (args.flag("--windows-hide-console")) {
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-hide-console is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-hide-console requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-hide-console requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.hide_console = true;
+            }
+            if (args.option("--windows-icon")) |path| {
+                _ = &path;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-icon is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-icon requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-icon requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.icon = path;
+            }
+            if (args.option("--windows-title")) |title| {
+                _ = &title;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-title is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-title requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-title requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.title = title;
+            }
+            if (args.option("--windows-publisher")) |publisher| {
+                _ = &publisher;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-publisher is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-publisher requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-publisher requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.publisher = publisher;
+            }
+            if (args.option("--windows-version")) |version| {
+                _ = &version;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-version is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-version requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-version requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.version = version;
+            }
+            if (args.option("--windows-description")) |description| {
+                _ = &description;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-description is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-description requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-description requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.description = description;
+            }
+            if (args.option("--windows-copyright")) |copyright| {
+                _ = &copyright;
+                if ((!Environment.isWindows)) {
+                    _ = Output.errGeneric("Using --windows-copyright is only available when compiling on Windows", .{});
+                    _ = Global.crash();
+                }
+                if ((ctx.bundler_options.compile_target.os != .windows)) {
+                    _ = Output.errGeneric("--windows-copyright requires a Windows compile target", .{});
+                    _ = Global.crash();
+                }
+                if ((!ctx.bundler_options.compile)) {
+                    _ = Output.errGeneric("--windows-copyright requires --compile", .{});
+                    _ = Global.crash();
+                }
+                ctx.bundler_options.windows.copyright = copyright;
+            }
+            if (args.option("--outdir")) |outdir| {
+                _ = &outdir;
+                if ((outdir.len > 0)) {
+                    ctx.bundler_options.outdir = outdir;
+                }
+            } else {
+                if (args.option("--outfile")) |outfile| {
+                    _ = &outfile;
+                    if ((outfile.len > 0)) {
+                        ctx.bundler_options.outfile = outfile;
+                    }
+                }
+            }
+            if (args.option("--metafile")) |metafile| {
+                _ = &metafile;
+                ctx.bundler_options.metafile = (if ((metafile.len > 0)) bun.handleOom(allocator.dupeZ(u8, metafile)) else "meta.json");
+            }
+            if (args.option("--metafile-md")) |metafile_md| {
+                _ = &metafile_md;
+                ctx.bundler_options.metafile_md = (if ((metafile_md.len > 0)) bun.handleOom(allocator.dupeZ(u8, metafile_md)) else "meta.md");
+            }
+            if (args.option("--root")) |root_dir| {
+                _ = &root_dir;
+                if ((root_dir.len > 0)) {
+                    ctx.bundler_options.root_dir = root_dir;
+                }
+            }
+            if (args.option("--format")) |format_str| {
+                _ = &format_str;
+                const format_opt = options.Format.fromString(format_str);
+                if ((format_opt == null)) {
+                    _ = Output.errGeneric("Invalid format - must be esm, cjs, or iife", .{});
+                    _ = Global.crash();
+                }
+                const format = format_opt.?;
+                switch (format) {
+.internal_bake_dev => {
+_ = bun.Output.warn("--format={s} is for debugging only, and may experience breaking changes at any moment", .{ format_str });
+                _ = bun.Output.flush();
+},
+.cjs => {
+if ((ctx.args.target == null)) {
+                    ctx.args.target = .node;
+                }
+},
+else => {
+
+},
+}
+                ctx.bundler_options.output_format = format;
+                if (ctx.bundler_options.bytecode) {
+                    if (((format != .cjs) and (format != .esm))) {
+                        _ = Output.errGeneric("format must be 'cjs' or 'esm' when bytecode is true.", .{});
+                        _ = Global.exit(1);
+                    }
+                    if (((format == .esm) and (!ctx.bundler_options.compile))) {
+                        _ = Output.errGeneric("ESM bytecode requires --compile. Use --format=cjs for bytecode without --compile.", .{});
+                        _ = Global.exit(1);
+                    }
+                }
+            }
+            if (args.flag("--splitting")) {
+                ctx.bundler_options.code_splitting = true;
+            }
+            if (args.option("--entry-naming")) |entry_naming| {
+                _ = &entry_naming;
+                ctx.bundler_options.entry_naming = try strings.concat(allocator, (&.{ "./", bun.strings.removeLeadingDotSlash(entry_naming) }));
+            }
+            if (args.option("--chunk-naming")) |chunk_naming| {
+                _ = &chunk_naming;
+                ctx.bundler_options.chunk_naming = try strings.concat(allocator, (&.{ "./", bun.strings.removeLeadingDotSlash(chunk_naming) }));
+            }
+            if (args.option("--asset-naming")) |asset_naming| {
+                _ = &asset_naming;
+                ctx.bundler_options.asset_naming = try strings.concat(allocator, (&.{ "./", bun.strings.removeLeadingDotSlash(asset_naming) }));
+            }
+            if (args.flag("--server-components")) {
+                ctx.bundler_options.server_components = true;
+                if (opts.target) |target| {
+                    _ = &target;
+                    if ((!bun.options.Target.@"from"(target).isServerSide())) {
+                        _ = bun.Output.errGeneric("Cannot use client-side --target={s} with --server-components", .{ @tagName(target) });
+                        _ = Global.crash();
+                    } else {
+                        opts.target = .bun;
+                    }
+                }
+            }
+            if (args.flag("--react-fast-refresh")) {
+                ctx.bundler_options.react_fast_refresh = true;
+            }
+            if (args.option("--sourcemap")) |setting| {
+                _ = &setting;
+                if ((setting.len == 0)) {
+                    opts.source_map = .linked;
+                } else {
+                    if (strings.eqlComptime(setting, "inline")) {
+                        opts.source_map = .@"inline";
+                    } else {
+                        if (strings.eqlComptime(setting, "none")) {
+                            opts.source_map = .none;
+                        } else {
+                            if (strings.eqlComptime(setting, "external")) {
+                                opts.source_map = .external;
+                            } else {
+                                if (strings.eqlComptime(setting, "linked")) {
+                                    opts.source_map = .linked;
+                                } else {
+                                    _ = Output.prettyErrorln("<r><red>error<r>: Invalid sourcemap setting: \"{s}\"", .{ setting });
+                                    _ = Global.crash();
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ctx.bundler_options.compile) {
+                    opts.source_map = .external;
+                }
+            }
+        }
+        if ((opts.entry_points.len == 0)) {
+            var entry_points = ctx.positionals;
+            _ = &entry_points;
+            switch ((comptime cmd)) {
+.BuildCommand => {
+if (((entry_points.len > 0) and (strings.eqlComptime(entry_points[0], "build") or strings.eqlComptime(entry_points[0], "bun")))) {
+                var out_entry = entry_points[1..];
+                _ = &out_entry;
+                var epi: usize = 0;
+                _ = &epi;
+                while ((epi < entry_points.len)) : (epi = (epi + 1)) {
+                    if ((entry_points[@as(usize, @intCast(epi))].len > 0)) {
+                        out_entry = out_entry[epi..];
+                        break;
+                    }
+                }
+                entry_points = out_entry;
+            }
+},
+.RunCommand => {
+if (((entry_points.len > 0) and (strings.eqlComptime(entry_points[0], "run") or strings.eqlComptime(entry_points[0], "r")))) {
+                entry_points = entry_points[1..];
+            }
+},
+else => {
+
+},
+}
+            opts.entry_points = entry_points;
+        }
+        const jsx_factory = args.option("--jsx-factory");
+        const jsx_fragment = args.option("--jsx-fragment");
+        const jsx_import_source = args.option("--jsx-import-source");
+        const jsx_runtime = args.option("--jsx-runtime");
+        const jsx_side_effects = args.flag("--jsx-side-effects");
+        if (((cmd == .AutoCommand) or (cmd == .RunCommand))) {
+            if (args.flag("--silent")) {
+                ctx.debug.silent = true;
+            }
+            if (args.option("--elide-lines")) |elide_lines| {
+                _ = &elide_lines;
+                if ((elide_lines.len > 0)) {
+                    ctx.bundler_options.elide_lines = (blk_catch_203: { break :blk_catch_203 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_203| { _ = &__ce_203; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_203 Global.exit(1); }); });
+                }
+            }
+            if (opts.define) |define| {
+                _ = &define;
+                if ((define.keys.len > 0)) {
+                    bun.jsc.RuntimeTranspilerCache.is_disabled = true;
+                }
+            }
+        }
+        if ((((cmd == .RunCommand) or (cmd == .AutoCommand)) or (cmd == .BunxCommand))) {
+            if (args.flag("--bun")) {
+                ctx.debug.run_in_bun = true;
+            }
+        }
+        opts.resolve = Api.ResolveMode.lazy;
+        if (((((jsx_factory != null) or (jsx_fragment != null)) or (jsx_import_source != null)) or (jsx_runtime != null))) {
+            var default_factory = ("").*;
+            _ = &default_factory;
+            var default_fragment = ("").*;
+            _ = &default_fragment;
+            var default_import_source = ("").*;
+            _ = &default_import_source;
+            if ((opts.jsx == null)) {
+                var resolved_runtime = Api.JsxRuntime.automatic;
+                _ = &resolved_runtime;
+                if (jsx_runtime) |runtime| {
+                    _ = &runtime;
+                    resolved_runtime = try resolve_jsx_runtime(runtime);
+                }
+                opts.jsx = Api.Jsx{ .factory = ((jsx_factory) orelse ((&default_factory))), .fragment = ((jsx_fragment) orelse ((&default_fragment))), .import_source = ((jsx_import_source) orelse ((&default_import_source))), .runtime = resolved_runtime, .development = false, .side_effects = jsx_side_effects };
+            } else {
+                var resolved_runtime = opts.jsx.?.runtime;
+                _ = &resolved_runtime;
+                if (jsx_runtime) |runtime| {
+                    _ = &runtime;
+                    resolved_runtime = try resolve_jsx_runtime(runtime);
+                }
+                opts.jsx = Api.Jsx{ .factory = ((jsx_factory) orelse (opts.jsx.?.factory)), .fragment = ((jsx_fragment) orelse (opts.jsx.?.fragment)), .import_source = ((jsx_import_source) orelse (opts.jsx.?.import_source)), .runtime = resolved_runtime, .development = false, .side_effects = jsx_side_effects };
+            }
+        }
+        if ((cmd == .BuildCommand)) {
+            if (((opts.entry_points.len == 0) and (!ctx.bundler_options.bake))) {
+                _ = Output.prettyln((("<r><b>bun build <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), .{});
+                _ = Output.pretty("<r><red>error: Missing entrypoints. What would you like to bundle?<r>\n\n", .{});
+                _ = Output.flush();
+                _ = Output.pretty("Usage:\n  <d>$<r> <b><green>bun build<r> \\<entrypoint\\> [...\\<entrypoints\\>] <cyan>[...flags]<r>  \n", .{});
+                _ = Output.pretty("\nTo see full documentation:\n  <d>$<r> <b><green>bun build<r> --help\n", .{});
+                _ = Output.flush();
+                _ = Global.exit(1);
+            }
+            if (args.flag("--production")) {
+                var any_html = false;
+                _ = &any_html;
+                for (cp_iter_slice(opts.entry_points)) |entry_point| {
+                    _ = &entry_point;
+                    if (strings.hasSuffixComptime(entry_point, ".html")) {
+                        any_html = true;
+                        break;
+                    }
+                }
+                if (any_html) {
+                    ctx.bundler_options.css_chunking = true;
+                }
+                ctx.bundler_options.production = true;
+            }
+        }
+        if (opts.log_level) |log_level| {
+            _ = &log_level;
+            logger.Log.default_log_level = (switch (log_level) {
+.debug => logger.Log.Level.debug,
+.err => logger.Log.Level.err,
+.warn => logger.Log.Level.warn,
+else => logger.Log.Level.err,
+});
+            ctx.log.level = logger.Log.default_log_level;
+        }
+        if (args.flag("--no-macros")) {
+            ctx.debug.macros = .{ .disable = .{} };
+        }
+        opts.output_dir = output_dir;
+        if ((output_file != null)) {
+            ctx.debug.output_file = output_file.?;
+        }
+        if (((cmd == .RunCommand) or (cmd == .AutoCommand))) {
+            if (args.option("--shell")) |shell| {
+                _ = &shell;
+                if (strings.eqlComptime(shell, "bun")) {
+                    ctx.debug.use_system_shell = false;
+                } else {
+                    if (strings.eqlComptime(shell, "system")) {
+                        ctx.debug.use_system_shell = true;
+                    } else {
+                        _ = Output.errGeneric("Expected --shell to be one of 'bun' or 'system'. Received: \"{s}\"", .{ shell });
+                        _ = Global.exit(1);
+                    }
+                }
+            }
+        }
+        if (Environment.show_crash_trace) {
+            debug_flags.resolve_breakpoints = args.options("--breakpoint-resolve");
+            debug_flags.print_breakpoints = args.options("--breakpoint-print");
+        }
+        return opts;
+}
