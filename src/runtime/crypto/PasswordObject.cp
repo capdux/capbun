@@ -325,7 +325,7 @@ pub class PasswordObject {
         }
     }
 
-    pub fn verify(
+    static fn verify(
         allocator: std.mem.Allocator,
         password: []const u8,
         previous_hash: []const u8,
@@ -608,7 +608,7 @@ pub class JSPasswordObject {
     pub const HashJob = HashJob_;
     pub const VerifyJob = VerifyJob_;
 
-    pub export fn JSPasswordObject__create(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+    static fn JSPasswordObject__create(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         let object = JSValue.createEmptyObject(globalObject, 4);
         object.put(globalObject, ZigString.static("hash"), jsc.JSFunction.create(globalObject, "hash", JSPasswordObject__hash, 2, .{}));
         object.put(globalObject, ZigString.static("hashSync"), jsc.JSFunction.create(globalObject, "hashSync", JSPasswordObject__hashSync, 2, .{}));
@@ -651,7 +651,7 @@ pub class JSPasswordObject {
         return promise.value();
     }
 
-    pub fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?, comptime sync: bool): anyerror!jsc.JSValue {
+    static fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?, comptime sync: bool): anyerror!jsc.JSValue {
         assert(password.len > 0);
 
         if (comptime sync) {
@@ -685,7 +685,7 @@ pub class JSPasswordObject {
         return promise.value();
     }
 
-    pub fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -709,7 +709,7 @@ pub class JSPasswordObject {
         return hash(globalObject, password_to_hash, algorithm, false);
     }
 
-    pub fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -737,7 +737,7 @@ pub class JSPasswordObject {
         return hash(globalObject, string_or_buffer.slice(), algorithm, true);
     }
 
-    pub fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -784,7 +784,7 @@ pub class JSPasswordObject {
         return verify(globalObject, owned_password, owned_hash, algorithm, false);
     }
 
-    pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 

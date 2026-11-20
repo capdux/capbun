@@ -390,7 +390,7 @@ extern fn Bun__Chrome__died(signo: i32);
 /// full ws:// URL in out_buf, or null if the file doesn't exist /
 /// is malformed / the profile dir is non-standard.
 ///
-fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): (void)? {
+fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): bool {
     // Default profile locations. Multiple Chrome channels (stable/beta/
     // canary) have distinct dirs; try each. Chromium and Edge also
     // respond to the same debugging protocol.
@@ -398,9 +398,9 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): (void)? {
     // names come from each browser's installer — hardcoded, not
     // discoverable. Edge uses the same CDP + file format as Chrome.
     const root = if (comptime bun.Environment.isWindows)
-        bun.getenvZ("LOCALAPPDATA") ?? return null
+        bun.getenvZ("LOCALAPPDATA") ?? return false
     else
-        bun.getenvZ("HOME") ?? return null;
+        bun.getenvZ("HOME") ?? return false;
 
     let candidates: []const []const u8 = [];
     if (comptime bun.Environment.isMac) {
@@ -452,10 +452,10 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): (void)? {
         if (port == 0 || ws_path.len == 0 || ws_path[0] != '/') continue;
 
         out_buf.clearRetainingCapacity();
-        out_buf.writer(bun.default_allocator).print("ws://127.0.0.1:{d}{s}", .{ port, ws_path }) catch return null;
-        return;
+        out_buf.writer(bun.default_allocator).print("ws://127.0.0.1:{d}{s}", .{ port, ws_path }) catch return false;
+        return true;
     }
-    return null;
+    return false;
 }
 
 /// Auto-discover a running Chrome's WebSocket debugger URL by reading
@@ -475,7 +475,7 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): (void)? {
 pub export fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize): usize {
     let buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(bun.default_allocator);
-    if (readDevToolsActivePort(&buf) != null) {
+    if (readDevToolsActivePort(&buf)) {
         if (buf.items.len > out_cap) return 0;
         unsafe {
             @memcpy(out_buf[0..buf.items.len], buf.items);

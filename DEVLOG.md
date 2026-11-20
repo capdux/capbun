@@ -1296,3 +1296,6 @@
 
 ### 2026-11-20 05:23:39 UTC - shell.cp NewLexer 提升收官经验
 - 将 `IfClauseTok` 及 `NewLexer` 内 4 个嵌套类型提至顶层并消除 `else if` 嵌套 `switch`，`shell.cp` 完整 lowering 通过（0.990x）。
+
+### 2026-11-20 05:25:49 UTC - 全仓终极清零 2 组经验
+- 彻底清除标量 `switch (e)`、未用 `self`、匿名 `struct` 缺少 `static fn` 及 `_.field = opt ?? default` 降级坑，15/15 全绿。

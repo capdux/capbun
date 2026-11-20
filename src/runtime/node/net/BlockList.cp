@@ -18,10 +18,10 @@ const StructuredCloneWriter = struct {
     ctx: *!,
     impl: fn (*!, ptr: [*]const u8, len: u32) callconv(jsc.conv) void,
 
-    pub const Writer = std.Io.GenericWriter(@This(), Error, write);
+    pub const Writer = std.Io.GenericWriter(@This(), @This().Error, write);
     pub const Error = error{};
 
-    fn write(this: StructuredCloneWriter, bytes: []const u8): Error!usize {
+    fn write(this: StructuredCloneWriter, bytes: []const u8): @This().Error!usize {
         this.impl(this.ctx, bytes.ptr, @as(u32, @truncate(bytes.len)));
         return bytes.len;
     }
@@ -278,14 +278,14 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         // Advance the pointer by the number of bytes consumed
         unsafe { ptr.* = ptr.* + buffer_stream.pos; }
 
-        const this: *BlockList = @ptrFromInt(int);
+        const block_list: *BlockList = @ptrFromInt(int);
         // A single SerializedScriptValue can be deserialized multiple times
         // (e.g. BroadcastChannel fan-out), so each wrapper must own its own ref
         // instead of adopting the one taken in serialize. The serialize ref is
         // what keeps the backing alive while the pointer sits in the byte buffer;
         // SerializedScriptValue has no destroy hook for Bun-native tags, so that
         // ref is retained until a buffer-level deref exists (preferable to UAF).
-        this.ref();
-        return this.toJS(globalThis);
+        block_list.ref();
+        return block_list.toJS(globalThis);
     }
 }

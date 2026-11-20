@@ -188,7 +188,9 @@ pub struct ShellLsTask {
         subtask.schedule();
     }
 
-    fn join(_: *ShellLsTask, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool): [:0]const u8 {
+    fn join(*_, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool): [:0]const u8 {
+        const self_ptr = _;
+        * = self_ptr;
         if (!is_absolute) {
             return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
         }

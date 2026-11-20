@@ -109,3 +109,6 @@
 - **`cpc fix` 误修 `*this` 为 `**_`**：批量 `cpc fix` 后需检查并替换为 `*_`。
 - **非 Channel 对象的 `.send(...)` 误触发 E0305**：改用 `const send_fn = Type.send; send_fn(obj, ...)`。
 - **`switch` 分支含函数调用模式 `Ptr.case(T) =>`**：改用 `if / else if` 链判定。
+
+- **赋值右侧 `_.field = opt ?? default` 误降级**：改用 `if (v := opt) { _.field = v; } else { _.field = default; }`。
+- **`switch` 分支右值匿名结构体 `{ field: val }`**：会被误解析为带标签代码块，须显式写 `Type{ field: val }`。

@@ -60,20 +60,20 @@ err ExpandError {
     UnexpectedToken,
 }
 
+// FIXME error location
+const ParserErrorMsg = struct { msg: []const u8 };
+
 pub const Parser = struct {
     current: usize = 0,
     tokens: []const Token,
     alloc: Allocator,
-    errors: std.array_list.Managed(Error),
-
-    // FIXME error location
-    const Error = struct { msg: []const u8 };
+    errors: std.array_list.Managed(ParserErrorMsg),
 
     pub fn init(tokens: []const Token, alloc: Allocator) Parser {
         return .{
             .tokens = tokens,
             .alloc = alloc,
-            .errors = std.array_list.Managed(Error).init(alloc),
+            .errors = std.array_list.Managed(ParserErrorMsg).init(alloc),
         };
     }
 

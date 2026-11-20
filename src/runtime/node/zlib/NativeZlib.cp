@@ -22,7 +22,7 @@ pub struct Context {
     dictionary: []const u8 = "",
     gzip_id_bytes_read: u8 = 0,
 
-    pub fn init(*_, level: c_int, windowBits: c_int, memLevel: c_int, strategy: c_int, dictionary: ([]const u8)?) {
+    pub fn init(*_, level: c_int, windowBits: c_int, memLevel: c_int, strategy: c_int, dict_opt: ([]const u8)?) {
         _.flush = .NoFlush;
         _.e = .Ok;
 
@@ -36,7 +36,11 @@ pub struct Context {
             .ZSTD_COMPRESS, .ZSTD_DECOMPRESS => unreachable,
         };
 
-        _.dictionary = dictionary ?? "";
+        if (d := dict_opt) {
+            _.dictionary = d;
+        } else {
+            _.dictionary = "";
+        }
 
         switch (_.mode) {
             .NONE => unreachable,

@@ -601,7 +601,7 @@ export class All {
         }
     }
 
-    pub fn clearImmediate(
+    static fn clearImmediate(
         globalThis: *JSGlobalObject,
         id: JSValue,
     ): JSError!JSValue {
@@ -610,7 +610,7 @@ export class All {
         return JSValue.js_undefined;
     }
 
-    pub fn clearTimeout(
+    static fn clearTimeout(
         globalThis: *JSGlobalObject,
         id: JSValue,
     ): JSError!JSValue {
@@ -619,7 +619,7 @@ export class All {
         return JSValue.js_undefined;
     }
 
-    pub fn clearInterval(
+    static fn clearInterval(
         globalThis: *JSGlobalObject,
         id: JSValue,
     ): JSError!JSValue {

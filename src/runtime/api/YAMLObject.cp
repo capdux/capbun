@@ -936,17 +936,15 @@ pub struct Stringifier {
 
     const source = &logger.Source.initPathString("input.yaml", input.slice());
 
-    const root = bun.interchange.yaml.YAML.parse(source, &log, arena_allocator.allocator()) catch |e| return switch (e) {
-        error.OutOfMemory => |oom| oom,
-        error.StackOverflow => global.throwStackOverflow(),
-        else => {
-            if (log.msgs.items.len > 0) {
-                const first_msg = log.msgs.items[0];
-                const error_text = first_msg.data.text;
-                return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: {s}", { error_text}));
-            }
-            return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: Unable to parse YAML string", {}));
-        },
+    const root = bun.interchange.yaml.YAML.parse(source, &log, arena_allocator.allocator()) catch |e| {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.StackOverflow) return global.throwStackOverflow();
+        if (log.msgs.items.len > 0) {
+            const first_msg = log.msgs.items[0];
+            const error_text = first_msg.data.text;
+            return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: {s}", { error_text }));
+        }
+        return global.throwValue(global.createSyntaxErrorInstance("YAML Parse error: Unable to parse YAML string", {}));
     };
 
     let ctx: ParserCtx = {
@@ -977,19 +975,18 @@ struct ParserCtx {
     }
 
     @callconv("c") static fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) {
-        ctx.result = ctx.toJS(args, ctx.root) catch |e| switch (e) {
-            error.OutOfMemory => {
+        ctx.result = ctx.toJS(args, ctx.root) catch |e| {
+            if (e == error.OutOfMemory) {
                 ctx.result = ctx.global.throwOutOfMemoryValue();
                 return;
-            },
-            error.JSError, error.JSTerminated => {
+            } else if (e == error.JSError || e == error.JSTerminated) {
                 ctx.result = .zero;
                 return;
-            },
-            error.StackOverflow => {
+            } else if (e == error.StackOverflow) {
                 ctx.result = ctx.global.throwStackOverflow() catch .zero;
                 return;
-            },
+            }
+            unreachable;
         };
     }
 

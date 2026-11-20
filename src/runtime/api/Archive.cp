@@ -174,11 +174,7 @@ fn extractToDiskFiltered(
 
         switch (kind) {
             .directory => {
-                dir_fd.makePath(u8, pathname) catch |e| switch (e) {
-                    // Directory already exists - don't count as extracted
-                    error.PathAlreadyExists => continue,
-                    else => continue,
-                };
+                dir_fd.makePath(u8, pathname) catch continue;
                 count += 1;
             },
             .file => {
@@ -192,14 +188,7 @@ fn extractToDiskFiltered(
 
                 // Create parent directories if needed (ignore expected errors)
                 if (parent_dir := std.fs.path.dirname(pathname)) {
-                    dir_fd.makePath(u8, parent_dir) catch |e| switch (e) {
-                        // Expected: directory already exists
-                        error.PathAlreadyExists => {},
-                        // Permission errors: skip file, will fail at openat
-                        error.AccessDenied => {},
-                        // Other errors: skip, will fail at openat
-                        else => {},
-                    };
+                    dir_fd.makePath(u8, parent_dir) catch {};
                 }
 
                 // Create and write the file using bun.sys
@@ -431,11 +420,11 @@ fn startExtractTask(
 
 struct BlobContext {
     const OutputType = enum { blob, bytes };
-    const Error = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
+    const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
     const Result = union(enum) {
         compressed: []u8,
         uncompressed: void,
-        e: Error,
+        e: Err,
     };
 
     store: *jsc.WebCore.Blob.Store,
@@ -499,10 +488,10 @@ fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store
 }
 
 struct WriteContext {
-    const Error = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
+    const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
     const Result = union(enum) {
         success: void,
-        e: Error,
+        e: Err,
         sys_err: bun.sys.Error,
     };
     const Data = union(enum) {
@@ -591,11 +580,11 @@ fn startWriteTask(
 struct FilesContext {
     const FileEntry = struct { path: []u8, data: []u8, mtime: i64 };
     const FileEntryList = std.ArrayList(FileEntry);
-    const Error = error{ OutOfMemory, ReadError };
+    const Err = error{ OutOfMemory, ReadError };
     const Result = union(enum) {
         success: FileEntryList,
         libarchive_err: [*:0]u8,
-        e: Error,
+        e: Err,
 
         fn deinit(*_) {
             switch (_.*) {

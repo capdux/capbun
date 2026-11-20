@@ -558,25 +558,25 @@ pub struct Interpreter {
 
             const stdout: Bufio = switch (io.stdout) {
                 .fd => brk: {
-                    if (io.stdout.fd.captured != null) break :brk { borrowed: io.stdout.fd.captured.? };
-                    break :brk { owned: {} };
+                    if (io.stdout.fd.captured != null) break :brk Bufio{ borrowed: io.stdout.fd.captured.? };
+                    break :brk Bufio{ owned: {} };
                 },
-                .ignore => { owned: {} },
+                .ignore => Bufio{ owned: {} },
                 .pipe => switch (kind) {
-                    .normal, .cmd_subst => { owned: {} },
-                    .subshell, .pipeline => { borrowed: _.buffered_stdout() },
+                    .normal, .cmd_subst => Bufio{ owned: {} },
+                    .subshell, .pipeline => Bufio{ borrowed: _.buffered_stdout() },
                 },
             };
 
             const stderr: Bufio = switch (io.stderr) {
                 .fd => brk: {
-                    if (io.stderr.fd.captured != null) break :brk { borrowed: io.stderr.fd.captured.? };
-                    break :brk { owned: {} };
+                    if (io.stderr.fd.captured != null) break :brk Bufio{ borrowed: io.stderr.fd.captured.? };
+                    break :brk Bufio{ owned: {} };
                 },
-                .ignore => { owned: {} },
+                .ignore => Bufio{ owned: {} },
                 .pipe => switch (kind) {
-                    .normal, .cmd_subst => { owned: {} },
-                    .subshell, .pipeline => { borrowed: _.buffered_stderr() },
+                    .normal, .cmd_subst => Bufio{ owned: {} },
+                    .subshell, .pipeline => Bufio{ borrowed: _.buffered_stderr() },
                 },
             };
 
@@ -1946,6 +1946,8 @@ pub struct ShellSyscall {
 }
 
 /// A task that can write to stdout and/or stderr
+type OutputTaskErrBuf = ([]const u8)?;
+type OutputTaskSysErr = jsc.SystemError?;
 pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
     return struct {
         parent: *Parent,
@@ -1964,15 +1966,18 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
             return vtable.onDone(this.parent);
         }
 
-        pub fn start(this: *@This(), errbuf: ([]const u8)?): Yield {
+        pub fn start(this: *@This(), errbuf: OutputTaskErrBuf): Yield {
             log("OutputTask({s}, 0x{x}) start errbuf={s}", .{ @typeName(Parent), @intFromPtr(this), if (errbuf != null) errbuf.?[0..@min(128, errbuf.?.len)] else "null" });
             this.state = .waiting_write_err;
-            if (e := errbuf) {
-                if (yield := vtable.writeErr(this.parent, this, e)) return yield;
+            if (errbuf != null) {
+                const e = errbuf.?;
+                const y_err = vtable.writeErr(this.parent, this, e);
+                if (y_err != null) return y_err.?;
                 return this.next();
             }
             this.state = .waiting_write_out;
-            if (yield := vtable.writeOut(this.parent, this, &this.output)) return yield;
+            const y_out = vtable.writeOut(this.parent, this, &this.output);
+            if (y_out != null) return y_out.?;
             vtable.onWriteOut(this.parent);
             this.state = .done;
             return this.deinit();
@@ -1983,7 +1988,8 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
                 .waiting_write_err => {
                     vtable.onWriteErr(this.parent);
                     this.state = .waiting_write_out;
-                    if (yield := vtable.writeOut(this.parent, this, &this.output)) return yield;
+                    const y_out = vtable.writeOut(this.parent, this, &this.output);
+                    if (y_out != null) return y_out.?;
                     vtable.onWriteOut(this.parent);
                     this.state = .done;
                     return this.deinit();
@@ -1997,18 +2003,18 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
             }
         }
 
-        pub fn onIOWriterChunk(this: *@This(), written: usize, e: jsc.SystemError?): Yield {
-            * = written;
+        pub fn onIOWriterChunk(this: *@This(), _: usize, e: OutputTaskSysErr): Yield {
             log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(this) });
-            if (err_sys := e) {
-                err_sys.deref();
+            if (e != null) {
+                e.?.deref();
             }
 
             switch (this.state) {
                 .waiting_write_err => {
                     vtable.onWriteErr(this.parent);
                     this.state = .waiting_write_out;
-                    if (yield := vtable.writeOut(this.parent, this, &this.output)) return yield;
+                    const y_out = vtable.writeOut(this.parent, this, &this.output);
+                    if (y_out != null) return y_out.?;
                     vtable.onWriteOut(this.parent);
                     this.state = .done;
                     return this.deinit();

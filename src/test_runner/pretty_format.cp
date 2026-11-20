@@ -584,6 +584,8 @@ pub struct JestPrettyFormat {
             globalThis: *JSGlobalObject,
             comptime enable_ansi_colors: bool,
         ) {
+            const self_ptr = _;
+            * = self_ptr;
             const WW = WrappedWriter(Writer);
             let writer = WW{ ctx: writer_ };
             let slice = slice_;

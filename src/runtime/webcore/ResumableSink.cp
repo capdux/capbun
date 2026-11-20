@@ -130,19 +130,19 @@ pub fn ResumableSink(
                 }
             }
 
-            const self = sink.toJS(globalThis);
-            self.ensureStillAlive();
+            const js_this = sink.toJS(globalThis);
+            js_this.ensureStillAlive();
             const js_stream = stream.toJS();
             js_stream.ensureStillAlive();
-            sink.#js_this.setStrong(self, globalThis);
-            setStream(self, globalThis, js_stream);
+            sink.#js_this.setStrong(js_this, globalThis);
+            setStream(js_this, globalThis, js_stream);
 
-            _ = Bun__assignStreamIntoResumableSink(globalThis, js_stream, self);
+            _ = Bun__assignStreamIntoResumableSink(globalThis, js_stream, js_this);
 
             return sink;
         }
 
-        pub fn jsSetHandlers(_: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame, this_value: JSValue) JSError!JSValue {
+        static fn jsSetHandlers(_: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame, this_value: JSValue) JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
 

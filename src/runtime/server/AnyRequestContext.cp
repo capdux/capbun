@@ -46,7 +46,7 @@ pub const AnyRequestContext = struct {
 
     pub fn setAdditionalOnAbortCallback(self: AnyRequestContext, cb: ?AdditionalOnAbortCallback) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype, c: ?AdditionalOnAbortCallback) void {
+            static fn f(comptime _: type, ctx: anytype, c: ?AdditionalOnAbortCallback) void {
                 bun.assert(ctx.additional_on_abort == null);
                 ctx.additional_on_abort = c;
             }
@@ -55,7 +55,7 @@ pub const AnyRequestContext = struct {
 
     pub fn memoryCost(self: AnyRequestContext) usize {
         return self.dispatch(usize, 0, struct {
-            fn f(comptime _: type, ctx: anytype) usize {
+            static fn f(comptime _: type, ctx: anytype) usize {
                 return ctx.memoryCost();
             }
         }.f, .{});
@@ -67,7 +67,7 @@ pub const AnyRequestContext = struct {
 
     pub fn setTimeout(self: AnyRequestContext, seconds: c_uint) bool {
         return self.dispatch(bool, false, struct {
-            fn f(comptime _: type, ctx: anytype, s: c_uint) bool {
+            static fn f(comptime _: type, ctx: anytype, s: c_uint) bool {
                 return ctx.setTimeout(s);
             }
         }.f, .{seconds});
@@ -75,7 +75,7 @@ pub const AnyRequestContext = struct {
 
     pub fn setCookies(self: AnyRequestContext, cookie_map: ?*jsc.WebCore.CookieMap) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype, c: ?*jsc.WebCore.CookieMap) void {
+            static fn f(comptime _: type, ctx: anytype, c: ?*jsc.WebCore.CookieMap) void {
                 ctx.setCookies(c);
             }
         }.f, .{cookie_map});
@@ -83,7 +83,7 @@ pub const AnyRequestContext = struct {
 
     pub fn enableTimeoutEvents(self: AnyRequestContext) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype) void {
+            static fn f(comptime _: type, ctx: anytype) void {
                 ctx.setTimeoutHandler();
             }
         }.f, .{});
@@ -91,7 +91,7 @@ pub const AnyRequestContext = struct {
 
     pub fn getRemoteSocketInfo(self: AnyRequestContext) ?uws.SocketAddress {
         return self.dispatch(?uws.SocketAddress, null, struct {
-            fn f(comptime _: type, ctx: anytype) ?uws.SocketAddress {
+            static fn f(comptime _: type, ctx: anytype) ?uws.SocketAddress {
                 return ctx.getRemoteSocketInfo();
             }
         }.f, .{});
@@ -99,7 +99,7 @@ pub const AnyRequestContext = struct {
 
     pub fn detachRequest(self: AnyRequestContext) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype) void {
+            static fn f(comptime _: type, ctx: anytype) void {
                 ctx.req = null;
             }
         }.f, .{});
@@ -108,7 +108,7 @@ pub const AnyRequestContext = struct {
     /// Wont actually set anything if `self` is `.none`
     pub fn setRequest(self: AnyRequestContext, req: *uws.Request) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime T: type, ctx: anytype, r: *uws.Request) void {
+            static fn f(comptime T: type, ctx: anytype, r: *uws.Request) void {
                 if (comptime T.is_h3) return; // H3 populates url/headers eagerly
                 ctx.req = r;
             }
@@ -117,7 +117,7 @@ pub const AnyRequestContext = struct {
 
     pub fn getRequest(self: AnyRequestContext) ?*uws.Request {
         return self.dispatch(?*uws.Request, null, struct {
-            fn f(comptime T: type, ctx: anytype) ?*uws.Request {
+            static fn f(comptime T: type, ctx: anytype) ?*uws.Request {
                 if (comptime T.is_h3) return null; // url/headers already on the Request
                 return ctx.req;
             }
@@ -126,7 +126,7 @@ pub const AnyRequestContext = struct {
 
     pub fn onAbort(self: AnyRequestContext, response: uws.AnyResponse) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime T: type, ctx: anytype, r: uws.AnyResponse) void {
+            static fn f(comptime T: type, ctx: anytype, r: uws.AnyResponse) void {
                 // The AnyResponse arm and T.Resp are created together; assert
                 // they agree so a mismatch traps in safe builds instead of being
                 // silently @ptrCast.
@@ -139,7 +139,7 @@ pub const AnyRequestContext = struct {
 
     pub fn ref(self: AnyRequestContext) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype) void {
+            static fn f(comptime _: type, ctx: anytype) void {
                 ctx.ref();
             }
         }.f, .{});
@@ -147,7 +147,7 @@ pub const AnyRequestContext = struct {
 
     pub fn setSignalAborted(self: AnyRequestContext, reason: bun.jsc.CommonAbortReason) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype, r: bun.jsc.CommonAbortReason) void {
+            static fn f(comptime _: type, ctx: anytype, r: bun.jsc.CommonAbortReason) void {
                 ctx.setSignalAborted(r);
             }
         }.f, .{reason});
@@ -155,7 +155,7 @@ pub const AnyRequestContext = struct {
 
     pub fn devServer(self: AnyRequestContext) ?*bun.bake.DevServer {
         return self.dispatch(?*bun.bake.DevServer, null, struct {
-            fn f(comptime _: type, ctx: anytype) ?*bun.bake.DevServer {
+            static fn f(comptime _: type, ctx: anytype) ?*bun.bake.DevServer {
                 return ctx.devServer();
             }
         }.f, .{});
@@ -163,7 +163,7 @@ pub const AnyRequestContext = struct {
 
     pub fn deref(self: AnyRequestContext) void {
         self.dispatch(void, {}, struct {
-            fn f(comptime _: type, ctx: anytype) void {
+            static fn f(comptime _: type, ctx: anytype) void {
                 ctx.deref();
             }
         }.f, .{});

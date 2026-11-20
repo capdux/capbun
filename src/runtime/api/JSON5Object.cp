@@ -32,9 +32,9 @@ pub fn stringify(
     let stringifier: Stringifier = .init(global, space_value)?;
     defer stringifier.deinit();
 
-    stringifier.stringifyValue(global, value) catch |e| return switch (e) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => |js_err| js_err,
-        error.StackOverflow => global.throwStackOverflow(),
+    stringifier.stringifyValue(global, value) catch |e| {
+        if (e == error.StackOverflow) return global.throwStackOverflow();
+        return e;
     };
 
     return stringifier.builder.toString(global);

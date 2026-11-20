@@ -209,17 +209,17 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: DecodeHint): Error!Decod
         // BMP/GIF have static decoders so Linux (and `backend == .bun`) work;
         // the system backend is tried first because ImageIO/WIC handle the
         // long tail (RLE BMP, animated GIF disposal, etc.) we don't.
-        .heic, .avif, .tiff => decodeViaSystem(bytes, max_pixels) catch |e| switch (e) {
-            error.BackendUnavailable => return error.UnsupportedOnPlatform,
-            else => return e,
+        .heic, .avif, .tiff => decodeViaSystem(bytes, max_pixels) catch |e| {
+            if (e == error.BackendUnavailable) return error.UnsupportedOnPlatform;
+            return e;
         },
-        .bmp => decodeViaSystem(bytes, max_pixels) catch |e| switch (e) {
-            error.BackendUnavailable => bmp.decode(bytes, max_pixels),
-            else => return e,
+        .bmp => decodeViaSystem(bytes, max_pixels) catch |e| {
+            if (e == error.BackendUnavailable) return bmp.decode(bytes, max_pixels);
+            return e;
         },
-        .gif => decodeViaSystem(bytes, max_pixels) catch |e| switch (e) {
-            error.BackendUnavailable => gif.decode(bytes, max_pixels),
-            else => return e,
+        .gif => decodeViaSystem(bytes, max_pixels) catch |e| {
+            if (e == error.BackendUnavailable) return gif.decode(bytes, max_pixels);
+            return e;
         },
     };
 }
@@ -383,10 +383,11 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: EncodeOptions): E
         .heic, .avif => blk: {
             if (b := system_backend) {
                 if (useSystem()) {
-                    break :blk Encoded.fromOwned(b.encode(rgba, width, height, opts) catch |e| switch (e) {
-                        error.BackendUnavailable => return error.UnsupportedOnPlatform,
-                        else => |narrowed| return narrowed,
-                    });
+                    const encoded = b.encode(rgba, width, height, opts) catch |e| {
+                        if (e == error.BackendUnavailable) return error.UnsupportedOnPlatform;
+                        return e;
+                    };
+                    break :blk Encoded.fromOwned(encoded);
                 }
             }
             break :blk error.UnsupportedOnPlatform;
