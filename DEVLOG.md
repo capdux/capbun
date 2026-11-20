@@ -1263,3 +1263,6 @@
 
 ### 2026-11-20 04:43:34 UTC - 上游 5 工单闭环解封 & 存量净化首批 36 模块总结
 - `cp_agy` 统一为 prelude/enum 注入 `__cp_` 前缀与顶层 `Error` 检测后，4 大受阻模块一键 PASS，实现 `src/` 根、`src/js_parser/ast/`、`src/bundler/`、`src/cli/` 全部 100% 闭环；同步沉淀 3 条存量净化新坑至 `CP_PITFALLS.md`。
+
+### 2026-11-20 04:45:03 UTC - css_parser.cp 解封收官
+- 上游将内部错误类型重命名为 `__CpErr` 后消除 `Err` 冲突，顺手修正 `@branchHint` 与 `[2]State` 字面量，全门禁 PASS。

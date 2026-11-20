@@ -951,23 +951,23 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
 }
 
 fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) {
-    zig {
-        @branchHint(.cold);
-        var stack = SmallList(BlockType, 16){};
-        stack.appendAssumeCapacity(block_type);
+    let stack = SmallList(BlockType, 16){};
+    stack.appendAssumeCapacity(block_type);
 
-        while (switch (tokenizer.next()) {
+    while (true) {
+        const tok = switch (tokenizer.next()) {
             .result => |v| v,
-            .err => null,
-        }) |tok| {
-            if (BlockType.closing(&tok)) |b| {
-                if (stack.getLastUnchecked() == b) {
-                    _ = stack.pop();
-                    if (stack.len() == 0) return;
-                }
+            .err => break,
+        };
+        if (b := BlockType.closing(&tok)) {
+            if (stack.getLastUnchecked() == b) {
+                * = stack.pop();
+                if (stack.len() == 0) return;
             }
+        }
 
-            if (BlockType.opening(&tok)) |bt| stack.append(tokenizer.allocator, bt);
+        if (bt := BlockType.opening(&tok)) {
+            stack.append(tokenizer.allocator, bt);
         }
     }
 }
@@ -3419,46 +3419,44 @@ pub fn StyleSheet(comptime AtRule: type): type {
         /// ourselves in the bundler.
         pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) void {
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
-            zig {
-                const State = enum { count, exec };
-                const STATES = comptime [_]State{ .count, .exec };
+            const State = enum { count, exec };
+            const STATES: [2]State = [ .count, .exec ];
 
-                var count: u32 = 0;
-                inline for (STATES[0..]) |state| {
-                    if (comptime state == .exec) {
-                        bun.handleOom(out.v.ensureUnusedCapacity(allocator, count));
+            let count: u32 = 0;
+            inline for (STATES[0..]) |state| {
+                if (comptime state == .exec) {
+                    bun.handleOom(out.v.ensureUnusedCapacity(allocator, count));
+                }
+                let saw_imports = false;
+                for (self.rules.v.items) |*rule| {
+                    switch (rule.*) {
+                        .layer_block => {},
+                        .import => {
+                            if (!saw_imports) saw_imports = true;
+                            switch (state) {
+                                .count => count += 1,
+                                .exec => {
+                                    const import_rule = &rule.import;
+                                    out.v.appendAssumeCapacity(rule.*);
+                                    const import_record_idx = new_import_records.len;
+                                    import_rule.import_record_idx = import_record_idx;
+                                    new_import_records.append(allocator, ImportRecord{
+                                        .path = bun.fs.Path.init(import_rule.url),
+                                        .kind = if (import_rule.supports != null) .at_conditional else .at,
+                                        .range = bun.logger.Range.None,
+                                    }) catch |e| bun.handleOom(e);
+                                    rule.* = .ignored;
+                                },
+                            }
+                        },
+                        .unknown => {
+                            if (bun.strings.eqlComptime(rule.unknown.name, "tailwind")) {
+                                continue;
+                            }
+                        },
+                        else => {},
                     }
-                    var saw_imports = false;
-                    for (self.rules.v.items) |*rule| {
-                        switch (rule.*) {
-                            .layer_block => {},
-                            .import => {
-                                if (!saw_imports) saw_imports = true;
-                                switch (state) {
-                                    .count => count += 1,
-                                    .exec => {
-                                        const import_rule = &rule.import;
-                                        out.v.appendAssumeCapacity(rule.*);
-                                        const import_record_idx = new_import_records.len;
-                                        import_rule.import_record_idx = import_record_idx;
-                                        new_import_records.append(allocator, ImportRecord{
-                                            .path = bun.fs.Path.init(import_rule.url),
-                                            .kind = if (import_rule.supports != null) .at_conditional else .at,
-                                            .range = bun.logger.Range.None,
-                                        }) catch |err| bun.handleOom(err);
-                                        rule.* = .ignored;
-                                    },
-                                }
-                            },
-                            .unknown => {
-                                if (bun.strings.eqlComptime(rule.unknown.name, "tailwind")) {
-                                    continue;
-                                }
-                            },
-                            else => {},
-                        }
-                        if (saw_imports) break;
-                    }
+                    if (saw_imports) break;
                 }
             }
         }
@@ -4039,10 +4037,9 @@ pub struct Parser {
                 let args: std.@"meta".ArgsTuple(@TypeOf(func)) = undefined;
                 args[0] = _;
 
-                zig {
-                    inline for (args_, 1..) |a, i| {
-                        args[i] = a;
-                    }
+                comptime let arg_idx: usize = 0;
+                inline while (arg_idx < args_.len) : (arg_idx += 1) {
+                    args[arg_idx + 1] = args_[arg_idx];
                 }
 
                 break :brk args;
@@ -6529,9 +6526,8 @@ const CopyOnWriteStr = union(enum) {
     }
 
     pub fn appendByte(self: *@This(), allocator: Allocator, b: u8) {
-        zig {
-            self.append(allocator, &[_]u8{b});
-        }
+        const buf: [1]u8 = [b];
+        self.append(allocator, &buf);
     }
 
     pub fn toSlice(this: *@This()): []const u8 {
