@@ -1175,7 +1175,7 @@ pub fn Calc(comptime V: type): type {
                         return .{ .rad = std.math.atan2(x, y) };
                     }
                 };
-                if (css.generic.tryOpTo(V, Angle, a.value, b.value, .{}, Fn.opToFn)) |v| {
+                if (css.generic.tryOpTo(V, Angle, a.value, b.value, @as(void, {}), Fn.opToFn)) |v| {
                     return .{ .result = v };
                 }
             } else if (a == .number and b == .number) {
@@ -1843,7 +1843,7 @@ pub enum Constant {
             .e => std.math.e,
             .pi => std.math.pi,
             .infinity => std.math.inf(f32),
-            .@"-infinity" => -std.math.inf(f32),
+            .@"-infinity" => -(std.math.inf(f32)),
             .nan => std.math.nan(f32),
         };
     }

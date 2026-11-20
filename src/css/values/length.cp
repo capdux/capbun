@@ -408,7 +408,8 @@ pub enum LengthValue {
         unreachable;
     }
 
-    pub fn tryFromAngle(_: css.css_values.angle.Angle): @This()? {
+    static fn tryFromAngle(angle: css.css_values.angle.Angle): @This()? {
+        * = angle;
         return null;
     }
 
@@ -526,25 +527,25 @@ pub enum Length {
     /// A computed length value using `calc()`.
     calc: *Calc(Length),
 
-    pub fn zero(): Length {
+    static fn zero(): Length {
         return .{ .value = LengthValue.zero() };
     }
 
     pub fn deepClone(allocator: Allocator): Length {
-        return switch (_.*) {
+        return switch (_) {
             .value => |v| .{ .value = v },
             .calc => |calc| .{ .calc = bun.create(allocator, Calc(Length), Calc(Length).deepClone(calc, allocator)) },
         };
     }
 
     pub fn deinit(allocator: Allocator) {
-        return switch (_.*) {
+        return switch (_) {
             .calc => |calc| calc.deinit(allocator),
             .value => {},
         };
     }
 
-    pub fn parse(input: *css.Parser): Result(Length) {
+    static fn parse(input: *css.Parser): Result(Length) {
         if (calc_value := input.tryParse(Calc(Length).parse, {}).asValue()) {
             // PERF: I don't like this redundant allocation
             if (calc_value == .value) {
@@ -568,36 +569,36 @@ pub enum Length {
         return .{ .result = { value: len } };
     }
 
-    pub fn toCss(_: *const @This(), dest: *Printer): PrintErr!void {
-        return switch (this.*) {
+    pub fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) {
             .value => |a| a.toCss(dest),
             .calc => |c| c.toCss(dest),
         };
     }
 
-    pub fn eql(_: *const @This(), other: *const @This()): bool {
-        return css.implementEql(@This(), this, other);
+    pub fn eql(other: *const @This()): bool {
+        return css.implementEql(@This(), &_, other);
     }
 
-    pub fn px(p: CSSNumber): Length {
+    static fn px(p: CSSNumber): Length {
         return { value: { px: p } };
     }
 
     pub fn toPx(): CSSNumber? {
-        return switch (this.*) {
+        return switch (_) {
             .value => |a| a.toPx(),
             else => null,
         };
     }
 
     pub fn mulF32(allocator: Allocator, other: f32): Length {
-        return switch (this) {
-            .value => Length{ value: this.value.mulF32(allocator, other) },
-            .calc => Length{
+        return switch (_) {
+            .value => |v| Length{ value: v.mulF32(allocator, other) },
+            .calc => |c| Length{
                 calc: bun.create(
                     allocator,
                     Calc(Length),
-                    this.calc.mulF32(allocator, other),
+                    c.mulF32(allocator, other),
                 ),
             },
         };
@@ -658,44 +659,47 @@ pub enum Length {
     }
 
     fn tryAdd(allocator: Allocator, other: *const Length): Length? {
-        if (this.* == .value && other.* == .value) {
-            if (res := this.value.tryAdd(allocator, &other.value)) {
-                return Length{ value: res };
-            }
-            return null;
-        }
-
-        if (this.* == .calc) {
-            switch (this.calc.*) {
-                .value => |v| return v.tryAdd(allocator, other),
-                .sum => |s| {
-                    const a = Length{ calc: s.left };
-                    if (res := a.tryAdd(allocator, other)) {
-                        return res.add__(allocator, Length{ calc: s.right });
+        switch (_) {
+            .value => |v| {
+                if (other.* == .value) {
+                    if (res := v.tryAdd(allocator, &other.value)) {
+                        return Length{ value: res };
                     }
-
-                    const b = Length{ calc: s.right };
-                    if (res := b.tryAdd(allocator, other)) {
-                        return a.add__(allocator, res);
-                    }
-
                     return null;
-                },
-                else => return null,
-            }
+                }
+            },
+            .calc => |c| {
+                switch (c.*) {
+                    .value => |v| return v.tryAdd(allocator, other),
+                    .sum => |s| {
+                        const a = Length{ calc: s.left };
+                        if (res := a.tryAdd(allocator, other)) {
+                            return res.add__(allocator, Length{ calc: s.right });
+                        }
+
+                        const b = Length{ calc: s.right };
+                        if (res := b.tryAdd(allocator, other)) {
+                            return a.add__(allocator, res);
+                        }
+
+                        return null;
+                    },
+                    else => return null,
+                }
+            },
         }
 
         if (other.* == .calc) {
             switch (other.calc.*) {
-                .value => |v| return v.tryAdd(allocator, this),
+                .value => |v| return v.tryAdd(allocator, &_),
                 .sum => |s| {
                     const a = Length{ calc: s.left };
-                    if (res := this.tryAdd(allocator, &a)) {
+                    if (res := _.tryAdd(allocator, &a)) {
                         return res.add__(allocator, Length{ calc: s.right });
                     }
 
                     const b = Length{ calc: s.right };
-                    if (res := this.tryAdd(allocator, &b)) {
+                    if (res := _.tryAdd(allocator, &b)) {
                         return a.add__(allocator, res);
                     }
 
@@ -708,7 +712,7 @@ pub enum Length {
         return null;
     }
 
-    fn unwrapCalc(allocator: Allocator, length: Length): Length {
+    static fn unwrapCalc(allocator: Allocator, length: Length): Length {
         return switch (length) {
             .calc => |c| switch (c.*) {
                 .function => |f| switch (f.*) {
@@ -726,7 +730,7 @@ pub enum Length {
     }
 
     pub fn trySign(): f32? {
-        return switch (this.*) {
+        return switch (_) {
             .value => |v| v.sign(),
             .calc => |v| v.trySign(),
         };
@@ -743,16 +747,22 @@ pub enum Length {
     }
 
     pub fn partialCmp(other: *const Length): std.math.Order? {
-        if (_.* == .value && other.* == .value) return css.generic.partialCmp(LengthValue, &_.value, &other.value);
+        switch (_) {
+            .value => |v| {
+                if (other.* == .value) return css.generic.partialCmp(LengthValue, &v, &other.value);
+            },
+            else => {},
+        }
         return null;
     }
 
-    pub fn tryFromAngle(_: css.css_values.angle.Angle): @This()? {
+    static fn tryFromAngle(angle: css.css_values.angle.Angle): @This()? {
+        * = angle;
         return null;
     }
 
     pub fn tryMap(comptime map_fn: *const fn (f32) f32): Length? {
-        return switch (_.*) {
+        return switch (_) {
             .value => |v| .{ .value = v.map(map_fn) },
             else => null,
         };
@@ -763,9 +773,13 @@ pub enum Length {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) f32,
     ): Length? {
-        if (_.* == .value && other.* == .value) {
-            if (val := _.value.tryOp(&other.value, ctx, op_fn)) return .{ .value = val };
-            return null;
+        switch (_) {
+            .value => |v| {
+                if (other.* == .value) {
+                    if (val := v.tryOp(&other.value, ctx, op_fn)) return .{ .value = val };
+                }
+            },
+            else => {},
         }
         return null;
     }
@@ -776,21 +790,26 @@ pub enum Length {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) R,
     ): R? {
-        if (_.* == .value && other.* == .value) {
-            return _.value.tryOpTo(&other.value, R, ctx, op_fn);
+        switch (_) {
+            .value => |v| {
+                if (other.* == .value) {
+                    return v.tryOpTo(&other.value, R, ctx, op_fn);
+                }
+            },
+            else => {},
         }
         return null;
     }
 
     pub fn isZero(): bool {
-        return switch (this.*) {
+        return switch (_) {
             .value => |v| v.isZero(),
             else => false,
         };
     }
 
-    pub fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        return switch (this.*) {
+    pub fn isCompatible(browsers: css.targets.Browsers): bool {
+        return switch (_) {
             .value => |*v| v.isCompatible(browsers),
             .calc => |c| c.isCompatible(browsers),
         };

@@ -319,7 +319,7 @@ pub struct Printer {
     /// NOTE: Same constraints as `writeStr`, the `str` param is assumted to not
     /// contain any newline characters
     fn writeAll(*_, str: []const u8)! {
-        return _.writeStr(str) catch std.mem.Allocator.Error.OutOfMemory;
+        return _.writeStr(str) catch return std.mem.Allocator.Error.OutOfMemory;
     }
 
     fn writeComment(*_, comment: []const u8): PrintErr!void {

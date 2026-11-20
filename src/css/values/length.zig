@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -41,8 +42,8 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_eq(a: anytype, b: anytype) bool {
     const Ta = @TypeOf(a); const Tb = @TypeOf(b);
     if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
@@ -359,8 +360,8 @@ pub fn mulF32(self: LengthValue, _: Allocator, other: f32) LengthValue {
             _ = unreachable;
     }
 
-pub fn tryFromAngle(self: LengthValue, _: css.css_values.angle.Angle) ?@This() {
-        _ = self;
+pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?@This() {
+            _ = &angle;
             return null;
     }
 
@@ -468,20 +469,19 @@ pub const Length = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn zero(self: Length) Length {
-        _ = self;
+pub fn zero() Length {
             return .{ .value = LengthValue.zero() };
     }
 
 pub fn deepClone(self: Length, allocator: Allocator) Length {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| .{ .value = v },
 .calc => |calc| .{ .calc = bun.create(allocator, Calc(Length), Calc(Length).deepClone(calc, allocator)) },
 });
     }
 
 pub fn deinit(self: Length, allocator: Allocator) void {
-            return (switch (self.*) {
+            return (switch (self) {
 .calc => |calc| calc.deinit(allocator),
 .value => {
 {
@@ -490,8 +490,7 @@ pub fn deinit(self: Length, allocator: Allocator) void {
 });
     }
 
-pub fn parse(self: *Length, input: *css.Parser) Result(Length) {
-        _ = self;
+pub fn parse(input: *css.Parser) Result(Length) {
             if (input.tryParse(Calc(Length).parse, .{}).asValue()) |calc_value| {
                 _ = &calc_value;
                 if ((calc_value == .value)) {
@@ -510,24 +509,23 @@ return .{ .err = e };
             return .{ .result = .{ .value = len } };
     }
 
-pub fn toCss(self: *const Length, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+pub fn toCss(self: *Length, dest: *Printer) PrintErr!void {
+            return (switch (self) {
 .value => |a| a.toCss(dest),
 .calc => |c| c.toCss(dest),
 });
     }
 
-pub fn eql(self: *const Length, other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
+pub fn eql(self: Length, other: *const @This()) bool {
+            return css.implementEql(@This(), (&self), other);
     }
 
-pub fn px(self: Length, p: CSSNumber) Length {
-        _ = self;
+pub fn px(p: CSSNumber) Length {
             return .{ .value = .{ .px = p } };
     }
 
 pub fn toPx(self: Length) ?CSSNumber {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |a| a.toPx(),
 else => null,
 });
@@ -535,8 +533,8 @@ else => null,
 
 pub fn mulF32(self: Length, allocator: Allocator, other: f32) Length {
             return (switch (self) {
-.value => Length{ .value = @intFromEnum(self).mulF32(allocator, other) },
-.calc => Length{ .calc = bun.create(allocator, Calc(Length), self.calc.mulF32(allocator, other)) },
+.value => |v| Length{ .value = v.mulF32(allocator, other) },
+.calc => |c| Length{ .calc = bun.create(allocator, Calc(Length), c.mulF32(allocator, other)) },
 });
     }
 
@@ -597,40 +595,44 @@ pub fn add__(self: Length, allocator: Allocator, other: Length) Length {
     }
 
 pub fn tryAdd(self: Length, allocator: Allocator, other: *const Length) ?Length {
-            if (((self.* == .value) and (other.* == .value))) {
-                if (@intFromEnum(self).tryAdd(allocator, (&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)))) |res| {
+            switch (self) {
+.value => |v| {
+if ((other.* == .value)) {
+                if (v.tryAdd(allocator, (&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)))) |res| {
                     _ = &res;
                     return Length{ .value = res };
                 }
                 return null;
             }
-            if ((self.* == .calc)) {
-                switch (self.calc.*) {
+},
+.calc => |c| {
+switch (c.*) {
 .value => |v| {
 return v.tryAdd(allocator, other);
 },
 .sum => |s| {
 const a = Length{ .calc = s.left };
-                if (a.tryAdd(allocator, other)) |res| {
-                    _ = &res;
-                    return res.add__(allocator, Length{ .calc = s.right });
-                }
-                const b = Length{ .calc = s.right };
-                if (b.tryAdd(allocator, other)) |res| {
-                    _ = &res;
-                    return a.add__(allocator, res);
-                }
-                return null;
+            if (a.tryAdd(allocator, other)) |res| {
+                _ = &res;
+                return res.add__(allocator, Length{ .calc = s.right });
+            }
+            const b = Length{ .calc = s.right };
+            if (b.tryAdd(allocator, other)) |res| {
+                _ = &res;
+                return a.add__(allocator, res);
+            }
+            return null;
 },
 else => {
 return null;
 },
 }
-            }
+},
+}
             if ((other.* == .calc)) {
                 switch (other.calc.*) {
 .value => |v| {
-return v.tryAdd(allocator, self);
+return v.tryAdd(allocator, (&self));
 },
 .sum => |s| {
 const a = Length{ .calc = s.left };
@@ -653,8 +655,7 @@ return null;
             return null;
     }
 
-pub fn unwrapCalc(self: Length, allocator: Allocator, length: Length) Length {
-        _ = self;
+pub fn unwrapCalc(allocator: Allocator, length: Length) Length {
             return (switch (length) {
 .calc => |c| (switch (c.*) {
 .function => |f| (switch (f.*) {
@@ -668,7 +669,7 @@ else => length,
     }
 
 pub fn trySign(self: Length) ?f32 {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| v.sign(),
 .calc => |v| v.trySign(),
 });
@@ -685,51 +686,71 @@ pub fn isSignPositive(self: Length) bool {
     }
 
 pub fn partialCmp(self: Length, other: *const Length) ?std.math.Order {
-            if (((self.* == .value) and (other.* == .value))) {
-                return css.generic.partialCmp(LengthValue, (&@intFromEnum(self)), (&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)));
+            switch (self) {
+.value => |v| {
+if ((other.* == .value)) {
+                return css.generic.partialCmp(LengthValue, (&v), (&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)));
             }
+},
+else => {
+
+},
+}
             return null;
     }
 
-pub fn tryFromAngle(self: Length, _: css.css_values.angle.Angle) ?@This() {
-        _ = self;
+pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?@This() {
+            _ = &angle;
             return null;
     }
 
 pub fn tryMap(self: Length, comptime map_fn: *const fn (f32) f32) ?Length {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| .{ .value = v.map(map_fn) },
 else => null,
 });
     }
 
 pub fn tryOp(self: Length, other: *const Length, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?Length {
-            if (((self.* == .value) and (other.* == .value))) {
-                if (@intFromEnum(self).tryOp((&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)), ctx, op_fn)) |val| {
+            switch (self) {
+.value => |v| {
+if ((other.* == .value)) {
+                if (v.tryOp((&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)), ctx, op_fn)) |val| {
                     _ = &val;
                     return .{ .value = val };
                 }
-                return null;
             }
+},
+else => {
+
+},
+}
             return null;
     }
 
 pub fn tryOpTo(self: Length, other: *const Length, comptime R: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) R) ?R {
-            if (((self.* == .value) and (other.* == .value))) {
-                return @intFromEnum(self).tryOpTo((&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)), R, ctx, op_fn);
+            switch (self) {
+.value => |v| {
+if ((other.* == .value)) {
+                return v.tryOpTo((&(if (@typeInfo(@TypeOf(other)) == .@"enum") @intFromEnum(other) else other.value)), R, ctx, op_fn);
             }
+},
+else => {
+
+},
+}
             return null;
     }
 
 pub fn isZero(self: Length) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| v.isZero(),
 else => false,
 });
     }
 
-pub fn isCompatible(self: *const Length, browsers: css.targets.Browsers) bool {
-            return (switch (self.*) {
+pub fn isCompatible(self: Length, browsers: css.targets.Browsers) bool {
+            return (switch (self) {
 .value => |*v| v.isCompatible(browsers),
 .calc => |c| c.isCompatible(browsers),
 });

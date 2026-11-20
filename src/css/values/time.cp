@@ -12,6 +12,7 @@ const Angle = css.css_values.angle.Angle;
 ///
 /// Time values may be explicit or computed by `calc()`, but are always stored and serialized
 /// as their computed value.
+@value
 pub union(Tag) Time {
     /// A time in seconds.
     seconds: CSSNumber,
@@ -20,18 +21,18 @@ pub union(Tag) Time {
 
     const Tag = enum(u8) { seconds = 1, milliseconds = 2 };
 
-    pub fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    pub fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-    pub fn hash(_: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+    pub fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
 
-    pub fn parse(input: *css.Parser): Result(Time) {
+    static fn parse(input: *css.Parser): Result(Time) {
         switch (input.tryParse(Calc(Time).parse, {})) {
             .result => |vv| switch (vv) {
                 .value => |v| {
@@ -66,10 +67,10 @@ pub union(Tag) Time {
         }
     }
 
-    pub fn toCss(_: *const @This(), dest: *css.Printer): css.PrintErr!void {
+    pub fn toCss(dest: *css.Printer): css.PrintErr!void {
         // 0.1s is shorter than 100ms
         // anything smaller is longer
-        switch (this.*) {
+        switch (_) {
             .seconds => |s| {
                 if (s > 0.0 && s < 0.1) {
                     CSSNumberFns.toCss(&(s * 1000.0), dest)?;
@@ -92,7 +93,7 @@ pub union(Tag) Time {
     }
 
     pub fn isZero(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .seconds => |s| s == 0.0,
             .milliseconds => |ms| ms == 0.0,
         };
@@ -100,13 +101,13 @@ pub union(Tag) Time {
 
     /// Returns the time in milliseconds.
     pub fn toMs(): CSSNumber {
-        return switch (_.*) {
+        return switch (_) {
             .seconds => |v| v * 1000.0,
             .milliseconds => |v| v,
         };
     }
 
-    pub fn tryFromToken(token: *const css.Token): css.Maybe(Time, void) {
+    static fn tryFromToken(token: *const css.Token): css.Maybe(Time, void) {
         switch (token.*) {
             .dimension => |*dim| {
                 // todo_stuff.match_ignore_ascii_case
@@ -122,12 +123,13 @@ pub union(Tag) Time {
         return { err: {} };
     }
 
-    pub fn tryFromAngle(_: css.css_values.angle.Angle): @This()? {
+    static fn tryFromAngle(angle: css.css_values.angle.Angle): @This()? {
+        * = angle;
         return null;
     }
 
     pub fn mulF32(allocator: std.mem.Allocator, other: f32): Time {
-        return switch (_.*) {
+        return switch (_) {
             .seconds => Time{ seconds: _.seconds * other },
             .milliseconds => Time{ milliseconds: _.milliseconds * other },
         };
@@ -148,7 +150,7 @@ pub union(Tag) Time {
                 return a + b;
             }
         };
-        return _.op(&other, {}, addfn.add);
+        return _.op(&other, @as(void, {}), addfn.add);
     }
 
     pub fn partialCmp(other: *const Time): std.math.Order? {
@@ -156,14 +158,14 @@ pub union(Tag) Time {
     }
 
     pub fn map(comptime map_fn: *const fn (f32) f32): Time {
-        return switch (_.*) {
+        return switch (_) {
             .seconds => Time{ seconds: map_fn(_.seconds) },
             .milliseconds => Time{ milliseconds: map_fn(_.milliseconds) },
         };
     }
 
     pub fn sign(): f32 {
-        return switch (_.*) {
+        return switch (_) {
             .seconds => |v| CSSNumberFns.sign(&v),
             .milliseconds => |v| CSSNumberFns.sign(&v),
         };
@@ -174,13 +176,13 @@ pub union(Tag) Time {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) f32,
     ): Time {
-        if (_.* == .seconds && other.* == .seconds) {
+        if (_ == .seconds && other.* == .seconds) {
             return Time{ seconds: op_fn(ctx, _.seconds, other.seconds) };
-        } else if (_.* == .milliseconds && other.* == .milliseconds) {
+        } else if (_ == .milliseconds && other.* == .milliseconds) {
             return Time{ milliseconds: op_fn(ctx, _.milliseconds, other.milliseconds) };
-        } else if (_.* == .seconds && other.* == .milliseconds) {
+        } else if (_ == .seconds && other.* == .milliseconds) {
             return Time{ seconds: op_fn(ctx, _.seconds, other.milliseconds / 1000.0) };
-        } else if (_.* == .milliseconds && other.* == .seconds) {
+        } else if (_ == .milliseconds && other.* == .seconds) {
             return Time{ milliseconds: op_fn(ctx, _.milliseconds, other.seconds * 1000.0) };
         }
         unreachable;
@@ -192,13 +194,13 @@ pub union(Tag) Time {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) R,
     ): R {
-        if (_.* == .seconds && other.* == .seconds) {
+        if (_ == .seconds && other.* == .seconds) {
             return op_fn(ctx, _.seconds, other.seconds);
-        } else if (_.* == .milliseconds && other.* == .milliseconds) {
+        } else if (_ == .milliseconds && other.* == .milliseconds) {
             return op_fn(ctx, _.milliseconds, other.milliseconds);
-        } else if (_.* == .seconds && other.* == .milliseconds) {
+        } else if (_ == .seconds && other.* == .milliseconds) {
             return op_fn(ctx, _.seconds, other.milliseconds / 1000.0);
-        } else if (_.* == .milliseconds && other.* == .seconds) {
+        } else if (_ == .milliseconds && other.* == .seconds) {
             return op_fn(ctx, _.milliseconds, other.seconds * 1000.0);
         }
         unreachable;

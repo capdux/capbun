@@ -670,9 +670,9 @@ pub inline fn trySign(comptime T: type, val: *const T) ?f32 {
         return (if (T == CSSNumber) CSSNumberFns.sign(val) else {
 {
             if (@hasDecl(T, "sign")) {
-                return T.sign(val);
+                return val.sign();
             }
-            return T.trySign(val);
+            return val.trySign();
         }
 });
 }
@@ -681,9 +681,9 @@ pub inline fn tryMap(comptime T: type, val: *const T, comptime map_fn: *const fn
         return (if (T == CSSNumber) map_fn(val.*) else {
 {
             if (@hasDecl(T, "map")) {
-                return T.map(val, map_fn);
+                return val.map(map_fn);
             }
-            return T.tryMap(val, map_fn);
+            return val.tryMap(map_fn);
         }
 });
 }
@@ -692,20 +692,20 @@ pub inline fn tryOpTo(comptime T: type, comptime R: type, lhs: *const T, rhs: *c
         return (if (T == CSSNumber) op_fn(ctx, lhs.*, rhs.*) else {
 {
             if (@hasDecl(T, "opTo")) {
-                return T.opTo(lhs, rhs, R, ctx, op_fn);
+                return lhs.opTo(rhs, R, ctx, op_fn);
             }
-            return T.tryOpTo(lhs, rhs, R, ctx, op_fn);
+            return lhs.tryOpTo(rhs, R, ctx, op_fn);
         }
 });
 }
 
 pub inline fn tryOp(comptime T: type, lhs: *const T, rhs: *const T, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?T {
-        return (if (T == Angle) Angle.tryOp(lhs, rhs, ctx, op_fn) else if (T == CSSNumber) op_fn(ctx, lhs.*, rhs.*) else {
+        return (if (T == Angle) lhs.tryOp(rhs, ctx, op_fn) else if (T == CSSNumber) op_fn(ctx, lhs.*, rhs.*) else {
 {
             if (@hasDecl(T, "op")) {
-                return T.op(lhs, rhs, ctx, op_fn);
+                return lhs.op(rhs, ctx, op_fn);
             }
-            return T.tryOp(lhs, rhs, ctx, op_fn);
+            return lhs.tryOp(rhs, ctx, op_fn);
         }
 });
 }

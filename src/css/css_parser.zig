@@ -1342,7 +1342,7 @@ return .{ .err = e };
 },
 }
             }
-            return .{ .result = self.input.cached_token.?.token };
+            return .{ .result = (&@field(self.input.cached_token.?, "token")) };
     }
 
 pub fn nextByte(self: *Parser) ?u8 {
@@ -1384,7 +1384,7 @@ pub fn nextIncludingWhitespaceAndComments(self: *Parser) Result(*Token) {
             if ((cached_token.token == .function)) {
                 _ = self.input.tokenizer.seeFunction(cached_token.token.function);
             }
-            const tok_ptr = cached_token.token;
+            const tok_ptr = (&@field(cached_token, "token"));
             break :token tok_ptr;
 } else token: {
             const new_token = (switch (self.input.tokenizer.next()) {
@@ -1394,7 +1394,7 @@ return .{ .err = self.newError(BasicParseErrorKind.end_of_input) };
 },
 });
             self.input.cached_token = CachedToken{ .token = new_token, .start_position = token_start_position, .end_state = self.input.tokenizer.state() };
-            const tok_ptr = self.input.cached_token.?.token;
+            const tok_ptr = (&@field(self.input.cached_token.?, "token"));
             break :token tok_ptr;
 });
             if (BlockType.opening(token)) |block_type| {
@@ -3553,10 +3553,10 @@ pub fn integer(comptime T: type, self: T, dest: *Printer) PrintErr!void {
             return dest.writeStr(str);
     }
 
-pub fn float32(self: to_css, writer: *Printer) !void {
+pub fn float32(val: f32, writer: *Printer) !void {
             var scratch: [129]u8 = undefined;
             _ = &scratch;
-            const _tmp_v4 = try dtoa_short((&scratch), self, 6);
+            const _tmp_v4 = try dtoa_short((&scratch), val, 6);
             var str = cp_unpack_elem(_tmp_v4, 0);
             _ = &str;
             return writer.writeAll(str);

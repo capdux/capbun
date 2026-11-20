@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -69,13 +70,11 @@ pub const Angle = union(Tag) {
     grad: CSSNumber,
     turn: CSSNumber,
 
-pub fn parse(self: *Angle, input: *css.Parser) Result(Angle) {
-        _ = self;
+pub fn parse(input: *css.Parser) Result(Angle) {
             return Angle.parseInternal(input, false);
     }
 
-pub fn parseInternal(self: *Angle, input: *css.Parser, allow_unitless_zero: bool) Result(Angle) {
-        _ = self;
+pub fn parseInternal(input: *css.Parser, allow_unitless_zero: bool) Result(Angle) {
             if (input.tryParse(Calc(Angle).parse, .{}).asValue()) |calc_value| {
                 _ = &calc_value;
                 if ((calc_value == .value)) {
@@ -124,13 +123,12 @@ else => {
             return .{ .err = location.newUnexpectedTokenError(token.*) };
     }
 
-pub fn parseWithUnitlessZero(self: *Angle, input: *css.Parser) Result(Angle) {
-        _ = self;
+pub fn parseWithUnitlessZero(input: *css.Parser) Result(Angle) {
             return Angle.parseInternal(input, true);
     }
 
-pub fn toCss(self: *Angle, dest: *Printer) PrintErr!void {
-            const tup = (switch (self.*) {
+pub fn toCss(self: Angle, dest: *Printer) PrintErr!void {
+            const tup = (switch (self) {
 .deg => |val| .{ val, "deg" },
 .grad => |val| .{ val, "grad" },
 .rad => |val| brk: {
@@ -148,7 +146,7 @@ pub fn toCss(self: *Angle, dest: *Printer) PrintErr!void {
             _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeDimension(value, unit, dest)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
     }
 
-pub fn toCssWithUnitlessZero(self: *Angle, dest: *Printer) PrintErr!void {
+pub fn toCssWithUnitlessZero(self: Angle, dest: *Printer) PrintErr!void {
             if (self.isZero()) {
                 const v: f32 = 0.0;
                 _ = try CSSNumberFns.toCss((&v), dest);
@@ -157,13 +155,11 @@ pub fn toCssWithUnitlessZero(self: *Angle, dest: *Printer) PrintErr!void {
             }
     }
 
-pub fn tryFromAngle(self: *const Angle, angle: *Angle) ?This {
-        _ = self;
+pub fn tryFromAngle(angle: Angle) ?This {
             return angle;
     }
 
-pub fn tryFromToken(self: *const Angle, token: *const css.Token) css.Maybe(Angle,void) {
-        _ = self;
+pub fn tryFromToken(token: *const css.Token) css.Maybe(Angle,void) {
             if ((token.* == .dimension)) {
                 const value = (if (@typeInfo(@TypeOf(token.dimension.num)) == .@"enum") @intFromEnum(token.dimension.num) else token.dimension.num.value);
                 const unit = token.dimension.unit;
@@ -186,9 +182,9 @@ pub fn tryFromToken(self: *const Angle, token: *const css.Token) css.Maybe(Angle
             return .{ .err = .{} };
     }
 
-pub fn toRadians(self: *const Angle) CSSNumber {
+pub fn toRadians(self: Angle) CSSNumber {
             const RAD_PER_DEG: f32 = (std.math.pi / 180.0);
-            return (switch (self.*) {
+            return (switch (self) {
 .deg => |deg| {
 return (deg * RAD_PER_DEG);
 },
@@ -204,9 +200,9 @@ return ((turn * 360.0) * RAD_PER_DEG);
 });
     }
 
-pub fn toDegrees(self: *const Angle) CSSNumber {
+pub fn toDegrees(self: Angle) CSSNumber {
             const DEG_PER_RAD: f32 = (180.0 / std.math.pi);
-            switch (self.*) {
+            switch (self) {
 .deg => |deg| {
 return deg;
 },
@@ -222,12 +218,12 @@ return (turn * 360.0);
 }
     }
 
-pub fn zero() *Angle {
+pub fn zero() Angle {
             return .{ .deg = 0.0 };
     }
 
-pub fn isZero(self: *const Angle) bool {
-            const v = (switch (self.*) {
+pub fn isZero(self: Angle) bool {
+            const v = (switch (self) {
 .deg => |deg| deg,
 .rad => |rad| rad,
 .grad => |grad| grad,
@@ -236,14 +232,14 @@ pub fn isZero(self: *const Angle) bool {
             return (v == 0.0);
     }
 
-pub fn intoCalc(self: *const Angle, allocator: std.mem.Allocator) Calc(Angle) {
+pub fn intoCalc(self: Angle, allocator: std.mem.Allocator) Calc(Angle) {
             const R = Calc(Angle);
             _ = &R;
-            return R{ .value = bun.create(allocator, Angle, self.*) };
+            return R{ .value = bun.create(allocator, Angle, self) };
     }
 
-pub fn map(self: *const Angle, comptime opfn: *const fn (f32) f32) *Angle {
-            return (switch (self.*) {
+pub fn map(self: Angle, comptime opfn: *const fn (f32) f32) Angle {
+            return (switch (self) {
 .deg => |deg| Angle{ .deg = opfn(deg) },
 .rad => |rad| Angle{ .rad = opfn(rad) },
 .grad => |grad| Angle{ .grad = opfn(grad) },
@@ -251,26 +247,26 @@ pub fn map(self: *const Angle, comptime opfn: *const fn (f32) f32) *Angle {
 });
     }
 
-pub fn tryMap(self: *const Angle, comptime opfn: *const fn (f32) f32) ?*Angle {
-            return self.map(self, opfn);
+pub fn tryMap(self: Angle, comptime opfn: *const fn (f32) f32) ?Angle {
+            return self.map(opfn);
     }
 
-pub fn addInternal(self: *const Angle, allocator: std.mem.Allocator, other: *Angle) *Angle {
+pub fn addInternal(self: Angle, allocator: std.mem.Allocator, other: Angle) Angle {
         _ = allocator;
             return self.add(other);
     }
 
-pub fn add(self: *const Angle, rhs: *Angle) *Angle {
+pub fn add(self: Angle, rhs: Angle) Angle {
             const addfn = struct {
 
 pub fn add(_: void, a: f32, b: f32) f32 {
             return (a + b);
     }
 };
-            return Angle.op(self, rhs, .{}, addfn.add);
+            return self.op((&rhs), @as(void, .{}), addfn.add);
     }
 
-pub fn tryAdd(self: *const Angle, allocator: std.mem.Allocator, rhs: *const Angle) ?*Angle {
+pub fn tryAdd(self: Angle, allocator: std.mem.Allocator, rhs: *const Angle) ?Angle {
         _ = allocator;
             return .{ .deg = (self.toDegrees() + rhs.toDegrees()) };
     }
@@ -279,9 +275,9 @@ pub fn eql(lhs: *const Angle, rhs: *const Angle) bool {
             return (lhs.toDegrees() == rhs.toDegrees());
     }
 
-pub fn mulF32(self: *const Angle, allocator: std.mem.Allocator, other: f32) *Angle {
+pub fn mulF32(self: Angle, allocator: std.mem.Allocator, other: f32) Angle {
         _ = allocator;
-            return (switch (self.*) {
+            return (switch (self) {
 .deg => |v| Angle{ .deg = (v * other) },
 .rad => |v| Angle{ .rad = (v * other) },
 .grad => |v| Angle{ .grad = (v * other) },
@@ -289,29 +285,29 @@ pub fn mulF32(self: *const Angle, allocator: std.mem.Allocator, other: f32) *Ang
 });
     }
 
-pub fn partialCmp(self: *const Angle, other: *const Angle) ?std.math.Order {
+pub fn partialCmp(self: Angle, other: *const Angle) ?std.math.Order {
             return css.generic.partialCmpF32((&self.toDegrees()), (&other.toDegrees()));
     }
 
-pub fn tryOp(self: *const Angle, other: *const Angle, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?*Angle {
-            return Angle.op(self, other, ctx, op_fn);
+pub fn tryOp(self: Angle, other: *const Angle, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?Angle {
+            return self.op(other, ctx, op_fn);
     }
 
-pub fn tryOpTo(self: *const Angle, other: *const Angle, comptime R: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) R) ?R {
-            return Angle.opTo(self, other, R, ctx, op_fn);
+pub fn tryOpTo(self: Angle, other: *const Angle, comptime R: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) R) ?R {
+            return self.opTo(other, R, ctx, op_fn);
     }
 
-pub fn op(self: *const Angle, other: *const Angle, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) *Angle {
-            if (((self.* == .deg) and (other.* == .deg))) {
+pub fn op(self: Angle, other: *const Angle, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) Angle {
+            if (((self == .deg) and (other.* == .deg))) {
                 return Angle{ .deg = op_fn(ctx, self.deg, other.deg) };
             } else {
-                if (((self.* == .rad) and (other.* == .rad))) {
+                if (((self == .rad) and (other.* == .rad))) {
                     return Angle{ .rad = op_fn(ctx, self.rad, other.rad) };
                 } else {
-                    if (((self.* == .grad) and (other.* == .grad))) {
+                    if (((self == .grad) and (other.* == .grad))) {
                         return Angle{ .grad = op_fn(ctx, self.grad, other.grad) };
                     } else {
-                        if (((self.* == .turn) and (other.* == .turn))) {
+                        if (((self == .turn) and (other.* == .turn))) {
                             return Angle{ .turn = op_fn(ctx, self.turn, other.turn) };
                         } else {
                             return Angle{ .deg = op_fn(ctx, self.toDegrees(), other.toDegrees()) };
@@ -321,17 +317,17 @@ pub fn op(self: *const Angle, other: *const Angle, ctx: anytype, comptime op_fn:
             }
     }
 
-pub fn opTo(self: *const Angle, other: *const Angle, comptime T: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) T) T {
-            if (((self.* == .deg) and (other.* == .deg))) {
+pub fn opTo(self: Angle, other: *const Angle, comptime T: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) T) T {
+            if (((self == .deg) and (other.* == .deg))) {
                 return op_fn(ctx, self.deg, other.deg);
             } else {
-                if (((self.* == .rad) and (other.* == .rad))) {
+                if (((self == .rad) and (other.* == .rad))) {
                     return op_fn(ctx, self.rad, other.rad);
                 } else {
-                    if (((self.* == .grad) and (other.* == .grad))) {
+                    if (((self == .grad) and (other.* == .grad))) {
                         return op_fn(ctx, self.grad, other.grad);
                     } else {
-                        if (((self.* == .turn) and (other.* == .turn))) {
+                        if (((self == .turn) and (other.* == .turn))) {
                             return op_fn(ctx, self.turn, other.turn);
                         } else {
                             return op_fn(ctx, self.toDegrees(), other.toDegrees());
@@ -341,18 +337,18 @@ pub fn opTo(self: *const Angle, other: *const Angle, comptime T: type, ctx: anyt
             }
     }
 
-pub fn sign(self: *const Angle) f32 {
-            return (switch (self.*) {
+pub fn sign(self: Angle) f32 {
+            return (switch (self) {
 .deg, .rad, .grad, .turn => |v| CSSNumberFns.sign((&v)),
 });
     }
 
-pub fn hash(self: *const Angle, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+pub fn hash(self: Angle, hasher: *std.hash.Wyhash) void {
+            return css.implementHash(@This(), (&self), hasher);
     }
 
-pub fn deepClone(self: *const Angle, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: Angle, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
     const This = @This();
 };

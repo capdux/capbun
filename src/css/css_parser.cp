@@ -4435,7 +4435,7 @@ pub struct Parser {
                 .err => |e| return { err: e },
             }
         }
-        return { result: &_.input.cached_token.?.token };
+        return { result: &@field(_.input.cached_token.?, "token") };
     }
 
     fn nextByte(*_): u8? {
@@ -4488,7 +4488,7 @@ pub struct Parser {
             if (cached_token.token == .function) {
                 _.input.tokenizer.seeFunction(cached_token.token.function);
             }
-            const tok_ptr = &cached_token.token;
+            const tok_ptr = &@field(cached_token, "token");
             break :token tok_ptr;
         } else token: {
             const new_token = switch (_.input.tokenizer.next()) {
@@ -4500,7 +4500,7 @@ pub struct Parser {
                 start_position: token_start_position,
                 end_state: _.input.tokenizer.state(),
             };
-            const tok_ptr = &_.input.cached_token.?.token;
+            const tok_ptr = &@field(_.input.cached_token.?, "token");
             break :token tok_ptr;
         };
 
@@ -7121,9 +7121,9 @@ pub struct to_css {
         return dest.writeStr(str);
     }
 
-    fn float32(writer: *Printer)! {
+    static fn float32(val: f32, writer: *Printer)! {
         let scratch: [129]u8 = undefined;
-        let [str, *] = dtoa_short(&scratch, _, 6)?;
+        let [str, *] = dtoa_short(&scratch, val, 6)?;
         return writer.writeAll(str);
     }
 

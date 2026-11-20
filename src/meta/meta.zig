@@ -115,7 +115,11 @@ else => @compileError("Used `EnumFields(T)` on a type that is not an `enum` or a
 
 pub fn ReturnOfMaybe(comptime function: anytype) type {
         const Func = @TypeOf(function);
-        const typeinfo: std.builtin.Type.Fn = @typeInfo(Func).@"fn";
+        const typeinfo: std.builtin.Type.Fn = (switch (@typeInfo(Func)) {
+.@"fn" => |f| f,
+.pointer => |ptr| @typeInfo(ptr.child).@"fn",
+else => @compileError(("Expected a function type, got " ++ @typeName(Func))),
+});
         const MaybeType = ((typeinfo.return_type) orelse (@compileError("Expected the function to have a return type")));
         return MaybeResult(MaybeType);
 }
@@ -140,7 +144,11 @@ pub fn ReturnOf(comptime function: anytype) type {
 }
 
 pub fn ReturnOfType(comptime Type: type) type {
-        const typeinfo: std.builtin.Type.Fn = @typeInfo(Type).@"fn";
+        const typeinfo: std.builtin.Type.Fn = (switch (@typeInfo(Type)) {
+.@"fn" => |f| f,
+.pointer => |ptr| @typeInfo(ptr.child).@"fn",
+else => @compileError(("Expected a function type, got " ++ @typeName(Type))),
+});
         return ((typeinfo.return_type) orelse (void));
 }
 

@@ -17,6 +17,7 @@ const Tag = enum(u8) {
 ///
 /// Angles may be explicit or computed by `calc()`, but are always stored and serialized
 /// as their computed value.
+@value
 pub union(Tag) Angle {
     /// An angle in degrees. There are 360 degrees in a full circle.
     deg: CSSNumber,
@@ -30,11 +31,11 @@ pub union(Tag) Angle {
     // ~toCssImpl
     const This = @This();
 
-    pub fn parse(input: *css.Parser): Result(Angle) {
+    static fn parse(input: *css.Parser): Result(Angle) {
         return Angle.parseInternal(input, false);
     }
 
-    fn parseInternal(input: *css.Parser, allow_unitless_zero: bool): Result(Angle) {
+    static fn parseInternal(input: *css.Parser, allow_unitless_zero: bool): Result(Angle) {
         if (calc_value := input.tryParse(Calc(Angle).parse, {}).asValue()) {
             if (calc_value == .value) return { result: calc_value.value.* };
             // Angles are always compatible, so they will always compute to a value.
@@ -71,12 +72,12 @@ pub union(Tag) Angle {
         return { err: location.newUnexpectedTokenError(token.*) };
     }
 
-    pub fn parseWithUnitlessZero(input: *css.Parser): Result(Angle) {
+    static fn parseWithUnitlessZero(input: *css.Parser): Result(Angle) {
         return Angle.parseInternal(input, true);
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        const tup = switch (_.*) {
+        const tup = switch (_) {
             .deg => |val| .{ val, "deg" },
             .grad => |val| .{ val, "grad" },
             .rad => |val| brk: {
@@ -106,11 +107,11 @@ pub union(Tag) Angle {
         }
     }
 
-    pub fn tryFromAngle(angle: Angle): This? {
+    static fn tryFromAngle(angle: Angle): This? {
         return angle;
     }
 
-    pub fn tryFromToken(token: *const css.Token): css.Maybe(Angle, void) {
+    static fn tryFromToken(token: *const css.Token): css.Maybe(Angle, void) {
         if (token.* == .dimension) {
             const value = token.dimension.num.value;
             const unit = token.dimension.unit;
@@ -130,7 +131,7 @@ pub union(Tag) Angle {
     /// Returns the angle in radians.
     pub fn toRadians(): CSSNumber {
         const RAD_PER_DEG: f32 = std.math.pi / 180.0;
-        return switch (_.*) {
+        return switch (_) {
             .deg => |deg| return deg * RAD_PER_DEG,
             .rad => |rad| return rad,
             .grad => |grad| return grad * 180.0 / 200.0 * RAD_PER_DEG,
@@ -141,7 +142,7 @@ pub union(Tag) Angle {
     /// Returns the angle in degrees.
     pub fn toDegrees(): CSSNumber {
         const DEG_PER_RAD: f32 = 180.0 / std.math.pi;
-        switch (_.*) {
+        switch (_) {
             .deg => |deg| return deg,
             .rad => |rad| return rad * DEG_PER_RAD,
             .grad => |grad| return grad * 180.0 / 200.0,
@@ -154,7 +155,7 @@ pub union(Tag) Angle {
     }
 
     pub fn isZero(): bool {
-        const v = switch (_.*) {
+        const v = switch (_) {
             .deg => |deg| deg,
             .rad => |rad| rad,
             .grad => |grad| grad,
@@ -166,12 +167,12 @@ pub union(Tag) Angle {
     pub fn intoCalc(allocator: std.mem.Allocator): Calc(Angle) {
         const R = Calc(Angle);
         return R{
-            value: bun.create(allocator, Angle, _.*),
+            value: bun.create(allocator, Angle, _),
         };
     }
 
     pub fn map(comptime opfn: *const fn (f32) f32): Angle {
-        return switch (_.*) {
+        return switch (_) {
             .deg => |deg| Angle{ deg: opfn(deg) },
             .rad => |rad| Angle{ rad: opfn(rad) },
             .grad => |grad| Angle{ grad: opfn(grad) },
@@ -180,7 +181,7 @@ pub union(Tag) Angle {
     }
 
     pub fn tryMap(comptime opfn: *const fn (f32) f32): Angle? {
-        return map(_, opfn);
+        return _.map(opfn);
     }
 
     pub fn addInternal(allocator: std.mem.Allocator, other: Angle): Angle {
@@ -193,7 +194,7 @@ pub union(Tag) Angle {
                 return a + b;
             }
         };
-        return Angle.op(&_, &rhs, {}, addfn.add);
+        return _.op(&rhs, @as(void, {}), addfn.add);
     }
 
     pub fn tryAdd(allocator: std.mem.Allocator, rhs: *const Angle): Angle? {
@@ -206,7 +207,7 @@ pub union(Tag) Angle {
 
     pub fn mulF32(allocator: std.mem.Allocator, other: f32): Angle {
         // return Angle.op(&this, &other, Angle.mulF32);
-        return switch (_.*) {
+        return switch (_) {
             .deg => |v| Angle{ deg: v * other },
             .rad => |v| Angle{ rad: v * other },
             .grad => |v| Angle{ grad: v * other },
@@ -223,7 +224,7 @@ pub union(Tag) Angle {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) f32,
     ): Angle? {
-        return Angle.op(_, other, ctx, op_fn);
+        return _.op(other, ctx, op_fn);
     }
 
     pub fn tryOpTo(
@@ -232,7 +233,7 @@ pub union(Tag) Angle {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) R,
     ): R? {
-        return Angle.opTo(_, other, R, ctx, op_fn);
+        return _.opTo(other, R, ctx, op_fn);
     }
 
     pub fn op(
@@ -240,13 +241,13 @@ pub union(Tag) Angle {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) f32,
     ): Angle {
-        if (_.* == .deg && other.* == .deg) {
+        if (_ == .deg && other.* == .deg) {
             return Angle{ deg: op_fn(ctx, _.deg, other.deg) };
-        } else if (_.* == .rad && other.* == .rad) {
+        } else if (_ == .rad && other.* == .rad) {
             return Angle{ rad: op_fn(ctx, _.rad, other.rad) };
-        } else if (_.* == .grad && other.* == .grad) {
+        } else if (_ == .grad && other.* == .grad) {
             return Angle{ grad: op_fn(ctx, _.grad, other.grad) };
-        } else if (_.* == .turn && other.* == .turn) {
+        } else if (_ == .turn && other.* == .turn) {
             return Angle{ turn: op_fn(ctx, _.turn, other.turn) };
         } else {
             return Angle{ deg: op_fn(ctx, _.toDegrees(), other.toDegrees()) };
@@ -259,13 +260,13 @@ pub union(Tag) Angle {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) T,
     ): T {
-        if (_.* == .deg && other.* == .deg) {
+        if (_ == .deg && other.* == .deg) {
             return op_fn(ctx, _.deg, other.deg);
-        } else if (_.* == .rad && other.* == .rad) {
+        } else if (_ == .rad && other.* == .rad) {
             return op_fn(ctx, _.rad, other.rad);
-        } else if (_.* == .grad && other.* == .grad) {
+        } else if (_ == .grad && other.* == .grad) {
             return op_fn(ctx, _.grad, other.grad);
-        } else if (_.* == .turn && other.* == .turn) {
+        } else if (_ == .turn && other.* == .turn) {
             return op_fn(ctx, _.turn, other.turn);
         } else {
             return op_fn(ctx, _.toDegrees(), other.toDegrees());
@@ -273,17 +274,17 @@ pub union(Tag) Angle {
     }
 
     pub fn sign(): f32 {
-        return switch (_.*) {
+        return switch (_) {
             .deg, .rad, .grad, .turn => |v| CSSNumberFns.sign(&v),
         };
     }
 
-    pub fn hash(_: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+    pub fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
 
-    pub fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    pub fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 

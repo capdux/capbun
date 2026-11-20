@@ -1409,3 +1409,5 @@
 - **[2026-11-20] Wave 11 Batch A+C 典型修复**：`output.cp` `panic` 自动解包指针 `args` 彻底根治 `Io/Writer.zig:597`；`Mutex.cp` 改原生 `if` 解决误选 `DarwinImpl`；`SSLConfig.cp` 建 `CStringSlice` 避免 `.len` 误走 `std.mem.span`；`BufferFallbackAllocator`/`MiniEventLoop` 升级 `@root struct`；57 个 `expect/to*.cp` 批量消除 `error.js_undefined`；19 高频模块预防性清扫 132 处错误联合返回。
 
 - **[2026-11-20] Wave 11 收官里程碑**：全仓 1,293 模块中已有 **1,250 个（96.7%）** 通过 `bun run zig:check` 零错误，仅剩 43 个文件（高度集中于 CSS `generics`/`calc`/`angle`/`time`/`length`、`meta` 与 `expect`）。
+
+- **[2026-11-20] Wave 12 Batch A Meta+CSS 泛型收官**：`meta.cp` `ReturnOfType`/`ReturnOfMaybe` 兼容 `.pointer` 解包消除 110 处报错；`css/generics.cp` 改点语法自动解引用消除 96 处报错；`angle`/`time` 补 `@value` 与 `static fn`，`calc` 统一 `@as(void, {})` 消除 29 处报错。
