@@ -1365,3 +1365,6 @@
 
 ### 2026-11-20 06:30:01 UTC - zig:check 第 4 轮 Bake+URL+Shell+Parser 修复经验
 - `url.cp` Scanner 从 `class` 改值类型 `struct`；`BundledAst`/`G`/`picohttp` 空定长数组 `[0]T = undefined`；`transpiler.cp` 别名规避 `union(enum)` 自动指针化。
+
+### 2026-11-20 06:34:14 UTC - WebCore Source 根导出修复经验
+- `FileReader`/`ByteBlobLoader`/`ByteStream` 统一由 `export class` 升级 `@root struct`，彻底解决 `generated_classes_list.zig` 3 处 `Source` 缺失。

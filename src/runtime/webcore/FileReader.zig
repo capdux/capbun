@@ -4,398 +4,230 @@
 const std = @import("std");
 const string = []const u8;
 
-pub fn CpResult(comptime __T: type, comptime __E: type) type {
-    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
-}
-const __CpErr = struct {
-    code: i32 = 0,
-    msg: []const u8 = "",
-    cause: ?*const anyopaque = null,
-    cause_type_id: u64 = 0,
-    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
-        if (__cp_self.cause) |__cp_c| {
-            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
-                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
-                    return null;
-                }
-            }
-            return @ptrCast(@alignCast(__cp_c));
-        }
-        return null;
-    }
-};
-pub const Err = __CpErr;
-pub const Error = __CpErr;
-fn is_cp_result(comptime __T: type) bool {
-    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
-}
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
-fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
-fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
-fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
-fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
-fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
-fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
-fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
-fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-fn cp_eq(a: anytype, b: anytype) bool {
-    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
-    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
-    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
-    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
-    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
-    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
-    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
-    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
-    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
-    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
-    if (comptime Ta != Tb) return false;
-    return a == b;
-}
-fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
-
 pub const bun = @import("bun");
 const Environment = @import("bun").Environment;
 const Output = @import("bun").Output;
 const jsc = @import("bun").jsc;
-pub const FileReader = struct {
-    reader: IOReader = IOReader.init(FileReader),
-    done: bool = false,
-    pending: streams.Result.Pending = .{},
-    pending_value: jsc.Strong.Optional = .empty,
-    pending_view: []u8 = (&.{}),
-    fd: bun.FD = bun.invalid_fd,
-    start_offset: ?usize = null,
-    max_size: ?usize = null,
-    total_readed: usize = 0,
-    started: bool = false,
-    waiting_for_onReaderDone: bool = false,
-    event_loop: jsc.EventLoopHandle,
-    lazy: Lazy = .{ .none = {} },
-    buffered: std.ArrayListUnmanaged(u8) = .{},
-    read_inside_on_pull: ReadDuringJSOnPullResult = .{ .none = {} },
-    highwater_mark: usize = 16384,
-    flowing: bool = true,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.reader = IOReader.init(FileReader); self_ptr.done = false; self_ptr.pending = .{}; self_ptr.pending_value = .empty; self_ptr.pending_view = (&.{}); self_ptr.fd = bun.invalid_fd; self_ptr.start_offset = null; self_ptr.max_size = null; self_ptr.total_readed = 0; self_ptr.started = false; self_ptr.waiting_for_onReaderDone = false; self_ptr.lazy = .{ .none = {} }; self_ptr.buffered = .{}; self_ptr.read_inside_on_pull = .{ .none = {} }; self_ptr.highwater_mark = 16384; self_ptr.flowing = true; return self_ptr; }
+pub const ReadDuringJSOnPullResult = union(enum) {
+    none: void,
+    js: []u8,
+    amount_read: usize,
+    temporary: []const u8,
+    use_buffered: usize,
+};
 
-pub fn init(self: *FileReader, reader: IOReader, done: bool, pending: streams.Result.Pending, pending_value: jsc.Strong.Optional, pending_view: []u8, fd: bun.FD, start_offset: ?usize, max_size: ?usize, total_readed: usize, started: bool, waiting_for_onReaderDone: bool, event_loop: jsc.EventLoopHandle, lazy: Lazy, buffered: std.ArrayListUnmanaged(u8), read_inside_on_pull: ReadDuringJSOnPullResult, highwater_mark: usize, flowing: bool) void {
-        var __reader_moved = false; _ = &__reader_moved;
-        defer if (!__reader_moved) { const __T = @TypeOf(reader); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = reader.release() catch {}; } else { reader.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = reader; _drop_val.release(); } };
-        var __pending_moved = false; _ = &__pending_moved;
-        defer if (!__pending_moved) { const __T = @TypeOf(pending); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pending.release() catch {}; } else { pending.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pending; _drop_val.release(); } };
-        var __pending_value_moved = false; _ = &__pending_value_moved;
-        defer if (!__pending_value_moved) { const __T = @TypeOf(pending_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pending_value.release() catch {}; } else { pending_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pending_value; _drop_val.release(); } };
-        var __fd_moved = false; _ = &__fd_moved;
-        defer if (!__fd_moved) { const __T = @TypeOf(fd); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = fd.release() catch {}; } else { fd.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = fd; _drop_val.release(); } };
-        var __event_loop_moved = false; _ = &__event_loop_moved;
-        defer if (!__event_loop_moved) { const __T = @TypeOf(event_loop); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = event_loop.release() catch {}; } else { event_loop.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = event_loop; _drop_val.release(); } };
-        var __lazy_moved = false; _ = &__lazy_moved;
-        defer if (!__lazy_moved) { const __T = @TypeOf(lazy); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = lazy.release() catch {}; } else { lazy.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = lazy; _drop_val.release(); } };
-        var __buffered_moved = false; _ = &__buffered_moved;
-        defer if (!__buffered_moved) { const __T = @TypeOf(buffered); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffered.release() catch {}; } else { buffered.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffered; _drop_val.release(); } };
-        var __read_inside_on_pull_moved = false; _ = &__read_inside_on_pull_moved;
-        defer if (!__read_inside_on_pull_moved) { const __T = @TypeOf(read_inside_on_pull); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = read_inside_on_pull.release() catch {}; } else { read_inside_on_pull.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = read_inside_on_pull; _drop_val.release(); } };
-            self.reader = reader;
-            self.done = done;
-            self.pending = pending;
-            self.pending_value = pending_value;
-            self.pending_view = pending_view;
-            self.fd = fd;
-            self.start_offset = start_offset;
-            self.max_size = max_size;
-            self.total_readed = total_readed;
-            self.started = started;
-            self.waiting_for_onReaderDone = waiting_for_onReaderDone;
-            self.event_loop = event_loop;
-            self.lazy = lazy;
-            self.buffered = buffered;
-            self.read_inside_on_pull = read_inside_on_pull;
-            self.highwater_mark = highwater_mark;
-            self.flowing = flowing;
-    }
+pub const FileReaderOpenedFileBlob = struct {
+    fd: bun.FD,
+    pollable: bool = false,
+    nonblocking: bool = true,
+    file_type: bun.io.FileType = .file,
+};
 
-pub extern "c" fn open_as_nonblocking_tty(self: *const FileReader, fd: i32, flags: i32) callconv(.c) i32;
+pub const Lazy = union(enum) {
+    none: void,
+    blob: *Blob.Store,
+    pub const OpenedFileBlob = FileReaderOpenedFileBlob;
+    pub const openFileBlob = openFileBlobImpl;
+};
 
-pub fn openFileBlob(file: *Blob.Store.File) bun.sys.Maybe(OpenedFileBlob) {
-            var opened = OpenedFileBlob{ .fd = bun.invalid_fd };
-            _ = &opened;
-            var file_buf: bun.PathBuffer = undefined;
-            _ = &file_buf;
-            var is_nonblocking = false;
-            _ = &is_nonblocking;
-            const fd: bun.FD = (if ((file.pathlike == .fd)) (if ((file.pathlike.fd.stdioTag() != null)) brk: {
-            if (Environment.isPosix) {
-                const rc = open_as_nonblocking_tty(file.pathlike.fd.native(), bun.O.RDONLY);
-                if ((rc > -1)) {
-                    is_nonblocking = true;
-                    file.is_atty = true;
-                    break :brk .fromNative(rc);
-                }
-            }
-            break :brk file.pathlike.fd;
-} else brk: {
-            const duped = bun.sys.dupWithFlags(file.pathlike.fd, 0);
-            if ((duped != .result)) {
-                return .{ .err = duped.err.withFd(file.pathlike.fd) };
-            }
-            const fd: bun.FD = duped.result;
-            if (Environment.isPosix) {
-                if ((fd.stdioTag() == null)) {
-                    is_nonblocking = (switch (fd.getFcntlFlags()) {
-.result => |flags| ((flags & bun.O.NONBLOCK) != 0),
-.err => false,
-});
-                }
-            }
-            break :brk (switch (fd.makeLibUVOwnedForSyscall(.dup, .close_on_fail)) {
-.result => |owned_fd| owned_fd,
-.err => |err| {
-return .{ .err = err };
-},
-});
-}) else (switch (bun.sys.open(file.pathlike.path.sliceZ((&file_buf)), ((bun.O.RDONLY | bun.O.NONBLOCK) | bun.O.CLOEXEC), 0)) {
-.result => |fd| brk: {
-            if (Environment.isPosix) {
-                is_nonblocking = true;
-            }
-            break :brk fd;
-},
-.err => |err| {
-return .{ .err = err.withPath(file.pathlike.path.slice()) };
-},
-}));
-            if (Environment.isPosix) {
-                if (((((file.is_atty) orelse (false)) or ((fd.stdioTag() != null) and std.posix.isatty(fd.cast()))) or (((file.pathlike == .fd) and (file.pathlike.fd.stdioTag() != null)) and std.posix.isatty(file.pathlike.fd.cast())))) {
-                    file.is_atty = true;
-                }
-                const stat: bun.Stat = (switch (bun.sys.fstat(fd)) {
-.result => |result| result,
-.err => |err| {
-{
-                    _ = fd.close();
-                    return .{ .err = err };
-                }
-},
-});
-                if (bun.S.ISDIR(stat.mode)) {
-                    _ = bun.Async.Closer.close(fd, .{});
-                    return .{ .err = .fromCode(.ISDIR, .fstat) };
-                }
-                if (bun.S.ISREG(stat.mode)) {
-                    is_nonblocking = false;
-                }
-                opened.pollable = ((bun.sys.isPollable(stat.mode) or is_nonblocking) or ((file.is_atty) orelse (false)));
-                opened.file_type = (if (bun.S.ISFIFO(stat.mode)) .pipe else (if (bun.S.ISSOCK(stat.mode)) .socket else .file));
-                if ((is_nonblocking and (opened.file_type != .socket))) {
-                    opened.file_type = .nonblocking_pipe;
-                }
-                opened.nonblocking = (is_nonblocking or ((opened.pollable and (!((file.is_atty) orelse (false)))) and (opened.file_type != .pipe)));
-                if ((opened.nonblocking and (opened.file_type == .pipe))) {
-                    opened.file_type = .nonblocking_pipe;
-                }
-            }
-            opened.fd = fd;
-            return .{ .result = opened };
-    }
+pub const FileReader = @This();
 
-pub fn eventLoop(self: *const FileReader) jsc.EventLoopHandle {
-            return self.event_loop;
-    }
+reader: IOReader = IOReader.init(FileReader),
+done: bool = false,
+pending: streams.Result.Pending = .{},
+pending_value: jsc.Strong.Optional = .empty,
+pending_view: []u8 = empty_u8_slice[0..0],
+fd: bun.FD = bun.invalid_fd,
+start_offset: ?usize = null,
+max_size: ?usize = null,
+total_readed: usize = 0,
+started: bool = false,
+waiting_for_onReaderDone: bool = false,
+event_loop: jsc.EventLoopHandle,
+lazy: Lazy = .{ .none = {} },
+buffered: std.ArrayListUnmanaged(u8) = .{},
+read_inside_on_pull: ReadDuringJSOnPullResult = .{ .none = {} },
+highwater_mark: usize = 16384,
+flowing: bool = true,
 
-pub fn loop(self: *const FileReader) *bun.Async.Loop {
-            if (bun.Environment.isWindows) {
-                return self.eventLoop().loop().uv_loop;
-            } else {
-                return self.eventLoop().loop();
-            }
-    }
+pub fn eventLoop(ctx: *const FileReader) jsc.EventLoopHandle {
+        return ctx.event_loop;
+}
+
+pub fn loop(ctx: *const FileReader) *bun.Async.Loop {
+        if (bun.Environment.isWindows) {
+            return ctx.eventLoop().loop().uv_loop;
+        } else {
+            return ctx.eventLoop().loop();
+        }
+}
 
 pub fn setup(self: *FileReader, fd: bun.FD) void {
-            self.* = FileReader{ .reader = .{}, .done = false, .fd = fd };
-            self.event_loop = self.parent().globalThis.bunVM().eventLoop();
-    }
+        self.* = FileReader{ .reader = .{}, .done = false, .fd = fd };
+        self.event_loop = self.parent().globalThis.bunVM().eventLoop();
+}
 
 pub fn onStart(self: *FileReader) streams.Start {
-            _ = self.reader.setParent(self);
-            const was_lazy = (self.lazy != .none);
-            var pollable = false;
-            _ = &pollable;
-            var file_type: bun.io.FileType = .file;
-            _ = &file_type;
-            if ((self.lazy == .blob)) {
-                switch (self.lazy.blob.data) {
-.s3, .bytes => {
-_ = @panic("Invalid state in FileReader: expected file ");
-},
-.file => |*file| {
-defer {
+        _ = self.reader.setParent(self);
+        const was_lazy = (self.lazy != .none);
+        var pollable = false;
+        _ = &pollable;
+        var file_type: bun.io.FileType = .file;
+        _ = &file_type;
+        if ((self.lazy == .blob)) {
+            if ((self.lazy.blob.data == .file)) {
+                defer {
                 {
                     _ = self.lazy.blob.deref();
                     self.lazy = .none;
                 }
                 }
-                switch (Lazy.openFileBlob(file)) {
-.err => |err| {
-self.fd = bun.invalid_fd;
-                return .{ .err = err };
-},
-.result => |opened| {
-_ = bun.assert(opened.fd.isValid());
-                self.fd = opened.fd;
-                pollable = opened.pollable;
-                file_type = opened.file_type;
-                self.reader.flags.nonblocking = opened.nonblocking;
-                self.reader.flags.pollable = pollable;
-},
-}
-},
-}
-            }
-            {
-                const reader_fd = self.reader.getFd();
-                if (((reader_fd != bun.invalid_fd) and (self.fd == bun.invalid_fd))) {
-                    self.fd = reader_fd;
-                }
-            }
-            self.event_loop = jsc.EventLoopHandle.init(self.parent().globalThis.bunVM().eventLoop());
-            if (was_lazy) {
-                _ = self.parent().incrementCount();
-                self.waiting_for_onReaderDone = true;
-                if (self.start_offset) |offset| {
-                    _ = &offset;
-                    switch (self.reader.startFileOffset(self.fd, pollable, offset)) {
-.result => {
-
-},
-.err => |e| {
-return .{ .err = e };
-},
-}
+                const opened_res = openFileBlobImpl((&self.lazy.blob.data.file));
+                if ((opened_res == .err)) {
+                    self.fd = bun.invalid_fd;
+                    return .{ .err = opened_res.err };
                 } else {
-                    switch (self.reader.start(self.fd, pollable)) {
-.result => {
-
-},
-.err => |e| {
-return .{ .err = e };
-},
-}
+                    const opened = opened_res.result;
+                    _ = bun.assert(opened.fd.isValid());
+                    self.fd = opened.fd;
+                    pollable = opened.pollable;
+                    file_type = opened.file_type;
+                    self.reader.flags.nonblocking = opened.nonblocking;
+                    self.reader.flags.pollable = pollable;
                 }
             } else {
-                if (Environment.isPosix) {
-                    if ((self.reader.flags.pollable and (!self.reader.isDone()))) {
-                        self.waiting_for_onReaderDone = true;
-                        _ = self.parent().incrementCount();
-                    }
+                _ = @panic("Invalid state in FileReader: expected file ");
+            }
+        }
+        {
+            const reader_fd = self.reader.getFd();
+            if (((reader_fd != bun.invalid_fd) and (self.fd == bun.invalid_fd))) {
+                self.fd = reader_fd;
+            }
+        }
+        self.event_loop = jsc.EventLoopHandle.init(self.parent().globalThis.bunVM().eventLoop());
+        if (was_lazy) {
+            _ = self.parent().incrementCount();
+            self.waiting_for_onReaderDone = true;
+            if (self.start_offset) |offset| {
+                _ = &offset;
+                const start_res = self.reader.startFileOffset(self.fd, pollable, offset);
+                if ((start_res == .err)) {
+                    return .{ .err = start_res.err };
+                }
+            } else {
+                const start_res = self.reader.start(self.fd, pollable);
+                if ((start_res == .err)) {
+                    return .{ .err = start_res.err };
                 }
             }
+        } else {
             if (Environment.isPosix) {
-                if ((file_type == .socket)) {
-                    self.reader.flags.socket = true;
-                }
-                if (self.reader.handle.getPoll()) |poll| {
-                    _ = &poll;
-                    if (((file_type == .socket) or self.reader.flags.socket)) {
-                        _ = poll.flags.insert(.socket);
-                    } else {
-                        _ = poll.flags.insert(.fifo);
-                    }
-                    if (self.reader.flags.nonblocking) {
-                        _ = poll.flags.insert(.nonblocking);
-                    }
+                if ((self.reader.flags.pollable and (!self.reader.isDone()))) {
+                    self.waiting_for_onReaderDone = true;
+                    _ = self.parent().incrementCount();
                 }
             }
-            self.started = true;
-            if (self.reader.isDone()) {
-                _ = self.consumeReaderBuffer();
-                if ((self.buffered.items.len > 0)) {
-                    return .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
+        }
+        if (Environment.isPosix) {
+            if ((file_type == .socket)) {
+                self.reader.flags.socket = true;
+            }
+            if (self.reader.handle.getPoll()) |poll| {
+                _ = &poll;
+                if (((file_type == .socket) or self.reader.flags.socket)) {
+                    _ = poll.flags.insert(.socket);
+                } else {
+                    _ = poll.flags.insert(.fifo);
                 }
-            } else {
-                if (Environment.isPosix) {
-                    if (((!was_lazy) and self.reader.flags.pollable)) {
-                        _ = self.reader.read();
-                    }
+                if (self.reader.flags.nonblocking) {
+                    _ = poll.flags.insert(.nonblocking);
                 }
             }
-            return .{ .ready = .{} };
-    }
+        }
+        self.started = true;
+        if (self.reader.isDone()) {
+            _ = self.consumeReaderBuffer();
+            if ((self.buffered.items.len > 0)) {
+                return .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
+            }
+        } else {
+            if (Environment.isPosix) {
+                if (((!was_lazy) and self.reader.flags.pollable)) {
+                    _ = self.reader.read();
+                }
+            }
+        }
+        return .{ .ready = .{} };
+}
 
 pub fn parent(self: *FileReader) *Source {
-            return @fieldParentPtr("context", self);
-    }
+        return @fieldParentPtr("context", self);
+}
 
 pub fn onCancel(self: *FileReader) void {
-            if (self.done) {
-                return;
-            }
-            self.done = true;
-            _ = self.reader.updateRef(false);
-            if ((!self.reader.isDone())) {
-                _ = self.reader.close();
-            }
-    }
+        if (self.done) {
+            return;
+        }
+        self.done = true;
+        _ = self.reader.updateRef(false);
+        if ((!self.reader.isDone())) {
+            _ = self.reader.close();
+        }
+}
 
 pub fn deinit(self: *FileReader) void {
-            _ = self.buffered.deinit(bun.default_allocator);
-            _ = self.reader.updateRef(false);
-            _ = self.reader.deinit();
-            _ = self.pending_value.deinit();
-            if ((self.lazy != .none)) {
-                _ = self.lazy.blob.deref();
-                self.lazy = .none;
-            }
-            _ = self.parent().deinit();
-    }
+        _ = self.buffered.deinit(bun.default_allocator);
+        _ = self.reader.updateRef(false);
+        _ = self.reader.deinit();
+        _ = self.pending_value.deinit();
+        if ((self.lazy != .none)) {
+            _ = self.lazy.blob.deref();
+            self.lazy = .none;
+        }
+        _ = self.parent().deinit();
+}
 
 pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadState) bool {
-            var buf = init_buf;
-            _ = &buf;
-            _ = log("onReadChunk() = {d} ({s}) - read_inside_on_pull: {s}", .{ buf.len, @tagName(state), @tagName(self.read_inside_on_pull) });
-            if (self.done) {
-                _ = self.reader.close();
-                return false;
-            }
-            var close = false;
-            _ = &close;
-            defer {
-            if (close) {
-                _ = self.reader.close();
-            }
-            }
-            var hasMore = (state != .eof);
-            _ = &hasMore;
-            if ((buf.len > 0)) {
-                if (self.max_size) |max_size| {
-                    _ = &max_size;
-                    if ((self.total_readed >= max_size)) {
-                        return false;
-                    }
-                    const len = @min((max_size - self.total_readed), buf.len);
-                    if ((buf.len > len)) {
-                        buf = buf[0..len];
-                    }
-                    self.total_readed = (self.total_readed + len);
-                    if ((buf.len == 0)) {
-                        close = true;
-                        hasMore = false;
-                    }
+        var buf = init_buf;
+        _ = &buf;
+        _ = log("onReadChunk() = {d} ({s}) - read_inside_on_pull: {s}", .{ buf.len, @tagName(state), @tagName(self.read_inside_on_pull) });
+        if (self.done) {
+            _ = self.reader.close();
+            return false;
+        }
+        var close = false;
+        _ = &close;
+        defer {
+        if (close) {
+            _ = self.reader.close();
+        }
+        }
+        var hasMore = (state != .eof);
+        _ = &hasMore;
+        if ((buf.len > 0)) {
+            if (self.max_size) |max_size| {
+                _ = &max_size;
+                if ((self.total_readed >= max_size)) {
+                    return false;
+                }
+                const len = @min((max_size - self.total_readed), buf.len);
+                if ((buf.len > len)) {
+                    buf = buf[0..len];
+                }
+                self.total_readed = (self.total_readed + len);
+                if ((buf.len == 0)) {
+                    close = true;
+                    hasMore = false;
                 }
             }
-            const reader_buffer = self.reader.buffer();
-            if ((self.read_inside_on_pull != .none)) {
-                switch (self.read_inside_on_pull) {
-.js => |in_progress| {
-if (((in_progress.len >= buf.len) and (!hasMore))) {
+        }
+        const reader_buffer = self.reader.buffer();
+        if ((self.read_inside_on_pull != .none)) {
+            if ((self.read_inside_on_pull == .js)) {
+                const in_progress = self.read_inside_on_pull.js;
+                if (((in_progress.len >= buf.len) and (!hasMore))) {
                     _ = @memcpy(in_progress[0..buf.len], buf);
                     self.read_inside_on_pull = .{ .js = in_progress[buf.len..] };
                 } else {
@@ -408,146 +240,159 @@ if (((in_progress.len >= buf.len) and (!hasMore))) {
                         }
                     }
                 }
-},
-.use_buffered => |original| {
-_ = bun.handleOom(self.buffered.appendSlice(bun.default_allocator, buf));
-                self.read_inside_on_pull = .{ .use_buffered = (buf.len + original) };
-},
-.none => {
-_ = unreachable;
-},
-else => {
-_ = @panic("Invalid state");
-},
-}
             } else {
-                if ((self.pending.state == .pending)) {
-                    if (((buf.len == 0) and (state == .drained))) {
-                        return true;
-                    }
-                    defer {
-                    {
-                        _ = self.pending_value.clearWithoutDeallocation();
-                        self.pending_view = empty_u8_slice[0..0];
-                        _ = self.pending.run();
-                    }
-                    }
-                    if ((buf.len == 0)) {
-                        if ((self.buffered.items.len == 0)) {
-                            _ = self.buffered.clearAndFree(bun.default_allocator);
-                            self.buffered = reader_buffer.moveToUnmanaged();
-                        }
-                        var buffer = (&self.buffered);
-                        _ = &buffer;
-                        defer {
-                        _ = buffer.clearAndFree(bun.default_allocator);
-                        }
-                        if ((buffer.items.len > 0)) {
-                            if ((self.pending_view.len >= buffer.items.len)) {
-                                _ = @memcpy(self.pending_view[0..buffer.items.len], buffer.items);
-                                self.pending.result = .{ .into_array_and_done = .{ .value = ((self.pending_value.get()) orelse (.zero)), .len = @truncate(buffer.items.len) } };
-                            } else {
-                                self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
-                            }
-                        } else {
-                            self.pending.result = .{ .done = .{} };
-                        }
-                        return false;
-                    }
-                    const was_done = self.reader.isDone();
-                    if ((self.pending_view.len >= buf.len)) {
-                        _ = @memcpy(self.pending_view[0..buf.len], buf);
-                        _ = reader_buffer.clearRetainingCapacity();
-                        _ = self.buffered.clearRetainingCapacity();
-                        const into_array: streams.Result.IntoArray = .{ .value = ((self.pending_value.get()) orelse (.zero)), .len = @truncate(buf.len) };
-                        self.pending.result = (if (was_done) .{ .into_array_and_done = into_array } else .{ .into_array = into_array });
-                        return (!was_done);
-                    }
-                    if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
-                        if (self.reader.isDone()) {
-                            _ = bun.assert_eql(buf.ptr, reader_buffer.items.ptr);
-                            var buffer = reader_buffer.moveToUnmanaged();
-                            _ = &buffer;
-                            _ = buffer.shrinkRetainingCapacity(buf.len);
-                            self.pending.result = .{ .owned_and_done = .moveFromList(buffer) };
-                        } else {
-                            _ = reader_buffer.clearRetainingCapacity();
-                            self.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };
-                        }
-                        return (!was_done);
-                    }
-                    if ((!bun.isSliceInBuffer(buf, self.buffered.allocatedSlice()))) {
-                        self.pending.result = (if (self.reader.isDone()) .{ .temporary_and_done = .fromBorrowedSliceDangerous(buf) } else .{ .temporary = .fromBorrowedSliceDangerous(buf) });
-                        return (!was_done);
-                    }
-                    _ = bun.assert_eql(buf.ptr, self.buffered.items.ptr);
-                    var buffered = self.buffered;
-                    _ = &buffered;
-                    self.buffered = .{};
-                    _ = buffered.shrinkRetainingCapacity(buf.len);
-                    self.pending.result = (if (self.reader.isDone()) .{ .owned_and_done = .moveFromList((&buffered)) } else .{ .owned = .moveFromList((&buffered)) });
-                    return (!was_done);
+                if ((self.read_inside_on_pull == .use_buffered)) {
+                    const original = self.read_inside_on_pull.use_buffered;
+                    _ = bun.handleOom(self.buffered.appendSlice(bun.default_allocator, buf));
+                    self.read_inside_on_pull = .{ .use_buffered = (buf.len + original) };
                 } else {
-                    if ((!bun.isSliceInBuffer(buf, self.buffered.allocatedSlice()))) {
-                        _ = bun.handleOom(self.buffered.appendSlice(bun.default_allocator, buf));
-                        if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
-                            _ = reader_buffer.clearRetainingCapacity();
-                        }
+                    if ((self.read_inside_on_pull == .none)) {
+                        _ = unreachable;
+                    } else {
+                        _ = @panic("Invalid state");
                     }
                 }
             }
-            return ((self.read_inside_on_pull != .temporary) and (!(((self.buffered.items.len + reader_buffer.items.len) >= self.highwater_mark) and (!self.reader.flags.pollable))));
-    }
+        } else {
+            if ((self.pending.state == .pending)) {
+                if (((buf.len == 0) and (state == .drained))) {
+                    return true;
+                }
+                defer {
+                {
+                    _ = self.pending_value.clearWithoutDeallocation();
+                    self.pending_view = empty_u8_slice[0..0];
+                    _ = self.pending.run();
+                }
+                }
+                if ((buf.len == 0)) {
+                    if ((self.buffered.items.len == 0)) {
+                        _ = self.buffered.clearAndFree(bun.default_allocator);
+                        self.buffered = reader_buffer.moveToUnmanaged();
+                    }
+                    var buffer = (&self.buffered);
+                    _ = &buffer;
+                    defer {
+                    _ = buffer.clearAndFree(bun.default_allocator);
+                    }
+                    if ((buffer.items.len > 0)) {
+                        if ((self.pending_view.len >= buffer.items.len)) {
+                            _ = @memcpy(self.pending_view[0..buffer.items.len], buffer.items);
+                            self.pending.result = .{ .into_array_and_done = .{ .value = ((self.pending_value.get()) orelse (.zero)), .len = @truncate(buffer.items.len) } };
+                        } else {
+                            self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
+                        }
+                    } else {
+                        self.pending.result = .{ .done = .{} };
+                    }
+                    return false;
+                }
+                const was_done = self.reader.isDone();
+                if ((self.pending_view.len >= buf.len)) {
+                    _ = @memcpy(self.pending_view[0..buf.len], buf);
+                    _ = reader_buffer.clearRetainingCapacity();
+                    _ = self.buffered.clearRetainingCapacity();
+                    const into_array: streams.Result.IntoArray = .{ .value = ((self.pending_value.get()) orelse (.zero)), .len = @truncate(buf.len) };
+                    if (was_done) {
+                        self.pending.result = .{ .into_array_and_done = into_array };
+                    } else {
+                        self.pending.result = .{ .into_array = into_array };
+                    }
+                    return (!was_done);
+                }
+                if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
+                    if (self.reader.isDone()) {
+                        _ = bun.assert_eql(buf.ptr, reader_buffer.items.ptr);
+                        var buffer = reader_buffer.moveToUnmanaged();
+                        _ = &buffer;
+                        _ = buffer.shrinkRetainingCapacity(buf.len);
+                        self.pending.result = .{ .owned_and_done = .moveFromList(buffer) };
+                    } else {
+                        _ = reader_buffer.clearRetainingCapacity();
+                        self.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };
+                    }
+                    return (!was_done);
+                }
+                if ((!bun.isSliceInBuffer(buf, self.buffered.allocatedSlice()))) {
+                    if (self.reader.isDone()) {
+                        self.pending.result = .{ .temporary_and_done = .fromBorrowedSliceDangerous(buf) };
+                    } else {
+                        self.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };
+                    }
+                    return (!was_done);
+                }
+                _ = bun.assert_eql(buf.ptr, self.buffered.items.ptr);
+                var buffered = self.buffered;
+                _ = &buffered;
+                self.buffered = .{};
+                _ = buffered.shrinkRetainingCapacity(buf.len);
+                if (self.reader.isDone()) {
+                    self.pending.result = .{ .owned_and_done = .moveFromList((&buffered)) };
+                } else {
+                    self.pending.result = .{ .owned = .moveFromList((&buffered)) };
+                }
+                return (!was_done);
+            } else {
+                if ((!bun.isSliceInBuffer(buf, self.buffered.allocatedSlice()))) {
+                    _ = bun.handleOom(self.buffered.appendSlice(bun.default_allocator, buf));
+                    if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
+                        _ = reader_buffer.clearRetainingCapacity();
+                    }
+                }
+            }
+        }
+        return ((self.read_inside_on_pull != .temporary) and (!(((self.buffered.items.len + reader_buffer.items.len) >= self.highwater_mark) and (!self.reader.flags.pollable))));
+}
 
-pub fn isPulling(self: *const FileReader) bool {
-            return (self.read_inside_on_pull != .none);
-    }
+pub fn isPulling(self: FileReader) bool {
+        return (self.read_inside_on_pull != .none);
+}
 
 pub fn onPull(self: *FileReader, buffer: []u8, array: jsc.JSValue) streams.Result {
-            _ = array.ensureStillAlive();
-            defer {
-            _ = array.ensureStillAlive();
-            }
-            var drained = self.drain();
-            _ = &drained;
-            if ((drained.len > 0)) {
-                _ = log("onPull({d}) = {d}", .{ buffer.len, drained.len });
-                _ = self.pending_value.clearWithoutDeallocation();
-                self.pending_view = empty_u8_slice[0..0];
-                if ((buffer.len >= (if (comptime @typeInfo(@TypeOf(drained.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(drained.len)) else cp_cast_int(usize, drained.len)))) {
-                    const drained_len = drained.len;
-                    _ = @memcpy(buffer[0..drained_len], drained.slice());
-                    _ = drained.deinit(bun.default_allocator);
-                    if (self.reader.isDone()) {
-                        return .{ .into_array_and_done = .{ .value = array, .len = drained_len } };
-                    } else {
-                        return .{ .into_array = .{ .value = array, .len = drained_len } };
-                    }
-                }
+        _ = array.ensureStillAlive();
+        defer {
+        _ = array.ensureStillAlive();
+        }
+        var drained = self.drain();
+        _ = &drained;
+        if ((drained.len > 0)) {
+            _ = log("onPull({d}) = {d}", .{ buffer.len, drained.len });
+            _ = self.pending_value.clearWithoutDeallocation();
+            self.pending_view = empty_u8_slice[0..0];
+            if ((buffer.len >= (if (comptime @typeInfo(@TypeOf(drained.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(drained.len)) else cp_cast_int(usize, drained.len)))) {
+                const drained_len = drained.len;
+                _ = @memcpy(buffer[0..drained_len], drained.slice());
+                _ = drained.deinit(bun.default_allocator);
                 if (self.reader.isDone()) {
-                    return .{ .owned_and_done = drained };
+                    return .{ .into_array_and_done = .{ .value = array, .len = drained_len } };
                 } else {
-                    return .{ .owned = drained };
+                    return .{ .into_array = .{ .value = array, .len = drained_len } };
                 }
             }
             if (self.reader.isDone()) {
-                return .{ .done = .{} };
+                return .{ .owned_and_done = drained };
+            } else {
+                return .{ .owned = drained };
             }
-            if ((!self.reader.hasPendingRead())) {
-                if ((!self.flowing)) {
-                    _ = log("onPull({d}) = pending (not flowing)", .{ buffer.len });
-                    _ = self.pending_value.set(self.parent().globalThis, array);
-                    self.pending_view = buffer;
-                    return .{ .pending = (&self.pending) };
-                }
-                self.read_inside_on_pull = .{ .js = buffer };
-                _ = self.reader.read();
-                defer {
-                self.read_inside_on_pull = .{ .none = {} };
-                }
-                switch (self.read_inside_on_pull) {
-.js => |remaining_buf| {
-const amount_read = (buffer.len - remaining_buf.len);
+        }
+        if (self.reader.isDone()) {
+            return .{ .done = .{} };
+        }
+        if ((!self.reader.hasPendingRead())) {
+            if ((!self.flowing)) {
+                _ = log("onPull({d}) = pending (not flowing)", .{ buffer.len });
+                _ = self.pending_value.set(self.parent().globalThis, array);
+                self.pending_view = buffer;
+                return .{ .pending = (&self.pending) };
+            }
+            self.read_inside_on_pull = .{ .js = buffer };
+            _ = self.reader.read();
+            defer {
+            self.read_inside_on_pull = .{ .none = {} };
+            }
+            if ((self.read_inside_on_pull == .js)) {
+                const remaining_buf = self.read_inside_on_pull.js;
+                const amount_read = (buffer.len - remaining_buf.len);
                 _ = log("onPull({d}) = {d}", .{ buffer.len, amount_read });
                 if ((amount_read > 0)) {
                     if (self.reader.isDone()) {
@@ -558,150 +403,223 @@ const amount_read = (buffer.len - remaining_buf.len);
                 if (self.reader.isDone()) {
                     return .{ .done = .{} };
                 }
-},
-.temporary => |buf| {
-_ = log("onPull({d}) = {d}", .{ buffer.len, buf.len });
-                if (self.reader.isDone()) {
-                    return .{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(buf) };
-                }
-                return .{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(buf) };
-},
-.use_buffered => {
-_ = log("onPull({d}) = {d}", .{ buffer.len, self.buffered.items.len });
-                if (self.reader.isDone()) {
-                    return .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
-                }
-                return .{ .owned = bun.ByteList.moveFromList((&self.buffered)) };
-},
-else => {
-
-},
-}
-                if (self.reader.isDone()) {
-                    _ = log("onPull({d}) = done", .{ buffer.len });
-                    return .{ .done = .{} };
+            } else {
+                if ((self.read_inside_on_pull == .temporary)) {
+                    const buf = self.read_inside_on_pull.temporary;
+                    _ = log("onPull({d}) = {d}", .{ buffer.len, buf.len });
+                    if (self.reader.isDone()) {
+                        return .{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(buf) };
+                    }
+                    return .{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(buf) };
+                } else {
+                    if ((self.read_inside_on_pull == .use_buffered)) {
+                        _ = log("onPull({d}) = {d}", .{ buffer.len, self.buffered.items.len });
+                        if (self.reader.isDone()) {
+                            return .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
+                        }
+                        return .{ .owned = bun.ByteList.moveFromList((&self.buffered)) };
+                    }
                 }
             }
-            _ = self.pending_value.set(self.parent().globalThis, array);
-            self.pending_view = buffer;
-            _ = log("onPull({d}) = pending", .{ buffer.len });
-            return .{ .pending = (&self.pending) };
-    }
+            if (self.reader.isDone()) {
+                _ = log("onPull({d}) = done", .{ buffer.len });
+                return .{ .done = .{} };
+            }
+        }
+        _ = self.pending_value.set(self.parent().globalThis, array);
+        self.pending_view = buffer;
+        _ = log("onPull({d}) = pending", .{ buffer.len });
+        return .{ .pending = (&self.pending) };
+}
 
 pub fn drain(self: *FileReader) bun.ByteList {
-            if ((self.buffered.items.len > 0)) {
-                const out = bun.ByteList.moveFromList((&self.buffered));
-                if (Environment.allow_assert) {
-                    _ = bun.assert((self.reader.buffer().items.ptr != out.ptr));
-                }
-                return out;
+        if ((self.buffered.items.len > 0)) {
+            const out = bun.ByteList.moveFromList((&self.buffered));
+            if (Environment.allow_assert) {
+                _ = bun.assert((self.reader.buffer().items.ptr != out.ptr));
             }
-            if (self.reader.hasPendingRead()) {
-                return .{};
-            }
-            return bun.ByteList.moveFromList(self.reader.buffer());
-    }
+            return out;
+        }
+        if (self.reader.hasPendingRead()) {
+            return .{};
+        }
+        return bun.ByteList.moveFromList(self.reader.buffer());
+}
 
 pub fn setRefOrUnref(self: *FileReader, enable: bool) void {
-            if (self.done) {
-                return;
-            }
-            _ = self.reader.updateRef(enable);
-    }
+        if (self.done) {
+            return;
+        }
+        _ = self.reader.updateRef(enable);
+}
 
 pub fn consumeReaderBuffer(self: *FileReader) void {
-            if ((self.buffered.capacity == 0)) {
-                self.buffered = self.reader.buffer().moveToUnmanaged();
-            }
-    }
+        if ((self.buffered.capacity == 0)) {
+            self.buffered = self.reader.buffer().moveToUnmanaged();
+        }
+}
 
 pub fn onReaderDone(self: *FileReader) void {
-            _ = log("onReaderDone()", .{});
-            if ((!self.isPulling())) {
-                _ = self.consumeReaderBuffer();
-                if ((self.pending.state == .pending)) {
-                    if ((self.buffered.items.len > 0)) {
-                        self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
-                    } else {
-                        self.pending.result = .{ .done = .{} };
-                    }
-                    self.buffered = .{};
-                    _ = self.pending.run();
-                }
-            }
-            if ((self.buffered.items.len == 0)) {
-                _ = self.parent().onClose();
-            }
-            if (self.waiting_for_onReaderDone) {
-                self.waiting_for_onReaderDone = false;
-                _ = self.parent().decrementCount();
-            }
-    }
-
-pub fn onReaderError(self: *FileReader, err: bun.sys.Error) void {
+        _ = log("onReaderDone()", .{});
+        if ((!self.isPulling())) {
             _ = self.consumeReaderBuffer();
-            if (((self.buffered.capacity > 0) and (self.buffered.items.len == 0))) {
-                _ = self.buffered.deinit(bun.default_allocator);
+            if ((self.pending.state == .pending)) {
+                if ((self.buffered.items.len > 0)) {
+                    self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
+                } else {
+                    self.pending.result = .{ .done = .{} };
+                }
                 self.buffered = .{};
+                _ = self.pending.run();
             }
-            self.pending.result = .{ .err = .{ .Error = err } };
-            _ = self.pending.run();
-    }
+        }
+        if ((self.buffered.items.len == 0)) {
+            _ = self.parent().onClose();
+        }
+        if (self.waiting_for_onReaderDone) {
+            self.waiting_for_onReaderDone = false;
+            _ = self.parent().decrementCount();
+        }
+}
+
+pub fn onReaderError(self: *FileReader, e: bun.sys.Error) void {
+        _ = self.consumeReaderBuffer();
+        if (((self.buffered.capacity > 0) and (self.buffered.items.len == 0))) {
+            _ = self.buffered.deinit(bun.default_allocator);
+            self.buffered = .{};
+        }
+        self.pending.result = .{ .err = .{ .Error = e } };
+        _ = self.pending.run();
+}
 
 pub fn setRawMode(self: *FileReader, flag: bool) bun.sys.Maybe(void) {
-            if ((!Environment.isWindows)) {
-                _ = @panic("FileReader.setRawMode must not be called on this OS");
-            }
-            return self.reader.setRawMode(flag);
-    }
+        if ((!Environment.isWindows)) {
+            _ = @panic("FileReader.setRawMode must not be called on this OS");
+        }
+        return self.reader.setRawMode(flag);
+}
 
 pub fn setFlowing(self: *FileReader, flag: bool) void {
-            _ = log("setFlowing({}) was={}", .{ flag, self.flowing });
-            if ((self.flowing == flag)) {
-                return;
+        _ = log("setFlowing({}) was={}", .{ flag, self.flowing });
+        if ((self.flowing == flag)) {
+            return;
+        }
+        self.flowing = flag;
+        if (flag) {
+            _ = self.reader.unpause();
+            if (((!self.reader.isDone()) and (!self.reader.hasPendingRead()))) {
+                _ = self.reader.read();
             }
-            self.flowing = flag;
-            if (flag) {
-                _ = self.reader.unpause();
-                if (((!self.reader.isDone()) and (!self.reader.hasPendingRead()))) {
-                    _ = self.reader.read();
-                }
-            } else {
-                _ = self.reader.pause();
-            }
-    }
+        } else {
+            _ = self.reader.pause();
+        }
+}
 
-pub fn memoryCost(self: *const FileReader) usize {
-            return (self.reader.memoryCost() + self.buffered.capacity);
-    }
-    pub const IOReader = bun.io.BufferedReader;
-    pub const Poll = IOReader;
-    pub const tag = ReadableStream.Tag.File;
-    pub const ReadDuringJSOnPullResult = union(enum) {
-        none: void,
-        js: []u8,
-        amount_read: usize,
-        temporary: []const u8,
-        use_buffered: usize,
-    };
-    pub const OpenedFileBlob = struct {
-        fd: bun.FD,
-        pollable: bool = false,
-        nonblocking: bool = true,
-        file_type: bun.io.FileType = .file,
-    };
-    pub const Lazy = union(enum) {
-        none: void,
-        blob: *Blob.Store,
-        pub const OpenedFileBlob = FileReader.OpenedFileBlob;
-        pub const openFileBlob = FileReader.openFileBlob;
-    };
-    pub const Source = ReadableStream.NewSource(FileReader, "File", onStart, onPull, onCancel, deinit, setRefOrUnref, drain, memoryCost, null);
-};
-
+pub fn memoryCost(ctx: *const FileReader) usize {
+        return (ctx.reader.memoryCost() + ctx.buffered.capacity);
+}
+pub const IOReader = bun.io.BufferedReader;
+pub const Poll = IOReader;
+pub const tag = ReadableStream.Tag.File;
+pub const Source = ReadableStream.NewSource(FileReader, "File", onStart, onPull, onCancel, deinit, setRefOrUnref, drain, memoryCost, null);
 var empty_u8_slice: [0]u8 = &.{};
 const webcore = bun.webcore;
 const Blob = webcore.Blob;
 const ReadableStream = webcore.ReadableStream;
 const streams = webcore.streams;
 const log = Output.scoped(.FileReader, .visible);
+
+extern "c" fn open_as_nonblocking_tty(fd: i32, flags: i32) callconv(.c) i32;
+
+pub fn openFileBlobImpl(file: *Blob.Store.File) bun.sys.Maybe(FileReaderOpenedFileBlob) {
+        var opened = FileReaderOpenedFileBlob{ .fd = bun.invalid_fd };
+        _ = &opened;
+        var file_buf: bun.PathBuffer = undefined;
+        _ = &file_buf;
+        var is_nonblocking = false;
+        _ = &is_nonblocking;
+        var fd: bun.FD = bun.invalid_fd;
+        _ = &fd;
+        if ((file.pathlike == .fd)) {
+            if ((file.pathlike.fd.stdioTag() != null)) {
+                fd = file.pathlike.fd;
+                if (Environment.isPosix) {
+                    const rc = open_as_nonblocking_tty(file.pathlike.fd.native(), bun.O.RDONLY);
+                    if ((rc > -1)) {
+                        is_nonblocking = true;
+                        file.is_atty = true;
+                        fd = bun.FD.fromNative(rc);
+                    }
+                }
+            } else {
+                const duped = bun.sys.dupWithFlags(file.pathlike.fd, 0);
+                if ((duped != .result)) {
+                    return .{ .err = duped.err.withFd(file.pathlike.fd) };
+                }
+                const dup_fd: bun.FD = duped.result;
+                if (Environment.isPosix) {
+                    if ((dup_fd.stdioTag() == null)) {
+                        const flags_res = dup_fd.getFcntlFlags();
+                        if ((flags_res == .result)) {
+                            is_nonblocking = ((flags_res.result & bun.O.NONBLOCK) != 0);
+                        } else {
+                            is_nonblocking = false;
+                        }
+                    }
+                }
+                const owned_res = dup_fd.makeLibUVOwnedForSyscall(.dup, .close_on_fail);
+                if ((owned_res == .result)) {
+                    fd = owned_res.result;
+                } else {
+                    return .{ .err = owned_res.err };
+                }
+            }
+        } else {
+            const open_res = bun.sys.open(file.pathlike.path.sliceZ((&file_buf)), ((bun.O.RDONLY | bun.O.NONBLOCK) | bun.O.CLOEXEC), 0);
+            if ((open_res == .result)) {
+                if (Environment.isPosix) {
+                    is_nonblocking = true;
+                }
+                fd = open_res.result;
+            } else {
+                return .{ .err = open_res.err.withPath(file.pathlike.path.slice()) };
+            }
+        }
+        if (Environment.isPosix) {
+            if (((((file.is_atty) orelse (false)) or ((fd.stdioTag() != null) and std.posix.isatty(fd.cast()))) or (((file.pathlike == .fd) and (file.pathlike.fd.stdioTag() != null)) and std.posix.isatty(file.pathlike.fd.cast())))) {
+                file.is_atty = true;
+            }
+            const stat_res = bun.sys.fstat(fd);
+            if ((stat_res != .result)) {
+                _ = fd.close();
+                return .{ .err = stat_res.err };
+            }
+            const stat: bun.Stat = stat_res.result;
+            if (bun.S.ISDIR(stat.mode)) {
+                _ = bun.Async.Closer.close(fd, .{});
+                return .{ .err = .fromCode(.ISDIR, .fstat) };
+            }
+            if (bun.S.ISREG(stat.mode)) {
+                is_nonblocking = false;
+            }
+            opened.pollable = ((bun.sys.isPollable(stat.mode) or is_nonblocking) or ((file.is_atty) orelse (false)));
+            if (bun.S.ISFIFO(stat.mode)) {
+                opened.file_type = .pipe;
+            } else {
+                if (bun.S.ISSOCK(stat.mode)) {
+                    opened.file_type = .socket;
+                } else {
+                    opened.file_type = .file;
+                }
+            }
+            if ((is_nonblocking and (opened.file_type != .socket))) {
+                opened.file_type = .nonblocking_pipe;
+            }
+            opened.nonblocking = (is_nonblocking or ((opened.pollable and (!((file.is_atty) orelse (false)))) and (opened.file_type != .pipe)));
+            if ((opened.nonblocking and (opened.file_type == .pipe))) {
+                opened.file_type = .nonblocking_pipe;
+            }
+        }
+        opened.fd = fd;
+        return .{ .result = opened };
+}

@@ -1,3 +1,5 @@
+let empty_u8_slice: [0]u8 = [];
+
 import {
     default_allocator,
     handleOom,
@@ -10,9 +12,6 @@ import {
     JSTerminated,
     jsc,
 } from "bun";
-import { Managed as ManagedList } from "std:array_list";
-import { Allocator } from "std:mem";
-import { heap } from "std";
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
@@ -22,22 +21,22 @@ const streams = webcore.streams;
 const BufferAction = streams.BufferAction;
 const log = Output.scoped(.ByteStream, .visible);
 
-export class ByteStream {
-    buffer: ManagedList(u8) = .{
+@root struct ByteStream {
+    buffer: std.array_list.Managed(u8) = .{
         .allocator = default_allocator,
-        .items = &.{},
+        .items = empty_u8_slice[0..0],
         .capacity = 0,
-    };
-    has_received_last_chunk: bool = false;
-    pending: streams.Result.Pending = .{ .result = .{ .done = {} } };
-    done: bool = false;
-    pending_buffer: []u8 = &.{};
-    pending_value: jsc.Strong.Optional = .empty;
-    offset: usize = 0;
-    highWaterMark: Blob.SizeType = 0;
-    pipe: Pipe = .{};
-    size_hint: Blob.SizeType = 0;
-    buffer_action: BufferAction? = null;
+    },
+    has_received_last_chunk: bool = false,
+    pending: streams.Result.Pending = .{ .result = .{ .done = {} } },
+    done: bool = false,
+    pending_buffer: []u8 = empty_u8_slice[0..0],
+    pending_value: jsc.Strong.Optional = .empty,
+    offset: usize = 0,
+    highWaterMark: Blob.SizeType = 0,
+    pipe: Pipe = .{},
+    size_hint: Blob.SizeType = 0,
+    buffer_action: BufferAction? = null,
 
     pub const Source = webcore.ReadableStream.NewSource(
         ByteStream,
@@ -72,14 +71,16 @@ export class ByteStream {
             return .{ .ready = {} };
         }
 
-        const page_size: Blob.SizeType = @intCast(heap.pageSize());
+        const page_size: Blob.SizeType = @intCast(std.heap.pageSize());
         return .{ .chunk_size = @min(512 * 1024 + page_size, @max(_.highWaterMark, page_size)) };
     }
 
     pub fn value(*_): JSValue {
-        const result = _.pending_value.get() ?? return JSValue.zero;
-        _.pending_value.clearWithoutDeallocation();
-        return result;
+        if (result := _.pending_value.get()) {
+            _.pending_value.clearWithoutDeallocation();
+            return result;
+        }
+        return JSValue.zero;
     }
 
     pub fn isCancelled(*_): bool {
@@ -94,8 +95,8 @@ export class ByteStream {
     pub fn onData(
         *_,
         stream: streams.Result,
-        allocator: Allocator,
-    ): JSTerminated! {
+        allocator: std.mem.Allocator,
+    ): void ! JSTerminated {
         jsc.markBinding(@src());
         if (_.done) {
             if (stream.isDone() && (stream == .owned || stream == .owned_and_done)) {
@@ -139,14 +140,14 @@ export class ByteStream {
                 if (_.buffer.capacity == 0 && stream == .done) {
                     log("ByteStream.onData done and action.fulfill()", .{});
                     let blob = _.toAnyBlob().?;
-                    action.fulfill(_.parent().globalThis, &blob) ?;
+                    action.fulfill(_.parent().globalThis, &blob)?;
                     return;
                 }
                 if (_.buffer.capacity == 0 && stream == .owned_and_done) {
                     log("ByteStream.onData owned_and_done and action.fulfill()", .{});
-                    _.buffer = ManagedList(u8).fromOwnedSlice(default_allocator, @constCast(chunk));
+                    _.buffer = std.array_list.Managed(u8).fromOwnedSlice(default_allocator, @constCast(chunk));
                     let blob = _.toAnyBlob().?;
-                    action.fulfill(_.parent().globalThis, &blob) ?;
+                    action.fulfill(_.parent().globalThis, &blob)?;
                     return;
                 }
                 defer {
@@ -158,7 +159,7 @@ export class ByteStream {
 
                 handleOom(_.buffer.appendSlice(chunk));
                 let blob = _.toAnyBlob().?;
-                action.fulfill(_.parent().globalThis, &blob) ?;
+                action.fulfill(_.parent().globalThis, &blob)?;
                 return;
             } else {
                 handleOom(_.buffer.appendSlice(chunk));
@@ -176,7 +177,7 @@ export class ByteStream {
             const pending_buffer_len = _.pending_buffer.len;
             assert(to_copy.ptr != chunk.ptr);
             @memcpy(to_copy, chunk[0..to_copy.len]);
-            _.pending_buffer = &.{};
+            _.pending_buffer = empty_u8_slice[0..0];
 
             const is_really_done = _.has_received_last_chunk && to_copy.len <= pending_buffer_len;
 
@@ -229,40 +230,36 @@ export class ByteStream {
         stream: streams.Result,
         offset: usize,
         base_address: []const u8,
-        allocator: Allocator,
-    ): ! {
+        allocator: std.mem.Allocator,
+    )! {
         let stream_ = stream;
         const chunk = stream.slice()[offset..];
 
         if (_.buffer.capacity == 0) {
-            switch (stream_) {
-                .owned => |*owned| {
-                    _.buffer = owned.moveToListManaged(allocator);
-                    _.offset += offset;
-                },
-                .owned_and_done => |*owned| {
-                    _.buffer = owned.moveToListManaged(allocator);
-                    _.offset += offset;
-                },
-                .temporary_and_done, .temporary => {
-                    _.buffer = ManagedList(u8).initCapacity(default_allocator, chunk.len) ?;
-                    _.buffer.appendSliceAssumeCapacity(chunk);
-                },
-                .err => {
-                    _.pending.result = .{ .err = stream.err };
-                },
-                .done => {},
-                else => unreachable,
+            if (stream_ == .owned) {
+                _.buffer = stream_.owned.moveToListManaged(allocator);
+                _.offset += offset;
+            } else if (stream_ == .owned_and_done) {
+                _.buffer = stream_.owned_and_done.moveToListManaged(allocator);
+                _.offset += offset;
+            } else if (stream_ == .temporary_and_done || stream_ == .temporary) {
+                _.buffer = std.array_list.Managed(u8).initCapacity(default_allocator, chunk.len)?;
+                _.buffer.appendSliceAssumeCapacity(chunk);
+            } else if (stream_ == .err) {
+                _.pending.result = .{ .err = stream.err };
+            } else if (stream_ == .done) {
+            } else {
+                unreachable;
             }
             return;
         }
 
         switch (stream) {
             .temporary_and_done, .temporary => {
-                _.buffer.appendSlice(chunk) ?;
+                _.buffer.appendSlice(chunk)?;
             },
             .owned_and_done, .owned => {
-                _.buffer.appendSlice(chunk) ?;
+                _.buffer.appendSlice(chunk)?;
                 allocator.free(@constCast(base_address));
             },
             .err => {
@@ -351,7 +348,7 @@ export class ByteStream {
         _.pending_value.deinit();
 
         if (view != JSValue.zero) {
-            _.pending_buffer = &.{};
+            _.pending_buffer = empty_u8_slice[0..0];
             _.pending.result.deinit();
             _.pending.result = .{ .done = {} };
             _.pending.run();
@@ -364,8 +361,8 @@ export class ByteStream {
         }
     }
 
-    pub fn memoryCost(): usize {
-        return _.buffer.capacity;
+    pub fn memoryCost(ctx: *const ByteStream): usize {
+        return ctx.buffer.capacity;
     }
 
     pub fn deinit(*_) {
@@ -376,7 +373,7 @@ export class ByteStream {
         if (!_.done) {
             _.done = true;
 
-            _.pending_buffer = &.{};
+            _.pending_buffer = empty_u8_slice[0..0];
             _.pending.result.deinit();
             _.pending.result = .{ .done = {} };
             if (_.pending.state == .pending && _.pending.future == .promise) {
@@ -403,7 +400,7 @@ export class ByteStream {
             const saved_buf = _.buffer;
             _.buffer = .{
                 .allocator = default_allocator,
-                .items = &.{},
+                .items = empty_u8_slice[0..0],
                 .capacity = 0,
             };
             _.done = true;
@@ -419,17 +416,18 @@ export class ByteStream {
         return null;
     }
 
-    pub fn toBufferedValue(*_, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag): JSError!JSValue {
+    pub fn toBufferedValue(*_, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag): JSValue ! JSError {
         if (_.buffer_action != null) {
             return globalThis.throw("Cannot buffer value twice", .{});
         }
 
         if (_.pending.result == .err) {
-            const [err, unused] = _.pending.result.err.toJSWeak(globalThis);
+            const pair = _.pending.result.err.toJSWeak(globalThis);
+            const js_err = pair[0];
             _.pending.result.deinit();
             _.done = true;
             _.buffer.clearAndFree();
-            return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+            return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, js_err);
         }
 
         if (blob_ := _.toAnyBlob()) {

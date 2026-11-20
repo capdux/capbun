@@ -60,14 +60,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 const default_allocator = @import("bun").default_allocator;
@@ -80,243 +72,214 @@ const webcore = @import("bun").webcore;
 const JSError = @import("bun").JSError;
 const JSTerminated = @import("bun").JSTerminated;
 const jsc = @import("bun").jsc;
-const Managed = @import("std:array_list").Managed;
-const as = @import("std:array_list").as;
-const ManagedList = @import("std:array_list").ManagedList;
-const Allocator = @import("std:mem").Allocator;
-const heap = @import("std").heap;
-pub const ByteStream = struct {
-    buffer: ManagedList(u8) = .{ .allocator = default_allocator, .items = (&.{}), .capacity = 0 },
-    has_received_last_chunk: bool = false,
-    pending: streams.Result.Pending = .{ .result = .{ .done = .{} } },
-    done: bool = false,
-    pending_buffer: []u8 = (&.{}),
-    pending_value: jsc.Strong.Optional = .empty,
-    offset: usize = 0,
-    highWaterMark: Blob.SizeType = 0,
-    pipe: Pipe = .{},
-    size_hint: Blob.SizeType = 0,
-    buffer_action: ?BufferAction = null,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.buffer = .{ .allocator = default_allocator, .items = (&.{}), .capacity = 0 }; self_ptr.has_received_last_chunk = false; self_ptr.pending = .{ .result = .{ .done = .{} } }; self_ptr.done = false; self_ptr.pending_buffer = (&.{}); self_ptr.pending_value = .empty; self_ptr.offset = 0; self_ptr.highWaterMark = 0; self_ptr.pipe = .{}; self_ptr.size_hint = 0; self_ptr.buffer_action = null; return self_ptr; }
+pub const ByteStream = @This();
 
-pub fn init(self: *ByteStream, buffer: ManagedList(u8), has_received_last_chunk: bool, pending: streams.Result.Pending, done: bool, pending_buffer: []u8, pending_value: jsc.Strong.Optional, offset: usize, highWaterMark: Blob.SizeType, pipe: Pipe, size_hint: Blob.SizeType, buffer_action: ?BufferAction) void {
-        var __buffer_moved = false; _ = &__buffer_moved;
-        defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
-        var __pending_moved = false; _ = &__pending_moved;
-        defer if (!__pending_moved) { const __T = @TypeOf(pending); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pending.release() catch {}; } else { pending.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pending; _drop_val.release(); } };
-        var __pending_value_moved = false; _ = &__pending_value_moved;
-        defer if (!__pending_value_moved) { const __T = @TypeOf(pending_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pending_value.release() catch {}; } else { pending_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pending_value; _drop_val.release(); } };
-        var __highWaterMark_moved = false; _ = &__highWaterMark_moved;
-        defer if (!__highWaterMark_moved) { const __T = @TypeOf(highWaterMark); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = highWaterMark.release() catch {}; } else { highWaterMark.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = highWaterMark; _drop_val.release(); } };
-        var __pipe_moved = false; _ = &__pipe_moved;
-        defer if (!__pipe_moved) { const __T = @TypeOf(pipe); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pipe.release() catch {}; } else { pipe.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pipe; _drop_val.release(); } };
-        var __size_hint_moved = false; _ = &__size_hint_moved;
-        defer if (!__size_hint_moved) { const __T = @TypeOf(size_hint); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = size_hint.release() catch {}; } else { size_hint.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = size_hint; _drop_val.release(); } };
-            self.buffer = buffer;
-            self.has_received_last_chunk = has_received_last_chunk;
-            self.pending = pending;
-            self.done = done;
-            self.pending_buffer = pending_buffer;
-            self.pending_value = pending_value;
-            self.offset = offset;
-            self.highWaterMark = highWaterMark;
-            self.pipe = pipe;
-            self.size_hint = size_hint;
-            self.buffer_action = buffer_action;
-    }
+buffer: std.array_list.Managed(u8) = .{ .allocator = default_allocator, .items = empty_u8_slice[0..0], .capacity = 0 },
+has_received_last_chunk: bool = false,
+pending: streams.Result.Pending = .{ .result = .{ .done = .{} } },
+done: bool = false,
+pending_buffer: []u8 = empty_u8_slice[0..0],
+pending_value: jsc.Strong.Optional = .empty,
+offset: usize = 0,
+highWaterMark: Blob.SizeType = 0,
+pipe: Pipe = .{},
+size_hint: Blob.SizeType = 0,
+buffer_action: ?BufferAction = null,
 
 pub fn setup(self: *ByteStream) void {
-            self.* = .{};
-    }
+        self.* = .{};
+}
 
 pub fn onStart(self: *ByteStream) streams.Start {
-            if ((self.has_received_last_chunk and (self.buffer.items.len == 0))) {
-                return .{ .empty = .{} };
-            }
-            if (self.has_received_last_chunk) {
-                var buffer = self.buffer.moveToUnmanaged();
-                _ = &buffer;
-                return .{ .owned_and_done = ByteList.moveFromList((&self.buffer)) };
-            }
-            if ((self.highWaterMark == 0)) {
-                return .{ .ready = .{} };
-            }
-            const page_size: Blob.SizeType = @intCast(heap.pageSize());
-            return .{ .chunk_size = @min(((512 * 1024) + page_size), @max(self.highWaterMark, page_size)) };
-    }
+        if ((self.has_received_last_chunk and (self.buffer.items.len == 0))) {
+            return .{ .empty = .{} };
+        }
+        if (self.has_received_last_chunk) {
+            var buffer = self.buffer.moveToUnmanaged();
+            _ = &buffer;
+            return .{ .owned_and_done = ByteList.moveFromList((&self.buffer)) };
+        }
+        if ((self.highWaterMark == 0)) {
+            return .{ .ready = .{} };
+        }
+        const page_size: Blob.SizeType = @intCast(std.heap.pageSize());
+        return .{ .chunk_size = @min(((512 * 1024) + page_size), @max(self.highWaterMark, page_size)) };
+}
 
 pub fn value(self: *ByteStream) JSValue {
-            const result = ((self.pending_value.get()) orelse { return JSValue.zero; });
+        if (self.pending_value.get()) |result| {
+            _ = &result;
             _ = self.pending_value.clearWithoutDeallocation();
             return result;
-    }
+        }
+        return JSValue.zero;
+}
 
 pub fn isCancelled(self: *ByteStream) bool {
-            return self.parent().cancelled;
-    }
+        return self.parent().cancelled;
+}
 
 pub fn unpipeWithoutDeref(self: *ByteStream) void {
-            self.pipe.ctx = null;
-            self.pipe.onPipe = null;
-    }
+        self.pipe.ctx = null;
+        self.pipe.onPipe = null;
+}
 
-pub fn onData(self: *ByteStream, stream: streams.Result, allocator: Allocator) !JSTerminated {
-            _ = jsc.markBinding(@src());
-            if (self.done) {
-                if ((stream.isDone() and ((stream == .owned) or (stream == .owned_and_done)))) {
-                    if ((stream == .owned)) {
-                        _ = allocator.free(stream.owned.slice());
-                    }
-                    if ((stream == .owned_and_done)) {
-                        _ = allocator.free(stream.owned_and_done.slice());
-                    }
+pub fn onData(self: *ByteStream, stream: streams.Result, allocator: std.mem.Allocator) JSTerminated!void {
+        _ = jsc.markBinding(@src());
+        if (self.done) {
+            if ((stream.isDone() and ((stream == .owned) or (stream == .owned_and_done)))) {
+                if ((stream == .owned)) {
+                    _ = allocator.free(stream.owned.slice());
                 }
-                self.has_received_last_chunk = stream.isDone();
-                _ = log("ByteStream.onData already done... do nothing", .{});
-                return;
+                if ((stream == .owned_and_done)) {
+                    _ = allocator.free(stream.owned_and_done.slice());
+                }
             }
-            _ = assert(((!self.has_received_last_chunk) or (stream == .err)));
             self.has_received_last_chunk = stream.isDone();
-            if (self.pipe.ctx) |ctx| {
-                _ = &ctx;
-                _ = self.pipe.onPipe.?(ctx, stream, allocator);
-                return;
-            }
-            const chunk = stream.slice();
-            if (self.buffer_action) |*action| {
-                _ = &action;
-                if ((stream == .err)) {
-                    defer {
-                    {
-                        _ = self.buffer.clearAndFree();
-                        _ = self.pending.result.deinit();
-                        self.pending.result = .{ .done = .{} };
-                        self.buffer_action = null;
-                    }
-                    }
-                    _ = log("ByteStream.onData err action.reject()", .{});
-                    return (action.*).reject(self.parent().globalThis, stream.err);
+            _ = log("ByteStream.onData already done... do nothing", .{});
+            return;
+        }
+        _ = assert(((!self.has_received_last_chunk) or (stream == .err)));
+        self.has_received_last_chunk = stream.isDone();
+        if (self.pipe.ctx) |ctx| {
+            _ = &ctx;
+            _ = self.pipe.onPipe.?(ctx, stream, allocator);
+            return;
+        }
+        const chunk = stream.slice();
+        if (self.buffer_action) |*action| {
+            _ = &action;
+            if ((stream == .err)) {
+                defer {
+                {
+                    _ = self.buffer.clearAndFree();
+                    _ = self.pending.result.deinit();
+                    self.pending.result = .{ .done = .{} };
+                    self.buffer_action = null;
                 }
-                if (self.has_received_last_chunk) {
-                    defer {
-                    {
-                        self.buffer_action = null;
-                    }
-                    }
-                    if (((self.buffer.capacity == 0) and (stream == .done))) {
-                        _ = log("ByteStream.onData done and action.fulfill()", .{});
-                        var blob = (self.toAnyBlob()).?;
-                        _ = &blob;
-                        _ = try (action.*).fulfill(self.parent().globalThis, (&blob));
-                        return;
-                    }
-                    if (((self.buffer.capacity == 0) and (stream == .owned_and_done))) {
-                        _ = log("ByteStream.onData owned_and_done and action.fulfill()", .{});
-                        self.buffer = ManagedList(u8).fromOwnedSlice(default_allocator, @constCast(chunk));
-                        var blob = (self.toAnyBlob()).?;
-                        _ = &blob;
-                        _ = try (action.*).fulfill(self.parent().globalThis, (&blob));
-                        return;
-                    }
-                    defer {
-                    {
-                        if (((stream == .owned_and_done) or (stream == .owned))) {
-                            _ = allocator.free(stream.slice());
-                        }
-                    }
-                    }
-                    _ = log("ByteStream.onData appendSlice and action.fulfill()", .{});
-                    _ = handleOom(self.buffer.appendSlice(chunk));
+                }
+                _ = log("ByteStream.onData err action.reject()", .{});
+                return (action.*).reject(self.parent().globalThis, stream.err);
+            }
+            if (self.has_received_last_chunk) {
+                defer {
+                {
+                    self.buffer_action = null;
+                }
+                }
+                if (((self.buffer.capacity == 0) and (stream == .done))) {
+                    _ = log("ByteStream.onData done and action.fulfill()", .{});
                     var blob = (self.toAnyBlob()).?;
                     _ = &blob;
                     _ = try (action.*).fulfill(self.parent().globalThis, (&blob));
                     return;
-                } else {
-                    _ = handleOom(self.buffer.appendSlice(chunk));
+                }
+                if (((self.buffer.capacity == 0) and (stream == .owned_and_done))) {
+                    _ = log("ByteStream.onData owned_and_done and action.fulfill()", .{});
+                    self.buffer = std.array_list.Managed(u8).fromOwnedSlice(default_allocator, @constCast(chunk));
+                    var blob = (self.toAnyBlob()).?;
+                    _ = &blob;
+                    _ = try (action.*).fulfill(self.parent().globalThis, (&blob));
+                    return;
+                }
+                defer {
+                {
                     if (((stream == .owned_and_done) or (stream == .owned))) {
                         _ = allocator.free(stream.slice());
                     }
                 }
+                }
+                _ = log("ByteStream.onData appendSlice and action.fulfill()", .{});
+                _ = handleOom(self.buffer.appendSlice(chunk));
+                var blob = (self.toAnyBlob()).?;
+                _ = &blob;
+                _ = try (action.*).fulfill(self.parent().globalThis, (&blob));
                 return;
+            } else {
+                _ = handleOom(self.buffer.appendSlice(chunk));
+                if (((stream == .owned_and_done) or (stream == .owned))) {
+                    _ = allocator.free(stream.slice());
+                }
             }
-            if ((self.pending.state == .pending)) {
-                _ = assert((self.buffer.items.len == 0));
-                const to_copy = self.pending_buffer[0..@min(chunk.len, self.pending_buffer.len)];
-                const pending_buffer_len = self.pending_buffer.len;
-                _ = assert((to_copy.ptr != chunk.ptr));
-                _ = @memcpy(to_copy, chunk[0..to_copy.len]);
-                self.pending_buffer = (&.{});
-                const is_really_done = (self.has_received_last_chunk and (to_copy.len <= pending_buffer_len));
-                if (is_really_done) {
-                    self.done = true;
-                    if ((to_copy.len == 0)) {
-                        if ((stream == .err)) {
-                            self.pending.result = .{ .err = stream.err };
-                        } else {
-                            self.pending.result = .{ .done = .{} };
-                        }
+            return;
+        }
+        if ((self.pending.state == .pending)) {
+            _ = assert((self.buffer.items.len == 0));
+            const to_copy = self.pending_buffer[0..@min(chunk.len, self.pending_buffer.len)];
+            const pending_buffer_len = self.pending_buffer.len;
+            _ = assert((to_copy.ptr != chunk.ptr));
+            _ = @memcpy(to_copy, chunk[0..to_copy.len]);
+            self.pending_buffer = empty_u8_slice[0..0];
+            const is_really_done = (self.has_received_last_chunk and (to_copy.len <= pending_buffer_len));
+            if (is_really_done) {
+                self.done = true;
+                if ((to_copy.len == 0)) {
+                    if ((stream == .err)) {
+                        self.pending.result = .{ .err = stream.err };
                     } else {
-                        self.pending.result = .{ .into_array_and_done = .{ .value = self.value(), .len = @as(Blob.SizeType, @truncate(to_copy.len)) } };
+                        self.pending.result = .{ .done = .{} };
                     }
                 } else {
-                    self.pending.result = .{ .into_array = .{ .value = self.value(), .len = @as(Blob.SizeType, @truncate(to_copy.len)) } };
+                    self.pending.result = .{ .into_array_and_done = .{ .value = self.value(), .len = @as(Blob.SizeType, @truncate(to_copy.len)) } };
                 }
-                const remaining = chunk[to_copy.len..];
-                if (((remaining.len > 0) and (chunk.len > 0))) {
-                    _ = (blk_catch_0: { break :blk_catch_0 ((self.append(stream, to_copy.len, chunk, allocator)) catch |__ce_0| { _ = &__ce_0; @panic("Out of memory while copying request body"); }); });
-                }
-                _ = log("ByteStream.onData pending.run()", .{});
-                _ = self.pending.run();
-                return;
+            } else {
+                self.pending.result = .{ .into_array = .{ .value = self.value(), .len = @as(Blob.SizeType, @truncate(to_copy.len)) } };
             }
-            _ = log("ByteStream.onData no action just append", .{});
-            _ = (blk_catch_1: { break :blk_catch_1 ((self.append(stream, 0, chunk, allocator)) catch |__ce_1| { _ = &__ce_1; @panic("Out of memory while copying request body"); }); });
-    }
-
-pub fn append(self: *ByteStream, stream: streams.Result, offset: usize, base_address: []const u8, allocator: Allocator) !void {
-            var stream_ = stream;
-            _ = &stream_;
-            const chunk = stream.slice()[offset..];
-            if ((self.buffer.capacity == 0)) {
-                switch (stream_) {
-.owned => |*owned| {
-self.buffer = owned.moveToListManaged(allocator);
-                self.offset = (self.offset + offset);
-},
-.owned_and_done => |*owned| {
-self.buffer = owned.moveToListManaged(allocator);
-                self.offset = (self.offset + offset);
-},
-.temporary_and_done, .temporary => {
-self.buffer = try ManagedList(u8).initCapacity(default_allocator, chunk.len);
-                _ = self.buffer.appendSliceAssumeCapacity(chunk);
-},
-.err => {
-self.pending.result = .{ .err = stream.err };
-},
-.done => {
-
-},
-else => {
-_ = unreachable;
-},
+            const remaining = chunk[to_copy.len..];
+            if (((remaining.len > 0) and (chunk.len > 0))) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((self.append(stream, to_copy.len, chunk, allocator)) catch |__ce_0| { _ = &__ce_0; @panic("Out of memory while copying request body"); }); });
+            }
+            _ = log("ByteStream.onData pending.run()", .{});
+            _ = self.pending.run();
+            return;
+        }
+        _ = log("ByteStream.onData no action just append", .{});
+        _ = (blk_catch_1: { break :blk_catch_1 ((self.append(stream, 0, chunk, allocator)) catch |__ce_1| { _ = &__ce_1; @panic("Out of memory while copying request body"); }); });
 }
-                return;
+
+pub fn append(self: *ByteStream, stream: streams.Result, offset: usize, base_address: []const u8, allocator: std.mem.Allocator) !void {
+        var stream_ = stream;
+        _ = &stream_;
+        const chunk = stream.slice()[offset..];
+        if ((self.buffer.capacity == 0)) {
+            if ((stream_ == .owned)) {
+                self.buffer = stream_.owned.moveToListManaged(allocator);
+                self.offset = (self.offset + offset);
+            } else {
+                if ((stream_ == .owned_and_done)) {
+                    self.buffer = stream_.owned_and_done.moveToListManaged(allocator);
+                    self.offset = (self.offset + offset);
+                } else {
+                    if (((stream_ == .temporary_and_done) or (stream_ == .temporary))) {
+                        self.buffer = try std.array_list.Managed(u8).initCapacity(default_allocator, chunk.len);
+                        _ = self.buffer.appendSliceAssumeCapacity(chunk);
+                    } else {
+                        if ((stream_ == .err)) {
+                            self.pending.result = .{ .err = stream.err };
+                        } else {
+                            if ((stream_ == .done)) {
+                            } else {
+                                _ = unreachable;
+                            }
+                        }
+                    }
+                }
             }
-            switch (stream) {
+            return;
+        }
+        switch (stream) {
 .temporary_and_done, .temporary => {
 _ = try self.buffer.appendSlice(chunk);
 },
 .owned_and_done, .owned => {
 _ = try self.buffer.appendSlice(chunk);
-            _ = allocator.free(@constCast(base_address));
+        _ = allocator.free(@constCast(base_address));
 },
 .err => {
 if ((self.buffer_action != null)) {
-                _ = @panic("Expected buffer action to be null");
-            }
-            self.pending.result = .{ .err = stream.err };
+            _ = @panic("Expected buffer action to be null");
+        }
+        self.pending.result = .{ .err = stream.err };
 },
 .done => {
 
@@ -325,152 +288,148 @@ else => {
 _ = unreachable;
 },
 }
-            return;
-    }
+        return;
+}
 
 pub fn setValue(self: *ByteStream, view: JSValue) void {
-            _ = jsc.markBinding(@src());
-            _ = self.pending_value.set(self.parent().globalThis, view);
-    }
+        _ = jsc.markBinding(@src());
+        _ = self.pending_value.set(self.parent().globalThis, view);
+}
 
 pub fn parent(self: *ByteStream) *Source {
-            return @fieldParentPtr("context", self);
-    }
+        return @fieldParentPtr("context", self);
+}
 
 pub fn onPull(self: *ByteStream, buffer: []u8, view: JSValue) streams.Result {
-            _ = jsc.markBinding(@src());
-            _ = assert((buffer.len > 0));
-            _ = debugAssert((self.buffer_action == null));
-            if ((self.buffer.items.len > 0)) {
-                _ = assert((self.value() == JSValue.zero));
-                const to_write = @min((self.buffer.items.len - self.offset), buffer.len);
-                const remaining_in_buffer = self.buffer.items[self.offset..][0..to_write];
-                _ = @memcpy(buffer[0..to_write], self.buffer.items[self.offset..][0..to_write]);
-                if (((self.offset + to_write) == self.buffer.items.len)) {
-                    self.offset = 0;
-                    self.buffer.items.len = 0;
-                } else {
-                    self.offset = (self.offset + to_write);
-                }
-                if ((self.has_received_last_chunk and (remaining_in_buffer.len == 0))) {
-                    _ = self.buffer.clearAndFree();
-                    self.done = true;
-                    return .{ .into_array_and_done = .{ .value = view, .len = @as(Blob.SizeType, @truncate(to_write)) } };
-                }
-                return .{ .into_array = .{ .value = view, .len = @as(Blob.SizeType, @truncate(to_write)) } };
+        _ = jsc.markBinding(@src());
+        _ = assert((buffer.len > 0));
+        _ = debugAssert((self.buffer_action == null));
+        if ((self.buffer.items.len > 0)) {
+            _ = assert((self.value() == JSValue.zero));
+            const to_write = @min((self.buffer.items.len - self.offset), buffer.len);
+            const remaining_in_buffer = self.buffer.items[self.offset..][0..to_write];
+            _ = @memcpy(buffer[0..to_write], self.buffer.items[self.offset..][0..to_write]);
+            if (((self.offset + to_write) == self.buffer.items.len)) {
+                self.offset = 0;
+                self.buffer.items.len = 0;
+            } else {
+                self.offset = (self.offset + to_write);
             }
-            if (self.has_received_last_chunk) {
-                return .{ .done = .{} };
+            if ((self.has_received_last_chunk and (remaining_in_buffer.len == 0))) {
+                _ = self.buffer.clearAndFree();
+                self.done = true;
+                return .{ .into_array_and_done = .{ .value = view, .len = @as(Blob.SizeType, @truncate(to_write)) } };
             }
-            self.pending_buffer = buffer;
-            _ = self.setValue(view);
-            return .{ .pending = (&self.pending) };
-    }
+            return .{ .into_array = .{ .value = view, .len = @as(Blob.SizeType, @truncate(to_write)) } };
+        }
+        if (self.has_received_last_chunk) {
+            return .{ .done = .{} };
+        }
+        self.pending_buffer = buffer;
+        _ = self.setValue(view);
+        return .{ .pending = (&self.pending) };
+}
 
 pub fn onCancel(self: *ByteStream) void {
-            _ = jsc.markBinding(@src());
-            const view = self.value();
-            if ((self.buffer.capacity > 0)) {
-                _ = self.buffer.clearAndFree();
-            }
-            self.done = true;
-            _ = self.pending_value.deinit();
-            if ((view != JSValue.zero)) {
-                self.pending_buffer = (&.{});
-                _ = self.pending.result.deinit();
-                self.pending.result = .{ .done = .{} };
-                _ = self.pending.run();
-            }
-            if (self.buffer_action) |*action| {
-                _ = &action;
-                const global = self.parent().globalThis;
-                _ = (blk_catch_2: { break :blk_catch_2 (((action.*).reject(global, .{ .AbortReason = .UserAbort })) catch |__ce_2| { _ = &__ce_2;  }); });
-                self.buffer_action = null;
-            }
-    }
+        _ = jsc.markBinding(@src());
+        const view = self.value();
+        if ((self.buffer.capacity > 0)) {
+            _ = self.buffer.clearAndFree();
+        }
+        self.done = true;
+        _ = self.pending_value.deinit();
+        if ((view != JSValue.zero)) {
+            self.pending_buffer = empty_u8_slice[0..0];
+            _ = self.pending.result.deinit();
+            self.pending.result = .{ .done = .{} };
+            _ = self.pending.run();
+        }
+        if (self.buffer_action) |*action| {
+            _ = &action;
+            const global = self.parent().globalThis;
+            _ = (blk_catch_2: { break :blk_catch_2 (((action.*).reject(global, .{ .AbortReason = .UserAbort })) catch |__ce_2| { _ = &__ce_2;  }); });
+            self.buffer_action = null;
+        }
+}
 
-pub fn memoryCost(self: *const ByteStream) usize {
-            return self.buffer.capacity;
-    }
+pub fn memoryCost(ctx: *const ByteStream) usize {
+        return ctx.buffer.capacity;
+}
 
 pub fn deinit(self: *ByteStream) void {
-            _ = jsc.markBinding(@src());
-            if ((self.buffer.capacity > 0)) {
-                _ = self.buffer.clearAndFree();
+        _ = jsc.markBinding(@src());
+        if ((self.buffer.capacity > 0)) {
+            _ = self.buffer.clearAndFree();
+        }
+        _ = self.pending_value.deinit();
+        if ((!self.done)) {
+            self.done = true;
+            self.pending_buffer = empty_u8_slice[0..0];
+            _ = self.pending.result.deinit();
+            self.pending.result = .{ .done = .{} };
+            if (((self.pending.state == .pending) and (self.pending.future == .promise))) {
+                _ = self.pending.runOnNextTick();
+            } else {
+                _ = self.pending.run();
             }
-            _ = self.pending_value.deinit();
-            if ((!self.done)) {
-                self.done = true;
-                self.pending_buffer = (&.{});
-                _ = self.pending.result.deinit();
-                self.pending.result = .{ .done = .{} };
-                if (((self.pending.state == .pending) and (self.pending.future == .promise))) {
-                    _ = self.pending.runOnNextTick();
-                } else {
-                    _ = self.pending.run();
-                }
-            }
-            if (self.buffer_action) |*action| {
-                _ = &action;
-                _ = (action.*).deinit();
-            }
-            _ = self.parent().deinit();
-    }
+        }
+        if (self.buffer_action) |*action| {
+            _ = &action;
+            _ = (action.*).deinit();
+        }
+        _ = self.parent().deinit();
+}
 
 pub fn drain(self: *ByteStream) ByteList {
-            if ((self.buffer.items.len > 0)) {
-                return ByteList.moveFromList((&self.buffer));
-            }
-            return .{};
-    }
+        if ((self.buffer.items.len > 0)) {
+            return ByteList.moveFromList((&self.buffer));
+        }
+        return .{};
+}
 
 pub fn toAnyBlob(self: *ByteStream) ?Blob.Any {
-            if (self.has_received_last_chunk) {
-                const saved_buf = self.buffer;
-                self.buffer = .{ .allocator = default_allocator, .items = (&.{}), .capacity = 0 };
-                self.done = true;
-                _ = self.pending.result.deinit();
-                self.pending.result = .{ .done = .{} };
-                self.parent().is_closed = true;
-                return .{ .InternalBlob = .{ .bytes = saved_buf, .was_string = false } };
-            }
-            return null;
-    }
+        if (self.has_received_last_chunk) {
+            const saved_buf = self.buffer;
+            self.buffer = .{ .allocator = default_allocator, .items = empty_u8_slice[0..0], .capacity = 0 };
+            self.done = true;
+            _ = self.pending.result.deinit();
+            self.pending.result = .{ .done = .{} };
+            self.parent().is_closed = true;
+            return .{ .InternalBlob = .{ .bytes = saved_buf, .was_string = false } };
+        }
+        return null;
+}
 
 pub fn toBufferedValue(self: *ByteStream, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag) JSError!JSValue {
-            if ((self.buffer_action != null)) {
-                return globalThis.throw("Cannot buffer value twice", .{});
-            }
-            if ((self.pending.result == .err)) {
-                const _tmp_v0 = self.pending.result.err.toJSWeak(globalThis);
-                const err = cp_unpack_elem(_tmp_v0, 0);
-                _ = &err;
-                const unused = cp_unpack_elem(_tmp_v0, 1);
-                _ = &unused;
-                _ = self.pending.result.deinit();
-                self.done = true;
-                _ = self.buffer.clearAndFree();
-                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
-            }
-            if (self.toAnyBlob()) |blob_| {
-                _ = &blob_;
-                var blob = blob_;
-                _ = &blob;
-                return blob.toPromise(globalThis, action);
-            }
-            self.buffer_action = (switch (action) {
+        if ((self.buffer_action != null)) {
+            return globalThis.throw("Cannot buffer value twice", .{});
+        }
+        if ((self.pending.result == .err)) {
+            const pair = self.pending.result.err.toJSWeak(globalThis);
+            const js_err = pair[0];
+            _ = self.pending.result.deinit();
+            self.done = true;
+            _ = self.buffer.clearAndFree();
+            return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, js_err);
+        }
+        if (self.toAnyBlob()) |blob_| {
+            _ = &blob_;
+            var blob = blob_;
+            _ = &blob;
+            return blob.toPromise(globalThis, action);
+        }
+        self.buffer_action = (switch (action) {
 .blob => .{ .blob = .init(globalThis) },
 .bytes => .{ .bytes = .init(globalThis) },
 .arrayBuffer => .{ .arrayBuffer = .init(globalThis) },
 .json => .{ .json = .init(globalThis) },
 .text => .{ .text = .init(globalThis) },
 });
-            return (if (@typeInfo(@TypeOf(self.buffer_action.?)) == .@"enum") @intFromEnum(self.buffer_action.?) else self.buffer_action.?.value)();
-    }
-    pub const Source = webcore.ReadableStream.NewSource(ByteStream, "Bytes", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
-    pub const tag = webcore.ReadableStream.Tag.Bytes;
-};
-
+        return (if (@typeInfo(@TypeOf(self.buffer_action.?)) == .@"enum") @intFromEnum(self.buffer_action.?) else self.buffer_action.?.value)();
+}
+pub const Source = webcore.ReadableStream.NewSource(ByteStream, "Bytes", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
+pub const tag = webcore.ReadableStream.Tag.Bytes;
+var empty_u8_slice: [0]u8 = &.{};
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;

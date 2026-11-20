@@ -13,16 +13,16 @@ const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;
 const streams = webcore.streams;
 
-export class ByteBlobLoader {
-    offset: Blob.SizeType = 0;
-    store: (*Blob.Store)? = null;
-    chunk_size: Blob.SizeType = 1024 * 1024 * 2;
-    remain: Blob.SizeType = 1024 * 1024 * 2;
-    done: bool = false;
-    pulled: bool = false;
+@root struct ByteBlobLoader {
+    offset: Blob.SizeType = 0,
+    store: (*Blob.Store)? = null,
+    chunk_size: Blob.SizeType = 1024 * 1024 * 2,
+    remain: Blob.SizeType = 1024 * 1024 * 2,
+    done: bool = false,
+    pulled: bool = false,
 
-    content_type: []const u8 = "";
-    content_type_allocated: bool = false;
+    content_type: []const u8 = "",
+    content_type_allocated: bool = false,
 
     pub const tag = webcore.ReadableStream.Tag.Blob;
     pub const Source = webcore.ReadableStream.NewSource(
@@ -50,16 +50,16 @@ export class ByteBlobLoader {
         blob.store.?.ref();
         let blobe = blob.*;
         blobe.resolveSize();
-        const [content_type, content_type_allocated] = brk: {
-            if (blob.content_type_was_set) {
-                if (blob.content_type_allocated) {
-                    break :brk [ handleOom(default_allocator.dupe(u8, blob.content_type)), true ];
-                }
-
-                break :brk [ blob.content_type, false ];
+        let content_type: []const u8 = "";
+        let content_type_allocated = false;
+        if (blob.content_type_was_set) {
+            if (blob.content_type_allocated) {
+                content_type = handleOom(default_allocator.dupe(u8, blob.content_type));
+                content_type_allocated = true;
+            } else {
+                content_type = blob.content_type;
             }
-            break :brk [ "", false ];
-        };
+        }
         let chunk_size = blobe.size;
         if (user_chunk_size > 0) {
             chunk_size = @min(user_chunk_size, blobe.size);
@@ -67,13 +67,13 @@ export class ByteBlobLoader {
         chunk_size = @min(chunk_size, 1024 * 1024 * 2);
 
         _.* = ByteBlobLoader{
-            .offset = blobe.offset,
-            .store = blobe.store.?,
-            .chunk_size = chunk_size,
-            .remain = blobe.size,
-            .done = false,
-            .content_type = content_type,
-            .content_type_allocated = content_type_allocated,
+            offset: blobe.offset,
+            store: blobe.store.?,
+            chunk_size: chunk_size,
+            remain: blobe.size,
+            done: false,
+            content_type: content_type,
+            content_type_allocated: content_type_allocated,
         };
     }
 
@@ -85,7 +85,8 @@ export class ByteBlobLoader {
         array.ensureStillAlive();
         defer array.ensureStillAlive();
         _.pulled = true;
-        const store = _.store ?? return .{ .done = {} };
+        if (_.store == null) return .{ .done = {} };
+        const store = _.store.?;
         if (_.done) {
             return .{ .done = {} };
         }
@@ -116,7 +117,7 @@ export class ByteBlobLoader {
     pub fn toAnyBlob(*_, globalThis: *JSGlobalObject): Blob.Any? {
         if (store := _.store) {
             * = _.detachStore();
-            if (_.offset == 0 and _.remain == store.size() and _.content_type.len == 0) {
+            if (_.offset == 0 && _.remain == store.size() && _.content_type.len == 0) {
                 if (blob := store.toAnyBlob()) {
                     defer store.deref();
                     return blob;
@@ -173,7 +174,8 @@ export class ByteBlobLoader {
     }
 
     pub fn drain(*_): ByteList {
-        const store = _.store ?? return .{};
+        if (_.store == null) return .{};
+        const store = _.store.?;
         let temporary = store.sharedView();
         temporary = temporary[_.offset..];
         temporary = temporary[0..@min(16384, @min(temporary.len, _.remain))];
@@ -186,7 +188,7 @@ export class ByteBlobLoader {
         return cloned;
     }
 
-    pub fn toBufferedValue(*_, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag): JSError!JSValue {
+    pub fn toBufferedValue(*_, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag): JSValue ! JSError {
         if (blob_ := _.toAnyBlob(globalThis)) {
             let blob = blob_;
             return blob.toPromise(globalThis, action);
@@ -195,8 +197,8 @@ export class ByteBlobLoader {
         return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).reject();
     }
 
-    pub fn memoryCost(): usize {
-        if (store := _.store) {
+    pub fn memoryCost(ctx: *const ByteBlobLoader): usize {
+        if (store := ctx.store) {
             return store.memoryCost();
         }
         return 0;

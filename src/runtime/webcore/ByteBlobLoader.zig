@@ -45,14 +45,6 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 const default_allocator = @import("bun").default_allocator;
@@ -62,197 +54,182 @@ const ByteList = @import("bun").ByteList;
 const webcore = @import("bun").webcore;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
-pub const ByteBlobLoader = struct {
-    offset: Blob.SizeType = 0,
-    store: ?*Blob.Store = null,
-    chunk_size: Blob.SizeType = ((1024 * 1024) * 2),
-    remain: Blob.SizeType = ((1024 * 1024) * 2),
-    done: bool = false,
-    pulled: bool = false,
-    content_type: []const u8 = "",
-    content_type_allocated: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.offset = 0; self_ptr.store = null; self_ptr.chunk_size = ((1024 * 1024) * 2); self_ptr.remain = ((1024 * 1024) * 2); self_ptr.done = false; self_ptr.pulled = false; self_ptr.content_type = ""; self_ptr.content_type_allocated = false; return self_ptr; }
+pub const ByteBlobLoader = @This();
 
-pub fn init(self: *ByteBlobLoader, offset: Blob.SizeType, store: ?*Blob.Store, chunk_size: Blob.SizeType, remain: Blob.SizeType, done: bool, pulled: bool, content_type: []const u8, content_type_allocated: bool) void {
-        var __offset_moved = false; _ = &__offset_moved;
-        defer if (!__offset_moved) { const __T = @TypeOf(offset); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = offset.release() catch {}; } else { offset.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = offset; _drop_val.release(); } };
-        var __chunk_size_moved = false; _ = &__chunk_size_moved;
-        defer if (!__chunk_size_moved) { const __T = @TypeOf(chunk_size); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = chunk_size.release() catch {}; } else { chunk_size.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = chunk_size; _drop_val.release(); } };
-        var __remain_moved = false; _ = &__remain_moved;
-        defer if (!__remain_moved) { const __T = @TypeOf(remain); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = remain.release() catch {}; } else { remain.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = remain; _drop_val.release(); } };
-            self.offset = offset;
-            self.store = store;
-            self.chunk_size = chunk_size;
-            self.remain = remain;
-            self.done = done;
-            self.pulled = pulled;
-            self.content_type = content_type;
-            self.content_type_allocated = content_type_allocated;
-    }
+offset: Blob.SizeType = 0,
+store: ?*Blob.Store = null,
+chunk_size: Blob.SizeType = ((1024 * 1024) * 2),
+remain: Blob.SizeType = ((1024 * 1024) * 2),
+done: bool = false,
+pulled: bool = false,
+content_type: []const u8 = "",
+content_type_allocated: bool = false,
 
 pub fn parent(self: *ByteBlobLoader) *Source {
-            return @fieldParentPtr("context", self);
-    }
+        return @fieldParentPtr("context", self);
+}
 
 pub fn setup(self: *ByteBlobLoader, blob: *const Blob, user_chunk_size: Blob.SizeType) void {
-            _ = blob.store.?.ref();
-            var blobe = blob.*;
-            _ = &blobe;
-            _ = blobe.resolveSize();
-            const _tmp_v0 = brk: {
-            if (blob.content_type_was_set) {
-                if (blob.content_type_allocated) {
-                    break :brk .{ handleOom(default_allocator.dupe(u8, blob.content_type)), true };
-                }
-                break :brk .{ blob.content_type, false };
+        _ = blob.store.?.ref();
+        var blobe = blob.*;
+        _ = &blobe;
+        _ = blobe.resolveSize();
+        var content_type: []const u8 = "";
+        _ = &content_type;
+        var content_type_allocated = false;
+        _ = &content_type_allocated;
+        if (blob.content_type_was_set) {
+            if (blob.content_type_allocated) {
+                content_type = handleOom(default_allocator.dupe(u8, blob.content_type));
+                content_type_allocated = true;
+            } else {
+                content_type = blob.content_type;
             }
-            break :brk .{ "", false };
-};
-            const content_type = cp_unpack_elem(_tmp_v0, 0);
-            _ = &content_type;
-            const content_type_allocated = cp_unpack_elem(_tmp_v0, 1);
-            _ = &content_type_allocated;
-            var chunk_size = blobe.size;
-            _ = &chunk_size;
-            if ((user_chunk_size > 0)) {
-                chunk_size = @min(user_chunk_size, blobe.size);
-            }
-            chunk_size = @min(chunk_size, ((1024 * 1024) * 2));
-            self.* = ByteBlobLoader{ .offset = blobe.offset, .store = blobe.store.?, .chunk_size = chunk_size, .remain = blobe.size, .done = false, .content_type = content_type, .content_type_allocated = content_type_allocated };
-    }
+        }
+        var chunk_size = blobe.size;
+        _ = &chunk_size;
+        if ((user_chunk_size > 0)) {
+            chunk_size = @min(user_chunk_size, blobe.size);
+        }
+        chunk_size = @min(chunk_size, ((1024 * 1024) * 2));
+        self.* = ByteBlobLoader{ .offset = blobe.offset, .store = blobe.store.?, .chunk_size = chunk_size, .remain = blobe.size, .done = false, .content_type = content_type, .content_type_allocated = content_type_allocated };
+}
 
 pub fn onStart(self: *ByteBlobLoader) streams.Start {
-            return .{ .chunk_size = self.chunk_size };
-    }
+        return .{ .chunk_size = self.chunk_size };
+}
 
 pub fn onPull(self: *ByteBlobLoader, buffer: []u8, array: JSValue) streams.Result {
-            _ = array.ensureStillAlive();
-            defer {
-            _ = array.ensureStillAlive();
-            }
-            self.pulled = true;
-            const store = ((self.store) orelse { return .{ .done = .{} }; });
-            if (self.done) {
-                return .{ .done = .{} };
-            }
-            var temporary = store.sharedView();
-            _ = &temporary;
-            temporary = temporary[@min(self.offset, temporary.len)..];
-            temporary = temporary[0..@min(buffer.len, @min(temporary.len, self.remain))];
-            if ((temporary.len == 0)) {
-                _ = self.clearData();
-                self.done = true;
-                return .{ .done = .{} };
-            }
-            const copied = @as(Blob.SizeType, @intCast(temporary.len));
-            self.remain = (self.remain - copied);
-            self.offset = (self.offset + copied);
-            _ = assert((buffer.ptr != temporary.ptr));
-            _ = @memcpy(buffer[0..temporary.len], temporary);
-            if ((self.remain == 0)) {
-                return .{ .into_array_and_done = .{ .value = array, .len = copied } };
-            }
-            return .{ .into_array = .{ .value = array, .len = copied } };
-    }
+        _ = array.ensureStillAlive();
+        defer {
+        _ = array.ensureStillAlive();
+        }
+        self.pulled = true;
+        if ((self.store == null)) {
+            return .{ .done = .{} };
+        }
+        const store = self.store.?;
+        if (self.done) {
+            return .{ .done = .{} };
+        }
+        var temporary = store.sharedView();
+        _ = &temporary;
+        temporary = temporary[@min(self.offset, temporary.len)..];
+        temporary = temporary[0..@min(buffer.len, @min(temporary.len, self.remain))];
+        if ((temporary.len == 0)) {
+            _ = self.clearData();
+            self.done = true;
+            return .{ .done = .{} };
+        }
+        const copied = @as(Blob.SizeType, @intCast(temporary.len));
+        self.remain = (self.remain - copied);
+        self.offset = (self.offset + copied);
+        _ = assert((buffer.ptr != temporary.ptr));
+        _ = @memcpy(buffer[0..temporary.len], temporary);
+        if ((self.remain == 0)) {
+            return .{ .into_array_and_done = .{ .value = array, .len = copied } };
+        }
+        return .{ .into_array = .{ .value = array, .len = copied } };
+}
 
 pub fn toAnyBlob(self: *ByteBlobLoader, globalThis: *JSGlobalObject) ?Blob.Any {
-            if (self.store) |store| {
-                _ = &store;
-                _ = self.detachStore();
-                if ((((self.offset == 0) and (self.remain == store.size())) and (self.content_type.len == 0))) {
-                    if (store.toAnyBlob()) |blob| {
-                        _ = &blob;
-                        defer {
-                        _ = store.deref();
-                        }
-                        return blob;
+        if (self.store) |store| {
+            _ = &store;
+            _ = self.detachStore();
+            if ((((self.offset == 0) and (self.remain == store.size())) and (self.content_type.len == 0))) {
+                if (store.toAnyBlob()) |blob| {
+                    _ = &blob;
+                    defer {
+                    _ = store.deref();
                     }
+                    return blob;
                 }
-                var blob = Blob.initWithStore(store, globalThis);
-                _ = &blob;
-                blob.offset = self.offset;
-                blob.size = self.remain;
-                if ((self.content_type.len > 0)) {
-                    blob.content_type = self.content_type;
-                    blob.content_type_was_set = (self.content_type.len > 0);
-                    blob.content_type_allocated = self.content_type_allocated;
-                    self.content_type = "";
-                    self.content_type_allocated = false;
-                }
-                self.parent().is_closed = true;
-                return .{ .Blob = blob };
             }
-            return null;
-    }
-
-pub fn detachStore(self: *ByteBlobLoader) ?*Blob.Store {
-            if (self.store) |store| {
-                _ = &store;
-                self.store = null;
-                self.done = true;
-                return store;
-            }
-            return null;
-    }
-
-pub fn onCancel(self: *ByteBlobLoader) void {
-            _ = self.clearData();
-    }
-
-pub fn deinit(self: *ByteBlobLoader) void {
-            _ = self.clearData();
-            _ = self.parent().deinit();
-    }
-
-pub fn clearData(self: *ByteBlobLoader) void {
-            if (self.content_type_allocated) {
-                _ = default_allocator.free(self.content_type);
+            var blob = Blob.initWithStore(store, globalThis);
+            _ = &blob;
+            blob.offset = self.offset;
+            blob.size = self.remain;
+            if ((self.content_type.len > 0)) {
+                blob.content_type = self.content_type;
+                blob.content_type_was_set = (self.content_type.len > 0);
+                blob.content_type_allocated = self.content_type_allocated;
                 self.content_type = "";
                 self.content_type_allocated = false;
             }
-            if (self.store) |store| {
-                _ = &store;
-                self.store = null;
-                _ = store.deref();
-            }
-    }
+            self.parent().is_closed = true;
+            return .{ .Blob = blob };
+        }
+        return null;
+}
+
+pub fn detachStore(self: *ByteBlobLoader) ?*Blob.Store {
+        if (self.store) |store| {
+            _ = &store;
+            self.store = null;
+            self.done = true;
+            return store;
+        }
+        return null;
+}
+
+pub fn onCancel(self: *ByteBlobLoader) void {
+        _ = self.clearData();
+}
+
+pub fn deinit(self: *ByteBlobLoader) void {
+        _ = self.clearData();
+        _ = self.parent().deinit();
+}
+
+pub fn clearData(self: *ByteBlobLoader) void {
+        if (self.content_type_allocated) {
+            _ = default_allocator.free(self.content_type);
+            self.content_type = "";
+            self.content_type_allocated = false;
+        }
+        if (self.store) |store| {
+            _ = &store;
+            self.store = null;
+            _ = store.deref();
+        }
+}
 
 pub fn drain(self: *ByteBlobLoader) ByteList {
-            const store = ((self.store) orelse { return .{}; });
-            var temporary = store.sharedView();
-            _ = &temporary;
-            temporary = temporary[self.offset..];
-            temporary = temporary[0..@min(16384, @min(temporary.len, self.remain))];
-            var byte_list = ByteList.fromBorrowedSliceDangerous(temporary);
-            _ = &byte_list;
-            const cloned = handleOom(byte_list.clone(default_allocator));
-            self.offset = (self.offset + (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(cloned.len)) else @as(Blob.SizeType, cloned.len)));
-            self.remain = (self.remain - (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(cloned.len)) else @as(Blob.SizeType, cloned.len)));
-            return cloned;
-    }
+        if ((self.store == null)) {
+            return .{};
+        }
+        const store = self.store.?;
+        var temporary = store.sharedView();
+        _ = &temporary;
+        temporary = temporary[self.offset..];
+        temporary = temporary[0..@min(16384, @min(temporary.len, self.remain))];
+        var byte_list = ByteList.fromBorrowedSliceDangerous(temporary);
+        _ = &byte_list;
+        const cloned = handleOom(byte_list.clone(default_allocator));
+        self.offset = (self.offset + (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(cloned.len)) else @as(Blob.SizeType, cloned.len)));
+        self.remain = (self.remain - (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(cloned.len)) else @as(Blob.SizeType, cloned.len)));
+        return cloned;
+}
 
 pub fn toBufferedValue(self: *ByteBlobLoader, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag) JSError!JSValue {
-            if (self.toAnyBlob(globalThis)) |blob_| {
-                _ = &blob_;
-                var blob = blob_;
-                _ = &blob;
-                return blob.toPromise(globalThis, action);
-            }
-            return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).reject();
-    }
+        if (self.toAnyBlob(globalThis)) |blob_| {
+            _ = &blob_;
+            var blob = blob_;
+            _ = &blob;
+            return blob.toPromise(globalThis, action);
+        }
+        return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).reject();
+}
 
-pub fn memoryCost(self: *const ByteBlobLoader) usize {
-            if (self.store) |store| {
-                _ = &store;
-                return store.memoryCost();
-            }
-            return 0;
-    }
-    pub const tag = webcore.ReadableStream.Tag.Blob;
-    pub const Source = webcore.ReadableStream.NewSource(ByteBlobLoader, "Blob", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
-};
-
+pub fn memoryCost(ctx: *const ByteBlobLoader) usize {
+        if (ctx.store) |store| {
+            _ = &store;
+            return store.memoryCost();
+        }
+        return 0;
+}
+pub const tag = webcore.ReadableStream.Tag.Blob;
+pub const Source = webcore.ReadableStream.NewSource(ByteBlobLoader, "Blob", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;

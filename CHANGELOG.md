@@ -1636,3 +1636,6 @@
 
 ### 2026-11-20 06:30:01 UTC - zig:check 第 4 轮 Bake+URL+Shell+Parser 簇 12 模块语义修复入库
 - 完成：`FrameworkRouter`/`unicode`/`url`/`HTTPContext`/`ParsedShellScript`/`Chunk`/`transpiler`/`PackageManagerTask`/`Ast`/`BundledAst`/`G`/`picohttp` 12/12 全 PASS。
+
+### 2026-11-20 06:34:14 UTC - zig:check 外部根因（FileReader/ByteBlobLoader/ByteStream）升级 @root struct 入库
+- 完成：3/3 升级为 `@root struct` 并在文件根导出 `pub const Source`，4 项硬门禁全 PASS。
