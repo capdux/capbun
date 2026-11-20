@@ -1218,3 +1218,6 @@
 
 ### 2026-11-20 03:29:13 UTC - js_parser/ast 遍历器与装饰器降级经验
 - 将 `visitStmt`/`visitExpr` 内嵌 `visitors = struct` 提升为顶层工厂，统一 `static fn` 并修复 `?? break/return` 与标签块赋值，膨胀率 1.010x~1.023x。
+
+### 2026-11-20 03:35:07 UTC - src/cli/ 100% 闭环总结
+- 攻克最后 3 个 2000+ 行级 CLI 模块（6,396 行），统一 `@c {}` / `@callconv("c")` / 顶层辅助结构，膨胀率 1.009x~1.025x。

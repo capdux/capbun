@@ -1488,3 +1488,6 @@
 
 ### 2026-11-20 03:29:13 UTC - src/js_parser/ast/ 4 核心遍历与降级模块迁移入库
 - 完成：`lowerDecorators.cp` (1.023x), `visitStmt.cp` (1.012x), `Parser.cp` (1.011x), `visitExpr.cp` (1.010x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:35:07 UTC - src/cli/ 100% 目录闭环（repl, update_interactive_command, test_command 入库）
+- 完成：`repl.cp` (1.022x), `update_interactive_command.cp` (1.009x), `test_command.cp` (1.025x)，4 项硬门禁全 PASS。

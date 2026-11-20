@@ -2928,3 +2928,5 @@ Options:
 - [2026-11-20 03:24:04 UTC] 验收并提交 `src/js_parser/` 4 模块：`runtime.cp` (1.015x), `js_parser.cp` (1.007x), `lexer_tables.cp` (1.000x), `parser.cp` (1.039x)；接力派发 `src/install/` 3 模块（`PackageManager`/`PackageInstaller`/`isolated_install`）。
 
 - [2026-11-20 03:29:13 UTC] 验收并提交 `src/js_parser/ast/` 4 模块：`lowerDecorators.cp` (1.023x), `visitStmt.cp` (1.012x), `Parser.cp` (1.011x), `visitExpr.cp` (1.010x)；接力派发 `src/napi/napi.zig` 与 `src/install/lockfile.zig`。
+
+- [2026-11-20 03:35:07 UTC] 验收并提交 `src/cli/` 最后 3 模块：`repl.cp` (1.022x), `update_interactive_command.cp` (1.009x), `test_command.cp` (1.025x)——`src/cli/` 实现 100% 目录闭环；接力派发 `src/runtime/api/bun/process.zig`。
