@@ -105,7 +105,7 @@ pub const Source = union(enum) {
     detached: void,
 
     pub fn memoryCost(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .blob => _.blob.memoryCost(),
             .array_buffer => 0,
             .detached => 0,
@@ -313,12 +313,12 @@ pub struct TestingAPIs {
                     .pipe => |pipe| {
                         pipe.signal.clear();
                         pipe.deref();
-                        client.stdin = { ignore: {} };
+                        client.stdin = .ignore;
                     },
                     .buffer => {
                         client.stdin.buffer.source.detach();
                         client.stdin.buffer.deref();
-                        client.stdin = { ignore: {} };
+                        client.stdin = .ignore;
                     },
                     else => {},
                 }
@@ -595,7 +595,8 @@ pub struct TestingAPIs {
             client.stderr.memoryCost();
     }
 
-    fn consumeExitedPromise(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
+    pub fn consumeExitedPromise(client: *Subprocess, this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
+        * = client;
         if (promise := jsc.Codegen.JSSubprocess.exitedPromiseGetCached(this_jsvalue)) {
             jsc.Codegen.JSSubprocess.exitedPromiseSetCached(this_jsvalue, globalThis, .zero);
             return promise;

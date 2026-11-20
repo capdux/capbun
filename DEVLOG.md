@@ -1437,3 +1437,5 @@
 - **[2026-11-20] Wave 15 收官**：43 个核心模块落地，总报错 714→507；`AnyRequestContext`/`DeferredTaskQueue`/`ManagedTask` 升级 `@root struct`，`Body.Mixin(T)` 补 `static fn` 清零 `host_fn`。
 
 - **[2026-11-20] Wave 16 Batch A 要点**：`AnyRequestContext` 用顶层 `Opt*` 类型别名避免 `?` 被误 lower 为 `try`；`Body.cp` 用 `&@field(x, "Locked")` 避开大写字段取址误解析；`uws` 新签名下统一移除 `onTimeout`/`runCorkedWithType` 多余类型参数。
+
+- **[2026-11-20] Wave 16 Batch B 要点**：`ParsedShellScript.take()` 用 `type OptString = bun.String?` 等顶层别名生成 `*?T`；`cron.cp` 以 `@TypeOf(empty_z_sentinel.ptr)` 保留 `[*:0]const u8`；Output Task VTable 方法统一 `static fn`。

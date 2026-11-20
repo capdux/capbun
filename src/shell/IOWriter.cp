@@ -270,7 +270,7 @@ pub fn __start(client: *IOWriter): Maybe(void) {
                 client.flags.nonblocking = false;
                 client.flags.is_socket = false;
                 if (client.writer.handle == .poll) client.writer.handle.closeImpl(null, {}, false);
-                client.writer.handle = { closed: {} };
+                client.writer.handle = .closed;
                 return __start(client);
             }
 
@@ -282,7 +282,7 @@ pub fn __start(client: *IOWriter): Maybe(void) {
                     client.flags.nonblocking = false;
                     client.flags.is_socket = false;
                     if (client.writer.handle == .poll) client.writer.handle.closeImpl(null, {}, false);
-                    client.writer.handle = { closed: {} };
+                    client.writer.handle = .closed;
                     return __start(client);
                 }
             }
@@ -490,7 +490,8 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
     if (client.writer_idx >= client.writers.len()) return;
     const child = client.writers.get(client.writer_idx);
     if (child.isDead()) {
-        client.bump(child).run();
+        let bump_y = client.bump(child);
+        bump_y.run();
     } else {
         if (bl := child.bytelist) {
             const written_slice = client.buf.items[client.total_bytes_written .. client.total_bytes_written + amount];
@@ -528,7 +529,8 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
         }
 
         if (child.written >= child.len) {
-            client.bump(child).run();
+            let bump_y = client.bump(child);
+        bump_y.run();
         }
     }
 
@@ -558,7 +560,8 @@ pub fn brokenPipeForWriters(client: *IOWriter) {
         }
         log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(0x{x}) {s}(0x{x})", .{ @intFromPtr(client), client.fd, @intFromPtr(w), @tagName(w.ptr.ptr.tag()), w.ptr.ptr.repr._ptr });
         const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
-        w.ptr.onIOWriterChunk(0, e).run();
+        let chunk_y = w.ptr.onIOWriterChunk(0, e);
+        chunk_y.run();
         offset += w.len;
         client.cancelChunks(w.ptr);
     }
@@ -612,7 +615,8 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) {
         // deref of this.err is balanced and multiple callees don't over-deref. Matches IOReader.
         if (*e := client.e) e.ref();
         // TODO: This probably shouldn't call .run()
-        w.ptr.onIOWriterChunk(0, client.e).run();
+        let err_y = w.ptr.onIOWriterChunk(0, client.e);
+        err_y.run();
     }
 
     client.total_bytes_written = 0;
@@ -872,13 +876,13 @@ fn tryWriteWithWriteFn(fd: bun.FD, buf: []const u8, comptime write_fn: *const fn
 
     while (offset < buf.len) {
         switch (write_fn(fd, buf[offset..])) {
-            .err => |e| {
-                if (e.isRetry()) {
+            .err write_err => {
+                if (write_err.isRetry()) {
                     return { pending: offset };
                 }
 
                 // Return EPIPE as an error so it propagates properly.
-                return { err: e };
+                return { err: write_err };
             },
 
             .result => |wrote| {

@@ -126,8 +126,8 @@ pub fn throwEncodingError(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)
             return globalObject.ERR(.INVALID_ARG_VALUE, "encoding '{f}' is an invalid encoding", .{ value.fmtString(globalObject) }).throw();
     }
 
-pub fn encodeWithSize(self: *Encoding, globalObject: *jsc.JSGlobalObject, comptime size: usize, input: *const [size]u8) bun.JSError!jsc.JSValue {
-            switch (self) {
+pub fn encodeWithSize(enc_val: Encoding, globalObject: *jsc.JSGlobalObject, comptime size: usize, input: *const [size]u8) bun.JSError!jsc.JSValue {
+            switch (enc_val) {
 .base64 => {
 const b64_size = std.base64.standard.Encoder.calcSize(size);
             var buf: [b64_size]u8 = undefined;
@@ -159,9 +159,9 @@ return try jsc.WebCore.encoding.toStringComptime(input, globalObject, enc);
 }
     }
 
-pub fn encodeWithMaxSize(self: *Encoding, globalObject: *jsc.JSGlobalObject, comptime max_size: usize, input: []const u8) bun.JSError!jsc.JSValue {
+pub fn encodeWithMaxSize(enc_val: Encoding, globalObject: *jsc.JSGlobalObject, comptime max_size: usize, input: []const u8) bun.JSError!jsc.JSValue {
             _ = bun.assertf((input.len <= max_size), "input length ({}) should not exceed max_size ({})", .{ input.len, max_size });
-            switch (self) {
+            switch (enc_val) {
 .base64 => {
 const b64_max_size = std.base64.standard.Encoder.calcSize((max_size * 4));
             var base64_buf: [b64_max_size]u8 = undefined;
@@ -1197,7 +1197,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!?Mod
             }
             mode_int = @intCast(parsed.?);
         }
-        return @truncate((mode_int & 511));
+        return @as(Mode, @intCast((mode_int & 511)));
 }
 
 extern "c" fn Bun__JSDirentObjectConstructor(global: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue;

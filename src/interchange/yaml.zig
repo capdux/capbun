@@ -1512,9 +1512,10 @@ else => {
         const NodeScalar = ParserNodeScalar(enc);
         const NodeTag = ParserNodeTag(enc);
         const Keywords = ScalarResolverKeywords;
-        const ResolveError = (OOM or error{
+        const ResolveError = error{
+                OutOfMemory,
                 // ScalarTypeMismatch,
-                });
+            };
     };
 }
 
@@ -1915,21 +1916,21 @@ _ = list.deinit();
         }
 
 pub fn slice(self: @This(), input: []const enc.unit()) []const enc.unit() {
-                return (switch (self.*) {
+                return (switch (self) {
 .range => |range| range.slice(input),
 .list => |list| list.items,
 });
         }
 
 pub fn len(self: @This()) usize {
-                return (switch (self.*) {
+                return (switch (self) {
 .range => |*range| range.len(),
 .list => |*list| list.items.len,
 });
         }
 
 pub fn isEmpty(self: @This()) bool {
-                return (switch (self.*) {
+                return (switch (self) {
 .range => |*range| range.isEmpty(),
 .list => |*list| (list.items.len == 0),
 });
@@ -2385,7 +2386,7 @@ pub fn parseBlockSequence(self: *@This()) ParseError!Expr {
                     _ = try self.scan(.{ .additional_parent_indent = entry_indent.add(1) });
                     {
                         const item: Expr = try (switch (self.token.data) {
-.eof => .init(E.Null, .{}, entry_start.add(2).loc()),
+.eof => Expr.init(E.Null, .{}, entry_start.add(2).loc()),
 .sequence_entry => item: {
                         if (self.token.indent.isLessThanOrEqual(sequence_indent)) {
                             break :item Expr.init(E.Null, .{}, entry_start.add(2).loc());
@@ -4619,10 +4620,11 @@ pub fn stringBuilder(self: *@This()) String.Builder {
             };
         const ScalarResolverCtx = ParserScalarResolverCtx(enc);
         const ScanBlockHeaderError = error{UnexpectedCharacter};
-        const ScanLiteralScalarError = (OOM or error{
+        const ScanLiteralScalarError = error{
+                OutOfMemory,
                 UnexpectedCharacter,
                 InvalidIndentation,
-            });
+            };
         const LiteralScalarCtx = ParserLiteralScalarCtx(enc);
         const ScanSingleQuotedScalarError = (OOM or error{
                 UnexpectedCharacter,

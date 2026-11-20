@@ -426,8 +426,8 @@ pub enum Encoding: u8 {
         return globalObject.ERR(.INVALID_ARG_VALUE, "encoding '{f}' is an invalid encoding", .{ value.fmtString(globalObject) }).throw();
     }
 
-    fn encodeWithSize(globalObject: *jsc.JSGlobalObject, comptime size: usize, input: *const [size]u8): bun.JSError!jsc.JSValue {
-        switch (_) {
+    static fn encodeWithSize(enc_val: Encoding, globalObject: *jsc.JSGlobalObject, comptime size: usize, input: *const [size]u8): bun.JSError!jsc.JSValue {
+        switch (enc_val) {
             .base64 => {
                 const b64_size = std.base64.standard.Encoder.calcSize(size);
                 let buf: [b64_size]u8 = undefined;
@@ -461,13 +461,13 @@ pub enum Encoding: u8 {
         }
     }
 
-    fn encodeWithMaxSize(globalObject: *jsc.JSGlobalObject, comptime max_size: usize, input: []const u8): bun.JSError!jsc.JSValue {
+    static fn encodeWithMaxSize(enc_val: Encoding, globalObject: *jsc.JSGlobalObject, comptime max_size: usize, input: []const u8): bun.JSError!jsc.JSValue {
         bun.assertf(
             input.len <= max_size,
             "input length ({}) should not exceed max_size ({})",
             .{ input.len, max_size },
         );
-        switch (_) {
+        switch (enc_val) {
             .base64 => {
                 const b64_max_size = std.base64.standard.Encoder.calcSize(max_size * 4);
                 let base64_buf: [b64_max_size]u8 = undefined;
@@ -916,7 +916,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Mod
         mode_int = @intCast(parsed.?);
     }
 
-    return @truncate(mode_int & 0o777);
+    return @as(Mode, @intCast(mode_int & 0o777));
 }
 
 pub const PathOrFileDescriptor = union(Tag) {

@@ -624,7 +624,9 @@ pub fn run(self: *Interpreter) !Maybe(void) {
             var root = Script.init(self, (&self.root_shell), (&self.args.script_ast), Script.ParentPtr.init(self), self.root_io.copy());
             _ = &root;
             _ = self.started.store(true, .seq_cst);
-            _ = root.start().run();
+            var root_yield = root.start();
+            _ = &root_yield;
+            _ = root_yield.run();
             return .success;
     }
 
@@ -643,7 +645,9 @@ pub fn runFromJS(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *js
             var root = Script.init(self, (&self.root_shell), (&self.args.script_ast), Script.ParentPtr.init(self), self.root_io.copy());
             _ = &root;
             _ = self.started.store(true, .seq_cst);
-            _ = root.start().run();
+            var root_yield = root.start();
+            _ = &root_yield;
+            _ = root_yield.run();
             if (globalThis.hasException()) {
                 return error.JSError;
             }

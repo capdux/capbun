@@ -1120,9 +1120,9 @@ pub fn adjustUlimit() !usize {
 
 pub fn init(cwd: []const u8) RealFS {
             const file_limit = ((adjustUlimit()) catch unreachable);
-            if ((!RealFS._entries_option_map_loaded)) {
-                RealFS._entries_option_map = EntriesOption.Map.init(bun.default_allocator);
-                RealFS._entries_option_map_loaded = true;
+            if ((!_entries_option_map_loaded)) {
+                _entries_option_map = EntriesOption.Map.init(bun.default_allocator);
+                _entries_option_map_loaded = true;
             }
             return RealFS{ .entries = RealFS._entries_option_map, .cwd = cwd, .file_limit = file_limit, .file_quota = file_limit };
     }
@@ -1548,7 +1548,7 @@ pub fn topLevelDirWithoutTrailingSlash(self: FileSystem) []const u8 {
 
 pub fn tmpdir(fs: *FileSystem) !std.fs.Dir {
             if ((tmpdir_handle == null)) {
-                tmpdir_handle = try fs.RealFS.openTmpDir(fs);
+                tmpdir_handle = try fs.fs.openTmpDir();
             }
             return tmpdir_handle.?;
     }

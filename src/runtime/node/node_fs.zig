@@ -1032,8 +1032,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = &self;
         }
     
-    pub fn toThreadSafe(self: *const @This()) void {
-            _ = self;
+    pub fn toThreadSafe(_: *const @This()) void {
         }
     
     pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fchown {
@@ -1149,8 +1148,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = &self;
         }
     
-    pub fn toThreadSafe(self: *const @This()) void {
-            _ = self;
+    pub fn toThreadSafe(_: *const @This()) void {
         }
     
     pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!FChmod {
@@ -1268,8 +1266,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = &self;
         }
     
-    pub fn toThreadSafe(self: *@This()) void {
-            _ = self;
+    pub fn toThreadSafe(_: *@This()) void {
         }
     
     pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fstat {
@@ -1752,8 +1749,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = &self;
         }
     
-    pub fn toThreadSafe(self: @This(), _: Close) void {
-            _ = self;
+    pub fn toThreadSafe(_: Close) void {
         }
     
     pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Close {
@@ -2051,7 +2047,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 if ((length_int < 0)) {
                     return ctx.throwRangeError(length_float, .{ .field_name = "length", .min = 0 });
                 }
-                const length: u64 = (if (comptime @typeInfo(@TypeOf(length_int)) == .@"enum") cp_cast_int(i32, @intFromEnum(length_int)) else cp_cast_int(i32, length_int));
+                const length: u64 = @intCast(length_int);
                 const position_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
                 var position_int: i64 = -1;
                 _ = &position_int;
@@ -2552,8 +2548,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 _ = &self;
         }
     
-    pub fn toThreadSafe(self: *const @This()) void {
-            _ = self;
+    pub fn toThreadSafe(_: *const @This()) void {
         }
     
     pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fsync {
@@ -2673,7 +2668,8 @@ pub const Return = struct {
     defer {
                 _ = bun.default_allocator.free(self.buffers);
                 }
-                return jsc.JSValue.fromAny(globalObject, &.{}, Buffer, self.buffers);
+                const BufferSlice = @TypeOf(self.buffers);
+                return jsc.JSValue.fromAny(globalObject, BufferSlice, self.buffers);
     },
     .files => {
     
@@ -3389,7 +3385,7 @@ pub fn _isSep(char: bun.OSPathChar) bool {
     }
 
 pub fn mkdirRecursiveOSPath(self: *NodeFS, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool) Maybe(Return.Mkdir) {
-            return self.mkdirRecursiveOSPathImpl(self, void, .{}, path, mode, return_path);
+            return self.mkdirRecursiveOSPathImpl(void, .{}, path, mode, return_path);
     }
 
 pub fn mkdirRecursiveOSPathImpl(self: *NodeFS, comptime Ctx: type, ctx: Ctx, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool) Maybe(Return.Mkdir) {
@@ -5033,7 +5029,7 @@ return .{ .err = e.withPath(self.osPathIntoSyncErrorBuf(src)) };
                 dest_buf[cp_cast_int(usize, ((dest_dir_len + 1) + name_slice.len))] = 0;
                 switch (current.kind) {
 .directory => {
-const r = self.cpSyncInner(src_buf, (src_dir_len + @as(PathString.PathInt, @intCast((1 + name_slice.len)))), dest_buf, (dest_dir_len + (if (comptime @typeInfo(PathString.PathInt) == .@"enum") @as(PathString.PathInt, @enumFromInt((if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len))))) else @as(PathString.PathInt, (if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len)))))), args);
+const r = self.cpSyncInner(src_buf, (src_dir_len + @as(PathString.PathInt, @intCast((1 + name_slice.len)))), dest_buf, (dest_dir_len + @as(PathString.PathInt, @intCast((1 + name_slice.len)))), args);
                 switch (r) {
 .err => {
 return r;
@@ -5756,7 +5752,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
                 return;
             }
             const globalObject = ((self.evtloop.globalObject()) orelse (@panic("No global object, this indicates a bug in Bun. Please file a GitHub issue.")));
-            const success = ((if (comptime @typeInfo(bun.sys.Maybe(Return.Cp).Tag) == .@"enum") @as(bun.sys.Maybe(Return.Cp).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(Return.Cp).Tag, self.result)) == .result);
+            const success = (std.meta.activeTag(self.result) == .result);
             var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
@@ -5972,14 +5968,14 @@ _ = this_.subtask_count.fetchAdd(1, .monotonic);
                 _ = jsc.WorkPool.schedule((&task.task));
         }
     
-    pub fn workPoolCallback(self: @This(), task: *jsc.WorkPoolTask) void {
-                var this: *ThisSingleTask = @fieldParentPtr("task", task);
-                _ = &this;
-                const parent = self.cp_task;
+    pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
+                var st: *ThisSingleTask = @fieldParentPtr("task", task);
+                _ = &st;
+                const parent = st.cp_task;
                 var node_fs = NodeFS{  };
                 _ = &node_fs;
                 const args = parent.args;
-                const result = node_fs._copySingleFileSync(self.src, self.dest, @enumFromInt((if ((args.flags.errorOnExist or (!args.flags.force))) constants.COPYFILE_EXCL else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)))), null, parent.args);
+                const result = node_fs._copySingleFileSync(st.src, st.dest, @enumFromInt((if ((args.flags.errorOnExist or (!args.flags.force))) constants.COPYFILE_EXCL else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)))), null, parent.args);
                 _ = brk: {
                 break :brk (switch (result) {
     .err => |e| {
@@ -5990,11 +5986,11 @@ _ = this_.subtask_count.fetchAdd(1, .monotonic);
                     _ = parent.finishConcurrently(result);
                 }
     },
-    .result => parent.onCopy(self.src, self.dest),
+    .result => parent.onCopy(st.src, st.dest),
     });
     
     };
-                _ = self.deinit();
+                _ = st.deinit();
                 _ = parent.onSubtaskDone();
         }
     

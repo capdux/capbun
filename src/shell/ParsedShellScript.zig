@@ -85,7 +85,7 @@ pub fn estimatedSize(client: *const ParsedShellScript) usize {
         return client.estimated_size_for_gc;
 }
 
-pub fn take(self: *ParsedShellScript, _: *jsc.JSGlobalObject, out_args: *ShellArgs, out_jsobjs: *std.array_list.Managed(JSValue), out_quiet: *bool, out_cwd: ?*bun.String, out_export_env: ?*EnvMap) void {
+pub fn take(self: *ParsedShellScript, _: *jsc.JSGlobalObject, out_args: *ShellArgsPtr, out_jsobjs: *std.array_list.Managed(JSValue), out_quiet: *bool, out_cwd: *OptString, out_export_env: *OptEnvMap) void {
         out_args.* = self.args.?;
         out_jsobjs.* = self.jsobjs;
         out_quiet.* = self.quiet;
@@ -222,16 +222,16 @@ pub fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *
         var script = std.array_list.Managed(u8).init(shargs.arena_allocator());
         _ = &script;
         _ = try bun.shell.shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
-        var parser: bun.shell.Parser = undefined;
+        var parser: ?bun.shell.Parser = null;
         _ = &parser;
-        var lex_result: shell.LexResult = undefined;
+        var lex_result: ?shell.LexResult = null;
         _ = &lex_result;
         const script_ast = (blk_catch_0: { break :blk_catch_0 ((Interpreter.parse(shargs.arena_allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], (&parser), (&lex_result))) catch |e| { _ = &e; if ((e == shell.ParseError.Lex)) {
-            const str = lex_result.combineErrors(shargs.arena_allocator());
+            const str = (lex_result).?.combineErrors(shargs.arena_allocator());
             return globalThis.throwPretty("{s}", .{ str });
         }
-        if ((parser.errors.items.len > 0)) {
-            const errstr = parser.combineErrors();
+        if (((parser).?.errors.items.len > 0)) {
+            const errstr = (parser).?.combineErrors();
             return globalThis.throwPretty("{s}", .{ errstr });
         }
         return globalThis.throwError(e, "failed to lex/parse shell"); }); });
@@ -248,6 +248,9 @@ pub const js = jsc.Codegen.JSParsedShellScript;
 pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
+const ShellArgsPtr = *ShellArgs;
+const OptString = ?bun.String;
+const OptEnvMap = ?EnvMap;
 pub const createParsedShellScript = jsc.MarkedArgumentBuffer.wrap(createParsedShellScriptImpl);
 const ShellArgs = interpreter.ShellArgs;
 const jsc = bun.jsc;

@@ -552,7 +552,8 @@ pub enum StdinFdType: i32 {
         if (e := _.boring_ssl_engine) {
             return e;
         }
-        _.boring_ssl_engine = BoringSSL.ENGINE_new();
+        const engine_new = BoringSSL.ENGINE_new;
+        _.boring_ssl_engine = engine_new();
         return _.boring_ssl_engine.?;
     }
 
@@ -854,8 +855,7 @@ pub enum StdinFdType: i32 {
         if (w := _.websocket_deflate) {
             return w;
         }
-        const res = bun.handleOom(bun.default_allocator.create(WebSocketDeflate.RareData));
-        res.* = WebSocketDeflate.RareData{};
+        const res = bun.@"new"(WebSocketDeflate.RareData, .{});
         _.websocket_deflate = res;
         return res;
     }

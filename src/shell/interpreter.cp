@@ -1242,7 +1242,8 @@ pub struct Interpreter {
 
         let root = Script.init(_, &_.root_shell, &_.args.script_ast, Script.ParentPtr.init(_), _.root_io.copy());
         _.started.store(true, .seq_cst);
-        root.start().run();
+        let root_yield = root.start();
+        root_yield.run();
 
         return .success;
     }
@@ -1260,7 +1261,8 @@ pub struct Interpreter {
 
         let root = Script.init(_, &_.root_shell, &_.args.script_ast, Script.ParentPtr.init(_), _.root_io.copy());
         _.started.store(true, .seq_cst);
-        root.start().run();
+        let root_yield = root.start();
+        root_yield.run();
         if (globalThis.hasException()) return error.JSError;
 
         return JSValue.js_undefined;

@@ -1090,7 +1090,6 @@ pub fn register(globalObject: *jsc.JSGlobalObject, schedule_arg: jsc.JSValue, ca
     pub const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
 };
 
-const ConstCString = [*:0]u8;
 pub const CronClearMode = enum { reload, teardown };
 const ScheduleMonthInfo = struct {
     cron: CronExpression,
@@ -1098,6 +1097,8 @@ const ScheduleMonthInfo = struct {
 };
 const dummy_zero: [1]i32 = .{ 0 };
 threadlocal var crontab_buf: bun.PathBuffer = undefined;
+const empty_z_sentinel: [:0]const u8 = "";
+const ConstCString = @TypeOf(empty_z_sentinel.ptr);
 const EmitMode = enum { include_all, exclude_weekday, exclude_day };
 const ScheduleType = union(enum) {
     by_day: void,

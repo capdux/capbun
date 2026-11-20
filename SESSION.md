@@ -3104,3 +3104,5 @@ Options:
 - **[2026-11-20 21:03] Wave 15 Batch A 验收提交（14 核心模块全绿）+ Wave 16 `zig:check` 体检**：完成 Server/WebCore/EventLoop 14 模块独立验收（14/14 PASS，ratio 0.485x~1.085x）；Wave 16 `bun run zig:check` 总报错由 **714 降至 507**（`node_fs_binding`/`CryptoHasher`/`shell/Builtin`/`PipeWriter`/`host_fn`/`websocket_client`/`ipc`/`Progress`/`ZigGeneratedClasses` 全部清零）。
 
 - **[2026-11-20 21:20] Wave 16 Batch A 验收提交（Server/WebCore/EventLoop/Bake 13 模块全绿）**：13/13 PASS（ratio 0.512x~1.147x）并原子提交；B 组（`65620450`）仍在 Gemini 上收尾；后续新子智能体统一继承 Claude Sonnet 5.5 (Medium)，并发 `<= 2`。
+
+- **[2026-11-20 21:21] Wave 16 Batch B 验收提交（SQL/Node/JSC/Shell/Core 20 模块全绿）**：20/20 PASS（Gemini 子智能体收官），并已记录外部根因（`jsc.zig OpaqueCallback`、`GarbageCollectionController`/`WTFTimer`/`PosixSignalHandle`/`ObjectURLRegistry` 缺 `@root struct`、`bundler/options Loader.fromString/toAPI` 缺 `static`、`blob/Store file: *StoreFile`、`BlobAny.toBlob/toString`）；已由 Sonnet 5.5 子智能体 `6c141a28` 接手 webcore/io 侧外部依赖。

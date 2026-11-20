@@ -22,7 +22,8 @@ const Yield = shell.Yield;
 const log = bun.Output.scoped(.ls, .hidden);
 const debug = log;
 
-pub type FilepathArgs = ([]const [*:0]const u8)?;
+type FilepathArgsSlice = []const [:0]const u8;
+pub type FilepathArgs = FilepathArgsSlice?;
 
 pub const ShellLsResultKind = enum {
     file,
@@ -462,7 +463,7 @@ pub struct ShellLsTask {
 }
 
 const ShellLsOutputTaskVTable = struct {
-    pub fn writeErr(this: *Ls, childptr: auto, errbuf: []const u8): Yield? {
+    static fn writeErr(this: *Ls, childptr: auto, errbuf: []const u8): Yield? {
         log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ @intFromPtr(this), errbuf });
         this.state.exec.output_waiting += 1;
         if (safeguard := this.bltn().stderr.needsIO()) {
@@ -472,12 +473,12 @@ const ShellLsOutputTaskVTable = struct {
         return null;
     }
 
-    pub fn onWriteErr(this: *Ls) {
+    static fn onWriteErr(this: *Ls) {
         log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{@intFromPtr(this)});
         this.state.exec.output_done += 1;
     }
 
-    pub fn writeOut(this: *Ls, childptr: auto, output: *OutputSrc): Yield? {
+    static fn writeOut(this: *Ls, childptr: auto, output: *OutputSrc): Yield? {
         log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ @intFromPtr(this), output.slice() });
         this.state.exec.output_waiting += 1;
         if (safeguard := this.bltn().stdout.needsIO()) {
@@ -488,12 +489,12 @@ const ShellLsOutputTaskVTable = struct {
         return null;
     }
 
-    pub fn onWriteOut(this: *Ls) {
+    static fn onWriteOut(this: *Ls) {
         log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{@intFromPtr(this)});
         this.state.exec.output_done += 1;
     }
 
-    pub fn onDone(this: *Ls): Yield {
+    static fn onDone(this: *Ls): Yield {
         return this.next();
     }
 };
@@ -635,23 +636,25 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
             .state = .waiting_write_err,
         });
 
-        if (*err_ptr := task.err) {
+        if (err_val := task.err) {
             let error_string: []const u8 = "";
             if (_.state.exec.err == null) {
-                _.state.exec.err = err_ptr.*;
+                _.state.exec.err = err_val;
                 error_string = _.bltn().taskErrorToString(.ls, _.state.exec.err.?);
             } else {
-                let e = err_ptr.*;
+                let e = err_val;
                 defer e.deinitWithAllocator(_.alloc_scope.allocator());
                 error_string = _.bltn().taskErrorToString(.ls, e);
             }
             task.err = null;
             task.deinit();
-            output_task.start(error_string).run();
+            let y_err = output_task.start(error_string);
+            y_err.run();
             return;
         }
         task.deinit();
-        output_task.start(null).run();
+        let y_ok = output_task.start(null);
+        y_ok.run();
     }
 
     pub fn parseOpts(*_): Result(FilepathArgs, Opts.ParseError) {

@@ -1202,9 +1202,9 @@ pub struct RealFS {
         ): RealFS {
             const file_limit = adjustUlimit() catch unreachable;
 
-            if (!RealFS._entries_option_map_loaded) {
-                RealFS._entries_option_map = EntriesOption.Map.init(bun.default_allocator);
-                RealFS._entries_option_map_loaded = true;
+            if (!_entries_option_map_loaded) {
+                _entries_option_map = EntriesOption.Map.init(bun.default_allocator);
+                _entries_option_map_loaded = true;
             }
 
             return RealFS{
@@ -1815,7 +1815,7 @@ pub struct FileSystem {
 
     static fn tmpdir(fs: *FileSystem): !std.fs.Dir {
         if (tmpdir_handle == null) {
-            tmpdir_handle = fs.RealFS.openTmpDir(fs)?;
+            tmpdir_handle = fs.fs.openTmpDir()?;
         }
 
         return tmpdir_handle.?;

@@ -493,17 +493,17 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                 jsc.WorkPool.schedule(&task.task);
             }
 
-            fn workPoolCallback(task: *jsc.WorkPoolTask) {
-                let this: *ThisSingleTask = @fieldParentPtr("task", task);
-                const parent = this.cp_task;
+            static fn workPoolCallback(task: *jsc.WorkPoolTask) {
+                let st: *ThisSingleTask = @fieldParentPtr("task", task);
+                const parent = st.cp_task;
 
                 // TODO: error strings on node_fs will die
                 let node_fs = NodeFS{};
 
                 const args = parent.args;
                 const result = node_fs._copySingleFileSync(
-                    this.src,
-                    this.dest,
+                    st.src,
+                    st.dest,
                     @enumFromInt((if (args.flags.errorOnExist || !args.flags.force) constants.COPYFILE_EXCL else @as(u8, 0))),
                     null,
                     parent.args,
@@ -518,12 +518,12 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                             parent.finishConcurrently(result);
                         },
                         .result => {
-                            parent.onCopy(this.src, this.dest);
+                            parent.onCopy(st.src, st.dest);
                         },
                     }
                 }
 
-                this.deinit();
+                st.deinit();
                 // Must be the very last use of `parent`: when the count reaches
                 // zero, runFromJSThread is enqueued and may destroy the parent.
                 parent.onSubtaskDone();
@@ -677,7 +677,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                 return;
             }
             const globalObject = _.evtloop.globalObject() ?? @panic("No global object, this indicates a bug in Bun. Please file a GitHub issue.");
-            const success = @as(bun.sys.Maybe(Return.Cp).Tag, _.result) == .result;
+            const success = std.meta.activeTag(_.result) == .result;
             let promise_value = _.promise.value();
             let promise = _.promise.get();
             const result = switch (_.result) {
@@ -1544,7 +1544,7 @@ pub struct Arguments {
 
         static fn deinit(self: *const @This()) { * = self; }
 
-        fn toThreadSafe(_: *const @This()) void {}
+        static fn toThreadSafe(_: *const @This()) {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fchown {
             const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
@@ -1660,7 +1660,7 @@ pub struct Arguments {
 
         static fn deinit(self: *const @This()) { * = self; }
 
-        fn toThreadSafe(_: *const @This()) void {}
+        static fn toThreadSafe(_: *const @This()) {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!FChmod {
             const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
@@ -1774,7 +1774,7 @@ pub struct Arguments {
 
         static fn deinit(self: *const @This()) { * = self; }
 
-        fn toThreadSafe(_: *@This()) void {}
+        static fn toThreadSafe(_: *@This()) {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fstat {
             const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
@@ -2294,7 +2294,7 @@ pub struct Arguments {
         fd: FD,
 
         static fn deinit(self: *const @This()) { * = self; }
-        fn toThreadSafe(_: Close) void {}
+        static fn toThreadSafe(_: Close) {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Close {
             const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
@@ -2636,7 +2636,7 @@ pub struct Arguments {
             if (length_int < 0) {
                 return ctx.throwRangeError(length_float, { field_name: "length", min: 0 });
             }
-            const length: u64 = i32(length_int);
+            const length: u64 = @intCast(length_int);
 
             // if (position == null) {
             //   position = -1;
@@ -3175,7 +3175,7 @@ pub struct Arguments {
         fd: FD,
 
         static fn deinit(self: *const @This()) { * = self; }
-        fn toThreadSafe(_: *const @This()) void {}
+        static fn toThreadSafe(_: *const @This()) {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fsync {
             const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
@@ -3343,7 +3343,8 @@ struct Return {
                 },
                 .buffers => {
                     defer bun.default_allocator.free(_.buffers);
-                    return jsc.JSValue.fromAny(globalObject, []Buffer, _.buffers);
+                    const BufferSlice = @TypeOf(_.buffers);
+                    return jsc.JSValue.fromAny(globalObject, BufferSlice, _.buffers);
                 },
                 .files => {
                     // automatically freed
@@ -4096,7 +4097,7 @@ pub struct NodeFS {
     }
 
     fn mkdirRecursiveOSPath(*_, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool): Maybe(Return.Mkdir) {
-        return mkdirRecursiveOSPathImpl(_, void, {}, path, mode, return_path);
+        return _.mkdirRecursiveOSPathImpl(void, {}, path, mode, return_path);
     }
 
     fn mkdirRecursiveOSPathImpl(
@@ -6345,7 +6346,7 @@ pub struct NodeFS {
                         src_buf,
                         src_dir_len + @as(PathString.PathInt, @intCast(1 + name_slice.len)),
                         dest_buf,
-                        dest_dir_len + @as(PathString.PathInt, i32(1 + name_slice.len)),
+                        dest_dir_len + @as(PathString.PathInt, @intCast(1 + name_slice.len)),
                         args,
                     );
                     switch (r) {

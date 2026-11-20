@@ -566,7 +566,8 @@ pub fn boringEngine(self: *RareData) *BoringSSL.ENGINE {
             _ = &e;
             return e;
         }
-        self.boring_ssl_engine = BoringSSL.ENGINE_new;
+        const engine_new = BoringSSL.ENGINE_new;
+        self.boring_ssl_engine = engine_new();
         return self.boring_ssl_engine.?;
 }
 
@@ -824,8 +825,7 @@ pub fn websocketDeflate(self: *RareData) *WebSocketDeflate.RareData {
             _ = &w;
             return w;
         }
-        const res = bun.handleOom(bun.default_allocator.create(WebSocketDeflate.RareData));
-        res.* = WebSocketDeflate.RareData;
+        const res = bun.@"new"(WebSocketDeflate.RareData, .{});
         self.websocket_deflate = res;
         return res;
 }

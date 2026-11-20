@@ -877,7 +877,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String) !?Reso
                 if (graph.files.getPtr(specifier_utf8.slice())) |file| {
                     _ = &file;
                     if (((file.loader == .sqlite) or (file.loader == .sqlite_embedded))) {
-                        const code: []const u8 = "/* Generated code */\nimport {Database} from 'bun:sqlite';\nimport {readFileSync} from 'node:fs';\nexport const db = new Database(readFileSync(import.meta.path));\n\nexport const __esModule = true;\nexport default db;\n";
+                        const code: [:0]const u8 = "/* Generated code */\nimport {Database} from 'bun:sqlite';\nimport {readFileSync} from 'node:fs';\nexport const db = new Database(readFileSync(import.meta.path));\n\nexport const __esModule = true;\nexport default db;\n";
                         return ResolvedSource{ .allocator = null, .source_code = bun.String.static(code), .specifier = specifier, .source_url = specifier.dupeRef(), .source_code_needs_deref = false };
                     }
                     return ResolvedSource{ .allocator = null, .source_code = file.toWTFString(), .specifier = specifier, .source_url = specifier.dupeRef(), .bytecode_origin_path = (if ((file.bytecode_origin_path.len > 0)) bun.String.fromBytes(file.bytecode_origin_path) else bun.String.empty), .source_code_needs_deref = false, .bytecode_cache = (if ((file.bytecode.len > 0)) file.bytecode.ptr else null), .bytecode_cache_size = file.bytecode.len, .module_info = (if ((file.module_info.len > 0)) analyze_transpiled_module.ModuleInfoDeserialized.createFromCachedRecord(file.module_info, bun.default_allocator) else null), .is_commonjs_module = (file.module_format == .cjs) };

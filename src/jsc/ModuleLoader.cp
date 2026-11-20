@@ -1191,7 +1191,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
         defer specifier_utf8.deinit();
         if (file := graph.files.getPtr(specifier_utf8.slice())) {
             if (file.loader == .sqlite || file.loader == .sqlite_embedded) {
-                const code = "/* Generated code */\nimport {Database} from 'bun:sqlite';\nimport {readFileSync} from 'node:fs';\nexport const db = new Database(readFileSync(import.meta.path));\n\nexport const __esModule = true;\nexport default db;\n";
+                const code: [:0]const u8 = "/* Generated code */\nimport {Database} from 'bun:sqlite';\nimport {readFileSync} from 'node:fs';\nexport const db = new Database(readFileSync(import.meta.path));\n\nexport const __esModule = true;\nexport default db;\n";
                 return ResolvedSource{
                     allocator: null,
                     source_code: bun.String.static(code),

@@ -753,7 +753,7 @@ pub fn relativeNormalizedBuf(buf: []u8, from_: []const u8, to_: []const u8, comp
         if (is_same) {
             return "";
         }
-        const two: [][]const u8 = .{ from_, to_ };
+        const two: [2][]const u8 = .{ from_, to_ };
         const common_path = longestCommonPathGeneric((&two), platform);
         return relativeToCommonPath(common_path, from_, to_, buf, always_copy, platform);
 }
@@ -1340,8 +1340,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
         }
         var count: usize = 0;
         _ = &count;
-        for (parts) |part| {
-            _ = &part;
+        inline for (parts) |part| {
             if ((part.len == 0)) {
                 continue;
             }
@@ -1352,8 +1351,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
             free_temp_buf = true;
         }
         temp_buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(0)) else @as(T, 0));
-        for (parts) |part| {
-            _ = &part;
+        inline for (parts) |part| {
             if ((part.len == 0)) {
                 continue;
             }

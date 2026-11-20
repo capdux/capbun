@@ -40,14 +40,18 @@ pub fn estimatedSize(client: *const ParsedShellScript): usize {
     return client.estimated_size_for_gc;
 }
 
+type ShellArgsPtr = *ShellArgs;
+type OptString = bun.String?;
+type OptEnvMap = EnvMap?;
+
 pub fn take(
     *_,
     _: *jsc.JSGlobalObject,
-    out_args: **ShellArgs,
+    out_args: *ShellArgsPtr,
     out_jsobjs: *std.array_list.Managed(JSValue),
     out_quiet: *bool,
-    out_cwd: *bun.String?,
-    out_export_env: *EnvMap?,
+    out_cwd: *OptString,
+    out_export_env: *OptEnvMap,
 ) {
     out_args.* = _.args.?;
     out_jsobjs.* = _.jsobjs;
@@ -160,8 +164,8 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
     let script = std.array_list.Managed(u8).init(shargs.arena_allocator());
     bun.shell.shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings, &script, marked_argument_buffer)?;
 
-    let parser: bun.shell.Parser = undefined;
-    let lex_result: shell.LexResult = undefined;
+    let parser: bun.shell.Parser? = null;
+    let lex_result: shell.LexResult? = null;
     const script_ast = Interpreter.parse(
         shargs.arena_allocator(),
         script.items[0..],

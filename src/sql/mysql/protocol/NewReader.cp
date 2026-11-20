@@ -30,27 +30,33 @@ pub fn NewReaderWrap(
         pub const is_wrapped = true;
 
         pub fn markMessageStart(this) void {
-            markMessageStartFn(this.wrapped);
+            let w = this.wrapped;
+            markMessageStartFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
         }
 
         pub fn setOffsetFromStart(this, offset: usize) void {
-            return setOffsetFromStartFn(this.wrapped, offset);
+            let w = this.wrapped;
+            return setOffsetFromStartFn(if (comptime @typeInfo(Context) == .pointer) w else &w, offset);
         }
 
         pub fn read(this, count: usize) AnyMySQLError.Error!Data {
-            return readFn(this.wrapped, count);
+            let w = this.wrapped;
+            return readFn(if (comptime @typeInfo(Context) == .pointer) w else &w, count);
         }
 
         pub fn skip(this, count: anytype) void {
-            skipFn(this.wrapped, @as(isize, @intCast(count)));
+            let w = this.wrapped;
+            skipFn(if (comptime @typeInfo(Context) == .pointer) w else &w, @as(isize, @intCast(count)));
         }
 
         pub fn peek(this) []const u8 {
-            return peekFn(this.wrapped);
+            let w = this.wrapped;
+            return peekFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
         }
 
         pub fn readZ(this) AnyMySQLError.Error!Data {
-            return readZFn(this.wrapped);
+            let w = this.wrapped;
+            return readZFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
         }
 
         pub fn byte(this) AnyMySQLError.Error!u8 {
@@ -59,7 +65,8 @@ pub fn NewReaderWrap(
         }
 
         pub fn ensureCapacity(this, count: usize) AnyMySQLError.Error!void {
-            if (!ensureCapacityFn(this.wrapped, count)) {
+            let w = this.wrapped;
+            if (!ensureCapacityFn(if (comptime @typeInfo(Context) == .pointer) w else &w, count)) {
                 return AnyMySQLError.Error.ShortRead;
             }
         }
@@ -113,7 +120,7 @@ pub fn NewReader(comptime Context: type): type {
 
 pub fn decoderWrap(comptime Container: type, comptime decodeFn: anytype): type {
     return struct {
-        pub static fn decode(this: *Container, context: anytype) AnyMySQLError.Error!void {
+        pub static fn decode(this: *Container, context: anytype) anyerror!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
                 decodeFn(this, Context, context)?;
@@ -122,7 +129,7 @@ pub fn decoderWrap(comptime Container: type, comptime decodeFn: anytype): type {
             }
         }
 
-        pub static fn decodeAllocator(this: *Container, allocator: std.mem.Allocator, context: anytype) AnyMySQLError.Error!void {
+        pub static fn decodeAllocator(this: *Container, allocator: std.mem.Allocator, context: anytype) anyerror!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
                 decodeFn(this, allocator, Context, context)?;

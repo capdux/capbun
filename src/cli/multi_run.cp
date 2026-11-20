@@ -116,7 +116,7 @@ pub struct ProcessHandle {
         };
     }
 
-    fn onProcessExit(*_, status: bun.spawn.Status) {
+    fn onProcessExit(*_, _: *bun.spawn.Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
         if (*proc := _.process) {
             proc.status = status;
         }

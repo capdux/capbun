@@ -443,7 +443,7 @@ pub fn transform_(self: *HTMLRewriter, global: *JSGlobalObject, response_value: 
                     const sinkBodyValue = sink.response.getBodyValue();
                     if ((((sinkBodyValue.* == .Locked) and (@intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink))) and (sinkBodyValue.Locked.promise == null))) {
                         _ = sinkBodyValue.Locked.readable.deinit();
-                        sinkBodyValue.* = .{ .Empty = .{} };
+                        sinkBodyValue.* = .Empty;
                     } else {
                         if ((((sinkBodyValue.* == .Locked) and (@intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink))) and (sinkBodyValue.Locked.promise != null))) {
                             sinkBodyValue.Locked.onReceiveValue = null;
@@ -1456,7 +1456,9 @@ pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
                 if ((result.isError() or result.isAggregateError(handler.global))) {
                     return true;
                 }
-                if (result.asAnyPromise()) |promise| {
+                if (result.asAnyPromise()) |promise_val| {
+                    _ = &promise_val;
+                    var promise = promise_val;
                     _ = &promise;
                     _ = handler.global.bunVM().waitForPromise(promise);
                     const fail = (promise.status() == .rejected);

@@ -833,8 +833,7 @@ pub struct PrettyFormatter {
             writer: Writer,
             static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                const SelfPtr = *@This();
-                let this: SelfPtr = bun.cast(SelfPtr, ctx.?);
+                let this = bun.cast(*@This(), ctx.?);
                 if (this.formatter.failed) return;
                 const key = jsc.JSObject.getIndex(nextValue, globalObject, 0) catch return;
                 const value = jsc.JSObject.getIndex(nextValue, globalObject, 1) catch return;
@@ -871,8 +870,7 @@ pub struct PrettyFormatter {
             writer: Writer,
             static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                const SelfPtr = *@This();
-                let this: SelfPtr = bun.cast(SelfPtr, ctx.?);
+                let this = bun.cast(*@This(), ctx.?);
                 if (this.formatter.failed) return;
                 this.formatter.writeIndent(Writer, this.writer) catch return;
                 const key_tag = Tag.get(nextValue, globalObject) catch return;

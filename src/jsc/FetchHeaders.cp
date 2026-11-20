@@ -209,7 +209,7 @@ const PicoHeaders = struct {
         global: *JSGlobalObject,
     ): ([]const u8)? {
         let out = ZigString.Empty;
-        get_(_, &ZigString.init(name_), &out, global);
+        _.get_(&ZigString.init(name_), &out, global);
         if (out.len > 0) {
             return out.slice();
         }
@@ -233,7 +233,7 @@ const PicoHeaders = struct {
         *_,
         name_: HTTPHeaderName,
     ): bool {
-        return fastHas_(_, @intFromEnum(name_));
+        return _.fastHas_(@intFromEnum(name_));
     }
 
     pub fn fastGet(
@@ -372,7 +372,7 @@ const PicoHeaders = struct {
         *_,
         header: HTTPHeaderName,
     ) {
-        return fastRemove_(_, @intFromEnum(header));
+        return _.fastRemove_(@intFromEnum(header));
     }
 
     pub fn fastRemove_(

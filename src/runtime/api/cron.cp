@@ -1306,7 +1306,8 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
     }
 }
 
-type ConstCString = [*:0]const u8;
+const empty_z_sentinel: [:0]const u8 = "";
+const ConstCString = @TypeOf(empty_z_sentinel.ptr);
 
 /// Find crontab binary using bun.which (searches PATH).
 fn findCrontab(): ConstCString? {

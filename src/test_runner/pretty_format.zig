@@ -586,8 +586,7 @@ pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, n
             if ((ctx == null)) {
                 return;
             }
-            const SelfPtr = (&@This());
-            var this: SelfPtr = bun.cast(SelfPtr, ctx.?);
+            var this = bun.cast((&@This()), ctx.?);
             _ = &this;
             if (self.formatter.failed) {
                 return;
@@ -615,8 +614,7 @@ pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, n
             if ((ctx == null)) {
                 return;
             }
-            const SelfPtr = (&@This());
-            var this: SelfPtr = bun.cast(SelfPtr, ctx.?);
+            var this = bun.cast((&@This()), ctx.?);
             _ = &this;
             if (self.formatter.failed) {
                 return;

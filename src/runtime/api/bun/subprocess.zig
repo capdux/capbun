@@ -266,12 +266,12 @@ switch (client.stdin) {
 .pipe => |pipe| {
 _ = pipe.signal.clear();
         _ = pipe.deref();
-        client.stdin = .{ .ignore = .{} };
+        client.stdin = .ignore;
 },
 .buffer => {
 _ = client.stdin.buffer.source.detach();
         _ = client.stdin.buffer.deref();
-        client.stdin = .{ .ignore = .{} };
+        client.stdin = .ignore;
 },
 else => {
 
@@ -560,7 +560,8 @@ pub fn memoryCost(client: *const Subprocess) usize {
         return ((((@sizeOf(@This()) + client.process.memoryCost()) + client.stdin.memoryCost()) + client.stdout.memoryCost()) + client.stderr.memoryCost());
 }
 
-pub fn consumeExitedPromise(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject) ?JSValue {
+pub fn consumeExitedPromise(client: *Subprocess, this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject) ?JSValue {
+        _ = &client;
         if (jsc.Codegen.JSSubprocess.exitedPromiseGetCached(this_jsvalue)) |promise| {
             _ = &promise;
             _ = jsc.Codegen.JSSubprocess.exitedPromiseSetCached(this_jsvalue, globalThis, .zero);
@@ -928,7 +929,7 @@ pub const Source = union(enum) {
     detached: void,
 
 pub fn memoryCost(self: @This()) usize {
-            return (switch (self.*) {
+            return (switch (self) {
 .blob => self.blob.memoryCost(),
 .array_buffer => 0,
 .detached => 0,

@@ -535,7 +535,7 @@ pub struct HTMLRewriter {
                     sinkBodyValue.Locked.promise == null)
                 {
                     sinkBodyValue.Locked.readable.deinit();
-                    sinkBodyValue.* = { Empty: {} };
+                    sinkBodyValue.* = .Empty;
                     // is there a pending promise?
                     // we will need to reject it
                 } else if (sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
@@ -963,7 +963,8 @@ fn HandlerCallback(
                     return true;
                 }
 
-                if (promise := result.asAnyPromise()) {
+                if (promise_val := result.asAnyPromise()) {
+                    let promise = promise_val;
                     handler.global.bunVM().waitForPromise(promise);
                     const fail = promise.status() == .rejected;
                     if (fail) {

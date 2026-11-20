@@ -440,7 +440,7 @@ pub struct ShellCpTask {
 }
 
 const ShellCpOutputTaskVTable = struct {
-    pub fn writeErr(this: *Cp, childptr: auto, errbuf: []const u8): Yield? {
+    static fn writeErr(this: *Cp, childptr: auto, errbuf: []const u8): Yield? {
         if (this.state == .exec) this.state.exec.output_waiting += 1;
         if (safeguard := this.bltn().stderr.needsIO()) {
             return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
@@ -449,11 +449,11 @@ const ShellCpOutputTaskVTable = struct {
         return null;
     }
 
-    pub fn onWriteErr(this: *Cp) {
+    static fn onWriteErr(this: *Cp) {
         if (this.state == .exec) this.state.exec.output_done += 1;
     }
 
-    pub fn writeOut(this: *Cp, childptr: auto, output: *OutputSrc): Yield? {
+    static fn writeOut(this: *Cp, childptr: auto, output: *OutputSrc): Yield? {
         if (this.state == .exec) this.state.exec.output_waiting += 1;
         if (safeguard := this.bltn().stdout.needsIO()) {
             return this.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
@@ -462,11 +462,11 @@ const ShellCpOutputTaskVTable = struct {
         return null;
     }
 
-    pub fn onWriteOut(this: *Cp) {
+    static fn onWriteOut(this: *Cp) {
         if (this.state == .exec) this.state.exec.output_done += 1;
     }
 
-    pub fn onDone(this: *Cp): Yield {
+    static fn onDone(this: *Cp): Yield {
         return this.next();
     }
 };
@@ -659,7 +659,8 @@ pub const ShellCpOutputTask = OutputTask(Cp, .{
             }
         }
 
-        _.printShellCpTask(task).run();
+        let y = _.printShellCpTask(task);
+        y.run();
     }
 
     pub fn printShellCpTask(*_, task: *ShellCpTask): Yield {

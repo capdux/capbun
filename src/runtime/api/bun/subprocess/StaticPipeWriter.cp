@@ -5,7 +5,7 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
         ref_count: WriterRefCount,
         writer: IOWriter = {},
         stdio_result: StdioResult,
-        source: Source = Source{ detached: {} },
+        source: Source = .detached,
         process: *ProcessType = undefined,
         event_loop: jsc.EventLoopHandle,
         buffer: []const u8 = "",

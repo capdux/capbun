@@ -169,7 +169,7 @@ pub fn start(self: *ProcessHandle) !void {
             self.process = ProcessState{ .ptr = process, .status = .running };
     }
 
-pub fn onProcessExit(self: *ProcessHandle, status: bun.spawn.Status) void {
+pub fn onProcessExit(self: *ProcessHandle, _: *bun.spawn.Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) void {
             if (self.process) |*proc| {
                 _ = &proc;
                 (proc.*).status = status;

@@ -118,7 +118,7 @@ pub fn get_(self: *FetchHeaders, name_: *const ZigString, out: *ZigString, globa
 pub fn get(self: *FetchHeaders, name_: []const u8, global: *JSGlobalObject) ?[]const u8 {
             var out = ZigString.Empty;
             _ = &out;
-            _ = self.get_(self, (&ZigString.init(name_)), (&out), global);
+            _ = self.get_((&ZigString.init(name_)), (&out), global);
             if ((out.len > 0)) {
                 return out.slice();
             }
@@ -130,7 +130,7 @@ pub fn has(self: *FetchHeaders, name_: *const ZigString, global: *JSGlobalObject
     }
 
 pub fn fastHas(self: *FetchHeaders, name_: HTTPHeaderName) bool {
-            return self.fastHas_(self, @intFromEnum(name_));
+            return self.fastHas_(@intFromEnum(name_));
     }
 
 pub fn fastGet(self: *FetchHeaders, name_: HTTPHeaderName) ?ZigString {
@@ -152,7 +152,7 @@ pub fn fastGet_(self: *FetchHeaders, name_: u8, str: *ZigString) void {
     }
 
 pub fn fastRemove(self: *FetchHeaders, header: HTTPHeaderName) void {
-            return self.fastRemove_(self, @intFromEnum(header));
+            return self.fastRemove_(@intFromEnum(header));
     }
 
 pub fn fastRemove_(self: *FetchHeaders, header: u8) void {

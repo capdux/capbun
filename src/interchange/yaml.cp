@@ -1039,9 +1039,10 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
 
     const Keywords = ScalarResolverKeywords;
 
-    const ResolveError = OOM || error{
+    const ResolveError = error{
+        OutOfMemory,
         // ScalarTypeMismatch,
-        };
+    };
 
     pub fn resolve(
         ctx: *@This(),
@@ -1871,21 +1872,21 @@ pub union(enum) ParserString<const enc: Encoding> {
     }
 
     fn slice(input: []const enc.unit()): []const enc.unit() {
-        return switch (_.*) {
+        return switch (_) {
             .range => |range| range.slice(input),
             .list => |list| list.items,
         };
     }
 
     fn len(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .range => |*range| range.len(),
             .list => |*list| list.items.len,
         };
     }
 
     fn isEmpty(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .range => |*range| range.isEmpty(),
             .list => |*list| list.items.len == 0,
         };
@@ -2511,7 +2512,7 @@ pub struct Parser<const enc: Encoding> {
                 // - - item
                 // ```
                 const item: Expr = switch (_.token.data) {
-                    .eof => .init(E.Null, {}, entry_start.add(2).loc()),
+                    .eof => Expr.init(E.Null, {}, entry_start.add(2).loc()),
                     .sequence_entry => item: {
                         if (_.token.indent.isLessThanOrEqual(sequence_indent)) {
                             break :item Expr.init(E.Null, {}, entry_start.add(2).loc());
@@ -3595,7 +3596,8 @@ pub struct Parser<const enc: Encoding> {
         }
     }
 
-    const ScanLiteralScalarError = OOM || error{
+    const ScanLiteralScalarError = error{
+        OutOfMemory,
         UnexpectedCharacter,
         InvalidIndentation,
     };

@@ -545,15 +545,15 @@ pub fn onShellLsTaskDone(self: *Ls, task: *ShellLsTask) void {
         _ = self.alloc_scope.leakSlice(output.items);
         const unmanaged = output.moveToUnmanaged();
         const output_task: *ShellLsOutputTask = bun.new(ShellLsOutputTask, .{ .parent = self, .output = .{ .arrlist = unmanaged }, .state = .waiting_write_err });
-        if (task.err) |*err_ptr| {
-            _ = &err_ptr;
+        if (task.err) |err_val| {
+            _ = &err_val;
             var error_string: []const u8 = "";
             _ = &error_string;
             if ((self.state.exec.err == null)) {
-                self.state.exec.err = (err_ptr.*).*;
+                self.state.exec.err = err_val;
                 error_string = self.bltn().taskErrorToString(.ls, self.state.exec.err.?);
             } else {
-                var e = (err_ptr.*).*;
+                var e = err_val;
                 _ = &e;
                 defer {
                 _ = e.deinitWithAllocator(self.alloc_scope.allocator());
@@ -562,11 +562,15 @@ pub fn onShellLsTaskDone(self: *Ls, task: *ShellLsTask) void {
             }
             task.err = null;
             _ = task.deinit();
-            _ = output_task.start(error_string).run();
+            var y_err = output_task.start(error_string);
+            _ = &y_err;
+            _ = y_err.run();
             return;
         }
         _ = task.deinit();
-        _ = output_task.start(null).run();
+        var y_ok = output_task.start(null);
+        _ = &y_ok;
+        _ = y_ok.run();
 }
 
 pub fn parseOpts(self: *Ls) Result(FilepathArgs,Opts.ParseError) {
@@ -741,7 +745,8 @@ pub inline fn bltn(self: *Ls) *Builtin {
         const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("ls", self));
         return @fieldParentPtr("impl", impl_);
 }
-pub const FilepathArgs = ?[]const [*:0]u8;
+const FilepathArgsSlice = []const [:0]const u8;
+pub const FilepathArgs = ?FilepathArgsSlice;
 const Allocator = std.mem.Allocator;
 const Interpreter = interpreter.Interpreter;
 const OutputSrc = interpreter.OutputSrc;
@@ -779,7 +784,7 @@ pub const State = union(enum) {
 };
 const ShellLsOutputTaskVTable = struct {
 
-pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
+pub fn writeErr(self: *Ls, childptr: anytype, errbuf: []const u8) ?Yield {
             _ = log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ @intFromPtr(self), errbuf });
             self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
             if (self.bltn().stderr.needsIO()) |safeguard| {
@@ -790,12 +795,12 @@ pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
             return null;
     }
 
-pub fn onWriteErr(self: *@This()) void {
+pub fn onWriteErr(self: *Ls) void {
             _ = log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{ @intFromPtr(self) });
             self.state.exec.output_done = (self.state.exec.output_done + 1);
     }
 
-pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
+pub fn writeOut(self: *Ls, childptr: anytype, output: *OutputSrc) ?Yield {
             _ = log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ @intFromPtr(self), output.slice() });
             self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
             if (self.bltn().stdout.needsIO()) |safeguard| {
@@ -807,12 +812,12 @@ pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
             return null;
     }
 
-pub fn onWriteOut(self: *@This()) void {
+pub fn onWriteOut(self: *Ls) void {
             _ = log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{ @intFromPtr(self) });
             self.state.exec.output_done = (self.state.exec.output_done + 1);
     }
 
-pub fn onDone(self: *@This()) Yield {
+pub fn onDone(self: *Ls) Yield {
             return self.next();
     }
 };
