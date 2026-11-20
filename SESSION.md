@@ -2938,3 +2938,7 @@ Options:
 - [2026-11-20 03:49:00 UTC] 验收并提交 `src/js_parser/lexer.cp` (3423行, 1.006x)——`src/js_parser/` 顶层 100% 目录闭环；接力派发 `src/install/npm.zig` (2775行)。
 
 - [2026-11-20 03:50:41 UTC] 验收并提交 `src/napi/napi.cp` (1.058x，闭合 `src/napi/`) 与 `src/install/lockfile.cp` (1.053x)；接力派发 `src/bun.zig` (3824行)。
+
+- [2026-11-20 03:58:49 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-enum-fromname-ambiguous-get`（复现 `/data/dev/cp/temp/repro_enum_fromname_ambiguous_get.cp`）：`pub enum` 自动生成的 `fromName` 调用无前缀 `get(s)` 与文件顶层 `pub fn get` 冲突报 `ambiguous reference`；`src/js_parser/ast/Expr.cp` (3300行, 1.016x) 已完成 CP 改写并标记 BLOCKED，原 `Expr.zig` 已还原保护。
+
+- [2026-11-20 04:02:38 UTC] 验收并提交 `src/install/npm.cp` (2817行, 1.015x)；接力派发 `src/install/` 最后 2 模块（`bin.zig`/`dependency.zig`）。

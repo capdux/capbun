@@ -1503,3 +1503,6 @@
 
 ### 2026-11-20 03:50:41 UTC - src/napi/ 100% 目录闭环 & src/install/lockfile.cp 入库
 - 完成：`src/napi/napi.cp` (1.058x), `src/install/lockfile.cp` (1.053x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:02:38 UTC - src/install/npm.cp (2817行) 迁移入库
+- 完成：`npm.cp` (1.015x)，4 项硬门禁全 PASS。
