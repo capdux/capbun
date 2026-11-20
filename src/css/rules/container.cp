@@ -75,7 +75,7 @@ pub enum ContainerSizeFeatureId {
     }
 
     static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), s, dest);
+        return css.enum_property_util.toCss(@This(), unsafe { &s }, dest);
     }
 
     fn toCssWithPrefix(prefix: []const u8, dest: *Printer): PrintErr!void {

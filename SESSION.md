@@ -55,3 +55,4 @@
 - **[2026-11-21 04:00] Wave 47 B 组验收提交（6 非 CSS 模块全绿，Wave 47 清仓）**：完成 `IncrementalGraph`/`generateChunksInParallel`/`PopulateManifestCache`/`bun.lock`(`splatByteAll`)/`bun.lockb`/`pnpm` 6 模块独立验收（6/6 PASS，4 项门禁全绿，ratio 0.992x~1.056x）并原子提交；随即运行 Wave 48 全仓 `bun run zig:check`。
 - **[2026-11-21 04:01] Wave 48 A 组验收提交（最后 2 CSS 模块全绿）**：完成 `css/rules/{container,scope}` 独立验收（2/2 PASS，4 项门禁全绿，ratio 0.987x~0.991x）并原子提交；静待 B 组（`c8fe0603`）完成即跑 Wave 49 `zig:check`。
 - **[2026-11-21 04:02] Wave 48 B 组验收提交（最后 4 非 CSS 模块全绿，Wave 48 清仓）**：完成 `DevServer`/`CachedBytecode`(导出 `CachedBytecode` 根结构体)/`bun.lock`(`str_slice`)/`pnpm` 4 模块独立验收（4/4 PASS，4 项门禁全绿，ratio 0.908x~1.054x）并原子提交；随即运行 Wave 49 全仓 `bun run zig:check`。
+- **[2026-11-21 04:04] Wave 49 A+B 组验收提交（6 模块全绿，Wave 49 清仓）**：完成 `css/{printer,rules/container}` 与 `bake/DevServer`、`bundler/linker_context/generateChunksInParallel`、`install/{bin,pnpm}` 6 模块独立验收（6/6 PASS，4 项门禁全绿，ratio 0.991x~1.056x）并原子提交；随即运行 Wave 50 全仓 `bun run zig:check`。

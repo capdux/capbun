@@ -696,7 +696,7 @@ else => .server,
             for (result.items) |*item| {
                 _ = &item;
                 if (((item.*).loader == .html)) {
-                    result.items[cp_cast_int(usize, write_idx)] = (item.*).*;
+                    result.items[cp_cast_int(usize, write_idx)] = (item.*);
                     write_idx = (write_idx + 1);
                 } else {
                     _ = (item.*).deinit();

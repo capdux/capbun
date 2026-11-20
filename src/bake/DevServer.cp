@@ -2932,7 +2932,7 @@ pub fn finalizeBundle(
                             // copy of a previous source map will simply
                             // reference the old one.
                         }
-                        entry.value_ptr.* = {};
+                        entry.value_ptr.* = undefined;
                     }
                 }
                 mapLog("inc {x}, for {d} sockets", .{ script_id.get(), sockets });

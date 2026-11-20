@@ -280,7 +280,7 @@ pub fn parseAppendFromDirectories(allocator: std.mem.Allocator, bin_expr: BunJSO
             return .{};
     }
 
-pub fn toJson(self: Bin, comptime style: FormatStyle, indent: if ((style == true)) *u32 else void, buf: []const u8, extern_strings: []const ExternalString, writer: *std.Io.Writer, writeIndent: WriteIndentFn) !std.Io.Writer.Error {
+pub fn toJson(self: Bin, comptime style: FormatStyle, indent: if ((style == true)) *u32 else void, buf: []const u8, extern_strings: []const ExternalString, writer: *std.Io.Writer, writeIndent: WriteIndentFn) std.Io.Writer.Error!void {
             _ = bun.debugAssert((self.tag != .none));
             if (comptime (style == .single_line)) {
                 switch (self.tag) {

@@ -440,7 +440,7 @@ pub fn withContext(self: *Printer, selectors: *const css.SelectorList, closure: 
 pub fn withClearedContext(self: *Printer, closure: anytype, comptime func: anytype) PrintErr!void {
             const parent = self.ctx;
             self.ctx = null;
-            const res = func(closure, self);
+            const res = func(closure.*, self);
             self.ctx = parent;
             return res;
     }

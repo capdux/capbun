@@ -525,7 +525,7 @@ pub struct Printer {
     )!PrintErr {
         const parent = _.ctx;
         _.ctx = null;
-        const res = func(closure, _);
+        const res = func(closure.*, _);
         _.ctx = parent;
         return res;
     }

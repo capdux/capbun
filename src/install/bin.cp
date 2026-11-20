@@ -237,7 +237,7 @@
         extern_strings: []const ExternalString,
         writer: *std.Io.Writer,
         writeIndent: WriteIndentFn,
-    ): !std.Io.Writer.Error {
+    ): void ! std.Io.Writer.Error {
         bun.debugAssert(_.tag != .none);
         if (comptime style == .single_line) {
             switch (_.tag) {

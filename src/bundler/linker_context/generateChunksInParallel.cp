@@ -803,7 +803,7 @@ pub fn generateChunksInParallel(
         let write_idx: usize = 0;
         for (*item of result.items) {
             if (item.loader == .html) {
-                result.items[write_idx] = item.*;
+                result.items[write_idx] = item;
                 write_idx += 1;
             } else {
                 item.deinit();

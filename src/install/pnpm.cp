@@ -393,7 +393,7 @@ pub fn migratePnpmLockfile(
                     continue;
                 }
 
-                let pkg = Lockfile.Package{};
+                let pkg: Lockfile.Package = .{};
 
                 pkg.resolution = .{
                     tag: .workspace,

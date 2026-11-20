@@ -1864,3 +1864,4 @@
 - **[2026-11-21] Wave 47 B 组 (6 模块)**：更新 `bake/DevServer/IncrementalGraph`, `bundler/linker_context/generateChunksInParallel`, `install/{PackageManager/PopulateManifestCache,lockfile/{bun.lock,bun.lockb},pnpm}`。
 - **[2026-11-21] Wave 48 A 组 (2 模块)**：更新 `css/rules/{container,scope}`。
 - **[2026-11-21] Wave 48 B 组 (4 模块)**：更新 `bake/DevServer`, `jsc/CachedBytecode`, `install/{lockfile/bun.lock,pnpm}`。
+- **[2026-11-21] Wave 49 A+B 组 (6 模块)**：更新 `css/{printer,rules/container}`, `bake/DevServer`, `bundler/linker_context/generateChunksInParallel`, `install/{bin,pnpm}`。

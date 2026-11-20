@@ -2885,7 +2885,7 @@ if (html.cached_response) |blob| {
                                 sockets = (sockets + 1);
                             } else {
                             }
-                            entry.value_ptr.* = .{};
+                            entry.value_ptr.* = undefined;
                         }
                     }
                     _ = mapLog("inc {x}, for {d} sockets", .{ script_id.get(), sockets });

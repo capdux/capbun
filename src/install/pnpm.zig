@@ -425,7 +425,7 @@ else => {
                 if ((!strings.eqlLong(path, workspace_path.slice(string_buf.bytes.items), true))) {
                     continue;
                 }
-                var pkg = Lockfile.Package;
+                var pkg: Lockfile.Package = .{};
                 _ = &pkg;
                 pkg.resolution = .{ .tag = .workspace, .value = .{ .workspace = try string_buf.append(path) } };
                 var path_buf: bun.AutoAbsPath = .initTopLevelDir();

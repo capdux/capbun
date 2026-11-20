@@ -85,7 +85,10 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), s, dest);
+            return css.enum_property_util.toCss(@This(), (blk: {
+            break :blk (&s);
+
+}), dest);
     }
 
 pub fn toCssWithPrefix(self: ContainerSizeFeatureId, prefix: []const u8, dest: *Printer) PrintErr!void {
