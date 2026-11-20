@@ -150,12 +150,11 @@ pub const EasingFunction = union(enum) {
     cubic_bezier: EasingCubicBezier,
     steps: EasingSteps,
 
-pub fn eql(self: *const EasingFunction, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
-pub fn deepClone(self: *const EasingFunction, allocator: std.mem.Allocator) @This() {
+pub fn deepClone(self: EasingFunction, allocator: std.mem.Allocator) @This() {
             return css.implementDeepClone(@This(), self, allocator);
     }
 
@@ -163,7 +162,7 @@ pub fn parse(input: *css.Parser) Result(EasingFunction) {
             const location = input.currentSourceLocation();
             if (input.tryParse(css.Parser.expectIdent, .{}).asValue()) |ident| {
                 _ = &ident;
-                var keyword: *EasingFunction = undefined;
+                var keyword: EasingFunction = undefined;
                 _ = &keyword;
                 if (Map.getASCIIICaseInsensitive(ident)) |e| {
                     _ = &e;
@@ -259,7 +258,7 @@ pub fn parse(p: *css.Parser) Result(StepPosition) {
 }.parse);
     }
 
-pub fn toCss(self: *EasingFunction, dest: *css.Printer) css.PrintErr!void {
+pub fn toCss(self: EasingFunction, dest: *css.Printer) css.PrintErr!void {
             return (switch (self.*) {
 .linear => try dest.writeStr("linear"),
 .ease => try dest.writeStr("ease"),
@@ -316,12 +315,11 @@ _ = unreachable;
 });
     }
 
-pub fn isIdent(self: *const EasingFunction, s: []const u8) bool {
-        _ = self;
+pub fn isIdent(s: []const u8) bool {
             return (Map.getASCIIICaseInsensitive(s) != null);
     }
 
-pub fn isEase(self: *const EasingFunction) bool {
+pub fn isEase(self: EasingFunction) bool {
             return ((self.* == .ease) or ((self.* == .cubic_bezier) and self.cubic_bezier.eql((&.{ .x1 = 0.25, .y1 = 0.1, .x2 = 0.25, .y2 = 1.0 }))));
     }
     const Map = bun.ComptimeEnumMap(enum {

@@ -54,7 +54,7 @@ pub union(enum) EasingFunction {
     /// A step easing function.
     steps: EasingSteps,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 

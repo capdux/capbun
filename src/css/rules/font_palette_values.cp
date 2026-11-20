@@ -203,55 +203,54 @@ pub union(enum) BasePalette {
 }
 
 pub struct FontPaletteValuesDeclarationParser {
-    const This = @This();
-
-    pub const DeclarationParser = struct {
-        pub const Declaration = FontPaletteValuesProperty;
-
-        pub fn parseValue(this_parser: *This, name: []const u8, input: *css.Parser): Result(Declaration) {
-            _ = this_parser;
-            const state = input.state();
-            // todo_stuff.match_ignore_ascii_case
-            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("font-family", name)) {
-                // https://drafts.csswg.org/css-fonts-4/#font-family-2-desc
-                if (font_family := FontFamily.parse(input).asValue()) {
-                    if (font_family == .generic) {
-                        return { err: input.newCustomError(css.ParserError.invalid_declaration) };
-                    }
-                    return { result: { font_family: font_family } };
-                }
-            } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("base-palette", name)) {
-                // https://drafts.csswg.org/css-fonts-4/#base-palette-desc
-                if (base_palette := BasePalette.parse(input).asValue()) {
-                    return { result: { base_palette: base_palette } };
-                }
-            } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("override-colors", name)) {
-                // https://drafts.csswg.org/css-fonts-4/#override-color
-                if (override_colors := input.parseCommaSeparated(OverrideColors, OverrideColors.parse).asValue()) {
-                    return { result: { override_colors: override_colors } };
-                }
-            } else {
-                return { err: input.newCustomError(css.ParserError.invalid_declaration) };
-            }
-
-            input.reset(&state);
-            const opts = css.ParserOptions.default(input.allocator(), null);
-            return { result: {
-                custom: switch (CustomProperty.parse(
-                    CustomPropertyName.fromStr(name),
-                    input,
-                    &opts,
-                )) {
-                    .result => |v| v,
-                    .err => |e| return { err: e },
-                },
-            } };
-        }
-    };
-
+    pub const DeclarationParser = FontPaletteValuesInnerDeclarationParser;
     pub const RuleBodyItemParser = FontPaletteValuesRuleBodyItemParser;
     pub const AtRuleParser = FontPaletteValuesAtRuleParser;
     pub const QualifiedRuleParser = FontPaletteValuesQualifiedRuleParser;
+}
+
+pub struct FontPaletteValuesInnerDeclarationParser {
+    pub const Declaration = FontPaletteValuesProperty;
+
+    static fn parseValue(this_parser: *FontPaletteValuesDeclarationParser, name: []const u8, input: *css.Parser): Result(Declaration) {
+        * = this_parser;
+        const state = input.state();
+        // todo_stuff.match_ignore_ascii_case
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("font-family", name)) {
+            // https://drafts.csswg.org/css-fonts-4/#font-family-2-desc
+            if (font_family := FontFamily.parse(input).asValue()) {
+                if (font_family == .generic) {
+                    return { err: input.newCustomError(css.ParserError.invalid_declaration) };
+                }
+                return { result: { font_family: font_family } };
+            }
+        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("base-palette", name)) {
+            // https://drafts.csswg.org/css-fonts-4/#base-palette-desc
+            if (base_palette := BasePalette.parse(input).asValue()) {
+                return { result: { base_palette: base_palette } };
+            }
+        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("override-colors", name)) {
+            // https://drafts.csswg.org/css-fonts-4/#override-color
+            if (override_colors := input.parseCommaSeparated(OverrideColors, OverrideColors.parse).asValue()) {
+                return { result: { override_colors: override_colors } };
+            }
+        } else {
+            return { err: input.newCustomError(css.ParserError.invalid_declaration) };
+        }
+
+        input.reset(&state);
+        const opts = css.ParserOptions.default(input.allocator(), null);
+        return { result: {
+            custom: switch (CustomProperty.parse(
+                CustomPropertyName.fromStr(name),
+                input,
+                &opts,
+            )) {
+                .result v => v,
+                .err e => return { err: e },
+            },
+        } };
+    }
 }
 
 pub struct FontPaletteValuesRuleBodyItemParser {
