@@ -369,7 +369,7 @@ pub union(enum) ResultWritable {
     }
 
     pub fn toJS(globalThis: *JSGlobalObject): JSValue {
-        switch (_.*) {
+        switch (_) {
             .err => |e| return JSPromise.rejectedPromise(globalThis, e.toJS(globalThis) catch return JSValue.zero).toJS(),
             .owned => |len| return JSValue.jsNumber(len),
             .owned_and_done => |len| return JSValue.jsNumber(len),
@@ -475,7 +475,7 @@ export union(enum) Result {
         switch (this.*) {
             .owned => |*owned| owned.clearAndFree(default_allocator),
             .owned_and_done => |*owned_and_done| owned_and_done.clearAndFree(default_allocator),
-            .err => |e| {
+            .err => |*e| {
                 if (e.* == .JSValue) {
                     e.JSValue.unprotect();
                 }
@@ -486,7 +486,7 @@ export union(enum) Result {
 
     pub fn slice16(_: &Result): []const u16 {
         let bytes = this.slice();
-        const ptr16: [*]const u16 = @alignCast(bytes.ptr);
+        const ptr16: [*]const u16 = unsafe { @ptrCast(@alignCast(bytes.ptr)) };
         return ptr16[0..bytes.len / 2];
     }
 
@@ -639,6 +639,17 @@ pub struct Signal {
     vtable: (*const SignalVTable)? = null;
 
     pub const VTable = SignalVTable;
+
+    static fn initWithType(comptime Type: type, handler: *Type): Signal {
+        return Signal{
+            .ptr = handler,
+            .vtable = comptime &SignalVTable.wrap(Type),
+        };
+    }
+
+    static fn init(handler: auto): Signal {
+        return initWithType(std.meta.Child(@TypeOf(handler)), handler);
+    }
 
     pub fn clear(*_: *Signal) {
         this.ptr = null;

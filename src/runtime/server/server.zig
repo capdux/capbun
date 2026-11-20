@@ -210,11 +210,13 @@ pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitCon
             if ((!argument.isObject())) {
                 return null;
             }
-            const index = try ((argument.getOptional(init_ctx.global, "index", ZigString.Slice)) orelse { return .{ .ok = null }; });
+            const index_opt = try argument.getOptional(init_ctx.global, "index", ZigString.Slice);
+            const index = ((index_opt) orelse { return .{ .ok = null }; });
             defer {
             _ = index.deinit();
             }
-            const files = try ((argument.getArray(init_ctx.global, "files")) orelse { return .{ .ok = null }; });
+            const files_opt = try argument.getArray(init_ctx.global, "files");
+            const files = ((files_opt) orelse { return .{ .ok = null }; });
             var iter = try files.arrayIterator(init_ctx.global);
             _ = &iter;
             var html_route: ?AnyRoute = null;
@@ -307,7 +309,9 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
                 _ = &file_route;
                 return .{ .file = file_route };
             }
-            return .{ .static = try ((StaticRoute.fromJS(global, argument)) orelse { return .{ .ok = null }; }) };
+            const static_route_opt = try StaticRoute.fromJS(global, argument);
+            const static_route = ((static_route_opt) orelse { return .{ .ok = null }; });
+            return .{ .static = static_route };
     }
     pub const ServerInitContext = struct {
             arena: std.heap.ArenaAllocator,
@@ -1028,16 +1032,32 @@ pub fn onSavedRequest(self: @This(), req: SavedRequest.Union, resp: uws.AnyRespo
 
 pub fn prepareAndSaveJsRequestContext(server: AnyServer, req: *uws.Request, resp: uws.AnyResponse, global: *jsc.JSGlobalObject, method: ?bun.http.Method) bun.JSError!?SavedRequest {
             if ((server.ptr.tag() == case_http)) {
-                return ((server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) orelse { return .{ .ok = null }; }).save(global, req, resp.TCP);
+                if (server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
+                    _ = &ctx;
+                    return ctx.save(global, req, resp.TCP);
+                }
+                return null;
             } else {
                 if ((server.ptr.tag() == case_https)) {
-                    return ((server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) orelse { return .{ .ok = null }; }).save(global, req, resp.SSL);
+                    if (server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
+                        _ = &ctx;
+                        return ctx.save(global, req, resp.SSL);
+                    }
+                    return null;
                 } else {
                     if ((server.ptr.tag() == case_debug_http)) {
-                        return ((server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) orelse { return .{ .ok = null }; }).save(global, req, resp.TCP);
+                        if (server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
+                            _ = &ctx;
+                            return ctx.save(global, req, resp.TCP);
+                        }
+                        return null;
                     } else {
                         if ((server.ptr.tag() == case_debug_https)) {
-                            return ((server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) orelse { return .{ .ok = null }; }).save(global, req, resp.SSL);
+                            if (server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
+                                _ = &ctx;
+                                return ctx.save(global, req, resp.SSL);
+                            }
+                            return null;
                         } else {
                             return bun.unreachablePanic("Invalid pointer tag", .{});
                         }

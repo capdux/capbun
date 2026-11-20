@@ -327,7 +327,7 @@ pub const Value = union(enum) {
     }
 
     pub fn wasString(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .InternalBlob => |*blob| blob.was_string,
             .WTFStringImpl => true,
             else => false,
@@ -554,15 +554,13 @@ pub const Value = union(enum) {
                     };
                 }
 
+                const duped_bytes = bun.default_allocator.dupe(u8, bytes) catch {
+                    return globalThis.throwValue(ZigString.static("Failed to clone ArrayBufferView").toErrorInstance(globalThis));
+                };
+                const bytes_list = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, duped_bytes);
                 return Body.Value{
-                    InternalBlob: {
-                        bytes: std.array_list.Managed(u8){
-                            items: bun.default_allocator.dupe(u8, bytes) catch {
-                                return globalThis.throwValue(ZigString.static("Failed to clone ArrayBufferView").toErrorInstance(globalThis));
-                            },
-                            capacity: bytes.len,
-                            allocator: bun.default_allocator,
-                        },
+                    InternalBlob: InternalBlob{
+                        bytes: bytes_list,
                         was_string: false,
                     },
                 };
@@ -693,8 +691,8 @@ pub const Value = union(enum) {
                                 promise.wrap(global, AnyBlob.toStringTransfer, .{ &blob, global })?;
                             },
                             else => {
-                                let blob = new_val.use();
-                                promise.wrap(global, Blob.toStringTransfer, .{ &blob, global })?;
+                                let blob = AnyBlob{ Blob: new_val.use() };
+                                promise.wrap(global, AnyBlob.toStringTransfer, .{ &blob, global })?;
                             },
                         }
                     },
@@ -1390,14 +1388,14 @@ pub struct ValueBufferer {
                     // return sink.createJSSink(stream);
                     return error.UnsupportedStreamType;
                 },
-                .Bytes => |byte_stream| {
-                    assert(byte_stream.pipe.ctx == null);
+                .Bytes => |bs| {
+                    assert(bs.pipe.ctx == null);
                     assert(sink.byte_stream == null);
 
-                    const bytes = byte_stream.buffer.items;
+                    const bytes = bs.buffer.items;
                     // If we've received the complete body by the time this function is called
                     // we can avoid streaming it and just send it all at once.
-                    if (byte_stream.has_received_last_chunk) {
+                    if (bs.has_received_last_chunk) {
                         log("byte stream has_received_last_chunk {}", .{bytes.len});
                         sink.onFinishedBuffering(sink.ctx, bytes, null, false);
                         // is safe to detach here because we're not going to receive any more data
@@ -1405,8 +1403,11 @@ pub struct ValueBufferer {
                         return;
                     }
 
-                    byte_stream.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
-                    sink.byte_stream = byte_stream;
+                    byte_stream_pipe: {
+                        bs.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
+                        break :byte_stream_pipe;
+                    }
+                    sink.byte_stream = bs;
                     log("byte stream pre-buffered {}", .{bytes.len});
 
                     * = bun.handleOom(sink.stream_buffer.write(bytes));

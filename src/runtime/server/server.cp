@@ -145,10 +145,12 @@ pub const AnyRoute = union(enum) {
     fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
         if (!argument.isObject()) return null;
 
-        const index = try argument.getOptional(init_ctx.global, "index", ZigString.Slice) orelse return null;
+        const index_opt = argument.getOptional(init_ctx.global, "index", ZigString.Slice)?;
+        const index = index_opt ?? return null;
         defer index.deinit();
 
-        const files = try argument.getArray(init_ctx.global, "files") orelse return null;
+        const files_opt = argument.getArray(init_ctx.global, "files")?;
+        const files = files_opt ?? return null;
         let iter = try files.arrayIterator(init_ctx.global);
         let html_route: ?AnyRoute = null;
         while (try iter.next()) |file_entry| {
@@ -272,7 +274,9 @@ pub const AnyRoute = union(enum) {
         if (try FileRoute.fromJS(global, argument)) |file_route| {
             return .{ .file = file_route };
         }
-        return .{ .static = try StaticRoute.fromJS(global, argument) orelse return null };
+        const static_route_opt = StaticRoute.fromJS(global, argument)?;
+        const static_route = static_route_opt ?? return null;
+        return .{ .static = static_route };
     }
 };
 
@@ -3481,7 +3485,27 @@ pub const AnyServer = struct {
         global: *jsc.JSGlobalObject,
         method: ?bun.http.Method,
     ) bun.JSError!?SavedRequest {
-        if (server.ptr.tag() == case_http) return (server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method) orelse return null).save(global, req, resp.TCP); else if (server.ptr.tag() == case_https) return (server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method) orelse return null).save(global, req, resp.SSL); else if (server.ptr.tag() == case_debug_http) return (server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method) orelse return null).save(global, req, resp.TCP); else if (server.ptr.tag() == case_debug_https) return (server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method) orelse return null).save(global, req, resp.SSL); else return bun.unreachablePanic("Invalid pointer tag", .{});
+        if (server.ptr.tag() == case_http) {
+            if (ctx := server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
+                return ctx.save(global, req, resp.TCP);
+            }
+            return null;
+        } else if (server.ptr.tag() == case_https) {
+            if (ctx := server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
+                return ctx.save(global, req, resp.SSL);
+            }
+            return null;
+        } else if (server.ptr.tag() == case_debug_http) {
+            if (ctx := server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
+                return ctx.save(global, req, resp.TCP);
+            }
+            return null;
+        } else if (server.ptr.tag() == case_debug_https) {
+            if (ctx := server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
+                return ctx.save(global, req, resp.SSL);
+            }
+            return null;
+        } else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
     pub fn numSubscribers(this: AnyServer, topic: []const u8) u32 {
         if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).app.?.numSubscribers(topic); else return bun.unreachablePanic("Invalid pointer tag", .{});

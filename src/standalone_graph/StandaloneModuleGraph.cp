@@ -228,7 +228,7 @@ pub enum StandaloneLazySourceMap {
                 }
                 const decompressed_contents_slice = slices[count..][0..count];
                 for (i of 0..count) {
-                    file_names[i] = serialized.sourceFileNameAt(i).slice(serialized.bytes);
+                    file_names[@intCast(i)] = serialized.sourceFileNameAt(@intCast(i)).slice(serialized.bytes);
                 }
 
                 @memset(decompressed_contents_slice, null);
@@ -268,7 +268,7 @@ pub struct StandaloneFile {
     pub const blob = StandaloneGraphJsc.fileBlob;
 
     pub fn appearsInEmbeddedFilesArray(): bool {
-        return _.side == .client || !this.loader.isJavaScriptLike();
+        return _.side == .client || !_.loader.isJavaScriptLike(_.loader);
     }
 
     pub fn stat(): bun.Stat {
@@ -542,7 +542,7 @@ pub struct StandaloneModuleGraph {
         for (output_file of output_files) {
             string_builder.countZ(output_file.dest_path);
             string_builder.countZ(prefix);
-            if (output_file.value == .buffer) {
+            if (std.meta.activeTag(output_file.value) == .buffer) {
                 if (output_file.output_kind == .sourcemap) {
                     string_builder.cap += output_file.value.buffer.bytes.len * 2;
                 } else if (output_file.output_kind == .bytecode) {
@@ -589,7 +589,7 @@ pub struct StandaloneModuleGraph {
                 continue;
             }
 
-            if (output_file.value != .buffer) {
+            if (std.meta.activeTag(output_file.value) != .buffer) {
                 continue;
             }
 
@@ -667,7 +667,7 @@ pub struct StandaloneModuleGraph {
                     .js, .jsx, .ts, .tsx => .latin1,
                     else => .binary,
                 },
-                module_format: if (output_file.loader.isJavaScriptLike()) switch (output_format) {
+                module_format: if (output_file.loader.isJavaScriptLike(output_file.loader)) switch (output_format) {
                     .cjs => .cjs,
                     .esm => .esm,
                     else => .none,

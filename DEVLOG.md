@@ -1443,3 +1443,5 @@
 - **[2026-11-20] Wave 16 D 组要点**：`export class` 持有的 struct 在 `union(enum)` 字段里会被自动指针化，改 `pub struct` 即得值类型；`cpc` 在 `fn ... callconv(.c)` 类型上存在两种 lowering 缺陷（双层指针 / 丢返回类型），已上报。
 
 - **[2026-11-20] Wave 17 A 组新坑**：向 `void` 值参数传 `{}` 会被 lower 成 `.{}`，用 `undefined` 绕过；单参方法调用 `x.isLocked(a)` 会丢实参，改 `const f = T.isLocked; f(x, a)`；`err` 做枚举成员名会被改写成 `e`，需写 `@"err"`。
+
+- **[2026-11-20] Wave 18 D 组要点**：`DevServer/memory_cost.cp` 对照原版重写 `useAllFields` 移除虚构字段；`ErrorReportRequest` `run`/`finalize`/`runWithBody` 改 `static fn` 消除循环依赖；`streams.cp` 补 `Signal.initWithType`/`init` 并改 `ResultWritable.toJS` 为 `switch (_)`；`QueryBindingIterator` 补 `static fn init`。

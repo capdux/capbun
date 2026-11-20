@@ -63,11 +63,11 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 pub const ObjectIterator = @import("./ObjectIterator.zig");
-pub const QueryBindingIterator = union {
+pub const QueryBindingIterator = union(enum) {
     array: jsc.JSArrayIterator,
     objects: ObjectIterator,
 
-pub fn init(array: JSValue, columns: JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!*QueryBindingIterator {
+pub fn init(array: JSValue, columns: JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!QueryBindingIterator {
             if (columns.isEmptyOrUndefinedOrNull()) {
                 return QueryBindingIterator{ .array = try jsc.JSArrayIterator.init(array, globalObject) };
             }
@@ -84,9 +84,9 @@ pub fn next(self: *QueryBindingIterator) bun.JSError!?jsc.JSValue {
 });
     }
 
-pub fn anyFailed(self: *const QueryBindingIterator) bool {
+pub fn anyFailed(self: QueryBindingIterator) bool {
             return (switch ((blk: {
-            break :blk self.*;
+            break :blk self;
 
 })) {
 .array => false,

@@ -1246,7 +1246,7 @@ pub fn parseNextJsAppImpl(file_path_raw: []const u8, ext: []const u8, log: *Tiny
         const without_ext = file_path_raw[0..(file_path_raw.len - ext.len)];
         const basename = std.fs.path.basename(without_ext);
         const loader = ((bun.options.Loader.fromString(ext)) orelse { return null; });
-        if ((!loader.isJavaScriptLike())) {
+        if ((!loader.isJavaScriptLike(loader))) {
             return null;
         }
         const kind = ((bun.ComptimeStringMap(ParsedPattern.Kind, (switch (extract) {

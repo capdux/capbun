@@ -35,7 +35,7 @@ export class FormData {
 
         pub fn get(content_type: []const u8) ?Encoding {
             if (strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)
-                return Encoding{ .URLEncoded = {} };
+                return Encoding{ .URLEncoded = undefined };
 
             if (strings.indexOf(content_type, "multipart/form-data") == null) return null;
 
@@ -141,7 +141,7 @@ export class FormData {
         }
     }
 
-    pub fn fromMultipartData(
+    static fn fromMultipartData(
         globalThis: *JSGlobalObject,
         callframe: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -280,7 +280,7 @@ export class FormData {
         return form_data_value;
     }
 
-    pub fn forEachMultipartEntry(
+    static fn forEachMultipartEntry(
         input: []const u8,
         boundary: []const u8,
         comptime Ctx: type,

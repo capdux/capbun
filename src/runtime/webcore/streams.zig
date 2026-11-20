@@ -82,7 +82,7 @@ pub const Start = union(enum) {
     owned_and_done: ByteList,
     done: ByteList,
 
-pub fn toJS(self: *const Start, globalThis: *JSGlobalObject) JSError!JSValue {
+pub fn toJS(self: Start, globalThis: *JSGlobalObject) JSError!JSValue {
             switch (self.*) {
 .empty, .ready => {
 return JSValue.js_undefined;
@@ -311,7 +311,7 @@ pub const ResultWritable = union(enum) {
     into_array: Blob.SizeType,
     into_array_and_done: Blob.SizeType,
 
-pub fn isDone(self: *const ResultWritable) bool {
+pub fn isDone(self: ResultWritable) bool {
             switch (self.*) {
 .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => {
 return true;
@@ -339,8 +339,8 @@ _ = (blk_catch_3: { break :blk_catch_3 ((promise.resolve(globalThis, result.toJS
 }
     }
 
-pub fn toJS(self: *ResultWritable, globalThis: *JSGlobalObject) JSValue {
-            switch (self.*) {
+pub fn toJS(self: ResultWritable, globalThis: *JSGlobalObject) JSValue {
+            switch (self) {
 .err => |e| {
 return JSPromise.rejectedPromise(globalThis, (blk_catch_4: { break :blk_catch_4 ((e.toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return JSValue.zero; }); })).toJS();
 },
@@ -434,7 +434,7 @@ pub fn runFromJSThread(self: *ResultPending) void {
 
 pub const Result = union(enum) {
     pending: *ResultPending,
-    err: *ResultStreamError,
+    err: ResultStreamError,
     done: void,
     owned: ByteList,
     owned_and_done: ByteList,
@@ -451,7 +451,7 @@ _ = owned.clearAndFree(default_allocator);
 .owned_and_done => |*owned_and_done| {
 _ = owned_and_done.clearAndFree(default_allocator);
 },
-.err => |e| {
+.err => |*e| {
 if ((e.* == .JSValue)) {
                 _ = e.JSValue.unprotect();
             }
@@ -465,7 +465,10 @@ else => {
 pub fn slice16(self: *const Result) []const u16 {
             var bytes = self.slice();
             _ = &bytes;
-            const ptr16: [*]const u16 = @alignCast(bytes.ptr);
+            const ptr16: [*]const u16 = (blk: {
+            break :blk @ptrCast(@alignCast(bytes.ptr));
+
+});
             return ptr16[0..(bytes.len / 2)];
     }
 
@@ -617,6 +620,14 @@ return JSValue.false;
 pub const Signal = struct {
     ptr: ?*anyopaque = null,
     vtable: ?*const SignalVTable = null,
+
+pub fn initWithType(comptime Type: type, handler: *Type) Signal {
+            return Signal{ .ptr = handler, .vtable = (comptime (&SignalVTable.wrap(Type))) };
+    }
+
+pub fn init(handler: anytype) Signal {
+            return initWithType(std.meta.Child(@TypeOf(handler)), handler);
+    }
 
 pub fn clear(self: *Signal) void {
             self.ptr = null;
@@ -907,11 +918,11 @@ pub const ReadResult = union(enum) {
     done: void,
     read: []u8,
 
-pub fn toStream(self: *ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool) Result {
+pub fn toStream(self: ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool) Result {
             return self.toStreamWithIsDone(pending, buf, view, close_on_empty, false);
     }
 
-pub fn toStreamWithIsDone(self: *ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool, is_done: bool) Result {
+pub fn toStreamWithIsDone(self: ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool, is_done: bool) Result {
             switch (self) {
 .pending => {
 return .{ .pending = pending };

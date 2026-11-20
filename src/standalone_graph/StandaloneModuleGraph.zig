@@ -124,10 +124,10 @@ return null;
 return map;
 },
 .serialized => |serialized| {
-const blob = ((serialized.mappingBlob()) orelse (({
+const blob = ((serialized.mappingBlob()) orelse {
             self.* = .none;
             return null;
-})));
+});
             if ((!SourceMap.InternalSourceMap.isValidBlob(blob))) {
                 self.* = .none;
                 return null;
@@ -149,7 +149,7 @@ const blob = ((serialized.mappingBlob()) orelse (({
                 _ = &i;
                 const __end_0 = count;
                 while (i < __end_0) : (i += 1) {
-                    file_names[cp_cast_int(usize, i)] = serialized.sourceFileNameAt(i).slice(serialized.bytes);
+                    file_names[cp_cast_int(usize, @intCast(i))] = serialized.sourceFileNameAt(@intCast(i)).slice(serialized.bytes);
                 }
             }
             _ = @memset(decompressed_contents_slice, null);
@@ -379,7 +379,7 @@ pub const StandaloneFile = struct {
     side: StandaloneFileSide = .server,
 
 pub fn appearsInEmbeddedFilesArray(self: StandaloneFile) bool {
-            return ((self.side == .client) or (!self.loader.isJavaScriptLike()));
+            return ((self.side == .client) or (!self.loader.isJavaScriptLike(self.loader)));
     }
 
 pub fn stat(self: StandaloneFile) bun.Stat {
@@ -554,7 +554,7 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 _ = &output_file;
                 _ = string_builder.countZ(output_file.dest_path);
                 _ = string_builder.countZ(prefix);
-                if (((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value) == .buffer)) {
+                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value)) == .buffer)) {
                     if ((output_file.output_kind == .sourcemap)) {
                         string_builder.cap = (string_builder.cap + ((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).buffer.bytes.len * 2));
                     } else {
@@ -610,7 +610,7 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 if ((!output_file.output_kind.isFileInStandaloneMode())) {
                     continue;
                 }
-                if (((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value) != .buffer)) {
+                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value)) != .buffer)) {
                     continue;
                 }
                 const dest_path = bun.strings.removeLeadingDotSlash(output_file.dest_path);
@@ -673,7 +673,7 @@ defer {
                 var module = StandaloneCompiledModuleGraphFile{ .name = string_builder.fmtAppendCountZ("{s}{s}", .{ prefix, dest_path }), .loader = output_file.loader, .contents = string_builder.appendCountZ((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).buffer.bytes), .encoding = (switch (output_file.loader) {
 .js, .jsx, .ts, .tsx => .latin1,
 else => .binary,
-}), .module_format = (if (output_file.loader.isJavaScriptLike()) (switch (output_format) {
+}), .module_format = (if (output_file.loader.isJavaScriptLike(output_file.loader)) (switch (output_format) {
 .cjs => .cjs,
 .esm => .esm,
 else => .none,

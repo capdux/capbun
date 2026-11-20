@@ -3874,7 +3874,7 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
             bun.assert(value.ref_count > 0);
             w.writeAll(std.mem.asBytes(&key.get()))?;
             w.writeInt(u32, value.ref_count, .little)?;
-            if (entry := dev.source_maps.locateWeakRef(&dev.source_maps, key)) {
+            if (entry := dev.source_maps.locateWeakRef(key)) {
                 w.writeInt(u32, entry.ref.count, .little)?;
                 // floats are easier to decode in JS
                 const expire_f64: f64 = @floatFromInt(entry.ref.expire);

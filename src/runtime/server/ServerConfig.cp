@@ -706,7 +706,9 @@ pub fn fromJS(
             }
         }
 
-        if (websocket_object := try arg.getTruthy(global, "webSocket") orelse try arg.getTruthy(global, "websocket")) {
+        const ws_obj_1 = arg.getTruthy(global, "webSocket")?;
+        const ws_obj_2 = if (ws_obj_1 == null) arg.getTruthy(global, "websocket")? else ws_obj_1;
+        if (websocket_object := ws_obj_2) {
             if (!websocket_object.isObject()) {
                 if (*conf := args.ssl_config) {
                     conf.deinit();

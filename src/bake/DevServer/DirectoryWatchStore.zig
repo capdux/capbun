@@ -90,11 +90,11 @@ dependencies: ArrayListUnmanaged(Dep),
 dependencies_free_list: ArrayListUnmanaged(Dep.Index),
 
 pub fn ownerFromRaw(raw: *anyopaque) *DevServer {
-        const store_ptr: *DirectoryWatchStore = @ptrCast(raw);
-        return (blk: {
-        break :blk @alignCast(@fieldParentPtr("directory_watchers", store_ptr));
+        const store_ptr: *DirectoryWatchStore = (blk: {
+        break :blk @ptrCast(@alignCast(raw));
 
 });
+        return @fieldParentPtr("directory_watchers", store_ptr);
 }
 
 pub fn owner(self: *DirectoryWatchStore) *DevServer {
@@ -240,7 +240,7 @@ pub fn freeDependencyIndex(self: *DirectoryWatchStore, alloc: Allocator, index: 
 pub fn freeEntry(self: *DirectoryWatchStore, alloc: Allocator, entry_index: usize) void {
         const entry = self.watches.values()[@as(usize, @intCast(entry_index))];
         _ = debug.log("DirectoryWatchStore.freeEntry({d}, {f})", .{ entry_index, entry.dir });
-        _ = DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).bun_watcher.removeAtIndex(entry.watch_index, 0, (&&.{}), .file);
+        _ = DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).bun_watcher.removeAtIndex(entry.watch_index, 0, &.{}, .file);
         defer {
         if (entry.dir_fd_owned) {
             _ = entry.dir.close();
@@ -303,7 +303,7 @@ pub fn appendDepAssumeCapacity(self: *DirectoryWatchStore, dep: Dep) Dep.Index {
 pub const Entry = WatchEntry;
 pub const Dep = WatchDep;
 pub const empty = empty_directory_watch_store;
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;
 pub const empty_watch_dep: WatchDep = WatchDep{ .next = .none, .source_file_path = "", .specifier = empty_u8[0..0] };
 pub const empty_directory_watch_store: DirectoryWatchStore = DirectoryWatchStore{ .watches = .{}, .dependencies = .{}, .dependencies_free_list = .{} };
 const Watcher = bun.Watcher;

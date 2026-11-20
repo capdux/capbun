@@ -129,8 +129,7 @@ return toJSFromMultipartData(globalThis, input, boundary);
 }
     }
 
-pub fn fromMultipartData(self: *FormData, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
-        _ = self;
+pub fn fromMultipartData(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
             const args_ = callframe.arguments_old(2);
             const args = args_.ptr[0..2];
@@ -266,8 +265,7 @@ pub fn onEntry(wrap: *@This(), name: Semver.String, field: Field, buf: []const u
             return form_data_value;
     }
 
-pub fn forEachMultipartEntry(self: *const FormData, input: []const u8, boundary: []const u8, comptime Ctx: type, ctx: Ctx, comptime iterator: *const fn (Ctx, Semver.String, Field, []const u8) void) !void {
-        _ = self;
+pub fn forEachMultipartEntry(input: []const u8, boundary: []const u8, comptime Ctx: type, ctx: Ctx, comptime iterator: *const fn (Ctx, Semver.String, Field, []const u8) void) !void {
             var slice = input;
             _ = &slice;
             var subslicer = Semver.SlicedString.init(input, input);
@@ -391,7 +389,7 @@ else => {
     
     pub fn get(content_type: []const u8) ?Encoding {
                 if ((strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)) {
-                    return Encoding{ .URLEncoded = .{} };
+                    return Encoding{ .URLEncoded = undefined };
                 }
                 if ((strings.indexOf(content_type, "multipart/form-data") == null)) {
                     return null;

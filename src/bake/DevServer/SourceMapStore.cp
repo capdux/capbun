@@ -141,7 +141,7 @@ pub struct StoreEntry {
         side: bake.Side,
         utf8_input: []const u8,
         array_list: *std.array_list.Managed(u8),
-    ): !EncodeSourceMapPathError {
+    )!EncodeSourceMapPathError {
         // On the client, percent encode everything so it works in the browser
         if (side == .client) {
             return bun.strings.percentEncodeWrite(utf8_input, array_list);
@@ -215,7 +215,7 @@ pub struct StoreEntry {
         assert(_.ref_count == 0);
         const files = _.files.slice();
         for (i of 0..files.len) {
-            let file = files.get(i);
+            let file = files.get(@intCast(i));
             file.deinit();
         }
         _.files.deinit(_.allocator());
@@ -415,40 +415,40 @@ pub struct StoreGetResult {
         return true;
     }
 
-    pub fn locateWeakRef(store: *Self, key: Key): WeakRefLocation? {
-        for (i of 0..store.weak_refs.count) {
-            const item_ref = store.weak_refs.peekItem(i);
-            if (item_ref.key() == key) return WeakRefLocation{ index: i, @"ref": item_ref };
+    pub fn locateWeakRef(*_, key: Key): WeakRefLocation? {
+        for (i of 0.._.weak_refs.count) {
+            const item_ref = _.weak_refs.peekItem(@intCast(i));
+            if (item_ref.key() == key) return WeakRefLocation{ index: @intCast(i), @"ref": item_ref };
         }
         return null;
     }
 
-    pub fn sweepWeakRefs(timer: *EventLoopTimer, now_ts: *const bun.timespec) {
+    pub fn sweepWeakRefs(*_, timer: *EventLoopTimer, now_ts: *const bun.timespec) {
+        * = timer;
         mapLog("sweepWeakRefs", []);
-        const store: *Self = @fieldParentPtr("weak_ref_sweep_timer", timer);
-        assert(store.owner().magic == .valid);
+        assert(_.owner().magic == .valid);
 
         const now: u64 = @max(now_ts.sec, 0);
 
-        defer store.owner().emitMemoryVisualizerMessageIfNeeded();
+        defer _.owner().emitMemoryVisualizerMessageIfNeeded();
 
-        while (item := store.weak_refs.readItem()) {
+        while (item := _.weak_refs.readItem()) {
             if (item.expire <= now) {
-                store.unrefCount(item.key(), item.count);
+                _.unrefCount(item.key(), item.count);
             } else {
-                store.weak_refs.unget(&[item]) catch
+                _.weak_refs.unget(&[item]) catch
                     unreachable; // there is enough space since the last item was just removed.
-                store.weak_ref_sweep_timer.state = .FIRED;
+                _.weak_ref_sweep_timer.state = .FIRED;
                 const next_ts = Timespec{ sec: item.expire + 1, nsec: 0 };
-                store.owner().vm.timer.update(
-                    &store.weak_ref_sweep_timer,
+                _.owner().vm.timer.update(
+                    &_.weak_ref_sweep_timer,
                     &next_ts,
                 );
                 return;
             }
         }
 
-        store.weak_ref_sweep_timer.state = .CANCELLED;
+        _.weak_ref_sweep_timer.state = .CANCELLED;
     }
 
     /// This is used in exactly one place: remapping errors.

@@ -655,7 +655,7 @@ export class FetchTasklet {
                         _.tracker.didCancel(_.global_this);
 
                         if (http_ := _.http) {
-                            http.http_thread.scheduleShutdown(http_);
+                            http_.http_thread.scheduleShutdown(http_);
                         }
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;
@@ -1185,7 +1185,7 @@ export class FetchTasklet {
         defer thread_safe_stream_buffer.release();
         let highWaterMark: usize = 16384;
         if (sink := _.sink) {
-            highWaterMark = sink.highWaterMark;
+            highWaterMark = @intCast(sink.highWaterMark);
         }
 
         let needs_schedule = false;
@@ -1233,7 +1233,7 @@ export class FetchTasklet {
                 handleOom(stream_buffer.write(http.end_of_chunked_http1_1_encoding_response_body));
             }
             if (http_ := _.http) {
-                http.http_thread.scheduleRequestWrite(http_, .end);
+                http_.http_thread.scheduleRequestWrite(http_, .end);
             }
         }
     }
@@ -1243,7 +1243,7 @@ export class FetchTasklet {
         _.tracker.didCancel(_.global_this);
 
         if (http_ := _.http) {
-            http.http_thread.scheduleShutdown(http_);
+            http_.http_thread.scheduleShutdown(http_);
         }
     }
 

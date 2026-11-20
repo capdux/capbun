@@ -642,7 +642,13 @@ else => {
                     args.idleTimeout = @truncate(idle_timeout_val);
                 }
             }
-            if (try ((arg.getTruthy(global, "webSocket")) orelse (try arg.getTruthy(global, "websocket")))) |websocket_object| {
+            const ws_obj_1 = try arg.getTruthy(global, "webSocket");
+            var __ws_obj_1_moved = false; _ = &__ws_obj_1_moved;
+            defer if (!__ws_obj_1_moved) { const __T = @TypeOf(ws_obj_1); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ws_obj_1.release() catch {}; } else { ws_obj_1.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ws_obj_1; _drop_val.release(); } };
+            const ws_obj_2 = (if ((ws_obj_1 == null)) try arg.getTruthy(global, "websocket") else (ws_obj_1.?));
+            var __ws_obj_2_moved = false; _ = &__ws_obj_2_moved;
+            defer if (!__ws_obj_2_moved) { const __T = @TypeOf(ws_obj_2); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ws_obj_2.release() catch {}; } else { ws_obj_2.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ws_obj_2; _drop_val.release(); } };
+            if (ws_obj_2) |websocket_object| {
                 _ = &websocket_object;
                 if ((!websocket_object.isObject())) {
                     if (args.ssl_config) |*conf| {

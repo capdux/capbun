@@ -257,7 +257,7 @@ fn hasNullByte(s: []const u8): bool {
                 ssl_error: uws.us_bun_verify_error_t,
             ) {
                 _ = s;
-                const handshakeWasSuccessful = conn.#connection.doHandshake(success, ssl_error) catch |e| return conn.failFmt(e, "Failed to send handshake response", .{});
+                const handshakeWasSuccessful = conn.#connection.doHandshake(success, ssl_error) catch |e| return conn.failFmt(@errorCast(e), "Failed to send handshake response", .{});
                 if (!handshakeWasSuccessful) {
                     conn.failWithJSValue(ssl_error.toJS(conn.#globalObject) catch return);
                 }
@@ -310,7 +310,7 @@ fn hasNullByte(s: []const u8): bool {
                 conn.ensureJSValueIsAlive();
 
                 conn.#connection.readAndProcessData(data) catch |e| {
-                    conn.onError(null, e);
+                    conn.onError(null, @errorCast(e));
                 };
             }
 

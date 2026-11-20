@@ -81,7 +81,8 @@ pub fn replacePath(self: *Assets, abs_path: []const u8, contents: *const AnyBlob
         var gop = try self.path_map.getOrPut(alloc, abs_path);
         _ = &gop;
         if ((!gop.found_existing)) {
-            const stable_abs_path = try self.owner().client_graph.insertEmpty(abs_path, .unknown).key;
+            const empty_entry = try self.owner().client_graph.insertEmpty(abs_path, .unknown);
+            const stable_abs_path = empty_entry.key;
             gop.key_ptr.* = stable_abs_path;
         } else {
             var entry_index = gop.value_ptr.*;
@@ -148,10 +149,17 @@ pub fn unrefByIndex(assets: *Assets, index: EntryIndex, dec_count: u32) void {
             _ = assets.refs.swapRemove(index.get());
             const moved_from: u30 = @intCast(assets.files.count());
             if ((moved_from != index.get())) {
-                for (assets.path_map.values()) |*entry_ptr| {
-                    _ = &entry_ptr;
-                    if (((entry_ptr.*).get() == moved_from)) {
-                        (entry_ptr.*).* = index;
+                var vals = assets.path_map.values();
+                _ = &vals;
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = vals.len;
+                    while (i < __end_0) : (i += 1) {
+                        const idx: usize = @intCast(i);
+                        if ((vals[@as(usize, @intCast(idx))].get() == moved_from)) {
+                            vals[cp_cast_int(usize, idx)] = index;
+                        }
                     }
                 }
             }

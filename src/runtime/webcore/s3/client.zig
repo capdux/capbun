@@ -83,7 +83,7 @@ pub const NetworkSinkCallbackWrapper = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn callback(result: S3UploadResult, sink: *WebCore.NetworkSink) callconv(.c) JSTerminatedError!void {
+pub fn callback(result: S3UploadResult, sink: *WebCore.NetworkSink) JSTerminatedError!void {
             if ((sink.endPromise.hasValue() or sink.flushPromise.hasValue())) {
                 var event_loop = sink.globalThis.bunVM().eventLoop();
                 _ = &event_loop;
@@ -194,7 +194,7 @@ pub fn writeEndRequest(self: *S3UploadStreamWrapper, err_val: ?JSValue) void {
             }
     }
 
-pub fn resolve(result: S3UploadResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn resolve(result: S3UploadResult, self_any: *anyopaque) JSTerminatedError!void {
             var self: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
             _ = &self;
             _ = log("resolve {any}", .{ result });
@@ -604,8 +604,7 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         break :brk handleOom(allocPrint(default_allocator, "bytes={}-", .{ offset }));
 };
         _ = &range;
-        const sign_opts: __CpObj_path___const_u8_method__anyopaque_request_payer_bool = .{ .path = path, .method = bun.http.Method.GET, .request_payer = request_payer };
-        var result = (blk_catch_8: { break :blk_catch_8 ((self.signRequest(sign_opts, false, null)) catch |sign_err| { _ = &sign_err; if (range) |range_| {
+        var result = (blk_catch_8: { break :blk_catch_8 ((self.signRequest(.{ .path = path, .method = .GET, .request_payer = request_payer }, false, null)) catch |sign_err| { _ = &sign_err; if (range) |range_| {
             _ = &range_;
             _ = default_allocator.free(range_);
         }
@@ -661,5 +660,4 @@ pub fn readableStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         _ = downloadStream(self, path, offset, size, proxy_url, request_payer, S3DownloadStreamWrapper.opaqueCallback, wrapper);
         return readable_value;
 }
-pub const __CpObj_path___const_u8_method__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_search_params__anyopaque = struct { path: []const u8, method: *anyopaque, search_params: *anyopaque };

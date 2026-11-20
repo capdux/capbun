@@ -301,7 +301,7 @@ pub fn upload(
 }
 
 export class NetworkSinkCallbackWrapper {
-    @c static fn callback(result: S3UploadResult, sink: *WebCore.NetworkSink): JSTerminatedError!void {
+    static fn callback(result: S3UploadResult, sink: *WebCore.NetworkSink): JSTerminatedError!void {
         if (sink.endPromise.hasValue() or sink.flushPromise.hasValue()) {
             let event_loop = sink.globalThis.bunVM().eventLoop();
             event_loop.enter();
@@ -446,7 +446,7 @@ export class S3UploadStreamWrapper {
         }
     }
 
-    @c static fn resolve(result: S3UploadResult, self_any: *!): JSTerminatedError!void {
+    static fn resolve(result: S3UploadResult, self_any: *!): JSTerminatedError!void {
         let self: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
         log("resolve {any}", .{ result });
         defer self.deref();
@@ -598,12 +598,11 @@ pub fn downloadStream(
         break :brk handleOom(allocPrint(default_allocator, "bytes={}-", .{ offset }));
     };
 
-    const sign_opts = .{
+    let result = this.signRequest(.{
         .path = path,
-        .method = bun.http.Method.GET,
+        .method = .GET,
         .request_payer = request_payer,
-    };
-    let result = this.signRequest(sign_opts, false, null) catch |sign_err| {
+    }, false, null) catch |sign_err| {
         if (range_ := range) default_allocator.free(range_);
         let error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
         callback(.{ .allocator = default_allocator, .list = .{} }, false, .{

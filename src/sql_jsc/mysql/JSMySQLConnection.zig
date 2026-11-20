@@ -299,7 +299,7 @@ pub fn onOpen(conn: *JSMySQLConnection, s: SocketType) void {
 
 pub fn onHandshake_(conn: *JSMySQLConnection, s: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
             _ = s;
-            const handshakeWasSuccessful = (blk_catch_0: { break :blk_catch_0 ((conn.#connection.doHandshake(success, ssl_error)) catch |e| { _ = &e; return conn.failFmt(e, "Failed to send handshake response", .{}); }); });
+            const handshakeWasSuccessful = (blk_catch_0: { break :blk_catch_0 ((conn.#connection.doHandshake(success, ssl_error)) catch |e| { _ = &e; return conn.failFmt(@errorCast(e), "Failed to send handshake response", .{}); }); });
             if ((!handshakeWasSuccessful)) {
                 _ = conn.failWithJSValue((blk_catch_1: { break :blk_catch_1 ((ssl_error.toJS(conn.#globalObject)) catch |__ce_1| { _ = &__ce_1; return; }); }));
             }
@@ -354,7 +354,7 @@ pub fn onData(conn: *JSMySQLConnection, s: SocketType, data: []const u8) void {
             _ = event_loop.exit();
             }
             _ = conn.ensureJSValueIsAlive();
-            _ = (blk_catch_2: { break :blk_catch_2 ((conn.#connection.readAndProcessData(data)) catch |e| { _ = &e; break :blk_catch_2 conn.onError(null, e); }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((conn.#connection.readAndProcessData(data)) catch |e| { _ = &e; break :blk_catch_2 conn.onError(null, @errorCast(e)); }); });
     }
 
 pub fn onWritable(conn: *JSMySQLConnection, s: SocketType) void {

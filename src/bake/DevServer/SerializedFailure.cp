@@ -27,7 +27,7 @@ pub union(enum) FailureOwner {
     pub const Packed = OwnerPacked;
 
     pub fn encode(): OwnerPacked {
-        return switch (_) {
+        return switch (_.*) {
             .none => OwnerPacked{ kind: .none, data: 0 },
             .client => |data| OwnerPacked{ kind: .client, data: data.get() },
             .server => |data| OwnerPacked{ kind: .server, data: data.get() },
@@ -53,11 +53,11 @@ pub struct FailureArrayHashContextViaOwner {
 }
 
 pub struct FailureArrayHashAdapter {
-    pub fn hash(owner_val: FailureOwner): u32 {
+    static fn hash(owner_val: FailureOwner): u32 {
         return std.hash.int(@as(u32, @bitCast(owner_val.encode())));
     }
 
-    pub fn eql(a: FailureOwner, b: SerializedFailure, _: usize): bool {
+    static fn eql(a: FailureOwner, b: SerializedFailure, _: usize): bool {
         return @as(u32, @bitCast(a.encode())) == @as(u32, @bitCast(b.getOwner().encode()));
     }
 }

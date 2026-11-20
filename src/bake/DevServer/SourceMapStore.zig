@@ -223,7 +223,7 @@ pub fn renderJSON(map: *const StoreEntry, dev: *DevServer, arena_alloc: Allocato
             return json_bytes;
     }
 
-pub fn encodeSourceMapPath(side: bake.Side, utf8_input: []const u8, array_list: *std.array_list.Managed(u8)) !EncodeSourceMapPathError {
+pub fn encodeSourceMapPath(side: bake.Side, utf8_input: []const u8, array_list: *std.array_list.Managed(u8)) EncodeSourceMapPathError!void {
             if ((side == .client)) {
                 return bun.strings.percentEncodeWrite(utf8_input, array_list);
             }
@@ -280,7 +280,7 @@ pub fn deinit(self: *StoreEntry) void {
                 _ = &i;
                 const __end_3 = files.len;
                 while (i < __end_3) : (i += 1) {
-                    var file = files.get(i);
+                    var file = files.get(@intCast(i));
                     _ = &file;
                     _ = file.deinit();
                 }
@@ -461,41 +461,41 @@ pub fn removeOrUpgradeWeakRef(store: *Self, key: Key, mode: RemoveOrUpgradeMode)
         return true;
 }
 
-pub fn locateWeakRef(store: *Self, key: Key) ?WeakRefLocation {
+pub fn locateWeakRef(self: *SourceMapStore, key: Key) ?WeakRefLocation {
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_6 = store.weak_refs.count;
+            const __end_6 = self.weak_refs.count;
             while (i < __end_6) : (i += 1) {
-                const item_ref = store.weak_refs.peekItem(i);
+                const item_ref = self.weak_refs.peekItem(@intCast(i));
                 if ((item_ref.key() == key)) {
-                    return WeakRefLocation{ .index = i, .@"ref" = item_ref };
+                    return WeakRefLocation{ .index = @intCast(i), .@"ref" = item_ref };
                 }
             }
         }
         return null;
 }
 
-pub fn sweepWeakRefs(timer: *EventLoopTimer, now_ts: *const bun.timespec) void {
+pub fn sweepWeakRefs(self: *SourceMapStore, timer: *EventLoopTimer, now_ts: *const bun.timespec) void {
+        _ = &timer;
         _ = mapLog("sweepWeakRefs", &.{});
-        const store: *Self = @fieldParentPtr("weak_ref_sweep_timer", timer);
-        _ = assert((store.owner().magic == .valid));
+        _ = assert((self.owner().magic == .valid));
         const now: u64 = @max(now_ts.sec, 0);
         defer {
-        _ = store.owner().emitMemoryVisualizerMessageIfNeeded();
+        _ = self.owner().emitMemoryVisualizerMessageIfNeeded();
         }
-        while (store.weak_refs.readItem()) |item| {
+        while (self.weak_refs.readItem()) |item| {
             if ((item.expire <= now)) {
-                _ = store.unrefCount(item.key(), item.count);
+                _ = self.unrefCount(item.key(), item.count);
             } else {
-                _ = ((store.weak_refs.unget((&.{ item }))) catch unreachable);
-                store.weak_ref_sweep_timer.state = .FIRED;
+                _ = ((self.weak_refs.unget((&.{ item }))) catch unreachable);
+                self.weak_ref_sweep_timer.state = .FIRED;
                 const next_ts = Timespec{ .sec = (item.expire + 1), .nsec = 0 };
-                _ = store.owner().vm.timer.update((&store.weak_ref_sweep_timer), (&next_ts));
+                _ = self.owner().vm.timer.update((&self.weak_ref_sweep_timer), (&next_ts));
                 return;
             }
         }
-        store.weak_ref_sweep_timer.state = .CANCELLED;
+        self.weak_ref_sweep_timer.state = .CANCELLED;
 }
 
 pub fn getParsedSourceMap(store: *Self, script_id: Key, arena_alloc: Allocator, gpa: Allocator) ?GetResult {

@@ -1,4 +1,4 @@
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 pub struct WatchEntry {
     /// The directory handle the watch is placed on
@@ -42,8 +42,8 @@ pub const empty_watch_dep: WatchDep = WatchDep{
     pub const empty = empty_directory_watch_store;
 
     fn ownerFromRaw(raw: *!): *DevServer {
-        const store_ptr: *DirectoryWatchStore = @ptrCast(raw);
-        return unsafe { @alignCast(@fieldParentPtr("directory_watchers", store_ptr)) };
+        const store_ptr: *DirectoryWatchStore = unsafe { @ptrCast(@alignCast(raw)) };
+        return @fieldParentPtr("directory_watchers", store_ptr);
     }
 
     pub fn owner(*_): *DevServer {
@@ -217,7 +217,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
             entry.dir,
         ]);
 
-        ownerFromRaw(@ptrCast(_)).bun_watcher.removeAtIndex(entry.watch_index, 0, &[], .file);
+        ownerFromRaw(@ptrCast(_)).bun_watcher.removeAtIndex(entry.watch_index, 0, [], .file);
 
         defer if (entry.dir_fd_owned) entry.dir.close();
 

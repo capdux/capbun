@@ -465,18 +465,21 @@ _ = unreachable;
 .JavaScript, .Direct => {
 return error.UnsupportedStreamType;
 },
-.Bytes => |byte_stream| {
-_ = assert(((byte_stream).?.pipe.ctx == null));
+.Bytes => |bs| {
+_ = assert((bs.pipe.ctx == null));
                 _ = assert((sink.byte_stream == null));
-                const bytes = (byte_stream).?.buffer.items;
-                if ((byte_stream).?.has_received_last_chunk) {
+                const bytes = bs.buffer.items;
+                if (bs.has_received_last_chunk) {
                     _ = log("byte stream has_received_last_chunk {}", .{ bytes.len });
                     _ = sink.onFinishedBuffering(sink.ctx, bytes, null, false);
                     _ = stream.done(sink.global);
                     return;
                 }
-                (byte_stream).?.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
-                sink.byte_stream = byte_stream;
+                _ = byte_stream_pipe: {
+                bs.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
+                break :byte_stream_pipe;
+};
+                sink.byte_stream = bs;
                 _ = log("byte stream pre-buffered {}", .{ bytes.len });
                 _ = bun.handleOom(sink.stream_buffer.write(bytes));
                 return;
@@ -1023,7 +1026,7 @@ pub fn isDefinitelyEmpty(self: @This()) bool {
     }
 
 pub fn wasString(self: @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .InternalBlob => |*blob| blob.was_string,
 .WTFStringImpl => true,
 else => false,
@@ -1199,7 +1202,9 @@ pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) bun.JSError!Value {
                     if ((bytes.len == 0)) {
                         return Body.Value{ .Empty = undefined };
                     }
-                    return Body.Value{ .InternalBlob = .{ .bytes = std.array_list.Managed(u8), .was_string = false } };
+                    const duped_bytes = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, bytes)) catch |__ce_0| { _ = &__ce_0; return globalThis.throwValue(ZigString.static("Failed to clone ArrayBufferView").toErrorInstance(globalThis)); }); });
+                    const bytes_list = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, duped_bytes);
+                    return Body.Value{ .InternalBlob = InternalBlob{ .bytes = bytes_list, .was_string = false } };
                 }
             }
             if (value.@"as"(jsc.DOMFormData)) |form_data| {
@@ -1254,7 +1259,7 @@ else => {
 }
                 return Body.Value.fromReadableStreamWithoutLockCheck(readable, globalThis);
             }
-            return Body.Value{ .Blob = (blk_catch_0: { break :blk_catch_0 ((Blob.get(globalThis, value, true, false)) catch |e| { _ = &e; if ((!globalThis.hasException())) {
+            return Body.Value{ .Blob = (blk_catch_1: { break :blk_catch_1 ((Blob.get(globalThis, value, true, false)) catch |e| { _ = &e; if ((!globalThis.hasException())) {
                 if ((e == error.InvalidArguments)) {
                     return globalThis.throwInvalidArguments("Expected an Array", .{});
                 }
@@ -1300,9 +1305,9 @@ var blob = new_val.useAsAnyBlobAllowNonUTF8String();
                     _ = try promise.wrap(global, AnyBlob.toStringTransfer, .{ (&blob), global });
 },
 else => {
-var blob = new_val.use();
+var blob = AnyBlob{ .Blob = new_val.use() };
                     _ = &blob;
-                    _ = try promise.wrap(global, Blob.toStringTransfer, .{ (&blob), global });
+                    _ = try promise.wrap(global, AnyBlob.toStringTransfer, .{ (&blob), global });
 },
 }
 },

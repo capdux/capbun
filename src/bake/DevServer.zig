@@ -3553,7 +3553,7 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
                     _ = bun.assert((value.ref_count > 0));
                     _ = try w.writeAll(std.mem.asBytes((&key.get())));
                     _ = try w.writeInt(u32, value.ref_count, .little);
-                    if (dev.source_maps.locateWeakRef((&dev.source_maps), key)) |entry| {
+                    if (dev.source_maps.locateWeakRef(key)) |entry| {
                         _ = &entry;
                         _ = try w.writeInt(u32, entry.ref.count, .little);
                         const expire_f64: f64 = @floatFromInt(entry.ref.expire);

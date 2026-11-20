@@ -19,7 +19,7 @@
     dev: *DevServer,
     body: uws.BodyReaderMixin(ErrorReportRequest, "body", runWithBody, finalize),
 
-    pub fn run(dev: *DevServer, _: *Request, resp: auto) {
+    static fn run(dev: *DevServer, _: *Request, resp: auto) {
         const ctx = bun.new(ErrorReportRequest, ErrorReportRequest{
             dev: dev,
             body: .init(dev.allocator()),
@@ -28,12 +28,12 @@
         ctx.body.readBody(resp);
     }
 
-    pub fn finalize(ctx: *ErrorReportRequest) {
+    static fn finalize(ctx: *ErrorReportRequest) {
         ctx.dev.server.?.onStaticRequestComplete();
         bun.destroy(ctx);
     }
 
-    pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse)! {
+    static fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse)! {
         // .finalize has to be called last, but only in the non-error path.
         let should_finalize_self = false;
         defer if (should_finalize_self) ctx.finalize();

@@ -52,7 +52,8 @@
         let gop = _.path_map.getOrPut(alloc, abs_path)?;
         if (!gop.found_existing) {
             // Locate a stable pointer for the file path
-            const stable_abs_path = (_.owner().client_graph.insertEmpty(abs_path, .unknown)?).key;
+            const empty_entry = _.owner().client_graph.insertEmpty(abs_path, .unknown)?;
+            const stable_abs_path = empty_entry.key;
             gop.key_ptr.* = stable_abs_path;
         } else {
             let entry_index = gop.value_ptr.*;
@@ -125,8 +126,10 @@
             * = assets.refs.swapRemove(index.get());
             const moved_from: u30 = @intCast(assets.files.count());
             if (moved_from != index.get()) {
-                for (*entry_ptr of assets.path_map.values()) {
-                    if (entry_ptr.get() == moved_from) entry_ptr.* = index;
+                let vals = assets.path_map.values();
+                for (i of 0..vals.len) {
+                    const idx: usize = @intCast(i);
+                    if (vals[idx].get() == moved_from) vals[idx] = index;
                 }
             }
         }

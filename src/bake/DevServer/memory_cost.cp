@@ -62,25 +62,38 @@ pub const MemoryCost = @This();
         other_bytes += memoryCostArrayList(dev.incremental_result.html_routes_soft_affected);
         other_bytes += memoryCostArrayList(dev.incremental_result.html_routes_hard_affected);
 
-        other_bytes += memoryCostArrayHashMap(dev.watch_store.unresolved_watches);
-        other_bytes += memoryCostArrayHashMap(dev.watch_store.unresolved_watches_dir_path);
-        other_bytes += memoryCostArrayHashMap(dev.watch_store.watched_dirs);
-        other_bytes += memoryCostArrayHashMap(dev.watch_store.watched_files);
-        other_bytes += memoryCostArrayHashMap(dev.error_report_requests);
-        for (req of dev.error_report_requests.values()) {
-            other_bytes += req.memoryCost();
+        if (hack := dev.has_tailwind_plugin_hack) {
+            other_bytes += memoryCostArrayHashMap(hack);
         }
-        other_bytes += memoryCostArrayHashMap(dev.active_hmr_sessions);
-        for (session of dev.active_hmr_sessions.values()) {
-            other_bytes += session.memoryCost();
+        other_bytes += memoryCostArrayList(dev.directory_watchers.dependencies);
+        other_bytes += memoryCostArrayList(dev.directory_watchers.dependencies_free_list);
+        other_bytes += memoryCostArrayHashMap(dev.directory_watchers.watches);
+        for (dep of dev.directory_watchers.dependencies.items) {
+            other_bytes += dep.specifier.len;
         }
-        other_bytes += memoryCostArrayHashMap(dev.framework_route_bundles);
-        other_bytes += memoryCostArrayHashMap(dev.html_route_bundles);
-        other_bytes += memoryCostArrayHashMap(dev.route_evaluation_failures);
-        for (e of dev.route_evaluation_failures.values()) {
-            other_bytes += e.memoryCost();
+        for (dir_name of dev.directory_watchers.watches.keys()) {
+            other_bytes += dir_name.len;
         }
-        switch (dev.batch_entry_points) {
+        other_bytes += dev.html_router.map.capacity() * (@sizeOf(*HTMLBundle.HTMLBundleRoute) + @sizeOf(string));
+        other_bytes += memoryCostSlice(dev.bundling_failures.keys());
+        for (failure of dev.bundling_failures.keys()) {
+            other_bytes += failure.data.len;
+        }
+        if (bundle := dev.current_bundle) {
+            let r = bundle.requests.first;
+            while (node := r) : (r = node.next) {
+                other_bytes += @sizeOf(DeferredRequest.Node);
+            }
+        }
+        {
+            let r = dev.next_bundle.requests.first;
+            while (node := r) : (r = node.next) {
+                other_bytes += @sizeOf(DeferredRequest.Node);
+            }
+            other_bytes += memoryCostArrayHashMap(dev.next_bundle.route_queue);
+        }
+        other_bytes += memoryCostArrayHashMap(dev.route_lookup);
+        switch (dev.testing_batch_events) {
             .disabled => {},
             .enabled => |batch| {
                 other_bytes += memoryCostArrayHashMap(batch.entry_points.set);

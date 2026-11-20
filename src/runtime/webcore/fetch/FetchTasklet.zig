@@ -252,7 +252,7 @@ else => null,
 });
     }
 
-pub fn slice(self: *const FetchHTTPRequestBody) []const u8 {
+pub fn slice(self: FetchHTTPRequestBody) []const u8 {
             return (switch (self.*) {
 .AnyBlob => self.AnyBlob.slice(),
 else => "",
@@ -277,8 +277,7 @@ if ((@max(self.Sendfile.offset, self.Sendfile.remain) > 0)) {
 }
     }
 
-pub fn fromJS(self: *FetchHTTPRequestBody, globalThis: *JSGlobalObject, value: JSValue) JSError!*FetchHTTPRequestBody {
-        _ = self;
+pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) JSError!FetchHTTPRequestBody {
             var body_value = try Body.Value.fromJS(globalThis, value);
             _ = &body_value;
             if (((body_value == .Used) or ((body_value == .Locked) and ((body_value.Locked.action != .none) or body_value.Locked.isDisturbed2(globalThis))))) {
@@ -296,21 +295,21 @@ pub fn fromJS(self: *FetchHTTPRequestBody, globalThis: *JSGlobalObject, value: J
             return FetchHTTPRequestBody{ .AnyBlob = body_value.useAsAnyBlob() };
     }
 
-pub fn needsToReadFile(self: *const FetchHTTPRequestBody) bool {
+pub fn needsToReadFile(self: FetchHTTPRequestBody) bool {
             return (switch (self.*) {
 .AnyBlob => |blob| blob.needsToReadFile(),
 else => false,
 });
     }
 
-pub fn isS3(self: *const FetchHTTPRequestBody) bool {
+pub fn isS3(self: FetchHTTPRequestBody) bool {
             return (switch (self.*) {
 .AnyBlob => |*blob| blob.isS3(),
 else => false,
 });
     }
 
-pub fn hasContentTypeFromUser(self: *const FetchHTTPRequestBody) bool {
+pub fn hasContentTypeFromUser(self: FetchHTTPRequestBody) bool {
             return (switch (self.*) {
 .AnyBlob => |blob| blob.hasContentTypeFromUser(),
 else => false,
@@ -324,14 +323,14 @@ else => null,
 });
     }
 
-pub fn hasBody(self: *const FetchHTTPRequestBody) bool {
+pub fn hasBody(self: FetchHTTPRequestBody) bool {
             return (switch (self.*) {
 .AnyBlob => |blob| (blob.size() > 0),
 .ReadableStream => |*stream| stream.has(),
 .Sendfile => true,
 });
     }
-    pub const Empty: *FetchHTTPRequestBody = .{ .AnyBlob = .{ .Blob = .{} } };
+    pub const Empty: FetchHTTPRequestBody = .{ .AnyBlob = .{ .Blob = .{} } };
 };
 
 pub const FetchTasklet = struct {
@@ -825,7 +824,7 @@ pub fn checkServerIdentity(self: *FetchTasklet, certificate_info: http.Certifica
                             _ = self.tracker.didCancel(self.global_this);
                             if (self.http) |http_| {
                                 _ = &http_;
-                                _ = (http).?.http_thread.scheduleShutdown(http_);
+                                _ = http_.http_thread.scheduleShutdown(http_);
                             }
                             self.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                             return false;
@@ -1174,7 +1173,7 @@ pub fn writeRequestData(self: *FetchTasklet, data: []const u8) ResumableSinkBack
             _ = &highWaterMark;
             if (self.sink) |sink| {
                 _ = &sink;
-                highWaterMark = sink.highWaterMark;
+                highWaterMark = @intCast(sink.highWaterMark);
             }
             var needs_schedule = false;
             _ = &needs_schedule;
@@ -1225,7 +1224,7 @@ pub fn writeEndRequest(self: *FetchTasklet, err: ?jsc.JSValue) void {
                 }
                 if (self.http) |http_| {
                     _ = &http_;
-                    _ = (http).?.http_thread.scheduleRequestWrite(http_, .end);
+                    _ = http_.http_thread.scheduleRequestWrite(http_, .end);
                 }
             }
     }
@@ -1235,7 +1234,7 @@ pub fn abortTask(self: *FetchTasklet) void {
             _ = self.tracker.didCancel(self.global_this);
             if (self.http) |http_| {
                 _ = &http_;
-                _ = (http).?.http_thread.scheduleShutdown(http_);
+                _ = http_.http_thread.scheduleShutdown(http_);
             }
     }
 

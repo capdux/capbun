@@ -116,7 +116,8 @@ pub fn tee(self: ReadableStream, globalThis: *JSGlobalObject) bun.JSError!?TeeRe
         _ = &out1;
         var out2: jsc.JSValue = .zero;
         _ = &out2;
-        if (try (!bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStream__tee, .{ self.value, globalThis, (&out1), (&out2) }))) {
+        const tee_ok = try bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStream__tee, .{ self.value, globalThis, (&out1), (&out2) });
+        if ((!tee_ok)) {
             return null;
         }
         const out_stream2 = ((try ReadableStream.fromJS(out2, globalThis)) orelse (null));
@@ -139,7 +140,7 @@ pub fn reloadTag(self: *ReadableStream, globalThis: *jsc.JSGlobalObject) bun.JSE
             _ = &stream;
             self.* = stream;
         } else {
-            self.* = .{ .ptr = .{ .Invalid = .{} }, .value = .zero };
+            self.* = .{ .ptr = .{ .Invalid = undefined }, .value = .zero };
         }
 }
 
@@ -250,7 +251,7 @@ pub fn fromJS(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!?Readable
         var ptr: ?*anyopaque = null;
         _ = &ptr;
         return (switch (try bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStreamTag__tagged, .{ globalThis, (&out), (&ptr) })) {
-.JavaScript => ReadableStream{ .value = out, .ptr = .{ .JavaScript = .{} } },
+.JavaScript => ReadableStream{ .value = out, .ptr = .{ .JavaScript = undefined } },
 .Blob => ReadableStream{ .value = out, .ptr = .{ .Blob = (blk: {
         break :blk @ptrCast(@alignCast(ptr.?));
 

@@ -59,6 +59,8 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -126,28 +128,45 @@ pub fn memoryCostDetailed(dev: *DevServer) MemoryCostStruct {
         other_bytes = (other_bytes + memoryCostArrayList(dev.incremental_result.failures_added));
         other_bytes = (other_bytes + memoryCostArrayList(dev.incremental_result.html_routes_soft_affected));
         other_bytes = (other_bytes + memoryCostArrayList(dev.incremental_result.html_routes_hard_affected));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.watch_store.unresolved_watches));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.watch_store.unresolved_watches_dir_path));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.watch_store.watched_dirs));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.watch_store.watched_files));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.error_report_requests));
-        for (dev.error_report_requests.values()) |req| {
-            _ = &req;
-            other_bytes = (other_bytes + req.memoryCost());
+        if (dev.has_tailwind_plugin_hack) |hack| {
+            _ = &hack;
+            other_bytes = (other_bytes + memoryCostArrayHashMap(hack));
         }
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.active_hmr_sessions));
-        for (dev.active_hmr_sessions.values()) |session| {
-            _ = &session;
-            other_bytes = (other_bytes + session.memoryCost());
+        other_bytes = (other_bytes + memoryCostArrayList(dev.directory_watchers.dependencies));
+        other_bytes = (other_bytes + memoryCostArrayList(dev.directory_watchers.dependencies_free_list));
+        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.directory_watchers.watches));
+        for (dev.directory_watchers.dependencies.items) |dep| {
+            _ = &dep;
+            other_bytes = (other_bytes + dep.specifier.len);
         }
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.framework_route_bundles));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.html_route_bundles));
-        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.route_evaluation_failures));
-        for (dev.route_evaluation_failures.values()) |e| {
-            _ = &e;
-            other_bytes = (other_bytes + e.memoryCost());
+        for (cp_iter_slice(dev.directory_watchers.watches.keys())) |dir_name| {
+            _ = &dir_name;
+            other_bytes = (other_bytes + dir_name.len);
         }
-        switch (dev.batch_entry_points) {
+        other_bytes = (other_bytes + (dev.html_router.map.capacity() * (@sizeOf(*HTMLBundle.HTMLBundleRoute) + @sizeOf(string))));
+        other_bytes = (other_bytes + memoryCostSlice(dev.bundling_failures.keys()));
+        for (cp_iter_slice(dev.bundling_failures.keys())) |failure| {
+            _ = &failure;
+            other_bytes = (other_bytes + failure.data.len);
+        }
+        if (dev.current_bundle) |bundle| {
+            _ = &bundle;
+            var r = bundle.requests.first;
+            _ = &r;
+            while (r) |node| : (r = node.next) {
+                other_bytes = (other_bytes + @sizeOf(DeferredRequest.Node));
+            }
+        }
+        {
+            var r = dev.next_bundle.requests.first;
+            _ = &r;
+            while (r) |node| : (r = node.next) {
+                other_bytes = (other_bytes + @sizeOf(DeferredRequest.Node));
+            }
+            other_bytes = (other_bytes + memoryCostArrayHashMap(dev.next_bundle.route_queue));
+        }
+        other_bytes = (other_bytes + memoryCostArrayHashMap(dev.route_lookup));
+        switch (dev.testing_batch_events) {
 .disabled => {
 
 },

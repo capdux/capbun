@@ -127,7 +127,8 @@ pub struct Strong {
 fn tee(globalThis: *JSGlobalObject): bun.JSError!TeeResult? {
     let out1: jsc.JSValue = .zero;
     let out2: jsc.JSValue = .zero;
-    if (!bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStream__tee, .{ _.value, globalThis, &out1, &out2 })?) {
+    const tee_ok = bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStream__tee, .{ _.value, globalThis, &out1, &out2 })?;
+    if (!tee_ok) {
         return null;
     }
     const out_stream2 = (ReadableStream.fromJS(out2, globalThis)?) ?? null;
@@ -145,7 +146,7 @@ fn reloadTag(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
     if (stream := ReadableStream.fromJS(_.value, globalThis)?) {
         _.* = stream;
     } else {
-        _.* = { ptr: { Invalid: {} }, value: .zero };
+        _.* = { ptr: { Invalid: undefined }, value: .zero };
     }
 }
 
@@ -271,7 +272,7 @@ static fn fromJS(value: JSValue, globalThis: *JSGlobalObject): bun.JSError!Reada
         .JavaScript => ReadableStream{
             value: out,
             ptr: {
-                JavaScript: {},
+                JavaScript: undefined,
             },
         },
         .Blob => ReadableStream{
