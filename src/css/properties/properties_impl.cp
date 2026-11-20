@@ -10,10 +10,10 @@ const PropertyId = css.PropertyId;
 const Property = css.Property;
 
 pub struct property_id_mixin {
-    fn toCss(dest: *Printer): PrintErr!void {
+    static fn toCss(prop: *const PropertyId, dest: *Printer): void!PrintErr {
         let first = true;
-        const name = _.name();
-        const prefix_value = _.prefix().orNone();
+        const name = prop.name();
+        const prefix_value = prop.prefix().orNone();
 
         inline for (field of VendorPrefix.FIELDS) {
             if (@field(prefix_value, field)) {
@@ -68,18 +68,18 @@ pub struct property_id_mixin {
 
 pub struct property_mixin {
     /// Serializes the CSS property, with an optional `!important` flag.
-    fn toCss(dest: *Printer, important: bool): PrintErr!void {
-        if (_.* == .custom) {
-            _.custom.name.toCss(dest)?;
+    static fn toCss(prop: *const Property, dest: *Printer, important: bool): void!PrintErr {
+        if (prop.* == .custom) {
+            prop.custom.name.toCss(dest)?;
             dest.delim(':', false)?;
-            _.valueToCss(dest)?;
+            prop.valueToCss(dest)?;
             if (important) {
                 dest.whitespace()?;
                 dest.writeStr("!important")?;
             }
             return;
         }
-        const css_helper_res = _.__toCssHelper();
+        const css_helper_res = prop.__toCssHelper();
         const name = css_helper_res[0];
         const prefix = css_helper_res[1];
         let first = true;
@@ -98,7 +98,7 @@ pub struct property_mixin {
                 p.toCss(dest)?;
                 dest.writeStr(name)?;
                 dest.delim(':', false)?;
-                _.valueToCss(dest)?;
+                prop.valueToCss(dest)?;
                 if (important) {
                     dest.whitespace()?;
                     dest.writeStr("!important")?;

@@ -1224,6 +1224,7 @@ pub const CloseSocketFrom = enum { user, deinit };
 pub const AckNack = enum { ack, nack };
 pub const ContinueSendReason = enum { new_message_appended, on_writable };
 pub const WindowsQueueState = (if (Environment.isWindows) WindowsState else NonWindowsState);
+pub const Data = SendQueue;
 pub const SendQueueOwner = IPCSendQueueOwner;
 pub const SocketType = IPCSocketType;
 pub const SocketUnion = IPCSocketUnion;

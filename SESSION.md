@@ -26,3 +26,4 @@
 - **[2026-11-21 01:15] Wave 34 A 组验收提交（16 模块全绿，Wave 34 清仓）**：完成 CSS 全家桶(`css_parser` 19错/`generics` 11错/`font_face` 7错/`gradient` 5错/`properties_generated` 等)/`macho` 16 模块独立验收（16/16 PASS，4 项门禁全绿，ratio 0.886x~1.14x）并原子提交；随即运行 Wave 35 全仓 `bun run zig:check`。
 - **[2026-11-21 01:31] Wave 35 B 组验收提交（28 模块全绿）**：完成 CSS rules(13)/Bundler(5)/Install(7)/`lowerDecorators`/`bun`/`Cmd` 28 模块独立验收（28/28 PASS，4 项门禁全绿）并原子提交；静待 A 组（`19345081`）完成。
 - **[2026-11-21 01:34] Wave 35 A 组验收提交（26 CSS 模块全绿）**：完成 CSS properties(14)/values(7)/selectors(2)/core(3) 26 模块独立验收（26/26 PASS，4 项门禁全绿）并原子提交；静待 C 组（`e288f876`）完成即跑 Wave 36 `zig:check`。
+- **[2026-11-21 01:36] Wave 35 C 组验收提交（4 根因全绿）**：完成 `ParseTask`（`@"err"`）、`Chunk`（`CssImportOrderLayersVTable`）、`jsc/ipc`（`pub const Data = SendQueue`）、`properties_impl`（`static fn toCss`）独立验收（4/4 PASS，4 项门禁全绿，ratio 0.993x~1.039x）并原子提交；静待 D 组（`a320a9de`）完成即跑 Wave 36 `zig:check`。

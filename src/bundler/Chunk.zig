@@ -75,6 +75,18 @@ pub const HTMLImportManifest = @import("./HTMLImportManifest.zig");
 pub const analyze_transpiled_module = @import("./analyze_transpiled_module.zig");
 pub const options = @import("./options.zig");
 pub const bun = @import("bun");
+pub const CssImportOrderLayersVTable = struct {
+
+pub fn copy(v: *const CssImportOrderLayersSelf, allocator: std.mem.Allocator) CssImportOrderLayersSelf {
+            return v.deepCloneInfallible(allocator);
+    }
+
+pub fn deinit(v: *CssImportOrderLayersSelf, a: std.mem.Allocator) void {
+            _ = v.clearAndFree(a);
+    }
+    pub const Self = CssImportOrderLayersSelf;
+};
+
 const string = []const u8;
 const Loader = options.Loader;
 const FeatureFlags = bun.FeatureFlags;
@@ -187,17 +199,8 @@ pub const ChunkJavaScriptChunk = struct {
     module_info_bytes: ?[]const u8 = null,
     module_info: ?*analyze_transpiled_module.ModuleInfo = null,
 };
-pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), struct {
-
-pub fn copy(self: *const @This(), allocator: std.mem.Allocator) Self {
-            return self.deepCloneInfallible(allocator);
-    }
-
-pub fn deinit(self: *@This(), a: std.mem.Allocator) void {
-            _ = self.clearAndFree(a);
-    }
-    const Self = bun.BabyList(bun.css.LayerName);
-});
+const CssImportOrderLayersSelf = bun.BabyList(bun.css.LayerName);
+pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), CssImportOrderLayersVTable);
 pub const CssImportOrderKind = union(enum) {
     layers: CssImportOrderLayers,
     external_path: bun.fs.Path,

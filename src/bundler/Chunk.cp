@@ -144,18 +144,21 @@ pub const ChunkJavaScriptChunk = struct {
     module_info: (*analyze_transpiled_module.ModuleInfo)? = null,
 };
 
-pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), struct {
-    const Self = bun.BabyList(bun.css.LayerName);
-    pub fn copy(self: *const Self, allocator: std.mem.Allocator): Self {
-        return self.deepCloneInfallible(allocator);
+const CssImportOrderLayersSelf = bun.BabyList(bun.css.LayerName);
+pub struct CssImportOrderLayersVTable {
+    pub const Self = CssImportOrderLayersSelf;
+    static fn copy(v: *const CssImportOrderLayersSelf, allocator: std.mem.Allocator): CssImportOrderLayersSelf {
+        return v.deepCloneInfallible(allocator);
     }
 
-    pub fn deinit(self: *Self, a: std.mem.Allocator): void {
+    static fn deinit(v: *CssImportOrderLayersSelf, a: std.mem.Allocator) {
         // do shallow deinit since `LayerName` has
         // allocations in arena
-        self.clearAndFree(a);
+        v.clearAndFree(a);
     }
-});
+}
+
+pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), CssImportOrderLayersVTable);
 
 pub const CssImportOrderKind = union(enum) {
     /// Represents earlier imports that have been made redundant by later ones (see `isConditionalImportRedundant`)

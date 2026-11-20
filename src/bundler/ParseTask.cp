@@ -112,7 +112,7 @@ pub enum ResultErrorStep {
 }
 
 pub struct ResultError {
-    e: anyerror,
+    @"err": anyerror,
     step: ResultErrorStep,
     log: Logger.Log,
     target: options.Target,
@@ -123,7 +123,7 @@ pub struct ResultError {
 
 pub const ResultValue = union(enum) {
     success: ResultSuccess,
-    e: ResultError,
+    @"err": ResultError,
     empty: struct {
         source_index: Index,
     },
@@ -1383,8 +1383,8 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
     if (client.stage == .needs_source_code) {
         let maybe_entry: CacheEntry? = null;
         const entry_res = getSourceCode(client, worker, &log) catch |e| blk_err: {
-            value = { e: {
-                e: e,
+            value = { @"err": {
+                @"err": e,
                 step: step,
                 log: log,
                 source_index: client.source_index,
@@ -1399,8 +1399,8 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
                 client.stage = { needs_parse: entry };
             }
             if (log.hasErrors()) {
-                value = { e: {
-                    e: error.SyntaxError,
+                value = { @"err": {
+                    @"err": error.SyntaxError,
                     step: step,
                     log: log,
                     source_index: client.source_index,
@@ -1424,8 +1424,8 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
                     } };
                     break :blk null;
                 } else {
-                    value = { e: {
-                        e: e,
+                    value = { @"err": {
+                        @"err": e,
                         step: step,
                         log: log,
                         source_index: client.source_index,
@@ -1441,8 +1441,8 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
             // Not done outside of the dev server out of fear of breaking existing code.
             if (client.ctx.transpiler.options.dev_server != null && ast.log.hasErrors()) {
                 value = {
-                    e: {
-                        e: error.SyntaxError,
+                    @"err": {
+                        @"err": error.SyntaxError,
                         step: .parse,
                         log: ast.log,
                         source_index: client.source_index,

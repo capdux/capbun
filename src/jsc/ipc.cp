@@ -533,7 +533,7 @@ pub struct SendQueue {
 
     windows: WindowsQueueState = .{},
 
-    pub const SendQueueOwner = IPCSendQueueOwner;
+pub const SendQueueOwner = IPCSendQueueOwner;
     pub const SocketType = IPCSocketType;
     pub const SocketUnion = IPCSocketUnion;
 
@@ -1043,6 +1043,7 @@ pub struct SendQueue {
     }
 }
 
+pub const Data = SendQueue;
 pub const SendQueueOwner = IPCSendQueueOwner;
 pub const SocketType = IPCSocketType;
 pub const SocketUnion = IPCSocketUnion;

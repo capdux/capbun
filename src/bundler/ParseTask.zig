@@ -110,7 +110,7 @@ pub const ResultSuccess = struct {
 };
 
 pub const ResultError = struct {
-    e: anyerror,
+    @"err": anyerror,
     step: ResultErrorStep,
     log: Logger.Log,
     target: options.Target,
@@ -506,7 +506,7 @@ const ParseTaskStage = union(enum) {
 };
 pub const ResultValue = union(enum) {
     success: ResultSuccess,
-    e: ResultError,
+    @"err": ResultError,
     empty: struct {
         source_index: Index,
     },
@@ -995,7 +995,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
             var maybe_entry: ?CacheEntry = null;
             _ = &maybe_entry;
             const entry_res = (blk_catch_15: { break :blk_catch_15 ((getSourceCode(client, worker, (&log))) catch |e| { _ = &e; break :blk_catch_15 @as(CacheEntry, blk_err: {
-            value = .{ .e = .{ .e = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
+            value = .{ .@"err" = .{ .@"err" = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
             done = true;
             break :blk_err undefined;
 }); }); });
@@ -1006,7 +1006,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
                     client.stage = .{ .needs_parse = entry };
                 }
                 if (log.hasErrors()) {
-                    value = .{ .e = .{ .e = error.SyntaxError, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
+                    value = .{ .@"err" = .{ .@"err" = error.SyntaxError, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
                     done = true;
                 } else {
                     if (ThreadPool.usesIOPool()) {
@@ -1023,7 +1023,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
                 value = .{ .empty = .{ .source_index = client.source_index } };
                 break :blk null;
             } else {
-                value = .{ .e = .{ .e = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
+                value = .{ .@"err" = .{ .@"err" = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
                 break :blk null;
             } }); });
             break :blk ast;
@@ -1032,7 +1032,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
             if (maybe_ast) |ast| {
                 _ = &ast;
                 if (((client.ctx.transpiler.options.dev_server != null) and ast.log.hasErrors())) {
-                    value = .{ .e = .{ .e = error.SyntaxError, .step = .parse, .log = ast.log, .source_index = client.source_index, .target = client.known_target } };
+                    value = .{ .@"err" = .{ .@"err" = error.SyntaxError, .step = .parse, .log = ast.log, .source_index = client.source_index, .target = client.known_target } };
                 } else {
                     value = .{ .success = ast };
                 }
