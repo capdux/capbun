@@ -89,7 +89,7 @@ pub fn parseExpr(self: *PackageJSONVersionChecker) !Expr {
             }
             const loc = self.lexer.loc();
             if ((self.has_found_name and self.has_found_version)) {
-                return newExpr(E.Missing, loc);
+                return newExpr(std.mem.zeroes(E.Missing), loc);
             }
             switch (self.lexer.token) {
 .t_false => {
@@ -102,7 +102,7 @@ _ = try self.lexer.next();
 },
 .t_null => {
 _ = try self.lexer.next();
-            return newExpr(E.Null, loc);
+            return newExpr(std.mem.zeroes(E.Null), loc);
 },
 .t_string_literal => {
 const str: E.String = try self.lexer.toEString();
@@ -134,7 +134,7 @@ _ = try self.lexer.next();
                 has_exprs = true;
             }
             _ = try self.lexer.expect(.t_close_bracket);
-            return newExpr(E.Missing, loc);
+            return newExpr(std.mem.zeroes(E.Missing), loc);
 },
 .t_open_brace => {
 _ = try self.lexer.next();
@@ -175,12 +175,12 @@ _ = try self.lexer.next();
                     }
                 }
                 if ((self.has_found_name and self.has_found_version)) {
-                    return newExpr(E.Missing, loc);
+                    return newExpr(std.mem.zeroes(E.Missing), loc);
                 }
                 has_properties = true;
             }
             _ = try self.lexer.expect(.t_close_brace);
-            return newExpr(E.Missing, loc);
+            return newExpr(std.mem.zeroes(E.Missing), loc);
 },
 else => {
 _ = try self.lexer.unexpected();
@@ -341,7 +341,7 @@ _ = try p.lexer.next();
 },
 .t_null => {
 _ = try p.lexer.next();
-        return newExpr(E.Null, loc);
+        return newExpr(std.mem.zeroes(E.Null), loc);
 },
 .t_string_literal => {
 var str: E.String = try p.lexer.toEString();

@@ -3,7 +3,7 @@
 
 const bun = @import("bun");
 
-import { toFetchHeaders } from "../http_jsc/headers_jsc.zig";
+pub const toFetchHeaders = @import("../http_jsc/headers_jsc.zig").toFetchHeaders;
 
 export struct Entry {
     name: bun.schema.api.StringPointer,

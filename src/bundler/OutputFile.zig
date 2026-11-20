@@ -152,23 +152,21 @@ _ = buf.allocator.free(buf.bytes);
 }
     }
 
-pub fn asSlice(self: *const Value, v: *Value) []const u8 {
-        _ = self;
-            return (switch (v) {
+pub fn asSlice(self: Value) []const u8 {
+            return (switch (self.*) {
 .buffer => |buf| buf.bytes,
 else => "",
 });
     }
 
-pub fn toBunString(self: *const Value, v: *Value) bun.String {
-        _ = self;
-            return (switch (v) {
+pub fn toBunString(self: Value) bun.String {
+            return (switch (self.*) {
 .noop => bun.String.empty,
 .buffer => |buf| {
 return bun.String.createExternal(*FreeContext, buf.bytes, true, bun.new(FreeContext, .{ .allocator = buf.allocator }), FreeContext.onFree);
 },
 .pending => unreachable,
-else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(v) }),
+else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(self.*) }),
 });
     }
 };
@@ -204,7 +202,7 @@ pub const Options = struct {
     display_size: u32 = 0,
     output_kind: jsc.API.BuildArtifact.OutputKind,
     is_executable: bool,
-    data: *OptionsData,
+    data: OptionsData,
     side: ?bun.bake.Side,
     entry_point_index: ?u32,
     referenced_css_chunks: []const Index = &.{},
@@ -216,7 +214,7 @@ pub const OutputFile = @This();
 loader: Loader,
 input_loader: Loader = .js,
 src_path: Fs.Path,
-value: *Value,
+value: Value,
 size: usize = 0,
 size_without_sourcemap: usize = 0,
 hash: u64 = 0,
@@ -267,7 +265,7 @@ pub fn init(options: Options) OutputFile {
 .saved => 0,
 });
         }
-        var val: *Value = undefined;
+        var val: Value = undefined;
         _ = &val;
         switch (options.data) {
 .buffer => |buffer| {

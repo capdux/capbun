@@ -101,7 +101,7 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
         },
         .t_null => {
             try p.lexer.next();
-            return newExpr(E.Null{}, loc);
+            return newExpr(std.mem.zeroes(E.Null), loc);
         },
         .t_string_literal => {
             let str: E.String = try p.lexer.toEString();
@@ -370,7 +370,7 @@ const PackageJSONLexer = js_lexer.NewLexer(package_json_version_checker_opts);
 
         const loc = this.lexer.loc();
 
-        if (this.has_found_name and this.has_found_version) return newExpr(E.Missing{}, loc);
+        if (this.has_found_name and this.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
 
         switch (this.lexer.token) {
             .t_false => {
@@ -387,7 +387,7 @@ const PackageJSONLexer = js_lexer.NewLexer(package_json_version_checker_opts);
             },
             .t_null => {
                 try this.lexer.next();
-                return newExpr(E.Null{}, loc);
+                return newExpr(std.mem.zeroes(E.Null), loc);
             },
             .t_string_literal => {
                 const str: E.String = try this.lexer.toEString();
@@ -422,7 +422,7 @@ const PackageJSONLexer = js_lexer.NewLexer(package_json_version_checker_opts);
                 }
 
                 try this.lexer.expect(.t_close_bracket);
-                return newExpr(E.Missing{}, loc);
+                return newExpr(std.mem.zeroes(E.Missing), loc);
             },
             .t_open_brace => {
                 try this.lexer.next();
@@ -473,13 +473,13 @@ const PackageJSONLexer = js_lexer.NewLexer(package_json_version_checker_opts);
                         }
                     }
 
-                    if (this.has_found_name and this.has_found_version) return newExpr(E.Missing{}, loc);
+                    if (this.has_found_name and this.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
 
                     has_properties = true;
                 }
 
                 try this.lexer.expect(.t_close_brace);
-                return newExpr(E.Missing{}, loc);
+                return newExpr(std.mem.zeroes(E.Missing), loc);
             },
             else => {
                 try this.lexer.unexpected();

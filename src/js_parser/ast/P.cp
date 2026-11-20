@@ -761,7 +761,7 @@ pub fn NewParser_(
                         const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
                         decls[0] = {
                             binding: p.b(B.Identifier{ ref: ctx.stack_ref }, loc),
-                            value: p.newExpr(E.Array{}, loc),
+                            value: p.newExpr(std.mem.zeroes(E.Array), loc),
                         };
                         break :decls G.Decl.List.fromOwnedSlice(decls);
                     },
@@ -888,7 +888,7 @@ pub fn NewParser_(
                 // We don't want to spend time scanning the required files if they will
                 // never be used.
                 if (p.is_control_flow_dead) {
-                    return p.newExpr(E.Null{}, arg.loc);
+                    return p.newExpr(std.mem.zeroes(E.Null), arg.loc);
                 }
 
                 const import_record_index = p.addImportRecord(.dynamic, arg.loc, str.slice(p.allocator));
@@ -956,7 +956,7 @@ pub fn NewParser_(
             // We don't want to spend time scanning the required files if they will
             // never be used.
             if (p.is_control_flow_dead) {
-                return p.newExpr(E.Null{}, arg.loc);
+                return p.newExpr(std.mem.zeroes(E.Null), arg.loc);
             }
 
             const import_record_index = p.addImportRecord(.require_resolve, arg.loc, arg.data.e_string.string(p.allocator) catch unreachable);
@@ -2893,7 +2893,7 @@ pub fn NewParser_(
                             // An example:
                             //      Promise.all(promises).then(([, len]) => true);
                             //                                   ^ Binding is missing there
-                            binding: res.binding ?? p.b(B.Missing{}, item.loc),
+                            binding: res.binding ?? p.b(std.mem.zeroes(B.Missing), item.loc),
                             default_value: res.expr,
                         });
                     }
@@ -2937,8 +2937,8 @@ pub fn NewParser_(
                                 is_spread: is_spread,
                                 is_computed: item.flags.contains(.is_computed),
                             }),
-                            key: item.key ?? p.newExpr(E.Missing{}, expr.loc),
-                            value: tup.binding ?? p.b(B.Missing{}, expr.loc),
+                            key: item.key ?? p.newExpr(std.mem.zeroes(E.Missing), expr.loc),
+                            value: tup.binding ?? p.b(std.mem.zeroes(B.Missing), expr.loc),
                             default_value: initializer,
                         });
                     }
@@ -5197,7 +5197,7 @@ pub fn NewParser_(
                                 },
                                 name_loc,
                             ),
-                            right: p.newExpr(E.Object{}, name_loc),
+                            right: p.newExpr(std.mem.zeroes(E.Object), name_loc),
                         }, name_loc),
                     );
                 };
@@ -5207,7 +5207,7 @@ pub fn NewParser_(
                 break :arg_expr p.newExpr(E.Binary{
                     op: .bin_logical_or_assign,
                     left: Expr.initIdentifier(name_ref, name_loc),
-                    right: p.newExpr(E.Object{}, name_loc),
+                    right: p.newExpr(std.mem.zeroes(E.Object), name_loc),
                 }, name_loc);
             };
 
@@ -5344,9 +5344,9 @@ pub fn NewParser_(
                             // TODO: when we have the `accessor` modifier, add `and !prop.flags.contains(.has_accessor_modifier)` to
                             // the if statement.
                             const descriptor_kind: Expr = if (!prop.flags.contains(.is_method))
-                                p.newExpr(E.Undefined{}, loc)
+                                p.newExpr(std.mem.zeroes(E.Undefined), loc)
                             else
-                                p.newExpr(E.Null{}, loc);
+                                p.newExpr(std.mem.zeroes(E.Null), loc);
 
                             let target: Expr = undefined;
                             if (prop.flags.contains(.is_static)) {
@@ -5472,7 +5472,7 @@ pub fn NewParser_(
                                 p.recordUsage(cls.class_name.?.ref.?);
                                 target = p.newExpr(E.Identifier{ ref: cls.class_name.?.ref.? }, cls.class_name.?.loc);
                             } else {
-                                target = p.newExpr(E.This{}, prop.key.?.loc);
+                                target = p.newExpr(std.mem.zeroes(E.This), prop.key.?.loc);
                             }
 
                             if (prop.flags.contains(.is_computed) || prop.key.?.data == .e_number) {
@@ -5508,7 +5508,7 @@ pub fn NewParser_(
                             let constructor_stmts = ListManaged(Stmt).init(p.allocator);
 
                             if (cls.extends != null) {
-                                const target = p.newExpr(E.Super{}, stmt.loc);
+                                const target = p.newExpr(std.mem.zeroes(E.Super), stmt.loc);
                                 const arguments_ref = p.newSymbol(.unbound, arguments_str) catch unreachable;
                                 bun.handleOom(p.current_scope.generated.append(p.allocator, arguments_ref));
 
@@ -5630,7 +5630,7 @@ pub fn NewParser_(
                 .m_null,
                 .m_void
                 => p.newExpr(
-                    E.Undefined{},
+                    std.mem.zeroes(E.Undefined),
                     logger.Loc.Empty,
                 ),
 

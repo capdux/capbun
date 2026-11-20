@@ -398,7 +398,7 @@ pub fn transposeImport(p: *P, arg: Expr, state: *const TransposeState) Expr {
             if (arg.data.@"as"(.e_string)) |str| {
                 _ = &str;
                 if (p.is_control_flow_dead) {
-                    return p.newExpr(E.Null, arg.loc);
+                    return p.newExpr(std.mem.zeroes(E.Null), arg.loc);
                 }
                 const import_record_index = p.addImportRecord(.dynamic, arg.loc, str.slice(p.allocator));
                 if (state.import_record_tag) |tag| {
@@ -438,7 +438,7 @@ pub fn transposeRequireResolve(p: *P, arg: Expr, require_resolve_ref: Expr) Expr
 pub inline fn transposeRequireResolveKnownString(p: *P, arg: Expr) Expr {
             _ = bun.assert((arg.data == .e_string));
             if (p.is_control_flow_dead) {
-                return p.newExpr(E.Null, arg.loc);
+                return p.newExpr(std.mem.zeroes(E.Null), arg.loc);
             }
             const import_record_index = p.addImportRecord(.require_resolve, arg.loc, ((arg.data.e_string.string(p.allocator)) catch unreachable));
             p.import_records.items[@as(usize, @intCast(import_record_index))].flags.handles_import_errors = (p.fn_or_arrow_data_visit.try_body_count != 0);
@@ -1957,7 +1957,7 @@ if (ex.comma_after_spread) |spread| {
                     item = (if (@typeInfo(@TypeOf(item.data.e_spread)) == .@"enum") @intFromEnum(item.data.e_spread) else item.data.e_spread.value);
                 }
                 const res = p.convertExprToBindingAndInitializer((&item), invalid_loc, is_spread);
-                _ = items.appendAssumeCapacity(js_ast.ArrayBinding{ .binding = ((res.binding) orelse (p.b(B.Missing, item.loc))), .default_value = res.expr });
+                _ = items.appendAssumeCapacity(js_ast.ArrayBinding{ .binding = ((res.binding) orelse (p.b(std.mem.zeroes(B.Missing), item.loc))), .default_value = res.expr });
             }
             return p.b(B.Array{ .items = items.items, .has_spread = is_spread, .is_single_line = ex.is_single_line }, expr.loc);
 },
@@ -1981,7 +1981,7 @@ if (ex.comma_after_spread) |sp| {
                 const tup = p.convertExprToBindingAndInitializer(value, invalid_loc, false);
                 const initializer = ((tup.expr) orelse ((item.*).initializer));
                 const is_spread = (((item.*).kind == .spread) or (item.*).flags.contains(.is_spread));
-                _ = properties.appendAssumeCapacity(B.Property{ .flags = Flags.Property.init(.{ .is_spread = is_spread, .is_computed = (item.*).flags.contains(.is_computed) }), .key = (((item.*).key) orelse (p.newExpr(E.Missing, expr.loc))), .value = ((tup.binding) orelse (p.b(B.Missing, expr.loc))), .default_value = initializer });
+                _ = properties.appendAssumeCapacity(B.Property{ .flags = Flags.Property.init(.{ .is_spread = is_spread, .is_computed = (item.*).flags.contains(.is_computed) }), .key = (((item.*).key) orelse (p.newExpr(std.mem.zeroes(E.Missing), expr.loc))), .value = ((tup.binding) orelse (p.b(std.mem.zeroes(B.Missing), expr.loc))), .default_value = initializer });
             }
             return p.b(B.Object{ .properties = properties.items, .is_single_line = ex.is_single_line }, expr.loc);
 },
@@ -3505,10 +3505,10 @@ pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(St
                     const name = p.symbols.items[@as(usize, @intCast(name_ref.innerIndex()))].original_name;
                     _ = p.recordUsage(namespace);
                     _ = p.recordUsage(name_ref);
-                    break :arg_expr Expr.assign(Expr.initIdentifier(name_ref, name_loc), p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = p.newExpr(E.Dot{ .target = Expr.initIdentifier(namespace, name_loc), .name = name, .name_loc = name_loc }, name_loc), .right = p.newExpr(E.Object, name_loc) }, name_loc));
+                    break :arg_expr Expr.assign(Expr.initIdentifier(name_ref, name_loc), p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = p.newExpr(E.Dot{ .target = Expr.initIdentifier(namespace, name_loc), .name = name, .name_loc = name_loc }, name_loc), .right = p.newExpr(std.mem.zeroes(E.Object), name_loc) }, name_loc));
                 }
             }
-            break :arg_expr p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = Expr.initIdentifier(name_ref, name_loc), .right = p.newExpr(E.Object, name_loc) }, name_loc);
+            break :arg_expr p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = Expr.initIdentifier(name_ref, name_loc), .right = p.newExpr(std.mem.zeroes(E.Object), name_loc) }, name_loc);
 };
             var func_args = bun.handleOom(allocator.alloc(G.Arg, 1));
             _ = &func_args;
@@ -3592,7 +3592,7 @@ _ = unreachable;
                 if (((prop.*).ts_decorators.len > 0)) {
                     const descriptor_key = (prop.*).key.?;
                     const loc = descriptor_key.loc;
-                    const descriptor_kind: Expr = (if ((!(prop.*).flags.contains(.is_method))) p.newExpr(E.Undefined, loc) else p.newExpr(E.Null, loc));
+                    const descriptor_kind: Expr = (if ((!(prop.*).flags.contains(.is_method))) p.newExpr(std.mem.zeroes(E.Undefined), loc) else p.newExpr(std.mem.zeroes(E.Null), loc));
                     var target: Expr = undefined;
                     _ = &target;
                     if ((prop.*).flags.contains(.is_static)) {
@@ -3722,7 +3722,7 @@ _ = (if ((prop.*).flags.contains(.is_method)) ({
                         _ = p.recordUsage(cls.class_name.?.ref.?);
                         target = p.newExpr(E.Identifier{ .ref = cls.class_name.?.ref.? }, cls.class_name.?.loc);
                     } else {
-                        target = p.newExpr(E.This, (prop.*).key.?.loc);
+                        target = p.newExpr(std.mem.zeroes(E.This), (prop.*).key.?.loc);
                     }
                     if (((prop.*).flags.contains(.is_computed) or ((prop.*).key.?.data == .e_number))) {
                         target = p.newExpr(E.Index{ .target = target, .index = (prop.*).key.? }, (prop.*).key.?.loc);
@@ -3746,7 +3746,7 @@ _ = (if ((prop.*).flags.contains(.is_method)) ({
                     var constructor_stmts = ListManaged(Stmt).init(p.allocator);
                     _ = &constructor_stmts;
                     if ((cls.extends != null)) {
-                        const target = p.newExpr(E.Super, stmt.loc);
+                        const target = p.newExpr(std.mem.zeroes(E.Super), stmt.loc);
                         const arguments_ref = ((p.newSymbol(.unbound, arguments_str)) catch unreachable);
                         _ = bun.handleOom(p.current_scope.generated.append(p.allocator, arguments_ref));
                         const super = p.newExpr(E.Spread{ .value = p.newExpr(E.Identifier{ .ref = arguments_ref }, stmt.loc) }, stmt.loc);
@@ -3837,7 +3837,7 @@ var stmts = ((p.allocator.alloc(Stmt, 1)) catch unreachable);
 pub fn serializeMetadata(p: *P, ts_metadata: TypeScript.Metadata) !Expr {
             return (switch (ts_metadata) {
 .m_none, .m_any, .m_unknown, .m_object => p.newExpr(E.Identifier{ .ref = ((p.findSymbol(logger.Loc.Empty, "Object")) catch unreachable).ref }, logger.Loc.Empty),
-.m_never, .m_undefined, .m_null, .m_void => p.newExpr(E.Undefined, logger.Loc.Empty),
+.m_never, .m_undefined, .m_null, .m_void => p.newExpr(std.mem.zeroes(E.Undefined), logger.Loc.Empty),
 .m_string => p.newExpr(E.Identifier{ .ref = ((p.findSymbol(logger.Loc.Empty, "String")) catch unreachable).ref }, logger.Loc.Empty),
 .m_number => p.newExpr(E.Identifier{ .ref = ((p.findSymbol(logger.Loc.Empty, "Number")) catch unreachable).ref }, logger.Loc.Empty),
 .m_function => p.newExpr(E.Identifier{ .ref = ((p.findSymbol(logger.Loc.Empty, "Function")) catch unreachable).ref }, logger.Loc.Empty),
@@ -4909,7 +4909,7 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
                 _ = bun.handleOom(result.ensureUnusedCapacity((2 + (if (comptime @typeInfo(@TypeOf(@intFromBool((exports.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((exports.items.len > 0)))) else cp_cast_int(usize, @intFromBool((exports.items.len > 0)))))));
                 _ = result.appendAssumeCapacity(p.s(S.Local{ .decls = decls: {
                 const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
-                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = ctx.stack_ref }, loc), .value = p.newExpr(E.Array, loc) };
+                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = ctx.stack_ref }, loc), .value = p.newExpr(std.mem.zeroes(E.Array), loc) };
                 break :decls G.Decl.List.fromOwnedSlice(decls);
     }, .kind = .k_let }, loc));
                 _ = result.appendAssumeCapacity(p.s(S.Try{ .body = non_exported_statements, .body_loc = loc, .catch_ = .{ .binding = p.b(B.Identifier{ .ref = caught_ref }, loc), .body = catch_body: {

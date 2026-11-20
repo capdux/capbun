@@ -72,7 +72,7 @@ pub struct FreeContext {
     }
 }
 
-pub union(Kind) Value {
+@value pub union(Kind) Value {
     @"move": FileOperation,
     @"copy": FileOperation,
     noop: u0,
@@ -93,15 +93,15 @@ pub union(Kind) Value {
         }
     }
 
-    pub fn asSlice(v: Value): []const u8 {
-        return switch (v) {
+    pub fn asSlice(): []const u8 {
+        return switch (_.*) {
             .buffer => |buf| buf.bytes,
             else => "",
         };
     }
 
-    pub fn toBunString(v: Value): bun.String {
-        return switch (v) {
+    pub fn toBunString(): bun.String {
+        return switch (_.*) {
             .noop => bun.String.empty,
             .buffer => |buf| {
                 return bun.String.createExternal(
@@ -113,7 +113,7 @@ pub union(Kind) Value {
                 );
             },
             .pending => unreachable,
-            else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(v) }),
+            else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(_.*) }),
         };
     }
 }
@@ -129,7 +129,7 @@ pub struct OptionsDataFile {
     dir: std.fs.Dir,
 }
 
-pub union(enum) OptionsData {
+@value pub union(enum) OptionsData {
     buffer: OptionsDataBuffer,
     file: OptionsDataFile,
     saved: usize,
