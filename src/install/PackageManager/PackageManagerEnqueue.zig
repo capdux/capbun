@@ -171,8 +171,7 @@ pub fn enqueueDependencyList(mgr: *PackageManager, dependencies_list: Lockfile.D
         while ((i < end)) : (i = (i + 1)) {
             const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
             const resolution = lockfile.buffers.resolutions.items[@as(usize, @intCast(i))];
-            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const path_sep: bun.Path.PathSeparators = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any");
-            const note: __CpObj_fmt___const_u8_args_struct____anyopaque__ = .{ .fmt = "error occurred while resolving {f}", .args = .{ bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = path_sep }) } };
+            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const note: __CpObj_fmt___const_u8_args_struct____anyopaque__ = .{ .fmt = "error occurred while resolving {f}", .args = .{ bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any") }) } };
             if ((dependency.behavior.isOptional() or dependency.behavior.isPeer())) {
                 _ = ((mgr.log.addWarningWithNote(null, .{}, mgr.allocator, @errorName(e), note.fmt, note.args)) catch unreachable);
             } else {
@@ -393,7 +392,7 @@ pub fn enqueuePatchTaskPre(client: *PackageManager, task: *PatchTask) void {
         _ = client.pending_pre_calc_hashes.fetchAdd(1, .monotonic);
 }
 
-pub fn enqueueDependencyWithMainAndSuccessFn(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool, comptime successFn: anytype, comptime failFn: anytype) !void {
+pub fn enqueueDependencyWithMainAndSuccessFn(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool, comptime successFn: anytype, comptime failFn: ?FailFn) !void {
         if (dependency.behavior.isOptionalPeer()) {
             return;
         }
@@ -734,19 +733,8 @@ const _result = (blk_catch_27: { break :blk_catch_27 ((getOrPutResolvedPackage(m
         }
         return e;
 }); }); });
-        const workspace_not_found_fmt: []const u8 = "Workspace dependency \"{[name]s}\" not found";
-        _ = "";
-        _ = "Searched in <b>{[search_path]f}<r>";
-        _ = "";
-        _ = "Workspace documentation: https://bun.com/docs/install/workspaces";
-        _ = "";
-        const link_not_found_fmt: []const u8 = "Package \"{[name]s}\" is not linked";
-        _ = "";
-        _ = "To install a linked package:";
-        _ = "   <cyan>bun link my-pkg-name-from-package-json<r>";
-        _ = "";
-        _ = "Tip: the package name is from package.json, which can differ from the folder name.";
-        _ = "";
+        const workspace_not_found_fmt: []const u8 = "Workspace dependency \"{[name]s}\" not found\n\nSearched in <b>{[search_path]f}<r>\n\nWorkspace documentation: https://bun.com/docs/install/workspaces\n";
+        const link_not_found_fmt: []const u8 = "Package \"{[name]s}\" is not linked\n\nTo install a linked package:\n   <cyan>bun link my-pkg-name-from-package-json<r>\n\nTip: the package name is from package.json, which can differ from the folder name.\n";
         if (_result) |result| {
             _ = &result;
             if (result.is_first_time) {

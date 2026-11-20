@@ -1051,7 +1051,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 .npm => String.Builder.stringHash(dependency_version.value.npm.name.slice(buf)),
                 .workspace => if (strings.hasPrefixComptime(sliced.slice, "workspace:")) brk: {
                     const input = sliced.slice["workspace:".len..];
-                    const trimmed = strings.trim(input, &strings.whitespace_chars);
+                    const trimmed = strings.trim(input, strings.whitespace_chars);
                     if (trimmed.len != 1 || (trimmed[0] != '*' && trimmed[0] != '^' && trimmed[0] != '~')) {
                         const at = strings.lastIndexOfChar(input, '@') orelse 0;
                         if (at > 0) {
@@ -1145,7 +1145,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             }
 
                             // important to trim before len == 0 check. `workspace:foo@      ` should install successfully
-                            const version_literal = strings.trim(range.input, &strings.whitespace_chars);
+                            const version_literal = strings.trim(range.input, strings.whitespace_chars);
                             if (version_literal.len == 0 || range.@"is *"() || Semver.Version.isTaggedVersionOnly(version_literal)) {
                                 dependency_version.value.workspace = path;
                                 break :workspace;

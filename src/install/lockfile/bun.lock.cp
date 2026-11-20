@@ -1532,7 +1532,7 @@ pub fn parseIntoBinaryLockfile(
                 pkg.name = string_buf.appendWithHash(name, name_hash)?;
                 pkg.name_hash = name_hash;
 
-                let [off, len] = try parseAppendDependencies(
+                const off_len = parseAppendDependencies(
                     lockfile,
                     allocator,
                     &value,
@@ -1545,7 +1545,9 @@ pub fn parseIntoBinaryLockfile(
                     undefined,
                     false,
                     undefined,
-                );
+                )?;
+                const off = off_len[0];
+                const len = off_len[1];
 
                 pkg.dependencies = { off: off, len: len };
                 pkg.resolutions = { off: off, len: len };

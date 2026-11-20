@@ -25,7 +25,7 @@ const log = bun.Output.scoped(.PostgresDataCell, .visible);
 extern fn Postgres__formatTime(microseconds: i64, buffer: [*]u8, bufferSize: usize) usize;
 extern fn Postgres__formatTimeTz(microseconds: i64, tzOffsetSeconds: i32, buffer: [*]u8, bufferSize: usize) usize;
 
-fn parseBytea(hex: []const u8) anyerror!SQLDataCell {
+fn parseBytea(hex: []const u8): AnyPostgresError!SQLDataCell {
     const len = hex.len / 2;
     const buf = bun.default_allocator.alloc(u8, len)?;
     errdefer bun.default_allocator.free(buf);
@@ -470,7 +470,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
                         ptr: null,
                         len: 0,
                         byte_len: 0,
-                        type: tag.toJSTypedArrayType()?,
+                        type: tag.toJSTypedArrayType() catch |e| return @errorCast(e),
                     },
                 },
             };
@@ -501,7 +501,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
                     ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
                     len: @truncate(elements.len),
                     byte_len: @truncate(bytes.len),
-                    type: tag.toJSTypedArrayType()?,
+                    type: tag.toJSTypedArrayType() catch |e| return @errorCast(e),
                 },
             },
         };
@@ -865,7 +865,7 @@ export struct Putter {
             @intFromEnum(result_mode),
             names,
             names_count,
-        );
+        ) catch |e| return @errorCast(e);
     }
 
     fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): AnyPostgresError!bool {

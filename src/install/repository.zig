@@ -612,16 +612,14 @@ pub fn checkout(allocator: std.mem.Allocator, env: DotEnv.Map, log: *logger.Log,
             const json_res = (blk_catch_19: { break :blk_catch_19 ((bun.sys.File.readFileFrom(package_dir, "package.json", allocator).unwrap()) catch |e| { _ = &e; if ((e == error.ENOENT)) {
                 return .{ .url = url, .resolved = resolved };
             }
-            const err_args: struct { []const u8, *anyopaque } = .{ name, @errorName(e) };
-            _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "\"package.json\" for \"{s}\" failed to open: {s}", err_args)) catch unreachable);
+            _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "\"package.json\" for \"{s}\" failed to open: {s}", .{ name, @errorName(e) })) catch unreachable);
             return error.InstallFailed; }); });
             const json_file = json_res[0];
             const json_buf = json_res[1];
             defer {
             _ = json_file.close();
             }
-            const json_path = (blk_catch_21: { break :blk_catch_21 ((json_file.getPath((&bufs.json_path_buf)).unwrap()) catch |e| { _ = &e; const err_args: struct { []const u8, *anyopaque } = .{ name, @errorName(e) };
-            _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "\"package.json\" for \"{s}\" failed to resolve: {s}", err_args)) catch unreachable);
+            const json_path = (blk_catch_21: { break :blk_catch_21 ((json_file.getPath((&bufs.json_path_buf)).unwrap()) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "\"package.json\" for \"{s}\" failed to resolve: {s}", .{ name, @errorName(e) })) catch unreachable);
             return error.InstallFailed; }); });
             const ret_json_path = try FileSystem.instance.dirname_store.append(@TypeOf(json_path), json_path);
             return .{ .url = url, .resolved = resolved, .json = .{ .path = ret_json_path, .buf = json_buf } };

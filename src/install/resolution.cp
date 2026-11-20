@@ -513,15 +513,15 @@ fn initResolutionValue(comptime ValueT: type, comptime TagT: type, field: bun.@"
     let value = ValueT.zero;
     switch (field) {
         .uninitialized, .root => {},
-        .npm => value.npm = field.npm,
-        .folder => value.folder = field.folder,
-        .local_tarball => value.local_tarball = field.local_tarball,
-        .github => value.github = field.github,
-        .git => value.git = field.git,
-        .symlink => value.symlink = field.symlink,
-        .workspace => value.workspace = field.workspace,
-        .remote_tarball => value.remote_tarball = field.remote_tarball,
-        .single_file_module => value.single_file_module = field.single_file_module,
+        .npm v => value.npm = v,
+        .folder v => value.folder = v,
+        .local_tarball v => value.local_tarball = v,
+        .github v => value.github = v,
+        .git v => value.git = v,
+        .symlink v => value.symlink = v,
+        .workspace v => value.workspace = v,
+        .remote_tarball v => value.remote_tarball = v,
+        .single_file_module v => value.single_file_module = v,
     }
     return value;
 }

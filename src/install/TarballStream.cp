@@ -797,13 +797,12 @@ fn populateResult(client: *TarballStream, task: *Task) {
 
     if (!tarball.skip_verify && tarball.integrity.tag.isSupported()) {
         if (!client.hasher.verify()) {
-            const int_args = .{ tarball.name.slice() };
             task.log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
                 client.allocator,
                 "Integrity check failed<r> for tarball: {s}",
-                int_args,
+                .{ tarball.name.slice() },
             ) catch unreachable;
             task.err = error.IntegrityCheckFailed;
             task.status = .fail;

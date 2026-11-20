@@ -111,11 +111,10 @@ pub fn enqueueDependencyList(
             resolution,
             false,
         ) catch |e| {
-            const path_sep: bun.Path.PathSeparators = if (dependency.version.tag == .folder) .@"auto" else .@"any";
             const note = {
                 fmt: "error occurred while resolving {f}",
                 args: .{bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), {
-                    path_sep: path_sep,
+                    path_sep: if (dependency.version.tag == .folder) .@"auto" else .@"any",
                 })},
             };
 
@@ -492,7 +491,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
     resolution: PackageID,
     install_peer: bool,
     comptime successFn: auto,
-    comptime failFn: auto,
+    comptime failFn: FailFn?,
 )! {
     if (dependency.behavior.isOptionalPeer()) return;
 
@@ -1057,23 +1056,8 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 return e;
             };
 
-            const workspace_not_found_fmt =
-                \\Workspace dependency "{[name]s}" not found
-                \\
-                \\Searched in <b>{[search_path]f}<r>
-                \\
-                \\Workspace documentation: https://bun.com/docs/install/workspaces
-                \\
-            ;
-            const link_not_found_fmt =
-                \\Package "{[name]s}" is not linked
-                \\
-                \\To install a linked package:
-                \\   <cyan>bun link my-pkg-name-from-package-json<r>
-                \\
-                \\Tip: the package name is from package.json, which can differ from the folder name.
-                \\
-            ;
+            const workspace_not_found_fmt = "Workspace dependency \"{[name]s}\" not found\n\nSearched in <b>{[search_path]f}<r>\n\nWorkspace documentation: https://bun.com/docs/install/workspaces\n";
+            const link_not_found_fmt = "Package \"{[name]s}\" is not linked\n\nTo install a linked package:\n   <cyan>bun link my-pkg-name-from-package-json<r>\n\nTip: the package name is from package.json, which can differ from the folder name.\n";
             if (result := _result) {
                 // First time?
                 if (result.is_first_time) {

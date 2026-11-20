@@ -411,10 +411,23 @@ pub fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf:
             if ((std.meta.activeTag(lhs) != std.meta.activeTag(rhs))) {
                 return false;
             }
+            const slice_fn = String.slice;
             if ((std.meta.activeTag(lhs) == .local)) {
-                return strings.eqlLong(cp_iter_slice(lhs.local)[@intCast(lhs_buf)..], cp_iter_slice(rhs.local)[@intCast(rhs_buf)..], true);
+                return strings.eqlLong(slice_fn((blk: {
+                break :blk (&lhs.local);
+
+}), lhs_buf), slice_fn((blk: {
+                break :blk (&rhs.local);
+
+}), rhs_buf), true);
             } else {
-                return strings.eqlLong(cp_iter_slice(lhs.remote)[@intCast(lhs_buf)..], cp_iter_slice(rhs.remote)[@intCast(rhs_buf)..], true);
+                return strings.eqlLong(slice_fn((blk: {
+                break :blk (&lhs.remote);
+
+}), lhs_buf), slice_fn((blk: {
+                break :blk (&rhs.remote);
+
+}), rhs_buf), true);
             }
     }
     pub const Tag = DependencyURITag;

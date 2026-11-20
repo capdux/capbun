@@ -828,8 +828,7 @@ pub fn populateResult(client: *TarballStream, task: *Task) void {
         }
         if (((!tarball.skip_verify) and tarball.integrity.tag.isSupported())) {
             if ((!client.hasher.verify())) {
-                const int_args: struct { *anyopaque } = .{ (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() };
-                _ = ((task.log.addErrorFmt(null, logger.Loc.Empty, client.allocator, "Integrity check failed<r> for tarball: {s}", int_args)) catch unreachable);
+                _ = ((task.log.addErrorFmt(null, logger.Loc.Empty, client.allocator, "Integrity check failed<r> for tarball: {s}", .{ (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() })) catch unreachable);
                 task.err = error.IntegrityCheckFailed;
                 task.status = .fail;
                 return;

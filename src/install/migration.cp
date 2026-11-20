@@ -772,7 +772,7 @@ pub fn migrateNPMLockfile(
                 for (item of arr.items.slice()) {
                     const item_str = item.asString(allocator);
                     if (item_str == null) return error.InvalidNPMLockfile;
-                    map.putAssumeCapacity(item_str.?, .{});
+                    map.putAssumeCapacity(item_str.?, undefined);
                 }
                 bundled_dependencies = map;
             }

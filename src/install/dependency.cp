@@ -28,10 +28,11 @@ pub union(DependencyURITag) DependencyURI {
             return false;
         }
 
+        const slice_fn = String.slice;
         if (std.meta.activeTag(lhs) == .local) {
-            return strings.eqlLong(lhs.local.slice(lhs_buf), rhs.local.slice(rhs_buf), true);
+            return strings.eqlLong(slice_fn(unsafe { &lhs.local }, lhs_buf), slice_fn(unsafe { &rhs.local }, rhs_buf), true);
         } else {
-            return strings.eqlLong(lhs.remote.slice(lhs_buf), rhs.remote.slice(rhs_buf), true);
+            return strings.eqlLong(slice_fn(unsafe { &lhs.remote }, lhs_buf), slice_fn(unsafe { &rhs.remote }, rhs_buf), true);
         }
     }
 

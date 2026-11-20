@@ -735,7 +735,7 @@ num_extern_strings = (num_extern_strings + @as(u32, @truncate((bin.data.e_object
                             if ((item_str == null)) {
                                 return error.InvalidNPMLockfile;
                             }
-                            _ = map.putAssumeCapacity(item_str.?, .{});
+                            _ = map.putAssumeCapacity(item_str.?, undefined);
                         }
                         bundled_dependencies = map;
                     }

@@ -110,7 +110,7 @@ pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, st
                     names_count = @truncate(f.len);
                 }
             }
-            return SQLDataCell.constructObjectFromDataCell(globalObject, array, structure, self.list.ptr, @truncate(self.fields.len), flags, @intFromEnum(result_mode), names, names_count);
+            return (blk_catch_0: { break :blk_catch_0 ((SQLDataCell.constructObjectFromDataCell(globalObject, array, structure, self.list.ptr, @truncate(self.fields.len), flags, @intFromEnum(result_mode), names, names_count)) catch |e| { _ = &e; return @errorCast(e); }); });
     }
 
 pub fn putImpl(self: *Putter, index: u32, optional_bytes: ?*Data, comptime is_raw: bool) AnyPostgresError!bool {
@@ -181,7 +181,7 @@ extern "c" fn Postgres__formatTime(microseconds: i64, buffer: [*]u8, bufferSize:
 
 extern "c" fn Postgres__formatTimeTz(microseconds: i64, tzOffsetSeconds: i32, buffer: [*]u8, bufferSize: usize) callconv(.c) usize;
 
-pub fn parseBytea(hex: []const u8) anyerror!SQLDataCell {
+pub fn parseBytea(hex: []const u8) AnyPostgresError!SQLDataCell {
         const len = (hex.len / 2);
         const buf = try bun.default_allocator.alloc(u8, len);
         errdefer {
@@ -369,7 +369,7 @@ const str_bytes = slice[1..current_idx];
                 _ = bun.default_allocator.free(buffer);
             }
             }
-            const unescaped = (blk_catch_0: { break :blk_catch_0 ((unescapePostgresString(str_bytes, buffer)) catch |__ce_0| { _ = &__ce_0; return error.InvalidByteSequence; }); });
+            const unescaped = (blk_catch_1: { break :blk_catch_1 ((unescapePostgresString(str_bytes, buffer)) catch |__ce_1| { _ = &__ce_1; return error.InvalidByteSequence; }); });
             _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .json, .value = .{ .json = (if ((unescaped.len > 0)) (if (@typeInfo(@TypeOf(String.cloneUTF8(unescaped))) == .@"enum") @intFromEnum(String.cloneUTF8(unescaped)) else String.cloneUTF8(unescaped).value).WTFStringImpl else null) }, .free_value = 1 });
             pos = (pos + (current_idx + 1));
             continue;
@@ -391,7 +391,7 @@ else => {
                 _ = bun.default_allocator.free(buffer);
             }
             }
-            const string_bytes = (blk_catch_1: { break :blk_catch_1 ((unescapePostgresString(str_bytes, buffer)) catch |__ce_1| { _ = &__ce_1; return error.InvalidByteSequence; }); });
+            const string_bytes = (blk_catch_2: { break :blk_catch_2 ((unescapePostgresString(str_bytes, buffer)) catch |__ce_2| { _ = &__ce_2; return error.InvalidByteSequence; }); });
             _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((string_bytes.len > 0)) (if (@typeInfo(@TypeOf(String.cloneUTF8(string_bytes))) == .@"enum") @intFromEnum(String.cloneUTF8(string_bytes)) else String.cloneUTF8(string_bytes).value).WTFStringImpl else null) }, .free_value = 1 });
             pos = (pos + (current_idx + 1));
             continue;
@@ -594,14 +594,14 @@ return error.UnsupportedArrayFormat;
             }
             const element = slice[0..current_idx];
             if ((is_float or (arrayType == .float8_array))) {
-                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = (blk_catch_2: { break :blk_catch_2 ((bun.parseDouble(element)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 std.math.nan(f64); }); }) } });
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = (blk_catch_3: { break :blk_catch_3 ((bun.parseDouble(element)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 std.math.nan(f64); }); }) } });
                 pos = (pos + current_idx);
                 continue;
             }
             switch (arrayType) {
 .int8_array => {
 if (bigint) {
-                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(i64, element, 0)) catch |__ce_3| { _ = &__ce_3; return error.UnsupportedArrayFormat; }); }) } });
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(i64, element, 0)) catch |__ce_4| { _ = &__ce_4; return error.UnsupportedArrayFormat; }); }) } });
             } else {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((element.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(element))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(element)) else bun.String.cloneUTF8(element).value).WTFStringImpl else null) }, .free_value = 1 });
             }
@@ -609,12 +609,12 @@ if (bigint) {
             continue;
 },
 .cid_array, .xid_array, .oid_array => {
-_ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u32, element, 0)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); }) } });
+_ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(u32, element, 0)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 0; }); }) } });
             pos = (pos + current_idx);
             continue;
 },
 else => {
-const value = (blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(i32, element, 0)) catch |__ce_5| { _ = &__ce_5; return error.UnsupportedArrayFormat; }); });
+const value = (blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(i32, element, 0)) catch |__ce_6| { _ = &__ce_6; return error.UnsupportedArrayFormat; }); });
             _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int4, .value = .{ .int4 = @intCast(value) } });
             pos = (pos + current_idx);
             continue;
@@ -678,7 +678,7 @@ pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, byte
                 return error.NullsInArrayNotSupportedYet;
             }
             if ((dimensions == 0)) {
-                return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .ptr = null, .len = 0, .byte_len = 0, .type = try tag.toJSTypedArrayType() } } };
+                return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .ptr = null, .len = 0, .byte_len = 0, .type = (blk_catch_7: { break :blk_catch_7 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
             }
             if ((bytes.len < 20)) {
                 return error.InvalidBinaryData;
@@ -701,7 +701,7 @@ pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, byte
             return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .head_ptr = (if ((bytes.len > 0)) @constCast(bytes.ptr) else null), .ptr = (if ((elements.len > 0)) (blk: {
             break :blk @ptrCast(elements.ptr);
 
-}) else null), .len = @truncate(elements.len), .byte_len = @truncate(bytes.len), .type = try tag.toJSTypedArrayType() } } };
+}) else null), .len = @truncate(elements.len), .byte_len = @truncate(bytes.len), .type = (blk_catch_8: { break :blk_catch_8 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
         } else {
             return parseArray(bytes, bigint, tag, globalObject, null, false);
         }
@@ -719,26 +719,26 @@ return fromTypedArrayBytes(.float4_array, binary, bigint, bytes, globalObject);
 if (binary) {
             return SQLDataCell{ .tag = .int4, .value = .{ .int4 = try parseBinary(.int2, i16, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 0; }); }) } };
+            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_9: { break :blk_catch_9 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); }) } };
         }
 },
 .cid, .xid, .oid => {
 if (binary) {
             return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = try parseBinary(.oid, u32, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_7: { break :blk_catch_7 ((std.fmt.parseInt(u32, bytes, 0)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 0; }); }) } };
+            return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_10: { break :blk_catch_10 ((std.fmt.parseInt(u32, bytes, 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) } };
         }
 },
 .int4 => {
 if (binary) {
             return SQLDataCell{ .tag = .int4, .value = .{ .int4 = try parseBinary(.int4, i32, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); }) } };
+            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_11: { break :blk_catch_11 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); }) } };
         }
 },
 .int8 => {
 if (bigint) {
-            return SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_9: { break :blk_catch_9 ((std.fmt.parseInt(i64, bytes, 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); }) } };
+            return SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_12: { break :blk_catch_12 ((std.fmt.parseInt(i64, bytes, 0)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); }) } };
         } else {
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((bytes.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(bytes))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(bytes)) else bun.String.cloneUTF8(bytes).value).WTFStringImpl else null) }, .free_value = 1 };
         }
@@ -747,7 +747,7 @@ if (bigint) {
 if ((binary and (bytes.len == 8))) {
             return SQLDataCell{ .tag = .float8, .value = .{ .float8 = try parseBinary(.float8, f64, bytes) } };
         } else {
-            const float8: f64 = (blk_catch_10: { break :blk_catch_10 ((bun.parseDouble(bytes)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 std.math.nan(f64); }); });
+            const float8: f64 = (blk_catch_13: { break :blk_catch_13 ((bun.parseDouble(bytes)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 std.math.nan(f64); }); });
             return SQLDataCell{ .tag = .float8, .value = .{ .float8 = float8 } };
         }
 },
@@ -755,7 +755,7 @@ if ((binary and (bytes.len == 8))) {
 if ((binary and (bytes.len == 4))) {
             return SQLDataCell{ .tag = .float8, .value = .{ .float8 = try parseBinary(.float4, f32, bytes) } };
         } else {
-            const float4: f64 = (blk_catch_11: { break :blk_catch_11 ((bun.parseDouble(bytes)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 std.math.nan(f64); }); });
+            const float4: f64 = (blk_catch_14: { break :blk_catch_14 ((bun.parseDouble(bytes)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 std.math.nan(f64); }); });
             return SQLDataCell{ .tag = .float8, .value = .{ .float8 = float4 } };
         }
 },
@@ -770,7 +770,7 @@ if (binary) {
             defer {
             _ = numeric_buffer.deinit();
             }
-            const result = (blk_catch_12: { break :blk_catch_12 ((parseBinaryNumeric(bytes, (&numeric_buffer))) catch |__ce_12| { _ = &__ce_12; return error.UnsupportedNumericFormat; }); });
+            const result = (blk_catch_15: { break :blk_catch_15 ((parseBinaryNumeric(bytes, (&numeric_buffer))) catch |__ce_15| { _ = &__ce_15; return error.UnsupportedNumericFormat; }); });
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(result.slice()))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(result.slice())) else bun.String.cloneUTF8(result.slice()).value).WTFStringImpl }, .free_value = 1 };
         } else {
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((bytes.len > 0)) (if (@typeInfo(@TypeOf(String.cloneUTF8(bytes))) == .@"enum") @intFromEnum(String.cloneUTF8(bytes)) else String.cloneUTF8(bytes).value).WTFStringImpl else null) }, .free_value = 1 };
@@ -968,7 +968,7 @@ return error.InvalidSign;
             const end: usize = (result.items.len + @as(usize, @intCast(dscale)));
             while ((idx < dscale)) {
                 if (((idx >= 0) and (idx < dscale))) {
-                    const digit = (blk_catch_13: { break :blk_catch_13 ((reader.readInt(u16, .big)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 0; }); });
+                    const digit = (blk_catch_16: { break :blk_catch_16 ((reader.readInt(u16, .big)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 0; }); });
                     _ = log("dscale digit: {d}", .{ digit });
                     var digit_str: [4]u8 = undefined;
                     _ = &digit_str;

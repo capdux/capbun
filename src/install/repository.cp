@@ -695,13 +695,12 @@ pub struct TopFormatter {
                 };
             }
 
-            const err_args = .{ name, @errorName(e) };
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
                 allocator,
                 "\"package.json\" for \"{s}\" failed to open: {s}",
-                err_args,
+                .{ name, @errorName(e) },
             ) catch unreachable;
             return error.InstallFailed;
         };
@@ -712,13 +711,12 @@ pub struct TopFormatter {
         const json_path = json_file.getPath(
             &bufs.json_path_buf,
         ).unwrap() catch |e| {
-            const err_args = .{ name, @errorName(e) };
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
                 allocator,
                 "\"package.json\" for \"{s}\" failed to resolve: {s}",
-                err_args,
+                .{ name, @errorName(e) },
             ) catch unreachable;
             return error.InstallFailed;
         };
