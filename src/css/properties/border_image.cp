@@ -302,8 +302,8 @@ pub const BorderImageSideWidth = union(enum) {
         };
     }
 
-    pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers): bool {
-        return switch (this.*) {
+    pub fn isCompatible(browsers: css.targets.Browsers): bool {
+        return switch (_) {
             .length_percentage => |*l| l.isCompatible(browsers),
             else => true,
         };

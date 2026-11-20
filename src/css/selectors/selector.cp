@@ -1371,7 +1371,7 @@ pub const tocss_servo = struct {
                     if (i != 0) {
                         try dest.writeChar(' ');
                     }
-                    try css.IdentFns.toCss(&name, dest);
+                    try css.IdentFns.toCss(name, dest);
                     i += 1;
                 }
                 try dest.writeChar(')');

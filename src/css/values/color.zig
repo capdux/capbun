@@ -2118,7 +2118,7 @@ pub const CssColor = union(enum) {
         if (fallbacks.lab) {
             if (!targets.shouldCompileSame(.lab_colors)) {
                 fallbacks = fallbacks.difference(ColorFallbackKind.andBelow(.{ .p3 = true }));
-            } else if (targets.browsers != null and css.compat.Feature.isPartiallyCompatible(&css.compat.Feature.lab_colors, targets.browsers.?)) {
+            } else if (targets.browsers != null and css.compat.Feature.isPartiallyCompatible(css.compat.Feature.lab_colors, targets.browsers.?)) {
                 // We don't need P3 if Lab is supported by some of our targets.
                 // No browser implements Lab but not P3.
                 fallbacks.p3 = false;

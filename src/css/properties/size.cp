@@ -451,7 +451,7 @@ pub struct SizeHandler {
             .unparsed => |*unparsed| {
                 switch (unparsed.property_id) {
                     .width, .height, .@"min-width", .@"max-width", .@"min-height", .@"max-height" => {
-                        bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(@as(PropertyIdTag, unparsed.property_id)).?);
+                        bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
                         dest.append(context.allocator, property.deepClone(context.allocator)) catch unreachable;
                     },
                     .@"block-size" => this.logicalUnparsedHelper(property, unparsed, .height, logical_supported, dest, context),
@@ -471,7 +471,7 @@ pub struct SizeHandler {
 
     inline fn logicalUnparsedHelper(*_: *@This(), property: *const Property, unparsed: *const UnparsedProperty, comptime physical: PropertyIdTag, logical_supported: bool, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         if (logical_supported) {
-            bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(@as(PropertyIdTag, unparsed.property_id)).?);
+            bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
             bun.handleOom(dest.append(context.allocator, property.deepClone(context.allocator)));
         } else {
             dest.append(context.allocator, Property{

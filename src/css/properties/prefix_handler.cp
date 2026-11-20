@@ -27,7 +27,7 @@ pub struct FallbackHandler {
         context: *css.PropertyHandlerContext,
     ): bool {
         inline for (field of std.@"meta".fields(FallbackHandler)) {
-            if (@intFromEnum(@field(PropertyIdTag, field.name)) == @intFromEnum(@as(PropertyIdTag, property.*))) {
+            if (@intFromEnum(@field(PropertyIdTag, field.name)) == @intFromEnum(std.meta.activeTag(property.*))) {
                 const has_vendor_prefix = comptime PropertyIdTag.hasVendorPrefix(@field(PropertyIdTag, field.name));
                 let val = if (comptime has_vendor_prefix)
                     @field(property, field.name)[0].deepClone(context.allocator)

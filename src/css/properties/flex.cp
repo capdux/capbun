@@ -617,7 +617,7 @@ pub struct FlexHandler {
 
                 // Otherwise, update the value and add the prefix
                 if (*field := @field(handler, prop)) {
-                    field[0] = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
+                    @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
                     bun.bits.insert(css.VendorPrefix, &field[1], vp.*);
                 } else {
                     @field(handler, prop) = .{

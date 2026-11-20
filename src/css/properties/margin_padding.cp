@@ -531,7 +531,7 @@ fn NewSizeHandler(
             dest: *css.DeclarationList,
             context: *css.PropertyHandlerContext,
         ): bool {
-            const tag = @as(PropertyIdTag, property.*);
+            const tag = std.meta.activeTag(property.*);
             if (tag == top_prop) {
                 _.propertyHelper("top", top_prop.valueType(), &@field(property, @tagName(top_prop)), PropertyCategory.physical, dest, context);
             } else if (tag == bottom_prop) {

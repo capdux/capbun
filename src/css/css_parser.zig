@@ -279,8 +279,7 @@ pub inline fn _or(self: VendorPrefix, other: VendorPrefix) VendorPrefix {
             return self;
     }
 
-pub fn difference(self: VendorPrefix, left: @This(), right: @This()) @This() {
-        _ = self;
+pub fn difference(left: @This(), right: @This()) @This() {
             return @bitCast((@as(u8, @bitCast(left)) - @as(u8, @bitCast(right))));
     }
 
@@ -497,28 +496,28 @@ pub const BundlerAtRuleParser = struct {
                 return .{ .err = .{} };
         }
     
-    pub fn onImportRule(self: *@This(), import_rule: *ImportRule, start_position: u32, end_position: u32) void {
-                const import_record_index = self.import_records.len;
+    pub fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) void {
+                const import_record_index = b.import_records.len;
                 import_rule.import_record_idx = import_record_index;
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.import_records.append(self.allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((end_position - start_position)) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                _ = (blk_catch_0: { break :blk_catch_0 ((b.import_records.append(b.allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((end_position - start_position)) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
         }
     
-    pub fn onLayerRule(self: *@This(), layers: *const bun.css.SmallList(LayerName,1)) void {
-                if ((self.anon_layer_count > 0)) {
+    pub fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName,1)) void {
+                if ((b.anon_layer_count > 0)) {
                     return;
                 }
-                _ = bun.handleOom(self.layer_names.ensureUnusedCapacity(self.allocator, layers.len()));
+                _ = bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
                 for (layers.slice()) |*layer| {
                     _ = &layer;
-                    if ((self.enclosing_layer.v.len() > 0)) {
+                    if ((b.enclosing_layer.v.len() > 0)) {
                         var cloned: LayerName = .{ .v = .{} };
                         _ = &cloned;
-                        _ = cloned.v.ensureTotalCapacity(self.allocator, (self.enclosing_layer.v.len() + layer.v.len()));
-                        _ = cloned.v.appendSliceAssumeCapacity(self.enclosing_layer.v.slice());
+                        _ = cloned.v.ensureTotalCapacity(b.allocator, (b.enclosing_layer.v.len() + layer.v.len()));
+                        _ = cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
                         _ = cloned.v.appendSliceAssumeCapacity(layer.v.slice());
-                        _ = bun.handleOom(self.layer_names.append(self.allocator, cloned));
+                        _ = bun.handleOom(b.layer_names.append(b.allocator, cloned));
                     } else {
-                        _ = bun.handleOom(self.layer_names.append(self.allocator, layer.deepClone(self.allocator)));
+                        _ = bun.handleOom(b.layer_names.append(b.allocator, layer.deepClone(b.allocator)));
                     }
                 }
         }
@@ -920,7 +919,7 @@ return .success;
 .function, .open_paren, .open_square, .open_curly => {
 if (self.parseNestedBlock(void, .{}, struct {
 
-pub fn parse(_: void, i: *Parser) Result(void) {
+pub fn parse(_: anytype, i: *Parser) Result(void) {
             if (i.expectNoErrorToken().asErr()) |err_val| {
                 _ = &err_val;
                 return .{ .err = err_val };
@@ -4193,7 +4192,8 @@ return .{ .err = e };
                 if (comptime (first_void_index < first_payload_index)) {
                     if (input.tryParse(Parser.expectIdentMatching, .{ (if (@typeInfo(@TypeOf(void_field)) == .@"enum" or @typeInfo(@TypeOf(void_field)) == .@"union") @tagName(void_field) else void_field.name) }).isOk()) {
                         if (comptime is_union_enum) {
-                            return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(void_field)) == .@"enum" or @typeInfo(@TypeOf(void_field)) == .@"union") @tagName(void_field) else void_field.name), .{}) };
+                            const ev: void = .{};
+                            return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(void_field)) == .@"enum" or @typeInfo(@TypeOf(void_field)) == .@"union") @tagName(void_field) else void_field.name), ev) };
                         }
                         return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(void_field)) == .@"enum") @intFromEnum(void_field) else void_field.value)) };
                     }
@@ -4235,7 +4235,8 @@ return .{ .err = e };
                         return .{ .err = e };
                     }
                     if (comptime is_union_enum) {
-                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(void_field)) == .@"enum" or @typeInfo(@TypeOf(void_field)) == .@"union") @tagName(void_field) else void_field.name), .{}) };
+                        const ev: void = .{};
+                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(void_field)) == .@"enum" or @typeInfo(@TypeOf(void_field)) == .@"union") @tagName(void_field) else void_field.name), ev) };
                     }
                     return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(void_field)) == .@"enum") @intFromEnum(void_field) else void_field.value)) };
                 }
@@ -4250,7 +4251,8 @@ return .{ .err = e };
                                 _ = &field;
                                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(matched))) {
                                     if (comptime is_union_enum) {
-                                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), .{}) };
+                                        const ev: void = .{};
+                                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), ev) };
                                     }
                                     return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value)) };
                                 }
@@ -4878,7 +4880,8 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                                     .err => |e| return .{ .err = e },
                                     .result => |v| v,
                                 };
-                                return .{ .result = .{ .namespace = .{ prefix, namespace } } };
+                                const ns_val = NamespacePreludeTuple{ .prefix = prefix, .url = namespace };
+                                return .{ .result = .{ .namespace = ns_val } };
                             },
                             .charset => {
                                 // @charset is removed by rust-cssparser if it's the first rule in the stylesheet.
@@ -5073,10 +5076,8 @@ pub fn parseNested(self: *@This(), input: *Parser, is_style_rule: bool) Result(s
             var nested_parser = This{ .allocator = input.allocator(), .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = (&rules), .is_in_style_rule = (self.is_in_style_rule or is_style_rule), .allow_declarations = ((self.allow_declarations or self.is_in_style_rule) or is_style_rule), .composes_state = (if ((self.is_in_style_rule and (self.composes_state == .allow))) .{ .disallow_nested = .{ .line = self.composes_state.allow.line, .column = self.composes_state.allow.column } } else self.composes_state), .composes = self.composes, .composes_refs = self.composes_refs, .local_properties = self.local_properties };
             _ = &nested_parser;
             const parse_declarations = This.RuleBodyItemParser.parseDeclarations((&nested_parser));
-            var errors = ArrayList(ParseError(ParserError));
+            var errors: ArrayList(ParseError(ParserError)) = .{};
             _ = &errors;
-            {
-            }
             var iter = RuleBodyParser(This).new(input, (&nested_parser));
             _ = &iter;
             while (iter.next()) |result| {
@@ -5821,7 +5822,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
                 continue;
             }
 },
-.unparsed => |u| (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(u.property_id)) else @as(PropertyIdTag, u.property_id)),
+.unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
 else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(prop.*)) else @as(PropertyIdTag, prop.*)),
 });
@@ -5837,7 +5838,7 @@ else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @
                 continue;
             }
 },
-.unparsed => |u| (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(u.property_id)) else @as(PropertyIdTag, u.property_id)),
+.unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
 else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(prop.*)) else @as(PropertyIdTag, prop.*)),
 });
@@ -5917,14 +5918,10 @@ pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: 
                 _ = try printer.writeStr("*/");
                 _ = try printer.newline();
             }
-            if (self.options.css_modules) |*config| {
-                _ = &config;
+            if ((self.options.css_modules != null)) {
                 var references = CssModuleReferences{  };
                 _ = &references;
-                const cfg_ptr: *const css_modules.Config = (blk: {
-                break :blk (config.*);
-
-});
+                const cfg_ptr: *const css_modules.Config = (&self.options.css_modules.?);
                 printer.css_module = CssModule.new(allocator, cfg_ptr, (&self.sources), project_root, (&references));
                 _ = try self.rules.toCss(printer);
                 _ = try printer.newline();

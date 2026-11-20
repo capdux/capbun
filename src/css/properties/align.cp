@@ -1307,9 +1307,10 @@ pub struct AlignHandler {
     fn handlePropertyHelper(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: []const u8, val: auto, vp: VendorPrefix) {
         _.handlePropertyMaybeFlush(dest, context, prop, val, vp);
         // Otherwise, update the value and add the prefix.
-        if (*tuple := @field(_, prop)) {
-            tuple.*[0] = css.generic.deepClone(@TypeOf(val.*), val, context.allocator);
-            bun.bits.insert(VendorPrefix, &tuple.*[1], vp);
+        if (@field(_, prop) != null) {
+            const tuple = &@field(_, prop).?;
+            @field(tuple.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, context.allocator);
+            bun.bits.insert(VendorPrefix, &@field(tuple.*, "1"), vp);
         } else {
             @field(_, prop) = .{ css.generic.deepClone(@TypeOf(val.*), val, context.allocator), vp };
             _.has_any = true;
@@ -1352,7 +1353,8 @@ pub struct AlignHandler {
             prefix = context.targets.prefixes(prefix, feature);
 
             if (prefix.none) {
-                if (p2009 := comptime prop_2009) {
+                if (comptime prop_2009 != null) {
+                    const p2009 = comptime prop_2009.?;
                     // 2009 spec, implemented by webkit and firefox.
                     if (targets := context.targets.browsers) {
                         let prefixes_2009 = VendorPrefix{};
@@ -1381,7 +1383,8 @@ pub struct AlignHandler {
 
             // 2012 spec, implemented by microsoft.
             if (prefix.ms) {
-                if (p2012 := comptime prop_2012) {
+                if (comptime prop_2012 != null) {
+                    const p2012 = comptime prop_2012.?;
                     const s = brk: {
                         const T = comptime p2012[0];
                         if (comptime T == css.css_properties.flex.BoxOrdinalGroup) break :brk @as(i32?, val);
@@ -1429,10 +1432,12 @@ pub struct AlignHandler {
         comptime justify_prop: auto,
     ) {
         // Only use shorthand if both align and justify are present
-        if (*__v1 := align_field.*) {
-            const align_val = &__v1.*[0];
-            let align_prefix = &__v1.*[1];
-            if (*__v2 := justify_val.*) {
+        if (align_field.* != null) {
+            const __v1 = &align_field.*.?;
+            const align_val = &__v1[0];
+            let align_prefix = &__v1[1];
+            if (justify_val.* != null) {
+                const __v2 = &justify_val.*.?;
                 const justify = __v2;
 
                 const intersection = align_prefix.bitwiseAnd(if (comptime justify_prop != null) __v2.*[1] else align_prefix.*);

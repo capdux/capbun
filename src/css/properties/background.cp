@@ -204,7 +204,7 @@ pub struct Background {
     }
 
     fn withImage(allocator: Allocator, image: Image): @This() {
-        let ret = _.*;
+        let ret = _;
         ret.image = .none;
         ret = ret.deepClone(allocator);
         ret.image = image;
@@ -212,7 +212,7 @@ pub struct Background {
     }
 
     fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): Background {
-        let ret: Background = _.*;
+        let ret: Background = _;
         // Dummy values for the clone
         ret.color = CssColor.default();
         ret.image = Image.default();
@@ -435,7 +435,7 @@ pub struct BackgroundRepeat {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -652,9 +652,10 @@ pub struct BackgroundHandler {
             .@"background-clip" => |*x| {
                 const val: *const SmallList(BackgroundClip, 1) = &x.*[0];
                 const vendor_prefix: VendorPrefix = x.*[1];
-                if (*clips_and_vp := _.clips) {
-                    let clips: *SmallList(BackgroundClip, 1) = &clips_and_vp.*[0];
-                    const vp: *VendorPrefix = &clips_and_vp.*[1];
+                if (_.clips != null) {
+                    const clips_and_vp = &_.clips.?;
+                    let clips: *SmallList(BackgroundClip, 1) = &clips_and_vp[0];
+                    const vp: *VendorPrefix = &clips_and_vp[1];
                     if (vendor_prefix != vp.* && !val.eql(clips)) {
                         // `flush()` takes ownership of `this.clips` via `bun.take` and
                         // frees it, so `clips` (which aliases the payload of `this.clips`)
@@ -685,11 +686,12 @@ pub struct BackgroundHandler {
                     clips.appendAssumeCapacity(b.clip.deepClone(allocator));
                 }
                 let clips_vp = VendorPrefix{ .none = true };
-                if (*clips_and_vp := _.clips) {
-                    if (clips_vp != clips_and_vp.*[1] && !clips.eql(&clips_and_vp.*[0])) {
+                if (_.clips != null) {
+                    const clips_and_vp = &_.clips.?;
+                    if (clips_vp != clips_and_vp[1] && !clips.eql(&clips_and_vp[0])) {
                         _.flush(allocator, dest, context);
                     } else {
-                        bun.bits.insert(VendorPrefix, &clips_vp, clips_and_vp.*[1]);
+                        bun.bits.insert(VendorPrefix, &clips_vp, clips_and_vp[1]);
                     }
                 }
 
@@ -828,7 +830,10 @@ pub struct BackgroundHandler {
             if (*s := maybe_sizes) s.deinit(allocator);
             if (*a := maybe_attachments) a.deinit(allocator);
             if (*o := maybe_origins) o.deinit(allocator);
-            if (*c := maybe_clips) c.*[0].deinit(allocator);
+            if (maybe_clips != null) {
+                const c = &maybe_clips.?;
+                c[0].deinit(allocator);
+            }
         }
 
         if (maybe_color != null &&
@@ -1005,7 +1010,10 @@ pub struct BackgroundHandler {
         _.attachments = null;
         if (*o := _.origins) o.deinit(allocator);
         _.origins = null;
-        if (*c := _.clips) c.*[0].deinit(allocator);
+        if (_.clips != null) {
+            const c = &_.clips.?;
+            c[0].deinit(allocator);
+        }
         _.clips = null;
     }
 

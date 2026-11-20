@@ -141,7 +141,7 @@ pub fn eql(self: ImageSet, other: *const ImageSet) bool {
     }
 
 pub fn deepClone(self: ImageSet, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn getVendorPrefix(self: ImageSet) VendorPrefix {
@@ -229,7 +229,7 @@ pub fn toCss(self: ImageSetOption, dest: *css.Printer, is_prefixed: bool) PrintE
     }
 
 pub fn deepClone(self: ImageSetOption, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(lhs: *const ImageSetOption, rhs: *const ImageSetOption) bool {

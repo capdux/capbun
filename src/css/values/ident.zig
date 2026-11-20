@@ -110,7 +110,7 @@ pub fn toCss(self: DashedIdentReference, dest: *Printer) PrintErr!void {
     }
 
 pub fn hash(self: DashedIdentReference, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 };
 
@@ -214,16 +214,16 @@ pub fn fromIdent(ident: Ident) @This() {
             return IdentOrRef{ .__ptrbits = @intCast(@intFromPtr(ident.v.ptr)), .__len = ident.v.len, .__ref_bit = false };
     }
 
-pub fn fromRef(self: *IdentOrRef, ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent) @This() {
-            var this = IdentOrRef{ .__len = @bitCast(ref_val), .__ref_bit = true };
-            _ = &this;
+pub fn fromRef(ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent) @This() {
+            var res = IdentOrRef{ .__len = @bitCast(ref_val), .__ref_bit = true };
+            _ = &res;
             if (comptime bun.Environment.isDebug) {
                 var heap_ptr: []u8 = bun.handleOom(debug_ident[1].create(string));
                 _ = &heap_ptr;
                 heap_ptr.* = debug_ident[0];
-                self.__ptrbits = @intCast(@intFromPtr(heap_ptr));
+                res.__ptrbits = @intCast(@intFromPtr(heap_ptr));
             }
-            return self;
+            return res;
     }
 
 pub inline fn isIdent(self: IdentOrRef) bool {

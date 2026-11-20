@@ -132,7 +132,7 @@ pub struct Url {
     // TODO: dedupe import records??
     // This might not fucking work
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), &_, hasher);
     }
 }
 

@@ -6218,7 +6218,7 @@ pub fn deepClone(self: Property, allocator: std.mem.Allocator) Property {
 .opacity => |*v| Property{ .opacity = v.deepClone(allocator) },
 .color => |*v| Property{ .color = v.deepClone(allocator) },
 .display => |*v| Property{ .display = v.deepClone(allocator) },
-.visibility => |*v| Property{ .visibility = v.deepClone(allocator) },
+.visibility => |*v| Property{ .visibility = v.*.deepClone(allocator) },
 .width => |*v| Property{ .width = v.deepClone(allocator) },
 .height => |*v| Property{ .height = v.deepClone(allocator) },
 .@"min-width" => |*v| Property{ .@"min-width" = v.deepClone(allocator) },
@@ -11241,7 +11241,7 @@ else => {
     }
     pub const toCss = properties_impl.property_id_mixin.toCss;
     pub const parse = properties_impl.property_id_mixin.toCss;
-    pub const fromString = properties_impl.property_id_mixin.toCss;
+    pub const fromString = properties_impl.property_id_mixin.fromString;
     pub const fromStr = fromString;
 };
 

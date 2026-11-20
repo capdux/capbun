@@ -213,7 +213,7 @@ pub struct todo_stuff {
         return _;
     }
 
-    pub fn difference(left: @This(), right: @This()): @This() {
+    pub static fn difference(left: @This(), right: @This()): @This() {
         return @bitCast(@as(u8, @bitCast(left)) - @as(u8, @bitCast(right)));
     }
 
@@ -693,7 +693,7 @@ pub fn DeriveParse(comptime T: type): type {
                 // to parsing the payload fields.
                 if (comptime first_void_index < first_payload_index) {
                     if (input.tryParse(Parser.expectIdentMatching, .{void_field.name}).isOk()) {
-                        if (comptime is_union_enum) return { result: @unionInit(T, void_field.name, {}) };
+                        if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, void_field.name, ev) }; }
                         return { result: @enumFromInt(void_field.value) };
                     }
 
@@ -723,7 +723,7 @@ pub fn DeriveParse(comptime T: type): type {
 
                     // We can generate this as the last statements of the function, avoiding the `input.tryParse` routine above
                     if (e := input.expectIdentMatching(void_field.name).asErr()) return { err: e };
-                    if (comptime is_union_enum) return { result: @unionInit(T, void_field.name, {}) };
+                    if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, void_field.name, ev) }; }
                     return { result: @enumFromInt(void_field.value) };
                 }
             } else if (comptime first_void_index < first_payload_index) {
@@ -733,7 +733,7 @@ pub fn DeriveParse(comptime T: type): type {
                     if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
                         inline for (void_fields) |field| {
                             if (field.value == @intFromEnum(matched)) {
-                                if (comptime is_union_enum) return { result: @unionInit(T, field.name, {}) };
+                                if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, field.name, ev) }; }
                                 return { result: @enumFromInt(field.value) };
                             }
                         }
@@ -1418,10 +1418,10 @@ pub struct BundlerAtRuleParser {
             return { err: {} };
         }
 
-        fn onImportRule(*_, import_rule: *ImportRule, start_position: u32, end_position: u32) {
-            const import_record_index = _.import_records.len;
+        static fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) {
+            const import_record_index = b.import_records.len;
             import_rule.import_record_idx = import_record_index;
-            _.import_records.append(_.allocator, ImportRecord{
+            b.import_records.append(b.allocator, ImportRecord{
                 path: bun.fs.Path.init(import_rule.url),
                 kind: if (import_rule.supports != null) .at_conditional else .at,
                 range: bun.logger.Range{
@@ -1431,20 +1431,20 @@ pub struct BundlerAtRuleParser {
             }) catch |e| bun.handleOom(e);
         }
 
-        fn onLayerRule(*_, layers: *const bun.css.SmallList(LayerName, 1)) {
-            if (_.anon_layer_count > 0) return;
+        static fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) {
+            if (b.anon_layer_count > 0) return;
 
-            bun.handleOom(_.layer_names.ensureUnusedCapacity(_.allocator, layers.len()));
+            bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
 
             for (layers.slice()) |*layer| {
-                if (_.enclosing_layer.v.len() > 0) {
+                if (b.enclosing_layer.v.len() > 0) {
                     let cloned: LayerName = .{ .v = .{} };
-                    cloned.v.ensureTotalCapacity(_.allocator, _.enclosing_layer.v.len() + layer.v.len());
-                    cloned.v.appendSliceAssumeCapacity(_.enclosing_layer.v.slice());
+                    cloned.v.ensureTotalCapacity(b.allocator, b.enclosing_layer.v.len() + layer.v.len());
+                    cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
                     cloned.v.appendSliceAssumeCapacity(layer.v.slice());
-                    bun.handleOom(_.layer_names.append(_.allocator, cloned));
+                    bun.handleOom(b.layer_names.append(b.allocator, cloned));
                 } else {
-                    bun.handleOom(_.layer_names.append(_.allocator, layer.deepClone(_.allocator)));
+                    bun.handleOom(b.layer_names.append(b.allocator, layer.deepClone(b.allocator)));
                 }
             }
         }
@@ -1789,7 +1789,8 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 .err => |e| return .{ .err = e },
                                 .result => |v| v,
                             };
-                            return .{ .result = .{ .namespace = .{ prefix, namespace } } };
+                            const ns_val = NamespacePreludeTuple{ .prefix = prefix, .url = namespace };
+                            return .{ .result = .{ .namespace = ns_val } };
                         },
                         .charset => {
                             // @charset is removed by rust-cssparser if it's the first rule in the stylesheet.
@@ -2752,7 +2753,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
             const parse_declarations = This.RuleBodyItemParser.parseDeclarations(&nested_parser);
             // TODO: think about memory management
-            let errors = ArrayList(ParseError(ParserError)){};
+            let errors: ArrayList(ParseError(ParserError)) = .{};
             let iter = RuleBodyParser(This).new(input, &nested_parser);
 
             while (iter.next()) |result| {
@@ -3052,7 +3053,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
                 bun.handleOom(custom_properties.append(allocator, prop.custom.name.asStr()));
                 continue;
             },
-            .unparsed => |u| @as(PropertyIdTag, u.property_id),
+            .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
             else => @as(PropertyIdTag, prop.*),
         };
@@ -3065,7 +3066,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
                 bun.handleOom(custom_properties.append(allocator, prop.custom.name.asStr()));
                 continue;
             },
-            .unparsed => |u| @as(PropertyIdTag, u.property_id),
+            .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
             else => @as(PropertyIdTag, prop.*),
         };
@@ -3209,9 +3210,9 @@ pub fn StyleSheet(comptime AtRule: type): type {
                 try printer.newline();
             }
 
-            if (self.options.css_modules) |*config| {
+            if (self.options.css_modules != null) {
                 let references = CssModuleReferences{};
-                const cfg_ptr: *const css_modules.Config = unsafe { &config };
+                const cfg_ptr: *const css_modules.Config = &self.options.css_modules.?;
                 printer.css_module = CssModule.new(allocator, cfg_ptr, &self.sources, project_root, &references);
 
                 try self.rules.toCss(printer);
@@ -4100,7 +4101,7 @@ pub struct Parser {
             switch (tok.*) {
                 .function, .open_paren, .open_square, .open_curly => {
                     if (e := _.parseNestedBlock(void, {}, struct {
-                        fn parse(_: void, i: *Parser): Result(void) {
+                        static fn parse(_: auto, i: *Parser): Result(void) {
                             if (err_val := i.expectNoErrorToken().asErr()) {
                                 return .{ .err = err_val };
                             }
@@ -6196,7 +6197,7 @@ pub union(TokenKind) Token {
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return implementHash(@This(), _, hasher);
+        return implementHash(@This(), &_, hasher);
     }
 
     /// Return whether this token represents a parse error.

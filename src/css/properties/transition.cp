@@ -125,43 +125,43 @@ pub struct TransitionHandler {
                 const val: *const SmallList(Transition, 1) = &x.*[0];
                 const vp: VendorPrefix = x.*[1];
 
-                let properties = SmallList(PropertyId, 1).initCapacity(context.allocator, val.len());
-                let durations = SmallList(Time, 1).initCapacity(context.allocator, val.len());
-                let delays = SmallList(Time, 1).initCapacity(context.allocator, val.len());
-                let timing_functions = SmallList(EasingFunction, 1).initCapacity(context.allocator, val.len());
-                properties.setLen(val.len());
-                durations.setLen(val.len());
-                delays.setLen(val.len());
-                timing_functions.setLen(val.len());
+                let props_list = SmallList(PropertyId, 1).initCapacity(context.allocator, val.len());
+                let durs_list = SmallList(Time, 1).initCapacity(context.allocator, val.len());
+                let delays_list = SmallList(Time, 1).initCapacity(context.allocator, val.len());
+                let tf_list = SmallList(EasingFunction, 1).initCapacity(context.allocator, val.len());
+                props_list.setLen(val.len());
+                durs_list.setLen(val.len());
+                delays_list.setLen(val.len());
+                tf_list.setLen(val.len());
 
                 let i: usize = 0;
                 while (i < val.len()) : (i += 1) {
-                    properties.slice_mut()[i] = val.slice()[i].property.deepClone(context.allocator);
+                    props_list.slice_mut()[i] = val.slice()[i].property.deepClone(context.allocator);
                 }
-                _.maybeFlush(dest, context, "properties", &properties, vp);
+                _.maybeFlush(dest, context, "properties", &props_list, vp);
 
                 i = 0;
                 while (i < val.len()) : (i += 1) {
-                    durations.slice_mut()[i] = val.slice()[i].duration.deepClone(context.allocator);
+                    durs_list.slice_mut()[i] = val.slice()[i].duration.deepClone(context.allocator);
                 }
-                _.maybeFlush(dest, context, "durations", &durations, vp);
+                _.maybeFlush(dest, context, "durations", &durs_list, vp);
 
                 i = 0;
                 while (i < val.len()) : (i += 1) {
-                    delays.slice_mut()[i] = val.slice()[i].delay.deepClone(context.allocator);
+                    delays_list.slice_mut()[i] = val.slice()[i].delay.deepClone(context.allocator);
                 }
-                _.maybeFlush(dest, context, "delays", &delays, vp);
+                _.maybeFlush(dest, context, "delays", &delays_list, vp);
 
                 i = 0;
                 while (i < val.len()) : (i += 1) {
-                    timing_functions.slice_mut()[i] = val.slice()[i].timing_function.deepClone(context.allocator);
+                    tf_list.slice_mut()[i] = val.slice()[i].timing_function.deepClone(context.allocator);
                 }
-                _.maybeFlush(dest, context, "timing_functions", &timing_functions, vp);
+                _.maybeFlush(dest, context, "timing_functions", &tf_list, vp);
 
-                _.property(dest, context, Feature.transition_property, "properties", &properties, vp);
-                _.property(dest, context, Feature.transition_duration, "durations", &durations, vp);
-                _.property(dest, context, Feature.transition_delay, "delays", &delays, vp);
-                _.property(dest, context, Feature.transition_timing_function, "timing_functions", &timing_functions, vp);
+                _.property(dest, context, Feature.transition_property, "properties", &props_list, vp);
+                _.property(dest, context, Feature.transition_duration, "durations", &durs_list, vp);
+                _.property(dest, context, Feature.transition_delay, "delays", &delays_list, vp);
+                _.property(dest, context, Feature.transition_timing_function, "timing_functions", &tf_list, vp);
             },
             .unparsed => |*x| {
                 if (isTransitionProperty(&x.property_id)) {
@@ -188,9 +188,10 @@ pub struct TransitionHandler {
         _.maybeFlush(dest, context, prop, val, vp);
 
         // Otherwise, update the value and add the prefix.
-        if (*p := @field(_, prop)) {
-            let v = &p.*[0];
-            let prefixes = &p.*[1];
+        if (@field(_, prop) != null) {
+            const p = &@field(_, prop).?;
+            let v = &p[0];
+            let prefixes = &p[1];
             v.* = val.deepClone(context.allocator);
             bun.bits.insert(VendorPrefix, prefixes, vp);
             prefixes.* = context.targets.prefixes(prefixes.*, feature);
@@ -205,9 +206,10 @@ pub struct TransitionHandler {
     fn maybeFlush(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: []const u8, val: auto, vp: VendorPrefix) {
         // If two vendor prefixes for the same property have different
         // values, we need to flush what we have immediately to preserve order.
-        if (*p := @field(_, prop)) {
-            let v = &p.*[0];
-            let prefixes = &p.*[1];
+        if (@field(_, prop) != null) {
+            const p = &@field(_, prop).?;
+            let v = &p[0];
+            let prefixes = &p[1];
             if (!val.eql(v) && !bun.bits.contains(VendorPrefix, prefixes.*, vp)) {
                 _.flush(dest, context);
             }
@@ -224,8 +226,9 @@ pub struct TransitionHandler {
         let _timing_functions: TransitionTimingFunctions? = bun.take(&_.timing_functions);
 
         let rtl_properties: SmallList(PropertyId, 1)? = null;
-        if (*p := _properties) {
-            rtl_properties = expandProperties(&p.*[0], context);
+        if (_properties != null) {
+            const p = &_properties.?;
+            rtl_properties = expandProperties(&p[0], context);
         }
 
         if (_properties != null && _durations != null && _delays != null && _timing_functions != null) {

@@ -262,7 +262,7 @@ pub struct Position {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -278,7 +278,7 @@ pub fn PositionComponentSide(comptime S: type): type {
         offset: LengthPercentage?,
 
         pub fn deepClone(allocator: std.mem.Allocator): @This() {
-            return css.implementDeepClone(@This(), _, allocator);
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
         pub fn eql(other: *const @This()): bool {
@@ -368,7 +368,7 @@ pub enum HorizontalPositionKeyword {
     right,
 
     fn deepClone(allocator: std.mem.Allocator): HorizontalPositionKeyword {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const HorizontalPositionKeyword): bool {
@@ -402,7 +402,7 @@ pub enum VerticalPositionKeyword {
     bottom,
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const VerticalPositionKeyword): bool {

@@ -97,8 +97,8 @@ pub const FontSize = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_lh.*) {
+    pub fn isCompatible(this_fs: *const FontSize, browsers: bun.css.targets.Browsers): bool {
+        return switch (this_fs.*) {
             .length => |*l| switch (l.*) {
                 .dimension => |*d| switch (d.*) {
                     .rem => css.Feature.font_size_rem.isCompatible(browsers),
@@ -152,7 +152,7 @@ pub enum AbsoluteFontSize {
     pub const deepClone = css_impl.deepClone;
 
     fn isCompatible(browsers: bun.css.targets.Browsers): bool {
-        return switch (_.*) {
+        return switch (_) {
             .@"xxx-large" => css.Feature.font_size_x_x_x_large.isCompatible(browsers),
             else => true,
         };
@@ -206,8 +206,8 @@ pub const FontStretch = union(enum) {
         };
     }
 
-    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_lh.*) {
+    pub fn isCompatible(this_fs: *const FontStretch, browsers: bun.css.targets.Browsers): bool {
+        return switch (this_fs.*) {
             .percentage => css.Feature.font_stretch_percentage.isCompatible(browsers),
             .keyword => true,
         };
@@ -445,7 +445,7 @@ pub enum GenericFontFamily {
     pub const deepClone = css_impl.deepClone;
 
     fn isCompatible(browsers: bun.css.targets.Browsers): bool {
-        return switch (_.*) {
+        return switch (_) {
             .@"system-ui" => css.Feature.font_family_system_ui.isCompatible(browsers),
             .@"ui-serif", .@"ui-sans-serif", .@"ui-monospace", .@"ui-rounded" => css.Feature.extended_system_fonts.isCompatible(browsers),
             else => true,
@@ -586,7 +586,7 @@ pub const LineHeight = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers) bool {
+    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers): bool {
         return switch (this_lh.*) {
             .length => |*l| l.isCompatible(browsers),
             .normal, .number => true,
@@ -879,7 +879,7 @@ pub struct FontHandler {
                 _.weight = val.weight.deepClone(context.allocator);
                 _.stretch = val.stretch.deepClone(context.allocator);
                 _.line_height = val.line_height.deepClone(context.allocator);
-                _.variant_caps = val.variant_caps.deepClone(context.allocator);
+                _.variant_caps = css.generic.deepClone(FontVariantCaps, &val.variant_caps, context.allocator);
                 _.has_any = true;
                 // TODO: reset other properties
             },
@@ -1050,7 +1050,8 @@ inline fn compatibleFontFamily(allocator: std.mem.Allocator, _family: bun.BabyLi
         let i: usize = 0;
         while (i < slice_c.len) : (i += 1) {
             const v = slice_c[i];
-            if (v.eql(&SYSTEM_UI)) {
+            const system_ui = SYSTEM_UI;
+            if (v.eql(&system_ui)) {
                 let j: usize = 0;
                 while (j < DEFAULT_SYSTEM_FONTS.len) : (j += 1) {
                     const name = DEFAULT_SYSTEM_FONTS[j];

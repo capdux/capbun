@@ -110,7 +110,7 @@ pub struct BoxShadow {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -141,9 +141,10 @@ pub struct BoxShadowHandler {
                     _.flush(dest, context);
                 }
 
-                if (*bxs := _.box_shadows) {
-                    let val = &bxs.*[0];
-                    let prefixes = &bxs.*[1];
+                if (_.box_shadows != null) {
+                    let bxs = &_.box_shadows.?;
+                    let val = &bxs[0];
+                    let prefixes = &bxs[1];
                     if (!val.eql(box_shadows) && !bun.bits.contains(VendorPrefix, prefixes.*, prefix)) {
                         _.flush(dest, context);
                         _.box_shadows = .{
@@ -191,7 +192,7 @@ pub struct BoxShadowHandler {
             return;
         }
         const taken = taken_opt.?;
-        const box_shadows = taken[0];
+        let box_shadows = taken[0];
         const prefixes2 = taken[1];
 
         if (!_.flushed) {

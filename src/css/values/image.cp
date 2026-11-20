@@ -276,7 +276,7 @@ pub struct ImageSet {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn getVendorPrefix(): VendorPrefix {
@@ -389,7 +389,7 @@ pub struct ImageSetOption {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const ImageSetOption, rhs: *const ImageSetOption): bool {

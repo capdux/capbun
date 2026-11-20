@@ -884,7 +884,7 @@ _ = try dest.writeStr("::part(");
                 if ((i != 0)) {
                     _ = try dest.writeChar(32);
                 }
-                _ = try css.IdentFns.toCss((&name), dest);
+                _ = try css.IdentFns.toCss(name, dest);
                 i = (i + 1);
             }
             _ = try dest.writeChar(41);

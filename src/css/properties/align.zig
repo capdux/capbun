@@ -749,10 +749,10 @@ pub fn handlePropertyMaybeFlush(self: *AlignHandler, dest: *css.DeclarationList,
 
 pub fn handlePropertyHelper(self: *AlignHandler, dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: []const u8, val: anytype, vp: VendorPrefix) void {
             _ = self.handlePropertyMaybeFlush(dest, context, prop, val, vp);
-            if (@field(self, prop)) |*tuple| {
-                _ = &tuple;
-                (tuple.*).*[cp_cast_int(usize, 0)] = css.generic.deepClone(@TypeOf(val.*), val, context.allocator);
-                _ = bun.bits.insert(VendorPrefix, (&(tuple.*).*[1]), vp);
+            if ((@field(self, prop) != null)) {
+                const tuple = (&(@field(self, prop)).?);
+                @field(tuple.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, context.allocator);
+                _ = bun.bits.insert(VendorPrefix, (&@field(tuple.*, "1")), vp);
             } else {
                 @field(self, prop) = .{ css.generic.deepClone(@TypeOf(val.*), val, context.allocator), vp };
                 self.has_any = true;
@@ -787,8 +787,8 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                 _ = &prefix;
                 prefix = context.targets.prefixes(prefix, feature);
                 if (prefix.none) {
-                    if ((comptime prop_2009)) |p2009| {
-                        _ = &p2009;
+                    if (comptime (prop_2009 != null)) {
+                        const p2009 = (comptime prop_2009.?);
                         if (context.targets.browsers) |targets| {
                             _ = &targets;
                             var prefixes_2009 = VendorPrefix{  };
@@ -816,8 +816,8 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                     }
                 }
                 if (prefix.ms) {
-                    if ((comptime prop_2012)) |p2012| {
-                        _ = &p2012;
+                    if (comptime (prop_2012 != null)) {
+                        const p2012 = (comptime prop_2012.?);
                         const s = brk: {
                         const T = (comptime p2012[0]);
                         if (comptime (T == css.css_properties.flex.BoxOrdinalGroup)) {
@@ -856,15 +856,15 @@ pub fn flushUnprefixProperty(self: *AlignHandler, dest: *css.DeclarationList, co
     }
 
 pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: anytype, comptime align_prop: anytype, align_field: anytype, justify_val: anytype, comptime justify_prop: anytype) void {
-            if (align_field.*) |*__v1| {
-                _ = &__v1;
-                const align_val = (&(__v1.*).*[0]);
-                var align_prefix = (&(__v1.*).*[1]);
+            if ((align_field.* != null)) {
+                const __v1 = (&align_field.*.?);
+                const align_val = (&__v1[0]);
+                var align_prefix = (&__v1[1]);
                 _ = &align_prefix;
-                if (justify_val.*) |*__v2| {
-                    _ = &__v2;
-                    const justify = (__v2.*);
-                    const intersection = align_prefix.bitwiseAnd((if (comptime (justify_prop != null)) (__v2.*).*[1] else align_prefix.*));
+                if ((justify_val.* != null)) {
+                    const __v2 = (&justify_val.*.?);
+                    const justify = __v2;
+                    const intersection = align_prefix.bitwiseAnd((if (comptime (justify_prop != null)) __v2.*[1] else align_prefix.*));
                     if (intersection.none) {
                         align_prefix.* = flushPrefixesHelper(context, align_prop.feature);
                         align_prefix.none = false;
@@ -872,8 +872,8 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
                             _ = (blk_catch_3: { break :blk_catch_3 ((dest.append(context.allocator, @unionInit(Property, align_prop.prop, .{ css.generic.deepClone(@TypeOf(align_val.*), align_val, context.allocator), align_prefix.* }))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
                         }
                         if (comptime (justify_prop != null)) {
-                            const justify_actual = (&(__v2.*).*[0]);
-                            var justify_prefix = (&(__v2.*).*[1]);
+                            const justify_actual = (&__v2.*[0]);
+                            var justify_prefix = (&__v2.*[1]);
                             _ = &justify_prefix;
                             justify_prefix.* = flushPrefixesHelper(context, justify_prop.?.feature);
                             justify_prefix.none = false;

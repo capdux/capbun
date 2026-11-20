@@ -623,8 +623,8 @@ else => false,
 });
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
-            return (switch (self.*) {
+pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
+            return (switch (self) {
 .length_percentage => |*l| l.isCompatible(browsers),
 else => true,
 });

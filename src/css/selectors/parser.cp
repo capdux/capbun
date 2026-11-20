@@ -2727,7 +2727,7 @@ pub fn parse_one_simple_selector(
                 .parser = parser,
             };
             const attr = switch (input.parseNestedBlock(GenericComponent(Impl), &closure, struct {
-                pub fn parsefn(this: *Closure, input2: *css.Parser) Result(GenericComponent(Impl)) {
+                pub static fn parsefn(this: *Closure, input2: *css.Parser): Result(GenericComponent(Impl)) {
                     return parse_attribute_selector(Impl, this.parser, input2);
                 }
             }
@@ -3501,9 +3501,9 @@ pub fn parse_qualified_name(
             switch (c) {
                 '*' => {
                     const after_star = input.state();
-                    const result = input.nextIncludingWhitespace();
-                    if (result == .result) {
-                        const t_val = result.result;
+                    const next_res = input.nextIncludingWhitespace();
+                    if (next_res == .result) {
+                        const t_val = next_res.result;
                         if (t_val.* == .delim && t_val.delim == '|') {
                             return parse_qualified_name_eplicit_namespace_helper(
                                 Impl,
@@ -3515,7 +3515,7 @@ pub fn parse_qualified_name(
                     }
                     input.reset(&after_star);
                     if (in_attr_selector) {
-                        switch (result) {
+                        switch (next_res) {
                             .result => |t| {
                                 return .{ .err = after_star.sourceLocation().newCustomError(SelectorParseErrorKind{
                                     .expected_bar_in_attr = t.*,

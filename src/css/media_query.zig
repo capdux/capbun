@@ -206,18 +206,15 @@ return .{ .err = e };
             return .{ .result = MediaCondition{ .feature = feature } };
     }
 
-pub fn createNegation(self: *MediaCondition, condition: *MediaCondition) MediaCondition {
-        _ = self;
+pub fn createNegation(condition: *MediaCondition) MediaCondition {
             return MediaCondition{ .not = condition };
     }
 
-pub fn createOperation(self: MediaCondition, operator: Operator, conditions: ArrayList(MediaCondition)) MediaCondition {
-        _ = self;
+pub fn createOperation(operator: Operator, conditions: ArrayList(MediaCondition)) MediaCondition {
             return MediaCondition{ .operation = .{ .operator = operator, .conditions = conditions } };
     }
 
-pub fn parseStyleQuery(self: *MediaCondition, input: *css.Parser) Result(MediaCondition) {
-        _ = self;
+pub fn parseStyleQuery(input: *css.Parser) Result(MediaCondition) {
             return .{ .err = input.newErrorForNextToken() };
     }
 
@@ -772,13 +769,11 @@ return .{ .err = e };
 .err => |e| {
 return .{ .err = e };
 },
-else => unreachable,
 }) else (if (input.tryParse(css.Parser.expectIdentMatching, .{ "and" }).isOk()) (switch (MediaCondition.parseWithFlags(input, .{})) {
 .result => |v| v,
 .err => |e| {
 return .{ .err = e };
 },
-else => unreachable,
 }) else null));
             const media_type = ((explicit_media_type) orelse (MediaType{ .all = {} }));
             return .{ .result = MediaQuery{ .qualifier = qualifier, .media_type = media_type, .condition = condition } };
@@ -1039,7 +1034,7 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(QueryCondition)
             return QueryCondition.parseFeature(i);
     }
 
-pub fn tryParseFn(self: @This(), i: *css.Parser) Result(QueryCondition) {
+pub fn tryParseFn(self: *@This(), i: *css.Parser) Result(QueryCondition) {
             return parseQueryCondition(QueryCondition, i, self.flags);
     }
 };

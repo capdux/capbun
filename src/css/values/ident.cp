@@ -57,7 +57,7 @@ pub struct DashedIdentReference {
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), &_, hasher);
     }
 }
 
@@ -188,8 +188,8 @@ pub struct Ident {
         };
     }
 
-    pub fn fromRef(*_, ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent): @This() {
-        let this = IdentOrRef{
+    pub static fn fromRef(ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent): @This() {
+        let res = IdentOrRef{
             __len: @bitCast(ref_val),
             __ref_bit: true,
         };
@@ -197,10 +197,10 @@ pub struct Ident {
         if (comptime bun.Environment.isDebug) {
             let heap_ptr: *string = bun.handleOom(debug_ident[1].create(string));
             heap_ptr.* = debug_ident[0];
-            this.__ptrbits = @intCast(@intFromPtr(heap_ptr));
+            res.__ptrbits = @intCast(@intFromPtr(heap_ptr));
         }
 
-        return this;
+        return res;
     }
 
     pub inline fn isIdent(_: @This()): bool {

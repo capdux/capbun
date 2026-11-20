@@ -162,10 +162,13 @@ pub struct DeclarationBlock {
                 comptime decl_field: []const u8,
                 comptime important: bool,
             ) {
-                for (*prop of @field(d, decl_field).items) {
+                const items = @field(d, decl_field).items;
+                let idx: usize = 0;
+                while (idx < items.len) : (idx += 1) {
+                    const prop = &items[idx];
                     ctx.is_important = important;
 
-                    const handled = hndlr.handleProperty(unsafe { &prop }, ctx);
+                    const handled = hndlr.handleProperty(prop, ctx);
 
                     if (!handled) {
                         bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));

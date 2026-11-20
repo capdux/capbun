@@ -134,7 +134,7 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
                 out_slice[i] = {
                     color: fb_slice[i],
                     width: this.width.deepClone(allocator),
-                    style: this.style.deepClone(allocator),
+                    style: css.generic.deepClone(S, &this.style, allocator),
                 };
             }
 
@@ -146,7 +146,7 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
         }
 
         pub fn eql(other: *const This): bool {
-            return css.implementEql(@This(), _, other);
+            return css.implementEql(@This(), &_, other);
         }
 
         pub inline fn default(): This {
@@ -690,7 +690,7 @@ pub struct BorderHandler {
         const propertyHelper = struct {
             inline fn propertyHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: auto, category: PropertyCategory) {
                 flushHelper(handler, d, c, key, prop, val, category);
-                @field(@field(handler, key), prop) = val.deepClone(c.allocator);
+                @field(@field(handler, key), prop) = css.generic.deepClone(@TypeOf(val.*), val, c.allocator);
                 handler.category = category;
                 handler.has_any = true;
             }
@@ -861,12 +861,12 @@ pub struct BorderHandler {
         logical_shorthand_supported: bool,
 
         inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: auto) {
-            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, val.deepClone(f.ctx.allocator)), @unionInit(css.Property, rtl, val.deepClone(f.ctx.allocator)));
+            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)), @unionInit(css.Property, rtl, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)));
         }
 
         inline fn push(f: *FlushContext, comptime p: []const u8, val: auto) {
             bun.bits.insert(BorderProperty, &f.self.flushed_properties, @field(BorderProperty, p));
-            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, val.deepClone(f.ctx.allocator))));
+            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator))));
         }
 
         inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: auto) {

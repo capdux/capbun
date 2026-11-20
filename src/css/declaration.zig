@@ -155,16 +155,16 @@ pub fn minify(self: *DeclarationBlock, handler: *DeclarationHandler, important_h
             const handle = struct {
 
 pub inline fn handle(d: *DeclarationBlock, ctx: *css.PropertyHandlerContext, hndlr: *DeclarationHandler, comptime decl_field: []const u8, comptime important: bool) void {
-            for (@field(d, decl_field).items) |*prop| {
-                _ = &prop;
+            const items = @field(d, decl_field).items;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < items.len)) : (idx = (idx + 1)) {
+                const prop = (&items[@as(usize, @intCast(idx))]);
                 ctx.is_important = important;
-                const handled = hndlr.handleProperty((blk: {
-                break :blk (&(prop.*));
-
-}), ctx);
+                const handled = hndlr.handleProperty(prop, ctx);
                 if ((!handled)) {
-                    _ = bun.handleOom(hndlr.decls.append(ctx.allocator, (prop.*).*));
-                    (prop.*).* = css.Property{ .all = .@"revert-layer" };
+                    _ = bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
+                    prop.* = css.Property{ .all = .@"revert-layer" };
                 }
             }
     }

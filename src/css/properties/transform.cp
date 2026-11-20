@@ -1234,7 +1234,7 @@ pub struct TransformHandler {
                 // If two vendor prefixes for the same property have different
                 // values, we need to flush what we have immediately to preserve order.
                 if (current := _.transform) {
-                    if (!current[0].eql(&transform_val) && !bun.bits.contains(css.VendorPrefix, current[1], vp)) {
+                    if (!current[0].eql(unsafe { &transform_val }) && !bun.bits.contains(css.VendorPrefix, current[1], vp)) {
                         _.flush(allocator, dest, context);
                     }
                 }
