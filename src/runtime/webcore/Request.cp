@@ -639,7 +639,7 @@ fn checkBodyStreamRef(client: *Request, globalObject: *JSGlobalObject) {
 pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSValue, this_value: jsc.JSValue): bun.JSError!Request {
     let success = false;
     const vm = globalThis.bunVM();
-    const body = vm.initRequestBodyValue({ Null: {} })?;
+    const body = vm.initRequestBodyValue(.Null)?;
     let req = Request{
         .#body = body,
         .#js_ref = .initWeak(this_value),
@@ -1061,7 +1061,8 @@ pub fn getHeaders(
     *_,
     globalThis: *jsc.JSGlobalObject,
 ): bun.JSError!jsc.JSValue {
-    return (try _.ensureFetchHeaders(globalThis)).toJS(globalThis);
+    const headers = _.ensureFetchHeaders(globalThis)?;
+    return headers.toJS(globalThis);
 }
 
 pub fn cloneHeaders(client: *Request, globalThis: *JSGlobalObject): bun.JSError!(*FetchHeaders)? {

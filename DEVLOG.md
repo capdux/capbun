@@ -1433,3 +1433,5 @@
 - **[2026-11-20] Wave 14 收官**：110 个模块全部落地，语义分析已穿透至最终主干运行时层（`server`/`RequestContext`/`CryptoHasher`/`AutoFlusher`/`VirtualMachine`/`DevServer`）。
 
 - **[2026-11-20] Wave 15 Batch B+C 核心修复**：`CryptoHasher` 提取 `digest_len` 与可变 `enc` 副本清 40 错；`node_fs_binding` 清 33 处 `error.zero` 并加 `hasDecl(deinit)` 守卫；`shell/IO.cp` `OutKind`、`PipeWriter.cp` `WriteResult`、`MySQLConnection.cp` `AuthState` 改 `pub const X = union(enum)` 恢复值类型存储；`shell/Builtin.cp` 用 `@field(args, comptimePrint)` 消除 19 处 comptime 错。
+
+- **[2026-11-20] Wave 15 收官**：43 个核心模块落地，总报错 714→507；`AnyRequestContext`/`DeferredTaskQueue`/`ManagedTask` 升级 `@root struct`，`Body.Mixin(T)` 补 `static fn` 清零 `host_fn`。

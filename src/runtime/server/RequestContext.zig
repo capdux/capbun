@@ -1568,7 +1568,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
             if (response_value.asAnyPromise()) |promise| {
                 // If we immediately have the value available, we can skip the extra event loop tick
-                switch (promise.unwrap(vm.global.vm(), .mark_handled)) {
+                var p = promise;
+                switch (p.unwrap(vm.global.vm(), .mark_handled)) {
                     .pending => {
                         ctx.ref();
                         const cell = NativePromiseContext.create(this.globalThis, ctx);
@@ -2081,7 +2082,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 defer exception_list.deinit();
                 const prev_exception_list = vm.onUnhandledRejectionExceptionList;
                 vm.onUnhandledRejectionExceptionList = &exception_list;
-                vm.onUnhandledRejection(vm, globalThis, value);
+                vm.onUnhandledRejection.*(vm, globalThis, value);
                 vm.onUnhandledRejectionExceptionList = prev_exception_list;
 
                 this.renderDefaultError(
@@ -2094,7 +2095,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 );
             } else {
                 if (status != 404) {
-                    vm.onUnhandledRejection(vm, globalThis, value);
+                    vm.onUnhandledRejection.*(vm, globalThis, value);
                 }
                 this.renderProductionError(status);
             }
@@ -2145,7 +2146,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             assert(ctx.server != null);
             var vm = ctx.server.?.vm;
 
-            switch (promise.unwrap(vm.global.vm(), .mark_handled)) {
+            var p = promise;
+            switch (p.unwrap(vm.global.vm(), .mark_handled)) {
                 .pending => {
                     ctx.flags.is_error_promise_pending = true;
                     ctx.ref();

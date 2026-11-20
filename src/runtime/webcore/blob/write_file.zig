@@ -153,7 +153,7 @@ pub fn onIOError(self: *WriteFile, err: sys.Error) void {
             _ = WorkPool.schedule((&self.task));
     }
 
-pub fn onRequestWritable(request: *io.Request) callconv(.c) io.Action {
+pub fn onRequestWritable(request: *io.Request) io.Action {
             _ = bloblog("WriteFile.onRequestWritable()", .{});
             request.scheduled = false;
             var self_wf: *WriteFile = @fieldParentPtr("io_request", request);
@@ -178,13 +178,12 @@ pub fn createWithCtx(file_blob: Blob, bytes_blob: Blob, onWriteFileContext: *any
     }
 
 pub fn create(file_blob: Blob, bytes_blob: Blob, comptime Context: type, context: Context, comptime callback: *const fn (Context, WriteFileResultType) anyerror!void, mkdirp_if_not_exists: bool) !*WriteFile {
-            var Handler = struct {
+            const Handler = struct {
 
 pub fn run(ptr: *anyopaque, bytes: WriteFileResultType) anyerror!void {
             _ = try callback(cast(Context, ptr), bytes);
     }
 };
-            _ = &Handler;
             return try WriteFile.createWithCtx(file_blob, bytes_blob, @ptrCast(context), Handler.run, mkdirp_if_not_exists);
     }
 
@@ -717,7 +716,9 @@ var blob = value.use();
             defer {
             _ = file_blob.detach();
             }
-            if (new_promise.asAnyPromise()) |p| {
+            if (new_promise.asAnyPromise()) |p_val| {
+                _ = &p_val;
+                var p = p_val;
                 _ = &p;
                 switch (p.unwrap(globalThis.vm(), .mark_handled)) {
 .pending => {

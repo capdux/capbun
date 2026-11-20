@@ -572,7 +572,7 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
 
 }));
         _ = &args;
-        var response = Response{ .#body = Body{ .value = .{ .Empty = .{} } }, .#init = Init{ .status_code = 200 }, .#url = bun.String.empty };
+        var response = Response{ .#body = Body{ .value = .Empty }, .#init = Init{ .status_code = 200 }, .#url = bun.String.empty };
         _ = &response;
         var did_succeed = false;
         _ = &did_succeed;
@@ -671,7 +671,7 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
         defer {
         _ = url_string_slice.deinit();
         }
-        var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .{ .Empty = .{} } }, .#url = bun.String.empty };
+        var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .Empty }, .#url = bun.String.empty };
         _ = &response;
         const url_string_value = ((args.nextEat()) orelse (jsc.JSValue.zero));
         var url_string = ZigString.init("");
@@ -722,7 +722,7 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
 }
 
 pub fn constructError(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-        const response = bun.new(Response, Response{ .#init = Init{ .status_code = 0 }, .#body = Body{ .value = .{ .Empty = .{} } } });
+        const response = bun.new(Response, Response{ .#init = Init{ .status_code = 0 }, .#body = Body{ .value = .Empty } });
         const js_value = response.toJS(globalThis);
         response.#js_ref = .initWeak(js_value);
         return js_value;
@@ -738,7 +738,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
                     if ((!arguments[1].isEmptyOrUndefinedOrNull())) {
                         return globalThis.throwInvalidArguments("new Response(s3File) do not support ResponseInit options", .{});
                     }
-                    var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .{ .Empty = .{} } }, .#url = bun.String.empty, .#js_ref = .initWeak(js_this) };
+                    var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .Empty }, .#url = bun.String.empty, .#js_ref = .initWeak(js_this) };
                     _ = &response;
                     const credentials = blob.store.?.data.s3.getCredentials();
                     const result = (blk_catch_2: { break :blk_catch_2 ((credentials.signRequest(.{ .path = blob.store.?.data.s3.path(), .method = .GET }, false, .{ .expires = (15 * 60) })) catch |sign_err| { _ = &sign_err; return s3.throwSignError(sign_err, globalThis); }); });

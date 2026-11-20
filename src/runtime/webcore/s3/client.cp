@@ -61,14 +61,14 @@ pub fn stat(
     proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
-    const req_opts = .{
-        .path = path,
-        .method = bun.http.Method.HEAD,
-        .proxy_url = proxy_url,
-        .body = "",
-        .request_payer = request_payer,
+    const req_opts = S3SimpleRequest.S3SimpleRequestOptions {
+        path = path,
+        method = bun.http.Method.HEAD,
+        proxy_url = proxy_url,
+        body = "",
+        request_payer = request_payer,
     };
-    const cb = .{ .stat = callback };
+    const cb: S3HttpSimpleTask.Callback = .{ .stat = callback };
     S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
 }
 
@@ -80,14 +80,14 @@ pub fn download(
     proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
-    const req_opts = .{
-        .path = path,
-        .method = bun.http.Method.GET,
-        .proxy_url = proxy_url,
-        .body = "",
-        .request_payer = request_payer,
+    const req_opts = S3SimpleRequest.S3SimpleRequestOptions {
+        path = path,
+        method = bun.http.Method.GET,
+        proxy_url = proxy_url,
+        body = "",
+        request_payer = request_payer,
     };
-    const cb = .{ .download = callback };
+    const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
     S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
 }
 
@@ -110,15 +110,15 @@ pub fn downloadSlice(
         break :brk handleOom(allocPrint(default_allocator, "bytes={}-", .{ offset }));
     };
 
-    const req_opts = .{
-        .path = path,
-        .method = bun.http.Method.GET,
-        .proxy_url = proxy_url,
-        .body = "",
-        .range = range,
-        .request_payer = request_payer,
+    const req_opts = S3SimpleRequest.S3SimpleRequestOptions {
+        path = path,
+        method = bun.http.Method.GET,
+        proxy_url = proxy_url,
+        body = "",
+        range = range,
+        request_payer = request_payer,
     };
-    const cb = .{ .download = callback };
+    const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
     S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
 }
 
@@ -130,14 +130,14 @@ pub fn delete(
     proxy_url: string?,
     request_payer: bool,
 ): JSTerminatedError!void {
-    const req_opts = .{
-        .path = path,
-        .method = bun.http.Method.DELETE,
-        .proxy_url = proxy_url,
-        .body = "",
-        .request_payer = request_payer,
+    const req_opts = S3SimpleRequest.S3SimpleRequestOptions {
+        path = path,
+        method = bun.http.Method.DELETE,
+        proxy_url = proxy_url,
+        body = "",
+        request_payer = request_payer,
     };
-    const cb = .{ .delete = callback };
+    const cb: S3HttpSimpleTask.Callback = .{ .delete = callback };
     S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
 }
 
@@ -284,19 +284,19 @@ pub fn upload(
     callback: fn (S3UploadResult, *!) JSTerminatedError!void,
     callback_context: *!,
 ): JSTerminatedError!void {
-    const req_opts = .{
-        .path = path,
-        .method = bun.http.Method.PUT,
-        .proxy_url = proxy_url,
-        .body = content,
-        .content_type = content_type,
-        .content_disposition = content_disposition,
-        .content_encoding = content_encoding,
-        .acl = acl,
-        .storage_class = storage_class,
-        .request_payer = request_payer,
+    const req_opts = S3SimpleRequest.S3SimpleRequestOptions {
+        path = path,
+        method = bun.http.Method.PUT,
+        proxy_url = proxy_url,
+        body = content,
+        content_type = content_type,
+        content_disposition = content_disposition,
+        content_encoding = content_encoding,
+        acl = acl,
+        storage_class = storage_class,
+        request_payer = request_payer,
     };
-    const cb = .{ .upload = callback };
+    const cb: S3HttpSimpleTask.Callback = .{ .upload = callback };
     S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
 }
 
@@ -512,7 +512,7 @@ pub fn uploadStream(
         .File(stream) => {
             if (stream.pending.result == .err) {
                 let err_res = stream.pending.result.err;
-                stream.pending = .{ .result = .{ .done = {} } };
+                stream.pending = .{ .result = .done };
                 const [js_err, was_strong] = err_res.toJSWeak(globalThis);
                 if (was_strong == .Strong) {
                     js_err.unprotect();
@@ -524,7 +524,7 @@ pub fn uploadStream(
         .Bytes(stream) => {
             if (stream.pending.result == .err) {
                 let err_res = stream.pending.result.err;
-                stream.pending = .{ .result = .{ .done = {} } };
+                stream.pending = .{ .result = .done };
                 const [js_err, was_strong] = err_res.toJSWeak(globalThis);
                 if (was_strong == .Strong) {
                     js_err.unprotect();
@@ -727,7 +727,7 @@ export class S3DownloadStreamWrapper {
         }
     }
 
-    @c static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: S3Error?, opaque_self: *!) {
+    static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: S3Error?, opaque_self: *!) {
         let self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
         callback(chunk, has_more, s3_err, self) catch {};
     }

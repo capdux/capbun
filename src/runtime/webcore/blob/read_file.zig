@@ -77,9 +77,6 @@ const errnoToZigErr = @import("bun").errnoToZigErr;
 const isRegularFile = @import("bun").isRegularFile;
 const isReadable = @import("bun").isReadable;
 const JSTerminated = @import("bun").JSTerminated;
-const String = @import("bun").String;
-const as = @import("bun").as;
-const BunString = @import("bun").BunString;
 pub const ReadFileRead = struct {
     buf: []u8,
     is_temporary: bool = false,
@@ -203,13 +200,12 @@ pub fn create(allocator: Allocator, store: *Store, off: SizeType, max_len: SizeT
             if (Environment.isWindows) {
                 _ = @compileError("dont call this function on windows");
             }
-            var Handler = struct {
+            const Handler = struct {
 
 pub fn run(ptr: *anyopaque, bytes: ReadFileResultType) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((callback(cast(Context, ptr), bytes)) catch |__ce_0| { _ = &__ce_0;  }); });
     }
 };
-            _ = &Handler;
             return try ReadFile.createWithCtx(allocator, store, @ptrCast(context), Handler.run, off, max_len);
     }
 
@@ -328,7 +324,7 @@ pub fn then(self: *ReadFile, _: *JSGlobalObject) !void {
             var buf = self.buffer.items;
             _ = &buf;
             defer {
-            _ = (store).?.deref();
+            _ = store.deref();
             }
             var system_error = self.system_error;
             _ = &system_error;
@@ -394,8 +390,8 @@ pub fn resolveSizeAndLastModified(self: *ReadFile, fd: FD) void {
             _ = &stat;
             if (self.store) |store| {
                 _ = &store;
-                if (((store).?.data == .file)) {
-                    (store).?.data.file.last_modified = jsc.toJSTime(stat.mtime().sec, stat.mtime().nsec);
+                if ((store.data == .file)) {
+                    store.data.file.last_modified = jsc.toJSTime(stat.mtime().sec, stat.mtime().nsec);
                 }
             }
             if (bun.S.ISDIR(@intCast(stat.mode))) {
@@ -796,6 +792,7 @@ pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
 };
 
 pub const ReadFileOnReadFileCallback = *const fn (*anyopaque, ReadFileResultType) void;
+const BunString = bun.String;
 const jsc = bun.jsc;
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;

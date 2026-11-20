@@ -309,7 +309,7 @@ pub fn onStreamCancelled(ctx: ?*anyopaque) callconv(.c) void {
             }
     }
 
-pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque) callconv(.c) void {
+pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque) void {
             var self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
             _ = &self;
             _ = (blk_catch_2: { break :blk_catch_2 ((callback(chunk, has_more, s3_err, self)) catch |__ce_2| { _ = &__ce_2;  }); });
@@ -359,14 +359,14 @@ pub const S3ListObjectsOptions = S3ListObjects.S3ListObjectsOptions;
 pub const getListObjectsOptionsFromJS = S3ListObjects.getListObjectsOptionsFromJS;
 
 pub fn stat(self: *S3Credentials, path: []const u8, callback: *const fn (S3StatResult, *anyopaque) JSTerminatedError!void, callback_context: *anyopaque, proxy_url: ?[]const u8, request_payer: bool) JSTerminatedError!void {
-        const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_request_payer_bool = .{ .path = path, .method = bun.http.Method.HEAD, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
-        const cb: __CpObj_stat__const_fn__S3StatResult___anyopaque__JSTerminatedError_void = .{ .stat = callback };
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = path, .method = bun.http.Method.HEAD, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
+        const cb: S3HttpSimpleTask.Callback = .{ .stat = callback };
         _ = try S3SimpleRequest.executeSimpleS3Request(self, req_opts, cb, callback_context);
 }
 
 pub fn download(self: *S3Credentials, path: []const u8, callback: *const fn (S3DownloadResult, *anyopaque) JSTerminatedError!void, callback_context: *anyopaque, proxy_url: ?[]const u8, request_payer: bool) JSTerminatedError!void {
-        const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_request_payer_bool = .{ .path = path, .method = bun.http.Method.GET, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
-        const cb: __CpObj_download__const_fn__S3DownloadResult___anyopaque__JSTerminatedError_void = .{ .download = callback };
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = path, .method = bun.http.Method.GET, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
+        const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
         _ = try S3SimpleRequest.executeSimpleS3Request(self, req_opts, cb, callback_context);
 }
 
@@ -384,14 +384,14 @@ pub fn downloadSlice(self: *S3Credentials, path: []const u8, offset: usize, size
         break :brk handleOom(allocPrint(default_allocator, "bytes={}-", .{ offset }));
 };
         _ = &range;
-        const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_range____const_u8_request_payer_bool = .{ .path = path, .method = bun.http.Method.GET, .proxy_url = proxy_url, .body = "", .range = range, .request_payer = request_payer };
-        const cb: __CpObj_download__const_fn__S3DownloadResult___anyopaque__JSTerminatedError_void = .{ .download = callback };
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = path, .method = bun.http.Method.GET, .proxy_url = proxy_url, .body = "", .range = range, .request_payer = request_payer };
+        const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
         _ = try S3SimpleRequest.executeSimpleS3Request(self, req_opts, cb, callback_context);
 }
 
 pub fn delete(self: *S3Credentials, path: []const u8, callback: *const fn (S3DeleteResult, *anyopaque) JSTerminatedError!void, callback_context: *anyopaque, proxy_url: ?[]const u8, request_payer: bool) JSTerminatedError!void {
-        const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_request_payer_bool = .{ .path = path, .method = bun.http.Method.DELETE, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
-        const cb: __CpObj_delete__const_fn__S3DeleteResult___anyopaque__JSTerminatedError_void = .{ .delete = callback };
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = path, .method = bun.http.Method.DELETE, .proxy_url = proxy_url, .body = "", .request_payer = request_payer };
+        const cb: S3HttpSimpleTask.Callback = .{ .delete = callback };
         _ = try S3SimpleRequest.executeSimpleS3Request(self, req_opts, cb, callback_context);
 }
 
@@ -498,8 +498,8 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
 }
 
 pub fn upload(self: *S3Credentials, path: []const u8, content: []const u8, content_type: ?[]const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, acl: ?ACL, proxy_url: ?[]const u8, storage_class: ?StorageClass, request_payer: bool, callback: *const fn (S3UploadResult, *anyopaque) JSTerminatedError!void, callback_context: *anyopaque) JSTerminatedError!void {
-        const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = path, .method = bun.http.Method.PUT, .proxy_url = proxy_url, .body = content, .content_type = content_type, .content_disposition = content_disposition, .content_encoding = content_encoding, .acl = acl, .storage_class = storage_class, .request_payer = request_payer };
-        const cb: __CpObj_upload__const_fn__S3UploadResult___anyopaque__JSTerminatedError_void = .{ .upload = callback };
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = path, .method = bun.http.Method.PUT, .proxy_url = proxy_url, .body = content, .content_type = content_type, .content_disposition = content_disposition, .content_encoding = content_encoding, .acl = acl, .storage_class = storage_class, .request_payer = request_payer };
+        const cb: S3HttpSimpleTask.Callback = .{ .upload = callback };
         _ = try S3SimpleRequest.executeSimpleS3Request(self, req_opts, cb, callback_context);
 }
 
@@ -543,7 +543,7 @@ return JSPromise.rejectedPromise(globalThis, bun.String.static("ReadableStream i
 if ((stream.pending.result == .err)) {
             var err_res = stream.pending.result.err;
             _ = &err_res;
-            stream.pending = .{ .result = .{ .done = .{} } };
+            stream.pending = .{ .result = .done };
             const _tmp_v0 = err_res.toJSWeak(globalThis);
             const js_err = cp_unpack_elem(_tmp_v0, 0);
             _ = &js_err;
@@ -560,7 +560,7 @@ if ((stream.pending.result == .err)) {
 if ((stream.pending.result == .err)) {
             var err_res = stream.pending.result.err;
             _ = &err_res;
-            stream.pending = .{ .result = .{ .done = .{} } };
+            stream.pending = .{ .result = .done };
             const _tmp_v1 = err_res.toJSWeak(globalThis);
             const js_err = cp_unpack_elem(_tmp_v1, 0);
             _ = &js_err;
@@ -592,7 +592,7 @@ else => {
         task.callback_context = @ptrCast(ctx);
         task.onWritable = @ptrCast((&S3UploadStreamWrapper.onWritable));
         _ = task.continueStream();
-        return (if (@typeInfo(@TypeOf(ctx.endPromise)) == .@"enum") @intFromEnum(ctx.endPromise) else ctx.endPromise.value)();
+        return ctx.endPromise.value();
 }
 
 pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, size: ?usize, proxy_url: ?[]const u8, request_payer: bool, callback: *const fn (MutableString, bool, ?S3Error, *anyopaque) void, callback_context: *anyopaque) void {
@@ -666,12 +666,5 @@ pub fn readableStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         _ = downloadStream(self, path, offset, size, proxy_url, request_payer, S3DownloadStreamWrapper.opaqueCallback, wrapper);
         return readable_value;
 }
-pub const __CpObj_delete__const_fn__S3DeleteResult___anyopaque__JSTerminatedError_void = struct { delete: *const fn (S3DeleteResult, *anyopaque) JSTerminatedError!void };
-pub const __CpObj_download__const_fn__S3DownloadResult___anyopaque__JSTerminatedError_void = struct { download: *const fn (S3DownloadResult, *anyopaque) JSTerminatedError!void };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: []const u8, content_type: ?[]const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_range____const_u8_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: []const u8, range: ?[]const u8, request_payer: bool };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body___const_u8_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: []const u8, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, request_payer: bool };
 pub const __CpObj_path___const_u8_method__anyopaque_search_params__anyopaque = struct { path: []const u8, method: *anyopaque, search_params: *anyopaque };
-pub const __CpObj_stat__const_fn__S3StatResult___anyopaque__JSTerminatedError_void = struct { stat: *const fn (S3StatResult, *anyopaque) JSTerminatedError!void };
-pub const __CpObj_upload__const_fn__S3UploadResult___anyopaque__JSTerminatedError_void = struct { upload: *const fn (S3UploadResult, *anyopaque) JSTerminatedError!void };

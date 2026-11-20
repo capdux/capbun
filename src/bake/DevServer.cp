@@ -623,7 +623,7 @@ pub fn deinit(dev: *DevServer) {
     dev.graph_safety_lock.lock();
     dev.bun_watcher.deinit(true);
     if (bun.FeatureFlags.bake_debugging_features) {
-        if (dir := dev.dump_dir) dir.close();
+        if (*dir := dev.dump_dir) dir.close();
     }
     dev.log.deinit();
     dev.server_fetch_function_callback.deinit();
@@ -814,8 +814,14 @@ pub fn dev_allocator(dev: *const DevServer): DevAllocator {
     return dev.allocation_scope.borrow();
 }
 
-pub const memoryCost = MemoryCost.memoryCost;
-pub const memoryCostDetailed = MemoryCost.memoryCostDetailed;
+pub fn memoryCost(dev: *DevServer): usize {
+    const mc: MemoryCost = undefined;
+    return mc.memoryCost(dev);
+}
+pub fn memoryCostDetailed(dev: *DevServer): MemoryCost {
+    const mc: MemoryCost = undefined;
+    return mc.memoryCostDetailed(dev);
+}
 pub const memoryCostArrayHashMap = MemoryCost.memoryCostArrayHashMap;
 pub const memoryCostArrayList = MemoryCost.memoryCostArrayList;
 pub const memoryCostSlice = MemoryCost.memoryCostSlice;

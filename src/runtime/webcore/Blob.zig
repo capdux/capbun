@@ -161,7 +161,7 @@ pub fn sliceConst(self: BlobInternal) []const u8 {
     }
 
 pub fn toOwnedSlice(self: *BlobInternal) []u8 {
-            return self.bytes.toOwnedSlice();
+            return bun.handleOom(self.bytes.toOwnedSlice());
     }
 
 pub fn clearAndFree(self: *BlobInternal) void {
@@ -174,12 +174,32 @@ pub const BlobAny = union(enum) {
     InternalBlob: BlobInternal,
     WTFStringImpl: bun.WTF.StringImpl,
 
+pub fn fromArrayList(list: std.array_list.Managed(u8)) *BlobAny {
+            return BlobAny{ .InternalBlob = BlobInternal{ .bytes = list } };
+    }
+
+pub inline fn fastSize(self: *const BlobAny) Blob.SizeType {
+            return (switch (self) {
+.Blob => self.Blob.size,
+.WTFStringImpl => @truncate(self.WTFStringImpl.byteLength()),
+.InternalBlob => @truncate(self.slice().len),
+});
+    }
+
+pub inline fn size(self: *const BlobAny) Blob.SizeType {
+            return (switch (self) {
+.Blob => self.Blob.size,
+.WTFStringImpl => @truncate(self.WTFStringImpl.utf8ByteLength()),
+else => @truncate(self.slice().len),
+});
+    }
+
 pub fn slice(self: *const BlobAny) []const u8 {
-            switch (self.*) {
-.Blob => |*b| {
+            switch (self) {
+.Blob => |b| {
 return b.sharedView();
 },
-.InternalBlob => |*b| {
+.InternalBlob => |b| {
 return b.sliceConst();
 },
 .WTFStringImpl => |s| {
@@ -279,7 +299,7 @@ pub fn new(blob: Blob) *Blob {
 }
 
 pub fn isHeapAllocated(self: Blob) bool {
-        return (self.ref_count.raw() > 0);
+        return (self.ref_count.raw_value != 0);
 }
 
 pub fn isBunFile(self: Blob) bool {
@@ -296,6 +316,110 @@ pub fn isS3(self: Blob) bool {
             return (store.data == .s3);
         }
         return false;
+}
+
+pub fn writeFormatForSize(is_jdom_file: bool, size: usize, writer: anytype, comptime enable_ansi_colors: bool) !void {
+        if (is_jdom_file) {
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>File<r>", enable_ansi_colors)));
+        } else {
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>Blob<r>", enable_ansi_colors)));
+        }
+        _ = try writer.print((comptime Output.prettyFmt(" (<yellow>{f}<r>)", enable_ansi_colors)), .{ bun.fmt.size(size, .{}) });
+}
+
+pub fn writeFormat(self: *Blob, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool) !void {
+        const Writer = @TypeOf(writer);
+        var __Writer_moved = false; _ = &__Writer_moved;
+        defer if (!__Writer_moved) { const __T = @TypeOf(Writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Writer.release() catch {}; } else { Writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Writer; _drop_val.release(); } };
+        if ((self.store == null)) {
+            if ((self.size > 0)) {
+                if (self.is_jsdom_file) {
+                    _ = try writer.writeAll((comptime Output.prettyFmt("<d>[<r>File<r> detached<d>]<r>", enable_ansi_colors)));
+                } else {
+                    _ = try writer.writeAll((comptime Output.prettyFmt("<d>[<r>Blob<r> detached<d>]<r>", enable_ansi_colors)));
+                }
+                return;
+            }
+            _ = try Blob.writeFormatForSize(self.is_jsdom_file, 0, writer, enable_ansi_colors);
+        } else {
+            const store = self.store.?;
+            switch (store.data) {
+.s3 => |*s3| {
+_ = try jsc.WebCore.S3File.writeFormat(s3, Formatter, formatter, writer, enable_ansi_colors, self.content_type, self.offset);
+},
+.file => |file| {
+_ = try writer.writeAll((comptime Output.prettyFmt("<r>FileRef<r>", enable_ansi_colors)));
+            switch (file.pathlike) {
+.path => |path| {
+_ = try writer.print((comptime Output.prettyFmt(" (<green>\"{s}\"<r>)<r>", enable_ansi_colors)), .{ path.slice() });
+},
+.fd => |fd| {
+if (Environment.isWindows) {
+                switch (fd.decodeWindows()) {
+.uv => |uv_file| {
+_ = try writer.print((comptime Output.prettyFmt(" (<r>fd<d>:<r> <yellow>{d}<r>)<r>", enable_ansi_colors)), .{ uv_file });
+},
+.windows => |handle| {
+if (Environment.isDebug) {
+                    _ = @panic("this shouldn't be reachable.");
+                }
+                _ = try writer.print((comptime Output.prettyFmt(" (<r>fd<d>:<r> <yellow>0x{x}<r>)<r>", enable_ansi_colors)), .{ @intFromPtr(handle) });
+},
+}
+            } else {
+                _ = try writer.print((comptime Output.prettyFmt(" (<r>fd<d>:<r> <yellow>{d}<r>)<r>", enable_ansi_colors)), .{ fd.native() });
+            }
+},
+}
+},
+.bytes => {
+_ = try Blob.writeFormatForSize(self.is_jsdom_file, self.size, writer, enable_ansi_colors);
+},
+}
+        }
+        const has_name = (!self.name.isEmpty());
+        var __has_name_moved = false; _ = &__has_name_moved;
+        defer if (!__has_name_moved) { const __T = @TypeOf(has_name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = has_name.release() catch {}; } else { has_name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = has_name; _drop_val.release(); } };
+        const show_name = ((self.is_jsdom_file and has_name) or ((has_name and (self.store != null)) and (self.store.?.data == .bytes)));
+        if (((!self.isS3()) and ((((self.content_type.len > 0) or (self.offset > 0)) or show_name) or (self.last_modified != 0.0)))) {
+            _ = try writer.writeAll(" {\n");
+            {
+                formatter.indent = (formatter.indent + 1);
+                defer {
+                formatter.indent = (formatter.indent - 1);
+                }
+                if (show_name) {
+                    _ = try formatter.writeIndent(Writer, writer);
+                    _ = try writer.print((comptime Output.prettyFmt("name<d>:<r> <green>\"{f}\"<r>", enable_ansi_colors)), .{ self.name });
+                    if ((((self.content_type.len > 0) or (self.offset > 0)) or (self.last_modified != 0))) {
+                        _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+                    }
+                    _ = try writer.writeAll("\n");
+                }
+                if ((self.content_type.len > 0)) {
+                    _ = try formatter.writeIndent(Writer, writer);
+                    _ = try writer.print((comptime Output.prettyFmt("type<d>:<r> <green>\"{s}\"<r>", enable_ansi_colors)), .{ self.content_type });
+                    if (((self.offset > 0) or (self.last_modified != 0))) {
+                        _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+                    }
+                    _ = try writer.writeAll("\n");
+                }
+                if ((self.offset > 0)) {
+                    _ = try formatter.writeIndent(Writer, writer);
+                    _ = try writer.print((comptime Output.prettyFmt("offset<d>:<r> <yellow>{d}<r>\n", enable_ansi_colors)), .{ self.offset });
+                    if ((self.last_modified != 0)) {
+                        _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+                    }
+                    _ = try writer.writeAll("\n");
+                }
+                if ((self.last_modified != 0)) {
+                    _ = try formatter.writeIndent(Writer, writer);
+                    _ = try writer.print((comptime Output.prettyFmt("lastModified<d>:<r> <yellow>{d}<r>\n", enable_ansi_colors)), .{ self.last_modified });
+                }
+            }
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll("}");
+        }
 }
 
 pub fn doReadFileInternal(self: *Blob, comptime Handler: type, ctx: Handler, comptime Function: anytype, global: *JSGlobalObject) void {
@@ -318,9 +442,9 @@ pub fn readBytesToHandler(self: *Blob, comptime Handler: type, ctx: *Handler, gl
             const Adapter = struct {
 
 pub fn run(c: *Handler, r: read_file_mod.ReadFileResultType) void {
-            const res: *BlobReadBytesResult = (switch (r) {
-.result => |b| .{ .ok = b.buf },
-.err => |e| .{ .err = e },
+            const res = (switch (r) {
+.result => |b| BlobReadBytesResult{ .ok = b.buf },
+.err => |e| BlobReadBytesResult{ .err = e },
 });
             _ = Handler.onReadBytes(c, res);
     }
@@ -348,7 +472,7 @@ pub fn done(t: *@This(), r: *BlobReadBytesResult) void {
             _ = Handler.onReadBytes(c, r);
     }
 
-pub fn cb(result: bun.S3.S3DownloadResult, opaque_self: *anyopaque) !bun.JSTerminated {
+pub fn cb(result: bun.S3.S3DownloadResult, opaque_self: *anyopaque) bun.JSTerminated!void {
             const t: *@This() = (blk: {
             break :blk @ptrCast(@alignCast(opaque_self));
 
@@ -1433,7 +1557,7 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
             _ = stream.done(globalThis);
         }
         _ = try wrapper.promise.resolve(globalThis, JSValue.jsNumber(0));
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
@@ -1459,7 +1583,7 @@ pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *
             _ = &stream;
             _ = stream.cancel(globalThis);
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub noinline fn mkdirIfNotExists(ctx: anytype, e: bun.sys.Error, path_string: [:0]const u8, err_path: []const u8) Retry {
@@ -2302,7 +2426,7 @@ pub fn getFd(ctx: *This, comptime Callback: OpenCallback) void {
     const State = @This();
     const __opener_flags = (bun.O.NONBLOCK | bun.O.CLOEXEC);
     const open_flags_ = (if (@hasDecl(This, "open_flags")) (This.open_flags | __opener_flags) else (bun.O.RDONLY | __opener_flags));
-    const OpenCallback = *const *const fn(*This, bun.FD) void;
+    const OpenCallback = *const fn(*This, bun.FD) void;
 };
 }
 

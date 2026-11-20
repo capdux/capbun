@@ -366,6 +366,8 @@ pub struct StoreBytes {
 }
 
 export class Store {
+    pub const new = bun.TrivialNew(@This());
+
     data: Data;
     mime_type: MimeType = .none;
     ref_count: AtomicValue(u32) = AtomicValue(u32).init(1);
@@ -386,9 +388,9 @@ export class Store {
 
     pub fn getPath(_: *const Store): string? {
         return switch (this.data) {
-            .bytes => |*bytes| if (bytes.stored_name.len > 0) bytes.stored_name.slice() else null,
-            .file => |*file| if (file.pathlike == .path) file.pathlike.path.slice() else null,
-            .s3 => |*s3| s3.pathlike.slice(),
+            .bytes(bytes) => if (bytes.stored_name.len > 0) bytes.stored_name.slice() else null,
+            .file(file) => if (file.pathlike == .path) file.pathlike.path.slice() else null,
+            .s3(s3) => s3.pathlike.slice(),
         };
     }
 

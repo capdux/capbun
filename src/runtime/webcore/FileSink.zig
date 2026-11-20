@@ -105,7 +105,7 @@ ref_count: RefCount = .init(),
 writer: IOWriter = .{},
 event_loop_handle: EventLoopHandle,
 written: usize = 0,
-pending: streams.Result.Writable.Pending = .{ .result = .{ .done = .{} } },
+pending: streams.Result.Writable.Pending = .{ .result = .done },
 signal: streams.Signal = .{},
 done: bool = false,
 started: bool = false,
@@ -425,7 +425,7 @@ pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys
         if (self.done) {
             return .initResult(JSValue.js_undefined);
         }
-        const rc = self.writer.flush();
+        const rc = (self.writer.flush()).*;
         if ((rc == .done)) {
             self.written = (self.written + @as(usize, @truncate(rc.done)));
         } else {
@@ -473,21 +473,21 @@ pub fn construct(self: *FileSink, alloc: sys.Allocator) void {
 
 pub fn write(self: *FileSink, data: streams.Result) streams.Result.Writable {
         if (self.done) {
-            return .{ .done = .{} };
+            return .done;
         }
         return self.toResult(self.writer.write(data.slice()));
 }
 
 pub fn writeLatin1(self: *FileSink, data: streams.Result) streams.Result.Writable {
         if (self.done) {
-            return .{ .done = .{} };
+            return .done;
         }
         return self.toResult(self.writer.writeLatin1(data.slice()));
 }
 
 pub fn writeUTF16(self: *FileSink, data: streams.Result) streams.Result.Writable {
         if (self.done) {
-            return .{ .done = .{} };
+            return .done;
         }
         return self.toResult(self.writer.writeUTF16(data.slice16()));
 }
@@ -496,7 +496,7 @@ pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
         if (self.done) {
             return .success;
         }
-        const flush_res = self.writer.flush();
+        const flush_res = (self.writer.flush()).*;
         if ((flush_res == .done)) {
             self.written = (self.written + @as(usize, @truncate(flush_res.done)));
             _ = self.writer.end();
@@ -533,7 +533,7 @@ pub fn deinit(self: *FileSink) void {
             _ = &global;
             _ = AutoFlusher.unregisterDeferredMicrotaskWithType(FileSink, self, global.bunVM());
         }
-        _ = sys.destroy(self);
+        _ = bun.destroy(self);
 }
 
 pub fn toJS(self: *FileSink, globalThis: *JSGlobalObject) JSValue {
@@ -552,7 +552,7 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
             }
             return .{ .result = JSValue.jsNumber(self.written) };
         }
-        const flush_result = self.writer.flush();
+        const flush_result = (self.writer.flush()).*;
         if ((flush_result == .done)) {
             _ = self.updateRef(false);
             _ = self.writer.end();
@@ -610,7 +610,7 @@ pub fn toResult(self: *FileSink, write_result: io.WriteResult) streams.Result.Wr
             if ((amt > 0)) {
                 return .{ .owned_and_done = @as(Blob.SizeType, @truncate(amt)) };
             }
-            return .{ .done = .{} };
+            return .done;
         } else {
             if ((write_result == .wrote)) {
                 const amt = write_result.wrote;

@@ -27,49 +27,42 @@
 //! issues with the event loop.
 
 import bun from "bun";
-import std from "std";
 
 pub type RawContext = *!?;
 pub type TaskContext = *!;
+pub const DeferredRepeatingTask = *const fn (TaskContext) bool;
 
-export class DeferredTaskQueue {
-    pub const DeferredRepeatingTask = *const fn (TaskContext) bool;
+@root struct DeferredTaskQueue {
+    map: std.AutoArrayHashMapUnmanaged(RawContext, DeferredRepeatingTask) = .{},
 
-    map: std.AutoArrayHashMapUnmanaged(RawContext, DeferredRepeatingTask) = .{};
-
-    pub fn postTask(_: *DeferredTaskQueue, ctx: RawContext, task: DeferredRepeatingTask): bool {
+    fn postTask(*_, ctx: RawContext, task: DeferredRepeatingTask): bool {
         const existing = bun.handleOom(_.map.getOrPutValue(bun.default_allocator, ctx, task));
         return existing.found_existing;
     }
 
-    pub fn unregisterTask(_: *DeferredTaskQueue, ctx: RawContext): bool {
+    fn unregisterTask(*_, ctx: RawContext): bool {
         return _.map.swapRemove(ctx);
     }
 
-    pub fn run(_: *DeferredTaskQueue) {
+    fn run(*_) {
         let i: usize = 0;
         let last: usize = _.map.count();
         while (i < last) {
-            const key = _.map.keys()[i] orelse {
-                _.map.swapRemoveAt(i);
-                last = _.map.count();
-                continue;
-            };
-
-            if (!_.map.values()[i](key)) {
-                _.map.swapRemoveAt(i);
-                last = _.map.count();
+            if (key := _.map.keys()[i]) {
+                if (!_.map.values()[i](key)) {
+                    _.map.swapRemoveAt(i);
+                    last = _.map.count();
+                } else {
+                    i += 1;
+                }
             } else {
-                i += 1;
+                _.map.swapRemoveAt(i);
+                last = _.map.count();
             }
         }
     }
 
-    pub fn release(_: *DeferredTaskQueue) {
+    fn deinit(*_) {
         _.map.deinit(bun.default_allocator);
-    }
-
-    pub fn deinit(_: *DeferredTaskQueue) {
-        _.release();
     }
 }

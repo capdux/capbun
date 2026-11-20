@@ -587,7 +587,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
 
         let response = Response{
             #body: Body{
-                value: .{ .Empty = {} },
+                value: .Empty,
             },
             #init: Init{
                 status_code: 200,
@@ -688,7 +688,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
                 status_code: 302,
             },
             #body: Body{
-                value: .{ .Empty = {} },
+                value: .Empty,
             },
             #url: bun.String.empty,
         };
@@ -741,7 +741,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
                     status_code: 0,
                 },
                 #body: Body{
-                    value: .{ .Empty = {} },
+                    value: .Empty,
                 },
             },
         );
@@ -765,7 +765,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
                             status_code: 302,
                         },
                         #body: Body{
-                            value: .{ .Empty = {} },
+                            value: .Empty,
                         },
                         #url: bun.String.empty,
                         #js_ref: .initWeak(js_this),

@@ -2,6 +2,8 @@
 //! Only really exists because of `NewServer()` and `NewRequestContext()` generics.
 
 import bun from "bun";
+import RequestContextMod from "./RequestContext.zig";
+
 const jsc = bun.jsc;
 const uws = bun.uws;
 
@@ -19,153 +21,147 @@ pub const Pointer = bun.TaggedPointerUnion(.{
     DebugHTTPSServer.H3RequestContext,
 });
 
-pub const AdditionalOnAbortCallback = @import("./RequestContext.zig").AdditionalOnAbortCallback;
+pub const AdditionalOnAbortCallback = RequestContextMod.AdditionalOnAbortCallback;
 
-pub const AnyRequestContext = struct {
+fn cbSetAdditionalOnAbortCallback(comptime _: type, ctx: auto, c: AdditionalOnAbortCallback?) {
+    bun.assert(ctx.additional_on_abort == null);
+    ctx.additional_on_abort = c;
+}
+
+fn cbMemoryCost(comptime _: type, ctx: auto): usize {
+    return ctx.memoryCost();
+}
+
+fn cbSetTimeout(comptime _: type, ctx: auto, s: c_uint): bool {
+    return ctx.setTimeout(s);
+}
+
+fn cbSetCookies(comptime _: type, ctx: auto, c: (*jsc.WebCore.CookieMap)?) {
+    ctx.setCookies(c);
+}
+
+fn cbEnableTimeoutEvents(comptime _: type, ctx: auto) {
+    ctx.setTimeoutHandler();
+}
+
+fn cbGetRemoteSocketInfo(comptime _: type, ctx: auto): uws.SocketAddress? {
+    return ctx.getRemoteSocketInfo();
+}
+
+fn cbDetachRequest(comptime _: type, ctx: auto) {
+    ctx.req = null;
+}
+
+fn cbSetRequest(comptime T: type, ctx: auto, r: *uws.Request) {
+    if (comptime T.is_h3) return;
+    ctx.req = r;
+}
+
+fn cbGetRequest(comptime T: type, ctx: auto): (*uws.Request)? {
+    if (comptime T.is_h3) return null;
+    return ctx.req;
+}
+
+fn cbOnAbort(comptime T: type, ctx: auto, r: uws.AnyResponse) {
+    switch (r) {
+        .TCP(p) => if (comptime @TypeOf(p) == *T.Resp) ctx.onAbort(p) else unreachable,
+        .SSL(p) => if (comptime @TypeOf(p) == *T.Resp) ctx.onAbort(p) else unreachable,
+        .H3(p) => if (comptime @TypeOf(p) == *T.Resp) ctx.onAbort(p) else unreachable,
+    }
+}
+
+fn cbRef(comptime _: type, ctx: auto) {
+    ctx.ref();
+}
+
+fn cbSetSignalAborted(comptime _: type, ctx: auto, r: bun.jsc.CommonAbortReason) {
+    ctx.setSignalAborted(r);
+}
+
+fn cbDevServer(comptime _: type, ctx: auto): (*bun.bake.DevServer)? {
+    return ctx.devServer();
+}
+
+fn cbDeref(comptime _: type, ctx: auto) {
+    ctx.deref();
+}
+
+@root struct AnyRequestContext {
     tagged_pointer: Pointer,
 
-    pub const Null: @This() = .{ .tagged_pointer = Pointer.Null };
+    const Null: AnyRequestContext = AnyRequestContext{ tagged_pointer: Pointer.Null };
 
-    pub fn init(request_ctx: anytype) AnyRequestContext {
-        return .{ .tagged_pointer = Pointer.init(request_ctx) };
+    static fn init(request_ctx: auto): AnyRequestContext {
+        return AnyRequestContext{ tagged_pointer: Pointer.init(request_ctx) };
     }
 
-    /// Dispatch `cb(ctx, args...)` to the concrete RequestContext type behind the
-    /// tagged pointer. The pointer types only differ in their comptime parameters
-    /// (ssl/debug/http3), so every method body is identical — this collapses what
-    /// used to be six hand-written switch arms per accessor.
-    inline fn dispatch(self: AnyRequestContext, comptime Ret: type, default: Ret, comptime cb: anytype, args: anytype) Ret {
-        if (self.tagged_pointer.isNull()) return default;
-        inline for (Pointer.type_map) |entry| {
-            if (self.tagged_pointer.repr.data == entry.value) {
-                return @call(.auto, cb, .{ entry.ty, self.tagged_pointer.as(entry.ty) } ++ args);
+    inline fn dispatch(comptime Ret: type, default: Ret, comptime cb: auto, args: auto): Ret {
+        if (_.tagged_pointer.isNull()) return default;
+        inline for (entry of Pointer.type_map) {
+            if (_.tagged_pointer.repr.data == entry.value) {
+                return @call(.auto, cb, .{ entry.ty, _.tagged_pointer.as(entry.ty) } ++ args);
             }
         }
         @panic("Unexpected AnyRequestContext tag");
     }
 
-    pub fn setAdditionalOnAbortCallback(self: AnyRequestContext, cb: ?AdditionalOnAbortCallback) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype, c: ?AdditionalOnAbortCallback) void {
-                bun.assert(ctx.additional_on_abort == null);
-                ctx.additional_on_abort = c;
-            }
-        }.f, .{cb});
+    fn setAdditionalOnAbortCallback(cb: AdditionalOnAbortCallback?) {
+        _.dispatch(void, {}, cbSetAdditionalOnAbortCallback, .{cb});
     }
 
-    pub fn memoryCost(self: AnyRequestContext) usize {
-        return self.dispatch(usize, 0, struct {
-            static fn f(comptime _: type, ctx: anytype) usize {
-                return ctx.memoryCost();
-            }
-        }.f, .{});
+    fn memoryCost(): usize {
+        return _.dispatch(usize, 0, cbMemoryCost, .{});
     }
 
-    pub fn get(self: AnyRequestContext, comptime T: type) ?*T {
-        return self.tagged_pointer.get(T);
+    fn get(comptime T: type): (*T)? {
+        return _.tagged_pointer.get(T);
     }
 
-    pub fn setTimeout(self: AnyRequestContext, seconds: c_uint) bool {
-        return self.dispatch(bool, false, struct {
-            static fn f(comptime _: type, ctx: anytype, s: c_uint) bool {
-                return ctx.setTimeout(s);
-            }
-        }.f, .{seconds});
+    fn setTimeout(seconds: c_uint): bool {
+        return _.dispatch(bool, false, cbSetTimeout, .{seconds});
     }
 
-    pub fn setCookies(self: AnyRequestContext, cookie_map: ?*jsc.WebCore.CookieMap) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype, c: ?*jsc.WebCore.CookieMap) void {
-                ctx.setCookies(c);
-            }
-        }.f, .{cookie_map});
+    fn setCookies(cookie_map: (*jsc.WebCore.CookieMap)?) {
+        _.dispatch(void, {}, cbSetCookies, .{cookie_map});
     }
 
-    pub fn enableTimeoutEvents(self: AnyRequestContext) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype) void {
-                ctx.setTimeoutHandler();
-            }
-        }.f, .{});
+    fn enableTimeoutEvents() {
+        _.dispatch(void, {}, cbEnableTimeoutEvents, .{});
     }
 
-    pub fn getRemoteSocketInfo(self: AnyRequestContext) ?uws.SocketAddress {
-        return self.dispatch(?uws.SocketAddress, null, struct {
-            static fn f(comptime _: type, ctx: anytype) ?uws.SocketAddress {
-                return ctx.getRemoteSocketInfo();
-            }
-        }.f, .{});
+    fn getRemoteSocketInfo(): uws.SocketAddress? {
+        return _.dispatch(uws.SocketAddress?, null, cbGetRemoteSocketInfo, .{});
     }
 
-    pub fn detachRequest(self: AnyRequestContext) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype) void {
-                ctx.req = null;
-            }
-        }.f, .{});
+    fn detachRequest() {
+        _.dispatch(void, {}, cbDetachRequest, .{});
     }
 
-    /// Wont actually set anything if `self` is `.none`
-    pub fn setRequest(self: AnyRequestContext, req: *uws.Request) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime T: type, ctx: anytype, r: *uws.Request) void {
-                if (comptime T.is_h3) return; // H3 populates url/headers eagerly
-                ctx.req = r;
-            }
-        }.f, .{req});
+    fn setRequest(req: *uws.Request) {
+        _.dispatch(void, {}, cbSetRequest, .{req});
     }
 
-    pub fn getRequest(self: AnyRequestContext) ?*uws.Request {
-        return self.dispatch(?*uws.Request, null, struct {
-            static fn f(comptime T: type, ctx: anytype) ?*uws.Request {
-                if (comptime T.is_h3) return null; // url/headers already on the Request
-                return ctx.req;
-            }
-        }.f, .{});
+    fn getRequest(): (*uws.Request)? {
+        return _.dispatch((*uws.Request)?, null, cbGetRequest, .{});
     }
 
-    pub fn onAbort(self: AnyRequestContext, response: uws.AnyResponse) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime T: type, ctx: anytype, r: uws.AnyResponse) void {
-                // The AnyResponse arm and T.Resp are created together; assert
-                // they agree so a mismatch traps in safe builds instead of being
-                // silently @ptrCast.
-                ctx.onAbort(switch (r) {
-                    inline else => |p| if (comptime @TypeOf(p) == *T.Resp) p else unreachable,
-                });
-            }
-        }.f, .{response});
+    fn onAbort(response: uws.AnyResponse) {
+        _.dispatch(void, {}, cbOnAbort, .{response});
     }
 
-    pub fn ref(self: AnyRequestContext) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype) void {
-                ctx.ref();
-            }
-        }.f, .{});
+    fn ref() {
+        _.dispatch(void, {}, cbRef, .{});
     }
 
-    pub fn setSignalAborted(self: AnyRequestContext, reason: bun.jsc.CommonAbortReason) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype, r: bun.jsc.CommonAbortReason) void {
-                ctx.setSignalAborted(r);
-            }
-        }.f, .{reason});
+    fn setSignalAborted(reason: bun.jsc.CommonAbortReason) {
+        _.dispatch(void, {}, cbSetSignalAborted, .{reason});
     }
 
-    pub fn devServer(self: AnyRequestContext) ?*bun.bake.DevServer {
-        return self.dispatch(?*bun.bake.DevServer, null, struct {
-            static fn f(comptime _: type, ctx: anytype) ?*bun.bake.DevServer {
-                return ctx.devServer();
-            }
-        }.f, .{});
+    fn devServer(): (*bun.bake.DevServer)? {
+        return _.dispatch((*bun.bake.DevServer)?, null, cbDevServer, .{});
     }
 
-    pub fn deref(self: AnyRequestContext) void {
-        self.dispatch(void, {}, struct {
-            static fn f(comptime _: type, ctx: anytype) void {
-                ctx.deref();
-            }
-        }.f, .{});
+    fn deref() {
+        _.dispatch(void, {}, cbDeref, .{});
     }
-};
+}

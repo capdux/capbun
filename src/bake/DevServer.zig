@@ -751,8 +751,6 @@ pub const HTMLRouter_empty: HTMLRouter = .{ .map = .empty, .fallback = null };
 pub const TestingBatch_empty: TestingBatch = .{ .entry_points = .empty };
 const AllocationScope = bun.allocators.AllocationScopeIn(bun.DefaultAllocator);
 pub const DevAllocator = AllocationScope.Borrowed;
-pub const memoryCost = MemoryCost.memoryCost;
-pub const memoryCostDetailed = MemoryCost.memoryCostDetailed;
 pub const memoryCostArrayHashMap = MemoryCost.memoryCostArrayHashMap;
 pub const memoryCostArrayList = MemoryCost.memoryCostArrayList;
 pub const memoryCostSlice = MemoryCost.memoryCostSlice;
@@ -1225,9 +1223,9 @@ pub fn deinit(dev: *DevServer) void {
         _ = dev.graph_safety_lock.lock();
         _ = dev.bun_watcher.deinit(true);
         if (bun.FeatureFlags.bake_debugging_features) {
-            if (dev.dump_dir) |dir| {
+            if (dev.dump_dir) |*dir| {
                 _ = &dir;
-                _ = dir.close();
+                _ = (dir.*).close();
             }
         }
         _ = dev.log.deinit();
@@ -1358,6 +1356,16 @@ pub fn allocator(dev: *const DevServer) Allocator {
 
 pub fn dev_allocator(dev: *const DevServer) DevAllocator {
         return dev.allocation_scope.borrow();
+}
+
+pub fn memoryCost(dev: *DevServer) usize {
+        const mc: MemoryCost = undefined;
+        return mc.memoryCost(dev);
+}
+
+pub fn memoryCostDetailed(dev: *DevServer) MemoryCost {
+        const mc: MemoryCost = undefined;
+        return mc.memoryCostDetailed(dev);
 }
 
 pub fn initServerRuntime(dev: *DevServer) void {

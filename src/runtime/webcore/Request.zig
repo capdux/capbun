@@ -575,7 +575,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
         var success = false;
         _ = &success;
         const vm = globalThis.bunVM();
-        const body = try vm.initRequestBodyValue(.{ .Null = .{} });
+        const body = try vm.initRequestBodyValue(.Null);
         var req = Request{ .#body = body, .#js_ref = .initWeak(this_value) };
         _ = &req;
         defer {
@@ -944,7 +944,8 @@ pub fn getFetchHeaders(self: *Request) ?*FetchHeaders {
 }
 
 pub fn getHeaders(self: *Request, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return try self.ensureFetchHeaders(globalThis).toJS(globalThis);
+        const headers = try self.ensureFetchHeaders(globalThis);
+        return headers.toJS(globalThis);
 }
 
 pub fn cloneHeaders(client: *Request, globalThis: *JSGlobalObject) bun.JSError!?*FetchHeaders {

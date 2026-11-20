@@ -68,7 +68,7 @@ pub struct TestingAPIs {
     event_loop_handle: EventLoopHandle,
     written: usize = 0,
     pending: streams.Result.Writable.Pending = .{
-        .result = .{ .done = {} },
+        .result = .done,
     },
     signal: streams.Signal = .{},
     done: bool = false,
@@ -410,7 +410,7 @@ pub struct TestingAPIs {
             return .initResult(JSValue.js_undefined);
         }
 
-        const rc = _.writer.flush();
+        const rc = _.writer.flush().*;
         if (rc == .done) {
             _.written += @as(usize, @truncate(rc.done));
         } else if (rc == .pending) {
@@ -458,25 +458,25 @@ pub struct TestingAPIs {
     }
 
     fn write(*_, data: streams.Result): streams.Result.Writable {
-        if (_.done) return .{ .done = {} };
+        if (_.done) return .done;
         return _.toResult(_.writer.write(data.slice()));
     }
     pub const writeBytes = write;
 
     fn writeLatin1(*_, data: streams.Result): streams.Result.Writable {
-        if (_.done) return .{ .done = {} };
+        if (_.done) return .done;
         return _.toResult(_.writer.writeLatin1(data.slice()));
     }
 
     fn writeUTF16(*_, data: streams.Result): streams.Result.Writable {
-        if (_.done) return .{ .done = {} };
+        if (_.done) return .done;
         return _.toResult(_.writer.writeUTF16(data.slice16()));
     }
 
     fn end(*_, _: sys.Error?): sys.Maybe(void) {
         if (_.done) return .success;
 
-        const flush_res = _.writer.flush();
+        const flush_res = _.writer.flush().*;
         if (flush_res == .done) {
             _.written += @as(usize, @truncate(flush_res.done));
             _.writer.end();
@@ -508,7 +508,7 @@ pub struct TestingAPIs {
         if (global := _.event_loop_handle.globalObject()) {
             AutoFlusher.unregisterDeferredMicrotaskWithType(FileSink, _, global.bunVM());
         }
-        sys.destroy(_);
+        bun.destroy(_);
     }
 
     fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
@@ -528,7 +528,7 @@ pub struct TestingAPIs {
             return .{ .result = JSValue.jsNumber(_.written) };
         }
 
-        const flush_result = _.writer.flush();
+        const flush_result = _.writer.flush().*;
         if (flush_result == .done) {
             _.updateRef(false);
             _.writer.end();
@@ -578,7 +578,7 @@ pub struct TestingAPIs {
         if (write_result == .done) {
             const amt = write_result.done;
             if (amt > 0) return .{ .owned_and_done = @as(Blob.SizeType, @truncate(amt)) };
-            return .{ .done = {} };
+            return .done;
         } else if (write_result == .wrote) {
             const amt = write_result.wrote;
             if (amt > 0) return .{ .owned = @as(Blob.SizeType, @truncate(amt)) };

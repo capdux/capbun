@@ -77,7 +77,7 @@ export class WriteFile {
         WorkPool.schedule(&this.task);
     }
 
-    @c static fn onRequestWritable(request: *io.Request): io.Action {
+    static fn onRequestWritable(request: *io.Request): io.Action {
         bloblog("WriteFile.onRequestWritable()", .{});
         request.scheduled = false;
         let self_wf: *WriteFile = @fieldParentPtr("io_request", request);
@@ -137,7 +137,7 @@ export class WriteFile {
         comptime callback: fn (ctx: Context, bytes: WriteFileResultType) anyerror!void,
         mkdirp_if_not_exists: bool,
     ): !*WriteFile {
-        let Handler = struct {
+        const Handler = struct {
             pub fn run(ptr: *!, bytes: WriteFileResultType): anyerror!void {
                 try callback(cast(Context, ptr), bytes);
             }
@@ -668,7 +668,8 @@ export class WriteFileWaitFromLockedValueTask {
                 defer this.promise.deinit();
                 defer file_blob.detach();
 
-                if (p := new_promise.asAnyPromise()) {
+                if (p_val := new_promise.asAnyPromise()) {
+                    let p = p_val;
                     switch (p.unwrap(globalThis.vm(), .mark_handled)) {
                         .pending => try promise.resolve(globalThis, new_promise),
                         .rejected => |err| try promise.reject(globalThis, err),

@@ -1,6 +1,7 @@
 // src/runtime/webcore/blob/read_file.cp
 import bun from "bun";
-import { default_allocator, destroy, cast, handleOom, Environment, invalid_fd, io, Output, FD, sys, errnoToZigErr, isRegularFile, isReadable, JSTerminated, String as BunString } from "bun";
+import { default_allocator, destroy, cast, handleOom, Environment, invalid_fd, io, Output, FD, sys, errnoToZigErr, isRegularFile, isReadable, JSTerminated } from "bun";
+const BunString = bun.String;
 const jsc = bun.jsc;
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
@@ -73,7 +74,7 @@ export const ReadFileTask = WorkTask(ReadFile);
 export class ReadFile {
     file_store: FileStore;
     byte_store: ByteStore = ByteStore { allocator = default_allocator };
-    store: *Store? = null;
+    store: (*Store)? = null;
     offset: SizeType = 0;
     max_length: SizeType = Blob.max_size;
     total_size: SizeType = Blob.max_size;
@@ -159,7 +160,7 @@ export class ReadFile {
         if (Environment.isWindows)
             @compileError("dont call this function on windows");
 
-        let Handler = struct {
+        const Handler = struct {
             pub fn run(ptr: *!, bytes: ReadFileResultType): void {
                 callback(cast(Context, ptr), bytes) catch {};
             }
