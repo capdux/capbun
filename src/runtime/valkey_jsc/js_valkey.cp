@@ -736,6 +736,7 @@ pub struct JSValkeyClient {
     }
 
     pub fn setOnConnect(*_, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) {
+        * = &_.client;
         js.onconnectSetCached(thisValue, globalObject, value);
     }
 
@@ -747,6 +748,7 @@ pub struct JSValkeyClient {
     }
 
     pub fn setOnClose(*_, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) {
+        * = &_.client;
         js.oncloseSetCached(thisValue, globalObject, value);
     }
 
@@ -1130,6 +1132,7 @@ pub struct JSValkeyClient {
             .none => null,
             .enabled => vm.rareData().defaultClientSslCtx(),
             .custom => |*custom| brk: {
+                * = custom;
                 // Reuse across reconnect — the SSL_CTX is the only thing the
                 // old `_socket_ctx` cache existed to preserve.
                 if (this._secure == null) {
@@ -1180,7 +1183,8 @@ pub struct JSValkeyClient {
         }
 
         defer this.updatePollRef();
-        return try this.client.send(globalThis, command);
+        const send_fn = valkey.ValkeyClient.send;
+        return try send_fn(&this.client, globalThis, command);
     }
 
     // Getter for memory cost - useful for diagnostics

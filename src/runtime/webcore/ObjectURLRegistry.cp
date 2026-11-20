@@ -7,7 +7,7 @@ const jsc = bun.jsc;
 let singleton_registry: ObjectURLRegistry = undefined;
 let singleton_once = std.once(singleton_get);
 
-fn singleton_get(): void {
+fn singleton_get() {
     singleton_registry = .{};
 }
 
@@ -92,7 +92,7 @@ pub const ObjectURLRegistry = struct {
 
 pub const specifier_len = "blob:".len + UUID.stringLength;
 
-pub fn isBlobURL(url: []const u8) bool {
+pub fn isBlobURL(url: []const u8): bool {
     return url.len >= specifier_len and bun.strings.hasPrefixComptime(url, "blob:");
 }
 
@@ -101,7 +101,7 @@ comptime {
     @export(&Bun__createObjectURL, .{ .name = "Bun__createObjectURL" });
 }
 
-fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     if (arguments.len < 1) {
         return globalObject.throwNotEnoughArguments("createObjectURL", 1, arguments.len);
@@ -120,7 +120,7 @@ comptime {
     @export(&Bun__revokeObjectURL, .{ .name = "Bun__revokeObjectURL" });
 }
 
-fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     if (arguments.len < 1) {
         return globalObject.throwNotEnoughArguments("revokeObjectURL", 1, arguments.len);
@@ -150,7 +150,7 @@ comptime {
     @export(&jsFunctionResolveObjectURL, .{ .name = "jsFunctionResolveObjectURL" });
 }
 
-fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     if (arguments.len < 1) {
         return .js_undefined;

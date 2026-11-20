@@ -29,7 +29,7 @@ export class Buffered {
     buf: [3]u8 = .{ 0, 0, 0 };
     len: u2 = 0;
 
-    pub fn slice(this: &Buffered): []const u8 {
+    pub fn slice(_: &Buffered): []const u8 {
         return this.buf[0..this.len];
     }
 }
@@ -37,8 +37,8 @@ export class Buffered {
 export class TextDecoder {
     buffered: Buffered = .{};
 
-    lead_byte: ?u8 = null;
-    lead_surrogate: ?u16 = null;
+    lead_byte: u8? = null;
+    lead_surrogate: u16? = null;
 
     ignore_bom: bool = false;
     fatal: bool = false;
@@ -347,7 +347,7 @@ export class TextDecoder {
         }
     }
 
-    pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*TextDecoder {
+    pub static fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*TextDecoder {
         const args = callframe.argumentsAsArray(2);
         const encoding_value = args[0];
         const options_value = args[1];

@@ -18,7 +18,7 @@ const PathOrBlob = jsc.Node.PathOrBlob;
 pub fn writeFormatCredentials(
     credentials: *S3Credentials,
     options: S3.MultiPartUploadOptions,
-    acl: ?S3.ACL,
+    acl: S3.ACL?,
     comptime Formatter: type,
     formatter: *Formatter,
     writer: anytype,
@@ -68,7 +68,7 @@ pub fn writeFormatCredentials(
             try writer.writeAll("\n");
         }
 
-        if (acl) |acl_value| {
+        if (acl_value := acl) {
             try formatter.writeIndent(Writer, writer);
             try writer.writeAll(Output.prettyFmt("<r>acl<d>:<r> ", enable_ansi_colors));
             try writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{acl_value.toString()});
@@ -105,8 +105,8 @@ export class S3Client {
     pub const new = TrivialNew(S3Client);
     credentials: *S3Credentials;
     options: S3.MultiPartUploadOptions = .{};
-    acl: ?S3.ACL = null;
-    storage_class: ?S3.StorageClass = null;
+    acl: S3.ACL? = null;
+    storage_class: S3.StorageClass? = null;
     request_payer: bool = false;
 
     pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*S3Client {
@@ -274,12 +274,12 @@ export class S3Client {
         return blob.store.?.data.s3.unlink(blob.store.?, globalThis, options);
     }
 
-    pub fn deinit(*_): void {
+    pub fn deinit(*_) {
         _.credentials.deref();
         destroy(_);
     }
 
-    pub fn finalize(*_): void {
+    pub fn finalize(*_) {
         _.deinit();
     }
 
@@ -320,7 +320,7 @@ export class S3Client {
         return S3File.stat(globalThis, callframe);
     }
 
-    pub fn staticListObjects(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticListObjects(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         const args = callframe.argumentsAsArray(2);
         const object_keys = args[0];
         const options = args[1];

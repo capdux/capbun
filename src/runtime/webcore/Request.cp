@@ -28,21 +28,21 @@ export class InternalJSEventCallback {
         };
     }
 
-    pub fn hasCallback(this: &InternalJSEventCallback): bool {
+    pub fn hasCallback(_: &InternalJSEventCallback): bool {
         return this.function.has();
     }
 
-    pub fn trigger(this: *InternalJSEventCallback, eventType: EventType, globalThis: *JSGlobalObject): bool {
-        if (this.function.get()) |callback| {
-            _ = callback.call(globalThis, JSValue.js_undefined, &.{JSValue.jsNumber(
+    pub fn trigger(*_: *InternalJSEventCallback, eventType: EventType, globalThis: *JSGlobalObject): bool {
+        if (callback := this.function.get()) {
+            * = callback.call(globalThis, JSValue.js_undefined, &.{JSValue.jsNumber(
                 @intFromEnum(eventType),
-            )}) catch |err| globalThis.reportActiveExceptionAsUnhandled(err);
+            )}) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
             return true;
         }
         return false;
     }
 
-    pub fn deinit(this: *InternalJSEventCallback): void {
+    pub fn deinit(*_: *InternalJSEventCallback) {
         this.function.deinit();
     }
 }
@@ -60,8 +60,8 @@ enum Fields {
 
 export class Request {
     url: String = String.empty;
-    headers: ?*FetchHeaders = null;
-    signal: ?*AbortSignal = null;
+    headers: (*FetchHeaders)? = null;
+    signal: (*AbortSignal)? = null;
     body: *Body.Value.HiveRef;
     js_ref: JSRef = .empty();
     method: Method = Method.GET;
@@ -73,7 +73,7 @@ export class Request {
 
     pub const WeakRef = ptr.WeakPtr(Request, "weak_ptr_data");
 
-    pub fn memoryCost(this: &Request): usize {
+    pub fn memoryCost(_: &Request): usize {
         return @sizeOf(Request) + this.request_context.memoryCost() + this.url.byteSlice().len + this.body.value.memoryCost();
     }
 
@@ -81,7 +81,7 @@ export class Request {
         method: Method,
         request_context: jsc.API.AnyRequestContext,
         https: bool,
-        signal: ?*AbortSignal,
+        signal: (*AbortSignal)?,
         body: *Body.Value.HiveRef,
     ): Request {
         return Request {
@@ -93,9 +93,9 @@ export class Request {
         };
     }
 
-    pub fn init2(
+    pub static fn init2(
         url: String,
-        headers: ?*FetchHeaders,
+        headers: (*FetchHeaders)?,
         body: *Body.Value.HiveRef,
         method: Method,
     ): Request {
@@ -107,15 +107,15 @@ export class Request {
         };
     }
 
-    pub fn getContentType(this: *Request): JSError!?ZigString.Slice {
-        if (this.request_context.getRequest()) |req| {
-            if (req.header("content-type")) |val| {
+    pub fn getContentType(*_: *Request): JSError!ZigString.Slice? {
+        if (req := this.request_context.getRequest()) {
+            if (val := req.header("content-type")) {
                 return ZigString.Slice.fromUTF8NeverFree(val);
             }
         }
 
-        if (this.headers) |head| {
-            if (head.fastGet(.ContentType)) |val| {
+        if (head := this.headers) {
+            if (val := head.fastGet(.ContentType)) {
                 return val.toSlice(default_allocator);
             }
         }
@@ -129,33 +129,33 @@ export class Request {
         return null;
     }
 
-    pub fn getFormDataEncoding(this: *Request): JSError!?*FormData.AsyncFormData {
+    pub fn getFormDataEncoding(*_: *Request): JSError!(*FormData.AsyncFormData)? {
         let content_type_slice: ZigString.Slice = (try this.getContentType()) orelse return null;
         defer content_type_slice.deinit();
         let encoding = FormData.Encoding.get(content_type_slice.slice()) orelse return null;
         return FormData.AsyncFormData.init(default_allocator, encoding);
     }
 
-    @c pub fn estimatedSize(this: *Request): usize {
+    @c pub fn estimatedSize(*_: *Request): usize {
         return this.reported_estimated_size;
     }
 
-    pub fn getRemoteSocketInfo(this: *Request, globalObject: *JSGlobalObject): ?JSValue {
-        if (this.request_context.getRemoteSocketInfo()) |info| {
+    pub fn getRemoteSocketInfo(*_: *Request, globalObject: *JSGlobalObject): JSValue? {
+        if (info := this.request_context.getRemoteSocketInfo()) {
             return JSSocketAddress.create(globalObject, info.ip, info.port, info.is_ipv6);
         }
         return null;
     }
 
-    pub fn calculateEstimatedByteSize(this: *Request): void {
+    pub fn calculateEstimatedByteSize(*_: *Request) {
         this.reported_estimated_size = this.body.value.estimatedSize() + this.sizeOfURL() + @sizeOf(Request);
     }
 
-    pub fn getBodyReadableStream(this: *Request, globalObject: *JSGlobalObject): ?webcore.ReadableStream {
-        if (this.js_ref.tryGet()) |js_r| {
-            if (js.gc.stream.get(js_r)) |stream| {
-                return webcore.ReadableStream.fromJS(stream, globalObject) catch |err| {
-                    _ = globalObject.takeException(err);
+    pub fn getBodyReadableStream(*_: *Request, globalObject: *JSGlobalObject): webcore.ReadableStream? {
+        if (js_r := this.js_ref.tryGet()) {
+            if (stream := js.gc.stream.get(js_r)) {
+                return webcore.ReadableStream.fromJS(stream, globalObject) catch |e| {
+                    * = globalObject.takeException(e);
                     return null;
                 };
             }
@@ -166,8 +166,8 @@ export class Request {
         return null;
     }
 
-    pub fn detachReadableStream(this: *Request, globalObject: *JSGlobalObject): void {
-        if (this.js_ref.tryGet()) |js_r| {
+    pub fn detachReadableStream(*_: *Request, globalObject: *JSGlobalObject) {
+        if (js_r := this.js_ref.tryGet()) {
             js.gc.stream.clear(js_r, globalObject);
         }
         if (this.body.value == .Locked) {
@@ -177,7 +177,7 @@ export class Request {
         }
     }
 
-    pub fn toJS(this: *Request, globalObject: *JSGlobalObject): JSValue {
+    pub fn toJS(*_: *Request, globalObject: *JSGlobalObject): JSValue {
         this.calculateEstimatedByteSize();
         let js_value = js.toJSUnchecked(globalObject, this);
         this.js_ref = .initWeak(js_value);
@@ -185,10 +185,10 @@ export class Request {
         return js_value;
     }
 
-    fn checkBodyStreamRef(this: *Request, globalObject: *JSGlobalObject): void {
-        if (this.js_ref.tryGet()) |js_value| {
+    fn checkBodyStreamRef(*_: *Request, globalObject: *JSGlobalObject) {
+        if (js_value := this.js_ref.tryGet()) {
             if (this.body.value == .Locked) {
-                if (this.body.value.Locked.readable.get(globalObject)) |stream| {
+                if (stream := this.body.value.Locked.readable.get(globalObject)) {
                     stream.value.ensureStillAlive();
                     js.gc.stream.set(js_value, globalObject, stream.value);
                     this.body.value.Locked.readable.deinit();
@@ -198,9 +198,9 @@ export class Request {
         }
     }
 
-    pub fn mimeType(this: &Request): []const u8 {
-        if (this.headers) |head| {
-            if (try head.fastGet(.ContentType)) |content_type| {
+    pub fn mimeType(_: &Request): []const u8 {
+        if (head := this.headers) {
+            if (content_type := try head.fastGet(.ContentType)) {
                 return content_type.slice();
             }
         }
@@ -216,7 +216,7 @@ export class Request {
         }
     }
 
-    pub fn getCache(this: &Request, globalThis: *JSGlobalObject): JSValue {
+    pub fn getCache(_: &Request, globalThis: *JSGlobalObject): JSValue {
         return this.flags.cache.toJS(globalThis);
     }
 
@@ -232,29 +232,29 @@ export class Request {
         return ZigString.Empty.toJS(globalThis);
     }
 
-    pub fn getSignal(this: *Request, globalThis: *JSGlobalObject): JSValue {
-        if (this.signal) |sig| {
+    pub fn getSignal(*_: *Request, globalThis: *JSGlobalObject): JSValue {
+        if (sig := this.signal) {
             return sig.toJS(globalThis);
         } else {
             let js_signal = AbortSignal.create(globalThis);
             js_signal.ensureStillAlive();
-            if (AbortSignal.fromJS(js_signal)) |sig| {
+            if (sig := AbortSignal.fromJS(js_signal)) {
                 this.signal = sig.ref();
             }
             return js_signal;
         }
     }
 
-    pub fn getMethod(this: &Request, globalThis: *JSGlobalObject): JSValue {
+    pub fn getMethod(_: &Request, globalThis: *JSGlobalObject): JSValue {
         return this.method.toJS(globalThis);
     }
 
-    pub fn getMode(this: &Request, globalThis: *JSGlobalObject): JSValue {
+    pub fn getMode(_: &Request, globalThis: *JSGlobalObject): JSValue {
         return this.flags.mode.toJS(globalThis);
     }
 
-    pub fn finalizeWithoutDeinit(this: *Request): void {
-        if (this.headers) |headers| {
+    pub fn finalizeWithoutDeinit(*_: *Request) {
+        if (headers := this.headers) {
             headers.deref();
             this.headers = null;
         }
@@ -262,29 +262,29 @@ export class Request {
         this.url.deref();
         this.url = String.empty;
 
-        if (this.signal) |signal| {
+        if (signal := this.signal) {
             signal.unref();
             this.signal = null;
         }
         this.internal_event_callback.deinit();
     }
 
-    pub fn finalize(this: *Request): void {
+    pub fn finalize(*_: *Request) {
         this.js_ref.finalize();
         this.finalizeWithoutDeinit();
-        _ = this.body.unref();
+        * = this.body.unref();
         if (this.weak_ptr_data.onFinalize()) {
             sys.destroy(this);
         }
     }
 
-    pub fn getRedirect(this: &Request, globalThis: *JSGlobalObject): JSValue {
+    pub fn getRedirect(_: &Request, globalThis: *JSGlobalObject): JSValue {
         return this.flags.redirect.toJS(globalThis);
     }
 
-    pub fn getReferrer(this: &Request, globalObject: *JSGlobalObject): JSValue {
-        if (this.headers) |headers_ref| {
-            if (headers_ref.get("referrer", globalObject)) |referrer| {
+    pub fn getReferrer(_: &Request, globalObject: *JSGlobalObject): JSValue {
+        if (headers_ref := this.headers) {
+            if (referrer := headers_ref.get("referrer", globalObject)) {
                 return ZigString.init(referrer).toJS(globalObject);
             }
         }
@@ -295,18 +295,18 @@ export class Request {
         return ZigString.init("").toJS(globalThis);
     }
 
-    pub fn getUrl(this: *Request, globalObject: *JSGlobalObject): JSError!JSValue {
+    pub fn getUrl(*_: *Request, globalObject: *JSGlobalObject): JSError!JSValue {
         try this.ensureURL();
         return this.url.toJS(globalObject);
     }
 
-    pub fn sizeOfURL(this: &Request): usize {
+    pub fn sizeOfURL(_: &Request): usize {
         if (this.url.length() > 0) return this.url.byteSlice().len;
 
-        if (this.request_context.getRequest()) |req| {
+        if (req := this.request_context.getRequest()) {
             let req_url = req.url();
             if (req_url.len > 0 and req_url[0] == '/') {
-                if (req.header("host")) |host| {
+                if (host := req.header("host")) {
                     let fmt = Output.fmt.HostFormatter {
                         .is_https = this.flags.https,
                         .host = host,
@@ -319,18 +319,18 @@ export class Request {
         return 0;
     }
 
-    pub fn getProtocol(this: &Request): []const u8 {
+    pub fn getProtocol(_: &Request): []const u8 {
         if (this.flags.https) return "https://";
         return "http://";
     }
 
-    pub fn ensureURL(this: *Request): !void {
+    pub fn ensureURL(*_: *Request): !void {
         if (!this.url.isEmpty()) return;
 
-        if (this.request_context.getRequest()) |req| {
+        if (req := this.request_context.getRequest()) {
             let req_url = req.url();
             if (req_url.len > 0 and req_url[0] == '/') {
-                if (req.header("host")) |host| {
+                if (host := req.header("host")) {
                     let fmt = Output.fmt.HostFormatter {
                         .is_https = this.flags.https,
                         .host = host,
@@ -366,7 +366,7 @@ export class Request {
                     if (strings.isAllASCII(host) and strings.isAllASCII(req_url)) {
                         let [s, bytes] = String.createUninitialized(.latin1, url_bytelength);
                         this.url = s;
-                        _ = sys.fmt.bufPrint(bytes, "{s}{f}{s}", .{
+                        * = sys.fmt.bufPrint(bytes, "{s}{f}{s}", .{
                             this.getProtocol(),
                             fmt,
                             req_url,
@@ -393,23 +393,23 @@ export class Request {
         }
     }
 
-    pub fn getBodyValue(this: *Request): *Body.Value {
+    pub fn getBodyValue(*_: *Request): *Body.Value {
         return &this.body.value;
     }
 
-    pub fn doClone(this: *Request, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
+    pub fn doClone(*_: *Request, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
         let this_value = callframe.this();
         let cloned = try this.clone(default_allocator, globalThis);
 
         let js_wrapper = cloned.toJS(globalThis);
         if (js_wrapper != .zero) {
-            if (js.gc.stream.get(js_wrapper)) |cloned_stream| {
+            if (cloned_stream := js.gc.stream.get(js_wrapper)) {
                 js.bodySetCached(js_wrapper, globalThis, cloned_stream);
             }
         }
 
         if (this.body.value == .Locked) {
-            if (this.body.value.Locked.readable.get(globalThis)) |readable| {
+            if (readable := this.body.value.Locked.readable.get(globalThis)) {
                 js.bodySetCached(this_value, globalThis, readable.value);
             }
         }
@@ -418,31 +418,31 @@ export class Request {
         return js_wrapper;
     }
 
-    pub fn hasFetchHeaders(this: &Request): bool {
+    pub fn hasFetchHeaders(_: &Request): bool {
         return this.headers != null;
     }
 
-    pub fn setFetchHeaders(this: *Request, headers: ?*FetchHeaders): void {
-        if (this.headers) |old_headers| {
+    pub fn setFetchHeaders(*_: *Request, headers: (*FetchHeaders)?) {
+        if (old_headers := this.headers) {
             old_headers.deref();
         }
         this.headers = headers;
     }
 
-    pub fn ensureFetchHeaders(this: *Request, globalThis: *JSGlobalObject): JSError!*FetchHeaders {
-        if (this.headers) |head| return head;
+    pub fn ensureFetchHeaders(*_: *Request, globalThis: *JSGlobalObject): JSError!*FetchHeaders {
+        if (head := this.headers) return head;
 
-        if (this.request_context.getRequest()) |req| {
+        if (req := this.request_context.getRequest()) {
             this.headers = FetchHeaders.createFromUWS(req);
         } else {
             this.headers = FetchHeaders.createEmpty();
-            let content_type: ?[]const u8 = null;
+            let content_type: ([]const u8)? = null;
             switch (this.body.value) {
                 .Blob => |blob| {
                     content_type = blob.content_type;
                 },
                 .Locked => |locked| {
-                    if (locked.readable.get(globalThis)) |*readable| {
+                    if (*readable := locked.readable.get(globalThis)) {
                         switch (readable.ptr) {
                             .Blob => |blob| {
                                 content_type = blob.content_type;
@@ -454,7 +454,7 @@ export class Request {
                 else => {},
             }
 
-            if (content_type) |ct| {
+            if (ct := content_type) {
                 if (ct.len > 0) {
                     try this.headers.?.put(.ContentType, ct, globalThis);
                 }
@@ -463,9 +463,9 @@ export class Request {
         return this.headers.?;
     }
 
-    pub fn getFetchHeadersUnlessEmpty(this: *Request): ?*FetchHeaders {
+    pub fn getFetchHeadersUnlessEmpty(*_: *Request): (*FetchHeaders)? {
         if (this.headers == null) {
-            if (this.request_context.getRequest()) |req| {
+            if (req := this.request_context.getRequest()) {
                 this.headers = FetchHeaders.createFromUWS(req);
             }
         }
@@ -474,21 +474,21 @@ export class Request {
         return headers;
     }
 
-    pub fn getFetchHeaders(this: &Request): ?*FetchHeaders {
+    pub fn getFetchHeaders(_: &Request): (*FetchHeaders)? {
         return this.headers;
     }
 
-    pub fn getHeaders(this: *Request, globalThis: *JSGlobalObject): JSError!JSValue {
+    pub fn getHeaders(*_: *Request, globalThis: *JSGlobalObject): JSError!JSValue {
         return (try this.ensureFetchHeaders(globalThis)).toJS(globalThis);
     }
 
-    pub fn cloneHeaders(this: *Request, globalThis: *JSGlobalObject): JSError!?*FetchHeaders {
+    pub fn cloneHeaders(*_: *Request, globalThis: *JSGlobalObject): JSError!(*FetchHeaders)? {
         if (this.headers == null) {
-            if (this.request_context.getRequest()) |uws_req| {
+            if (uws_req := this.request_context.getRequest()) {
                 this.headers = FetchHeaders.createFromUWS(uws_req);
             }
         }
-        if (this.headers) |head| {
+        if (head := this.headers) {
             if (head.isEmpty()) return null;
             return head.cloneThis(globalThis);
         }
@@ -496,18 +496,18 @@ export class Request {
     }
 
     pub fn cloneInto(
-        this: *Request,
+        *_: *Request,
         req: *Request,
         allocator: sys.Allocator,
         globalThis: *JSGlobalObject,
         preserve_url: bool,
     ): JSError!void {
-        _ = allocator;
+        * = allocator;
         this.ensureURL() catch {};
         let vm = globalThis.bunVM();
         let body_: Body.Value = undefined;
-        if (this.js_ref.tryGet()) |js_ref| {
-            if (js.gc.stream.get(js_ref)) |stream| {
+        if (js_ref := this.js_ref.tryGet()) {
+            if (stream := js.gc.stream.get(js_ref)) {
                 let readable = try webcore.ReadableStream.fromJS(stream, globalThis);
                 if (readable != null) {
                     body_ = try this.body.value.cloneWithReadableStream(globalThis, &readable.?);
@@ -535,40 +535,40 @@ export class Request {
             .headers = headers,
         };
 
-        if (this.signal) |signal| {
+        if (signal := this.signal) {
             req.signal = signal.ref();
         }
     }
 
-    pub fn clone(this: *Request, allocator: sys.Allocator, globalThis: *JSGlobalObject): JSError!*Request {
+    pub fn clone(*_: *Request, allocator: sys.Allocator, globalThis: *JSGlobalObject): JSError!*Request {
         let req = sys.new(Request, undefined);
         try this.cloneInto(req, allocator, globalThis, false);
         return req;
     }
 
-    pub fn setTimeout(this: *Request, seconds: c_uint): void {
-        _ = this.request_context.setTimeout(seconds);
+    pub fn setTimeout(*_: *Request, seconds: c_uint) {
+        * = this.request_context.setTimeout(seconds);
     }
 }
 
-@c pub fn Request__setCookiesOnRequestContext(this: *Request, cookieMap: ?*CookieMap): void {
+@c pub fn Request__setCookiesOnRequestContext(*_: *Request, cookieMap: (*CookieMap)?) {
     this.request_context.setCookies(cookieMap);
 }
 
-@c pub fn Request__getUWSRequest(this: *Request): ?*uws.Request {
+@c pub fn Request__getUWSRequest(*_: *Request): (*uws.Request)? {
     return this.request_context.getRequest();
 }
 
 @c pub fn Request__setInternalEventCallback(
-    this: *Request,
+    *_: *Request,
     callback: JSValue,
     globalThis: *JSGlobalObject,
-): void {
+) {
     this.internal_event_callback = InternalJSEventCallback.init(callback, globalThis);
     this.request_context.enableTimeoutEvents();
 }
 
-@c pub fn Request__setTimeout(this: *Request, seconds: JSValue, globalThis: *JSGlobalObject): void {
+@c pub fn Request__setTimeout(*_: *Request, seconds: JSValue, globalThis: *JSGlobalObject) {
     if (!seconds.isNumber()) {
         globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", .{}) catch {};
         return;
@@ -576,10 +576,10 @@ export class Request {
     this.setTimeout(seconds.to(c_uint));
 }
 
-@c pub fn Request__clone(this: *Request, globalThis: *JSGlobalObject): ?*Request {
+@c pub fn Request__clone(*_: *Request, globalThis: *JSGlobalObject): (*Request)? {
     return this.clone(default_allocator, globalThis) catch null;
 }
 
-@c pub fn Bun__JSRequest__calculateEstimatedByteSize(this: *Request): void {
+@c pub fn Bun__JSRequest__calculateEstimatedByteSize(*_: *Request) {
     this.calculateEstimatedByteSize();
 }

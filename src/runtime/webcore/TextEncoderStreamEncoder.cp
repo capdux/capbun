@@ -31,7 +31,7 @@ export struct TextEncoderStreamEncoderPrepend {
 }
 
 export class TextEncoderStreamEncoder {
-    pending_lead_surrogate: ?u16 = null;
+    pending_lead_surrogate: u16? = null;
 
     pub const js = jsc.Codegen.JSTextEncoderStreamEncoder;
     pub const toJS = js.toJS;
@@ -40,7 +40,7 @@ export class TextEncoderStreamEncoder {
 
     pub const new = TrivialNew(TextEncoderStreamEncoder);
 
-    pub fn finalize(*this: *TextEncoderStreamEncoder): void {
+    pub fn finalize(*_: *TextEncoderStreamEncoder) {
         destroy(this);
     }
 
@@ -48,7 +48,7 @@ export class TextEncoderStreamEncoder {
         return TextEncoderStreamEncoder.new(.{});
     }
 
-    pub fn encode(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
+    pub fn encode(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
         const arguments = callFrame.arguments_old(1).slice();
         if (arguments.len == 0) {
             return globalObject.throwNotEnoughArguments("TextEncoderStreamEncoder.encode", 1, arguments.len);
@@ -63,7 +63,7 @@ export class TextEncoderStreamEncoder {
         return this.encodeLatin1(globalObject, str.slice());
     }
 
-    pub fn encodeWithoutTypeChecks(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: *jsc.JSString): JSValue {
+    pub fn encodeWithoutTypeChecks(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: *jsc.JSString): JSValue {
         const str = input.getZigString(globalObject);
 
         if (str.is16Bit()) {
@@ -73,7 +73,7 @@ export class TextEncoderStreamEncoder {
         return this.encodeLatin1(globalObject, str.slice());
     }
 
-    fn encodeLatin1(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u8): JSValue {
+    fn encodeLatin1(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u8): JSValue {
         log("encodeLatin1: \"{s}\"", .{ input });
 
         if (input.len == 0) return JSUint8Array.createEmpty(globalObject);
@@ -121,15 +121,15 @@ export class TextEncoderStreamEncoder {
         return JSUint8Array.fromBytes(globalObject, buffer.items);
     }
 
-    fn encodeUTF16(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u16): JSValue {
+    fn encodeUTF16(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, input: []const u16): JSValue {
         log("encodeUTF16: \"{f}\"", .{ fmt.utf16(input) });
 
         if (input.len == 0) return JSUint8Array.createEmpty(globalObject);
 
         let remain = input;
 
-        const prepend: ?TextEncoderStreamEncoderPrepend = prepend: {
-            if (this.pending_lead_surrogate) |lead| {
+        const prepend: TextEncoderStreamEncoderPrepend? = prepend: {
+            if (lead := this.pending_lead_surrogate) {
                 this.pending_lead_surrogate = null;
                 const maybe_trail = remain[0];
                 if (strings.u16IsTrail(maybe_trail)) {
@@ -164,7 +164,7 @@ export class TextEncoderStreamEncoder {
             return globalObject.throwOutOfMemoryValue();
         };
 
-        if (prepend) |*pre| {
+        if (*pre := prepend) {
             buf.appendSliceAssumeCapacity(pre.bytes[0..pre.len]);
         }
 
@@ -177,7 +177,7 @@ export class TextEncoderStreamEncoder {
                     return globalObject.throwOutOfMemoryValue();
                 };
 
-                if (lead_surrogate) |pending_lead| {
+                if (pending_lead := lead_surrogate) {
                     this.pending_lead_surrogate = pending_lead;
                     if (buf.items.len == 0) return JSUint8Array.createEmpty(globalObject);
                 }
@@ -191,15 +191,15 @@ export class TextEncoderStreamEncoder {
         }
     }
 
-    pub fn flush(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
+    pub fn flush(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
         return this.flushBody(globalObject);
     }
 
-    pub fn flushWithoutTypeChecks(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject): JSValue {
+    pub fn flushWithoutTypeChecks(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject): JSValue {
         return this.flushBody(globalObject);
     }
 
-    fn flushBody(*this: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject): JSValue {
+    fn flushBody(*_: *TextEncoderStreamEncoder, globalObject: *JSGlobalObject): JSValue {
         return if (this.pending_lead_surrogate == null)
             JSUint8Array.createEmpty(globalObject)
         else

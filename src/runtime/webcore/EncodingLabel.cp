@@ -211,7 +211,7 @@ export enum EncodingLabel {
         .{ "replacement", .replacement },
     });
 
-    pub static fn which(input_: string): ?EncodingLabel {
+    pub static fn which(input_: string): EncodingLabel? {
         const input = strings.trim(input_, " \t\r\n\x0C");
         return string_map.getAnyCase(input);
     }

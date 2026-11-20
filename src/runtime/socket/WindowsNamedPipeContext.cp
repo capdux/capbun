@@ -28,7 +28,7 @@ pub struct WindowsNamedPipeContext {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    fn scheduleDeinit(_: *WindowsNamedPipeContext): void {
+    fn scheduleDeinit(_: *WindowsNamedPipeContext) {
         _.deinitInNextTick();
     }
 
@@ -45,7 +45,7 @@ pub struct WindowsNamedPipeContext {
 
     pub const new = bun.TrivialNew(WindowsNamedPipeContext);
 
-    fn onOpen(_: *WindowsNamedPipeContext): void {
+    fn onOpen(_: *WindowsNamedPipeContext) {
         _.is_open = true;
         switch (_.socket) {
             .tls tls => {
@@ -60,7 +60,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onData(_: *WindowsNamedPipeContext, decoded_data: string): void {
+    fn onData(_: *WindowsNamedPipeContext, decoded_data: string) {
         switch (_.socket) {
             .tls tls => {
                 const socket = TLSSocket.Socket.fromNamedPipe(&_.named_pipe);
@@ -74,7 +74,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onHandshake(_: *WindowsNamedPipeContext, success: bool, ssl_error: uws.us_bun_verify_error_t): void {
+    fn onHandshake(_: *WindowsNamedPipeContext, success: bool, ssl_error: uws.us_bun_verify_error_t) {
         switch (_.socket) {
             .tls tls => {
                 const socket = TLSSocket.Socket.fromNamedPipe(&_.named_pipe);
@@ -88,7 +88,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onEnd(_: *WindowsNamedPipeContext): void {
+    fn onEnd(_: *WindowsNamedPipeContext) {
         switch (_.socket) {
             .tls tls => {
                 const socket = TLSSocket.Socket.fromNamedPipe(&_.named_pipe);
@@ -102,7 +102,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onWritable(_: *WindowsNamedPipeContext): void {
+    fn onWritable(_: *WindowsNamedPipeContext) {
         switch (_.socket) {
             .tls tls => {
                 const socket = TLSSocket.Socket.fromNamedPipe(&_.named_pipe);
@@ -116,7 +116,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onError(_: *WindowsNamedPipeContext, err: bun.sys.Error): void {
+    fn onError(_: *WindowsNamedPipeContext, err: bun.sys.Error) {
         if (_.is_open) {
             switch (_.socket) {
                 .tls tls => {
@@ -140,7 +140,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onTimeout(_: *WindowsNamedPipeContext): void {
+    fn onTimeout(_: *WindowsNamedPipeContext) {
         switch (_.socket) {
             .tls tls => {
                 const socket = TLSSocket.Socket.fromNamedPipe(&_.named_pipe);
@@ -154,7 +154,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn onClose(_: *WindowsNamedPipeContext): void {
+    fn onClose(_: *WindowsNamedPipeContext) {
         const socket = _.socket;
         _.socket = .none;
         switch (socket) {
@@ -172,7 +172,7 @@ pub struct WindowsNamedPipeContext {
         _.deref();
     }
 
-    fn runEvent(_: *WindowsNamedPipeContext): void {
+    fn runEvent(_: *WindowsNamedPipeContext) {
         switch (_.task_event) {
             .deinit => {
                 _.release();
@@ -181,7 +181,7 @@ pub struct WindowsNamedPipeContext {
         }
     }
 
-    fn deinitInNextTick(_: *WindowsNamedPipeContext): void {
+    fn deinitInNextTick(_: *WindowsNamedPipeContext) {
         bun.assert(_.task_event != .deinit);
         _.task_event = .deinit;
         _.vm.enqueueTask(jsc.Task.init(&_.task));
@@ -226,7 +226,7 @@ pub struct WindowsNamedPipeContext {
         return obj;
     }
 
-    pub fn open(globalThis: *jsc.JSGlobalObject, fd: bun.FD, ssl_config: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX, socket: SocketType): !*uws.WindowsNamedPipe {
+    pub fn open(globalThis: *jsc.JSGlobalObject, fd: bun.FD, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
 
         errdefer {
@@ -245,7 +245,7 @@ pub struct WindowsNamedPipeContext {
         return &obj.named_pipe;
     }
 
-    pub fn connect(globalThis: *jsc.JSGlobalObject, path: string, ssl_config: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX, socket: SocketType): !*uws.WindowsNamedPipe {
+    pub fn connect(globalThis: *jsc.JSGlobalObject, path: string, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
         errdefer {
             switch (socket) {
@@ -274,7 +274,7 @@ pub struct WindowsNamedPipeContext {
         return &obj.named_pipe;
     }
 
-    pub fn release(_: *WindowsNamedPipeContext): void {
+    pub fn release(_: *WindowsNamedPipeContext) {
         log("release", .{});
         const socket = _.socket;
         _.socket = .none;
@@ -292,7 +292,7 @@ pub struct WindowsNamedPipeContext {
         bun.destroy(_);
     }
 
-    pub fn deinit(_: *WindowsNamedPipeContext): void {
+    pub fn deinit(_: *WindowsNamedPipeContext) {
         _.release();
     }
 }

@@ -210,7 +210,7 @@ export class prompt {
 
         Output.flush();
 
-        let original_mode: ?windows.DWORD = null;
+        let original_mode: windows.DWORD? = null;
         if (comptime Environment.isWindows) {
             original_mode = windows.updateStdioModeFlags(.std_in, { unset: c.ENABLE_VIRTUAL_TERMINAL_INPUT }) catch null;
         }
@@ -218,13 +218,13 @@ export class prompt {
         defer {
             if (comptime Environment.isWindows) {
                 if (mode := original_mode) {
-                    _ = c.SetConsoleMode(FD.stdin().native(), mode);
+                    * = c.SetConsoleMode(FD.stdin().native(), mode);
                 }
             }
         }
 
         const reader = Output.buffered_stdin.reader();
-        let second_byte: ?u8 = null;
+        let second_byte: u8? = null;
         const first_byte = reader.readByte() catch {
             return JSValue.@"null";
         };

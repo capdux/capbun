@@ -1,3 +1,4 @@
+let empty_ab_bytes: [0]u8 = [];
 import {
     handleOom,
     assert,
@@ -25,7 +26,7 @@ export class ArrayBufferSink {
     allocator: Allocator;
     done: bool = false;
     signal: Signal = .{};
-    next: ?Sink = null;
+    next: Sink? = null;
     streaming: bool = false;
     as_uint8array: bool = false;
 
@@ -77,7 +78,7 @@ export class ArrayBufferSink {
         _.destroy();
     }
 
-    pub fn init(allocator: Allocator, next: ?Sink): !*ArrayBufferSink {
+    pub fn init(allocator: Allocator, next: Sink?): !*ArrayBufferSink {
         return bun.new(ArrayBufferSink, .{
             .bytes = ByteList.empty,
             .allocator = allocator,
@@ -94,7 +95,7 @@ export class ArrayBufferSink {
     }
 
     pub fn write(*_, data: streams.Result): streams.Result.Writable {
-        if (_.next) |*next| {
+        if (*next := _.next) {
             return next.writeBytes(data);
         }
 
@@ -108,7 +109,7 @@ export class ArrayBufferSink {
     pub const writeBytes = write;
 
     pub fn writeLatin1(*_, data: streams.Result): streams.Result.Writable {
-        if (_.next) |*next| {
+        if (*next := _.next) {
             return next.writeLatin1(data);
         }
         const len = _.bytes.writeLatin1(_.allocator, data.slice()) catch {
@@ -119,7 +120,7 @@ export class ArrayBufferSink {
     }
 
     pub fn writeUTF16(*_, data: streams.Result): streams.Result.Writable {
-        if (_.next) |*next| {
+        if (*next := _.next) {
             return next.writeUTF16(data);
         }
         const u16_slice = mem.bytesAsSlice(u16, data.slice());
@@ -130,8 +131,8 @@ export class ArrayBufferSink {
         return .{ .owned = len };
     }
 
-    pub fn end(*_, err: ?Syscall.Error): sys.Maybe(void) {
-        if (_.next) |*next| {
+    pub fn end(*_, err: Syscall.Error?): sys.Maybe(void) {
+        if (*next := _.next) {
             return next.end(err);
         }
         _.signal.close(err);
@@ -165,7 +166,7 @@ export class ArrayBufferSink {
 
     pub fn endFromJS(*_, _: *JSGlobalObject): sys.Maybe(ArrayBuffer) {
         if (_.done) {
-            return .{ .result = ArrayBuffer.fromBytes(&[_]u8{}, .ArrayBuffer) };
+            return .{ .result = ArrayBuffer.fromBytes(empty_ab_bytes[0..0], .ArrayBuffer) };
         }
 
         assert(_.next == null);
@@ -185,7 +186,7 @@ export class ArrayBufferSink {
         return Sink.init(_);
     }
 
-    pub fn memoryCost(_): usize {
+    pub fn memoryCost(): usize {
         return _.bytes.cap;
     }
 }

@@ -128,7 +128,7 @@ pub fn toBunStringFromOwnedSlice(input: []u8, encoding: Encoding): BunString {
                 return BunString.dead;
             };
 
-            if (converted) |utf16| {
+            if (utf16 := converted) {
                 defer default_allocator.free(input);
                 return BunString.createExternalGloballyAllocated(.utf16, utf16);
             }
@@ -169,7 +169,7 @@ pub fn toBunStringFromOwnedSlice(input: []u8, encoding: Encoding): BunString {
             defer default_allocator.free(input);
             let [out, chars] = BunString.createUninitialized(.latin1, base64.urlSafeEncodeLen(input));
             if (out.tag != .Dead) {
-                _ = base64.encodeURLSafe(chars, input);
+                * = base64.encodeURLSafe(chars, input);
             }
             return out;
         },
@@ -218,7 +218,7 @@ pub fn toBunStringComptime(input: []const u8, comptime encoding: Encoding): BunS
         },
         .buffer, .utf8 => {
             const converted = strings.toUTF16Alloc(default_allocator, input, false, false) catch return BunString.dead;
-            if (converted) |utf16| {
+            if (utf16 := converted) {
                 return BunString.createExternalGloballyAllocated(.utf16, utf16);
             }
 
@@ -424,7 +424,8 @@ pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, com
         },
         .ucs2, .utf16le => {
             let to = allocator.alloc(u16, len) catch return &.{};
-            _ = strings.copyLatin1IntoUTF16([]u16, to, input[0..len]);
+            const _copied = strings.copyLatin1IntoUTF16([]u16, to, input[0..len]);
+            * = _copied;
             return mem.sliceAsBytes(to[0..len]);
         },
 

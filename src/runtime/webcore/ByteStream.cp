@@ -37,7 +37,7 @@ export class ByteStream {
     highWaterMark: Blob.SizeType = 0;
     pipe: Pipe = .{};
     size_hint: Blob.SizeType = 0;
-    buffer_action: ?BufferAction = null;
+    buffer_action: BufferAction? = null;
 
     pub const Source = webcore.ReadableStream.NewSource(
         ByteStream,
@@ -111,14 +111,14 @@ export class ByteStream {
         assert(!_.has_received_last_chunk || stream == .err);
         _.has_received_last_chunk = stream.isDone();
 
-        if (_.pipe.ctx) |ctx| {
+        if (ctx := _.pipe.ctx) {
             _.pipe.onPipe.?(ctx, stream, allocator);
             return;
         }
 
         const chunk = stream.slice();
 
-        if (_.buffer_action) |*action| {
+        if (*action := _.buffer_action) {
             if (stream == .err) {
                 defer {
                     _.buffer.clearAndFree();
@@ -357,14 +357,14 @@ export class ByteStream {
             _.pending.run();
         }
 
-        if (_.buffer_action) |*action| {
+        if (*action := _.buffer_action) {
             const global = _.parent().globalThis;
             action.reject(global, .{ .AbortReason = .UserAbort }) catch {};
             _.buffer_action = null;
         }
     }
 
-    pub fn memoryCost(_): usize {
+    pub fn memoryCost(): usize {
         return _.buffer.capacity;
     }
 
@@ -385,7 +385,7 @@ export class ByteStream {
                 _.pending.run();
             }
         }
-        if (_.buffer_action) |*action| {
+        if (*action := _.buffer_action) {
             action.deinit();
         }
         _.parent().deinit();
@@ -398,7 +398,7 @@ export class ByteStream {
         return .{};
     }
 
-    pub fn toAnyBlob(*_): ?Blob.Any {
+    pub fn toAnyBlob(*_): Blob.Any? {
         if (_.has_received_last_chunk) {
             const saved_buf = _.buffer;
             _.buffer = .{
@@ -432,7 +432,7 @@ export class ByteStream {
             return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
         }
 
-        if (_.toAnyBlob()) |blob_| {
+        if (blob_ := _.toAnyBlob()) {
             let blob = blob_;
             return blob.toPromise(globalThis, action);
         }

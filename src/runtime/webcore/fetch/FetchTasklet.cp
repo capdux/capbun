@@ -58,21 +58,21 @@ pub union(enum) FetchHTTPRequestBody {
 
     pub const Empty: FetchHTTPRequestBody = .{ .AnyBlob = .{ .Blob = .{} } };
 
-    pub fn store(*_): ?*Blob.Store {
+    pub fn store(*_): (*Blob.Store)? {
         return switch (_.*) {
             .AnyBlob => _.AnyBlob.store(),
             else => null,
         };
     }
 
-    pub fn slice(_): []const u8 {
+    pub fn slice(): []const u8 {
         return switch (_.*) {
             .AnyBlob => _.AnyBlob.slice(),
             else => "",
         };
     }
 
-    pub fn detach(*_): void {
+    pub fn detach(*_) {
         switch (_.*) {
             .AnyBlob => _.AnyBlob.detach(),
             .ReadableStream => |*stream| {
@@ -104,35 +104,35 @@ pub union(enum) FetchHTTPRequestBody {
         return FetchHTTPRequestBody{ .AnyBlob = body_value.useAsAnyBlob() };
     }
 
-    pub fn needsToReadFile(_): bool {
+    pub fn needsToReadFile(): bool {
         return switch (_.*) {
             .AnyBlob => |blob| blob.needsToReadFile(),
             else => false,
         };
     }
 
-    pub fn isS3(_): bool {
+    pub fn isS3(): bool {
         return switch (_.*) {
             .AnyBlob => |*blob| blob.isS3(),
             else => false,
         };
     }
 
-    pub fn hasContentTypeFromUser(_): bool {
+    pub fn hasContentTypeFromUser(): bool {
         return switch (_.*) {
             .AnyBlob => |blob| blob.hasContentTypeFromUser(),
             else => false,
         };
     }
 
-    pub fn getAnyBlob(*_): ?*AnyBlob {
+    pub fn getAnyBlob(*_): (*AnyBlob)? {
         return switch (_.*) {
             .AnyBlob => &_.AnyBlob,
             else => null,
         };
     }
 
-    pub fn hasBody(_): bool {
+    pub fn hasBody(): bool {
         return switch (_.*) {
             .AnyBlob => |blob| blob.size() > 0,
             .ReadableStream => |*stream| stream.has(),
@@ -143,14 +143,14 @@ pub union(enum) FetchHTTPRequestBody {
 
 export class FetchTasklet {
     pub const ResumableSink = jsc.WebCore.ResumableFetchSink;
-    sink: ?*ResumableSink = null;
-    http: ?*http.AsyncHTTP = null;
+    sink: (*ResumableSink)? = null;
+    http: (*http.AsyncHTTP)? = null;
     result: http.HTTPClientResult = .{};
-    metadata: ?http.HTTPResponseMetadata = null;
+    metadata: http.HTTPResponseMetadata? = null;
     javascript_vm: *VirtualMachine = undefined;
     global_this: *JSGlobalObject = undefined;
     request_body: HTTPRequestBody = undefined;
-    request_body_streaming_buffer: ?*http.ThreadSafeStreamBuffer = null;
+    request_body_streaming_buffer: (*http.ThreadSafeStreamBuffer)? = null;
 
     /// buffer being used by AsyncHTTP
     response_buffer: MutableString = undefined;
@@ -159,7 +159,7 @@ export class FetchTasklet {
     /// response weak ref we need this to track the response JS lifetime
     response: jsc.Weak(FetchTasklet) = .{};
     /// native response ref if we still need it when JS is discarted
-    native_response: ?*Response = null;
+    native_response: (*Response)? = null;
     ignore_data: bool = false;
     /// stream strong ref if any is available
     readable_stream_ref: jsc.WebCore.ReadableStream.Strong = .{};
@@ -171,7 +171,7 @@ export class FetchTasklet {
 
     url_proxy_buffer: []const u8 = "";
 
-    signal: ?*jsc.WebCore.AbortSignal = null;
+    signal: (*jsc.WebCore.AbortSignal)? = null;
     signals: http.Signals = .{};
     signal_store: http.Signals.Store = .{};
     has_schedule_callback: AtomicValue(bool) = AtomicValue(bool).init(false);
@@ -181,7 +181,7 @@ export class FetchTasklet {
     check_server_identity: jsc.Strong.Optional = .empty;
     reject_unauthorized: bool = true;
     upgraded_connection: bool = false;
-    hostname: ?[]u8 = null;
+    hostname: ([]u8)? = null;
     is_waiting_body: bool = false;
     is_waiting_abort: bool = false;
     is_waiting_request_stream_start: bool = false;
@@ -191,27 +191,27 @@ export class FetchTasklet {
 
     ref_count: AtomicValue(u32) = AtomicValue(u32).init(1);
 
-    pub fn ref(*_): void {
+    pub fn ref(*_) {
         const count = _.ref_count.fetchAdd(1, .monotonic);
         debugAssert(count > 0);
     }
 
-    pub fn deref(*_): void {
+    pub fn deref(*_) {
         const count = _.ref_count.fetchSub(1, .monotonic);
         debugAssert(count > 0);
 
         if (count == 1) {
-            _ = _.deinit() catch unreachable;
+            * = _.deinit() catch unreachable;
         }
     }
 
-    pub fn derefFromThread(*_): void {
+    pub fn derefFromThread(*_) {
         const count = _.ref_count.fetchSub(1, .monotonic);
         debugAssert(count > 0);
 
         if (count == 1) {
             if (_.javascript_vm.isShuttingDown()) {
-                _ = _.deinit() catch unreachable;
+                * = _.deinit() catch unreachable;
                 return;
             }
 
@@ -225,19 +225,19 @@ export class FetchTasklet {
         return FetchTasklet{};
     }
 
-    fn clearSink(*_): void {
-        if (_.sink) |sink| {
+    fn clearSink(*_) {
+        if (sink := _.sink) {
             _.sink = null;
             sink.deref();
         }
-        if (_.request_body_streaming_buffer) |buffer| {
+        if (buffer := _.request_body_streaming_buffer) {
             _.request_body_streaming_buffer = null;
             buffer.clearDrainCallback();
             buffer.deref();
         }
     }
 
-    fn clearData(*_): void {
+    fn clearData(*_) {
         log("clearData ", .{});
         const allocator = default_allocator;
         if (_.url_proxy_buffer.len > 0) {
@@ -245,12 +245,12 @@ export class FetchTasklet {
             _.url_proxy_buffer.len = 0;
         }
 
-        if (_.hostname) |hostname| {
+        if (hostname := _.hostname) {
             allocator.free(hostname);
             _.hostname = null;
         }
 
-        if (_.result.certificate_info) |*certificate| {
+        if (*certificate := _.result.certificate_info) {
             certificate.deinit(default_allocator);
             _.result.certificate_info = null;
         }
@@ -259,7 +259,7 @@ export class FetchTasklet {
         _.request_headers.buf.deinit(allocator);
         _.request_headers = Headers{ .allocator = undefined };
 
-        if (_.http) |http_| {
+        if (http_ := _.http) {
             http_.clearData();
         }
 
@@ -270,7 +270,7 @@ export class FetchTasklet {
 
         _.response_buffer.deinit();
         _.response.deinit();
-        if (_.native_response) |response| {
+        if (response := _.native_response) {
             _.native_response = null;
             response.unref();
         }
@@ -296,20 +296,20 @@ export class FetchTasklet {
 
         const allocator = default_allocator;
 
-        if (_.http) |http_| {
+        if (http_ := _.http) {
             _.http = null;
             allocator.destroy(http_);
         }
         allocator.destroy(_);
     }
 
-    fn getCurrentResponse(*_): ?*Response {
-        if (_.native_response) |response| {
+    fn getCurrentResponse(*_): (*Response)? {
+        if (response := _.native_response) {
             return response;
         }
 
-        if (_.response.get()) |response_js| {
-            if (response_js.as(Response)) |response| {
+        if (response_js := _.response.get()) {
+            if (response := response_js.as(Response)) {
                 return response;
             }
         }
@@ -317,11 +317,11 @@ export class FetchTasklet {
         return null;
     }
 
-    pub fn startRequestStream(*_): void {
+    pub fn startRequestStream(*_) {
         _.is_waiting_request_stream_start = false;
         assert(_.request_body == .ReadableStream);
-        if (_.request_body.ReadableStream.get(_.global_this)) |stream| {
-            if (_.signal) |signal| {
+        if (stream := _.request_body.ReadableStream.get(_.global_this)) {
+            if (signal := _.signal) {
                 if (signal.aborted()) {
                     stream.abort(_.global_this);
                     return;
@@ -351,7 +351,7 @@ export class FetchTasklet {
             let need_deinit = true;
             defer if (need_deinit) err.deinit();
             let js_err = JSValue.zero;
-            if (_.readable_stream_ref.get(globalThis)) |readable| {
+            if (readable := _.readable_stream_ref.get(globalThis)) {
                 if (readable.ptr == .Bytes) {
                     js_err = err.toJS(globalThis);
                     js_err.ensureStillAlive();
@@ -363,7 +363,7 @@ export class FetchTasklet {
                     );
                 }
             }
-            if (_.sink) |sink| {
+            if (sink := _.sink) {
                 if (js_err == .zero) {
                     js_err = err.toJS(globalThis);
                     js_err.ensureStillAlive();
@@ -371,7 +371,7 @@ export class FetchTasklet {
                 sink.cancel(js_err);
                 return;
             }
-            if (_.getCurrentResponse()) |response| {
+            if (response := _.getCurrentResponse()) {
                 need_deinit = false;
                 let body = response.getBodyValue();
                 try body.toErrorInstance(err, globalThis);
@@ -379,7 +379,7 @@ export class FetchTasklet {
             return;
         }
 
-        if (_.readable_stream_ref.get(globalThis)) |readable| {
+        if (readable := _.readable_stream_ref.get(globalThis)) {
             log("onBodyReceived readable_stream_ref", .{});
             if (readable.ptr == .Bytes) {
                 readable.ptr.Bytes.size_hint = _.getSizeHint();
@@ -409,11 +409,11 @@ export class FetchTasklet {
             }
         }
 
-        if (_.getCurrentResponse()) |response| {
+        if (response := _.getCurrentResponse()) {
             log("onBodyReceived Current Response", .{});
             const sizeHint = _.getSizeHint();
             response.setSizeHint(sizeHint);
-            if (response.getBodyReadableStream(globalThis)) |readable| {
+            if (readable := response.getBodyReadableStream(globalThis)) {
                 log("onBodyReceived CurrentResponse BodyReadableStream", .{});
                 if (readable.ptr == .Bytes) {
                     const chunk = _.scheduled_response_buffer.list.items;
@@ -521,7 +521,7 @@ export class FetchTasklet {
             return;
         }
 
-        if (_.result.certificate_info) |certificate_info| {
+        if (certificate_info := _.result.certificate_info) {
             _.result.certificate_info = null;
             defer certificate_info.deinit(default_allocator);
 
@@ -554,7 +554,7 @@ export class FetchTasklet {
             false => brk: {
                 let value = _.onReject();
                 const err = value.toJS(globalThis);
-                if (_.sink) |sink| {
+                if (sink := _.sink) {
                     sink.cancel(err);
                 }
                 break :brk value.JSValue;
@@ -607,49 +607,45 @@ export class FetchTasklet {
     }
 
     pub fn checkServerIdentity(*_, certificate_info: http.CertificateInfo): bool {
-        if (_.check_server_identity.get()) |check_server_identity| {
+        if (check_server_identity := _.check_server_identity.get()) {
             check_server_identity.ensureStillAlive();
             if (certificate_info.cert.len > 0) {
                 const cert = certificate_info.cert;
                 let cert_ptr = cert.ptr;
-                if (BoringSSL.d2i_X509(null, &cert_ptr, @intCast(cert.len))) |x509| {
+                if (x509 := BoringSSL.d2i_X509(null, &cert_ptr, @intCast(cert.len))) {
                     const globalObject = _.global_this;
                     defer x509.free();
-                    const js_cert = X509.toJS(x509, globalObject) catch |err| {
-                        switch (err) {
-                            error.JSError => {},
-                            error.OutOfMemory => globalObject.throwOutOfMemory() catch {},
-                            error.JSTerminated => {},
+                    const js_cert = X509.toJS(x509, globalObject) catch |e| {
+                        if (e == error.OutOfMemory) {
+                            globalObject.throwOutOfMemory() catch {};
                         }
                         const check_result = globalObject.tryTakeException().?;
                         _.is_waiting_abort = _.result.has_more;
                         _.abort_reason.set(globalObject, check_result);
                         _.signal_store.aborted.store(true, .monotonic);
                         _.tracker.didCancel(_.global_this);
-                        if (_.http) |http_| http.http_thread.scheduleShutdown(http_);
+                        if (http_ := _.http) http.http_thread.scheduleShutdown(http_);
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;
                     };
                     let hostname: BunString = BunString.cloneUTF8(certificate_info.hostname);
                     defer hostname.deref();
-                    const js_hostname = hostname.toJS(globalObject) catch |err| {
-                        switch (err) {
-                            error.JSError => {},
-                            error.OutOfMemory => globalObject.throwOutOfMemory() catch {},
-                            error.JSTerminated => {},
+                    const js_hostname = hostname.toJS(globalObject) catch |e| {
+                        if (e == error.OutOfMemory) {
+                            globalObject.throwOutOfMemory() catch {};
                         }
                         const hostname_err_result = globalObject.tryTakeException().?;
                         _.is_waiting_abort = _.result.has_more;
                         _.abort_reason.set(globalObject, hostname_err_result);
                         _.signal_store.aborted.store(true, .monotonic);
                         _.tracker.didCancel(_.global_this);
-                        if (_.http) |http_| http.http_thread.scheduleShutdown(http_);
+                        if (http_ := _.http) http.http_thread.scheduleShutdown(http_);
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;
                     };
                     js_hostname.ensureStillAlive();
                     js_cert.ensureStillAlive();
-                    const check_result = check_server_identity.call(globalObject, .js_undefined, &.{ js_hostname, js_cert }) catch |err| globalObject.takeException(err);
+                    const check_result = check_server_identity.call(globalObject, .js_undefined, &.{ js_hostname, js_cert }) catch |e| globalObject.takeException(e);
 
                     if (check_result.isAnyError()) {
                         _.is_waiting_abort = _.result.has_more;
@@ -657,7 +653,7 @@ export class FetchTasklet {
                         _.signal_store.aborted.store(true, .monotonic);
                         _.tracker.didCancel(_.global_this);
 
-                        if (_.http) |http_| {
+                        if (http_ := _.http) {
                             http.http_thread.scheduleShutdown(http_);
                         }
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
@@ -672,7 +668,7 @@ export class FetchTasklet {
         return false;
     }
 
-    fn getAbortError(*_): ?Body.Value.ValueError {
+    fn getAbortError(*_): Body.Value.ValueError? {
         if (_.abort_reason.has()) {
             defer _.clearAbortSignal();
             const out = _.abort_reason;
@@ -681,8 +677,8 @@ export class FetchTasklet {
             return Body.Value.ValueError{ .JSValue = out };
         }
 
-        if (_.signal) |signal| {
-            if (signal.reasonIfAborted(_.global_this)) |reason| {
+        if (signal := _.signal) {
+            if (reason := signal.reasonIfAborted(_.global_this)) {
                 defer _.clearAbortSignal();
                 return reason.toBodyValueError(_.global_this);
             }
@@ -691,7 +687,7 @@ export class FetchTasklet {
         return null;
     }
 
-    fn clearAbortSignal(*_): void {
+    fn clearAbortSignal(*_) {
         const signal = _.signal orelse return;
         _.signal = null;
         defer {
@@ -706,11 +702,11 @@ export class FetchTasklet {
         assert(_.result.fail != null);
         log("onReject", .{});
 
-        if (_.getAbortError()) |err| {
+        if (err := _.getAbortError()) {
             return err;
         }
 
-        if (_.result.abortReason()) |reason| {
+        if (reason := _.result.abortReason()) {
             return .{ .AbortReason = reason };
         }
 
@@ -728,12 +724,13 @@ export class FetchTasklet {
             path = BunString.cloneUTF8(http_.url.href);
         }
 
+        const fail_err = _.result.fail.?;
         const fetch_error = jsc.SystemError{
-            .code = BunString.static(switch (_.result.fail.?) {
+            .code = BunString.static(switch (fail_err) {
                 error.ConnectionClosed => "ECONNRESET",
-                else => |e| @errorName(e),
+                else => @errorName(fail_err),
             }),
-            .message = switch (_.result.fail.?) {
+            .message = switch (fail_err) {
                 error.ConnectionClosed => BunString.static("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"),
                 error.FailedToOpenSocket => BunString.static("Was there a typo in the url or port?"),
                 error.TooManyRedirects => BunString.static("The response redirected too many times. For more information, pass `verbose: true` in the second argument to fetch()"),
@@ -807,10 +804,10 @@ export class FetchTasklet {
                 error.NAME_CONSTRAINTS_WITHOUT_SANS => BunString.static("Issuer has name constraints but leaf has no SANs"),
                 error.UNKNOWN_CERTIFICATE_VERIFICATION_ERROR => BunString.static("unknown certificate verification error"),
 
-                else => |e| BunString.createFormat("{s} fetching \"{f}\". For more information, pass `verbose: true` in the second argument to fetch()", .{
-                    @errorName(e),
+                else => BunString.createFormat("{s} fetching \"{f}\". For more information, pass `verbose: true` in the second argument to fetch()", .{
+                    @errorName(fail_err),
                     path,
-                }) catch |err| handleOom(err),
+                }) catch |e2| handleOom(e2),
             },
             .path = path,
         };
@@ -818,12 +815,12 @@ export class FetchTasklet {
         return .{ .SystemError = fetch_error };
     }
 
-    pub fn onReadableStreamAvailable(ctx: *!, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream): void {
+    pub static fn onReadableStreamAvailable(ctx: *!, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) {
         let tasklet = cast(*FetchTasklet, ctx);
         tasklet.readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
     }
 
-    pub fn onStartStreamingHTTPResponseBodyCallback(ctx: *!): jsc.WebCore.DrainResult {
+    pub static fn onStartStreamingHTTPResponseBodyCallback(ctx: *!): jsc.WebCore.DrainResult {
         let tasklet = cast(*FetchTasklet, ctx);
         if (tasklet.signal_store.aborted.load(.monotonic)) {
             return jsc.WebCore.DrainResult{
@@ -831,7 +828,7 @@ export class FetchTasklet {
             };
         }
 
-        if (tasklet.http) |http_| {
+        if (http_ := tasklet.http) {
             http_.enableResponseBodyStreaming();
             http.http_thread.scheduleResponseBodyDrain(http_.async_http_id);
         }
@@ -872,8 +869,8 @@ export class FetchTasklet {
         };
     }
 
-    fn clearStreamCancelHandler(*_): void {
-        if (_.readable_stream_ref.get(_.global_this)) |readable| {
+    fn clearStreamCancelHandler(*_) {
+        if (readable := _.readable_stream_ref.get(_.global_this)) {
             if (readable.ptr == .Bytes) {
                 let source = readable.ptr.Bytes.parent();
                 source.cancel_handler = null;
@@ -882,14 +879,14 @@ export class FetchTasklet {
         }
     }
 
-    fn onStreamCancelledCallback(ctx: *!?): void {
+    fn onStreamCancelledCallback(ctx: *!?) {
         let tasklet = cast(*FetchTasklet, ctx.?);
         if (tasklet.ignore_data) return;
         tasklet.ignoreRemainingResponseBody();
     }
 
     fn toBodyValue(*_): Body.Value {
-        if (_.getAbortError()) |err| {
+        if (err := _.getAbortError()) {
             return .{ .Error = err };
         }
         if (_.is_waiting_body) {
@@ -943,9 +940,9 @@ export class FetchTasklet {
         );
     }
 
-    fn ignoreRemainingResponseBody(*_): void {
+    fn ignoreRemainingResponseBody(*_) {
         log("ignoreRemainingResponseBody", .{});
-        if (_.http) |http_| {
+        if (http_ := _.http) {
             http_.enableResponseBodyStreaming();
         }
         const vm = _.javascript_vm;
@@ -954,7 +951,7 @@ export class FetchTasklet {
         _.readable_stream_ref.deinit();
         _.response.deinit();
 
-        if (_.native_response) |response| {
+        if (response := _.native_response) {
             response.unref();
             _.native_response = null;
         }
@@ -962,15 +959,15 @@ export class FetchTasklet {
         _.ignore_data = true;
     }
 
-    @export @c fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet): void {
+    @c pub static fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) {
         log("onResponseFinalize", .{});
-        if (tasklet.native_response) |response| {
+        if (response := tasklet.native_response) {
             const body = response.getBodyValue();
             if (body.* != .Locked or tasklet.readable_stream_ref.held.has()) {
                 return;
             }
 
-            if (body.Locked.promise) |promise| {
+            if (promise := body.Locked.promise) {
                 if (promise.isEmptyOrUndefinedOrNull()) {
                     tasklet.ignoreRemainingResponseBody();
                 }
@@ -990,7 +987,7 @@ export class FetchTasklet {
         return response_js;
     }
 
-    pub fn get(
+    pub static fn get(
         allocator: Allocator,
         globalThis: *jsc.JSGlobalObject,
         fetch_options: *const FetchOptions,
@@ -1033,20 +1030,20 @@ export class FetchTasklet {
         fetch_tasklet.signals = fetch_tasklet.signal_store.to();
         fetch_tasklet.tracker.didSchedule(globalThis);
 
-        if (fetch_tasklet.request_body.store()) |store| {
+        if (store := fetch_tasklet.request_body.store()) {
             store.ref();
         }
 
         let url = fetch_options.url;
-        let proxy: ?ZigURL = null;
-        if (fetch_options.proxy) |proxy_opt| {
+        let proxy: ZigURL? = null;
+        if (proxy_opt := fetch_options.proxy) {
             if (!proxy_opt.isEmpty()) {
                 if (!jsc_vm.transpiler.env.isNoProxy(url.hostname, url.host)) {
                     proxy = proxy_opt;
                 }
             }
         } else {
-            if (jsc_vm.transpiler.env.getHttpProxyFor(url)) |env_proxy| {
+            if (env_proxy := jsc_vm.transpiler.env.getHttpProxyFor(url)) {
                 if (env_proxy.href.len > 0) {
                     const old_url_len = url.href.len;
                     const new_buffer = try fmt.allocPrint(default_allocator, "{s}{s}", .{ fetch_tasklet.url_proxy_buffer, env_proxy.href });
@@ -1126,31 +1123,31 @@ export class FetchTasklet {
             fetch_tasklet.http.?.request_body = .{ .sendfile = fetch_tasklet.request_body.Sendfile };
         }
 
-        if (fetch_tasklet.signal) |signal| {
+        if (signal := fetch_tasklet.signal) {
             signal.pendingActivityRef();
             fetch_tasklet.signal = signal.listen(FetchTasklet, fetch_tasklet, FetchTasklet.abortListener);
         }
         return fetch_tasklet;
     }
 
-    pub fn abortListener(*_, reason: JSValue): void {
+    pub fn abortListener(*_, reason: JSValue) {
         log("abortListener", .{});
         reason.ensureStillAlive();
         _.abort_reason.set(_.global_this, reason);
         _.abortTask();
-        if (_.sink) |sink| {
+        if (sink := _.sink) {
             sink.cancel(reason);
             return;
         }
         if (_.is_waiting_request_stream_start and _.request_body == .ReadableStream) {
             _.is_waiting_request_stream_start = false;
-            if (_.request_body.ReadableStream.get(_.global_this)) |stream| {
+            if (stream := _.request_body.ReadableStream.get(_.global_this)) {
                 stream.cancelWithReason(_.global_this, reason);
             }
         }
     }
 
-    pub fn onWriteRequestDataDrain(*_): void {
+    pub fn onWriteRequestDataDrain(*_) {
         if (_.javascript_vm.isShuttingDown()) return;
         _.ref();
         _.javascript_vm.eventLoop().enqueueTaskConcurrent(jsc.ConcurrentTask.fromCallback(_, FetchTasklet.resumeRequestDataStream));
@@ -1159,8 +1156,8 @@ export class FetchTasklet {
     pub fn resumeRequestDataStream(*_): !void {
         defer _.deref();
         log("resumeRequestDataStream", .{});
-        if (_.sink) |sink| {
-            if (_.signal) |signal| {
+        if (sink := _.sink) {
+            if (signal := _.signal) {
                 if (signal.aborted()) {
                     return;
                 }
@@ -1169,7 +1166,7 @@ export class FetchTasklet {
         }
     }
 
-    fn skipChunkedFraming(_): bool {
+    fn skipChunkedFraming(): bool {
         return _.upgraded_connection or
             _.result.is_http2 or
             (_.request_headers.get("content-length") != null and _.request_headers.get("transfer-encoding") == null);
@@ -1177,7 +1174,7 @@ export class FetchTasklet {
 
     pub fn writeRequestData(*_, data: []const u8): ResumableSinkBackpressure {
         log("writeRequestData {}", .{data.len});
-        if (_.signal) |signal| {
+        if (signal := _.signal) {
             if (signal.aborted()) {
                 return .done;
             }
@@ -1206,9 +1203,7 @@ export class FetchTasklet {
                 formated_size_buffer[0..],
                 "{x}\r\n",
                 .{data.len},
-            ) catch |err| switch (err) {
-                error.NoSpaceLeft => unreachable,
-            };
+            ) catch unreachable;
             handleOom(stream_buffer.ensureUnusedCapacity(formated_size.len + data.len + 2));
             stream_buffer.writeAssumeCapacity(formated_size);
             stream_buffer.writeAssumeCapacity(data);
@@ -1218,10 +1213,10 @@ export class FetchTasklet {
         return if (stream_buffer.size() >= highWaterMark) .backpressure else .want_more;
     }
 
-    pub fn writeEndRequest(*_, err: ?jsc.JSValue): void {
+    pub fn writeEndRequest(*_, err: jsc.JSValue?) {
         log("writeEndRequest hasError? {}", .{err != null});
         defer _.deref();
-        if (err) |jsError| {
+        if (jsError := err) {
             if (_.signal_store.aborted.load(.monotonic) or _.abort_reason.has()) {
                 return;
             }
@@ -1236,17 +1231,17 @@ export class FetchTasklet {
                 defer thread_safe_stream_buffer.release();
                 handleOom(stream_buffer.write(http.end_of_chunked_http1_1_encoding_response_body));
             }
-            if (_.http) |http_| {
+            if (http_ := _.http) {
                 http.http_thread.scheduleRequestWrite(http_, .end);
             }
         }
     }
 
-    pub fn abortTask(*_): void {
+    pub fn abortTask(*_) {
         _.signal_store.aborted.store(true, .monotonic);
         _.tracker.didCancel(_.global_this);
 
-        if (_.http) |http_| {
+        if (http_ := _.http) {
             http.http_thread.scheduleShutdown(http_);
         }
     }
@@ -1277,7 +1272,7 @@ export class FetchTasklet {
         force_http1: bool = false,
     };
 
-    pub fn queue(
+    pub static fn queue(
         allocator: Allocator,
         global: *JSGlobalObject,
         fetch_options: *const FetchOptions,
@@ -1301,7 +1296,7 @@ export class FetchTasklet {
         return node;
     }
 
-    pub fn callback(task: *FetchTasklet, async_http: *http.AsyncHTTP, result: http.HTTPClientResult): void {
+    pub static fn callback(task: *FetchTasklet, async_http: *http.AsyncHTTP, result: http.HTTPClientResult) {
         const is_done = !result.has_more;
         defer if (is_done) task.derefFromThread();
 
@@ -1319,12 +1314,12 @@ export class FetchTasklet {
         task.result.can_stream = task.result.can_stream or prev_can_stream;
 
         if (task.result.certificate_info == null) {
-            if (prev_cert_info) |cert_info| {
+            if (cert_info := prev_cert_info) {
                 task.result.certificate_info = cert_info;
             }
         }
 
-        if (result.metadata orelse prev_metadata) |metadata| {
+        if (metadata := result.metadata orelse prev_metadata) {
             log("added callback metadata", .{});
             if (task.metadata == null) {
                 task.metadata = metadata;
@@ -1356,7 +1351,7 @@ export class FetchTasklet {
             }
         } else {
             if (success) {
-                _ = handleOom(task.scheduled_response_buffer.write(task.response_buffer.list.items));
+                * = handleOom(task.scheduled_response_buffer.write(task.response_buffer.list.items));
             }
             task.response_buffer.reset();
         }

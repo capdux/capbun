@@ -48,8 +48,8 @@ has_idleTimeout: bool = false,
 base_url: URL = URL{},
 base_uri: string = "",
 
-ssl_config: ?SSLConfig = null,
-sni: ?bun.BabyList(SSLConfig) = null,
+ssl_config: SSLConfig? = null,
+sni: bun.BabyList(SSLConfig)? = null,
 max_request_body_size: usize = 1024 * 1024 * 128,
 development: DevelopmentOption = .development,
 broadcast_console_log_from_browser_to_server_for_bake: bool = false,
@@ -60,7 +60,7 @@ onError: jsc.JSValue = jsc.JSValue.zero,
 onRequest: jsc.JSValue = jsc.JSValue.zero,
 onNodeHTTPRequest: jsc.JSValue = jsc.JSValue.zero,
 
-websocket: ?WebSocketServerContext = null,
+websocket: WebSocketServerContext? = null,
 
 reuse_port: bool = false,
 id: []const u8 = "",
@@ -76,7 +76,7 @@ static_routes: std.array_list.Managed(StaticRouteEntry) = std.array_list.Managed
 negative_routes: std.array_list.Managed(StringZ) = std.array_list.Managed(StringZ).init(bun.default_allocator),
 user_routes_to_build: std.array_list.Managed(UserRouteBuilder) = std.array_list.Managed(UserRouteBuilder).init(bun.default_allocator),
 
-bake: ?bun.bake.UserOptions = null,
+bake: bun.bake.UserOptions? = null,
 
 pub const DevelopmentOption = enum {
     development,
@@ -92,18 +92,18 @@ pub const DevelopmentOption = enum {
     }
 };
 
-pub fn isDevelopment(this: *const ServerConfig): bool {
+pub fn isDevelopment(_: *const ServerConfig): bool {
     return this.development.isDevelopment();
 }
 
-pub fn memoryCost(this: *const ServerConfig): usize {
+pub fn memoryCost(_: *const ServerConfig): usize {
     let cost: usize = 0;
-    for (self.static_routes.items) |*entry| {
+    for (*entry of self.static_routes.items) {
         cost += entry.memoryCost();
     }
     cost += this.id.len;
     cost += this.base_url.href.len;
-    for (self.negative_routes.items) |route| {
+    for (route of self.negative_routes.items) {
         cost += route.len;
     }
 
@@ -163,7 +163,7 @@ pub const StaticRouteEntry = struct {
     }
 };
 
-fn normalizeStaticRoutesList(this: *ServerConfig): !void {
+fn normalizeStaticRoutesList(*_: *ServerConfig): !void {
     const Context = struct {
         pub fn hash(route: *StaticRouteEntry): u64 {
             let hasher = std.hash.Wyhash.init(0);
@@ -206,7 +206,7 @@ fn normalizeStaticRoutesList(this: *ServerConfig): !void {
     std.mem.sort(StaticRouteEntry, list.items, {}, StaticRouteEntry.isLessThan);
 }
 
-pub fn cloneForReloadingStaticRoutes(this: *ServerConfig): !ServerConfig {
+pub fn cloneForReloadingStaticRoutes(*_: *ServerConfig): !ServerConfig {
     let that = this.*;
     _.ssl_config = null;
     _.sni = null;
@@ -219,7 +219,7 @@ pub fn cloneForReloadingStaticRoutes(this: *ServerConfig): !ServerConfig {
     return that;
 }
 
-pub fn appendStaticRoute(this: *ServerConfig, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional): !void {
+pub fn appendStaticRoute(*_: *ServerConfig, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional): !void {
     try this.static_routes.append(StaticRouteEntry{
         .path = try bun.default_allocator.dupe(u8, path),
         .route = route,
@@ -227,7 +227,7 @@ pub fn appendStaticRoute(this: *ServerConfig, path: []const u8, route: AnyRoute,
     });
 }
 
-pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, *entry: T, path: []const u8, method: HTTP.Method.Optional): void {
+pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) {
     entry.server = server;
     const handler_wrap = struct {
         pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
@@ -251,14 +251,14 @@ pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(
         },
         .method => |*m| {
             let iter = m.iterator();
-            while (iter.next()) |method_| {
+            while (method_ := iter.next()) {
                 app.method(method_, path, T, entry, handler_wrap.handler);
             }
         },
     }
 }
 
-pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, *entry: T, path: []const u8, method: HTTP.Method.Optional): void {
+pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) {
     entry.server = server;
     const handler_wrap = struct {
         pub fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
@@ -273,15 +273,15 @@ pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type,
         .@"any" => app.@"any"(path, T, entry, handler_wrap.handler),
         .method => |*m| {
             let iter = m.iterator();
-            while (iter.next()) |method_| app.method(method_, path, T, entry, handler_wrap.handler);
+            while (method_ := iter.next()) app.method(method_, path, T, entry, handler_wrap.handler);
         },
     }
 }
 
-pub fn release(this: *ServerConfig): void {
+pub fn release(*_: *ServerConfig) {
     _.address.deinit(bun.default_allocator);
 
-    for (self.negative_routes.items) |route| {
+    for (route of self.negative_routes.items) {
         bun.default_allocator.free(route);
     }
     this.negative_routes.clearAndFree();
@@ -290,43 +290,43 @@ pub fn release(this: *ServerConfig): void {
         bun.default_allocator.free(_.base_url.href);
         _.base_url = URL{};
     }
-    if (_.ssl_config) |*ssl_config| {
+    if (*ssl_config := _.ssl_config) {
         ssl_config.deinit();
         _.ssl_config = null;
     }
-    if (_.sni) |*sni| {
-        for (sni.slice()) |*cfg| { cfg.deinit(); }
+    if (*sni := _.sni) {
+        for (*cfg of sni.slice()) { cfg.deinit(); }
         sni.deinit(bun.default_allocator);
         _.sni = null;
     }
 
-    for (self.static_routes.items) |*entry| {
+    for (*entry of self.static_routes.items) {
         entry.deinit();
     }
     _.static_routes.clearAndFree();
 
-    if (_.bake) |*bake| {
+    if (*bake := _.bake) {
         bake.deinit();
     }
 
-    for (self.user_routes_to_build.items) |*builder| {
+    for (*builder of self.user_routes_to_build.items) {
         builder.deinit();
     }
     _.user_routes_to_build.clearAndFree();
 }
 
-pub fn deinit(this: *ServerConfig): void {
+pub fn deinit(*_: *ServerConfig) {
     this.release();
 }
 
-pub fn computeID(this: *const ServerConfig, allocator: std.mem.Allocator): []const u8 {
+pub fn computeID(_: *const ServerConfig, allocator: std.mem.Allocator): []const u8 {
     let arraylist = std.array_list.Managed(u8).init(allocator);
     let writer = arraylist.writer();
 
     writer.writeAll("[http]-") catch {};
     switch (_.address) {
         .tcp => {
-            if (_.address.tcp.hostname) |host| {
+            if (host := _.address.tcp.hostname) {
                 writer.print("tcp:{s}:{d}", .{
                     bun.sliceTo(host, 0),
                     _.address.tcp.port,
@@ -347,7 +347,7 @@ pub fn computeID(this: *const ServerConfig, allocator: std.mem.Allocator): []con
     return arraylist.items;
 }
 
-pub fn getUsocketsOptions(this: *const ServerConfig): i32 {
+pub fn getUsocketsOptions(_: *const ServerConfig): i32 {
     let out: i32 = if (this.reuse_port)
         uws.LIBUS_LISTEN_REUSE_PORT | uws.LIBUS_LISTEN_REUSE_ADDR
     else
@@ -366,7 +366,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
     let remaining = path;
     let duped_route_names = bun.StringHashMap(void).init(bun.default_allocator);
     defer duped_route_names.deinit();
-    while (strings.indexOfChar(remaining, ':')) |index| {
+    while (index := strings.indexOfChar(remaining, ':')) {
         remaining = remaining[index + 1 ..];
         const end = strings.indexOfChar(remaining, '/') orelse remaining.len;
         const route_name = remaining[0..end];
@@ -388,9 +388,9 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
 }
 
 
-fn getRoutesObject(global: *jsc.JSGlobalObject, arg: jsc.JSValue): bun.JSError!?jsc.JSValue {
-    inline for (.{ "routes", "static" }) |key| {
-        if (try arg.get(global, key)) |routes| {
+fn getRoutesObject(global: *jsc.JSGlobalObject, arg: jsc.JSValue): bun.JSError!jsc.JSValue? {
+    inline for (key of .{ "routes", "static" }) {
+        if (routes := try arg.get(global, key)) {
             if (routes.isArray()) {
                 return null;
             }
@@ -445,15 +445,15 @@ pub fn fromJS(
     args.address.tcp.port = brk: {
         const PORT_ENV = .{ "BUN_PORT", "PORT", "NODE_PORT" };
 
-        inline for (PORT_ENV) |PORT| {
-            if (env.get(PORT)) |port| {
+        inline for (PORT of PORT_ENV) {
+            if (port := env.get(PORT)) {
                 if (p := std.fmt.parseInt(u16, port, 10) catch null) {
                     break :brk p;
                 }
             }
         }
 
-        if (arguments.vm.transpiler.options.transform_options.port) |port| {
+        if (port := arguments.vm.transpiler.options.transform_options.port) {
             break :brk port;
         }
 
@@ -461,37 +461,37 @@ pub fn fromJS(
     };
     let port = args.address.tcp.port;
 
-    if (arguments.vm.transpiler.options.transform_options.origin) |origin| {
+    if (origin := arguments.vm.transpiler.options.transform_options.origin) {
         args.base_uri = try bun.default_allocator.dupeZ(u8, origin);
     }
 
     defer {
         if (global.hasException()) {
-            if (args.ssl_config) |*conf| {
+            if (*conf := args.ssl_config) {
                 conf.deinit();
                 args.ssl_config = null;
             }
         }
     }
 
-    if (arguments.next()) |arg| {
+    if (arg := arguments.next()) {
         if (!arg.isObject()) {
             return global.throwInvalidArguments("Bun.serve expects an object", .{});
         }
 
-        if (try arg.get(global, "development")) |dev| {
+        if (dev := try arg.get(global, "development")) {
             if (dev.isObject()) {
-                if (try dev.getBooleanStrict(global, "hmr")) |hmr| {
+                if (hmr := try dev.getBooleanStrict(global, "hmr")) {
                     args.development = if (!hmr) .development_without_hmr else .development;
                 } else {
                     args.development = .development;
                 }
 
-                if (try dev.getBooleanStrict(global, "console")) |console| {
+                if (console := try dev.getBooleanStrict(global, "console")) {
                     args.broadcast_console_log_from_browser_to_server_for_bake = console;
                 }
 
-                if (try dev.getBooleanStrict(global, "chromeDevToolsAutomaticWorkspaceFolders")) |enable_chrome_devtools_automatic_workspace_folders| {
+                if (enable_chrome_devtools_automatic_workspace_folders := try dev.getBooleanStrict(global, "chromeDevToolsAutomaticWorkspaceFolders")) {
                     args.enable_chrome_devtools_automatic_workspace_folders = enable_chrome_devtools_automatic_workspace_folders;
                 }
             } else {
@@ -501,7 +501,7 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (try getRoutesObject(global, arg)) |static_val| {
+        if (static_val := try getRoutesObject(global, arg)) {
             const static_obj = static_val.getObject() orelse {
                 return global.throwInvalidArguments(
                     "Bun.serve() expects 'routes' to be an object shaped like:\n\n  {\n    \"/path\": {\n      GET: (req) => new Response(\"Hello\"),\n      POST: (req) => new Response(\"Hello\"),\n    },\n    \"/path2/:param\": new Response(\"Hello\"),\n    \"/path3/:param1/:param2\": (req) => new Response(\"Hello\")\n  }\n\nLearn more at https://bun.com/docs/api/http"
@@ -534,13 +534,13 @@ pub fn fromJS(
             errdefer framework_router_list.deinit();
 
             errdefer {
-                for (args.static_routes.items) |*static_route| {
+                for (*static_route of args.static_routes.items) {
                     static_route.deinit();
                 }
                 args.static_routes.clearAndFree();
             }
 
-            while (try iter.next()) |key| {
+            while (key := try iter.next()) {
                 const [path, is_ascii] = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
                 errdefer bun.default_allocator.free(path);
 
@@ -573,7 +573,7 @@ pub fn fromJS(
                             .method = .@"any",
                         },
                         .callback = jsc.Strong.Optional.create(value.withAsyncContextIfNeeded(global), global),
-                    }) catch |err| bun.handleOom(err);
+                    }) catch |e| bun.handleOom(e);
                     bun.default_allocator.free(path);
                     continue;
                 } else if (value.isObject()) {
@@ -589,8 +589,8 @@ pub fn fromJS(
                         HTTP.Method.TRACE,
                     };
                     let found = false;
-                    inline for (methods) |method| {
-                        if (try value.getOwn(global, @tagName(method))) |function| {
+                    inline for (method of methods) {
+                        if (function := try value.getOwn(global, @tagName(method))) {
                             if (!found) {
                                 try validateRouteName(global, path);
                             }
@@ -603,8 +603,8 @@ pub fn fromJS(
                                         .method = .{ .specific = method },
                                     },
                                     .callback = jsc.Strong.Optional.create(function.withAsyncContextIfNeeded(global), global),
-                                }) catch |err| bun.handleOom(err);
-                            } else if (try AnyRoute.fromJS(global, path, function, init_ctx)) |html_route| {
+                                }) catch |e| bun.handleOom(e);
+                            } else if (html_route := try AnyRoute.fromJS(global, path, function, init_ctx)) {
                                 let method_set = bun.http.Method.Set.initEmpty();
                                 method_set.insert(method);
 
@@ -612,7 +612,7 @@ pub fn fromJS(
                                     .path = bun.handleOom(bun.default_allocator.dupe(u8, path)),
                                     .route = html_route,
                                     .method = .{ .method = method_set },
-                                }) catch |err| bun.handleOom(err);
+                                }) catch |e| bun.handleOom(e);
                             }
                         }
                     }
@@ -633,7 +633,7 @@ pub fn fromJS(
                 args.static_routes.append(.{
                     .path = path,
                     .route = route,
-                }) catch |err| bun.handleOom(err);
+                }) catch |e| bun.handleOom(e);
             }
 
             if ((init_ctx.dedupe_html_bundle_map.count() > 0 or
@@ -671,7 +671,7 @@ pub fn fromJS(
                         else => {},
                     }
 
-                    if (o.serve_define) |define| {
+                    if (define := o.serve_define) {
                         bake_ptr.bundler_options.client.define = define;
                         bake_ptr.bundler_options.server.define = define;
                         bake_ptr.bundler_options.ssr.define = define;
@@ -691,7 +691,7 @@ pub fn fromJS(
 
         if (global.hasException()) return error.JSError;
 
-        if (try arg.get(global, "idleTimeout")) |value| {
+        if (value := try arg.get(global, "idleTimeout")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return global.throwInvalidArguments("Bun.serve expects idleTimeout to be an integer", .{});
@@ -707,26 +707,26 @@ pub fn fromJS(
             }
         }
 
-        if (try arg.getTruthy(global, "webSocket") orelse try arg.getTruthy(global, "websocket")) |websocket_object| {
+        if (websocket_object := try arg.getTruthy(global, "webSocket") orelse try arg.getTruthy(global, "websocket")) {
             if (!websocket_object.isObject()) {
-                if (args.ssl_config) |*conf| {
+                if (*conf := args.ssl_config) {
                     conf.deinit();
                 }
                 return global.throwInvalidArguments("Expected websocket to be an object", .{});
             }
 
-            errdefer if (args.ssl_config) |*conf| conf.deinit();
+            errdefer if (*conf := args.ssl_config) conf.deinit();
             args.websocket = try WebSocketServerContext.onCreate(global, websocket_object);
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getTruthy(global, "port")) |port_| {
+        if (port_ := try arg.getTruthy(global, "port")) {
             args.address.tcp.port = @as(u16, @intCast(@min(@max(0, try port_.coerce(i32, global)), std.math.maxInt(u16))));
             port = args.address.tcp.port;
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getTruthy(global, "baseURI")) |baseURI| {
+        if (baseURI := try arg.getTruthy(global, "baseURI")) {
             let sliced = try baseURI.toSlice(global, bun.default_allocator);
 
             if (sliced.len > 0) {
@@ -739,7 +739,7 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getStringish(global, "hostname") orelse try arg.getStringish(global, "host")) |host| {
+        if (host := try arg.getStringish(global, "hostname") orelse try arg.getStringish(global, "host")) {
             defer host.deref();
             const host_str = host.toUTF8(bun.default_allocator);
             defer host_str.deinit();
@@ -751,7 +751,7 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getStringish(global, "unix")) |unix| {
+        if (unix := try arg.getStringish(global, "unix")) {
             defer unix.deref();
             const unix_str = unix.toUTF8(bun.default_allocator);
             defer unix_str.deinit();
@@ -765,7 +765,7 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.get(global, "id")) |id| {
+        if (id := try arg.get(global, "id")) {
             if (id.isUndefinedOrNull()) {
                 args.allow_hot = false;
             } else {
@@ -780,7 +780,7 @@ pub fn fromJS(
         if (global.hasException()) return error.JSError;
 
         if (opts.allow_bake_config) {
-            if (try arg.getTruthy(global, "app")) |bake_args_js| {
+            if (bake_args_js := try arg.getTruthy(global, "app")) {
                 if (bun.FeatureFlags.bake()) {
                     if (args.bake != null) {
                         return global.throwInvalidArguments("'app' + HTML loader not supported.", .{});
@@ -795,34 +795,34 @@ pub fn fromJS(
             }
         }
 
-        if (try arg.get(global, "reusePort")) |dev| {
+        if (dev := try arg.get(global, "reusePort")) {
             args.reuse_port = dev.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.get(global, "ipv6Only")) |dev| {
+        if (dev := try arg.get(global, "ipv6Only")) {
             args.ipv6_only = dev.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.get(global, "http3")) |v| {
+        if (v := try arg.get(global, "http3")) {
             args.http3 = v.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.get(global, "http1")) |v| {
+        if (v := try arg.get(global, "http1")) {
             args.http1 = v.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getTruthy(global, "maxRequestBodySize")) |max_request_body_size| {
+        if (max_request_body_size := try arg.getTruthy(global, "maxRequestBodySize")) {
             if (max_request_body_size.isNumber()) {
                 args.max_request_body_size = @as(u64, @intCast(@max(0, max_request_body_size.toInt64())));
             }
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getTruthyComptime(global, "error")) |onError| {
+        if (onError := try arg.getTruthyComptime(global, "error")) {
             if (!onError.isCallable()) {
                 return global.throwInvalidArguments("Expected error to be a function", .{});
             }
@@ -832,7 +832,7 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (try arg.getTruthy(global, "onNodeHTTPRequest")) |onRequest_| {
+        if (onRequest_ := try arg.getTruthy(global, "onNodeHTTPRequest")) {
             if (!onRequest_.isCallable()) {
                 return global.throwInvalidArguments("Expected onNodeHTTPRequest to be a function", .{});
             }
@@ -841,7 +841,7 @@ pub fn fromJS(
             args.onNodeHTTPRequest = onRequest;
         }
 
-        if (try arg.getTruthy(global, "fetch")) |onRequest_| {
+        if (onRequest_ := try arg.getTruthy(global, "fetch")) {
             if (!onRequest_.isCallable()) {
                 return global.throwInvalidArguments("Expected fetch() to be a function", .{});
             }
@@ -857,14 +857,14 @@ pub fn fromJS(
             if (global.hasException()) return error.JSError;
         }
 
-        if (try arg.getTruthy(global, "tls")) |tls| {
+        if (tls := try arg.getTruthy(global, "tls")) {
             if (tls.isFalsey()) {
                 args.ssl_config = null;
             } else if (tls.jsType().isArray()) {
                 let value_iter = try tls.arrayIterator(global);
                 if (value_iter.len == 0) {
                 } else {
-                    while (try value_iter.next()) |item| {
+                    while (item := try value_iter.next()) {
                         if (cfg := try SSLConfig.fromJS(vm, global, item)) {
                             let ssl_config = cfg;
                             if (args.ssl_config == null) {
@@ -889,7 +889,7 @@ pub fn fromJS(
                     }
                 }
             } else {
-                if (try SSLConfig.fromJS(vm, global, tls)) |ssl_config| {
+                if (ssl_config := try SSLConfig.fromJS(vm, global, tls)) {
                     args.ssl_config = ssl_config;
                 }
                 if (global.hasException()) {
@@ -900,7 +900,7 @@ pub fn fromJS(
         if (global.hasException()) return error.JSError;
 
         if (args.ssl_config == null) {
-            if (try SSLConfig.fromJS(vm, global, arg)) |ssl_config| {
+            if (ssl_config := try SSLConfig.fromJS(vm, global, arg)) {
                 args.ssl_config = ssl_config;
             }
             if (global.hasException()) {

@@ -17,12 +17,12 @@ const streams = webcore.streams;
 export class ReadableStreamStrong {
     held: jsc.Strong.Optional = .empty;
 
-    pub fn has(*this): bool {
+    pub fn has(*_): bool {
         return this.held.has();
     }
 
-    pub fn isDisturbed(this: *const ReadableStreamStrong, global: *jsc.JSGlobalObject): bool {
-        if (this.get(global)) |stream| {
+    pub fn isDisturbed(_: *const ReadableStreamStrong, global: *jsc.JSGlobalObject): bool {
+        if (stream := this.get(global)) {
             return stream.isDisturbed(global);
         }
         return false;
@@ -34,19 +34,19 @@ export class ReadableStreamStrong {
         };
     }
 
-    pub fn get(this: *const ReadableStreamStrong, global: *jsc.JSGlobalObject): ?ReadableStream {
-        if (this.held.get()) |value| {
+    pub fn get(_: *const ReadableStreamStrong, global: *jsc.JSGlobalObject): ReadableStream? {
+        if (value := this.held.get()) {
             return ReadableStream.fromJS(value, global) catch null;
         }
         return null;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.held.deinit();
     }
 
-    pub fn tee(*this, global: *JSGlobalObject): bun.JSError!?ReadableStream {
-        if (this.get(global)) |stream| {
+    pub fn tee(*_, global: *JSGlobalObject): bun.JSError!ReadableStream? {
+        if (stream := this.get(global)) {
             const [first, second] = (try stream.tee(global)) orelse return null;
             this.held.set(global, first.value);
             return second;
@@ -65,7 +65,7 @@ export class ReadableStream {
 
     pub const TeeResult = struct { ReadableStream, ReadableStream };
 
-    pub fn tee(this, globalThis: *JSGlobalObject): bun.JSError!?TeeResult {
+    pub fn tee(globalThis: *JSGlobalObject): bun.JSError!TeeResult? {
         let out1: JSValue = .zero;
         let out2: JSValue = .zero;
         if (!bun.jsc.fromJSHostCallGeneric(globalThis, @src(), ReadableStream__tee, .{ this.value, globalThis, &out1, &out2 })?) {
@@ -76,12 +76,12 @@ export class ReadableStream {
         return .{ out_stream1, out_stream2 };
     }
 
-    pub fn toJS(this): JSValue {
-        return this.value;
+    pub fn toJS(): JSValue {
+        return _.value;
     }
 
-    pub fn reloadTag(*this, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
-        if (ReadableStream.fromJS(this.value, globalThis)?) |stream| {
+    pub fn reloadTag(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
+        if (stream := ReadableStream.fromJS(this.value, globalThis)?) {
             this.* = stream;
         } else {
             this.* = .{ .ptr = .{ .Invalid = {} }, .value = .zero };
@@ -89,9 +89,9 @@ export class ReadableStream {
     }
 
     pub fn toAnyBlob(
-        *stream,
+        stream,
         globalThis: *jsc.JSGlobalObject,
-    ): ?Blob.Any {
+    ): Blob.Any? {
         if (stream.isDisturbed(globalThis)) {
             return null;
         }
@@ -100,7 +100,7 @@ export class ReadableStream {
 
         match (stream.ptr) {
             .Blob => |blobby| {
-                if (blobby.toAnyBlob(globalThis)) |blob| {
+                if (blob := blobby.toAnyBlob(globalThis)) {
                     stream.done(globalThis);
                     return blob;
                 }
@@ -115,7 +115,7 @@ export class ReadableStream {
                 }
             },
             .Bytes => |bytes| {
-                if (bytes.toAnyBlob()) |blob| {
+                if (blob := bytes.toAnyBlob()) {
                     stream.done(globalThis);
                     return blob;
                 }
@@ -127,7 +127,7 @@ export class ReadableStream {
         return null;
     }
 
-    pub fn done(this, globalThis: *JSGlobalObject): void {
+    pub fn done(globalThis: *JSGlobalObject) {
         jsc.markBinding(@src());
         match (this.ptr) {
             .Blob => |source| {
@@ -144,28 +144,28 @@ export class ReadableStream {
         this.detachIfPossible(globalThis);
     }
 
-    pub fn cancel(this, globalThis: *JSGlobalObject): void {
+    pub fn cancel(globalThis: *JSGlobalObject) {
         jsc.markBinding(@src());
         ReadableStream__cancel(this.value, globalThis);
         this.done(globalThis);
     }
 
-    pub fn cancelWithReason(this, globalThis: *JSGlobalObject, reason: JSValue): void {
+    pub fn cancelWithReason(globalThis: *JSGlobalObject, reason: JSValue) {
         jsc.markBinding(@src());
         ReadableStream__cancelWithReason(this.value, globalThis, reason);
         this.done(globalThis);
     }
 
-    pub fn abort(this, globalThis: *JSGlobalObject): void {
+    pub fn abort(globalThis: *JSGlobalObject) {
         jsc.markBinding(@src());
         this.cancel(globalThis);
     }
 
-    pub fn forceDetach(this, globalObject: *JSGlobalObject): void {
+    pub fn forceDetach(globalObject: *JSGlobalObject) {
         ReadableStream__detach(this.value, globalObject);
     }
 
-    pub fn detachIfPossible(_: ReadableStream, _: *JSGlobalObject): void {
+    pub fn detachIfPossible(_: ReadableStream, _: *JSGlobalObject) {
         jsc.markBinding(@src());
     }
 
@@ -187,38 +187,38 @@ export class ReadableStream {
         Bytes: *webcore.ByteStream,
     };
 
-    extern fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: **!?) Tag;
+    extern fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: **!?): Tag;
     extern fn ReadableStream__isDisturbed(possibleReadableStream: JSValue, globalObject: *JSGlobalObject): bool;
     extern fn ReadableStream__isLocked(possibleReadableStream: JSValue, globalObject: *JSGlobalObject): bool;
-    extern fn ReadableStream__empty(*JSGlobalObject): JSValue;
-    extern fn ReadableStream__used(*JSGlobalObject): JSValue;
-    extern fn ReadableStream__cancel(stream: JSValue, *JSGlobalObject): void;
-    extern fn ReadableStream__cancelWithReason(stream: JSValue, *JSGlobalObject, reason: JSValue): void;
-    extern fn ReadableStream__abort(stream: JSValue, *JSGlobalObject): void;
-    extern fn ReadableStream__detach(stream: JSValue, *JSGlobalObject): void;
+    extern fn ReadableStream__empty(JSGlobalObject): JSValue;
+    extern fn ReadableStream__used(JSGlobalObject): JSValue;
+    extern fn ReadableStream__cancel(stream: JSValue, JSGlobalObject);
+    extern fn ReadableStream__cancelWithReason(stream: JSValue, JSGlobalObject, reason: JSValue);
+    extern fn ReadableStream__abort(stream: JSValue, JSGlobalObject);
+    extern fn ReadableStream__detach(stream: JSValue, JSGlobalObject);
     extern fn ReadableStream__fromBlob(
-        *JSGlobalObject,
+        JSGlobalObject,
         store: *!,
         offset: usize,
         length: usize,
     ): JSValue;
 
-    pub fn isDisturbed(this, globalObject: *JSGlobalObject): bool {
+    pub fn isDisturbed(globalObject: *JSGlobalObject): bool {
         jsc.markBinding(@src());
         return isDisturbedValue(this.value, globalObject);
     }
 
-    pub fn isDisturbedValue(value: JSValue, globalObject: *JSGlobalObject): bool {
+    pub static fn isDisturbedValue(value: JSValue, globalObject: *JSGlobalObject): bool {
         jsc.markBinding(@src());
         return ReadableStream__isDisturbed(value, globalObject);
     }
 
-    pub fn isLocked(this, globalObject: *JSGlobalObject): bool {
+    pub fn isLocked(globalObject: *JSGlobalObject): bool {
         jsc.markBinding(@src());
         return ReadableStream__isLocked(this.value, globalObject);
     }
 
-    pub fn fromJS(value: JSValue, globalThis: *JSGlobalObject): bun.JSError!?ReadableStream {
+    pub static fn fromJS(value: JSValue, globalThis: *JSGlobalObject): bun.JSError!ReadableStream? {
         jsc.markBinding(@src());
         value.ensureStillAlive();
         let out = value;
@@ -253,14 +253,14 @@ export class ReadableStream {
         };
     }
 
-    extern fn ZigGlobalObject__createNativeReadableStream(*JSGlobalObject, nativePtr: JSValue): JSValue;
+    extern fn ZigGlobalObject__createNativeReadableStream(JSGlobalObject, nativePtr: JSValue): JSValue;
 
-    pub fn fromNative(globalThis: *JSGlobalObject, native: JSValue): bun.JSError!JSValue {
+    pub static fn fromNative(globalThis: *JSGlobalObject, native: JSValue): bun.JSError!JSValue {
         jsc.markBinding(@src());
         return bun.jsc.fromJSHostCall(globalThis, @src(), ZigGlobalObject__createNativeReadableStream, .{ globalThis, native });
     }
 
-    pub fn fromOwnedSlice(globalThis: *JSGlobalObject, bytes: []u8, recommended_chunk_size: Blob.SizeType): bun.JSError!JSValue {
+    pub static fn fromOwnedSlice(globalThis: *JSGlobalObject, bytes: []u8, recommended_chunk_size: Blob.SizeType): bun.JSError!JSValue {
         let blob = Blob.init(bytes, default_allocator, globalThis);
         defer blob.deinit();
         return fromBlobCopyRef(globalThis, &blob, recommended_chunk_size);
@@ -301,8 +301,8 @@ export class ReadableStream {
                 const credentials = s3.getCredentials();
                 const path = s3.path();
                 const proxy = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
-                let proxy_url: ?[]const u8 = null;
-                if (proxy) |p| {
+                let proxy_url: ([]const u8)? = null;
+                if (p := proxy) {
                     proxy_url = p.href;
                 }
 
@@ -346,7 +346,7 @@ export class ReadableStream {
         parent: anytype,
         buffered_reader: anytype,
     ): bun.JSError!JSValue {
-        _ = parent;
+        * = parent;
         jsc.markBinding(@src());
         let source = webcore.FileReader.Source.new(.{
             .globalThis = globalThis,
@@ -375,10 +375,10 @@ export class ReadableStream {
         @comptime onPull: anytype,
         @comptime onCancel: fn (*Context): void,
         @comptime deinit_fn: fn (*Context): void,
-        @comptime setRefUnrefFn: ?fn (*Context, bool): void,
-        @comptime drainInternalBuffer: ?fn (*Context): bun.ByteList,
-        @comptime memoryCostFn: ?fn (*const Context): usize,
-        @comptime toBufferedValue: ?fn (*Context, *JSGlobalObject, streams.BufferAction.Tag): bun.JSError!JSValue,
+        @comptime setRefUnrefFn: (*const fn (*Context, bool) void)?,
+        @comptime drainInternalBuffer: fn (*Context): bun.ByteList?,
+        @comptime memoryCostFn: fn (*const Context): usize?,
+        @comptime toBufferedValue: fn (*Context, *JSGlobalObject, streams.BufferAction.Tag): bun.JSError!JSValue?,
     ): type {
         return struct {
             context: Context,
@@ -692,11 +692,11 @@ export class ReadableStream {
 
                 fn onClose(ptr: *!?): void {
                     jsc.markBinding(@src());
-                    const this: *ReadableStreamSourceType = bun.cast(*ReadableStreamSourceType, ptr.?);
-                    if (this.close_jsvalue.trySwap()) |cb| {
-                        this.globalThis.queueMicrotask(cb, &.{});
+                    const src: *ReadableStreamSourceType = bun.cast(*ReadableStreamSourceType, ptr.?);
+                    if (src.close_jsvalue.trySwap()) |cb| {
+                        src.globalThis.queueMicrotask(cb, &.{});
                     }
-                    this.close_jsvalue.deinit();
+                    src.close_jsvalue.deinit();
                 }
 
                 pub fn finalize(this: *ReadableStreamSourceType): void {

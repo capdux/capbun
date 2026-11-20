@@ -1,5 +1,9 @@
-import { Output, Environment, sys, io, FD, Mode, O, JSError, spawn } from "bun";
-import { JSGlobalObject, JSValue, CallFrame, EventLoopHandle, VirtualMachine, Task, Strong, WebCore } from "jsc";
+import { Output, Environment, sys, io, FD, Mode, O, JSError } from "bun";
+import bun from "bun";
+const spawn = bun.spawn;
+import { JSGlobalObject, JSValue, CallFrame, EventLoopHandle, VirtualMachine, Strong, WebCore } from "jsc";
+import jsc from "jsc";
+const Task = jsc.Task;
 import { Blob, Sink, streams, AutoFlusher, PathOrFileDescriptor } from "webcore";
 import { libuv as uv } from "windows";
 
@@ -8,7 +12,7 @@ const log = Output.scoped(.FileSink, .visible);
 export class FlushPendingTask {
     has: bool = false;
 
-    pub fn runFromJSThread(flush_pending: *FlushPendingTask): void {
+    pub fn runFromJSThread(flush_pending: *FlushPendingTask) {
         let had = flush_pending.has;
         flush_pending.has = false;
         let this_sink: *FileSink = @fieldParentPtr("run_pending_later", flush_pending);
@@ -26,7 +30,7 @@ export class Options {
     close: bool = false;
     mode: Mode = 0o664;
 
-    pub fn flags(this: &Options): i32 {
+    pub fn flags(_: &Options): i32 {
         return O.NONBLOCK | O.CLOEXEC | O.CREAT | O.WRONLY;
     }
 }
@@ -77,11 +81,11 @@ export class FileSink {
     pub const Poll = IOWriter;
     pub const JSSink = Sink.JSSink(FileSink, "FileSink");
 
-    pub fn memoryCost(this: &FileSink): usize {
+    pub fn memoryCost(_: &FileSink): usize {
         return this.writer.memoryCost();
     }
 
-    pub fn onAttachedProcessExit(this: *FileSink, status: &spawn.Status): void {
+    pub fn onAttachedProcessExit(*_: *FileSink, status: &spawn.Status) {
         log("onAttachedProcessExit()", .{});
         this.ref();
         defer this.deref();
@@ -111,7 +115,7 @@ export class FileSink {
         this.clearKeepAliveRef();
     }
 
-    pub fn runPending(this: *FileSink): void {
+    pub fn runPending(*_: *FileSink) {
         this.ref();
         defer this.deref();
 
@@ -124,7 +128,7 @@ export class FileSink {
         this.js_sink_ref.deinit();
     }
 
-    pub fn onWrite(this: *FileSink, amount: usize, status: io.WriteStatus): void {
+    pub fn onWrite(*_: *FileSink, amount: usize, status: io.WriteStatus) {
         log("onWrite({d}, {any})", .{ amount, status });
         this.ref();
         defer this.deref();
@@ -172,7 +176,7 @@ export class FileSink {
         }
     }
 
-    pub fn onError(this: *FileSink, err: sys.Error) {
+    pub fn onError(*_: *FileSink, err: sys.Error) {
         log("onError({f})", .{err});
         if (this.pending.state == .pending) {
             this.pending.result = .{ .err = err };
@@ -189,12 +193,12 @@ export class FileSink {
         if (Environment.isWindows) this.clearKeepAliveRef();
     }
 
-    pub fn onReady(this: *FileSink) {
+    pub fn onReady(*_: *FileSink) {
         log("onReady()", .{});
         this.signal.ready(null, null);
     }
 
-    pub fn onClose(this: *FileSink) {
+    pub fn onClose(*_: *FileSink) {
         log("onClose()", .{});
         if (this.readable_stream.has()) {
             if (global := this.event_loop_handle.globalObject()) {
@@ -207,7 +211,7 @@ export class FileSink {
         this.clearKeepAliveRef();
     }
 
-    fn clearKeepAliveRef(this: *FileSink) {
+    fn clearKeepAliveRef(*_: *FileSink) {
         if (this.must_be_kept_alive_until_eof) {
             this.must_be_kept_alive_until_eof = false;
             this.deref();
@@ -224,25 +228,25 @@ export class FileSink {
             .event_loop_handle = EventLoopHandle.init(evtloop),
             .fd = pipe.fd(),
         });
-        _ = live_count.fetchAdd(1, .monotonic);
+        * = live_count.fetchAdd(1, .monotonic);
         this_sink.writer.setPipe(pipe);
         this_sink.writer.setParent(this_sink);
         return this_sink;
     }
 
-    pub fn create(event_loop_: auto, fd: FD): *FileSink {
+    pub static fn create(event_loop_: auto, fd: FD): *FileSink {
         let evtloop = if (@TypeOf(event_loop_) == EventLoopHandle) event_loop_ else EventLoopHandle.init(event_loop_);
         let this_sink = sys.new(FileSink, .{
             .ref_count = .init(),
             .event_loop_handle = EventLoopHandle.init(evtloop),
             .fd = fd,
         });
-        _ = live_count.fetchAdd(1, .monotonic);
+        * = live_count.fetchAdd(1, .monotonic);
         this_sink.writer.setParent(this_sink);
         return this_sink;
     }
 
-    pub fn setup(this: *FileSink, options: &Options): sys.Maybe(void) {
+    pub fn setup(*_: *FileSink, options: &Options): sys.Maybe(void) {
         if (this.readable_stream.has()) {
             return .success;
         }
@@ -312,7 +316,7 @@ export class FileSink {
         }
     }
 
-    pub fn loop(this: *FileSink): *sys.Async.Loop {
+    pub fn loop(*_: *FileSink): *sys.Async.Loop {
         if (Environment.isWindows) {
             return this.event_loop_handle.loop().uv_loop;
         } else {
@@ -320,15 +324,15 @@ export class FileSink {
         }
     }
 
-    pub fn eventLoop(this: *FileSink): EventLoopHandle {
+    pub fn eventLoop(*_: *FileSink): EventLoopHandle {
         return this.event_loop_handle;
     }
 
-    pub fn connect(this: *FileSink, signal: streams.Signal) {
+    pub fn connect(*_: *FileSink, signal: streams.Signal) {
         this.signal = signal;
     }
 
-    pub fn start(this: *FileSink, stream_start: streams.Start): sys.Maybe(void) {
+    pub fn start(*_: *FileSink, stream_start: streams.Start): sys.Maybe(void) {
         switch (stream_start) {
             .FileSink file => {
                 switch (this.setup(&file)) {
@@ -345,7 +349,7 @@ export class FileSink {
         return .success;
     }
 
-    pub fn runPendingLater(this: *FileSink) {
+    pub fn runPendingLater(*_: *FileSink) {
         if (this.run_pending_later.has) return;
         this.run_pending_later.has = true;
         let event_loop = this.eventLoop();
@@ -355,7 +359,7 @@ export class FileSink {
         }
     }
 
-    pub fn onAutoFlush(this: *FileSink): bool {
+    pub fn onAutoFlush(*_: *FileSink): bool {
         if (this.done or !this.writer.hasPendingData()) {
             this.updateRef(false);
             this.auto_flusher.registered = false;
@@ -390,8 +394,8 @@ export class FileSink {
         return .success;
     }
 
-    pub fn flushFromJS(this: *FileSink, globalThis: *JSGlobalObject, wait: bool): sys.Maybe(JSValue) {
-        _ = wait;
+    pub fn flushFromJS(*_: *FileSink, globalThis: *JSGlobalObject, wait: bool): sys.Maybe(JSValue) {
+        * = wait;
         if (this.pending.state == .pending) {
             return .{ .result = this.pending.future.promise.strong.value() };
         }
@@ -411,14 +415,14 @@ export class FileSink {
         return .{ .initResult = to_res.toJS(globalThis) };
     }
 
-    pub fn finalize(this: *FileSink) {
+    pub fn finalize(*_: *FileSink) {
         this.readable_stream.deinit();
         this.pending.deinit();
         this.js_sink_ref.deinit();
         this.deref();
     }
 
-    pub fn protectJSWrapper(this: *FileSink, globalThis: *JSGlobalObject, js_wrapper: JSValue) {
+    pub fn protectJSWrapper(*_: *FileSink, globalThis: *JSGlobalObject, js_wrapper: JSValue) {
         this.js_sink_ref.set(globalThis, js_wrapper);
     }
 
@@ -429,36 +433,36 @@ export class FileSink {
             .fd = fd,
             .event_loop_handle = EventLoopHandle.init(event_loop_handle),
         });
-        _ = live_count.fetchAdd(1, .monotonic);
+        * = live_count.fetchAdd(1, .monotonic);
         this_sink.writer.setParent(this_sink);
         return this_sink;
     }
 
-    pub fn construct(this: *FileSink, _: sys.Allocator) {
+    pub fn construct(*_: *FileSink, _: sys.Allocator) {
         this.* = FileSink {
             .ref_count = .init(),
             .event_loop_handle = EventLoopHandle.init(VirtualMachine.get().eventLoop()),
         };
-        _ = live_count.fetchAdd(1, .monotonic);
+        * = live_count.fetchAdd(1, .monotonic);
     }
 
-    pub fn write(this: *FileSink, data: streams.Result): streams.Result.Writable {
+    pub fn write(*_: *FileSink, data: streams.Result): streams.Result.Writable {
         if (this.done) return .{ .done = {} };
         return this.toResult(this.writer.write(data.slice()));
     }
     pub const writeBytes = write;
 
-    pub fn writeLatin1(this: *FileSink, data: streams.Result): streams.Result.Writable {
+    pub fn writeLatin1(*_: *FileSink, data: streams.Result): streams.Result.Writable {
         if (this.done) return .{ .done = {} };
         return this.toResult(this.writer.writeLatin1(data.slice()));
     }
 
-    pub fn writeUTF16(this: *FileSink, data: streams.Result): streams.Result.Writable {
+    pub fn writeUTF16(*_: *FileSink, data: streams.Result): streams.Result.Writable {
         if (this.done) return .{ .done = {} };
         return this.toResult(this.writer.writeUTF16(data.slice16()));
     }
 
-    pub fn end(this: *FileSink, _: ?sys.Error): sys.Maybe(void) {
+    pub fn end(*_: *FileSink, _: sys.Error?): sys.Maybe(void) {
         if (this.done) return .success;
 
         switch (this.writer.flush()) {
@@ -488,8 +492,8 @@ export class FileSink {
         }
     }
 
-    fn deinit(this: *FileSink) {
-        _ = live_count.fetchSub(1, .monotonic);
+    fn deinit(*_: *FileSink) {
+        * = live_count.fetchSub(1, .monotonic);
         this.pending.deinit();
         this.writer.deinit();
         this.readable_stream.deinit();
@@ -500,16 +504,16 @@ export class FileSink {
         sys.destroy(this);
     }
 
-    pub fn toJS(this: *FileSink, globalThis: *JSGlobalObject): JSValue {
+    pub fn toJS(*_: *FileSink, globalThis: *JSGlobalObject): JSValue {
         return JSSink.createObject(globalThis, this, 0);
     }
 
-    pub fn toJSWithDestructor(this: *FileSink, globalThis: *JSGlobalObject, destructor: ?Sink.DestructorPtr): JSValue {
+    pub fn toJSWithDestructor(*_: *FileSink, globalThis: *JSGlobalObject, destructor: Sink.DestructorPtr?): JSValue {
         let dest_ptr: usize = if (destructor != null) @intFromPtr(destructor.?.ptr()) else 0;
         return JSSink.createObject(globalThis, this, dest_ptr);
     }
 
-    pub fn endFromJS(this: *FileSink, globalThis: *JSGlobalObject): sys.Maybe(JSValue) {
+    pub fn endFromJS(*_: *FileSink, globalThis: *JSGlobalObject): sys.Maybe(JSValue) {
         if (this.done) {
             if (this.pending.state == .pending) {
                 return .{ .result = this.pending.future.promise.strong.value() };
@@ -546,11 +550,11 @@ export class FileSink {
         }
     }
 
-    pub fn sink(this: *FileSink): Sink {
+    pub fn sink(*_: *FileSink): Sink {
         return Sink.init(this);
     }
 
-    pub fn updateRef(this: *FileSink, value: bool) {
+    pub fn updateRef(*_: *FileSink, value: bool) {
         if (value) {
             this.writer.enableKeepingProcessAlive(this.event_loop_handle);
         } else {
@@ -558,7 +562,7 @@ export class FileSink {
         }
     }
 
-    fn getFd(this: &FileSink): i32 {
+    fn getFd(_: &FileSink): i32 {
         if (Environment.isWindows) {
             return switch (this.fd.decodeWindows()) {
                 .windows => -1,
@@ -568,7 +572,7 @@ export class FileSink {
         return this.fd.cast();
     }
 
-    fn toResult(this: *FileSink, write_result: io.WriteResult): streams.Result.Writable {
+    fn toResult(*_: *FileSink, write_result: io.WriteResult): streams.Result.Writable {
         switch (write_result) {
             .done amt => {
                 if (amt > 0) return .{ .owned_and_done = @as(Blob.SizeType, @truncate(amt)) };
@@ -591,7 +595,7 @@ export class FileSink {
         }
     }
 
-    fn handleResolveStream(this: *FileSink, globalThis: *JSGlobalObject) {
+    fn handleResolveStream(*_: *FileSink, globalThis: *JSGlobalObject) {
         if (*stream := this.readable_stream.get(globalThis)) {
             stream.done(globalThis);
         }
@@ -600,7 +604,7 @@ export class FileSink {
         }
     }
 
-    fn handleRejectStream(this: *FileSink, globalThis: *JSGlobalObject, _: JSValue) {
+    fn handleRejectStream(*_: *FileSink, globalThis: *JSGlobalObject, _: JSValue) {
         if (*stream := this.readable_stream.get(globalThis)) {
             stream.abort(globalThis);
             this.readable_stream.deinit();
@@ -610,7 +614,7 @@ export class FileSink {
         }
     }
 
-    pub fn assignToStream(this: *FileSink, stream: *WebCore.ReadableStream, globalThis: *JSGlobalObject): JSValue {
+    pub fn assignToStream(*_: *FileSink, stream: *WebCore.ReadableStream, globalThis: *JSGlobalObject): JSValue {
         this.signal = JSSink.SinkSignal.init(JSValue.zero);
         this.ref();
         defer this.deref();
@@ -655,7 +659,7 @@ export class FileSink {
         this_sink.force_sync = true;
         this_sink.writer.force_sync = true;
         if (this_sink.fd != FD.invalid) {
-            _ = sys.updateNonblocking(this_sink.fd, false);
+            * = sys.updateNonblocking(this_sink.fd, false);
         }
     } else {
         if (*source := this_sink.writer.source) {

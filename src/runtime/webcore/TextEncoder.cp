@@ -51,7 +51,7 @@ const JSValue = jsc.JSValue;
         if (result.read == 0 or result.written == 0) {
             const uint8array = jsc.JSValue.createUninitializedUint8Array(globalThis, 3) catch return .zero;
             const array_buffer = uint8array.asArrayBuffer(globalThis).?;
-            const replacement_char: [3]u8 = .{ 239, 191, 189 };
+            const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
             @memcpy(array_buffer.slice()[0..replacement_char.len], &replacement_char);
             return uint8array;
         }
@@ -86,7 +86,7 @@ const JSValue = jsc.JSValue;
         if (result.read == 0 or result.written == 0) {
             const uint8array = jsc.JSValue.createUninitializedUint8Array(globalThis, 3) catch return .zero;
             const array_buffer = uint8array.asArrayBuffer(globalThis).?;
-            const replacement_char: [3]u8 = .{ 239, 191, 189 };
+            const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
             @memcpy(array_buffer.slice()[0..replacement_char.len], &replacement_char);
             return uint8array;
         }
@@ -206,7 +206,7 @@ class RopeStringEncoder {
     const input = input_ptr[0..input_len];
     let result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
     if (output.len >= 3 and (result.read == 0 or result.written == 0)) {
-        const replacement_char: [3]u8 = .{ 239, 191, 189 };
+        const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
         @memcpy(buf_ptr[0..replacement_char.len], &replacement_char);
         result.read = 1;
         result.written = 3;

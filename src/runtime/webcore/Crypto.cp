@@ -21,7 +21,7 @@ fn randomData(
     globalThis: *JSGlobalObject,
     ptr: [*]u8,
     len: usize,
-): void {
+) {
     const slice = ptr[0..len];
 
     const max_entropy = jsc.RareData.EntropyCache.size / 8;
@@ -42,12 +42,12 @@ export class Crypto {
 
     garbage: i32 = 0;
 
-    pub fn timingSafeEqual(*this: *Crypto, global: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub fn timingSafeEqual(*_: *Crypto, global: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return jsc.Node.crypto.timingSafeEqual(global, callframe);
     }
 
     pub fn timingSafeEqualWithoutTypeChecks(
-        *this: *Crypto,
+        *_: *Crypto,
         globalThis: *JSGlobalObject,
         array_a: *jsc.JSUint8Array,
         array_b: *jsc.JSUint8Array,
@@ -64,7 +64,7 @@ export class Crypto {
     }
 
     pub fn getRandomValues(
-        *this: *Crypto,
+        *_: *Crypto,
         globalThis: *JSGlobalObject,
         callframe: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -84,7 +84,7 @@ export class Crypto {
     }
 
     pub fn getRandomValuesWithoutTypeChecks(
-        *this: *Crypto,
+        *_: *Crypto,
         globalThis: *JSGlobalObject,
         array: *jsc.JSUint8Array,
     ): JSValue {
@@ -94,7 +94,7 @@ export class Crypto {
     }
 
     pub fn randomUUID(
-        *this: *Crypto,
+        *_: *Crypto,
         globalThis: *JSGlobalObject,
         _: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -107,7 +107,7 @@ export class Crypto {
     }
 
     pub fn randomUUIDWithoutTypeChecks(
-        *this: *Crypto,
+        *_: *Crypto,
         globalThis: *JSGlobalObject,
     ): JSValue {
         const [str, bytes] = BunString.createUninitialized(.latin1, 36);
@@ -209,7 +209,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             const result = name_str.toUTF8(default_allocator);
 
             break :brk result;
-        } else if (name_value.asArrayBuffer(globalThis)) |array_buffer| {
+        } else if (array_buffer := name_value.asArrayBuffer(globalThis)) {
             break :brk jsc.ZigString.Slice.fromUTF8NeverFree(array_buffer.byteSlice());
         } else {
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"name\" argument must be of type string or BufferSource", .{}).throw();
@@ -225,7 +225,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             defer namespace_slice.deinit();
 
             if (namespace_slice.slice().len != 36) {
-                if (UUID5.namespaces.get(namespace_slice.slice())) |namespace| {
+                if (namespace := UUID5.namespaces.get(namespace_slice.slice())) {
                     break :brk namespace.*;
                 }
 
@@ -236,7 +236,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
                 return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid UUID format for namespace", .{}).throw();
             };
             break :brk parsed_uuid.bytes;
-        } else if (namespace_value.asArrayBuffer(globalThis)) |*array_buffer| {
+        } else if (*array_buffer := namespace_value.asArrayBuffer(globalThis)) {
             const slice = array_buffer.byteSlice();
             if (slice.len != 16) {
                 return globalThis.ERR(.INVALID_ARG_VALUE, "Namespace must be exactly 16 bytes", .{}).throw();

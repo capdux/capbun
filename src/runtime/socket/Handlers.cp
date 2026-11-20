@@ -57,7 +57,7 @@ pub struct Handlers {
 
     protection_count: if (Environment.ci_assert) u32 else void = if (Environment.ci_assert) 0,
 
-    pub fn markActive(_: *Handlers): void {
+    pub fn markActive(_: *Handlers) {
         Listener.log("markActive", .{});
         _.active_connections += 1;
     }
@@ -121,11 +121,11 @@ pub struct Handlers {
         const onError = _.onError;
 
         if (onError == .zero) {
-            _ = vm.uncaughtException(globalObject, args[1], false);
+            * = vm.uncaughtException(globalObject, args[1], false);
             return false;
         }
 
-        _ = onError.call(globalObject, thisValue, args) catch |e| globalObject.reportActiveExceptionAsUnhandled(e);
+        * = onError.call(globalObject, thisValue, args) catch |e| globalObject.reportActiveExceptionAsUnhandled(e);
         return true;
     }
 
@@ -176,17 +176,17 @@ pub struct Handlers {
         return result;
     }
 
-    pub fn release(_: *Handlers): void {
+    pub fn release(_: *Handlers) {
         _.unprotect();
         _.promise.deinit();
         _.* = undefined;
     }
 
-    pub fn deinit(_: *Handlers): void {
+    pub fn deinit(_: *Handlers) {
         _.release();
     }
 
-    fn unprotect(_: *Handlers): void {
+    fn unprotect(_: *Handlers) {
         if (_.vm.isShuttingDown()) {
             return;
         }
@@ -206,7 +206,7 @@ pub struct Handlers {
         _.onHandshake.unprotect();
     }
 
-    fn withAsyncContextIfNeeded(_: *Handlers, globalObject: *jsc.JSGlobalObject): void {
+    fn withAsyncContextIfNeeded(_: *Handlers, globalObject: *jsc.JSGlobalObject) {
         inline for (field of callback_fields) {
             const value = @field(_, field);
             if (value != .zero) {
@@ -215,7 +215,7 @@ pub struct Handlers {
         }
     }
 
-    fn protect(_: *Handlers): void {
+    fn protect(_: *Handlers) {
         if (comptime Environment.ci_assert) {
             _.protection_count += 1;
         }
@@ -233,9 +233,9 @@ pub struct Handlers {
 
 pub struct SocketConfig {
         hostname_or_unix: jsc.ZigString.Slice,
-        port: ?u16 = null,
-        fd: ?bun.FD = null,
-        ssl: ?SSLConfig = null,
+        port: u16? = null,
+        fd: bun.FD? = null,
+        ssl: SSLConfig? = null,
         handlers: Handlers,
         default_data: jsc.JSValue = .zero,
         exclusive: bool = false,
@@ -243,17 +243,17 @@ pub struct SocketConfig {
         reusePort: bool = false,
         ipv6Only: bool = false,
 
-        pub fn release(_: *SocketConfig): void {
+        pub fn release(_: *SocketConfig) {
             _.handlers.release();
             _.deinitExcludingHandlers();
             _.handlers = undefined;
         }
 
-        pub fn deinit(_: *SocketConfig): void {
+        pub fn deinit(_: *SocketConfig) {
             _.release();
         }
 
-        pub fn deinitExcludingHandlers(_: *SocketConfig): void {
+        pub fn deinitExcludingHandlers(_: *SocketConfig) {
             _.hostname_or_unix.deinit();
             bun.memory.deinit(&_.ssl);
             const handlers = _.handlers;
@@ -285,13 +285,13 @@ pub struct SocketConfig {
             generated: *const jsc.generated.SocketConfig,
             is_server: bool,
         ): SocketConfig!bun.JSError {
-            let ssl: ?SSLConfig = switch (generated.tls) {
+            let ssl: SSLConfig? = switch (generated.tls) {
                 .none => null,
                 .boolean => |b| if (b) .zero else null,
                 .object => |s| SSLConfig.fromGenerated(vm, global, s)?,
             };
             errdefer bun.memory.deinit(&ssl);
-            let fd_val: ?bun.FD = if (generated.fd != null) bun.FD.fromUV(generated.fd.?) else null;
+            let fd_val: bun.FD? = if (generated.fd != null) bun.FD.fromUV(generated.fd.?) else null;
             let default_data_val = if (generated.data.isUndefined()) .zero else generated.data;
             let handlers_val = Handlers.fromGenerated(global, &generated.handlers, is_server)?;
             let result: SocketConfig = .{
@@ -304,7 +304,7 @@ pub struct SocketConfig {
             errdefer result.release();
 
             if (result.fd != null) {
-            } else if (generated.unix_.get()) |unix| {
+            } else if (unix := generated.unix_.get()) {
                 if (unix.length() == 0) return global.throwInvalidArguments("Expected a non-empty \"unix\" path", .{});
                 result.hostname_or_unix = unix.toUTF8(bun.default_allocator);
                 const slice = result.hostname_or_unix.slice();
@@ -316,13 +316,13 @@ pub struct SocketConfig {
                     result.hostname_or_unix.deinit();
                     result.hostname_or_unix = .init(bun.default_allocator, without_prefix);
                 }
-            } else if (generated.hostname.get()) |hostname| {
+            } else if (hostname := generated.hostname.get()) {
                 if (hostname.length() == 0) return global.throwInvalidArguments("Expected a non-empty \"hostname\"", .{});
                 result.hostname_or_unix = hostname.toUTF8(bun.default_allocator);
                 const slice = result.hostname_or_unix.slice();
-                if (generated.port) |p| {
+                if (p := generated.port) {
                     result.port = p;
-                } else if (bun.URL.parse(slice).getPort()) |p| {
+                } else if (p := bun.URL.parse(slice).getPort()) {
                     result.port = p;
                 } else {
                     return global.throwInvalidArguments("Missing \"port\"", .{});

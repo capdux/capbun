@@ -99,7 +99,7 @@ pub fn SSLWrapper(comptime T: type): type {
 
         pub fn shutdownRead(this: *This) void {
             const DummyReadHandler = struct {
-                fn onData(_: T, _: []const u8) void {}
+                fn onData(ctx: T, data: []const u8) void { _ = ctx; _ = data; }
             };
             this.handlers.onData = DummyReadHandler.onData;
         }
@@ -323,7 +323,7 @@ pub fn SSLWrapper(comptime T: type): type {
                 const ssl = this.ssl orelse return false;
 
                 const available = buffer[read..];
-                const just_read = BoringSSL.SSL_read(ssl, available.ptr, @intCast(available.len));
+                const just_read = BoringSSL.SSL_read(ssl, available.ptr, @as(c_int, @intCast(available.len)));
                 log("just read {d}", .{just_read});
                 if (just_read <= 0) {
                     const err = BoringSSL.SSL_get_error(ssl, just_read);
@@ -361,7 +361,7 @@ pub fn SSLWrapper(comptime T: type): type {
 
                 this.handleEndOfRenegotiation();
 
-                read += @intCast(just_read);
+                read += @as(usize, @intCast(just_read));
                 if (read == buffer.len) {
                     log("triggering data callback (read {d}) and resetting read buffer", .{read});
                     this.triggerDataCallback(buffer[0..read]);
@@ -383,9 +383,9 @@ pub fn SSLWrapper(comptime T: type): type {
                 const ssl = this.ssl orelse return;
                 const output = BoringSSL.SSL_get_wbio(ssl) orelse return;
                 const available = buffer[read..];
-                const just_read = BoringSSL.BIO_read(output, available.ptr, @intCast(available.len));
+                const just_read = BoringSSL.BIO_read(output, available.ptr, @as(c_int, @intCast(available.len)));
                 if (just_read > 0) {
-                    read += @intCast(just_read);
+                    read += @as(usize, @intCast(just_read));
                     if (read == buffer.len) {
                         this.triggerWannaWriteCallback(buffer[0..read]);
                         read = 0;
@@ -412,8 +412,8 @@ pub fn SSLWrapper(comptime T: type): type {
     };
 }
 
-@c fn alwaysContinueVerify(_: c_int, _: ?*BoringSSL.X509_STORE_CTX) c_int {
+@c fn alwaysContinueVerify(_: c_int, _: *BoringSSL.X509_STORE_CTX?): c_int {
     return 1;
 }
 
-extern fn us_get_shared_default_ca_store() ?*BoringSSL.X509_STORE;
+extern fn us_get_shared_default_ca_store(): *BoringSSL.X509_STORE?;

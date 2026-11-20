@@ -55,12 +55,12 @@ export class S3Stat {
         return jsc.JSValue.fromDateNumber(globalObject, _.lastModified);
     }
 
-    pub fn release(*_): void {
+    pub fn release(*_) {
         _.etag.deref();
         _.contentType.deref();
     }
 
-    pub fn finalize(_: *S3Stat): void {
+    pub fn finalize(_: *S3Stat) {
         _.release();
         bun.destroy(_);
     }

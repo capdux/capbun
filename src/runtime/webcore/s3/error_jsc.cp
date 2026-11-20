@@ -62,7 +62,7 @@ pub const JSS3Error = extern struct {
     extern fn S3Error__toErrorInstance(this: *const JSS3Error, global: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue;
 };
 
-pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: ?[]const u8): jsc.JSValue {
+pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: []const u8?): jsc.JSValue {
     const value = JSS3Error.init(s3_err.code, s3_err.message, path).toErrorInstance(globalObject);
     bun.assert(!globalObject.hasException());
     return value;
@@ -71,7 +71,7 @@ pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, pa
 pub fn s3ErrorToJSWithAsyncStack(
     s3_err: *const S3Error,
     globalObject: *jsc.JSGlobalObject,
-    path: ?[]const u8,
+    path: []const u8?,
     promise: *jsc.JSPromise,
 ): jsc.JSValue {
     const value = s3ErrorToJS(s3_err, globalObject, path);

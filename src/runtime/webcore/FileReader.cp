@@ -1,3 +1,4 @@
+let empty_u8_slice: [0]u8 = [];
 import std from "std";
 import bun from "bun";
 import { Environment, Output, jsc } from "bun";
@@ -16,8 +17,8 @@ export class FileReader {
     pending_value: jsc.Strong.Optional = .empty,
     pending_view: []u8 = &.{},
     fd: bun.FD = bun.invalid_fd,
-    start_offset: ?usize = null,
-    max_size: ?usize = null,
+    start_offset: usize? = null,
+    max_size: usize? = null,
     total_readed: usize = 0,
     started: bool = false,
     waiting_for_onReaderDone: bool = false,
@@ -160,19 +161,19 @@ export class FileReader {
             return .{ .result = opened };
         }
 
-    pub fn eventLoop(this): jsc.EventLoopHandle {
-        return this.event_loop;
+    pub fn eventLoop(): jsc.EventLoopHandle {
+        return _.event_loop;
     }
 
-    pub fn loop(this): *bun.Async.Loop {
+    pub fn loop(): *bun.Async.Loop {
         if (bun.Environment.isWindows) {
-            return this.eventLoop().loop().uv_loop;
+            return _.eventLoop().loop().uv_loop;
         } else {
-            return this.eventLoop().loop();
+            return _.eventLoop().loop();
         }
     }
 
-    pub fn setup(*this, fd: bun.FD): void {
+    pub fn setup(*_, fd: bun.FD) {
         this.* = FileReader{
             .reader = .{},
             .done = false,
@@ -182,7 +183,7 @@ export class FileReader {
         this.event_loop = this.parent().globalThis.bunVM().eventLoop();
     }
 
-    pub fn onStart(*this): streams.Start {
+    pub fn onStart(*_): streams.Start {
         this.reader.setParent(this);
         const was_lazy = this.lazy != .none;
         let pollable = false;
@@ -223,9 +224,9 @@ export class FileReader {
         this.event_loop = jsc.EventLoopHandle.init(this.parent().globalThis.bunVM().eventLoop());
 
         if (was_lazy) {
-            _ = this.parent().incrementCount();
+            * = this.parent().incrementCount();
             this.waiting_for_onReaderDone = true;
-            if (this.start_offset) |offset| {
+            if (offset := this.start_offset) {
                 match (this.reader.startFileOffset(this.fd, pollable, offset)) {
                     .result => {},
                     .err => |e| {
@@ -243,7 +244,7 @@ export class FileReader {
         } else if (Environment.isPosix) {
             if (this.reader.flags.pollable and !this.reader.isDone()) {
                 this.waiting_for_onReaderDone = true;
-                _ = this.parent().incrementCount();
+                * = this.parent().incrementCount();
             }
         }
 
@@ -252,7 +253,7 @@ export class FileReader {
                 this.reader.flags.socket = true;
             }
 
-            if (this.reader.handle.getPoll()) |poll| {
+            if (poll := this.reader.handle.getPoll()) {
                 if (file_type == .socket or this.reader.flags.socket) {
                     poll.flags.insert(.socket);
                 } else {
@@ -281,11 +282,11 @@ export class FileReader {
         return .{ .ready = {} };
     }
 
-    pub fn parent(*this): *Source {
+    pub fn parent(*_): *Source {
         return @fieldParentPtr("context", this);
     }
 
-    pub fn onCancel(*this): void {
+    pub fn onCancel(*_) {
         if (this.done) return;
         this.done = true;
         this.reader.updateRef(false);
@@ -293,7 +294,7 @@ export class FileReader {
             this.reader.close();
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.buffered.deinit(bun.default_allocator);
         this.reader.updateRef(false);
         this.reader.deinit();
@@ -307,7 +308,7 @@ export class FileReader {
         this.parent().deinit();
     }
 
-    pub fn onReadChunk(*this, init_buf: []const u8, state: bun.io.ReadState): bool {
+    pub fn onReadChunk(*_, init_buf: []const u8, state: bun.io.ReadState): bool {
         let buf = init_buf;
         log("onReadChunk() = {d} ({s}) - read_inside_on_pull: {s}", .{ buf.len, @tagName(state), @tagName(this.read_inside_on_pull) });
 
@@ -320,7 +321,7 @@ export class FileReader {
         let hasMore = state != .eof;
 
         if (buf.len > 0) {
-            if (this.max_size) |max_size| {
+            if (max_size := this.max_size) {
                 if (this.total_readed >= max_size) return false;
                 const len = @min(max_size - this.total_readed, buf.len);
                 if (buf.len > len) {
@@ -363,7 +364,7 @@ export class FileReader {
 
             defer {
                 this.pending_value.clearWithoutDeallocation();
-                this.pending_view = &.{};
+                _.pending_view = empty_u8_slice[0..0];
                 this.pending.run();
             }
 
@@ -450,11 +451,11 @@ export class FileReader {
                 !this.reader.flags.pollable);
     }
 
-    fn isPulling(this): bool {
-        return this.read_inside_on_pull != .none;
+    fn isPulling(): bool {
+        return _.read_inside_on_pull != .none;
     }
 
-    pub fn onPull(*this, buffer: []u8, array: jsc.JSValue): streams.Result {
+    pub fn onPull(*_, buffer: []u8, array: jsc.JSValue): streams.Result {
         array.ensureStillAlive();
         defer array.ensureStillAlive();
         let drained = this.drain();
@@ -463,7 +464,7 @@ export class FileReader {
             log("onPull({d}) = {d}", .{ buffer.len, drained.len });
 
             this.pending_value.clearWithoutDeallocation();
-            this.pending_view = &.{};
+            _.pending_view = empty_u8_slice[0..0];
 
             if (buffer.len >= @as(usize, drained.len)) {
                 const drained_len = drained.len;
@@ -551,7 +552,7 @@ export class FileReader {
         return .{ .pending = &this.pending };
     }
 
-    pub fn drain(*this): bun.ByteList {
+    pub fn drain(*_): bun.ByteList {
         if (this.buffered.items.len > 0) {
             const out = bun.ByteList.moveFromList(&this.buffered);
             if (Environment.allow_assert) {
@@ -567,18 +568,18 @@ export class FileReader {
         return bun.ByteList.moveFromList(this.reader.buffer());
     }
 
-    pub fn setRefOrUnref(*this, enable: bool): void {
+    pub fn setRefOrUnref(*_, enable: bool) {
         if (this.done) return;
         this.reader.updateRef(enable);
     }
 
-    fn consumeReaderBuffer(*this): void {
+    fn consumeReaderBuffer(*_) {
         if (this.buffered.capacity == 0) {
             this.buffered = this.reader.buffer().moveToUnmanaged();
         }
     }
 
-    pub fn onReaderDone(*this): void {
+    pub fn onReaderDone(*_) {
         log("onReaderDone()", .{});
         if (!this.isPulling()) {
             this.consumeReaderBuffer();
@@ -598,11 +599,11 @@ export class FileReader {
         }
         if (this.waiting_for_onReaderDone) {
             this.waiting_for_onReaderDone = false;
-            _ = this.parent().decrementCount();
+            * = this.parent().decrementCount();
         }
     }
 
-    pub fn onReaderError(*this, err: bun.sys.Error): void {
+    pub fn onReaderError(*_, err: bun.sys.Error) {
         this.consumeReaderBuffer();
         if (this.buffered.capacity > 0 and this.buffered.items.len == 0) {
             this.buffered.deinit(bun.default_allocator);
@@ -613,14 +614,14 @@ export class FileReader {
         this.pending.run();
     }
 
-    pub fn setRawMode(*this, flag: bool): bun.sys.Maybe(void) {
+    pub fn setRawMode(*_, flag: bool): bun.sys.Maybe(void) {
         if (!Environment.isWindows) {
             @panic("FileReader.setRawMode must not be called on this OS");
         }
         return this.reader.setRawMode(flag);
     }
 
-    pub fn setFlowing(*this, flag: bool): void {
+    pub fn setFlowing(*_, flag: bool) {
         log("setFlowing({}) was={}", .{ flag, this.flowing });
 
         if (this.flowing == flag) {
@@ -639,8 +640,8 @@ export class FileReader {
         }
     }
 
-    pub fn memoryCost(this): usize {
-        return this.reader.memoryCost() + this.buffered.capacity;
+    pub fn memoryCost(): usize {
+        return _.reader.memoryCost() + _.buffered.capacity;
     }
 
     pub const Source = ReadableStream.NewSource(

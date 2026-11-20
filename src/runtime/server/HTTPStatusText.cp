@@ -1,4 +1,4 @@
-pub fn get(code: u16): ?string {
+pub fn get(code: u16): string? {
     return switch (code) {
         100 => "100 Continue",
         101 => "101 Switching protocols",

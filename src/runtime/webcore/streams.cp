@@ -62,7 +62,7 @@ export union(enum) Start {
 
     pub const Tag = StartTag;
 
-    pub fn toJS(this: Start, globalThis: *JSGlobalObject): JSError!JSValue {
+    pub fn toJS(_: Start, globalThis: *JSGlobalObject): JSError!JSValue {
         switch (this) {
             .empty, .ready => return JSValue.js_undefined,
             .chunk_size => |chunk| return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk))),
@@ -77,7 +77,7 @@ export union(enum) Start {
         if (value.isEmptyOrUndefinedOrNull() or !value.isObject()) {
             return .{ .empty = {} };
         }
-        if (value.get(globalThis, "chunkSize")) |chunkSize| {
+        if (chunkSize := value.get(globalThis, "chunkSize")) {
             if (chunkSize.isNumber()) {
                 return .{ .chunk_size = @as(Blob.SizeType, @intCast(@as(i52, @truncate(chunkSize.toInt64())))) };
             }
@@ -94,7 +94,7 @@ export union(enum) ResultStreamError {
     JSValue: JSValue,
     WeakJSValue: JSValue,
 
-    pub fn toJSWeak(this: &ResultStreamError, globalObject: *JSGlobalObject): [JSValue, WasStrong] {
+    pub fn toJSWeak(_: &ResultStreamError, globalObject: *JSGlobalObject): [JSValue, WasStrong] {
         switch (this.*) {
             .Error => |err| return .{ err.toJS(globalObject) catch return .{ JSValue.zero, WasStrong.Weak }, WasStrong.Weak },
             .JSValue => return .{ this.JSValue, WasStrong.Strong },
@@ -127,9 +127,11 @@ pub const PendingState = enum {
     used,
 };
 
+pub const WritableHandlerFn = *const fn (*!?, ResultWritable) void;
+
 export class WritablePendingHandler {
     ctx: *!? = null;
-    handler: ?fn (*!?, ResultWritable): void = null;
+    handler: WritableHandlerFn? = null;
 }
 
 pub const WritablePromiseInfo = struct {
@@ -142,7 +144,7 @@ export union(enum) WritablePendingFuture {
     promise: WritablePromiseInfo,
     handler: WritablePendingHandler,
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         if (this.* == .promise) {
             this.promise.strong.deinit();
             this.* = .{ .none = {} };
@@ -159,11 +161,11 @@ export class WritablePending {
     pub const Future = WritablePendingFuture;
     pub const Handler = WritablePendingHandler;
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.future.deinit();
     }
 
-    pub fn promise(this: *WritablePending, globalThis: *JSGlobalObject): *JSPromise {
+    pub fn promise(*_: *WritablePending, globalThis: *JSGlobalObject): *JSPromise {
         this.state = .pending;
         switch (this.future) {
             .promise => |p| return p.strong.get(),
@@ -179,7 +181,7 @@ export class WritablePending {
         }
     }
 
-    pub fn run(this: *WritablePending): void {
+    pub fn run(*_: *WritablePending) {
         if (this.state != .pending) return;
         this.state = .used;
         switch (this.future) {
@@ -189,7 +191,7 @@ export class WritablePending {
                 ResultWritable.fulfillPromise(this.result, p.strong.swap(), p.global);
             },
             .handler => |h| {
-                if (h.handler) |handler_fn| {
+                if (handler_fn := h.handler) {
                     handler_fn(h.ctx, this.result);
                 }
             },
@@ -211,14 +213,14 @@ export union(enum) ResultWritable {
 
     pub const Pending = WritablePending;
 
-    pub fn isDone(this: &ResultWritable): bool {
+    pub fn isDone(_: &ResultWritable): bool {
         switch (this.*) {
             .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => return true,
             else => return false,
         }
     }
 
-    pub static fn fulfillPromise(result: ResultWritable, promise: *JSPromise, globalThis: *JSGlobalObject): void {
+    pub static fn fulfillPromise(result: ResultWritable, promise: *JSPromise, globalThis: *JSGlobalObject) {
         defer promise.toJS().unprotect();
         switch (result) {
             .err => |err| {
@@ -233,7 +235,7 @@ export union(enum) ResultWritable {
         }
     }
 
-    pub fn toJS(this: ResultWritable, globalThis: *JSGlobalObject): JSValue {
+    pub fn toJS(_: ResultWritable, globalThis: *JSGlobalObject): JSValue {
         switch (this) {
             .err => |err| return JSPromise.rejectedPromise(globalThis, err.toJS(globalThis) catch return JSValue.zero).toJS(),
             .owned => |len| return JSValue.jsNumber(len),
@@ -248,9 +250,11 @@ export union(enum) ResultWritable {
     }
 }
 
+pub const ResultHandlerFn = *const fn (*!?, Result) void;
+
 export class ResultPendingHandler {
     ctx: *!? = null;
-    handler: ?fn (*!?, Result): void = null;
+    handler: ResultHandlerFn? = null;
 }
 
 pub const ResultPromiseInfo = struct {
@@ -272,7 +276,7 @@ export class ResultPending {
     pub const Handler = ResultPendingHandler;
     pub const State = PendingState;
 
-    pub fn promise(this: *ResultPending, globalObject: *JSGlobalObject): *JSPromise {
+    pub fn promise(*_: *ResultPending, globalObject: *JSGlobalObject): *JSPromise {
         let prom = JSPromise.create(globalObject);
         this.future = .{
             .promise = .{
@@ -284,7 +288,7 @@ export class ResultPending {
         return prom;
     }
 
-    pub fn run(this: *ResultPending): void {
+    pub fn run(*_: *ResultPending) {
         if (this.state != .pending) return;
         this.state = .used;
         switch (this.future) {
@@ -292,7 +296,7 @@ export class ResultPending {
                 Result.fulfillPromise(&this.result, p.promise, p.globalThis);
             },
             .handler => |h| {
-                if (h.handler) |handler_fn| {
+                if (handler_fn := h.handler) {
                     handler_fn(h.ctx, this.result);
                 }
             },
@@ -317,7 +321,7 @@ export union(enum) Result {
     pub const IntoArray = ResultIntoArray;
     pub const Pending = ResultPending;
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         switch (this.*) {
             .owned => |*owned| owned.clearAndFree(default_allocator),
             .owned_and_done => |*owned_and_done| owned_and_done.clearAndFree(default_allocator),
@@ -330,13 +334,13 @@ export union(enum) Result {
         }
     }
 
-    pub fn slice16(this: &Result): []const u16 {
+    pub fn slice16(_: &Result): []const u16 {
         let bytes = this.slice();
         const ptr16: [*]const u16 = @alignCast(bytes.ptr);
         return ptr16[0..bytes.len / 2];
     }
 
-    pub fn slice(this: &Result): []const u8 {
+    pub fn slice(_: &Result): []const u8 {
         switch (this.*) {
             .owned => |owned| return owned.slice(),
             .owned_and_done => |owned_and_done| return owned_and_done.slice(),
@@ -346,14 +350,14 @@ export union(enum) Result {
         }
     }
 
-    pub fn isDone(this: &Result): bool {
+    pub fn isDone(_: &Result): bool {
         switch (this.*) {
             .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => return true,
             else => return false,
         }
     }
 
-    pub static fn fulfillPromise(result: *Result, promise: *JSPromise, globalThis: *JSGlobalObject): void {
+    pub static fn fulfillPromise(result: *Result, promise: *JSPromise, globalThis: *JSGlobalObject) {
         let vm = globalThis.bunVM();
         let loop = vm.eventLoop();
         let promise_value = promise.toJS();
@@ -386,7 +390,7 @@ export union(enum) Result {
         }
     }
 
-    pub fn toJS(this: &Result, globalThis: *JSGlobalObject): JSError!JSValue {
+    pub fn toJS(_: &Result, globalThis: *JSGlobalObject): JSError!JSValue {
         if (VirtualMachine.get().isShuttingDown()) {
             let that = this.*;
             that.deinit();
@@ -442,25 +446,25 @@ pub const SignalVTable = struct {
     ready: OnReadyFn,
     start: OnStartFn,
 
-    pub fn wrap(comptime Wrapped: type): SignalVTable {
+    pub static fn wrap(comptime Wrapped: type): SignalVTable {
         const Functions = struct {
-            fn onClose(this: *!, err: ?sys.Error) void {
+            fn onClose(ptr: *!, err: ?sys.Error) void {
                 if (comptime !@hasDecl(Wrapped, "onClose"))
-                    Wrapped.close(@as(*Wrapped, @ptrCast(@alignCast(this))), err)
+                    Wrapped.close(bun.cast(*Wrapped, ptr), err)
                 else
-                    Wrapped.onClose(@as(*Wrapped, @ptrCast(@alignCast(this))), err);
+                    Wrapped.onClose(bun.cast(*Wrapped, ptr), err);
             }
-            fn onReady(this: *!, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
+            fn onReady(ptr: *!, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
                 if (comptime !@hasDecl(Wrapped, "onReady"))
-                    Wrapped.ready(@as(*Wrapped, @ptrCast(@alignCast(this))), amount, offset)
+                    Wrapped.ready(bun.cast(*Wrapped, ptr), amount, offset)
                 else
-                    Wrapped.onReady(@as(*Wrapped, @ptrCast(@alignCast(this))), amount, offset);
+                    Wrapped.onReady(bun.cast(*Wrapped, ptr), amount, offset);
             }
-            fn onStart(this: *!) void {
+            fn onStart(ptr: *!) void {
                 if (comptime !@hasDecl(Wrapped, "onStart"))
-                    Wrapped.start(@as(*Wrapped, @ptrCast(@alignCast(this))))
+                    Wrapped.start(bun.cast(*Wrapped, ptr))
                 else
-                    Wrapped.onStart(@as(*Wrapped, @ptrCast(@alignCast(this))));
+                    Wrapped.onStart(bun.cast(*Wrapped, ptr));
             }
         };
 
@@ -474,36 +478,36 @@ pub const SignalVTable = struct {
 
 export class Signal {
     ptr: *!? = null;
-    vtable: ?*const SignalVTable = null;
+    vtable: (*const SignalVTable)? = null;
 
     pub const VTable = SignalVTable;
 
-    pub fn clear(this: *Signal): void {
+    pub fn clear(*_: *Signal) {
         this.ptr = null;
     }
 
-    pub fn isDead(this: &Signal): bool {
+    pub fn isDead(_: &Signal): bool {
         return this.ptr == null;
     }
 
-    pub fn close(this: *Signal, err: ?sys.Error): void {
+    pub fn close(*_: *Signal, err: sys.Error?) {
         if (this.isDead()) return;
         this.vtable.?.close(this.ptr.?, err);
     }
 
-    pub fn ready(this: *Signal, amount: ?Blob.SizeType, offset: ?Blob.SizeType): void {
+    pub fn ready(*_: *Signal, amount: Blob.SizeType?, offset: Blob.SizeType?) {
         if (this.isDead()) return;
         this.vtable.?.ready(this.ptr.?, amount, offset);
     }
 
-    pub fn start(this: *Signal): void {
+    pub fn start(*_: *Signal) {
         if (this.isDead()) return;
         this.vtable.?.start(this.ptr.?);
     }
 }
 
 export class NetworkSink {
-    task: ?*bun.S3.MultiPartUpload = null;
+    task: (*bun.S3.MultiPartUpload)? = null;
     signal: Signal = .{};
     globalThis: *JSGlobalObject = undefined;
     highWaterMark: Blob.SizeType = 2048;
@@ -516,7 +520,7 @@ export class NetworkSink {
     pub const name = "NetworkSink";
     pub const JSSink = Sink.JSSink(NetworkSink, name);
 
-    pub fn start(this: *NetworkSink, stream_start: Start): sys.Maybe(void) {
+    pub fn start(*_: *NetworkSink, stream_start: Start): sys.Maybe(void) {
         if (this.ended) return .success;
         switch (stream_start) {
             .chunk_size => |chunk_size| {
@@ -529,20 +533,20 @@ export class NetworkSink {
         return .success;
     }
 
-    pub fn connect(this: *NetworkSink, signal: Signal): void {
+    pub fn connect(*_: *NetworkSink, signal: Signal) {
         this.signal = signal;
     }
 
-    pub fn sink(this: *NetworkSink): Sink {
+    pub fn sink(*_: *NetworkSink): Sink {
         return Sink.init(this);
     }
 
-    pub fn finalize(this: *NetworkSink): void {
+    pub fn finalize(*_: *NetworkSink) {
         this.detachWritable();
     }
 
-    fn detachWritable(this: *NetworkSink): void {
-        if (this.task) |task| {
+    fn detachWritable(*_: *NetworkSink) {
+        if (task := this.task) {
             this.task = null;
             task.deref();
         }
@@ -552,14 +556,14 @@ export class NetworkSink {
         return .success;
     }
 
-    pub fn flushFromJS(this: *NetworkSink, globalThis: *JSGlobalObject, _: bool): sys.Maybe(JSValue) {
+    pub fn flushFromJS(*_: *NetworkSink, globalThis: *JSGlobalObject, _: bool): sys.Maybe(JSValue) {
         if (this.flushPromise.hasValue()) {
             return .{ .result = this.flushPromise.value() };
         }
         if (this.done) {
             return .{ .result = JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0)) };
         }
-        if (this.task) |task| {
+        if (task := this.task) {
             if (!task.isQueueEmpty()) {
                 this.flushPromise = JSPromise.Strong.init(globalThis);
                 return .{ .result = this.flushPromise.value() };
@@ -568,12 +572,12 @@ export class NetworkSink {
         return .{ .result = JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0)) };
     }
 
-    pub fn finalizeAndDestroy(this: *NetworkSink): void {
+    pub fn finalizeAndDestroy(*_: *NetworkSink) {
         this.finalize();
         sys.destroy(this);
     }
 
-    pub fn abort(this: *NetworkSink): void {
+    pub fn abort(*_: *NetworkSink) {
         this.ended = true;
         this.done = true;
         this.signal.close(null);
@@ -581,12 +585,12 @@ export class NetworkSink {
         this.finalize();
     }
 
-    pub fn write(this: *NetworkSink, data: Result): Result.Writable {
+    pub fn write(*_: *NetworkSink, data: Result): Result.Writable {
         if (this.ended) return .{ .owned = 0 };
         let bytes = data.slice();
         let len = @as(Blob.SizeType, @truncate(bytes.len));
-        if (this.task) |task| {
-            _ = task.writeBytes(bytes, false) catch {
+        if (task := this.task) {
+            * = task.writeBytes(bytes, false) catch {
                 return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
             };
         }
@@ -595,50 +599,50 @@ export class NetworkSink {
 
     pub const writeBytes = write;
 
-    pub fn writeLatin1(this: *NetworkSink, data: Result): Result.Writable {
+    pub fn writeLatin1(*_: *NetworkSink, data: Result): Result.Writable {
         if (this.ended) return .{ .owned = 0 };
         let bytes = data.slice();
         let len = @as(Blob.SizeType, @truncate(bytes.len));
-        if (this.task) |task| {
-            _ = task.writeLatin1(bytes, false) catch {
+        if (task := this.task) {
+            * = task.writeLatin1(bytes, false) catch {
                 return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
             };
         }
         return .{ .owned = len };
     }
 
-    pub fn writeUTF16(this: *NetworkSink, data: Result): Result.Writable {
+    pub fn writeUTF16(*_: *NetworkSink, data: Result): Result.Writable {
         if (this.ended) return .{ .owned = 0 };
         let bytes = data.slice();
-        if (this.task) |task| {
-            _ = task.writeUTF16(bytes, false) catch {
+        if (task := this.task) {
+            * = task.writeUTF16(bytes, false) catch {
                 return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
             };
         }
         return .{ .owned = @as(Blob.SizeType, @intCast(bytes.len)) };
     }
 
-    pub fn end(this: *NetworkSink, err: ?sys.Error): sys.Maybe(void) {
+    pub fn end(*_: *NetworkSink, err: sys.Error?): sys.Maybe(void) {
         if (this.ended) return .success;
         this.ended = true;
-        if (this.task) |task| {
-            _ = sys.handleOom(task.writeBytes("", true));
+        if (task := this.task) {
+            * = sys.handleOom(task.writeBytes("", true));
         }
         this.signal.close(err);
         return .success;
     }
 
-    pub fn endFromJS(this: *NetworkSink, _: *JSGlobalObject): sys.Maybe(JSValue) {
-        _ = this.end(null);
+    pub fn endFromJS(*_: *NetworkSink, _: *JSGlobalObject): sys.Maybe(JSValue) {
+        * = this.end(null);
         if (this.endPromise.hasValue()) {
             return .{ .result = this.endPromise.value() };
         }
-        if (this.task) |task| {
+        if (task := this.task) {
             this.endPromise = JSPromise.Strong.init(this.globalThis);
             let value = this.endPromise.value();
             if (!this.ended) {
                 this.ended = true;
-                _ = sys.handleOom(task.writeBytes("", true));
+                * = sys.handleOom(task.writeBytes("", true));
                 this.signal.close(null);
             }
             return .{ .result = value };
@@ -646,12 +650,12 @@ export class NetworkSink {
         return .{ .result = JSValue.jsNumber(0) };
     }
 
-    pub fn toJS(this: *NetworkSink, globalThis: *JSGlobalObject): JSValue {
+    pub fn toJS(*_: *NetworkSink, globalThis: *JSGlobalObject): JSValue {
         return JSSink.createObject(globalThis, this, 0);
     }
 
-    pub fn memoryCost(this: &NetworkSink): usize {
-        if (this.task) |task| {
+    pub fn memoryCost(_: &NetworkSink): usize {
+        if (task := this.task) {
             return task.buffered.memoryCost();
         }
         return 0;

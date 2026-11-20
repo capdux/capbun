@@ -24,7 +24,7 @@ export enum SSRKind: u8 {
     render = 2,
 }
 
-pub fn toJSForSSR(this: *Response, globalObject: *JSGlobalObject, kind: SSRKind): JSValue {
+pub fn toJSForSSR(*_: *Response, globalObject: *JSGlobalObject, kind: SSRKind): JSValue {
     this.calculateEstimatedByteSize();
     return BakeResponse__createForSSR(globalObject, this, @intFromEnum(kind));
 }
@@ -36,13 +36,11 @@ export fn BakeResponseClass__constructForSSR(
     bake_ssr_has_jsx: *c_int,
     js_this: jsc.JSValue,
 ): *!? {
-    const res = constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this) catch |err| switch (err) {
-        error.JSError => return null,
-        error.OutOfMemory => {
+    const res = constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this) catch |e| {
+        if (e == error.OutOfMemory) {
             globalObject.throwOutOfMemory() catch {};
-            return null;
-        },
-        error.JSTerminated => return null,
+        }
+        return null;
     };
     return *res!?;
 }
@@ -59,7 +57,7 @@ pub fn constructor(
         bake_ssr_has_jsx.* = 0;
         if (arguments[0].isJSXElement(globalThis) ?) {
             const vm = globalThis.bunVM();
-            if (vm.getDevServerAsyncLocalStorage() ?) |async_local_storage| {
+            if (async_local_storage := vm.getDevServerAsyncLocalStorage() ?) {
                 assertStreamingDisabled(globalThis, async_local_storage, "new Response(<jsx />, { ... })") ?;
             }
             bake_ssr_has_jsx.* = 1;
@@ -85,7 +83,7 @@ pub fn constructRedirect(
     const ptr = bun.new(Response, response);
 
     const vm = globalThis.bunVM();
-    if (vm.getDevServerAsyncLocalStorage() ?) |async_local_storage| {
+    if (async_local_storage := vm.getDevServerAsyncLocalStorage() ?) {
         assertStreamingDisabled(globalThis, async_local_storage, "Response.redirect") ?;
         return toJSForSSR(ptr, globalThis, .redirect);
     }

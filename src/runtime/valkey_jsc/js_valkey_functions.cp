@@ -1,6 +1,7 @@
 import bun from "bun";
 import std from "std";
 import js_valkey from "./js_valkey.zig";
+const valkeySend = JSValkeyClient.send;
 const JSValkeyClient = js_valkey.JSValkeyClient;
 const SubscriptionCtx = js_valkey.SubscriptionCtx;
 
@@ -63,7 +64,7 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     };
     cmd.meta = cmd.meta.check(&cmd);
     // Send command with slices directly
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &cmd,
@@ -82,7 +83,7 @@ pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     defer key.deinit();
 
     // Send GET command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -103,7 +104,7 @@ pub fn getBuffer(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
     };
     defer key.deinit();
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -151,7 +152,7 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     }
 
     // Send SET command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -174,7 +175,7 @@ pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     defer key.deinit();
 
     // Send INCR command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -196,7 +197,7 @@ pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     defer key.deinit();
 
     // Send DECR command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -218,7 +219,7 @@ pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     defer key.deinit();
 
     // Send EXISTS command with special Exists type for boolean conversion
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -252,7 +253,7 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const seconds_slice = int_buf[0..seconds_len];
 
     // Send EXPIRE command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -274,7 +275,7 @@ pub fn ttl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     defer key.deinit();
 
     // Send TTL command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -321,7 +322,7 @@ pub fn srem(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     }
 
     // Send SREM command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -362,7 +363,7 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
     }
 
     // Send SRANDMEMBER command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -385,7 +386,7 @@ pub fn smembers(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, call
     defer key.deinit();
 
     // Send SMEMBERS command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -426,7 +427,7 @@ pub fn spop(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     }
 
     // Send SPOP command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -473,7 +474,7 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     }
 
     // Send SADD command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -500,7 +501,7 @@ pub fn sismember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
     defer value.deinit();
 
     // Send SISMEMBER command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -564,7 +565,7 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
     }
 
     // Send HMGET command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -596,7 +597,7 @@ pub fn hincrby(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
     defer value_slice.deinit();
 
     // Send HINCRBY command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -628,7 +629,7 @@ pub fn hincrbyfloat(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, 
     defer value_slice.deinit();
 
     // Send HINCRBYFLOAT command
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -728,7 +729,7 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         return globalObject.throw("HSET requires at least one field-value pair", .{});
     }
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -783,7 +784,7 @@ pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     };
     defer value.deinit();
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -808,7 +809,7 @@ pub fn hexists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
         return globalObject.throwInvalidArgumentType("hexists", "field", "string or buffer");
     defer field.deinit();
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -841,7 +842,7 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         }
     }
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -971,7 +972,7 @@ pub fn smove(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
     };
     defer member.deinit();
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -1034,7 +1035,7 @@ pub fn publish(
     const message = (try fromJS(globalObject, arg1)) orelse unreachable;
     args.appendAssumeCapacity(message);
 
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &Command{
@@ -1110,7 +1111,7 @@ pub fn subscribe(
             .subscription_request = true,
         },
     };
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         callframe.this(),
         &command,
@@ -1137,7 +1138,7 @@ fn sendUnsubscribeRequestAndCleanup(
         command: "UNSUBSCRIBE",
         args: .{ .args = redis_channels },
     };
-    const promise = client.send(
+    const promise = valkeySend(client, 
         globalObject,
         this_js,
         &command,
@@ -1336,7 +1337,7 @@ const compile = struct {
             pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
                 try testCorrectState(client, name, client_state_requirement);
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1366,7 +1367,7 @@ const compile = struct {
                 };
                 defer key.deinit();
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1415,7 +1416,7 @@ const compile = struct {
                     try args.append(another);
                 }
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1449,7 +1450,7 @@ const compile = struct {
                 };
                 defer value.deinit();
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1489,7 +1490,7 @@ const compile = struct {
                 };
                 defer value2.deinit();
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1528,7 +1529,7 @@ const compile = struct {
                     try args.append(another);
                 }
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{
@@ -1571,7 +1572,7 @@ const compile = struct {
                     try args.append(another);
                 }
 
-                const promise = client.send(
+                const promise = valkeySend(client, 
                     globalObject,
                     callframe.this(),
                     &Command{

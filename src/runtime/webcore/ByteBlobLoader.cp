@@ -15,7 +15,7 @@ const streams = webcore.streams;
 
 export class ByteBlobLoader {
     offset: Blob.SizeType = 0;
-    store: ?*Blob.Store = null;
+    store: (*Blob.Store)? = null;
     chunk_size: Blob.SizeType = 1024 * 1024 * 2;
     remain: Blob.SizeType = 1024 * 1024 * 2;
     done: bool = false;
@@ -113,11 +113,11 @@ export class ByteBlobLoader {
         return .{ .into_array = .{ .value = array, .len = copied } };
     }
 
-    pub fn toAnyBlob(*_, globalThis: *JSGlobalObject): ?Blob.Any {
-        if (_.store) |store| {
-            _ = _.detachStore();
+    pub fn toAnyBlob(*_, globalThis: *JSGlobalObject): Blob.Any? {
+        if (store := _.store) {
+            * = _.detachStore();
             if (_.offset == 0 and _.remain == store.size() and _.content_type.len == 0) {
-                if (store.toAnyBlob()) |blob| {
+                if (blob := store.toAnyBlob()) {
                     defer store.deref();
                     return blob;
                 }
@@ -141,8 +141,8 @@ export class ByteBlobLoader {
         return null;
     }
 
-    pub fn detachStore(*_): ?*Blob.Store {
-        if (_.store) |store| {
+    pub fn detachStore(*_): (*Blob.Store)? {
+        if (store := _.store) {
             _.store = null;
             _.done = true;
             return store;
@@ -166,7 +166,7 @@ export class ByteBlobLoader {
             _.content_type_allocated = false;
         }
 
-        if (_.store) |store| {
+        if (store := _.store) {
             _.store = null;
             store.deref();
         }
@@ -187,7 +187,7 @@ export class ByteBlobLoader {
     }
 
     pub fn toBufferedValue(*_, globalThis: *JSGlobalObject, action: streams.BufferAction.Tag): JSError!JSValue {
-        if (_.toAnyBlob(globalThis)) |blob_| {
+        if (blob_ := _.toAnyBlob(globalThis)) {
             let blob = blob_;
             return blob.toPromise(globalThis, action);
         }
@@ -195,8 +195,8 @@ export class ByteBlobLoader {
         return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).reject();
     }
 
-    pub fn memoryCost(_): usize {
-        if (_.store) |store| {
+    pub fn memoryCost(): usize {
+        if (store := _.store) {
             return store.memoryCost();
         }
         return 0;

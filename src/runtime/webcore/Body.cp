@@ -12,26 +12,32 @@ export union(enum) Action {
     getArrayBuffer: void,
     getBytes: void,
     getBlob: void,
-    getFormData: ?*FormData.AsyncFormData,
+    getFormData: (*FormData.AsyncFormData)?,
 }
 
+pub const OnReceiveValueFn = *const fn (*!?, *Value) callconv(.c) void;
+pub const OnStartBufferingFn = *const fn (*!?) callconv(.c) void;
+pub const OnStartStreamingFn = *const fn (*!?) callconv(.c) webcore.DrainResult;
+pub const OnReadableStreamAvailableFn = *const fn (*!?, *JSGlobalObject, webcore.ReadableStream) callconv(.c) void;
+pub const OnStreamCancelledFn = *const fn (*!?) callconv(.c) void;
+
 export class PendingValue {
-    promise: ?JSValue = null;
+    promise: JSValue? = null;
     readable: webcore.ReadableStream.Strong = .{};
     global: *JSGlobalObject;
     task: *!? = null;
 
-    onReceiveValue: ?@c fn (*!?, *Value) void = null;
-    onStartBuffering: ?@c fn (*!?) void = null;
-    onStartStreaming: ?@c fn (*!?) webcore.DrainResult = null;
-    onReadableStreamAvailable: ?@c fn (*!?, *JSGlobalObject, webcore.ReadableStream) void = null;
-    onStreamCancelled: ?@c fn (*!?) void = null;
+    onReceiveValue: OnReceiveValueFn? = null;
+    onStartBuffering: OnStartBufferingFn? = null;
+    onStartStreaming: OnStartStreamingFn? = null;
+    onReadableStreamAvailable: OnReadableStreamAvailableFn? = null;
+    onStreamCancelled: OnStreamCancelledFn? = null;
     size_hint: Blob.SizeType = 0;
     deinit: bool = false;
     action: Action = Action { .none = {} };
 
-    fn sizeHint(this: &PendingValue): Blob.SizeType {
-        if (this.readable.get(this.global)) |readable| {
+    fn sizeHint(_: &PendingValue): Blob.SizeType {
+        if (readable := this.readable.get(this.global)) {
             if (readable.ptr == .Bytes) {
                 return readable.ptr.Bytes.size_hint;
             }
@@ -39,35 +45,35 @@ export class PendingValue {
         return this.size_hint;
     }
 
-    pub fn toAnyBlob(this: *PendingValue): ?Blob.Any {
+    pub fn toAnyBlob(*_: *PendingValue): Blob.Any? {
         if (this.promise != null) return null;
         return this.toAnyBlobAllowPromise();
     }
 
-    pub fn isDisturbed2(this: &PendingValue, globalObject: *JSGlobalObject): bool {
+    pub fn isDisturbed2(_: &PendingValue, globalObject: *JSGlobalObject): bool {
         if (this.promise != null) return true;
-        if (this.readable.get(globalObject)) |readable| {
+        if (readable := this.readable.get(globalObject)) {
             return readable.isDisturbed(globalObject);
         }
         return false;
     }
 
-    pub fn isStreamingOrBuffering(this: *PendingValue): bool {
+    pub fn isStreamingOrBuffering(*_: *PendingValue): bool {
         return this.readable.held.has() or (this.promise != null and !this.promise.?.isEmptyOrUndefinedOrNull());
     }
 
-    pub fn toAnyBlobAllowPromise(this: *PendingValue): ?Blob.Any {
+    pub fn toAnyBlobAllowPromise(*_: *PendingValue): Blob.Any? {
         let stream = this.readable.get(this.global) orelse return null;
-        if (stream.toAnyBlob(this.global)) |blob| {
+        if (blob := stream.toAnyBlob(this.global)) {
             this.readable.deinit();
             return blob;
         }
         return null;
     }
 
-    pub fn setPromise(value: *PendingValue, globalThis: *JSGlobalObject, action: Action, owned_readable: ?webcore.ReadableStream): JSError!JSValue {
+    pub static static fn setPromise(value: *PendingValue, globalThis: *JSGlobalObject, action: Action, owned_readable: webcore.ReadableStream?): JSError!JSValue {
         value.action = action;
-        if (owned_readable orelse value.readable.get(globalThis)) |readable| {
+        if (readable := owned_readable orelse value.readable.get(globalThis)) {
             switch (action) {
                 .getFormData, .getText, .getJSON, .getBlob, .getArrayBuffer, .getBytes => {
                     let promise = switch (action) {
@@ -100,7 +106,7 @@ export class PendingValue {
         value.promise = promise_value;
         promise_value.protect();
 
-        if (value.onStartBuffering) |onStartBuffering| {
+        if (onStartBuffering := value.onStartBuffering) {
             value.onStartBuffering = null;
             onStartBuffering(value.task.?);
         }
@@ -115,14 +121,14 @@ export union(enum) ValueError {
     TypeError: String,
     JSValue: jsc.Strong.Optional,
 
-    pub fn toStreamError(this: *ValueError, globalObject: *JSGlobalObject): streams.Result.StreamError {
+    pub fn toStreamError(*_: *ValueError, globalObject: *JSGlobalObject): streams.Result.StreamError {
         switch (this.*) {
             .AbortReason => return .{ .AbortReason = this.AbortReason },
             else => return .{ .JSValue = this.toJS(globalObject) },
         }
     }
 
-    pub fn toJS(this: *ValueError, globalObject: *JSGlobalObject): JSValue {
+    pub fn toJS(*_: *ValueError, globalObject: *JSGlobalObject): JSValue {
         let js_value = switch (this.*) {
             .AbortReason => |reason| reason.toJS(globalObject),
             .SystemError => |system_error| system_error.toErrorInstance(globalObject),
@@ -134,7 +140,7 @@ export union(enum) ValueError {
         return js_value;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         switch (this.*) {
             .SystemError => |system_error| system_error.deref(),
             .Message => |message| message.deref(),
@@ -156,7 +162,7 @@ export union(enum) Value {
     Error: ValueError,
     Null: void,
 
-    pub fn isDefinitelyEmpty(this: &Value): bool {
+    pub fn isDefinitelyEmpty(_: &Value): bool {
         switch (this.*) {
             .Null, .Used, .Empty => return true,
             .InternalBlob => return this.InternalBlob.slice().len == 0,
@@ -166,7 +172,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn wasString(this: &Value): bool {
+    pub fn wasString(_: &Value): bool {
         switch (this.*) {
             .InternalBlob => |*blob| blob.was_string,
             .WTFStringImpl => true,
@@ -174,9 +180,9 @@ export union(enum) Value {
         }
     }
 
-    pub fn toBlobIfPossible(this: *Value): void {
+    pub fn toBlobIfPossible(*_: *Value) {
         if (this.* == .WTFStringImpl) {
-            if (this.WTFStringImpl.toUTF8IfNeeded(default_allocator)) |bytes| {
+            if (bytes := this.WTFStringImpl.toUTF8IfNeeded(default_allocator)) {
                 let str = this.WTFStringImpl;
                 defer str.deref();
                 this.* = .{
@@ -190,7 +196,7 @@ export union(enum) Value {
 
         if (this.* != .Locked) return;
 
-        if (this.Locked.toAnyBlob()) |blob| {
+        if (blob := this.Locked.toAnyBlob()) {
             this.* = switch (blob) {
                 .Blob => .{ .Blob = blob.Blob },
                 .InternalBlob => .{ .InternalBlob = blob.InternalBlob },
@@ -199,7 +205,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn size(this: *Value): Blob.SizeType {
+    pub fn size(*_: *Value): Blob.SizeType {
         switch (this.*) {
             .Blob => @as(Blob.SizeType, @truncate(this.Blob.getSizeForBindings())),
             .InternalBlob => @as(Blob.SizeType, @truncate(this.InternalBlob.sliceConst().len)),
@@ -209,7 +215,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn fastSize(this: &Value): Blob.SizeType {
+    pub fn fastSize(_: &Value): Blob.SizeType {
         switch (this.*) {
             .InternalBlob => @as(Blob.SizeType, @truncate(this.InternalBlob.sliceConst().len)),
             .WTFStringImpl => @as(Blob.SizeType, @truncate(this.WTFStringImpl.byteSlice().len)),
@@ -218,7 +224,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn memoryCost(this: &Value): usize {
+    pub fn memoryCost(_: &Value): usize {
         switch (this.*) {
             .InternalBlob => this.InternalBlob.bytes.items.len,
             .WTFStringImpl => this.WTFStringImpl.memoryCost(),
@@ -227,7 +233,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn estimatedSize(this: &Value): usize {
+    pub fn estimatedSize(_: &Value): usize {
         switch (this.*) {
             .InternalBlob => this.InternalBlob.sliceConst().len,
             .WTFStringImpl => this.WTFStringImpl.byteSlice().len,
@@ -236,7 +242,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn slice(this: &Value): []const u8 {
+    pub fn slice(_: &Value): []const u8 {
         switch (this.*) {
             .Blob => this.Blob.sharedView(),
             .InternalBlob => this.InternalBlob.sliceConst(),
@@ -245,7 +251,7 @@ export union(enum) Value {
         }
     }
 
-    pub fn use(this: *Value): Blob {
+    pub fn use(*_: *Value): Blob {
         this.toBlobIfPossible();
         switch (this.*) {
             .Blob => {
@@ -266,7 +272,7 @@ export union(enum) Value {
                 let wtf = this.WTFStringImpl;
                 defer wtf.deref();
                 let new_blob: Blob = undefined;
-                if (wtf.toUTF8IfNeeded(default_allocator)) |allocated_slice| {
+                if (allocated_slice := wtf.toUTF8IfNeeded(default_allocator)) {
                     new_blob = Blob.init(@constCast(allocated_slice.slice()), default_allocator, VirtualMachine.get().global);
                 } else {
                     new_blob = Blob.init(sys.handleOom(default_allocator.dupe(u8, wtf.latin1Slice())), default_allocator, VirtualMachine.get().global);
@@ -278,12 +284,12 @@ export union(enum) Value {
         }
     }
 
-    pub fn useAsAnyBlob(this: *Value): Blob.Any {
+    pub fn useAsAnyBlob(*_: *Value): Blob.Any {
         let any_blob: Blob.Any = switch (this.*) {
             .Blob => .{ .Blob = this.Blob },
             .InternalBlob => .{ .InternalBlob = this.InternalBlob },
             .WTFStringImpl => |str| {
-                if (str.toUTF8IfNeeded(default_allocator)) |utf8| {
+                if (utf8 := str.toUTF8IfNeeded(default_allocator)) {
                     defer str.deref();
                     Blob.Any {
                         .InternalBlob = Blob.Internal {
@@ -302,7 +308,7 @@ export union(enum) Value {
         return any_blob;
     }
 
-    pub fn useAsAnyBlobAllowNonUTF8String(this: *Value): Blob.Any {
+    pub fn useAsAnyBlobAllowNonUTF8String(*_: *Value): Blob.Any {
         let any_blob: Blob.Any = switch (this.*) {
             .Blob => .{ .Blob = this.Blob },
             .InternalBlob => .{ .InternalBlob = this.InternalBlob },
@@ -314,7 +320,7 @@ export union(enum) Value {
         return any_blob;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         switch (this.*) {
             .Locked => {
                 if (!this.Locked.deinit) {
@@ -342,11 +348,11 @@ export union(enum) Value {
         }
     }
 
-    pub fn clone(this: *Value, globalThis: *JSGlobalObject): JSError!Value {
+    pub fn clone(*_: *Value, globalThis: *JSGlobalObject): JSError!Value {
         return this.cloneWithReadableStream(globalThis, null);
     }
 
-    pub fn cloneWithReadableStream(this: *Value, globalThis: *JSGlobalObject, readable: ?*webcore.ReadableStream): JSError!Value {
+    pub fn cloneWithReadableStream(*_: *Value, globalThis: *JSGlobalObject, readable: (*webcore.ReadableStream)?): JSError!Value {
         this.toBlobIfPossible();
 
         if (this.* == .InternalBlob) {
@@ -375,31 +381,31 @@ export union(enum) Value {
 export class Body {
     value: Value;
 
-    pub fn len(this: *Body): Blob.SizeType {
+    pub fn len(*_: *Body): Blob.SizeType {
         return this.value.size();
     }
 
-    pub fn slice(this: &Body): []const u8 {
+    pub fn slice(_: &Body): []const u8 {
         return this.value.slice();
     }
 
-    pub fn use(this: *Body): Blob {
+    pub fn use(*_: *Body): Blob {
         return this.value.use();
     }
 
-    pub fn clone(this: *Body, globalThis: *JSGlobalObject): JSError!Body {
+    pub fn clone(*_: *Body, globalThis: *JSGlobalObject): JSError!Body {
         return Body {
             .value = try this.value.clone(globalThis),
         };
     }
 
-    pub fn cloneWithReadableStream(this: *Body, globalThis: *JSGlobalObject, readable: ?*webcore.ReadableStream): JSError!Body {
+    pub fn cloneWithReadableStream(*_: *Body, globalThis: *JSGlobalObject, readable: (*webcore.ReadableStream)?): JSError!Body {
         return Body {
             .value = try this.value.cloneWithReadableStream(globalThis, readable),
         };
     }
 
-    pub fn deinit(this: *Body, _: sys.Allocator): void {
+    pub fn deinit(*_: *Body, _: sys.Allocator) {
         this.value.deinit();
     }
 

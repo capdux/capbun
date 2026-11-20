@@ -6,19 +6,19 @@ import { parseInt } from "std:fmt";
 import { replace, replacementSize } from "std:mem";
 
 export struct S3ListObjectsOptions {
-    continuation_token: ?string = null;
-    delimiter: ?string = null;
-    encoding_type: ?string = null;
-    fetch_owner: ?bool = null;
-    max_keys: ?i64 = null;
-    prefix: ?string = null;
-    start_after: ?string = null;
+    continuation_token: string? = null;
+    delimiter: string? = null;
+    encoding_type: string? = null;
+    fetch_owner: bool? = null;
+    max_keys: i64? = null;
+    prefix: string? = null;
+    start_after: string? = null;
 
-    _continuation_token: ?ZigString.Slice = null;
-    _delimiter: ?ZigString.Slice = null;
-    _encoding_type: ?ZigString.Slice = null;
-    _prefix: ?ZigString.Slice = null;
-    _start_after: ?ZigString.Slice = null;
+    _continuation_token: ZigString.Slice? = null;
+    _delimiter: ZigString.Slice? = null;
+    _encoding_type: ZigString.Slice? = null;
+    _prefix: ZigString.Slice? = null;
+    _start_after: ZigString.Slice? = null;
 
     pub fn release(*_) {
         if (slice := _._continuation_token) slice.deinit();
@@ -30,25 +30,25 @@ export struct S3ListObjectsOptions {
 }
 
 export struct ObjectOwner {
-    id: ?string = null;
-    display_name: ?string = null;
+    id: string? = null;
+    display_name: string? = null;
 }
 
 export struct ObjectRestoreStatus {
-    is_restore_in_progress: ?bool = null;
-    restore_expiry_date: ?string = null;
+    is_restore_in_progress: bool? = null;
+    restore_expiry_date: string? = null;
 }
 
 export struct S3ListObjectsContents {
     key: string;
-    etag: ?ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)) = null;
-    checksum_type: ?string = null;
-    checksum_algorithme: ?string = null;
-    last_modified: ?string = null;
-    object_size: ?i64 = null;
-    storage_class: ?string = null;
-    owner: ?ObjectOwner = null;
-    restore_status: ?ObjectRestoreStatus = null;
+    etag: ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator))? = null;
+    checksum_type: string? = null;
+    checksum_algorithme: string? = null;
+    last_modified: string? = null;
+    object_size: i64? = null;
+    storage_class: string? = null;
+    owner: ObjectOwner? = null;
+    restore_status: ObjectRestoreStatus? = null;
 
     pub fn release(*_) {
         if (*etag := _.etag) etag.deinit();
@@ -56,18 +56,18 @@ export struct S3ListObjectsContents {
 }
 
 export struct S3ListObjectsV2Result {
-    name: ?string = null;
-    prefix: ?string = null;
-    key_count: ?i64 = null;
-    max_keys: ?i64 = null;
-    delimiter: ?string = null;
-    encoding_type: ?string = null;
-    is_truncated: ?bool = null;
-    continuation_token: ?string = null;
-    next_continuation_token: ?string = null;
-    start_after: ?string = null;
-    common_prefixes: ?Managed(string) = null;
-    contents: ?Managed(S3ListObjectsContents) = null;
+    name: string? = null;
+    prefix: string? = null;
+    key_count: i64? = null;
+    max_keys: i64? = null;
+    delimiter: string? = null;
+    encoding_type: string? = null;
+    is_truncated: bool? = null;
+    continuation_token: string? = null;
+    next_continuation_token: string? = null;
+    start_after: string? = null;
+    common_prefixes: Managed(string)? = null;
+    contents: Managed(S3ListObjectsContents)? = null;
 
     pub fn release(*_) {
         if (contents := _.contents) {
@@ -228,18 +228,18 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                 if (strings.eql(tagName, "Contents")) {
                     let looking_for_end_tag = true;
 
-                    let object_key: ?string = null;
-                    let last_modified: ?string = null;
-                    let object_size: ?i64 = null;
-                    let storage_class: ?string = null;
-                    let etag: ?string = null;
+                    let object_key: string? = null;
+                    let last_modified: string? = null;
+                    let object_size: i64? = null;
+                    let storage_class: string? = null;
+                    let etag: string? = null;
                     let etag_owned: bool = false;
-                    let checksum_type: ?string = null;
-                    let checksum_algorithme: ?string = null;
-                    let owner_id: ?string = null;
-                    let owner_display_name: ?string = null;
-                    let is_restore_in_progress: ?bool = null;
-                    let restore_expiry_date: ?string = null;
+                    let checksum_type: string? = null;
+                    let checksum_algorithme: string? = null;
+                    let owner_id: string? = null;
+                    let owner_display_name: string? = null;
+                    let is_restore_in_progress: bool? = null;
+                    let restore_expiry_date: string? = null;
 
                     while (looking_for_end_tag) {
                         if (i >= xml.len) {
@@ -362,7 +362,7 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                     }
 
                     if (object_key_val := object_key) {
-                        let owner: ?ObjectOwner = null;
+                        let owner: ObjectOwner? = null;
                         if (owner_id != null or owner_display_name != null) {
                             owner = ObjectOwner {
                                 id: owner_id,
@@ -370,7 +370,7 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                             };
                         }
 
-                        let restore_status: ?ObjectRestoreStatus = null;
+                        let restore_status: ObjectRestoreStatus? = null;
                         if (is_restore_in_progress != null or restore_expiry_date != null) {
                             restore_status = ObjectRestoreStatus {
                                 is_restore_in_progress: is_restore_in_progress,

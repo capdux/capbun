@@ -12,11 +12,11 @@ const S3CredentialsWithOptions = bun.S3.S3CredentialsWithOptions;
 const StorageClass = bun.S3.StorageClass;
 
 pub fn getCredentialsWithOptions(
-    this: S3Credentials,
+    _: S3Credentials,
     default_options: MultiPartUploadOptions,
-    options: ?jsc.JSValue,
-    default_acl: ?ACL,
-    default_storage_class: ?StorageClass,
+    options: jsc.JSValue?,
+    default_acl: ACL?,
+    default_storage_class: StorageClass?,
     default_request_payer: bool,
     globalObject: *jsc.JSGlobalObject,
 ): bun.JSError!S3CredentialsWithOptions {
@@ -33,9 +33,9 @@ pub fn getCredentialsWithOptions(
         new_credentials.deinit();
     }
 
-    if (options) |opts| {
+    if (opts := options) {
         if (opts.isObject()) {
-            if (opts.getTruthyComptime(globalObject, "accessKeyId")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "accessKeyId")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -50,7 +50,7 @@ pub fn getCredentialsWithOptions(
                     }
                 }
             }
-            if (opts.getTruthyComptime(globalObject, "secretAccessKey")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "secretAccessKey")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -65,7 +65,7 @@ pub fn getCredentialsWithOptions(
                     }
                 }
             }
-            if (opts.getTruthyComptime(globalObject, "region")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "region")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -80,7 +80,7 @@ pub fn getCredentialsWithOptions(
                     }
                 }
             }
-            if (opts.getTruthyComptime(globalObject, "endpoint")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "endpoint")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -103,7 +103,7 @@ pub fn getCredentialsWithOptions(
                     }
                 }
             }
-            if (opts.getTruthyComptime(globalObject, "bucket")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "bucket")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -119,12 +119,12 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getBooleanStrict(globalObject, "virtualHostedStyle")?) |virtual_hosted_style| {
+            if (virtual_hosted_style := opts.getBooleanStrict(globalObject, "virtualHostedStyle")?) {
                 new_credentials.credentials.virtual_hosted_style = virtual_hosted_style;
                 new_credentials.changed_credentials = true;
             }
 
-            if (opts.getTruthyComptime(globalObject, "sessionToken")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "sessionToken")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -140,7 +140,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getOptional(globalObject, "pageSize", i64)?) |pageSize| {
+            if (pageSize := opts.getOptional(globalObject, "pageSize", i64)?) {
                 if (pageSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE or pageSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
                     return globalObject.throwRangeError(pageSize, .{
                         .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
@@ -151,7 +151,7 @@ pub fn getCredentialsWithOptions(
                     new_credentials.options.partSize = @intCast(pageSize);
                 }
             }
-            if (opts.getOptional(globalObject, "partSize", i64)?) |partSize| {
+            if (partSize := opts.getOptional(globalObject, "partSize", i64)?) {
                 if (partSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE or partSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
                     return globalObject.throwRangeError(partSize, .{
                         .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
@@ -163,7 +163,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getOptional(globalObject, "queueSize", i32)?) |queueSize| {
+            if (queueSize := opts.getOptional(globalObject, "queueSize", i32)?) {
                 if (queueSize < 1) {
                     return globalObject.throwRangeError(queueSize, .{
                         .min = 1,
@@ -174,7 +174,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getOptional(globalObject, "retry", i32)?) |retry| {
+            if (retry := opts.getOptional(globalObject, "retry", i32)?) {
                 if (retry < 0 or retry > 255) {
                     return globalObject.throwRangeError(retry, .{
                         .min = 0,
@@ -186,15 +186,15 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getOptionalEnum(globalObject, "acl", ACL)?) |acl| {
+            if (acl := opts.getOptionalEnum(globalObject, "acl", ACL)?) {
                 new_credentials.acl = acl;
             }
 
-            if (opts.getOptionalEnum(globalObject, "storageClass", StorageClass)?) |storage_class| {
+            if (storage_class := opts.getOptionalEnum(globalObject, "storageClass", StorageClass)?) {
                 new_credentials.storage_class = storage_class;
             }
 
-            if (opts.getTruthyComptime(globalObject, "contentDisposition")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "contentDisposition")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -213,7 +213,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getTruthyComptime(globalObject, "type")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "type")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -232,7 +232,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getTruthyComptime(globalObject, "contentEncoding")?) |js_value| {
+            if (js_value := opts.getTruthyComptime(globalObject, "contentEncoding")?) {
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
@@ -251,7 +251,7 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (opts.getBooleanStrict(globalObject, "requestPayer")?) |request_payer| {
+            if (request_payer := opts.getBooleanStrict(globalObject, "requestPayer")?) {
                 new_credentials.request_payer = request_payer;
             }
         }

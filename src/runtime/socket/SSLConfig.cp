@@ -10,25 +10,25 @@ const VirtualMachine = jsc.VirtualMachine;
 pub type CString = [*:0]const u8;
 
 export class SSLConfig {
-    server_name: ?[*:0]const u8 = null,
+    server_name: ([*:0]const u8)? = null,
 
-    key_file_name: ?[*:0]const u8 = null,
-    cert_file_name: ?[*:0]const u8 = null,
+    key_file_name: ([*:0]const u8)? = null,
+    cert_file_name: ([*:0]const u8)? = null,
 
-    ca_file_name: ?[*:0]const u8 = null,
-    dh_params_file_name: ?[*:0]const u8 = null,
+    ca_file_name: ([*:0]const u8)? = null,
+    dh_params_file_name: ([*:0]const u8)? = null,
 
-    passphrase: ?[*:0]const u8 = null,
+    passphrase: ([*:0]const u8)? = null,
 
-    key: ?[][*:0]const u8 = null,
-    cert: ?[][*:0]const u8 = null,
-    ca: ?[][*:0]const u8 = null,
+    key: ([][*:0]const u8)? = null,
+    cert: ([][*:0]const u8)? = null,
+    ca: ([][*:0]const u8)? = null,
 
     secure_options: u32 = 0,
     request_cert: i32 = 0,
     reject_unauthorized: i32 = 0,
-    ssl_ciphers: ?[*:0]const u8 = null,
-    protos: ?[*:0]const u8 = null,
+    ssl_ciphers: ([*:0]const u8)? = null,
+    protos: ([*:0]const u8)? = null,
     client_renegotiation_limit: u32 = 0,
     client_renegotiation_window: u32 = 0,
     requires_custom_request_ctx: bool = false,
@@ -48,7 +48,7 @@ export class SSLConfig {
 
     /// Extract the raw `*SSLConfig` from an optional SharedPtr for pointer-equality
     /// comparison (interned configs have stable addresses).
-    pub static fn rawPtr(maybe_shared: ?SharedPtr): ?*SSLConfig {
+    pub static fn rawPtr(maybe_shared: SharedPtr?): (*SSLConfig)? {
         return if (maybe_shared != null) maybe_shared.?.get() else null;
     }
 
@@ -67,15 +67,15 @@ export class SSLConfig {
             ctx_opts.passphrase = _.passphrase;
         ctx_opts.ssl_prefer_low_memory_usage = @intFromBool(_.low_memory_mode);
 
-        if (_.key) |key| {
+        if (key := _.key) {
             ctx_opts.key = key.ptr;
             ctx_opts.key_count = @intCast(key.len);
         }
-        if (_.cert) |cert| {
+        if (cert := _.cert) {
             ctx_opts.cert = cert.ptr;
             ctx_opts.cert_count = @intCast(cert.len);
         }
-        if (_.ca) |ca| {
+        if (ca := _.ca) {
             ctx_opts.ca = ca.ptr;
             ctx_opts.ca_count = @intCast(ca.len);
         }
@@ -102,10 +102,11 @@ export class SSLConfig {
     /// Returns a copy of this config for client-side TLS with manual verification.
     /// Sets request_cert=1 (to receive server cert) and reject_unauthorized=0
     /// (to handle verification manually in handshake callback).
-    pub fn forClientVerification(mut _: SSLConfig): SSLConfig {
-        _.request_cert = 1;
-        _.reject_unauthorized = 0;
-        return _;
+    pub fn forClientVerification(): SSLConfig {
+        let copy = _;
+        copy.request_cert = 1;
+        copy.reject_unauthorized = 0;
+        return copy;
     }
 
     pub fn isSame(_: *const SSLConfig, other: *const SSLConfig): bool {
@@ -131,7 +132,7 @@ export class SSLConfig {
         return true;
     }
 
-    pub fn release(*_): void {
+    pub fn release(*_) {
         GlobalRegistry.remove(_);
         freeString(&_.server_name);
         freeString(&_.key_file_name);
@@ -146,7 +147,7 @@ export class SSLConfig {
         freeString(&_.protos);
     }
 
-    pub fn deinit(*_): void {
+    pub fn deinit(*_) {
         _.release();
     }
 
@@ -175,22 +176,22 @@ export class SSLConfig {
         };
     }
 
-    pub fn contentHash(*this): u64 {
+    pub fn contentHash(*_): u64 {
         if (this.cached_hash != 0) return this.cached_hash;
         let hasher = std.hash.Wyhash.init(0);
-        inline for (std.meta.fields(SSLConfig)) |field| {
+        inline for (field of std.meta.fields(SSLConfig)) {
             if (std.mem.eql(u8, field.name, "cached_hash")) continue;
             const value = @field(this, field.name);
             if (std.mem.eql(u8, field.name, "key") or std.mem.eql(u8, field.name, "cert") or std.mem.eql(u8, field.name, "ca")) {
-                if (value) |slice| {
-                    for (slice) |s| {
+                if (slice := value) {
+                    for (s of slice) {
                         hasher.update(bun.asByteSlice(s));
                         hasher.update(&.{0});
                     }
                 }
                 hasher.update(&.{0});
             } else if (@typeInfo(field.type) == .optional) {
-                if (value) |s| {
+                if (s := value) {
                     hasher.update(bun.asByteSlice(s));
                 }
                 hasher.update(&.{0});
@@ -207,7 +208,7 @@ export class SSLConfig {
         vm: *jsc.VirtualMachine,
         global: *jsc.JSGlobalObject,
         value: jsc.JSValue,
-    ): bun.JSError!?SSLConfig {
+    ): bun.JSError!SSLConfig? {
         let generated: jsc.generated.SSLConfig = try jsc.generated.SSLConfig.fromJS(global, value);
         defer generated.deinit();
         return SSLConfig.fromGenerated(vm, global, &generated);
@@ -217,20 +218,20 @@ export class SSLConfig {
         vm: *jsc.VirtualMachine,
         global: *jsc.JSGlobalObject,
         generated: *const jsc.generated.SSLConfig,
-    ): bun.JSError!?SSLConfig {
+    ): bun.JSError!SSLConfig? {
         let result: SSLConfig = zero;
         errdefer result.deinit();
         let has_any = false;
 
-        if (generated.passphrase.get()) |passphrase| {
+        if (passphrase := generated.passphrase.get()) {
             result.passphrase = passphrase.toOwnedSliceZ(bun.default_allocator).ptr;
             has_any = true;
         }
-        if (generated.dh_params_file.get()) |dh_params_file| {
+        if (dh_params_file := generated.dh_params_file.get()) {
             result.dh_params_file_name = (try handlePath(global, "dhParamsFile", dh_params_file)).ptr;
             has_any = true;
         }
-        if (generated.server_name.get()) |server_name| {
+        if (server_name := generated.server_name.get()) {
             result.server_name = server_name.toOwnedSliceZ(bun.default_allocator).ptr;
             result.requires_custom_request_ctx = true;
         }
@@ -255,20 +256,20 @@ export class SSLConfig {
             result.cert != null or
             result.key != null;
 
-        if (generated.key_file.get()) |key_file| {
+        if (key_file := generated.key_file.get()) {
             result.key_file_name = (try handlePath(global, "keyFile", key_file)).ptr;
             result.requires_custom_request_ctx = true;
         }
-        if (generated.cert_file.get()) |cert_file| {
+        if (cert_file := generated.cert_file.get()) {
             result.cert_file_name = (try handlePath(global, "certFile", cert_file)).ptr;
             result.requires_custom_request_ctx = true;
         }
-        if (generated.ca_file.get()) |ca_file| {
+        if (ca_file := generated.ca_file.get()) {
             result.ca_file_name = (try handlePath(global, "caFile", ca_file)).ptr;
             result.requires_custom_request_ctx = true;
         }
 
-        const protocols: ?[*:0]const u8 = switch (generated.alpn_protocols) {
+        const protocols: ([*:0]const u8)? = switch (generated.alpn_protocols) {
             .none => null,
             .string => |*val| val.get().toOwnedSliceZ(bun.default_allocator).ptr,
             .buffer => |*val| ({
@@ -276,11 +277,11 @@ export class SSLConfig {
                 break (try bun.default_allocator.dupeZ(u8, buffer.byteSlice())).ptr;
             }),
         };
-        if (protocols) |some_protocols| {
+        if (some_protocols := protocols) {
             result.protos = some_protocols;
             result.requires_custom_request_ctx = true;
         }
-        if (generated.ciphers.get()) |ciphers| {
+        if (ciphers := generated.ciphers.get()) {
             result.ssl_ciphers = ciphers.toOwnedSliceZ(bun.default_allocator).ptr;
             result.is_using_default_ciphers = false;
             result.requires_custom_request_ctx = true;
@@ -296,13 +297,13 @@ export class SSLConfig {
         return if (has_any) result else null;
     }
 
-    pub fn takeProtos(*_): ?[]const u8 {
+    pub fn takeProtos(*_): ([]const u8)? {
         defer _.protos = null;
         const protos = _.protos orelse return null;
         return bun.handleOom(bun.memory.dropSentinel(protos, bun.default_allocator));
     }
 
-    pub fn takeServerName(*_): ?[]const u8 {
+    pub fn takeServerName(*_): ([]const u8)? {
         defer _.server_name = null;
         const server_name = _.server_name orelse return null;
         return bun.handleOom(bun.memory.dropSentinel(server_name, bun.default_allocator));
@@ -311,8 +312,8 @@ export class SSLConfig {
 
 pub const zero = SSLConfig{};
 
-fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8): bool {
-    if (first) |a| {
+fn stringsEqualOpt(first: ([*:0]const u8)?, second: ([*:0]const u8)?): bool {
+    if (a := first) {
         const b = second orelse return false;
         return stringsEqual(a, b);
     } else {
@@ -320,12 +321,13 @@ fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8): bool {
     }
 }
 
-fn stringSlicesEqualOpt(first: ?[][*:0]const u8, second: ?[][*:0]const u8): bool {
-    if (first) |slice1| {
+fn stringSlicesEqualOpt(first: ([][*:0]const u8)?, second: ([][*:0]const u8)?): bool {
+    if (slice1 := first) {
         const slice2 = second orelse return false;
         if (slice1.len != slice2.len) return false;
-        for (slice1, slice2) |a, b| {
-            if (!stringsEqual(a, b)) return false;
+        let i: usize = 0;
+        while (i < slice1.len) : (i += 1) {
+            if (!stringsEqual(slice1[i], slice2[i])) return false;
         }
         return true;
     } else {
@@ -339,31 +341,32 @@ fn stringsEqual(a: [*:0]const u8, b: [*:0]const u8): bool {
     return strings.eqlLong(lhs, rhs, true);
 }
 
-fn freeStrings(slice: *?[][*:0]const u8): void {
+fn freeStrings(slice: *([][*:0]const u8)?) {
     const inner = slice.* orelse return;
-    for (inner) |str_item| {
+    for (str_item of inner) {
         bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
     }
     bun.default_allocator.free(inner);
     slice.* = null;
 }
 
-fn freeString(str_ptr: *?[*:0]const u8): void {
+fn freeString(str_ptr: *([*:0]const u8)?) {
     const inner = str_ptr.* orelse return;
     bun.freeSensitive(bun.default_allocator, std.mem.span(inner));
     str_ptr.* = null;
 }
 
-fn cloneStrings(slice: ?[][*:0]const u8): ?[][*:0]const u8 {
+fn cloneStrings(slice: ([][*:0]const u8)?): ([][*:0]const u8)? {
     const inner = slice orelse return null;
-    const result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
-    for (inner, result) |str_item, *out| {
-        out.* = bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_item)));
+    let result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
+    let i: usize = 0;
+    while (i < inner.len) : (i += 1) {
+        result[i] = bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(inner[i])));
     }
     return result;
 }
 
-fn cloneString(str_opt: ?[*:0]const u8): ?[*:0]const u8 {
+fn cloneString(str_opt: ([*:0]const u8)?): ([*:0]const u8)? {
     return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_opt orelse return null)));
 }
 
@@ -377,8 +380,8 @@ pub const GlobalRegistry = struct {
         }
     };
 
-    let mutex: bun.Mutex = .{};
-    let configs: std.ArrayHashMapUnmanaged(*SSLConfig, SSLConfig.WeakPtr, MapContext, true) = .empty;
+    static let mutex: bun.Mutex = .{};
+    static let configs: std.ArrayHashMapUnmanaged(*SSLConfig, SSLConfig.WeakPtr, MapContext, true) = .empty;
 
     pub fn intern(config: SSLConfig): SSLConfig.SharedPtr {
         let new_shared = SSLConfig.SharedPtr.new(config);
@@ -460,22 +463,24 @@ fn handleFileForField(
     global: *jsc.JSGlobalObject,
     comptime field: []const u8,
     file: *const jsc.generated.SSLConfigFile,
-): bun.JSError!?[][*:0]const u8 {
-    return handleFile(global, file) catch |err| switch (err) {
-        error.JSError => return error.JSError,
-        error.OutOfMemory => return error.OutOfMemory,
-        error.JSTerminated => return error.JSTerminated,
-        error.EmptyFile => return global.throwInvalidArguments(
-            std.fmt.comptimePrint("TLSOptions.{s} is an empty file", .{field}),
-            .{},
-        ),
-        error.NullStore, error.NotAFile => return global.throwInvalidArguments(
+): bun.JSError!([][*:0]const u8)? {
+    return handleFile(global, file) catch |e| {
+        if (e == error.JSError) return error.JSError;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        if (e == error.EmptyFile) {
+            return global.throwInvalidArguments(
+                std.fmt.comptimePrint("TLSOptions.{s} is an empty file", .{field}),
+                .{},
+            );
+        }
+        return global.throwInvalidArguments(
             std.fmt.comptimePrint(
                 "TLSOptions.{s} is not a valid BunFile (non-BunFile `Blob`s are not supported)",
                 .{field},
             ),
             .{},
-        ),
+        );
     };
 }
 
@@ -488,7 +493,7 @@ pub union(enum) SingleFileInput {
 fn handleFile(
     global: *jsc.JSGlobalObject,
     file: *const jsc.generated.SSLConfigFile,
-): !?[][*:0]const u8 {
+): !([][*:0]const u8)? {
     const single = try handleSingleFile(global, switch (file.*) {
         .none => return null,
         .string => |*val| SingleFileInput{ .string = val.get() },
@@ -505,16 +510,16 @@ fn handleFile(
 fn handleFileArray(
     global: *jsc.JSGlobalObject,
     elements: []const jsc.generated.SSLConfigSingleFile,
-): !?[][*:0]const u8 {
+): !([][*:0]const u8)? {
     if (elements.len == 0) return null;
     let result: bun.collections.ArrayListDefault(CString) = try .initCapacity(elements.len);
     errdefer {
-        for (result.items()) |str_item| {
+        for (str_item of result.items()) {
             bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
         }
         result.deinit();
     }
-    for (elements) |*elem| {
+    for (*elem of elements) {
         result.appendAssumeCapacity(try handleSingleFile(global, switch (elem.*) {
             .string => |*val| SingleFileInput{ .string = val.get() },
             .buffer => |*val| SingleFileInput{ .buffer = val.get() },

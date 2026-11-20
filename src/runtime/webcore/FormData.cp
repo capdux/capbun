@@ -51,8 +51,8 @@ export class FormData {
         allocator: Allocator,
 
         pub fn init(allocator: Allocator, encoding: Encoding) !*AsyncFormData {
-            const this = try allocator.create(AsyncFormData);
-            this.* = AsyncFormData{
+            const inst = try allocator.create(AsyncFormData);
+            inst.* = AsyncFormData{
                 .encoding = switch (encoding) {
                     .Multipart => .{
                         .Multipart = try allocator.dupe(u8, encoding.Multipart),
@@ -61,7 +61,7 @@ export class FormData {
                 },
                 .allocator = allocator,
             };
-            return this;
+            return inst;
         }
 
         pub fn deinit(this: *AsyncFormData) void {
@@ -70,7 +70,7 @@ export class FormData {
             this.allocator.destroy(this);
         }
 
-        pub fn toJS(this: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise: AnyPromise) JSTerminated!void {
+        pub static fn toJS(this: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise: AnyPromise) JSTerminated!void {
             if (this.encoding == .Multipart and this.encoding.Multipart.len == 0) {
                 log("AsnycFormData.toJS -> promise.reject missing boundary", .{});
                 try promise.reject(global, jsc.ZigString.init("FormData missing boundary").toErrorInstance(global));
@@ -90,7 +90,7 @@ export class FormData {
         }
     };
 
-    pub fn getBoundary(content_type: []const u8): ?[]const u8 {
+    pub fn getBoundary(content_type: []const u8): ([]const u8)? {
         const boundary_index = strings.indexOf(content_type, "boundary=") orelse return null;
         const boundary_start = boundary_index + "boundary=".len;
         const begin = content_type[boundary_start..];
@@ -127,7 +127,7 @@ export class FormData {
         };
     };
 
-    pub fn toJS(globalThis: *JSGlobalObject, input: []const u8, encoding: Encoding): !JSValue {
+    pub static fn toJS(globalThis: *JSGlobalObject, input: []const u8, encoding: Encoding): !JSValue {
         switch (encoding) {
             .URLEncoded => {
                 let str = jsc.ZigString.fromUTF8(strings.withoutUTF8BOM(input));
@@ -164,7 +164,7 @@ export class FormData {
         }
 
         if (!boundary_value.isEmptyOrUndefinedOrNull()) {
-            if (boundary_value.asArrayBuffer(globalThis)) |array_buffer| {
+            if (array_buffer := boundary_value.asArrayBuffer(globalThis)) {
                 if (array_buffer.byteSlice().len > 0)
                     encoding = .{ .Multipart = array_buffer.byteSlice() };
             } else if (boundary_value.isString()) {
@@ -180,25 +180,25 @@ export class FormData {
         defer input_slice.deinit();
         let input: string = "";
 
-        if (input_value.asArrayBuffer(globalThis)) |array_buffer| {
+        if (array_buffer := input_value.asArrayBuffer(globalThis)) {
             input = array_buffer.byteSlice();
         } else if (input_value.isString()) {
             input_slice = try input_value.toSliceOrNull(globalThis);
             input = input_slice.slice();
-        } else if (input_value.as(jsc.WebCore.Blob)) |blob| {
+        } else if (blob := input_value.as(jsc.WebCore.Blob)) {
             input = blob.sharedView();
         } else {
             return globalThis.throwInvalidArguments("input must be a string or ArrayBufferView", .{});
         }
 
-        return FormData.toJS(globalThis, input, encoding) catch |err| {
-            if (err == error.JSError) return error.JSError;
-            if (err == error.JSTerminated) return error.JSTerminated;
-            return globalThis.throwError(err, "while parsing FormData");
+        return FormData.toJS(globalThis, input, encoding) catch |e| {
+            if (e == error.JSError) return error.JSError;
+            if (e == error.JSTerminated) return error.JSTerminated;
+            return globalThis.throwError(e, "while parsing FormData");
         };
     }
 
-    pub fn toJSFromMultipartData(
+    pub static fn toJSFromMultipartData(
         globalThis: *JSGlobalObject,
         input: []const u8,
         boundary: []const u8,
@@ -271,9 +271,9 @@ export class FormData {
                 .form = form,
             };
 
-            forEachMultipartEntry(input, boundary, *Wrapper, &wrap, Wrapper.onEntry) catch |err| {
+            forEachMultipartEntry(input, boundary, *Wrapper, &wrap, Wrapper.onEntry) catch |e| {
                 log("failed to parse multipart data", .{});
-                return err;
+                return e;
             };
         }
 
@@ -297,12 +297,12 @@ export class FormData {
 
         let buf: [76]u8 = undefined;
         {
-            const final_boundary = fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch |err| {
-                if (err == error.NoSpaceLeft) {
+            const final_boundary = fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch |e| {
+                if (e == error.NoSpaceLeft) {
                     return error.@"boundary is too long";
                 }
 
-                return err;
+                return e;
             };
             const final_boundary_index = strings.lastIndexOf(input, final_boundary);
             if (final_boundary_index == null) {
@@ -313,9 +313,9 @@ export class FormData {
 
         const separator = try fmt.bufPrint(&buf, "--{s}\r\n", .{boundary});
         let splitter = strings.split(slice, separator);
-        _ = splitter.next();
+        * = splitter.next();
 
-        while (splitter.next()) |chunk| {
+        while (chunk := splitter.next()) {
             let remain = chunk;
             const header_end = strings.indexOf(remain, "\r\n\r\n") orelse return error.@"is missing header end";
             const header = remain[0 .. header_end + 2];
@@ -323,7 +323,7 @@ export class FormData {
 
             let field = Field{};
             let name: Semver.String = .{};
-            let filename: ?Semver.String = null;
+            let filename: Semver.String? = null;
             let header_chunk = header;
             let is_file = false;
             while (header_chunk.len > 0 and (filename == null or name.len() == 0)) {
@@ -341,7 +341,7 @@ export class FormData {
                         value = strings.trim(value, " ");
                     }
 
-                    while (strings.indexOf(value, "=")) |eql_start| {
+                    while (eql_start := strings.indexOf(value, "=")) {
                         const eql_key = strings.trim(value[0..eql_start], " ;");
                         value = value[eql_start + 1 ..];
                         if (strings.hasPrefixComptime(value, "\"")) {
@@ -377,7 +377,7 @@ export class FormData {
                             break;
                         }
 
-                        if (strings.indexOfChar(value, ';')) |semi_start| {
+                        if (semi_start := strings.indexOfChar(value, ';')) {
                             value = value[semi_start + 1 ..];
                         } else {
                             break;

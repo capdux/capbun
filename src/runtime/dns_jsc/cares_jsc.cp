@@ -12,7 +12,7 @@ const GetAddrInfo = bun.dns.GetAddrInfo;
 
 // ── struct_hostent ─────────────────────────────────────────────────────────
 pub fn hostentToJSResponse(reply: *c_ares.struct_hostent, parent_alloc: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = parent_alloc;
+    * = parent_alloc;
     if (comptime strings.eqlComptime(lookup_name, "cname")) {
         // A cname lookup always returns a single record but we follow the common API here.
         if (reply.h_name == null) {
@@ -46,7 +46,7 @@ pub fn hostentToJSResponse(reply: *c_ares.struct_hostent, parent_alloc: std.mem.
 
 // ── hostent_with_ttls ──────────────────────────────────────────────────────
 pub fn hostentWithTtlsToJSResponse(reply: *c_ares.hostent_with_ttls, parent_alloc: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = parent_alloc;
+    * = parent_alloc;
     if (comptime strings.eqlComptime(lookup_name, "a") || strings.eqlComptime(lookup_name, "aaaa")) {
         if (reply.hostent.h_addr_list == null) {
             return jsc.JSValue.createEmptyArray(globalThis, 0)?;
@@ -69,7 +69,7 @@ pub fn hostentWithTtlsToJSResponse(reply: *c_ares.hostent_with_ttls, parent_allo
             else
                 bun.dns.addressToJS(&std.net.Address.initIp4(addr[0..4].*, 0), globalThis)) catch return globalThis.throwOutOfMemoryValue();
 
-            const ttl: ?i32 = if (count < reply.ttls.len) reply.ttls[count] else null;
+            const ttl: i32? = if (count < reply.ttls.len) reply.ttls[count] else null;
             const ttlVal = if (ttl != null) jsc.JSValue.jsNumber(ttl.?) else jsc.JSValue.js_undefined;
             const resultObject = jsc.JSValue.createObject2(globalThis, &addressKey, &ttlKey, addrString, ttlVal)?;
             array.putIndex(globalThis, count, resultObject)?;
@@ -84,7 +84,7 @@ pub fn hostentWithTtlsToJSResponse(reply: *c_ares.hostent_with_ttls, parent_allo
 
 // ── struct_nameinfo ────────────────────────────────────────────────────────
 pub fn nameinfoToJSResponse(reply: *c_ares.struct_nameinfo, parent_alloc: std.mem.Allocator, globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
-    _ = parent_alloc;
+    * = parent_alloc;
     const array = jsc.JSValue.createEmptyArray(globalThis, 2)?;
 
     if (reply.node != null) {
@@ -115,7 +115,7 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
     const array = jsc.JSValue.createEmptyArray(globalThis, node.count())?;
 
     let j: u32 = 0;
-    let current: ?*c_ares.AddrInfo_node = addr_info.node;
+    let current: *c_ares.AddrInfo_node? = addr_info.node;
     while (current != null) {
         const this_node = current.?;
         current = this_node.next;
@@ -130,7 +130,7 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
             .address = addr_val,
             .ttl = this_node.ttl,
         };
-        const js_res = GetAddrInfo.Result.toJS(&res, globalThis) catch |err| return err;
+        const js_res = GetAddrInfo.Result.toJS(&res, globalThis) catch |e| return e;
         array.putIndex(globalThis, j, js_res)?;
         j += 1;
     }
@@ -140,14 +140,14 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
 
 // ── struct_ares_caa_reply ──────────────────────────────────────────────────
 pub fn caaReplyToJSResponse(reply: *c_ares.struct_ares_caa_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
-    let caa: ?*c_ares.struct_ares_caa_reply = reply;
+    let caa: *c_ares.struct_ares_caa_reply? = reply;
     while (caa != null) {
         count += 1;
         caa = caa.?.next;
@@ -168,7 +168,7 @@ pub fn caaReplyToJSResponse(reply: *c_ares.struct_ares_caa_reply, parent_allocat
 }
 
 pub fn caaReplyToJS(reply: *c_ares.struct_ares_caa_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const obj = jsc.JSValue.createEmptyObject(globalThis, 2);
 
     obj.put(globalThis, jsc.ZigString.static("critical"), jsc.JSValue.jsNumber(reply.critical));
@@ -183,14 +183,14 @@ pub fn caaReplyToJS(reply: *c_ares.struct_ares_caa_reply, globalThis: *jsc.JSGlo
 
 // ── struct_ares_srv_reply ──────────────────────────────────────────────────
 pub fn srvReplyToJSResponse(reply: *c_ares.struct_ares_srv_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
-    let srv: ?*c_ares.struct_ares_srv_reply = reply;
+    let srv: *c_ares.struct_ares_srv_reply? = reply;
     while (srv != null) {
         count += 1;
         srv = srv.?.next;
@@ -211,7 +211,7 @@ pub fn srvReplyToJSResponse(reply: *c_ares.struct_ares_srv_reply, parent_allocat
 }
 
 pub fn srvReplyToJS(reply: *c_ares.struct_ares_srv_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const obj = jsc.JSValue.createEmptyObject(globalThis, 4);
 
     obj.put(globalThis, jsc.ZigString.static("priority"), jsc.JSValue.jsNumber(reply.priority));
@@ -227,14 +227,14 @@ pub fn srvReplyToJS(reply: *c_ares.struct_ares_srv_reply, globalThis: *jsc.JSGlo
 
 // ── struct_ares_mx_reply ───────────────────────────────────────────────────
 pub fn mxReplyToJSResponse(reply: *c_ares.struct_ares_mx_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
-    let mx: ?*c_ares.struct_ares_mx_reply = reply;
+    let mx: *c_ares.struct_ares_mx_reply? = reply;
     while (mx != null) {
         count += 1;
         mx = mx.?.next;
@@ -255,7 +255,7 @@ pub fn mxReplyToJSResponse(reply: *c_ares.struct_ares_mx_reply, parent_allocator
 }
 
 pub fn mxReplyToJS(reply: *c_ares.struct_ares_mx_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const obj = jsc.JSValue.createEmptyObject(globalThis, 2);
     obj.put(globalThis, jsc.ZigString.static("priority"), jsc.JSValue.jsNumber(reply.priority));
 
@@ -268,14 +268,14 @@ pub fn mxReplyToJS(reply: *c_ares.struct_ares_mx_reply, globalThis: *jsc.JSGloba
 
 // ── struct_ares_txt_reply ──────────────────────────────────────────────────
 pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
-    let txt: ?*c_ares.struct_ares_txt_reply = reply;
+    let txt: *c_ares.struct_ares_txt_reply? = reply;
     while (txt != null) {
         count += 1;
         txt = txt.?.next;
@@ -287,7 +287,7 @@ pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocat
     let i: u32 = 0;
     while (txt != null) {
         const node = txt.?;
-        const js_item = node.toJS(globalThis, allocator) catch |err| return err;
+        const js_item = node.toJS(globalThis, allocator) catch |e| return e;
         array.putIndex(globalThis, i, js_item)?;
         txt = node.next;
         i += 1;
@@ -297,7 +297,7 @@ pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocat
 }
 
 pub fn txtReplyToJS(reply: *c_ares.struct_ares_txt_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): !jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const array = jsc.JSValue.createEmptyArray(globalThis, 1)?;
     const value = reply.txt[0..reply.length];
     array.putIndex(globalThis, 0, jsc.ZigString.fromUTF8(value).toJS(globalThis))?;
@@ -305,10 +305,10 @@ pub fn txtReplyToJS(reply: *c_ares.struct_ares_txt_reply, globalThis: *jsc.JSGlo
 }
 
 pub fn txtReplyToJSForAny(reply: *c_ares.struct_ares_txt_reply, parent_alloc: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = parent_alloc;
-    _ = lookup_name;
+    * = parent_alloc;
+    * = lookup_name;
     let count: usize = 0;
-    let txt: ?*c_ares.struct_ares_txt_reply = reply;
+    let txt: *c_ares.struct_ares_txt_reply? = reply;
     while (txt != null) {
         count += 1;
         txt = txt.?.next;
@@ -333,14 +333,14 @@ pub fn txtReplyToJSForAny(reply: *c_ares.struct_ares_txt_reply, parent_alloc: st
 
 // ── struct_ares_naptr_reply ────────────────────────────────────────────────
 pub fn naptrReplyToJSResponse(reply: *c_ares.struct_ares_naptr_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
-    let naptr: ?*c_ares.struct_ares_naptr_reply = reply;
+    let naptr: *c_ares.struct_ares_naptr_reply? = reply;
     while (naptr != null) {
         count += 1;
         naptr = naptr.?.next;
@@ -361,7 +361,7 @@ pub fn naptrReplyToJSResponse(reply: *c_ares.struct_ares_naptr_reply, parent_all
 }
 
 pub fn naptrReplyToJS(reply: *c_ares.struct_ares_naptr_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const obj = jsc.JSValue.createEmptyObject(globalThis, 6);
 
     obj.put(globalThis, jsc.ZigString.static("preference"), jsc.JSValue.jsNumber(reply.preference));
@@ -388,7 +388,7 @@ pub fn naptrReplyToJS(reply: *c_ares.struct_ares_naptr_reply, globalThis: *jsc.J
 
 // ── struct_ares_soa_reply ──────────────────────────────────────────────────
 pub fn soaReplyToJSResponse(reply: *c_ares.struct_ares_soa_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
@@ -398,7 +398,7 @@ pub fn soaReplyToJSResponse(reply: *c_ares.struct_ares_soa_reply, parent_allocat
 }
 
 pub fn soaReplyToJS(reply: *c_ares.struct_ares_soa_reply, globalThis: *jsc.JSGlobalObject, alloc: std.mem.Allocator): jsc.JSValue {
-    _ = alloc;
+    * = alloc;
     const obj = jsc.JSValue.createEmptyObject(globalThis, 7);
 
     obj.put(globalThis, jsc.ZigString.static("serial"), jsc.JSValue.jsNumber(reply.serial));
@@ -420,7 +420,7 @@ pub fn soaReplyToJS(reply: *c_ares.struct_ares_soa_reply, globalThis: *jsc.JSGlo
 
 // ── struct_any_reply ───────────────────────────────────────────────────────
 pub fn anyReplyToJSResponse(reply: *c_ares.struct_any_reply, parent_allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
-    _ = lookup_name;
+    * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
     defer arena_allocator.deinit();
@@ -433,7 +433,7 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
     const transformed = if (response.isString())
         (jsc.JSObject.create(.{
             .value = response,
-        }, globalThis) catch |err| return err).toJS()
+        }, globalThis) catch |e| return e).toJS()
     else blk: {
         bun.assert(response.isObject());
         break :blk response;
@@ -446,25 +446,25 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
         idx += 1;
     }
 
-    const upper_js = bun.String.ascii(&upper).toJS(globalThis) catch |err| return err;
+    const upper_js = bun.String.ascii(&upper).toJS(globalThis) catch |e| return e;
     transformed.put(globalThis, "type", upper_js);
-    array.putIndex(globalThis, i.*, transformed) catch |err| return err;
+    array.putIndex(globalThis, i.*, transformed) catch |e| return e;
     i.* += 1;
 }
 
 fn anyReplyAppendAll(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, array: jsc.JSValue, i: *u32, reply: auto, comptime lookup_name: []const u8): !void {
     const response: jsc.JSValue = if (comptime @hasDecl(@TypeOf(reply.*), "toJSForAny"))
-        (reply.toJSForAny(allocator, globalThis, lookup_name) catch |err| return err)
+        (reply.toJSForAny(allocator, globalThis, lookup_name) catch |e| return e)
     else
-        (reply.toJSResponse(allocator, globalThis, lookup_name) catch |err| return err);
+        (reply.toJSResponse(allocator, globalThis, lookup_name) catch |e| return e);
 
     if (response.isArray()) {
-        let iterator = response.arrayIterator(globalThis) catch |err| return err;
-        while (item := (iterator.next() catch |err| return err)) {
-            anyReplyAppend(globalThis, array, i, item, lookup_name) catch |err| return err;
+        let iterator = response.arrayIterator(globalThis) catch |e| return e;
+        while (item := (iterator.next() catch |e| return e)) {
+            anyReplyAppend(globalThis, array, i, item, lookup_name) catch |e| return e;
         }
     } else {
-        anyReplyAppend(globalThis, array, i, response, lookup_name) catch |err| return err;
+        anyReplyAppend(globalThis, array, i, response, lookup_name) catch |e| return e;
     }
 }
 
@@ -479,7 +479,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
             }
         }
         break :blk len;
-    }) catch |err| return err;
+    }) catch |e| return e;
 
     let i: u32 = 0;
 
@@ -487,7 +487,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
         if (bun.strings.hasSuffix(field.name, "_reply")) {
             if (rep := @field(reply, field.name)) {
                 const lookup_name = field.name[0 .. field.name.len - "_reply".len];
-                anyReplyAppendAll(globalThis, allocator, array, &i, rep, lookup_name) catch |err| return err;
+                anyReplyAppendAll(globalThis, allocator, array, &i, rep, lookup_name) catch |e| return e;
             }
         }
     }
@@ -499,12 +499,12 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
 export struct ErrorDeferred {
     errno: c_ares.Error;
     syscall: []const u8;
-    hostname: ?bun.String;
+    hostname: bun.String?;
     promise: jsc.JSPromise.Strong;
 
     pub const new = bun.TrivialNew(@This());
 
-    pub static fn init(errno: c_ares.Error, syscall: []const u8, hostname: ?bun.String, promise: jsc.JSPromise.Strong): *ErrorDeferred {
+    pub static fn init(errno: c_ares.Error, syscall: []const u8, hostname: bun.String?, promise: jsc.JSPromise.Strong): *ErrorDeferred {
         return ErrorDeferred.new(.{
             .errno = errno,
             .syscall = syscall,
@@ -513,7 +513,7 @@ export struct ErrorDeferred {
         });
     }
 
-    pub fn reject(*this, globalThis: *jsc.JSGlobalObject): !void {
+    pub fn reject(*_, globalThis: *jsc.JSGlobalObject): !void {
         const syscall_arg = this.syscall;
         const code_arg = this.errno.code()[4..];
         const msg = if (this.hostname != null) blk: {
@@ -532,7 +532,7 @@ export struct ErrorDeferred {
         };
 
         const instance = system_error.toErrorInstanceWithAsyncStack(globalThis, this.promise.get());
-        const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |err| return err;
+        const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |e| return e;
         instance.put(globalThis, "name", dns_name);
 
         defer this.deinit();
@@ -540,13 +540,13 @@ export struct ErrorDeferred {
         return this.promise.reject(globalThis, instance);
     }
 
-    pub fn rejectLater(*this, globalThis: *jsc.JSGlobalObject) {
+    pub fn rejectLater(*_, globalThis: *jsc.JSGlobalObject) {
         const Context = struct {
             deferred: *ErrorDeferred,
             globalThis: *jsc.JSGlobalObject,
             pub fn callback(context: *@This()) !void {
                 defer bun.default_allocator.destroy(context);
-                context.deferred.reject(context.globalThis) catch |err| return err;
+                context.deferred.reject(context.globalThis) catch |e| return e;
             }
         };
 
@@ -556,7 +556,7 @@ export struct ErrorDeferred {
         globalThis.bunVM().enqueueTask(jsc.ManagedTask.New(Context, Context.callback).init(context));
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         if (hostname := this.hostname) {
             hostname.deref();
         }
@@ -565,8 +565,8 @@ export struct ErrorDeferred {
     }
 }
 
-pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: ?[]const u8, promise: *jsc.JSPromise.Strong): *ErrorDeferred {
-    const host_string: ?bun.String = if (hostname != null)
+pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: []const u8?, promise: *jsc.JSPromise.Strong): *ErrorDeferred {
+    const host_string: bun.String? = if (hostname != null)
         bun.String.cloneUTF8(hostname.?)
     else
         null;
@@ -619,7 +619,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
     }
     const INET6_ADDRSTRLEN = if (comptime bun.Environment.isWindows) 65 else 46;
 
-    const addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch |err| return err;
+    const addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch |e| return e;
     defer addr_arg.deinit();
     const addr_str = addr_arg.slice();
     if (addr_str.len >= INET6_ADDRSTRLEN) {

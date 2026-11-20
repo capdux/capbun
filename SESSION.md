@@ -2978,3 +2978,5 @@ Options:
 - [2026-11-20 05:01:09 UTC] 验收并提交 `src/sql_jsc/` (34) + `src/uws_sys/` (20) 共 54 模块新版 `cpc` 语法升级（54/54 全 PASS，膨胀率 0.525x~1.134x）；接力派发 5 组（sys/options_types/sourcemap 等 16 目录共 66 文件）。
 
 - [2026-11-20 05:06:44 UTC] 验收并提交 `src/{http,unicode,bun_alloc,md,http_jsc,string}/` 64 模块新版 `cpc` 语法升级（64/64 全 PASS，膨胀率 0.754x~1.151x）；接力派发最终 6 组（最后 42 文件）。
+
+- [2026-11-20 05:11:20 UTC] 验收并提交 `src/runtime/` 41/42 模块新版 `cpc` 语法升级（膨胀率 0.049x~1.158x，全门禁 PASS）；[发送至 cp_agy] 工单 `task-bun-20261120-return-struct-rawzig-fallback`（复现 `/data/dev/cp/temp/repro_return_struct_rawzig_fallback.cp`）：泛型 `return struct` 内部静默透传未 lower 代码（阻断 `node_fs.cp`，原 `node_fs.zig` 已还原保护）。

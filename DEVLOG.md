@@ -1284,3 +1284,6 @@
 
 ### 2026-11-20 05:06:44 UTC - 64 模块批量语法升级经验
 - 修正可选指针/切片优先级 `(*T)?`/`([]T)?`、多序列 `for` 改索引循环、`static fn` 避让 `_: T` 与 `const self` 遮蔽，64/64 全 PASS。
+
+### 2026-11-20 05:11:20 UTC - src/runtime/ 41 模块批量语法升级经验
+- 统一修补可选指针/切片优先级、`static fn`/`static let` 与 `valkey_jsc` 非 Channel `.send(...)`；`node_fs.cp` 已清零 221 处 `cpc check` 报错，仅余 `return struct` 透传缺陷待上游修复。

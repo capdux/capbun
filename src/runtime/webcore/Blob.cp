@@ -8,7 +8,7 @@ export class Blob {
     reported_estimated_size: usize = 0;
     size: SizeType = 0;
     offset: SizeType = 0;
-    store: ?*BlobStore = null;
+    store: (*BlobStore)? = null;
     content_type: string = "";
     content_type_allocated: bool = false;
     content_type_was_set: bool = false;
@@ -29,23 +29,23 @@ export class Blob {
         return result;
     }
 
-    pub fn isBunFile(this: &Blob): bool {
+    pub fn isBunFile(_: &Blob): bool {
         let store = this.store orelse return false;
         return store.data == .file;
     }
 
-    pub fn isS3(this: &Blob): bool {
+    pub fn isS3(_: &Blob): bool {
         let store = this.store orelse return false;
         return store.data == .s3;
     }
 
-    pub fn hasContentTypeFromUser(this: &Blob): bool {
+    pub fn hasContentTypeFromUser(_: &Blob): bool {
         return this.content_type_was_set or (this.store != null and (this.store.?.data == .file or this.store.?.data == .s3));
     }
 
-    pub fn contentTypeOrMimeType(this: &Blob): ?[]const u8 {
+    pub fn contentTypeOrMimeType(_: &Blob): ([]const u8)? {
         if (this.content_type.len > 0) return this.content_type;
-        if (this.store) |store| {
+        if (store := this.store) {
             switch (store.data) {
                 .file => |file| return file.mime_type.value,
                 .s3 => |s3_data| return s3_data.mime_type.value,
@@ -55,26 +55,26 @@ export class Blob {
         return null;
     }
 
-    pub fn getFormDataEncoding(this: *Blob): ?*FormData.AsyncFormData {
+    pub fn getFormDataEncoding(*_: *Blob): (*FormData.AsyncFormData)? {
         let content_type_slice: ZigString.Slice = this.getContentType() orelse return null;
         defer content_type_slice.deinit();
         let encoding = FormData.Encoding.get(content_type_slice.slice()) orelse return null;
         return sys.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
     }
 
-    pub fn getContentType(this: *Blob): ?ZigString.Slice {
+    pub fn getContentType(*_: *Blob): ZigString.Slice? {
         if (this.content_type.len > 0) {
             return ZigString.Slice.fromUTF8NeverFree(this.content_type);
         }
         return null;
     }
 
-    pub fn getSizeForBindings(this: &Blob): usize {
+    pub fn getSizeForBindings(_: &Blob): usize {
         return @as(usize, @intCast(this.size));
     }
 
-    pub fn sharedView(this: &Blob): []const u8 {
-        if (this.store) |store| {
+    pub fn sharedView(_: &Blob): []const u8 {
+        if (store := this.store) {
             switch (store.data) {
                 .bytes => |b| return b.slice(),
                 else => return "",
@@ -83,18 +83,18 @@ export class Blob {
         return "";
     }
 
-    pub fn resolveSize(this: *Blob): void {
+    pub fn resolveSize(*_: *Blob) {
         // compute or refresh size
     }
 
-    pub fn detach(this: *Blob): void {
-        if (this.store) |store| {
+    pub fn detach(*_: *Blob) {
+        if (store := this.store) {
             store.deref();
             this.store = null;
         }
     }
 
-    pub fn release(*this): void {
+    pub fn release(*_) {
         this.detach();
         if (this.content_type_allocated and this.content_type.len > 0) {
             default_allocator.free(this.content_type);
@@ -104,13 +104,13 @@ export class Blob {
         this.name.deref();
     }
 
-    pub fn deinit(this: *Blob): void {
+    pub fn deinit(*_: *Blob) {
         this.release();
     }
 
-    pub fn dupe(this: &Blob): Blob {
-        if (this.store) |store| {
-            _ = store.ref();
+    pub fn dupe(*_: &Blob): Blob {
+        if (store := this.store) {
+            * = store.ref();
         }
         return Blob {
             .reported_estimated_size = this.reported_estimated_size,
@@ -129,9 +129,9 @@ export class Blob {
         };
     }
 
-    pub fn dupeWithContentType(this: &Blob, preserve_type: bool): Blob {
-        if (this.store) |store| {
-            _ = store.ref();
+    pub fn dupeWithContentType(*_: &Blob, preserve_type: bool): Blob {
+        if (store := this.store) {
+            * = store.ref();
         }
         return Blob {
             .reported_estimated_size = this.reported_estimated_size,
@@ -179,7 +179,7 @@ export class Blob {
         return Blob.initEmpty(globalThis);
     }
 
-    pub fn toJS(this: *Blob, globalThis: *JSGlobalObject): JSValue {
+    pub fn toJS(*_: *Blob, globalThis: *JSGlobalObject): JSValue {
         return jsc.Codegen.JSBlob.toJS(globalThis, this);
     }
 }
@@ -188,19 +188,19 @@ export class Internal {
     bytes: sys.ManagedArray(u8);
     was_string: bool = false;
 
-    pub fn slice(this: &Internal): []u8 {
+    pub fn slice(_: &Internal): []u8 {
         return this.bytes.items;
     }
 
-    pub fn sliceConst(this: &Internal): []const u8 {
+    pub fn sliceConst(_: &Internal): []const u8 {
         return this.bytes.items;
     }
 
-    pub fn toOwnedSlice(this: *Internal): []u8 {
+    pub fn toOwnedSlice(*_: *Internal): []u8 {
         return this.bytes.toOwnedSlice();
     }
 
-    pub fn clearAndFree(this: *Internal): void {
+    pub fn clearAndFree(*_: *Internal) {
         this.bytes.clearAndFree();
     }
 }
@@ -210,7 +210,7 @@ export union(enum) Any {
     InternalBlob: Internal,
     WTFStringImpl: *String.Impl,
 
-    pub fn slice(this: &Any): []const u8 {
+    pub fn slice(_: &Any): []const u8 {
         switch (this.*) {
             .Blob => |*b| b.sharedView(),
             .InternalBlob => |*b| b.sliceConst(),
@@ -218,7 +218,7 @@ export union(enum) Any {
         }
     }
 
-    pub fn detach(this: *Any): void {
+    pub fn detach(*_: *Any) {
         switch (this.*) {
             .Blob => |*b| b.detach(),
             .InternalBlob => |*b| b.clearAndFree(),
@@ -226,22 +226,22 @@ export union(enum) Any {
         }
     }
 
-    pub fn toArrayBufferTransfer(this: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
+    pub fn toArrayBufferTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
         let bytes = this.slice();
         return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
     }
 
-    pub fn toUint8ArrayTransfer(this: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
+    pub fn toUint8ArrayTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
         let bytes = this.slice();
         return ArrayBuffer.create(globalObject, bytes, .Uint8Array);
     }
 
-    pub fn toJSONShare(this: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
+    pub fn toJSONShare(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
         let bytes = this.slice();
         return JSValue.parseJSON(globalObject, bytes);
     }
 
-    pub fn toStringTransfer(this: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
+    pub fn toStringTransfer(*_: *Any, globalObject: *JSGlobalObject): JSError!JSValue {
         let bytes = this.slice();
         return String.fromBytes(bytes).toJS(globalObject);
     }
