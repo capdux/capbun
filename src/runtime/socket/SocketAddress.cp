@@ -112,10 +112,10 @@ pub struct SocketAddressOptions {
 
         const paddr = host.latin1();
         const addr = if (paddr[0] == '[' && paddr[paddr.len - 1] == ']') ({
-            const v6 = net.Ip6Address.parse(paddr[1 .. paddr.len - 1], port_) catch return .js_undefined;
+            const v6 = net.Ip6Address.parse(paddr[1 .. paddr.len - 1], port_) catch return jsc.JSValue.js_undefined;
             break SocketAddress{ _addr: .{ .sin6 = v6.sa } };
         }) else ({
-            const v4 = net.Ip4Address.parse(paddr, port_) catch return .js_undefined;
+            const v4 = net.Ip4Address.parse(paddr, port_) catch return jsc.JSValue.js_undefined;
             break SocketAddress{ _addr: .{ .sin = v4.sa } };
         });
 

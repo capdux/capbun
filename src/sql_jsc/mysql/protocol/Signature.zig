@@ -52,12 +52,12 @@ pub const QueryBindingIteratorMod = @import("../../shared/QueryBindingIterator.z
 pub const types = @import("../../../sql/mysql/MySQLTypes.zig");
 pub const Signature = @This();
 
-fields: []Param = empty_params[0..0],
+fields: []Param = &.{},
 name: []const u8 = "",
 query: []const u8 = "",
 
 pub fn empty() Signature {
-        return Signature{ .fields = empty_params[0..0], .name = "", .query = "" };
+        return Signature{ .fields = &.{}, .name = "", .query = "" };
 }
 
 pub fn deinit(self: *Signature) void {
@@ -122,6 +122,5 @@ const QueryBindingIterator = QueryBindingIteratorMod.QueryBindingIterator;
 const FieldType = types.FieldType;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const empty_params: [0]Param = &.{};
 const ParamList = std.array_list.Managed(Param);
 const ByteList = std.array_list.Managed(u8);

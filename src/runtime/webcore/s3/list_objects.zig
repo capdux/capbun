@@ -46,6 +46,7 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const default_allocator = @import("bun").default_allocator;
 const ptr = @import("bun").ptr;
 const strings = @import("bun").strings;
@@ -53,13 +54,6 @@ const String = @import("bun").String;
 const as = @import("bun").as;
 const BunString = @import("bun").BunString;
 const JSError = @import("bun").JSError;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSValue = @import("bun:jsc").JSValue;
-const ZigString = @import("bun:jsc").ZigString;
-const Managed = @import("std:array_list").Managed;
-const parseInt = @import("std:fmt").parseInt;
-const replace = @import("std:mem").replace;
-const replacementSize = @import("std:mem").replacementSize;
 pub const S3ListObjectsOptions = struct {
     continuation_token: ?[]const u8 = null,
     delimiter: ?[]const u8 = null,
@@ -280,7 +274,13 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
     }
 };
 
-const bun = @import("bun");
+const JSGlobalObject = bun.jsc.JSGlobalObject;
+const JSValue = bun.jsc.JSValue;
+const ZigString = bun.jsc.ZigString;
+const Managed = std.array_list.Managed;
+const parseInt = std.fmt.parseInt;
+const replace = std.mem.replace;
+const replacementSize = std.mem.replacementSize;
 
 pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
         var result = S3ListObjectsV2Result{ .contents = null, .common_prefixes = null, .continuation_token = null, .delimiter = null, .encoding_type = null, .is_truncated = null, .key_count = null, .max_keys = null, .name = null, .next_continuation_token = null, .prefix = null, .start_after = null };

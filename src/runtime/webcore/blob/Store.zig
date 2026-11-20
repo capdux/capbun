@@ -179,7 +179,8 @@ pub fn deinit(wrap: *@This()) void {
 };
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
-            var value = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            const value_fn = (if (@typeInfo(@TypeOf(JSPromise.Strong)) == .@"enum") @intFromEnum(JSPromise.Strong) else JSPromise.Strong.value);
+            var value = value_fn(promise);
             _ = &value;
             var proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
             _ = &proxy_url;
@@ -235,7 +236,8 @@ pub fn deinit(wrap: *@This()) void {
 };
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
-            var value = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            const value_fn = (if (@typeInfo(@TypeOf(JSPromise.Strong)) == .@"enum") @intFromEnum(JSPromise.Strong) else JSPromise.Strong.value);
+            var value = value_fn(promise);
             _ = &value;
             var proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
             _ = &proxy_url;

@@ -41,9 +41,6 @@ const Platform = switch (Environment.os) {
 };
 
 pub type ChangedFilePath = [:0]u8?;
-const empty_watch_events: [0]WatchEvent = [];
-const empty_names: [0]ChangedFilePath = [];
-const empty_hashes: [0]HashType = [];
 
 export @packed(u8) struct WatchEventOp {
     delete: bool = false,
@@ -92,7 +89,7 @@ export struct WatchEvent {
     name_len: u8 = 0,
 
     pub fn names(buf: []ChangedFilePath): []ChangedFilePath {
-        if (this.name_len == 0) return empty_names[0..0];
+        if (this.name_len == 0) return [];
         return buf[this.name_off..][0..this.name_len];
     }
 
@@ -150,7 +147,7 @@ pub type OnFileUpdateFn = *const fn (ctx: *!, events: []WatchEvent, changed_file
 pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
 @root struct Watcher {
-    watch_events: []WatchEvent = empty_watch_events[0..0],
+    watch_events: []WatchEvent = [],
     changed_filepaths: [max_count][:0]u8?,
     platform: Platform,
     watchlist: WatchList,
@@ -685,7 +682,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         this.mutex.lock();
         defer this.mutex.unlock();
         if (index := Watcher.indexOf(this, hash)) {
-            this.removeAtIndex(@truncate(index), hash, empty_hashes[0..0], .file);
+            this.removeAtIndex(@truncate(index), hash, [], .file);
         }
     }
 

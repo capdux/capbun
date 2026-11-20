@@ -73,7 +73,7 @@ extern fn BunString__createExternal(
     len: usize,
     isLatin1: bool,
     ptr: *!?,
-    callback: (*const ExternalFreeCallback)?,
+    callback: ExternalFreeCallback?,
 ): String;
 
 extern fn BunString__createStaticExternal(
@@ -421,7 +421,7 @@ export @c struct String {
         bytes: []const u8,
         isLatin1: bool,
         ctx: Ctx,
-        callback: (*const ExternalStringImplFreeFunction(Ctx))?,
+        callback: (ExternalStringImplFreeFunction(Ctx))?,
     ): String {
         comptime {
             if (@typeInfo(Ctx) != .pointer) @compileError("context must be a pointer");
@@ -815,10 +815,11 @@ export @c struct String {
 
     pub fn indexOfAsciiChar(chr: u8): usize? {
         bun.assert(chr < 128);
-        return switch (this.isUTF16()) {
-            true => std.mem.indexOfScalar(u16, this.utf16(), @intCast(chr)),
-            false => bun.strings.indexOfCharUsize(this.byteSlice(), chr),
-        };
+        if (this.isUTF16()) {
+            return std.mem.indexOfScalar(u16, this.utf16(), @intCast(chr));
+        } else {
+            return bun.strings.indexOfCharUsize(this.byteSlice(), chr);
+        }
     }
 
     pub fn visibleWidth(_: *const String, ambiguousAsWide: bool): usize {

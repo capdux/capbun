@@ -43,7 +43,7 @@ fn hasPtr(alloc: Allocator): bool {
         alloc.vtable == bun.allocators.c_allocator.vtable ||
         alloc.vtable == bun.allocators.z_allocator.vtable ||
         MimallocArena.isInstance(alloc) ||
-        bun.jsc.CachedBytecode.isInstance(alloc) ||
+        alloc.vtable == bun.jsc.CachedBytecode.VTable ||
         bun.bundle_v2.allocatorHasPointer(alloc) ||
         ((comptime bun.heap_breakdown.enabled) && bun.heap_breakdown.Zone.isInstance(alloc)) ||
         bun.String.isWTFAllocator(alloc);

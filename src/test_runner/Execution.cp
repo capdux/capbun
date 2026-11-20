@@ -107,9 +107,9 @@ pub struct ExecutionFlakyAttempt {
     elapsed_ns: u64,
 }
 
-pub union(enum) ExpectAssertions {
-    not_set: void,
-    at_least_one: void,
+pub enum ExpectAssertions {
+    not_set,
+    at_least_one,
     exact: u32,
 }
 

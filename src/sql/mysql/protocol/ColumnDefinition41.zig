@@ -91,7 +91,7 @@ column_length: u32 = 0,
 column_type: types.FieldType = .MYSQL_TYPE_NULL,
 flags: ColumnFlags = ColumnFlags{  },
 decimals: u8 = 0,
-name_or_index: ColumnIdentifier = ColumnIdentifier{ .name = Data{ .empty = .{} } },
+name_or_index: ColumnIdentifier = ColumnIdentifier{ .name = .empty },
 
 pub fn deinit(self: *ColumnDefinition41) void {
         _ = self.catalog.deinit();

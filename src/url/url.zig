@@ -863,7 +863,7 @@ pub fn init(allocator: std.mem.Allocator, query_string: []const u8) bun.OOM!?Que
                     const name_hash: u64 = bun.hash(result.rawName(query_string));
                     _ = list.appendAssumeCapacity(Param{ .name = name, .value = value, .name_hash = name_hash });
                 }
-                return QueryStringMap{ .list = list, .buffer = (&&.{}), .slice = query_string, .allocator = allocator };
+                return QueryStringMap{ .list = list, .buffer = &.{}, .slice = query_string, .allocator = allocator };
             }
             var buf = try std.array_list.Managed(u8).initCapacity(allocator, estimated_str_len);
             var __buf_moved = false; _ = &__buf_moved;

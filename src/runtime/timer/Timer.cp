@@ -86,7 +86,7 @@ export class All {
     last_id: i32 = 1;
     lock: bun.Mutex = .{};
     thread_id: std.Thread.Id = undefined;
-    timers: TimerHeap = .{ .context = {} };
+    timers: TimerHeap = .{ .context = std.mem.zeroes(void) };
     active_timer_count: i32 = 0;
     uv_timer: @if (Environment.isWindows) uv.Timer else void = if (Environment.isWindows) std.mem.zeroes(uv.Timer) else {};
     warned_negative_number: bool = false;
@@ -468,7 +468,7 @@ export class All {
         return TimeoutObject.init(global, id, .setTimeout, countdown_int, wrapped_promise, .js_undefined);
     }
 
-    pub fn setImmediate(
+    static fn setImmediate(
         global: *JSGlobalObject,
         callback: JSValue,
         arguments: JSValue,

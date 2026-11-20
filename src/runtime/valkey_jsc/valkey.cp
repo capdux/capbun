@@ -164,8 +164,8 @@ pub const ValkeyClient = struct {
     status: Status = Status.connecting,
 
     // Buffer management
-    write_buffer: bun.OffsetByteList = {},
-    read_buffer: bun.OffsetByteList = {},
+    write_buffer: bun.OffsetByteList = .{},
+    read_buffer: bun.OffsetByteList = .{},
 
     /// In-flight commands, after the data has been written to the network socket
     in_flight: Command.PromisePair.Queue,

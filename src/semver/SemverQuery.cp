@@ -128,15 +128,15 @@ struct Query {
                 return;
             }
 
-            let tail = try allocator.create(Query);
-            tail.* = Query{
+            let new_tail = try allocator.create(Query);
+            new_tail.* = Query{
                 .range = range,
             };
-            tail.range = range;
+            new_tail.range = range;
 
             let last_tail = self.tail orelse &self.head;
-            last_tail.next = tail;
-            self.tail = tail;
+            last_tail.next = new_tail;
+            self.tail = new_tail;
         }
     };
 

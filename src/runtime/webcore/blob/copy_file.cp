@@ -1,14 +1,21 @@
 // src/runtime/webcore/blob/copy_file.cp
 import bun from "bun";
 import { default_allocator, destroy, assert, handleOom, Environment, invalid_fd, Output, FD, Mode, O, sys, errnoToZigErr, JSTerminated, String as BunString, canUseCopyFileRangeSyscall } from "bun";
-import { Allocator } from "std:mem";
-import { EnumMap } from "std";
-import { posix } from "std";
-import { Managed } from "std:array_list";
-import { JSGlobalObject, JSPromise, SystemError, ConcurrentPromiseTask, WebCore, EventLoop, ConcurrentTask, ManagedTask } from "bun:jsc";
-import { libuv } from "bun:windows";
 
+const Allocator = std.mem.Allocator;
+const EnumMap = std.EnumMap;
+const posix = std.posix;
+const Managed = std.array_list.Managed;
 const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const ConcurrentPromiseTask = jsc.ConcurrentPromiseTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const ConcurrentTask = jsc.ConcurrentTask;
+const ManagedTask = jsc.ManagedTask;
+const libuv = bun.windows.libuv;
 const Blob = WebCore.Blob;
 const SizeType = Blob.SizeType;
 const Store = Blob.Store;

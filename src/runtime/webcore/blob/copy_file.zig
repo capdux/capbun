@@ -80,19 +80,6 @@ const String = @import("bun").String;
 const as = @import("bun").as;
 const BunString = @import("bun").BunString;
 const canUseCopyFileRangeSyscall = @import("bun").canUseCopyFileRangeSyscall;
-const Allocator = @import("std:mem").Allocator;
-const EnumMap = @import("std").EnumMap;
-const posix = @import("std").posix;
-const Managed = @import("std:array_list").Managed;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSPromise = @import("bun:jsc").JSPromise;
-const SystemError = @import("bun:jsc").SystemError;
-const ConcurrentPromiseTask = @import("bun:jsc").ConcurrentPromiseTask;
-const WebCore = @import("bun:jsc").WebCore;
-const EventLoop = @import("bun:jsc").EventLoop;
-const ConcurrentTask = @import("bun:jsc").ConcurrentTask;
-const ManagedTask = @import("bun:jsc").ManagedTask;
-const libuv = @import("bun:windows").libuv;
 pub const CopyFile = struct {
     destination_file_store: Store.File,
     source_file_store: Store.File,
@@ -968,7 +955,20 @@ pub fn deinit(self: *CopyFileWindows) void {
     pub const ReadWriteLoop = CopyFileWindowsReadWriteLoop;
 };
 
+const Allocator = std.mem.Allocator;
+const EnumMap = std.EnumMap;
+const posix = std.posix;
+const Managed = std.array_list.Managed;
 const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const ConcurrentPromiseTask = jsc.ConcurrentPromiseTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const ConcurrentTask = jsc.ConcurrentTask;
+const ManagedTask = jsc.ManagedTask;
+const libuv = bun.windows.libuv;
 const Blob = WebCore.Blob;
 const SizeType = Blob.SizeType;
 const Store = Blob.Store;

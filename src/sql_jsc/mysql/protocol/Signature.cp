@@ -9,18 +9,17 @@ const QueryBindingIterator = QueryBindingIteratorMod.QueryBindingIterator;
 const FieldType = types.FieldType;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const empty_params: [0]Param = [];
 const ParamList = std.array_list.Managed(Param);
 const ByteList = std.array_list.Managed(u8);
 
 @root struct Signature {
-    fields: []Param = empty_params[0..0],
+    fields: []Param = [],
     name: []const u8 = "",
     query: []const u8 = "",
 
     pub static fn empty(): Signature {
         return Signature{
-            fields: empty_params[0..0],
+            fields: [],
             name: "",
             query: "",
         };

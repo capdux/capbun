@@ -153,7 +153,7 @@ pub fn noAlloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_ad
 }
 
 pub fn hasPtr(alloc: Allocator) bool {
-        return (((((((((((alloc.vtable == arena_vtable) or bun.allocators.allocation_scope.isInstance(alloc)) or ((comptime bun.Environment.isLinux) and LinuxMemFdAllocator.isInstance(alloc))) or bun.MaxHeapAllocator.isInstance(alloc)) or (alloc.vtable == bun.allocators.c_allocator.vtable)) or (alloc.vtable == bun.allocators.z_allocator.vtable)) or MimallocArena.isInstance(alloc)) or bun.jsc.CachedBytecode.isInstance(alloc)) or bun.bundle_v2.allocatorHasPointer(alloc)) or ((comptime bun.heap_breakdown.enabled) and bun.heap_breakdown.Zone.isInstance(alloc))) or bun.String.isWTFAllocator(alloc));
+        return (((((((((((alloc.vtable == arena_vtable) or bun.allocators.allocation_scope.isInstance(alloc)) or ((comptime bun.Environment.isLinux) and LinuxMemFdAllocator.isInstance(alloc))) or bun.MaxHeapAllocator.isInstance(alloc)) or (alloc.vtable == bun.allocators.c_allocator.vtable)) or (alloc.vtable == bun.allocators.z_allocator.vtable)) or MimallocArena.isInstance(alloc)) or (alloc.vtable == bun.jsc.CachedBytecode.VTable)) or bun.bundle_v2.allocatorHasPointer(alloc)) or ((comptime bun.heap_breakdown.enabled) and bun.heap_breakdown.Zone.isInstance(alloc))) or bun.String.isWTFAllocator(alloc));
 }
 
 pub fn guaranteedMismatch(alloc1: Allocator, alloc2: Allocator) bool {

@@ -3863,7 +3863,8 @@ pub fn shellCmdFromJS(
     const last = string_iter.len -| 1;
     while (js_value := string_iter.next()?) {
         defer i += 1;
-        if (!builder.appendJSValueStr(js_value, false)?) {
+        const append_ok = builder.appendJSValueStr(js_value, false)?;
+        if (!append_ok) {
             return globalThis.throw("Shell script string contains invalid UTF-16", {});
         }
         // const str = js_value.getZigString(globalThis);
@@ -3947,7 +3948,8 @@ pub fn handleTemplateValue(
         }
 
         if (template_value.isString()) {
-            if (!builder.appendJSValueStr(template_value, true)?) {
+            const append_ok = builder.appendJSValueStr(template_value, true)?;
+            if (!append_ok) {
                 return globalThis.throw("Shell script string contains invalid UTF-16", {});
             }
             return;
@@ -3987,14 +3989,16 @@ pub fn handleTemplateValue(
         }
 
         if (template_value.isPrimitive()) {
-            if (!builder.appendJSValueStr(template_value, true)?) {
+            const append_ok = builder.appendJSValueStr(template_value, true)?;
+            if (!append_ok) {
                 return globalThis.throw("Shell script string contains invalid UTF-16", {});
             }
             return;
         }
 
         if (template_value.implementsToString(globalThis)?) {
-            if (!builder.appendJSValueStr(template_value, true)?) {
+            const append_ok = builder.appendJSValueStr(template_value, true)?;
+            if (!append_ok) {
                 return globalThis.throw("Shell script string contains invalid UTF-16", {});
             }
             return;

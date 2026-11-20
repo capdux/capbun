@@ -12,13 +12,13 @@ pub fn status(self: *Socket, buf: []u8) i32 {
 
 pub fn ext(self: *Socket, comptime T: type) *?*T {
             return (blk: {
-            break :blk @ptrCast(us_quic_socket_ext(self));
+            break :blk @ptrCast(@alignCast(us_quic_socket_ext(self)));
 
 });
     }
     const makeStream = us_quic_socket_make_stream;
-    const streamsAvail = us_quic_socket_streams_avail;
-    const close = us_quic_socket_close;
+    pub const streamsAvail = us_quic_socket_streams_avail;
+    pub const close = us_quic_socket_close;
 };
 
 

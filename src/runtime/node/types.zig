@@ -515,7 +515,11 @@ pub fn fromJSMaybeFileMaybeAsync(global: *jsc.JSGlobalObject, allocator: std.mem
                 _ = &str;
                 return .{ .string_or_buffer = str };
             }
-            const blob = ((value.@"as"(jsc.WebCore.Blob)) orelse { return .{ .ok = null }; });
+            const blob_opt = value.@"as"(jsc.WebCore.Blob);
+            if ((blob_opt == null)) {
+                return null;
+            }
+            const blob = blob_opt.?;
             if ((allow_file and blob.needsToReadFile())) {
                 return global.throwInvalidArguments("File blob cannot be used here", .{});
             }

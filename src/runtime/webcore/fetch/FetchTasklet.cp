@@ -20,10 +20,10 @@ import {
     http,
     jsc,
 } from "bun";
-import { BoringSSL } from "bun:boringssl";
-import { Value } from "std:atomic";
-import { Allocator } from "std:mem";
-import { fmt } from "std";
+const BoringSSL = bun.BoringSSL;
+const Value = std.atomic.Value;
+const Allocator = std.mem.Allocator;
+const fmt = std.fmt;
 import { Method } from "../../../http_types/Method";
 import { URL } from "../../../url/url";
 

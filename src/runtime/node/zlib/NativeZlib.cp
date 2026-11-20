@@ -95,20 +95,21 @@ pub struct Context {
     fn error_for_message(*_, default_msg: CStr): Error {
         let message = default_msg;
         if (msg := _.state.err_msg) message = msg;
+        const code_str = switch (_.e) {
+            .Ok => @as(CStr, "Z_OK"),
+            .StreamEnd => "Z_STREAM_END",
+            .NeedDict => "Z_NEED_DICT",
+            .ErrNo => "Z_ERRNO",
+            .StreamError => "Z_STREAM_ERROR",
+            .DataError => "Z_DATA_ERROR",
+            .MemError => "Z_MEM_ERROR",
+            .BufError => "Z_BUF_ERROR",
+            .VersionError => "Z_VERSION_ERROR",
+        };
         return Error{
             msg: message,
             e: @intFromEnum(_.e),
-            code: switch (_.e) {
-                .Ok => "Z_OK",
-                .StreamEnd => "Z_STREAM_END",
-                .NeedDict => "Z_NEED_DICT",
-                .ErrNo => "Z_ERRNO",
-                .StreamError => "Z_STREAM_ERROR",
-                .DataError => "Z_DATA_ERROR",
-                .MemError => "Z_MEM_ERROR",
-                .BufError => "Z_BUF_ERROR",
-                .VersionError => "Z_VERSION_ERROR",
-            },
+            code: unsafe { @constCast(code_str) },
         };
     }
 

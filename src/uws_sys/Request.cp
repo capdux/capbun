@@ -77,7 +77,7 @@ export @opaque class Request {
     }
 
     pub fn header(*_, name: string): string? {
-        bun.assert(bun.strings.isLower(name[0]));
+        bun.assert(std.ascii.isLower(name[0]));
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_header(this, name.ptr, name.len, &ptr);
         if (len == 0) return null;

@@ -37,10 +37,10 @@ pub enum StatementStatus {
     cached_structure: CachedStructure = .{},
     ref_count: RefCount = RefCount.init(),
     statement_id: u32 = 0,
-    params: []Param = &[],
+    params: []Param = [],
     params_received: u32 = 0,
 
-    columns: []ColumnDefinition41 = &[],
+    columns: []ColumnDefinition41 = [],
     columns_received: u32 = 0,
 
     signature: Signature,

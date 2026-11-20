@@ -180,9 +180,9 @@ pub type CString = [*:0]const u8;
         if (_.cached_hash != 0) return _.cached_hash;
         let hasher = std.hash.Wyhash.init(0);
         inline for (field of std.meta.fields(SSLConfig)) {
-            if (std.mem.eql(u8, field.name, "cached_hash")) continue;
+            if (comptime std.mem.eql(u8, field.name, "cached_hash")) continue;
             const value = @field(_, field.name);
-            if (std.mem.eql(u8, field.name, "key") || std.mem.eql(u8, field.name, "cert") || std.mem.eql(u8, field.name, "ca")) {
+            if (comptime std.mem.eql(u8, field.name, "key") || std.mem.eql(u8, field.name, "cert") || std.mem.eql(u8, field.name, "ca")) {
                 if (slice := value) {
                     for (s of slice) {
                         hasher.update(bun.asByteSlice(s));

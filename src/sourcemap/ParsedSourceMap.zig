@@ -141,7 +141,7 @@ ref_count: RefCount = .init(),
 input_line_count: usize = 0,
 mappings: Mapping.List = .{},
 internal: ?InternalSourceMap = null,
-external_source_names: []const []const u8 = (&&.{}),
+external_source_names: []const []const u8 = &.{},
 underlying_provider: SourceContentPtr = .none,
 is_standalone_module_graph: bool = false,
 

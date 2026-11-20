@@ -382,7 +382,7 @@ pub fn ExternalStringImplFreeFunction(comptime Ctx: type) type {
             return *const fn (Ctx, *anyopaque, u32) callconv(.c) void;
     }
 
-pub fn createExternal(comptime Ctx: type, bytes: []const u8, isLatin1: bool, ctx: Ctx, callback: ?*const ExternalStringImplFreeFunction(Ctx)) String {
+pub fn createExternal(comptime Ctx: type, bytes: []const u8, isLatin1: bool, ctx: Ctx, callback: ?ExternalStringImplFreeFunction(Ctx)) String {
             comptime {
             if ((@typeInfo(Ctx) != .pointer)) {
                 _ = @compileError("context must be a pointer");
@@ -738,11 +738,11 @@ else => 0,
 
 pub fn indexOfAsciiChar(self: String, chr: u8) ?usize {
             _ = bun.assert((chr < 128));
-            return (switch (self.isUTF16()) {
-true => std.mem.indexOfScalar(u16, self.utf16(), @intCast(chr)),
-false => bun.strings.indexOfCharUsize(self.byteSlice(), chr),
-else => unreachable,
-});
+            if (self.isUTF16()) {
+                return std.mem.indexOfScalar(u16, self.utf16(), @intCast(chr));
+            } else {
+                return bun.strings.indexOfCharUsize(self.byteSlice(), chr);
+            }
     }
 
 pub fn visibleWidth(self: *const String, ambiguousAsWide: bool) usize {
@@ -1046,7 +1046,7 @@ pub const StringImpl = extern union {
 const string_empty = String{ .tag = .Empty, .value = .{ .ZigString = .Empty } };
 const string_dead = String{ .tag = .Dead, .value = .{ .Dead = @as(void, undefined) } };
 
-extern "c" fn BunString__createExternal(bytes: [*]const u8, len: usize, isLatin1: bool, ptr: ?*anyopaque, callback: ?*const ExternalFreeCallback) callconv(.c) String;
+extern "c" fn BunString__createExternal(bytes: [*]const u8, len: usize, isLatin1: bool, ptr: ?*anyopaque, callback: ?ExternalFreeCallback) callconv(.c) String;
 
 extern "c" fn BunString__createStaticExternal(bytes: [*]const u8, len: usize, isLatin1: bool) callconv(.c) String;
 

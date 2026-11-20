@@ -22,16 +22,16 @@ pub fn sendHeaders(self: *Stream, headers: anytype, end_stream: bool) i32 {
 
 pub fn ext(self: *Stream, comptime T: type) *?*T {
             return (blk: {
-            break :blk @ptrCast(us_quic_stream_ext(self));
+            break :blk @ptrCast(@alignCast(us_quic_stream_ext(self)));
 
 });
     }
-    const socket = us_quic_stream_socket;
-    const shutdown = us_quic_stream_shutdown;
-    const close = us_quic_stream_close;
-    const reset = us_quic_stream_reset;
-    const headerCount = us_quic_stream_header_count;
-    const header = us_quic_stream_header;
+    pub const socket = us_quic_stream_socket;
+    pub const shutdown = us_quic_stream_shutdown;
+    pub const close = us_quic_stream_close;
+    pub const reset = us_quic_stream_reset;
+    pub const headerCount = us_quic_stream_header_count;
+    pub const header = us_quic_stream_header;
 };
 
 pub const Header = HeaderMod.Header;

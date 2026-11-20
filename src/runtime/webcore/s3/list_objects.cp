@@ -1,9 +1,12 @@
-const bun = @import("bun");
+import bun from "bun";
 import { default_allocator, ptr, strings, String as BunString, JSError } from "bun";
-import { JSGlobalObject, JSValue, ZigString } from "bun:jsc";
-import { Managed } from "std:array_list";
-import { parseInt } from "std:fmt";
-import { replace, replacementSize } from "std:mem";
+const JSGlobalObject = bun.jsc.JSGlobalObject;
+const JSValue = bun.jsc.JSValue;
+const ZigString = bun.jsc.ZigString;
+const Managed = std.array_list.Managed;
+const parseInt = std.fmt.parseInt;
+const replace = std.mem.replace;
+const replacementSize = std.mem.replacementSize;
 
 export struct S3ListObjectsOptions {
     continuation_token: string? = null;

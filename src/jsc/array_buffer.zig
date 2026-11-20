@@ -419,7 +419,7 @@ pub fn fromBytes(bytes: []u8, typed_array_type: jsc.JSValue.JSType) ArrayBuffer 
             return ArrayBuffer{ .len = @as(u32, @intCast(bytes.len)), .byte_len = @as(u32, @intCast(bytes.len)), .typed_array_type = typed_array_type, .ptr = bytes.ptr };
     }
 
-pub fn toJSUnchecked(self: *ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+pub fn toJSUnchecked(self: ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
             if ((self.byte_len == 0)) {
                 if ((self.typed_array_type == .ArrayBuffer)) {
                     return ArrayBuffer.create(ctx, "", .ArrayBuffer);
@@ -440,7 +440,7 @@ pub fn toJSUnchecked(self: *ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!j
 }));
     }
 
-pub fn toJS(self: *ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+pub fn toJS(self: ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
             if ((self.value != .zero)) {
                 return self.value;
             }

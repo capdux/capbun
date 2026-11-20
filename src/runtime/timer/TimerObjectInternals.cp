@@ -46,12 +46,12 @@ export class TimerObjectInternals {
             .setImmediate => {
                 const parent: *ImmediateObject = @fieldParentPtr("internals", _);
                 assert(parent.event_loop_timer.tag == .ImmediateObject);
-                return parent.getEventLoopTimer();
+                return &parent.event_loop_timer;
             },
             .setTimeout, .setInterval => {
                 const parent: *TimeoutObject = @fieldParentPtr("internals", _);
                 assert(parent.event_loop_timer.tag == .TimeoutObject);
-                return parent.getEventLoopTimer();
+                return &parent.event_loop_timer;
             },
         }
     }

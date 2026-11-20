@@ -3064,3 +3064,5 @@ Options:
 - **[2026-11-20 18:49] Wave 9 Batch B 验收提交（27 单错模块全绿）**：完成前 36 单错模块中的 27 项独立验收（27/27 PASS，ratio 0.847x~1.160x）并精准定位 7 个外部根因 + `src/interchange/yaml.cp` 自循环 stub；已派发全新子智能体 C 组并行攻坚剩余 34 单错 + 7 外部根因（共 41 模块）。
 
 - **[2026-11-20 18:56] Wave 9 Batch A 验收提交（全部 27 个多错模块全绿）**：完成 `color`/`cares_jsc`/`uws_sys/Response`/`MarkdownObject`/`css_parser`/`h3`/`dns`/`ByteStream`/`Sink`/`ConsoleObject`/`BunObject`/`braces`/`NativeBrotli`/`NativeZstd`/`Blob`/`ByteBlobLoader`/`JSObject`/`md/parser`/`filesystem_router`/`Body`/`ReadableStream`/`TextDecoder`/`streams`/`InternalSourceMap`/`pretty_format`/`snapshot`/`ThreadPool` 27 模块独立验收（27/27 PASS，ratio 0.104x~1.124x）并原子提交；静待专家 C 组（`8c1117a0`）完成后跑 Wave 10 `zig:check`。
+
+- **[2026-11-20 18:59] Wave 9 Batch C 验收提交（41 模块全绿）**：完成 7 个已定位外部根因（`Loop`/`css/error`/`resolve_path`/`quic/Stream`/`Timer`/`string`/`array_buffer`）与剩余 34 个单错模块独立验收（41/41 PASS，ratio 0.641x~1.134x）并原子提交。

@@ -260,7 +260,7 @@ export @extern @value class us_socket_stream_buffer_t {
     }
 
     pub fn toStreamBuffer(): bun.io.StreamBuffer {
-        let items: u8[] = if (this.list_ptr != null) this.list_ptr.?[0..this.list_len] else &[];
+        let items: u8[] = if (this.list_ptr != null) this.list_ptr.?[0..this.list_len] else [];
         let cap: usize = if (this.list_ptr != null) this.list_cap else 0;
         return bun.io.StreamBuffer{
             .list = .{

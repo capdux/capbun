@@ -11,9 +11,9 @@
         return us_quic_socket_status(_, buf.ptr, @intCast(buf.len));
     }
     const makeStream = us_quic_socket_make_stream;
-    const streamsAvail = us_quic_socket_streams_avail;
-    const close = us_quic_socket_close;
+    pub const streamsAvail = us_quic_socket_streams_avail;
+    pub const close = us_quic_socket_close;
     fn ext(*_, comptime T: type): *(*T)? {
-        return unsafe { @ptrCast(us_quic_socket_ext(_)) };
+        return unsafe { @ptrCast(@alignCast(us_quic_socket_ext(_))) };
     }
 }

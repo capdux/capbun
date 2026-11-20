@@ -236,7 +236,7 @@ pub fn wrote(self: *us_socket_stream_buffer_t, written: usize) void {
     }
 
 pub fn toStreamBuffer(self: us_socket_stream_buffer_t) bun.io.StreamBuffer {
-            var items: []u8 = (if ((self.list_ptr != null)) self.list_ptr.?[0..self.list_len] else (&&.{}));
+            var items: []u8 = (if ((self.list_ptr != null)) self.list_ptr.?[0..self.list_len] else &.{});
             _ = &items;
             var cap: usize = (if ((self.list_ptr != null)) self.list_cap else 0);
             _ = &cap;

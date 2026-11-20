@@ -1971,10 +1971,10 @@ else => {
                         return ParseError.Unsupported;
                     }
                     const atom_opt = try self.parse_atom();
-                    const arg2 = ((atom_opt) orelse (({
+                    const arg2 = ((atom_opt) orelse {
                     _ = try self.add_error("Expected a word, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
                     return ParseError.Expected;
-})));
+});
                     if ((!.DoubleBracketClose.exec(self))) {
                         _ = try self.add_error("Expected \"]]\" but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
                         return ParseError.Expected;
@@ -4056,7 +4056,8 @@ pub fn shellCmdFromJS(globalThis: *jsc.JSGlobalObject, string_args: JSValue, tem
             defer {
             i = (i + 1);
             }
-            if (try (!builder.appendJSValueStr(js_value, false))) {
+            const append_ok = try builder.appendJSValueStr(js_value, false);
+            if ((!append_ok)) {
                 return globalThis.throw("Shell script string contains invalid UTF-16", .{});
             }
             if ((i < last)) {
@@ -4126,7 +4127,8 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 return;
             }
             if (template_value.isString()) {
-                if (try (!builder.appendJSValueStr(template_value, true))) {
+                const append_ok = try builder.appendJSValueStr(template_value, true);
+                if ((!append_ok)) {
                     return globalThis.throw("Shell script string contains invalid UTF-16", .{});
                 }
                 return;
@@ -4165,13 +4167,15 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 }
             }
             if (template_value.isPrimitive()) {
-                if (try (!builder.appendJSValueStr(template_value, true))) {
+                const append_ok = try builder.appendJSValueStr(template_value, true);
+                if ((!append_ok)) {
                     return globalThis.throw("Shell script string contains invalid UTF-16", .{});
                 }
                 return;
             }
             if (try template_value.implementsToString(globalThis)) {
-                if (try (!builder.appendJSValueStr(template_value, true))) {
+                const append_ok = try builder.appendJSValueStr(template_value, true);
+                if ((!append_ok)) {
                     return globalThis.throw("Shell script string contains invalid UTF-16", .{});
                 }
                 return;

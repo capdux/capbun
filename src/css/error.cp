@@ -4,7 +4,7 @@ pub const Error = css.Error;
 const Location = css.Location;
 
 /// A printer error.
-pub const PrinterError = Err(PrinterErrorKind);
+pub const PrinterError = @This().Err(PrinterErrorKind);
 
 pub fn fmtPrinterError(): PrinterError {
     return {

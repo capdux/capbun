@@ -238,10 +238,6 @@ const webcore = @import("bun").webcore;
 const api = @import("bun").api;
 const http = @import("bun").http;
 const jsc = @import("bun").jsc;
-const BoringSSL = @import("bun:boringssl").BoringSSL;
-const Value = @import("std:atomic").Value;
-const Allocator = @import("std:mem").Allocator;
-const fmt = @import("std").fmt;
 const Method = @import("../../../http_types/Method").Method;
 const URL = @import("../../../url/url").URL;
 pub const FetchHTTPRequestBody = union(enum) {
@@ -1347,6 +1343,10 @@ pub fn callback(task: *FetchTasklet, async_http: *http.AsyncHTTP, result: http.H
     };
 };
 
+const BoringSSL = bun.BoringSSL;
+const Value = std.atomic.Value;
+const Allocator = std.mem.Allocator;
+const fmt = std.fmt;
 const BunString = String;
 const AtomicValue = Value;
 const ZigURL = URL;

@@ -133,14 +133,14 @@ pub fn andRange(self: *@This(), allocator: Allocator, range: Range) !void {
                 self.head.range = range;
                 return;
             }
-            var tail = try allocator.create(Query);
-            _ = &tail;
-            tail.* = Query{ .range = range };
-            (tail).?.range = range;
+            var new_tail = try allocator.create(Query);
+            _ = &new_tail;
+            new_tail.* = Query{ .range = range };
+            new_tail.range = range;
             var last_tail = ((self.tail) orelse ((&self.head)));
             _ = &last_tail;
-            last_tail.next = tail;
-            self.tail = tail;
+            last_tail.next = new_tail;
+            self.tail = new_tail;
     }
     const Formatter = struct {
         list: *const List,

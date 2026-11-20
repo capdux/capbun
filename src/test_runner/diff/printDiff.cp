@@ -36,9 +36,10 @@ fn removeTrailingNewline(text: []const u8): []const u8 {
 
 pub fn printDiffMain(allocator: std.mem.Allocator, not: bool, received_slice: []const u8, expected_slice: []const u8, writer: anytype, config: DiffConfig): std.Io.Writer.Error!void {
     if (not) {
-        switch (config.enable_ansi_colors) {
-            true => try writer.print("Expected: not " ++ colors.red ++ "{s}" ++ colors.reset, [expected_slice]),
-            false => try writer.print("Expected: not {s}", [expected_slice]),
+        if (config.enable_ansi_colors) {
+            try writer.print("Expected: not " ++ colors.red ++ "{s}" ++ colors.reset, [expected_slice]);
+        } else {
+            try writer.print("Expected: not {s}", [expected_slice]);
         }
         return;
     }

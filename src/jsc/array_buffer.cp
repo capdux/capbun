@@ -376,7 +376,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         return ArrayBuffer{ .len = @as(u32, @intCast(bytes.len)), .byte_len = @as(u32, @intCast(bytes.len)), .typed_array_type = typed_array_type, .ptr = bytes.ptr };
     }
 
-    pub fn toJSUnchecked(*_, ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    pub fn toJSUnchecked(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (_.byte_len == 0) {
             if (_.typed_array_type == .ArrayBuffer) {
                 return create(ctx, "", .ArrayBuffer);
@@ -407,7 +407,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         );
     }
 
-    pub fn toJS(*_, ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    pub fn toJS(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (_.value != .zero) {
             return _.value;
         }

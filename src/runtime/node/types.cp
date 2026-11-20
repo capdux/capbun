@@ -58,7 +58,9 @@ pub const BlobOrStringOrBuffer = union(enum) {
             return .{ string_or_buffer: str };
         }
 
-        const blob = value.@"as"(jsc.WebCore.Blob) ?? return null;
+        const blob_opt = value.@"as"(jsc.WebCore.Blob);
+        if (blob_opt == null) return null;
+        const blob = blob_opt.?;
         if (allow_file && blob.needsToReadFile()) {
             return global.throwInvalidArguments("File blob cannot be used here", .{});
         }

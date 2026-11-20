@@ -50,7 +50,7 @@ export @packed struct ColumnFlags {
     flags: ColumnFlags = ColumnFlags{},
     decimals: u8 = 0,
     name_or_index: ColumnIdentifier = ColumnIdentifier{
-        name: Data{ empty: {} },
+        name: .empty,
     },
 
     pub fn deinit(*_)  {

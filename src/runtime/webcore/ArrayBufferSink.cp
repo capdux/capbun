@@ -123,7 +123,7 @@ const Signal = webcore.streams.Signal;
         if (*next := _.next) {
             return next.writeUTF16(data);
         }
-        const u16_slice = mem.bytesAsSlice(u16, data.slice());
+        const u16_slice = unsafe { @as([*]const u16, data.slice().ptr)[0..mem.bytesAsSlice(u16, data.slice()).len] };
         const len = _.bytes.writeUTF16(_.allocator, u16_slice) catch {
             return .{ .err = Syscall.Error.oom };
         };

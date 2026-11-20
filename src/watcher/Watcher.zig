@@ -121,7 +121,7 @@ pub const WatchEvent = struct {
 
 pub fn names(self: WatchEvent, buf: []ChangedFilePath) []ChangedFilePath {
             if ((self.name_len == 0)) {
-                return empty_names[0..0];
+                return &.{};
             }
             return buf[self.name_off..][0..self.name_len];
     }
@@ -153,7 +153,7 @@ pub const WatchItem = struct {
 
 pub const Watcher = @This();
 
-watch_events: []WatchEvent = empty_watch_events[0..0],
+watch_events: []WatchEvent = &.{},
 changed_filepaths: [max_count]?[:0]u8,
 platform: Platform,
 watchlist: WatchList,
@@ -596,7 +596,7 @@ pub fn remove(self: *Watcher, hash: HashType) void {
         }
         if (Watcher.indexOf(self, hash)) |index| {
             _ = &index;
-            _ = self.removeAtIndex(@truncate(index), hash, empty_hashes[0..0], .file);
+            _ = self.removeAtIndex(@truncate(index), hash, &.{}, .file);
         }
 }
 
@@ -656,9 +656,6 @@ const Platform = (switch (Environment.os) {
 .windows => WindowsWatcher,
 .wasm => @compileError("Unsupported platform"),
 });
-const empty_watch_events: [0]WatchEvent = &.{};
-const empty_names: [0]ChangedFilePath = &.{};
-const empty_hashes: [0]HashType = &.{};
 const EventListIndexType = (if (Environment.isLinux) Platform.EventListIndex else u0);
 
 pub fn InitWrapped(comptime T: type) type {

@@ -30,14 +30,14 @@ pub const Socket = SocketMod.Socket;
         return us_quic_stream_send_headers(_, headers.ptr, @intCast(headers.len), @intFromBool(end_stream));
     }
 
-    const socket = us_quic_stream_socket;
-    const shutdown = us_quic_stream_shutdown;
-    const close = us_quic_stream_close;
-    const reset = us_quic_stream_reset;
-    const headerCount = us_quic_stream_header_count;
-    const header = us_quic_stream_header;
+    pub const socket = us_quic_stream_socket;
+    pub const shutdown = us_quic_stream_shutdown;
+    pub const close = us_quic_stream_close;
+    pub const reset = us_quic_stream_reset;
+    pub const headerCount = us_quic_stream_header_count;
+    pub const header = us_quic_stream_header;
 
     fn ext(*_, comptime T: type): *(*T)? {
-        return unsafe { @ptrCast(us_quic_stream_ext(_)) };
+        return unsafe { @ptrCast(@alignCast(us_quic_stream_ext(_))) };
     }
 }

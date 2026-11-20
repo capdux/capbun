@@ -54,8 +54,8 @@ pub const Error = StatementError;
 
     cached_structure: PostgresCachedStructure = .{},
     ref_count: RefCount = RefCount.init(),
-    fields: []protocol.FieldDescription = &[],
-    parameters: []const int4 = &[],
+    fields: []protocol.FieldDescription = [],
+    parameters: []const int4 = [],
     signature: Signature,
     status: Status = Status.pending,
     error_response: Error? = null,

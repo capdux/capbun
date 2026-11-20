@@ -1159,10 +1159,11 @@ pub fn joinAbsStringZ(_cwd: []const u8, parts: anytype, comptime platform: Platf
 }
 
 // pub threadlocal let join_buf: [4096]u8 = undefined; (declared at module level)
-pub fn join(_parts: anytype, comptime platform: Platform) []const u8 {
+pub fn joinImpl(_parts: anytype, comptime platform: Platform): []const u8 {
     return joinStringBuf(&join_buf, _parts, platform);
 }
-pub fn joinZ(_parts: anytype, comptime platform: Platform) [:0]const u8 {
+pub const join = joinImpl;
+pub fn joinZ(_parts: anytype, comptime platform: Platform): [:0]const u8 {
     return joinZBuf(&join_buf, _parts, platform);
 }
 

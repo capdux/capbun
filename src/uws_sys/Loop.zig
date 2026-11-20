@@ -106,7 +106,7 @@ pub fn updateDate(self: *PosixLoop) void {
             _ = uws_loop_date_header_timer_update(@as(*Loop, @ptrCast(@alignCast(self))));
     }
 
-pub fn iterationNumber(self: *const PosixLoop) u64 {
+pub fn iterationNumber(self: PosixLoop) u64 {
             return self.internal_loop_data.iteration_nr;
     }
 
@@ -130,7 +130,7 @@ pub fn unref(self: *PosixLoop) void {
             }
     }
 
-pub fn isActive(self: *const PosixLoop) bool {
+pub fn isActive(self: PosixLoop) bool {
             return (self.active > 0);
     }
 
@@ -215,7 +215,7 @@ pub fn run(self: *PosixLoop) void {
             _ = us_loop_run(@as(*Loop, @ptrCast(@alignCast(self))));
     }
 
-pub fn shouldEnableDateHeaderTimer(self: *const PosixLoop) bool {
+pub fn shouldEnableDateHeaderTimer(self: PosixLoop) bool {
             return self.internal_loop_data.shouldEnableDateHeaderTimer();
     }
 
@@ -339,7 +339,7 @@ pub fn deinit(self: *WindowsLoop) void {
 pub const LoopVoidCbFn = *const fn (*Loop) callconv(.c) void;
 pub const OptLoopVoidCb = ?LoopVoidCbFn;
 const OpaquePtr = *anyopaque;
-pub const Loop = *PosixLoop;
+pub const Loop = PosixLoop;
 pub const PosixEventType = (switch (bun.Environment.os) {
 .linux => std.os.linux.epoll_event,
 .mac => std.posix.system.kevent64_s,

@@ -13,10 +13,10 @@ pub type LoopCbFn = @c fn (*Loop?);
 pub type OptLoopCb = LoopCbFn?;
 
 export @extern class InternalLoopData {
-    sweep_timer: *Timer? = null,
+    sweep_timer: (*Timer)? = null,
     sweep_timer_count: i32 = 0,
-    wakeup_async: *us_internal_async? = null,
-    head: *SocketGroup? = null,
+    wakeup_async: (*us_internal_async)? = null,
+    head: (*SocketGroup)? = null,
     quic_head: *!? = null,
     quic_next_tick_us: i64 = 0,
     quic_timer: *Timer? = null,

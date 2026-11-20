@@ -157,7 +157,8 @@ pub struct StoreS3 {
         };
 
         let promise = JSPromise.Strong.init(globalThis);
-        let value = promise.value();
+        const value_fn = JSPromise.Strong.value;
+        let value = value_fn(promise);
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
         let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);
@@ -209,7 +210,8 @@ pub struct StoreS3 {
         };
 
         let promise = JSPromise.Strong.init(globalThis);
-        let value = promise.value();
+        const value_fn = JSPromise.Strong.value;
+        let value = value_fn(promise);
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
         let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);

@@ -217,6 +217,7 @@ pub const Platform = enum {
         }
     }
 };
+pub const join = joinImpl;
 const JoinScratch = struct {
     sfa: std.heap.StackFallbackAllocator(bun.MAX_PATH_BYTES*2),
     alloc: std.mem.Allocator,
@@ -785,7 +786,7 @@ const separator = ((lastIndexOfSeparatorWindows(str)) orelse { return ""; });
 }
 
 pub fn dirnameW(str: []const u16) []const u16 {
-        const separator = ((lastIndexOfSeparatorWindowsT(u16, str)) orelse (({
+        const separator = ((lastIndexOfSeparatorWindowsT(u16, str)) orelse {
         if ((str.len < 2)) {
             return (&.{});
         }
@@ -796,7 +797,7 @@ pub fn dirnameW(str: []const u16) []const u16 {
             return (&.{});
         }
         return str[0..2];
-})));
+});
         return str[0..separator];
 }
 
@@ -1273,6 +1274,10 @@ pub fn joinAbsString(_cwd: []const u8, parts: anytype, comptime platform: Platfo
 
 pub fn joinAbsStringZ(_cwd: []const u8, parts: anytype, comptime platform: Platform) [:0]const u8 {
         return joinAbsStringBufZ(_cwd, (&parser_join_input_buffer), parts, platform);
+}
+
+pub fn joinImpl(_parts: anytype, comptime platform: Platform) []const u8 {
+        return joinStringBuf((&join_buf), _parts, platform);
 }
 
 pub fn joinZ(_parts: anytype, comptime platform: Platform) [:0]const u8 {

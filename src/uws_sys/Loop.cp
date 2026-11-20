@@ -63,7 +63,7 @@ pub const PosixEventType = switch (bun.Environment.os) {
     .wasm => @compileError("Unsupported OS"),
 };
 
-export @extern class PosixLoop {
+export @extern @value class PosixLoop {
     @align(16) internal_loop_data: InternalLoopData,
     num_polls: i32 = 0,
     num_ready_polls: i32 = 0,

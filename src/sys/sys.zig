@@ -1220,7 +1220,7 @@ else => mkdir(file_path, flags),
             const rc = c.CreateDirectoryW(file_path, null);
             if (Maybe(void).errnoSys(rc, .mkdir)) |e| {
                 _ = &e;
-                _ = log("CreateDirectoryW({f}) = {s}", .{ bun.fmt.fmtOSPath(file_path, .{}), (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)() });
+                _ = log("CreateDirectoryW({f}) = {s}", .{ bun.fmt.fmtOSPath(file_path, .{}), e.err.name() });
                 return e;
             }
             _ = log("CreateDirectoryW({f}) = 0", .{ bun.fmt.fmtOSPath(file_path, .{}) });
@@ -1691,7 +1691,7 @@ pub fn write(fd: bun.FD, bytes: []const u8) Maybe(usize) {
                 _ = &e;
                 return e;
             }
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) };
+            return .{ .result = @intCast(rc) };
         }
 },
 .linux, .freebsd => {
@@ -1705,7 +1705,7 @@ while (true) {
                 }
                 return e;
             }
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) };
+            return .{ .result = @intCast(rc) };
         }
 },
 .windows => {
@@ -1934,7 +1934,7 @@ pub fn read(fd: bun.FD, buf: []u8) Maybe(usize) {
             const rc = darwin_nocancel.@"read$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len);
             if (Maybe(usize).errnoSysFd(rc, .read, fd)) |e| {
                 _ = &e;
-                _ = log("read({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)(), debug_timer });
+                _ = log("read({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, e.err.name(), debug_timer });
                 return e;
             }
             _ = log("read({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
@@ -1962,7 +1962,7 @@ while (true) {
         if ((rc == windows.FALSE)) {
             const ret: Maybe(usize) = .{ .err = ErrorMod{ .errno = @intFromEnum(bun.windows.getLastErrno()), .syscall = .read, .fd = fd } };
             if (comptime Environment.isDebug) {
-                _ = log("ReadFile({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, (if (@typeInfo(@TypeOf(ret.err)) == .@"enum" or @typeInfo(@TypeOf(ret.err)) == .@"union") @tagName(ret.err) else ret.err.name)(), debug_timer });
+                _ = log("ReadFile({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, ret.err.name(), debug_timer });
             }
             return ret;
         }
@@ -2069,7 +2069,7 @@ pub fn recv(fd: bun.FD, buf: []u8, flag: u32) Maybe(usize) {
             const rc = darwin_nocancel.@"recvfrom$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
             if (Maybe(usize).errnoSysFd(rc, .recv, fd)) |e| {
                 _ = &e;
-                _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)(), debug_timer });
+                _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
                 return e;
             }
             _ = log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
@@ -2082,7 +2082,7 @@ pub fn recv(fd: bun.FD, buf: []u8, flag: u32) Maybe(usize) {
                     if ((e.getErrno() == .INTR)) {
                         continue;
                     }
-                    _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)(), debug_timer });
+                    _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
                     return e;
                 }
                 _ = log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
@@ -2117,7 +2117,7 @@ pub fn send(fd: bun.FD, buf: []const u8, flag: u32) Maybe(usize) {
             const rc = darwin_nocancel.@"sendto$NOCANCEL"(fd.cast(), buf.ptr, buf.len, flag, null, 0);
             if (Maybe(usize).errnoSysFd(rc, .send, fd)) |e| {
                 _ = &e;
-                _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)(), debug_timer });
+                _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
                 return e;
             }
             _ = syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
@@ -2131,7 +2131,7 @@ pub fn send(fd: bun.FD, buf: []const u8, flag: u32) Maybe(usize) {
                     if ((e.getErrno() == .INTR)) {
                         continue;
                     }
-                    _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)(), debug_timer });
+                    _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
                     return e;
                 }
                 _ = syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
@@ -2858,7 +2858,7 @@ pub fn setsockopt(fd: bun.FD, level: c_int, optname: u32, value: i32) Maybe(i32)
                 if ((e.getErrno() == .INTR)) {
                     continue;
                 }
-                _ = log("setsockopt() = {d} {s}", .{ e.err.errno, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)() });
+                _ = log("setsockopt() = {d} {s}", .{ e.err.errno, e.err.name() });
                 return e;
             }
             _ = log("setsockopt({d}, {d}, {d}) = {d}", .{ fd.cast(), level, optname, rc });
@@ -2905,7 +2905,7 @@ pub fn socketpairImpl(domain: socketpair_t, socktype: socketpair_t, protocol: so
                     if ((e.getErrno() == .INTR)) {
                         continue;
                     }
-                    _ = log("socketpair() = {d} {s}", .{ e.err.errno, (if (@typeInfo(@TypeOf(e.err)) == .@"enum" or @typeInfo(@TypeOf(e.err)) == .@"union") @tagName(e.err) else e.err.name)() });
+                    _ = log("socketpair() = {d} {s}", .{ e.err.errno, e.err.name() });
                     return e;
                 }
                 break;
@@ -2918,7 +2918,7 @@ pub fn socketpairImpl(domain: socketpair_t, socktype: socketpair_t, protocol: so
                     if ((err2.getErrno() == .INTR)) {
                         continue;
                     }
-                    _ = log("socketpair() = {d} {s}", .{ err2.err.errno, (if (@typeInfo(@TypeOf(err2.err)) == .@"enum" or @typeInfo(@TypeOf(err2.err)) == .@"union") @tagName(err2.err) else err2.err.name)() });
+                    _ = log("socketpair() = {d} {s}", .{ err2.err.errno, err2.err.name() });
                     return err2;
                 }
                 break;
@@ -2972,7 +2972,7 @@ break :e e;
                 inline for (0..2) |i| {
                     _ = bun.FD.fromNative(fds_i[@as(usize, @intCast(i))]).close();
                 }
-                _ = log("socketpair() = {d} {s}", .{ errr.errno, (if (@typeInfo(@TypeOf(errr)) == .@"enum" or @typeInfo(@TypeOf(errr)) == .@"union") @tagName(errr) else errr.name)() });
+                _ = log("socketpair() = {d} {s}", .{ errr.errno, errr.name() });
                 return .{ .err = errr };
             }
         }
@@ -3658,7 +3658,7 @@ pub fn getFileSize(fd: bun.FD) Maybe(usize) {
             _ = &size;
             if ((windows.kernel32.GetFileSizeEx(fd.cast(), (&size)) == windows.FALSE)) {
                 const e = ErrorMod.fromCode(windows.getLastErrno(), .fstat);
-                _ = log("GetFileSizeEx({f}) = {s}", .{ fd, (if (@typeInfo(@TypeOf(e)) == .@"enum" or @typeInfo(@TypeOf(e)) == .@"union") @tagName(e) else e.name)() });
+                _ = log("GetFileSizeEx({f}) = {s}", .{ fd, e.name() });
                 return .{ .err = e };
             }
             _ = log("GetFileSizeEx({f}) = {d}", .{ fd, size });

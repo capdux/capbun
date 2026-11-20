@@ -200,12 +200,12 @@ inline else => |is_8_bit| blk: {
         var __paddr_moved = false; _ = &__paddr_moved;
         defer if (!__paddr_moved) { const __T = @TypeOf(paddr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = paddr.release() catch {}; } else { paddr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = paddr; _drop_val.release(); } };
         const addr = (if (((paddr[0] == 91) and (paddr[@as(usize, @intCast((paddr.len - 1)))] == 93))) blk: {
-        const v6 = (blk_catch_1: { break :blk_catch_1 ((net.Ip6Address.parse(paddr[1..(paddr.len - 1)], port_)) catch |__ce_1| { _ = &__ce_1; return error.js_undefined; }); });
+        const v6 = (blk_catch_1: { break :blk_catch_1 ((net.Ip6Address.parse(paddr[1..(paddr.len - 1)], port_)) catch |__ce_1| { _ = &__ce_1; return jsc.JSValue.js_undefined; }); });
         var __v6_moved = false; _ = &__v6_moved;
         defer if (!__v6_moved) { const __T = @TypeOf(v6); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = v6.release() catch {}; } else { v6.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = v6; _drop_val.release(); } };
         break :blk SocketAddress{ ._addr = .{ .sin6 = v6.sa } };
 } else blk: {
-        const v4 = (blk_catch_2: { break :blk_catch_2 ((net.Ip4Address.parse(paddr, port_)) catch |__ce_2| { _ = &__ce_2; return error.js_undefined; }); });
+        const v4 = (blk_catch_2: { break :blk_catch_2 ((net.Ip4Address.parse(paddr, port_)) catch |__ce_2| { _ = &__ce_2; return jsc.JSValue.js_undefined; }); });
         var __v4_moved = false; _ = &__v4_moved;
         defer if (!__v4_moved) { const __T = @TypeOf(v4); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = v4.release() catch {}; } else { v4.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = v4; _drop_val.release(); } };
         break :blk SocketAddress{ ._addr = .{ .sin = v4.sa } };

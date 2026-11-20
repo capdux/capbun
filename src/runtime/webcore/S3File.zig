@@ -140,7 +140,7 @@ _ = try self.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, self.
 pub fn exists(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
-            const promise = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
             const path = s3_store.path();
@@ -159,7 +159,7 @@ pub fn exists(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValu
 pub fn stat(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
-            const promise = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
             const path = s3_store.path();
@@ -178,7 +178,7 @@ pub fn stat(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue 
 pub fn size(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
-            const promise = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
             const path = s3_store.path();
@@ -347,9 +347,9 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
         }
-        const data = ((args.nextEat()) orelse (({
+        const data = ((args.nextEat()) orelse {
         return globalThis.ERR(.MISSING_ARGS, "Expected a Blob-y thing to upload", .{}).throw();
-})));
+});
         switch (path_or_blob) {
 .path => |path| {
 const options = args.nextEat();
@@ -703,9 +703,9 @@ pub fn constructInternal(globalObject: *JSGlobalObject, callframe: *CallFrame) J
         defer {
         _ = args.deinit();
         }
-        const path = ((try jsc.Node.PathLike.fromJS(globalObject, (&args))) orelse (({
+        const path = ((try jsc.Node.PathLike.fromJS(globalObject, (&args))) orelse {
         return globalObject.throwInvalidArguments("Expected file path string", .{});
-})));
+});
         return constructS3FileInternal(globalObject, path, args.nextEat());
 }
 

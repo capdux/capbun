@@ -242,13 +242,13 @@ pub fn contentHash(self: *SSLConfig) u64 {
         var __hasher_moved = false; _ = &__hasher_moved;
         defer if (!__hasher_moved) { const __T = @TypeOf(hasher); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hasher.release() catch {}; } else { hasher.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hasher; _drop_val.release(); } };
         inline for (std.meta.fields(SSLConfig)) |field| {
-            if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cached_hash")) {
+            if (comptime std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cached_hash")) {
                 continue;
             }
             const value = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
             var __value_moved = false; _ = &__value_moved;
             defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
-            if (((std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "key") or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cert")) or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "ca"))) {
+            if (comptime ((std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "key") or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cert")) or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "ca"))) {
                 if (value) |slice| {
                     _ = &slice;
                     for (cp_iter_slice(slice)) |s| {

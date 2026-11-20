@@ -764,7 +764,7 @@ export @value class QueryStringMap {
 
             return QueryStringMap{
                 .list = list,
-                .buffer = &[],
+                .buffer = [],
                 .slice = query_string,
                 .allocator = allocator,
             };

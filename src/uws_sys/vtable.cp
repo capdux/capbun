@@ -3,10 +3,10 @@
 
 import bun from "bun";
 import { ConnectingSocket } from "./ConnectingSocket.cp";
-import { SocketGroup } from "./SocketGroup.cp";
+import SocketGroupMod from "./SocketGroup.zig";
 import { us_socket_t } from "./us_socket_t.cp";
 
-export const VTable = SocketGroup.VTable;
+export const VTable = SocketGroupMod.VTable;
 
 pub fn Trampolines(comptime H: type): type {
     const has_ext = @hasDecl(H, "Ext");

@@ -148,7 +148,7 @@ pub fn method(self: *Request) []const u8 {
     }
 
 pub fn header(self: *Request, name: []const u8) ?[]const u8 {
-            _ = bun.assert(bun.strings.isLower(name[0]));
+            _ = bun.assert(std.ascii.isLower(name[0]));
             var ptr: [*]u8 = undefined;
             _ = &ptr;
             var len = uws_req_get_header(self, name.ptr, name.len, (&ptr));

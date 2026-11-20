@@ -1892,7 +1892,7 @@ pub fn write(fd: bun.FD, bytes: []const u8): Maybe(usize) {
                 return e;
             }
 
-            return { result: i32(rc) };
+            return { result: @intCast(rc) };
         },
         .linux, .freebsd => {
             while (true) {
@@ -1904,7 +1904,7 @@ pub fn write(fd: bun.FD, bytes: []const u8): Maybe(usize) {
                     return e;
                 }
 
-                return { result: i32(rc) };
+                return { result: @intCast(rc) };
             }
         },
         .windows => {

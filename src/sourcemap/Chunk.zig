@@ -247,7 +247,7 @@ pub fn NewBuilder(comptime SourceMapFormatType: type) type {
     generated_column: i32 = 0,
     prev_loc: Logger.Loc = Logger.Loc.Empty,
     has_prev_state: bool = false,
-    line_offset_table_byte_offset_list: []const u32 = (&&.{}),
+    line_offset_table_byte_offset_list: []const u32 = &.{},
     line_starts_with_mapping: bool = false,
     cover_lines_without_mappings: bool = false,
     approximate_input_line_count: usize = 0,

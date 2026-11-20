@@ -133,7 +133,7 @@ pub const All = struct {
     last_id: i32 = 1,
     lock: bun.Mutex = .{},
     thread_id: std.Thread.Id = undefined,
-    timers: TimerHeap = .{ .context = .{} },
+    timers: TimerHeap = .{ .context = std.mem.zeroes(void) },
     active_timer_count: i32 = 0,
     uv_timer: if (Environment.isWindows) uv.Timer else void = (if (Environment.isWindows) std.mem.zeroes(uv.Timer) else ({
 })),
@@ -148,7 +148,7 @@ pub const All = struct {
     maps: Maps = .{},
     date_header_timer: DateHeaderTimer = .{},
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.last_id = 1; self_ptr.lock = .{}; self_ptr.thread_id = undefined; self_ptr.timers = .{ .context = .{} }; self_ptr.active_timer_count = 0; self_ptr.uv_timer = (if (Environment.isWindows) std.mem.zeroes(uv.Timer) else ({
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.last_id = 1; self_ptr.lock = .{}; self_ptr.thread_id = undefined; self_ptr.timers = .{ .context = std.mem.zeroes(void) }; self_ptr.active_timer_count = 0; self_ptr.uv_timer = (if (Environment.isWindows) std.mem.zeroes(uv.Timer) else ({
 })); self_ptr.warned_negative_number = false; self_ptr.warned_not_number = false; self_ptr.epoch = 0; self_ptr.immediate_ref_count = 0; self_ptr.uv_idle = (if (Environment.isWindows) std.mem.zeroes(uv.uv_idle_t) else ({
 })); self_ptr.event_loop_delay = .{}; self_ptr.fake_timers = .{}; self_ptr.maps = .{}; self_ptr.date_header_timer = .{}; return self_ptr; }
 
@@ -504,8 +504,7 @@ pub fn sleep(self: *All, global: *JSGlobalObject, promise: JSValue, countdown: J
             return TimeoutObject.init(global, id, .setTimeout, countdown_int, wrapped_promise, .js_undefined);
     }
 
-pub fn setImmediate(self: *All, global: *JSGlobalObject, callback: JSValue, arguments: JSValue) JSError!JSValue {
-        _ = self;
+pub fn setImmediate(global: *JSGlobalObject, callback: JSValue, arguments: JSValue) JSError!JSValue {
             _ = jsc.markBinding(@src());
             _ = bun.debugAssert(((callback != .zero) and (arguments != .zero)));
             const vm = global.bunVM();
