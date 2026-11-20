@@ -94,7 +94,7 @@ entry_final_offset: i64 = 0,
 /// touches the filesystem.
 dest: bun.FD? = null,
 /// Owned copy of the temp-directory name; freed in `deinit()`.
-tmpname: []const u8 = "",
+tmpname: [:0]const u8 = "",
 
 /// Incremental SHA over the *compressed* bytes, matching
 /// `Integrity.verify` / `Integrity.forBytes` in the buffered path.

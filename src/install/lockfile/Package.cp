@@ -1122,7 +1122,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             // It doesn't satisfy, but a workspace shares the same name. Override the workspace with the other dependency
                             for (*dep of package_dependencies[0..dependencies_count]) {
                                 if (dep.name_hash == name_hash && dep.behavior.isWorkspace()) {
-                                    dep.* = {
+                                    dep = {
                                         behavior: group.behavior,
                                         name: external_alias.value,
                                         name_hash: external_alias.hash,
@@ -1250,7 +1250,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     if (comptime group.behavior.isOptional()) {
                         for (*package_dep of package_dependencies[0..dependencies_count]) {
                             if (package_dep.name_hash == this_dep.name_hash) {
-                                package_dep.* = this_dep;
+                                package_dep = this_dep;
                                 break;
                             }
                         }

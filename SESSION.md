@@ -19,3 +19,4 @@
 - **[2026-11-21 00:55] Wave 33 A 组验收提交（13 模块全绿）**：完成 CSS 全家桶(`VendorPrefix.eq` 解封 `properties_generated`)/`macho` 13 模块独立验收（13/13 PASS，4 项门禁全绿，ratio 0.886x~1.027x）并原子提交；补派 D 组修复外部根因 `css/values/length.cp` 与 `css/rules/media.cp`。
 - **[2026-11-21 00:58] Wave 33 D 组验收提交（2 CSS 根因全绿）**：完成 `css/values/length`（`LengthPercentageOrAuto.eql` 改为 `static fn`）与 `css/rules/media`（`deepClone` 改为只读接收者）独立验收（2/2 PASS，ratio 0.98x~1.029x）并原子提交；同时确认 `properties_generated.zig:6083/6337` 返回类型系旧版 `cpc` 误生成 `*PropertyId`/`*Property`，待 B/C 组完成后一并处置。
 - **[2026-11-21 00:58] `css/properties/properties_generated.cp` 新版 `cpc` 重编提交**：使用新版 `cpc` 重新生成 `properties_generated.zig` 并通过 4 项门禁（PASS，ratio 1.14x），修复旧版 `cpc` 误生成 `*PropertyId`/`*Property` 问题。
+- **[2026-11-21 00:59] Wave 33 C 组验收提交（18 模块全绿）**：完成 `bun`、`Install`（还原 `ResolutionTag` 枚举值等）、`CLI`、`Runtime`、`subproc`、`DataCell`、`AsyncModule`、`resolve_path` 18 模块独立验收（18/18 PASS，4 项门禁全绿）并原子提交；静待 B 组（`3214dcfb`）完成即跑 Wave 34 `zig:check`。

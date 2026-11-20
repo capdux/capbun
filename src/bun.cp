@@ -2969,10 +2969,19 @@ pub fn iterateDir(dir: FD): DirIterator.Iterator {
 }
 
 fn ReinterpretSliceType(comptime T: type, comptime slice: type): type {
-    let info = @typeInfo(slice);
-    info.pointer.child = T;
-    info.pointer.alignment = @alignOf(T);
-    return @Type(info);
+    const p = @typeInfo(slice).pointer;
+    return @Type(std.builtin.Type{
+        .pointer = {
+            size: p.size,
+            is_const: p.is_const,
+            is_volatile: p.is_volatile,
+            alignment: @alignOf(T),
+            address_space: p.address_space,
+            child: T,
+            is_allowzero: p.is_allowzero,
+            sentinel_ptr: p.sentinel_ptr,
+        },
+    });
 }
 
 /// Zig has a todo for @ptrCast changing the `.len`. This is the workaround

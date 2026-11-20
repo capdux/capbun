@@ -108,7 +108,7 @@ pub struct LifecycleScriptSubprocess {
 
         if (comptime Environment.allow_assert) {
             const flags = bun.sys.getFcntlFlags(fd).unwrap() catch @panic("Failed to get fcntl flags");
-            bun.assertWithLocation(flags & bun.O.NONBLOCK != 0, @src());
+            bun.assertWithLocation((flags & bun.O.NONBLOCK) != 0, @src());
 
             const stat = bun.sys.fstat(fd).unwrap() catch @panic("Failed to fstat");
             bun.assertWithLocation(std.posix.S.ISSOCK(stat.mode), @src());
@@ -278,19 +278,20 @@ pub struct LifecycleScriptSubprocess {
         }
 
         const event_loop = &_.manager.event_loop;
-        let process = spawned.toProcess(
+        const proc: *bun.spawn.Process = spawned.toProcess(
             event_loop,
             false,
         );
 
         bun.assertf(_.process == null, "forgot to call `resetPolls`", {});
-        _.process = process;
-        process.setExitHandler(_);
+        _.process = proc;
+        const p = _.process.?;
+        p.setExitHandler(_);
 
-        switch (process.watchOrReap()) {
+        switch (p.watchOrReap()) {
             .err => |e| {
-                if (!process.hasExited())
-                    process.onExit({ err: e }, &std.mem.zeroes(bun.spawn.Rusage));
+                if (!p.hasExited())
+                    p.onExit({ err: e }, &std.mem.zeroes(bun.spawn.Rusage));
             },
             .result => {},
         }

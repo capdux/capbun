@@ -619,7 +619,7 @@ pub fn runTasks(
                     }
                 }
 
-                manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueExtractNPMPackage(extract, task)));
+                manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueExtractNPMPackage(&extract, task)));
             },
             else => unreachable,
         }

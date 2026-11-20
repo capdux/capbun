@@ -1261,7 +1261,7 @@ pub struct PosixSpawnResult {
         sync_: bool,
     ): *Process {
         return Process.initPosix(
-            _.*,
+            _,
             event_loop,
             sync_,
         );

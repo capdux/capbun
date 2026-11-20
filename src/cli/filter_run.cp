@@ -92,7 +92,7 @@ pub struct ProcessHandle {
             const spawn_res = bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?;
             break :brk spawn_res.unwrap()?;
         };
-        let process = spawned.toProcess(_.state.event_loop, false);
+        const proc: *bun.spawn.Process = spawned.toProcess(_.state.event_loop, false);
 
         handle.stdout.setParent(handle);
         handle.stderr.setParent(handle);
@@ -116,14 +116,14 @@ pub struct ProcessHandle {
             handle.stderr.startWithCurrentPipe().unwrap()?;
         }
 
-        _.process = ProcessState{ ptr: process };
-        process.setExitHandler(handle);
+        _.process = ProcessState{ ptr: proc };
+        proc.setExitHandler(handle);
 
-        switch (process.watchOrReap()) {
+        switch (proc.watchOrReap()) {
             .result => {},
             .err e => {
-                if (!process.hasExited())
-                    process.onExit(.{ .err = e }, &std.mem.zeroes(bun.spawn.Rusage));
+                if (!proc.hasExited())
+                    proc.onExit(.{ .err = e }, &std.mem.zeroes(bun.spawn.Rusage));
             },
         }
     }

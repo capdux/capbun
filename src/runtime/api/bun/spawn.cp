@@ -4,6 +4,7 @@ import stdio_mod from "./spawn/stdio.zig";
 
 const Environment = bun.Environment;
 const Maybe = bun.sys.Maybe;
+type OptCStr = ([*:0]const u8)?;
 
 const errno = std.posix.errno;
 const fd_t = std.posix.fd_t;
@@ -310,15 +311,15 @@ pub struct PosixActions {
         pid: *c_int,
         path: [*:0]const u8,
         request: *const PosixBunSpawnRequest,
-        argv: [*:null]([*:0]const u8)?,
-        envp: [*:null]([*:0]const u8)?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): isize;
 
     pub static fn spawn(
         path: [*:0]const u8,
         req_: PosixBunSpawnRequest,
-        argv: [*:null]([*:0]const u8)?,
-        envp: [*:null]([*:0]const u8)?,
+        argv: [*:null]OptCStr,
+        envp: [*:null]OptCStr,
     ): PidMaybe {
         let req = req_;
         let pid: c_int = 0;
@@ -353,8 +354,6 @@ pub struct PosixSpawn {
     pub const Actions = if (Environment.isPosix) BunSpawn.Actions else PosixActions;
     pub const Attr = if (Environment.isPosix) BunSpawn.Attr else PosixAttr;
     pub const BunSpawnRequest = PosixBunSpawnRequest;
-    type OptCStr = ([*:0]const u8)?;
-
     pub static fn spawnZ(
         path: [*:0]const u8,
         actions: Actions?,

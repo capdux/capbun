@@ -525,7 +525,7 @@ return .{ .err = e };
 });
     }
 
-pub fn spawnMaybeSyncImpl(event_loop: jsc.EventLoopHandle, allocator: Allocator, spawn_args: *SpawnArgs, shellio: *ShellIO, out_subproc: *@This(), notify_caller_process_already_exited: *bool) bun.shell.Result(void) {
+pub fn spawnMaybeSyncImpl(event_loop: jsc.EventLoopHandle, allocator: Allocator, spawn_args: *SpawnArgs, shellio: *ShellIO, out_subproc: *SelfPtr, notify_caller_process_already_exited: *bool) bun.shell.Result(void) {
             const is_sync = false;
             if (((!spawn_args.override_env) and (spawn_args.env_array.items.len == 0))) {
                 spawn_args.env_array.items = bun.handleOom(event_loop.createNullDelimitedEnvMap(allocator));
@@ -1068,6 +1068,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
 
 pub const OptFD = ?bun.FD;
 pub const EnvStrZ = ?[*:0]const u8;
+const SelfPtr = *ShellSubprocess;
 pub const Stdio = util.Stdio;
 const StdioResult = (if (Environment.isWindows) bun.spawn.WindowsSpawnResult.StdioResult else OptFD);
 const ShellCmd = bun.shell.Interpreter.Cmd;

@@ -80,7 +80,7 @@ fn unescapePostgresString(input: []const u8, buffer: []u8) anyerror![]u8 {
     return buf[0..out_index];
 }
 
-fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: (*usize)?, comptime is_json_sub_array: bool) anyerror!SQLDataCell {
+fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: (*usize)?, comptime is_json_sub_array: bool): AnyPostgresError!SQLDataCell {
     const closing_brace = if (is_json_sub_array) ']' else '}';
     const opening_brace = if (is_json_sub_array) '[' else '{';
     if (bytes.len < 2 || bytes[0] != opening_brace) {

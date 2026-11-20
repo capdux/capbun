@@ -171,11 +171,12 @@ pub fn enqueueDependencyList(mgr: *PackageManager, dependencies_list: Lockfile.D
         while ((i < end)) : (i = (i + 1)) {
             const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
             const resolution = lockfile.buffers.resolutions.items[@as(usize, @intCast(i))];
-            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const note: __CpObj_fmt___const_u8_args_struct____anyopaque__ = .{ .fmt = "error occurred while resolving {f}", .args = .{ bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any") }) } };
+            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const note_fmt: []const u8 = "error occurred while resolving {f}";
+            const note_arg = bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any") });
             if ((dependency.behavior.isOptional() or dependency.behavior.isPeer())) {
-                _ = ((mgr.log.addWarningWithNote(null, .{}, mgr.allocator, @errorName(e), note.fmt, note.args)) catch unreachable);
+                _ = ((mgr.log.addWarningWithNote(null, .{}, mgr.allocator, @errorName(e), note_fmt, .{ note_arg })) catch unreachable);
             } else {
-                _ = ((mgr.log.addZigErrorWithNote(mgr.allocator, e, note.fmt, note.args)) catch unreachable);
+                _ = ((mgr.log.addZigErrorWithNote(mgr.allocator, e, note_fmt, .{ note_arg })) catch unreachable);
             }
             continue; }); });
         }
@@ -332,7 +333,7 @@ pub fn issue_19586_workaround() type {
 pub fn isDone(closure: *@This()) bool {
             const manager = closure.manager;
             if ((manager.pendingTaskCount() > 0)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, .{}, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.err = e;
+                _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, undefined, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.e = e;
                 return true; }); });
                 if ((PackageManager.verbose_install and (manager.pendingTaskCount() > 0))) {
                     if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
@@ -355,7 +356,7 @@ pub fn isDone(closure: *@This()) bool {
                 _ = mgr.endProgressBar();
                 _ = Output.flush();
             }
-            if (closure.err) |e| {
+            if (closure.e) |e| {
                 _ = &e;
                 return .{ .failure = e };
             }
@@ -1225,4 +1226,3 @@ pub fn resolutionSatisfiesDependency(client: *PackageManager, resolution: Resolu
         }
         return false;
 }
-pub const __CpObj_fmt___const_u8_args_struct____anyopaque__ = struct { fmt: []const u8, args: struct { *anyopaque } };

@@ -3071,10 +3071,8 @@ pub fn iterateDir(dir: FD) DirIterator.Iterator {
 }
 
 pub fn ReinterpretSliceType(comptime T: type, comptime slice: type) type {
-        const info = @typeInfo(slice);
-        info.pointer.child = T;
-        info.pointer.alignment = @alignOf(T);
-        return @Type(info);
+        const p = @typeInfo(slice).pointer;
+        return @Type(std.builtin.Type{ .pointer = .{ .size = p.size, .is_const = p.is_const, .is_volatile = p.is_volatile, .alignment = @alignOf(T), .address_space = p.address_space, .child = T, .is_allowzero = p.is_allowzero, .sentinel_ptr = p.sentinel_ptr } });
 }
 
 pub fn reinterpretSlice(comptime T: type, slice: anytype) ReinterpretSliceType(T,@TypeOf(slice)) {

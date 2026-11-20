@@ -579,58 +579,55 @@ pub struct AsyncModule {
     fn downloadError(*_, vm: *VirtualMachine, import_record_id: u32, result: PackageDownloadError)! {
         const globalThis = _.globalThis;
 
-        const msg_args = .{ 
-            result.name,
-            result.resolution.fmt(vm.packageManager().lockfile.buffers.string_bytes.items, .@"any"),
-        };
+        const res_fmt = result.resolution.fmt(vm.packageManager().lockfile.buffers.string_bytes.items, .@"any");
 
         const msg: []u8 = if (result.err == error.TarballHTTP400)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 400 downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP401)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 401 downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP402)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 402 downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP403)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 403 downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP404)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 404 downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP4xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 4xx downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballHTTP5xx)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "HTTP 5xx downloading package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else if (result.err == error.TarballFailedToExtract)
             std.fmt.allocPrint(
                 bun.default_allocator,
                 "Failed to extract tarball for package '{s}@{f}'",
-                msg_args,
+                .{ result.name, res_fmt },
             )?
         else
             std.fmt.allocPrint(

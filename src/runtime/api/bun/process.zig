@@ -904,7 +904,7 @@ _ = f.close();
     }
 
 pub fn toProcess(self: PosixSpawnResult, event_loop: anytype, sync_: bool) *Process {
-            return Process.initPosix(self.*, event_loop, sync_);
+            return Process.initPosix(self, event_loop, sync_);
     }
 
 pub fn pidfdFlagsForLinux() u32 {

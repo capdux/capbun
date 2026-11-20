@@ -105,13 +105,21 @@ pub struct ProcessHandle {
         if (Environment.isWindows) {
             _.stdout_reader.reader.source = .{ .pipe = _.options.stdout.buffer };
             _.stderr_reader.reader.source = .{ .pipe = _.options.stderr.buffer };
-        } else {
-            _.stdout_reader.reader.source = .{ .fd = _.options.stdout.fd };
-            _.stderr_reader.reader.source = .{ .fd = _.options.stderr.fd };
         }
 
-        _.stdout_reader.reader.watch();
-        _.stderr_reader.reader.watch();
+        if (Environment.isPosix) {
+            if (stdout_fd := spawned.stdout) {
+                * = bun.sys.setNonblocking(stdout_fd);
+                _.stdout_reader.reader.start(stdout_fd, true).unwrap()?;
+            }
+            if (stderr_fd := spawned.stderr) {
+                * = bun.sys.setNonblocking(stderr_fd);
+                _.stderr_reader.reader.start(stderr_fd, true).unwrap()?;
+            }
+        } else {
+            _.stdout_reader.reader.startWithCurrentPipe().unwrap()?;
+            _.stderr_reader.reader.startWithCurrentPipe().unwrap()?;
+        }
 
         _.process = ProcessState{
             ptr: process,

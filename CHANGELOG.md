@@ -1828,3 +1828,4 @@
 - **[2026-11-21] Wave 33 A 组 (13 模块)**：更新 `css/{generics,css_parser,declaration,rules/{style,supports},values/{position,gradient,ident,image,resolution},media_query,selectors/selector}`, `exe_format/macho`。
 - **[2026-11-21] Wave 33 D 组 (2 跨模块根因)**：更新 `css/values/length`, `css/rules/media`。
 - **[2026-11-21] Wave 33 附增 (1 模块)**：重编更新 `css/properties/properties_generated`。
+- **[2026-11-21] Wave 33 C 组 (18 模块)**：更新 `bun`, `install/{PackageManager/{PackageManagerEnqueue,runTasks},lockfile/{Package,bun.lock},lifecycle_script_runner,TarballStream,migration,resolution}`, `cli/{filter_run,multi_run}`, `runtime/api/bun/{process,js_bun_spawn_bindings,spawn}`, `shell/subproc`, `sql_jsc/postgres/DataCell`, `jsc/AsyncModule`, `paths/resolve_path`。

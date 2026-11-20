@@ -111,17 +111,15 @@ pub fn enqueueDependencyList(
             resolution,
             false,
         ) catch |e| {
-            const note = {
-                fmt: "error occurred while resolving {f}",
-                args: .{bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), {
-                    path_sep: if (dependency.version.tag == .folder) .@"auto" else .@"any",
-                })},
-            };
+            const note_fmt = "error occurred while resolving {f}";
+            const note_arg = bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), {
+                path_sep: if (dependency.version.tag == .folder) .@"auto" else .@"any",
+            });
 
             if (dependency.behavior.isOptional() || dependency.behavior.isPeer())
-                mgr.log.addWarningWithNote(null, {}, mgr.allocator, @errorName(e), note.fmt, note.args) catch unreachable
+                mgr.log.addWarningWithNote(null, {}, mgr.allocator, @errorName(e), note_fmt, .{note_arg}) catch unreachable
             else
-                mgr.log.addZigErrorWithNote(mgr.allocator, e, note.fmt, note.args) catch unreachable;
+                mgr.log.addZigErrorWithNote(mgr.allocator, e, note_fmt, .{note_arg}) catch unreachable;
 
             continue;
         };
@@ -394,7 +392,7 @@ pub fn enqueueDependencyToRoot(
                         if (manager.pendingTaskCount() > 0) {
                             manager.runTasks(
                                 void,
-                                {},
+                                undefined,
                                 {
                                     onExtract: {},
                                     onResolve: {},
@@ -404,7 +402,7 @@ pub fn enqueueDependencyToRoot(
                                 false,
                                 manager.options.log_level,
                             ) catch |e| {
-                                closure.err = e;
+                                closure.e = e;
                                 return true;
                             };
 
@@ -431,7 +429,7 @@ pub fn enqueueDependencyToRoot(
             Output.flush();
         }
 
-        if (e := closure.err) {
+        if (e := closure.e) {
             return { failure: e };
         }
 

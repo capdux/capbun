@@ -428,9 +428,9 @@ pub const PosixBunSpawnRequest = extern struct {
     pty_slave_fd: i32 = -1,
     linux_pdeathsig: i32 = 0,
 
-pub extern "c" fn posix_spawn_bun(pid: *c_int, path: [*:0]const u8, request: *const PosixBunSpawnRequest, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) callconv(.c) isize;
+pub extern "c" fn posix_spawn_bun(pid: *c_int, path: [*:0]const u8, request: *const PosixBunSpawnRequest, argv: [*:null]OptCStr, envp: [*:null]OptCStr) callconv(.c) isize;
 
-pub fn spawn(path: [*:0]const u8, req_: PosixBunSpawnRequest, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) PidMaybe {
+pub fn spawn(path: [*:0]const u8, req_: PosixBunSpawnRequest, argv: [*:null]OptCStr, envp: [*:null]OptCStr) PidMaybe {
             var req = req_;
             _ = &req;
             var pid: c_int = 0;
@@ -612,7 +612,6 @@ return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
     pub const Actions = (if (Environment.isPosix) BunSpawn.Actions else PosixActions);
     pub const Attr = (if (Environment.isPosix) BunSpawn.Attr else PosixAttr);
     pub const BunSpawnRequest = PosixBunSpawnRequest;
-    const OptCStr = ?[*:0]const u8;
     pub const process = proc;
     pub const Process = proc.Process;
     pub const SpawnOptions = proc.SpawnOptions;
@@ -627,6 +626,7 @@ return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
     pub const Stdio = stdio_mod.Stdio;
 };
 
+const OptCStr = ?[*:0]const u8;
 const Environment = bun.Environment;
 const Maybe = bun.sys.Maybe;
 const errno = std.posix.errno;

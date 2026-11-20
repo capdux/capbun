@@ -462,7 +462,7 @@ else => error.TarballHTTP5xx,
                     has_updated_this_run = true;
                 }
             }
-            _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueExtractNPMPackage(extract, task)));
+            _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueExtractNPMPackage((&extract), task)));
 },
 else => {
 _ = unreachable;

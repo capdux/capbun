@@ -165,12 +165,22 @@ pub fn start(self: *ProcessHandle) !void {
             if (Environment.isWindows) {
                 self.stdout_reader.reader.source = .{ .pipe = self.options.stdout.buffer };
                 self.stderr_reader.reader.source = .{ .pipe = self.options.stderr.buffer };
-            } else {
-                self.stdout_reader.reader.source = .{ .fd = self.options.stdout.fd };
-                self.stderr_reader.reader.source = .{ .fd = self.options.stderr.fd };
             }
-            _ = self.stdout_reader.reader.watch();
-            _ = self.stderr_reader.reader.watch();
+            if (Environment.isPosix) {
+                if (spawned.stdout) |stdout_fd| {
+                    _ = &stdout_fd;
+                    _ = bun.sys.setNonblocking(stdout_fd);
+                    _ = try self.stdout_reader.reader.start(stdout_fd, true).unwrap();
+                }
+                if (spawned.stderr) |stderr_fd| {
+                    _ = &stderr_fd;
+                    _ = bun.sys.setNonblocking(stderr_fd);
+                    _ = try self.stderr_reader.reader.start(stderr_fd, true).unwrap();
+                }
+            } else {
+                _ = try self.stdout_reader.reader.startWithCurrentPipe().unwrap();
+                _ = try self.stderr_reader.reader.startWithCurrentPipe().unwrap();
+            }
             self.process = ProcessState{ .ptr = process, .status = .running };
     }
 

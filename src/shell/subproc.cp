@@ -6,6 +6,7 @@ pub const Stdio = util.Stdio;
 
 pub type OptFD = bun.FD?;
 pub type EnvStrZ = ([*:0]const u8)?;
+type SelfPtr = *ShellSubprocess;
 
 const StdioResult = if (Environment.isWindows) bun.spawn.WindowsSpawnResult.StdioResult else OptFD;
 
@@ -919,7 +920,7 @@ pub struct ShellSubprocess {
         // We have to use an out pointer because this function may invoke callbacks that expect a
         // fully initialized parent object. Writing to this out pointer may be the last step needed
         // to initialize the object.
-        out_subproc: *(*@This()),
+        out_subproc: *SelfPtr,
         notify_caller_process_already_exited: *bool,
     ): bun.shell.Result(void) {
         const is_sync = false;

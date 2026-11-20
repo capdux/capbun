@@ -527,7 +527,7 @@ const npm = (if (@typeInfo(@TypeOf(dependency_version)) == .@"enum") @intFromEnu
                     for (cp_mut_slice(&package_dependencies[0..dependencies_count])) |*dep| {
                         _ = &dep;
                         if ((((dep.*).name_hash == name_hash) and (dep.*).behavior.isWorkspace())) {
-                            (dep.*).* = .{ .behavior = group.behavior, .name = (if (@typeInfo(@TypeOf(external_alias)) == .@"enum") @intFromEnum(external_alias) else external_alias.value), .name_hash = external_alias.hash, .version = dependency_version };
+                            (dep.*) = .{ .behavior = group.behavior, .name = (if (@typeInfo(@TypeOf(external_alias)) == .@"enum") @intFromEnum(external_alias) else external_alias.value), .name_hash = external_alias.hash, .version = dependency_version };
                             return null;
                         }
                     }
@@ -617,7 +617,7 @@ else => {
                         for (cp_mut_slice(&package_dependencies[0..dependencies_count])) |*package_dep| {
                             _ = &package_dep;
                             if (((package_dep.*).name_hash == this_dep.name_hash)) {
-                                (package_dep.*).* = this_dep;
+                                (package_dep.*) = this_dep;
                                 break;
                             }
                         }

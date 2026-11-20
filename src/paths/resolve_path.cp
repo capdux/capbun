@@ -1361,13 +1361,20 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
 
     const PartsT = @TypeOf(_parts);
     const is_struct_ptr = comptime (@typeInfo(PartsT) == .pointer && @typeInfo(@typeInfo(PartsT).pointer.child) == .@"struct");
-    const arr_len = comptime if (is_struct_ptr) @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields.len else 0;
+    const is_struct_val = comptime (@typeInfo(PartsT) == .@"struct");
+    const arr_len = comptime if (is_struct_ptr) @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields.len else if (is_struct_val) @typeInfo(PartsT).@"struct".fields.len else 0;
     let parts_arr: [arr_len][]const u8 = undefined;
     let parts: []const []const u8 = undefined;
     if (comptime is_struct_ptr) {
         const fields = @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields;
         inline for (i of 0..fields.len) {
             parts_arr[i] = @field(_parts.*, fields[i].name);
+        }
+        parts = &parts_arr;
+    } else if (comptime is_struct_val) {
+        const fields = @typeInfo(PartsT).@"struct".fields;
+        inline for (i of 0..fields.len) {
+            parts_arr[i] = @field(_parts, fields[i].name);
         }
         parts = &parts_arr;
     } else {

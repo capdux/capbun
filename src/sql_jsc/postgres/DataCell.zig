@@ -252,7 +252,7 @@ return error.UnknownEscapeSequence;
         return buf[0..out_index];
 }
 
-pub fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: ?*usize, comptime is_json_sub_array: bool) anyerror!SQLDataCell {
+pub fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: ?*usize, comptime is_json_sub_array: bool) AnyPostgresError!SQLDataCell {
         const closing_brace = (if (is_json_sub_array) 93 else 125);
         const opening_brace = (if (is_json_sub_array) 91 else 123);
         if (((bytes.len < 2) or (bytes[0] != opening_brace))) {

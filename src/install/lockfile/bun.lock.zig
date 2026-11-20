@@ -838,7 +838,7 @@ pub fn deinit(self: *@This()) void {
             _ = self.map.deinit();
     }
 
-pub fn getOrPut(self: *@This(), name: []const u8) !void {
+pub fn getOrPut(self: *@This(), name: []const u8) OOM!bun.StringHashMap(T).GetOrPutResult {
             return self.map.getOrPut(name);
     }
 

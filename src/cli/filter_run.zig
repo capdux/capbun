@@ -142,8 +142,7 @@ pub fn start(self: *ProcessHandle) !void {
             break :brk try spawn_res.unwrap();
 };
             _ = &spawned;
-            var process = spawned.toProcess(self.state.event_loop, false);
-            _ = &process;
+            const proc: *bun.spawn.Process = spawned.toProcess(self.state.event_loop, false);
             _ = handle.stdout.setParent(handle);
             _ = handle.stderr.setParent(handle);
             if (Environment.isWindows) {
@@ -165,15 +164,15 @@ pub fn start(self: *ProcessHandle) !void {
                 _ = try handle.stdout.startWithCurrentPipe().unwrap();
                 _ = try handle.stderr.startWithCurrentPipe().unwrap();
             }
-            self.process = ProcessState{ .ptr = process };
-            _ = (process).?.setExitHandler(handle);
-            switch ((process).?.watchOrReap()) {
+            self.process = ProcessState{ .ptr = proc };
+            _ = proc.setExitHandler(handle);
+            switch (proc.watchOrReap()) {
 .result => {
 
 },
 .err => |e| {
-if ((!(process).?.hasExited())) {
-                _ = (process).?.onExit(.{ .err = e }, (&std.mem.zeroes(bun.spawn.Rusage)));
+if ((!proc.hasExited())) {
+                _ = proc.onExit(.{ .err = e }, (&std.mem.zeroes(bun.spawn.Rusage)));
             }
 },
 }

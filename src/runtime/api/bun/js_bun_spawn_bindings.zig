@@ -674,7 +674,7 @@ return e.throwJS(globalThis);
             systemerror.errno = (if ((e == error.EMFILE)) (0 - bun.sys.UV_E.MFILE) else (0 - bun.sys.UV_E.NFILE));
             return globalThis.throwValue(systemerror.toErrorInstance(globalThis));
         } else {
-            return (blk_catch_5: { break :blk_catch_5 ((globalThis.throwError(e, ": failed to spawn process")) catch |__ce_5| { _ = &__ce_5; return error.zero; }); });
+            return globalThis.throwError(e, ": failed to spawn process");
         } }); });
         var spawned = (switch (spawn_res) {
 .err => |e| {
@@ -727,7 +727,7 @@ else => {
             }
         }
         subprocess.* = Subprocess{ .globalThis = globalThis, .process = process, .pid_rusage = null, .stdin = Writable{ .ignore = .{} }, .stdout = Readable{ .ignore = .{} }, .stderr = Readable{ .ignore = .{} }, .ref_count = .initExactRefs(2), .stdio_pipes = spawned.extra_pipes.moveToUnmanaged(), .ipc_data = ipc_data_val, .flags = Subprocess.Flags{ .is_sync = is_sync }, .killSignal = killSignal, .stderr_maxbuf = subprocess.stderr_maxbuf, .stdout_maxbuf = subprocess.stdout_maxbuf, .terminal = terminal_val };
-        subprocess.stdin = (blk_catch_6: { break :blk_catch_6 ((Writable.init((&stdio[0]), event_loop, subprocess, spawned.stdin, (&promise_for_stream))) catch |e| { _ = &e; if (Environment.isPosix) {
+        subprocess.stdin = (blk_catch_5: { break :blk_catch_5 ((Writable.init((&stdio[0]), event_loop, subprocess, spawned.stdin, (&promise_for_stream))) catch |e| { _ = &e; if (Environment.isPosix) {
             if (spawned.stdout) |fd| {
                 _ = &fd;
                 _ = fd.close();
@@ -777,7 +777,7 @@ _ = fd.close();
         if (((promise_for_stream != .zero) and (!globalThis.hasException()))) {
             if (promise_for_stream.toError()) |e| {
                 _ = &e;
-                _ = (blk_catch_7: { break :blk_catch_7 ((globalThis.throwValue(e)) catch |__ce_7| { _ = &__ce_7;  }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((globalThis.throwValue(e)) catch |__ce_6| { _ = &__ce_6;  }); });
             }
         }
         if (globalThis.hasException()) {
@@ -877,7 +877,7 @@ send_exit_notification = true;
             if (subprocess.stdin.buffer.start().asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_9: { break :blk_catch_9 ((globalThis.throwValue((blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return error.JSError; }); }))) catch |__ce_9| { _ = &__ce_9;  }); });
+                _ = (blk_catch_8: { break :blk_catch_8 ((globalThis.throwValue((blk_catch_7: { break :blk_catch_7 ((e.toJS(globalThis)) catch |__ce_7| { _ = &__ce_7; return error.JSError; }); }))) catch |__ce_8| { _ = &__ce_8;  }); });
                 return error.JSError;
             }
         }
@@ -885,7 +885,7 @@ send_exit_notification = true;
             if (subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_11: { break :blk_catch_11 ((globalThis.throwValue((blk_catch_10: { break :blk_catch_10 ((e.toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return error.JSError; }); }))) catch |__ce_11| { _ = &__ce_11;  }); });
+                _ = (blk_catch_10: { break :blk_catch_10 ((globalThis.throwValue((blk_catch_9: { break :blk_catch_9 ((e.toJS(globalThis)) catch |__ce_9| { _ = &__ce_9; return error.JSError; }); }))) catch |__ce_10| { _ = &__ce_10;  }); });
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stdout == .pipe))) {
@@ -896,7 +896,7 @@ send_exit_notification = true;
             if (subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_13: { break :blk_catch_13 ((globalThis.throwValue((blk_catch_12: { break :blk_catch_12 ((e.toJS(globalThis)) catch |__ce_12| { _ = &__ce_12; return error.JSError; }); }))) catch |__ce_13| { _ = &__ce_13;  }); });
+                _ = (blk_catch_12: { break :blk_catch_12 ((globalThis.throwValue((blk_catch_11: { break :blk_catch_11 ((e.toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return error.JSError; }); }))) catch |__ce_12| { _ = &__ce_12;  }); });
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stderr == .pipe))) {

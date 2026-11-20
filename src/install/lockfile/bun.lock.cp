@@ -1016,7 +1016,7 @@ fn PkgMap(comptime T: type): type {
             Unresolvable,
         };
 
-        pub fn getOrPut(*_, name: string)! {
+        pub fn getOrPut(*_, name: string): bun.StringHashMap(T).GetOrPutResult!OOM {
             return _.map.getOrPut(name);
         }
 

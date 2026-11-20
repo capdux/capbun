@@ -72,16 +72,16 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 pub const ResolutionTag = enum(u8) {
-    root = 0,
-    npm = 1,
-    local_tarball = 2,
-    remote_tarball = 3,
+    uninitialized = 0,
+    root = 1,
+    npm = 2,
     folder = 4,
-    git = 5,
-    github = 6,
-    workspace = 7,
-    symlink = 8,
-    uninitialized = 9,
+    local_tarball = 8,
+    github = 16,
+    git = 32,
+    symlink = 64,
+    workspace = 72,
+    remote_tarball = 80,
     single_file_module = 100,
     _,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }

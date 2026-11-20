@@ -149,7 +149,7 @@ pub fn resetOutputFlags(output: *OutputReader, fd: bun.FD) void {
             output.flags.closed_without_reporting = false;
             if (comptime Environment.allow_assert) {
                 const flags = (blk_catch_0: { break :blk_catch_0 ((bun.sys.getFcntlFlags(fd).unwrap()) catch |__ce_0| { _ = &__ce_0; @panic("Failed to get fcntl flags"); }); });
-                _ = bun.assertWithLocation((flags & (bun.O.NONBLOCK != 0)), @src());
+                _ = bun.assertWithLocation(((flags & bun.O.NONBLOCK) != 0), @src());
                 const stat = (blk_catch_1: { break :blk_catch_1 ((bun.sys.fstat(fd).unwrap()) catch |__ce_1| { _ = &__ce_1; @panic("Failed to fstat"); }); });
                 _ = bun.assertWithLocation(std.posix.S.ISSOCK(stat.mode), @src());
             }
@@ -277,15 +277,15 @@ pub fn spawnNextScript(self: *LifecycleScriptSubprocess, next_script_index: u8) 
                 }
             }
             const event_loop = (&self.manager.event_loop);
-            var process = spawned.toProcess(event_loop, false);
-            _ = &process;
+            const proc: *bun.spawn.Process = spawned.toProcess(event_loop, false);
             _ = bun.assertf((self.process == null), "forgot to call `resetPolls`", .{});
-            self.process = process;
-            _ = (process).?.setExitHandler(self);
-            switch ((process).?.watchOrReap()) {
+            self.process = proc;
+            const p = self.process.?;
+            _ = p.setExitHandler(self);
+            switch (p.watchOrReap()) {
 .err => |e| {
-if ((!(process).?.hasExited())) {
-                _ = (process).?.onExit(.{ .err = e }, (&std.mem.zeroes(bun.spawn.Rusage)));
+if ((!p.hasExited())) {
+                _ = p.onExit(.{ .err = e }, (&std.mem.zeroes(bun.spawn.Rusage)));
             }
 },
 .result => {

@@ -642,7 +642,7 @@ pub fn spawnMaybeSync(
             systemerror.errno = if (e == error.EMFILE) -(bun.sys.UV_E.MFILE) else -(bun.sys.UV_E.NFILE);
             return globalThis.throwValue(systemerror.toErrorInstance(globalThis));
         } else {
-            return globalThis.throwError(e, ": failed to spawn process") catch return .zero;
+            return globalThis.throwError(e, ": failed to spawn process");
         }
     };
 
