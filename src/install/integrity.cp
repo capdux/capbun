@@ -35,22 +35,20 @@ pub enum IntegrityTag: u8 {
     }
 
     static fn parse(buf: []const u8): [IntegrityTag, usize] {
-        const Matcher = strings.ExactSizeMatcher(8);
-
         const i = strings.indexOfChar(buf[0..@min(buf.len, 7)], '-') ?? return .{ IntegrityTag.unknown, 0 };
 
         if (buf.len <= i + 1) {
             return .{ IntegrityTag.unknown, 0 };
         }
 
-        const matched = Matcher.match(buf[0..i]);
-        if (matched == Matcher.case("sha1")) {
+        const algo = buf[0..i];
+        if (strings.eqlComptime(algo, "sha1")) {
             return .{ IntegrityTag.sha1, i + 1 };
-        } else if (matched == Matcher.case("sha256")) {
+        } else if (strings.eqlComptime(algo, "sha256")) {
             return .{ IntegrityTag.sha256, i + 1 };
-        } else if (matched == Matcher.case("sha384")) {
+        } else if (strings.eqlComptime(algo, "sha384")) {
             return .{ IntegrityTag.sha384, i + 1 };
-        } else if (matched == Matcher.case("sha512")) {
+        } else if (strings.eqlComptime(algo, "sha512")) {
             return .{ IntegrityTag.sha512, i + 1 };
         } else {
             return .{ IntegrityTag.unknown, 0 };

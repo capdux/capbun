@@ -137,7 +137,7 @@ fn putEntriesFromPnpmLockfile(
 
     fn getOrPutGroup(*_, lockfile: *Lockfile, catalog_name: String): (*Map)!OOM {
         if (catalog_name.isEmpty()) {
-            return &_.default;
+            return unsafe { &_.default };
         }
 
         const entry = (_.groups.getOrPutContext(
@@ -154,7 +154,7 @@ fn putEntriesFromPnpmLockfile(
 
     fn getGroup(map_buf: string, catalog_name: String, catalog_name_buf: string): (*Map)? {
         if (catalog_name.isEmpty()) {
-            return &_.default;
+            return unsafe { &_.default };
         }
 
         return _.groups.getPtrContext(catalog_name, String.ArrayHashContext{

@@ -760,7 +760,8 @@ static fn cloneWithDifferentBuffers(client: *const Dependency, package_manager: 
     const out_slice = builder.lockfile.buffers.string_bytes.items;
     const new_literal = builder.append(String, client.version.literal.slice(version_buf));
     const sliced = new_literal.sliced(out_slice);
-    const new_name = builder.append(String, client.name.slice(name_buf));
+    const slice_fn = String.slice;
+    const new_name = builder.append(String, slice_fn(&client.name, name_buf));
 
     return Dependency{
         name_hash: client.name_hash,
@@ -1388,7 +1389,7 @@ static fn parseWithTag(
 
             const group = dependency["catalog:".len..];
 
-            const trimmed = strings.trim(group, &strings.whitespace_chars);
+            const trimmed = strings.trim(group, strings.whitespace_chars);
 
             return {
                 value: { catalog: sliced.sub(trimmed).value() },

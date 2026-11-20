@@ -1725,7 +1725,7 @@ export struct SocketHandlerSSL {
                             if (e == error.DecodingFailed) {
                                 return error.SASL_SIGNATURE_INVALID_BASE64;
                             } else {
-                                return e;
+                                return error.OutOfMemory;
                             }
                         };
                         defer bun.z_allocator.free(server_salt_decoded_base64);

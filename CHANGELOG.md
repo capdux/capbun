@@ -1786,3 +1786,5 @@
 - **[2026-11-20] Wave 25 E 组 (2 跨模块根因)**：更新 `options_types/CompileTarget`, `bundler/options`。
 
 - **[2026-11-20] Wave 25 D 组 (4 跨模块根因)**：更新 `bundler/OutputFile`, `http/Headers`, `interchange/json`, `js_parser/ast/P`。
+
+- **[2026-11-20] Wave 26 B 组 (21 模块)**：更新 `bun_alloc/maybe_owned`, `install/{PackageManager/{PackageManagerOptions,runTasks},TarballStream,dependency,extract_tarball,integrity,lockfile,lockfile/{CatalogMap,Package/WorkspaceMap,bun.lock},npm,resolvers/folder_resolver}`, `jsc/{ModuleLoader,NodeModuleModule,VirtualMachine,web_worker}`, `sql/mysql/protocol/{AuthSwitchResponse,PreparedStatement}`, `sql_jsc/postgres/{PostgresRequest,PostgresSQLConnection}`。

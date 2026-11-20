@@ -153,7 +153,7 @@ pub fn hash(normalized_path: []const u8) u64 {
             return bun.hash(normalized_path);
     }
 
-pub fn getOrPut(global_or_relative: GlobalOrRelative_, version: Dependency.Version, non_normalized_path: []const u8, manager: *PackageManager) *FolderResolution {
+pub fn getOrPut(global_or_relative: GlobalOrRelative_, version: Dependency.Version, non_normalized_path: []const u8, manager: *PackageManager) FolderResolution {
             var joined: bun.PathBuffer = undefined;
             _ = &joined;
             const paths = normalizePackageJSONPath(global_or_relative, (&joined), non_normalized_path);

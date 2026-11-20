@@ -1144,10 +1144,12 @@ else => {
             _ = try log.addError(source, value.loc, "Expected a string name property");
             return error.InvalidWorkspaceObject;
 });
-            const name_hash = try ((name_expr.asStringHash(allocator, String.Builder.stringHash)) orelse {
-            _ = try log.addError(source, name_expr.loc, "Expected a string name property");
-            return error.InvalidWorkspaceObject;
-});
+            const name_hash_opt = try name_expr.asStringHash(allocator, String.Builder.stringHash);
+            if ((name_hash_opt == null)) {
+                _ = try log.addError(source, name_expr.loc, "Expected a string name property");
+                return error.InvalidWorkspaceObject;
+            }
+            const name_hash = name_hash_opt.?;
             _ = try lockfile.workspace_paths.put(allocator, name_hash, try string_buf.append(path));
             if (value.get("version")) |version_expr| {
                 _ = &version_expr;

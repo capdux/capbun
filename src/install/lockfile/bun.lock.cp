@@ -1423,10 +1423,12 @@ pub fn parseIntoBinaryLockfile(
             return error.InvalidWorkspaceObject;
         };
 
-        const name_hash = try name_expr.asStringHash(allocator, String.Builder.stringHash) orelse {
+        const name_hash_opt = name_expr.asStringHash(allocator, String.Builder.stringHash)?;
+        if (name_hash_opt == null) {
             log.addError(source, name_expr.loc, "Expected a string name property")?;
             return error.InvalidWorkspaceObject;
-        };
+        }
+        const name_hash = name_hash_opt.?;
 
         try lockfile.workspace_paths.put(allocator, name_hash, try string_buf.append(path));
 

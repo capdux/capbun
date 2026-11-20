@@ -704,7 +704,8 @@ pub fn cloneWithDifferentBuffers(client: *const Dependency, package_manager: *Pa
         const out_slice = builder.lockfile.buffers.string_bytes.items;
         const new_literal = builder.append(String, client.version.literal.slice(version_buf));
         const sliced = new_literal.sliced(out_slice);
-        const new_name = builder.append(String, cp_iter_slice(client.name)[@intCast(name_buf)..]);
+        const slice_fn = String.slice;
+        const new_name = builder.append(String, slice_fn((&client.name), name_buf));
         return Dependency{ .name_hash = client.name_hash, .name = new_name, .version = ((Dependency.parseWithTag(builder.lockfile.allocator, new_name, String.Builder.stringHash(new_name.slice(out_slice)), new_literal.slice(out_slice), client.version.tag, (&sliced), null, package_manager)) orelse (Dependency.Version)), .behavior = client.behavior };
 }
 
@@ -1130,7 +1131,7 @@ var input = dependency;
 .catalog => {
 _ = bun.assert(strings.hasPrefixComptime(dependency, "catalog:"));
         const group = dependency["catalog:".len..];
-        const trimmed = strings.trim(group, (&strings.whitespace_chars));
+        const trimmed = strings.trim(group, strings.whitespace_chars);
         return .{ .value = .{ .catalog = sliced.sub(trimmed).value() }, .tag = .catalog, .literal = sliced.value() };
 },
 }

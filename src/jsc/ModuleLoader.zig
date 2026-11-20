@@ -692,10 +692,7 @@ pub fn Bun__transpileFile(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject
                 @branchHint(.unlikely);
                 if (node_module_module.findLongestRegisteredExtension(jsc_vm, _specifier.slice())) |entry| {
                     _ = &entry;
-                    switch ((blk: {
-                    break :blk entry.*;
-
-})) {
+                    switch (entry) {
 .loader => |loader| {
 lr.loader = loader;
 },

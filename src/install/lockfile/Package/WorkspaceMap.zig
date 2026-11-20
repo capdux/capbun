@@ -250,7 +250,8 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                 var cwd = bun.path.dirname(source.path.text, .auto);
                 _ = &cwd;
                 cwd = (if (bun.strings.eql(cwd, "")) bun.fs.FileSystem.instance.top_level_dir else cwd);
-                if (try walker.initWithCwd((&arena_alloc), glob_pattern, cwd, false, false, false, false, true).asErr()) |err_opt| {
+                const init_res = try walker.initWithCwd((&arena_alloc), glob_pattern, cwd, false, false, false, false, true);
+                if (init_res.asErr()) |err_opt| {
                     _ = &err_opt;
                     const e = err_opt;
                     _ = (blk_catch_6: { break :blk_catch_6 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_6| { _ = &__ce_6;  }); });

@@ -782,7 +782,7 @@ pub struct LiveWorkers {
     fn flushLogs(*_, vm: *jsc.VirtualMachine) {
         jsc.markBinding(@src());
         if (vm.log.msgs.items.len == 0) return;
-        const [err_val, str] = blk: {
+        const err_pair = blk: {
             const err_obj = vm.log.toJS(vm.global, bun.default_allocator, "Error in worker") catch |e| {
                 if (e == error.OutOfMemory) bun.outOfMemory();
                 @panic("unhandled exception");
@@ -793,6 +793,8 @@ pub struct LiveWorkers {
             };
             break :blk .{ err_obj, str_val };
         };
+        const err_val = @field(err_pair, "0");
+        const str = @field(err_pair, "1");
         defer str.deref();
         bun.jsc.fromJSHostCallGeneric(vm.global, @src(), WebWorker__dispatchError, .{ vm.global, _.cpp_worker, str, err_val }) catch |e| {
             * = vm.global.reportUncaughtException(vm.global.takeException(e).asException(vm.global.vm()).?);

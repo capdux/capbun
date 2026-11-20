@@ -951,7 +951,7 @@ pub struct PackageManifest {
         let counter = std.Io.Writer.Discarding.init([]);
         const writer = &counter.writer;
 
-        Serializer.write(_, scope, @TypeOf(writer), writer) catch return 0;
+        Serializer.write(unsafe { &_ }, scope, @TypeOf(writer), writer) catch return 0;
         return counter.count;
     }
 
@@ -991,7 +991,7 @@ pub struct PackageManifest {
                     return lhs.alignment > rhs.alignment;
                 }
             };
-            std.sort.pdq(FieldData, &data, {}, Sort.lessThan);
+            std.sort.pdq(FieldData, &data, @as(void, undefined), Sort.lessThan);
             let sizes_bytes: [field_count]usize = undefined;
             let names: [field_count]string = undefined;
             for (data, &sizes_bytes, &names) |elem, *size_, *name_| {

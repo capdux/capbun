@@ -1127,7 +1127,7 @@ pub fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID):
         const resolution = resolutions[pkg_id];
         const dependencies = dependencies_lists[pkg_id];
         if (resolution.tag != .workspace && resolution.tag != .root) continue;
-        if (dependencies.contains(id)) return i32(pkg_id);
+        if (dependencies.contains(id)) return @intCast(pkg_id);
     }
 
     return invalid_package_id;

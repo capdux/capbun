@@ -321,7 +321,12 @@ else => error.PackageManifestHTTP5xx,
                     if ((timestamp_this_tick == null)) {
                         timestamp_this_tick = (@as(u32, @truncate((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(0, std.time.timestamp()))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(0, std.time.timestamp()))) else cp_cast_int(i32, @max(0, std.time.timestamp()))))))) +| 300);
                     }
-                    if (entry.value_ptr.manifest.pkg.public_max_age == null) { entry.value_ptr.manifest.pkg.public_max_age = unreachable; }
+                    if (timestamp_this_tick) |ts| {
+                        _ = &ts;
+                        entry.value_ptr.manifest.pkg.public_max_age = ts;
+                    } else {
+                        _ = unreachable;
+                    }
                     if (manager.options.enable.manifest_cache) {
                         _ = Npm.PackageManifest.Serializer.saveAsync((&entry.value_ptr.manifest), manager.scopeForPackageName(name.slice()), manager.getTemporaryDirectory().handle, manager.getCacheDirectory());
                     }

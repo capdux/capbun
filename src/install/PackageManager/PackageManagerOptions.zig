@@ -202,7 +202,7 @@ pub fn openGlobalDir(explicit_global_dir: []const u8) !std.fs.Dir {
             _ = &home_dir;
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const parts: [][]const u8 = .{ "install", "global" };
+            const parts: [2][]const u8 = .{ "install", "global" };
             const path = Path.joinAbsStringBuf(home_dir, (&buf), (&parts), .auto);
             return try std.fs.cwd().makeOpenPath(path, .{});
         }
@@ -210,7 +210,7 @@ pub fn openGlobalDir(explicit_global_dir: []const u8) !std.fs.Dir {
             _ = &home_dir;
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const parts: [][]const u8 = .{ ".bun", "install", "global" };
+            const parts: [3][]const u8 = .{ ".bun", "install", "global" };
             const path = Path.joinAbsStringBuf(home_dir, (&buf), (&parts), .auto);
             return try std.fs.cwd().makeOpenPath(path, .{});
         }

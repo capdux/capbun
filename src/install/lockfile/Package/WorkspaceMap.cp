@@ -268,7 +268,8 @@ pub fn processNamesArray(
             let walker: GlobWalker = {};
             let cwd = bun.path.dirname(source.path.text, .auto);
             cwd = if (bun.strings.eql(cwd, "")) bun.fs.FileSystem.instance.top_level_dir else cwd;
-            if (err_opt := (walker.initWithCwd(&arena_alloc, glob_pattern, cwd, false, false, false, false, true)?).asErr()) {
+            const init_res = walker.initWithCwd(&arena_alloc, glob_pattern, cwd, false, false, false, false, true)?;
+            if (err_opt := init_res.asErr()) {
                 const e = err_opt;
                 log.addErrorFmt(
                     source,

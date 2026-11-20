@@ -689,7 +689,12 @@ pub fn loadExtraEnvAndSourceCodePrinter(client: *VirtualMachine) void {
             _ = &mode;
             if (map.map.fetchSwapRemove("NODE_CHANNEL_SERIALIZATION_MODE")) |mode_kv| {
                 _ = &mode_kv;
-                if (mode == null) { mode = .json; }
+                if (IPC.Mode.fromString((if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(mode_kv)) == .@"enum") @intFromEnum(mode_kv) else mode_kv.value))) == .@"enum") @intFromEnum((if (@typeInfo(@TypeOf(mode_kv)) == .@"enum") @intFromEnum(mode_kv) else mode_kv.value)) else (if (@typeInfo(@TypeOf(mode_kv)) == .@"enum") @intFromEnum(mode_kv) else mode_kv.value).value))) |parsed_mode| {
+                    _ = &parsed_mode;
+                    mode = parsed_mode;
+                } else {
+                    mode = .json;
+                }
             }
             _ = IPC.log("IPC environment variables: NODE_CHANNEL_FD={s}, NODE_CHANNEL_SERIALIZATION_MODE={s}", .{ fd_s, @tagName(mode) });
             if ((blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(u31, fd_s, 10)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |fd| {
@@ -1310,7 +1315,12 @@ pub fn init(opts: Options) !*VirtualMachine {
         vm.transpiler.macro_context = null;
         vm.transpiler.resolver.store_fd = opts.store_fd;
         vm.transpiler.resolver.prefer_module_field = false;
-        if (vm.transpiler.resolver.opts.preserve_symlinks == null) { vm.transpiler.resolver.opts.preserve_symlinks = false; }
+        if (opts.args.preserve_symlinks) |ps| {
+            _ = &ps;
+            vm.transpiler.resolver.opts.preserve_symlinks = ps;
+        } else {
+            vm.transpiler.resolver.opts.preserve_symlinks = false;
+        }
         vm.transpiler.resolver.onWakePackageManager = .{ .context = (&vm.modules), .handler = ModuleLoader.AsyncModule.Queue.onWakeHandler, .onDependencyError = ModuleLoader.AsyncModule.Queue.onDependencyError };
         _ = vm.transpiler.configureLinker();
         vm.transpiler.macro_context = js_ast.Macro.MacroContext.init((&vm.transpiler));
@@ -2825,7 +2835,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         .js => JSValue,
         .zig_exception => *ZigException,
     }, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) !void {
-        var exception_holder = (if ((mode == .js)) ZigException.Holder.init() else undefined);
+        var exception_holder: ZigException.Holder = (if ((mode == .js)) ZigException.Holder.init() else undefined);
         _ = &exception_holder;
         var exception = (if ((mode == .js)) exception_holder.zigException() else error_instance);
         _ = &exception;
@@ -3173,7 +3183,8 @@ pub fn printErrorNameAndMessage(_: *VirtualMachine, name: String, message: Strin
                         }
                         if (has_prefix) {
                             display_name = String.init(code);
-                            display_message = cp_iter_slice(message)[@intCast((code.len + ": ".len))..];
+                            const substring_fn = String.substring;
+                            display_message = substring_fn(message, (code.len + ": ".len));
                         }
                     }
                 }

@@ -6,7 +6,7 @@ const NewWriter = NewWriterMod.NewWriter;
 const writeWrap = NewWriterMod.writeWrap;
 
 @root struct AuthSwitchResponse {
-    auth_response: Data = Data{ empty: {} },
+    auth_response: Data = Data{ empty: undefined },
 
     pub fn deinit(*_)  {
         this.auth_response.deinit();

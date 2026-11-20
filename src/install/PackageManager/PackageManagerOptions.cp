@@ -236,14 +236,14 @@ pub const Enable = packed struct(u16) {
 
         if (home_dir := bun.env_var.BUN_INSTALL.get()) {
             let buf: bun.PathBuffer = undefined;
-            const parts = [ "install", "global" ];
+            const parts: [2]string = [ "install", "global" ];
             const path = Path.joinAbsStringBuf(home_dir, &buf, &parts, .auto);
             return std.fs.cwd().makeOpenPath(path, {})?;
         }
 
         if (home_dir := bun.env_var.XDG_CACHE_HOME.get() ?? bun.env_var.HOME.get()) {
             let buf: bun.PathBuffer = undefined;
-            const parts = [ ".bun", "install", "global" ];
+            const parts: [3]string = [ ".bun", "install", "global" ];
             const path = Path.joinAbsStringBuf(home_dir, &buf, &parts, .auto);
             return std.fs.cwd().makeOpenPath(path, {})?;
         }

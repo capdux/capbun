@@ -50,7 +50,7 @@ pub const DataMod = @import("../../shared/Data.zig");
 pub const NewWriterMod = @import("./NewWriter.zig");
 pub const AuthSwitchResponse = @This();
 
-auth_response: Data = Data{ .empty = .{} },
+auth_response: Data = Data{ .empty = undefined },
 
 pub fn deinit(self: *AuthSwitchResponse) void {
         _ = self.auth_response.deinit();

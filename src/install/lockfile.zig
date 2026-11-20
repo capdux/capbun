@@ -924,7 +924,7 @@ pub fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID) 
                 continue;
             }
             if (dependencies.contains(id)) {
-                return (if (comptime @typeInfo(@TypeOf(pkg_id)) == .@"enum") cp_cast_int(i32, @intFromEnum(pkg_id)) else cp_cast_int(i32, pkg_id));
+                return @intCast(pkg_id);
             }
         }
         return invalid_package_id;

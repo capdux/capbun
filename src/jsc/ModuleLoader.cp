@@ -916,7 +916,7 @@ pub export fn Bun__transpileFile(
     } else if (is_commonjs_require && jsc_vm.has_mutated_built_in_extensions > 0) {
         @branchHint(.unlikely);
         if (entry := node_module_module.findLongestRegisteredExtension(jsc_vm, _specifier.slice())) {
-            switch (unsafe { entry.* }) {
+            switch (entry) {
                 .loader loader => {
                     lr.loader = loader;
                 },

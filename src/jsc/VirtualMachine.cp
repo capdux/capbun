@@ -532,7 +532,7 @@ pub fn loadExtraEnvAndSourceCodePrinter(client: *VirtualMachine) {
         const fd_s = kv.value.value;
         let mode: IPC.Mode = .json;
         if (mode_kv := map.map.fetchSwapRemove("NODE_CHANNEL_SERIALIZATION_MODE")) {
-            mode = IPC.Mode.fromString(mode_kv.value.value) ?? .json;
+            if (parsed_mode := IPC.Mode.fromString(mode_kv.value.value)) { mode = parsed_mode; } else { mode = .json; }
         }
 
         IPC.log("IPC environment variables: NODE_CHANNEL_FD={s}, NODE_CHANNEL_SERIALIZATION_MODE={s}", .{ fd_s, @tagName(mode) });
@@ -1300,7 +1300,7 @@ pub fn init(opts: Options): !*VirtualMachine {
     vm.transpiler.macro_context = null;
     vm.transpiler.resolver.store_fd = opts.store_fd;
     vm.transpiler.resolver.prefer_module_field = false;
-    vm.transpiler.resolver.opts.preserve_symlinks = opts.args.preserve_symlinks ?? false;
+    if (ps := opts.args.preserve_symlinks) { vm.transpiler.resolver.opts.preserve_symlinks = ps; } else { vm.transpiler.resolver.opts.preserve_symlinks = false; }
 
     vm.transpiler.resolver.onWakePackageManager = {
         context: &vm.modules,
@@ -3365,7 +3365,7 @@ fn printErrorInstance(
     comptime allow_ansi_color: bool,
     comptime allow_side_effects: bool,
 )! {
-    let exception_holder = if (mode == .js) ZigException.Holder.init() else undefined;
+    let exception_holder: ZigException.Holder = if (mode == .js) ZigException.Holder.init() else undefined;
     let exception = if (mode == .js) exception_holder.zigException() else error_instance;
     defer if (mode == .js) exception_holder.deinit(client);
     defer if (mode == .js) error_instance.ensureStillAlive();
@@ -3799,7 +3799,8 @@ fn printErrorNameAndMessage(
                     }
                     if (has_prefix) {
                         display_name = String.init(code);
-                        display_message = message.substring(code.len + ": ".len);
+                        const substring_fn = String.substring;
+                        display_message = substring_fn(message, code.len + ": ".len);
                     }
                 }
             }

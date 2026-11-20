@@ -51,20 +51,20 @@ pub fn MaybeOwned(comptime Allocator: type): type {
 
         pub fn allocator(self: Self): std.mem.Allocator {
             const maybe_parent = self.rawParent();
-            return if (maybe_parent) |parent_alloc|
-                bun.allocators.asStd(parent_alloc)
-            else
-                .{ .ptr = undefined, .vtable = &null_vtable };
+            if (parent_alloc := maybe_parent) {
+                return bun.allocators.asStd(parent_alloc);
+            }
+            return std.mem.Allocator{ ptr: undefined, vtable: &null_vtable };
         }
 
         pub const BorrowedParent = bun.allocators.Borrowed(Allocator);
 
-        pub fn parent(self: Self): ?BorrowedParent {
+        pub fn parent(self: Self): BorrowedParent? {
             const maybe_parent = self.rawParent();
-            return if (maybe_parent) |parent_alloc|
-                bun.allocators.borrow(parent_alloc)
-            else
-                null;
+            if (parent_alloc := maybe_parent) {
+                return bun.allocators.borrow(parent_alloc);
+            }
+            return null;
         }
 
         pub fn intoParent(self: *Self): ?Allocator {

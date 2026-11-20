@@ -44,12 +44,20 @@ pub fn isOwned(self: @This()) bool {
 
 pub fn allocator(self: @This()) std.mem.Allocator {
             const maybe_parent = self.rawParent();
-            _ = &maybe_parent;
+            if (maybe_parent) |parent_alloc| {
+                _ = &parent_alloc;
+                return bun.allocators.asStd(parent_alloc);
+            }
+            return std.mem.Allocator{ .ptr = undefined, .vtable = (&null_vtable) };
     }
 
 pub fn parent(self: @This()) ?BorrowedParent {
             const maybe_parent = self.rawParent();
-            _ = &maybe_parent;
+            if (maybe_parent) |parent_alloc| {
+                _ = &parent_alloc;
+                return bun.allocators.borrow(parent_alloc);
+            }
+            return null;
     }
 
 pub fn intoParent(self: *@This()) ?Allocator {

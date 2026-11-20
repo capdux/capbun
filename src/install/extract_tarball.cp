@@ -109,8 +109,8 @@ const DirnameReader = struct {
         comptime ReturnType: type,
         comptime ErrorType: type,
         printer: PrinterContext,
-        comptime print: fn (ctx: PrinterContext, comptime str: string, args: anytype) ErrorType!ReturnType,
-    ): ErrorType!ReturnType {
+        comptime print: fn (ctx: PrinterContext, comptime str: string, args: anytype) ReturnType!ErrorType,
+    ): ReturnType!ErrorType {
         const registry = std.mem.trimRight(u8, registry_, "/");
         const full_name = full_name_.slice();
 
@@ -195,7 +195,7 @@ const DirnameReader = struct {
     }
 
     fn extract(log: *logger.Log, tgz_bytes: []const u8): !Install.ExtractData {
-        const tracer = bun.perf.trace("ExtractTarball.extract");
+        let tracer = bun.perf.trace("ExtractTarball.extract");
         defer tracer.end();
 
         const tmpdir = _.temp_dir;

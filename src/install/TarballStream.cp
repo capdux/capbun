@@ -158,7 +158,7 @@ pub fn init(
         npm_mode: tarball.resolution.tag != .github,
         want_first_dirname: tarball.resolution.tag == .github,
         hasher: Integrity.Streaming.init(
-            if (tarball.skip_verify) {} else tarball.integrity,
+            if (tarball.skip_verify) Integrity{} else tarball.integrity,
             compute_if_missing,
         ),
     });
@@ -343,15 +343,14 @@ fn step(client: *TarballStream)! {
         switch (client.phase) {
             .done => { return; },
             .want_header => {
-                let entry: *lib.Archive.Entry = undefined;
-                const entry_ptr = unsafe { &entry };
-                switch (archive.readNextHeader(entry_ptr)) {
+                let entry_arr: [1]*lib.Archive.Entry = [undefined];
+                switch (archive.readNextHeader(&entry_arr)) {
                     .retry => { return; },
                     .eof => {
                         client.phase = .done;
                         return;
                     },
-                    .ok, .warn => client.beginEntry(entry)?,
+                    .ok, .warn => client.beginEntry(entry_arr[0])?,
                     .failed, .fatal => {
                         const hdr_err = .{ archive.errorString() };
                         log("readNextHeader: {s}", hdr_err);

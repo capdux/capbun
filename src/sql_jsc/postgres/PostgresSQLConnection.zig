@@ -1748,7 +1748,7 @@ var sasl_cont = auth.SASLContinue;
         const server_salt_decoded_base64 = (blk_catch_21: { break :blk_catch_21 ((bun.base64.decodeAlloc(bun.z_allocator, cont.s)) catch |e| { _ = &e; if ((e == error.DecodingFailed)) {
             return error.SASL_SIGNATURE_INVALID_BASE64;
         } else {
-            return e;
+            return error.OutOfMemory;
         } }); });
         defer {
         _ = bun.z_allocator.free(server_salt_decoded_base64);

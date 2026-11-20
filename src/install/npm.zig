@@ -501,7 +501,10 @@ pub fn byteLength(self: PackageManifest, scope: *const Registry.Scope) usize {
             var counter = std.Io.Writer.Discarding.init(&.{});
             _ = &counter;
             const writer = (&counter.writer);
-            _ = (blk_catch_0: { break :blk_catch_0 ((Serializer.write(self, scope, @TypeOf(writer), writer)) catch |__ce_0| { _ = &__ce_0; return 0; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((Serializer.write((blk: {
+            break :blk (&self);
+
+}), scope, @TypeOf(writer), writer)) catch |__ce_0| { _ = &__ce_0; return 0; }); });
             return counter.count;
     }
 
@@ -1981,7 +1984,7 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
                     return (lhs.alignment > rhs.alignment);
             }
         };
-                _ = std.sort.pdq(FieldData, (&data), .{}, Sort.lessThan);
+                _ = std.sort.pdq(FieldData, (&data), @as(void, undefined), Sort.lessThan);
                 var sizes_bytes: [field_count]usize = undefined;
                 _ = &sizes_bytes;
                 var names: [field_count][]const u8 = undefined;

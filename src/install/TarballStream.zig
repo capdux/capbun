@@ -280,8 +280,7 @@ pub fn init(allocator: std.mem.Allocator, extract_task: *Task, network_task: *Ne
 .github, .remote_tarball, .local_tarball => true,
 else => false,
 });
-        return TarballStream.new(.{ .allocator = allocator, .extract_task = extract_task, .network_task = network_task, .package_manager = manager, .npm_mode = (tarball.resolution.tag != .github), .want_first_dirname = (tarball.resolution.tag == .github), .hasher = Integrity.Streaming.init((if (tarball.skip_verify) ({
-}) else tarball.integrity), compute_if_missing) });
+        return TarballStream.new(.{ .allocator = allocator, .extract_task = extract_task, .network_task = network_task, .package_manager = manager, .npm_mode = (tarball.resolution.tag != .github), .want_first_dirname = (tarball.resolution.tag == .github), .hasher = Integrity.Streaming.init((if (tarball.skip_verify) Integrity{  } else tarball.integrity), compute_if_missing) });
 }
 
 pub fn deinit(client: *TarballStream) void {
@@ -425,13 +424,9 @@ pub fn step(client: *TarballStream) !void {
 return;
 },
 .want_header => {
-var entry: *lib.Archive.Entry = undefined;
-            _ = &entry;
-            const entry_ptr = (blk: {
-            break :blk entry;
-
-});
-            switch (archive.readNextHeader(entry_ptr)) {
+var entry_arr: [1]*lib.Archive.Entry = .{ undefined };
+            _ = &entry_arr;
+            switch (archive.readNextHeader((&entry_arr))) {
 .retry => {
 return;
 },
@@ -440,7 +435,7 @@ client.phase = .done;
             return;
 },
 .ok, .warn => {
-_ = try client.beginEntry(entry);
+_ = try client.beginEntry(entry_arr[0]);
 },
 .failed, .fatal => {
 const hdr_err: struct { *anyopaque } = .{ archive.errorString() };

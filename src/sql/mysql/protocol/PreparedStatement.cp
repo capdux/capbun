@@ -15,7 +15,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
 const NewWriter = NewWriterMod.NewWriter;
 const writeWrap = NewWriterMod.writeWrap;
 const debug = bun.Output.scoped(.PreparedStatement, .hidden);
-const empty_values: [0]Value = [];
+const empty_values: [0]Value = undefined;
 
 export struct PrepareOK {
     status: u8 = 0,

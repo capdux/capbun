@@ -335,7 +335,11 @@ pub fn runTasks(
                             timestamp_this_tick = @as(u32, @truncate(@as(u64, i32(@max(0, std.time.timestamp()))))) +| 300;
                         }
 
-                        entry.value_ptr.manifest.pkg.public_max_age = timestamp_this_tick ?? unreachable;
+                        if (ts := timestamp_this_tick) {
+                            entry.value_ptr.manifest.pkg.public_max_age = ts;
+                        } else {
+                            unreachable;
+                        }
 
                         if (manager.options.enable.manifest_cache) {
                             Npm.PackageManifest.Serializer.saveAsync(

@@ -111,7 +111,7 @@ pub fn buildURL(registry_: []const u8, full_name_: strings.StringOrTinyString, v
         return buildURLWithPrinter(registry_, full_name_, version, string_buf, @TypeOf(FileSystem.instance.dirname_store), string, OOM, FileSystem.instance.dirname_store, FileSystem.DirnameStore.print);
 }
 
-pub fn buildURLWithPrinter(registry_: []const u8, full_name_: strings.StringOrTinyString, version: Semver.Version, string_buf: []const u8, comptime PrinterContext: type, comptime ReturnType: type, comptime ErrorType: type, printer: PrinterContext, comptime print: *const fn (PrinterContext, comptime string, anytype) ReturnType!ErrorType) ReturnType!ErrorType {
+pub fn buildURLWithPrinter(registry_: []const u8, full_name_: strings.StringOrTinyString, version: Semver.Version, string_buf: []const u8, comptime PrinterContext: type, comptime ReturnType: type, comptime ErrorType: type, printer: PrinterContext, comptime print: *const fn (PrinterContext, comptime string, anytype) ErrorType!ReturnType) ErrorType!ReturnType {
         const registry = std.mem.trimRight(u8, registry_, "/");
         const full_name = full_name_.slice();
         var name = full_name;
@@ -188,7 +188,8 @@ pub fn nameAndBasename(self: ExtractTarball) struct { []const u8, []const u8 } {
 }
 
 pub fn extract(self: ExtractTarball, log: *logger.Log, tgz_bytes: []const u8) !Install.ExtractData {
-        const tracer = bun.perf.trace("ExtractTarball.extract");
+        var tracer = bun.perf.trace("ExtractTarball.extract");
+        _ = &tracer;
         defer {
         _ = tracer.end();
         }
