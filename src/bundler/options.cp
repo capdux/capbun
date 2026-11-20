@@ -1,5 +1,6 @@
 type string = []const u8;
 type OptSource = logger.Source?;
+type OptBlob = jsc.WebCore.Blob?;
 
 import bun from "bun";
 const Environment = bun.Environment;
@@ -1000,7 +1001,7 @@ pub fn getLoaderAndVirtualSource(
     specifier_str: string,
     jsc_vm: *jsc.VirtualMachine,
     virtual_source_to_use: *OptSource,
-    blob_to_deinit: *jsc.WebCore.Blob?,
+    blob_to_deinit: *OptBlob,
     type_attribute_str: string?,
 ): LoaderResult! {
     const spec_res = normalizeSpecifier(

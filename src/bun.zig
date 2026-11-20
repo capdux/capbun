@@ -830,15 +830,15 @@ pub fn atime(self: WindowsStat) std.c.timespec {
 
 pub const MakePath = struct {
 
-pub fn makeOpenPathAccessMaskW(self: MakePath, comptime T: type, sub_path: []const T, access_mask: u32, no_follow: bool) !std.fs.Dir {
+pub fn makeOpenPathAccessMaskW(dir: std.fs.Dir, comptime T: type, sub_path: []const T, access_mask: u32, no_follow: bool) !std.fs.Dir {
             const Iterator = std.fs.path.ComponentIterator(.windows, T);
             var it = try Iterator.init(sub_path);
             _ = &it;
             var component = ((it.last()) orelse (Iterator.Component{ .name = &.{}, .path = sub_path }));
             _ = &component;
             while (true) {
-                const sub_path_w = (if (comptime (T == u16)) try w.wToPrefixedFileW(self.fd, @ptrCast(component.path)) else try w.sliceToPrefixedFileW(self.fd, component.path));
-                var result = (blk_catch_0: { break :blk_catch_0 ((self.makeOpenDirAccessMaskW(self, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                const sub_path_w = (if (comptime (T == u16)) try w.wToPrefixedFileW(dir.fd, @ptrCast(component.path)) else try w.sliceToPrefixedFileW(dir.fd, component.path));
+                var result = (blk_catch_0: { break :blk_catch_0 ((makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                     if (it.previous()) |prev| {
                         _ = &prev;
                         component = prev;
@@ -859,13 +859,13 @@ pub fn makeOpenPathAccessMaskW(self: MakePath, comptime T: type, sub_path: []con
             }
     }
 
-pub fn makeOpenDirAccessMaskW(self: MakePath, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions) !std.fs.Dir {
+pub fn makeOpenDirAccessMaskW(dir: std.fs.Dir, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions) !std.fs.Dir {
             var result = std.fs.Dir{ .fd = undefined };
             _ = &result;
             const path_len_bytes = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2))))) == .@"enum") cp_cast_int(u16, @intFromEnum((if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2))))) else cp_cast_int(u16, (if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2)))));
             var nt_name = w.UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = @constCast(sub_path_w) };
             _ = &nt_name;
-            var attr = w.OBJECT_ATTRIBUTES{ .Length = @sizeOf(w.OBJECT_ATTRIBUTES), .RootDirectory = (if (std.fs.path.isAbsoluteWindowsW(sub_path_w)) null else self.fd), .Attributes = 0, .ObjectName = (&nt_name), .SecurityDescriptor = null, .SecurityQualityOfService = null };
+            var attr = w.OBJECT_ATTRIBUTES{ .Length = @sizeOf(w.OBJECT_ATTRIBUTES), .RootDirectory = (if (std.fs.path.isAbsoluteWindowsW(sub_path_w)) null else dir.fd), .Attributes = 0, .ObjectName = (&nt_name), .SecurityDescriptor = null, .SecurityQualityOfService = null };
             _ = &attr;
             const open_reparse_point: w.DWORD = (if (flags.no_follow) w.FILE_OPEN_REPARSE_POINT else 0);
             var status: w.IO_STATUS_BLOCK = undefined;
@@ -902,11 +902,11 @@ return w.unexpectedStatus(rc);
 }
     }
 
-pub fn makeOpenPath(self: MakePath, sub_path: anytype, opts: std.fs.Dir.OpenOptions) !std.fs.Dir {
+pub fn makeOpenPath(dir: std.fs.Dir, sub_path: anytype, opts: std.fs.Dir.OpenOptions) !std.fs.Dir {
             if (comptime Environment.isWindows) {
-                return self.makeOpenPathAccessMaskW(self, std.@"meta".Elem(@TypeOf(sub_path)), sub_path, ((((w.STANDARD_RIGHTS_READ | w.FILE_READ_ATTRIBUTES) | w.FILE_READ_EA) | w.SYNCHRONIZE) | w.FILE_TRAVERSE), false);
+                return makeOpenPathAccessMaskW(dir, std.@"meta".Elem(@TypeOf(sub_path)), sub_path, ((((w.STANDARD_RIGHTS_READ | w.FILE_READ_ATTRIBUTES) | w.FILE_READ_EA) | w.SYNCHRONIZE) | w.FILE_TRAVERSE), false);
             }
-            return self.makeOpenPath(sub_path, opts);
+            return dir.makeOpenPath(sub_path, opts);
     }
 
 pub fn makePath(comptime T: type, self: std.fs.Dir, sub_path: []const T) !void {

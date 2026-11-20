@@ -1746,6 +1746,7 @@ _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, self.placeholder.tar
 
 const string = []const u8;
 const OptSource = ?logger.Source;
+const OptBlob = ?jsc.WebCore.Blob;
 const Environment = bun.Environment;
 const Global = bun.Global;
 const Output = bun.Output;
@@ -1843,7 +1844,7 @@ pub fn normalizeSpecifier(jsc_vm: *bun.jsc.VirtualMachine, slice_: []const u8) S
         return SpecifierParts{ .file_path = slice, .specifier = specifier, .query = query };
 }
 
-pub fn getLoaderAndVirtualSource(specifier_str: []const u8, jsc_vm: *jsc.VirtualMachine, virtual_source_to_use: *OptSource, blob_to_deinit: ?*jsc.WebCore.Blob, type_attribute_str: ?[]const u8) !LoaderResult {
+pub fn getLoaderAndVirtualSource(specifier_str: []const u8, jsc_vm: *jsc.VirtualMachine, virtual_source_to_use: *OptSource, blob_to_deinit: *OptBlob, type_attribute_str: ?[]const u8) !LoaderResult {
         const spec_res = normalizeSpecifier(jsc_vm, specifier_str);
         const normalized_file_path_from_specifier = spec_res.file_path;
         const specifier = spec_res.specifier;

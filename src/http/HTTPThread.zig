@@ -229,10 +229,7 @@ pub inline fn getRequestBodySendBuffer(self: *HTTPThread, estimated_size: usize)
             if ((self.lazy_request_body_buffer == null)) {
                 return .{ .heap = HeapRequestBodyBuffer.init() };
             }
-            return .{ .heap = (bun.take((blk: {
-            break :blk self.lazy_request_body_buffer;
-
-}))).? };
+            return .{ .heap = (bun.take((&@field(self, "lazy_request_body_buffer")))).? };
         }
         return .{ .stack = std.heap.stackFallback(request_body_send_stack_buffer_size, bun.default_allocator) };
 }

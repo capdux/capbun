@@ -4,6 +4,7 @@ import bun from "bun";
 const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const assert = bun.assert;
+type U8Slice = []u8;
 
 @root struct StringBuilder {
     len: usize = 0,
@@ -256,7 +257,7 @@ const assert = bun.assert;
     ///
     /// After calling this, you are responsible for freeing the underlying memory.
     /// This StringBuilder should not be used after calling this function.
-    pub fn moveToSlice(*_, into_slice: *[]u8) {
+    pub fn moveToSlice(*_, into_slice: *U8Slice) {
         unsafe {
             into_slice.* = this.allocatedSlice();
             this.* = {};

@@ -84,11 +84,6 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const ProcessParamKV = struct {
-    key: []const u8,
-    val: void,
-};
-
 var title_mutex = bun.Mutex{  };
 pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 pub const setCwd = jsc.host_fn.wrap2(setCwd_);
@@ -236,7 +231,8 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
             const map = bun.ComptimeStringMap(void, (comptime brk: {
             const auto_params = bun.cli.Arguments.auto_params;
             const auto_params_len = auto_params.len;
-            var entries: [auto_params_len]ProcessParamKV = undefined;
+            const KV = struct { []const u8, void };
+            var entries: [auto_params_len]KV = undefined;
             _ = &entries;
             var i: i32 = 0;
             _ = &i;
@@ -245,18 +241,18 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
                 if ((param.takes_value != .none)) {
                     if (param.names.long) |name| {
                         _ = &name;
-                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = ("--" ++ name), .val = undefined };
+                        entries[cp_cast_int(usize, i)] = .{ ("--" ++ name), .{} };
                         i = (i + 1);
                     }
                     if (param.names.short) |name| {
                         _ = &name;
                         const short_str: [2]u8 = .{ 45, name };
-                        entries[cp_cast_int(usize, i)] = ProcessParamKV{ .key = (&short_str), .val = undefined };
+                        entries[cp_cast_int(usize, i)] = .{ (&short_str), .{} };
                         i = (i + 1);
                     }
                 }
             }
-            var result: [i]ProcessParamKV = undefined;
+            var result: [i]KV = undefined;
             _ = &result;
             _ = @memcpy((&result), entries[0..i]);
             break :brk result;

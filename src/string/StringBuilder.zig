@@ -305,12 +305,13 @@ pub fn writable(self: *StringBuilder) []u8 {
 });
 }
 
-pub fn moveToSlice(self: *StringBuilder, into_slice: []u8) void {
+pub fn moveToSlice(self: *StringBuilder, into_slice: *U8Slice) void {
         {
             into_slice.* = self.allocatedSlice();
             self.* = .{};
         }
 }
+const U8Slice = []u8;
 const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const assert = bun.assert;

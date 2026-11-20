@@ -14,11 +14,6 @@ comptime {
 
 let title_mutex = bun.Mutex{};
 
-pub struct ProcessParamKV {
-    key: []const u8,
-    val: void,
-}
-
 @callconv("c") pub fn getTitle(_: *JSGlobalObject, title: *bun.String) {
     title_mutex.lock();
     defer title_mutex.unlock();
@@ -132,23 +127,24 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         const map = bun.ComptimeStringMap(void, comptime brk: {
             const auto_params = bun.cli.Arguments.auto_params;
             const auto_params_len = auto_params.len;
-            let entries: [auto_params_len]ProcessParamKV = undefined;
+            const KV = struct { []const u8, void };
+            let entries: [auto_params_len]KV = undefined;
             let i = 0;
             for (param of auto_params) {
                 if (param.takes_value != .none) {
                     if (name := param.names.long) {
-                        entries[i] = ProcessParamKV{ key: "--" ++ name, val: undefined };
+                        entries[i] = .{ "--" ++ name, {} };
                         i += 1;
                     }
                     if (name := param.names.short) {
                         const short_str: [2]u8 = ['-', name];
-                        entries[i] = ProcessParamKV{ key: &short_str, val: undefined };
+                        entries[i] = .{ &short_str, {} };
                         i += 1;
                     }
                 }
             }
 
-            let result: [i]ProcessParamKV = undefined;
+            let result: [i]KV = undefined;
             @memcpy(&result, entries[0..i]);
             break :brk result;
         });

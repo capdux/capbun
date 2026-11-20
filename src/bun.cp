@@ -2447,7 +2447,7 @@ pub struct MakePath {
     /// Opens the dir if the path already exists and is a directory.
     /// This function is not atomic, and if it returns an error, the file system may
     /// have been modified regardless.
-    fn makeOpenPathAccessMaskW(comptime T: type, sub_path: []const T, access_mask: u32, no_follow: bool): !std.fs.Dir {
+    static fn makeOpenPathAccessMaskW(dir: std.fs.Dir, comptime T: type, sub_path: []const T, access_mask: u32, no_follow: bool): !std.fs.Dir {
         const Iterator = std.fs.path.ComponentIterator(.windows, T);
         let it = Iterator.init(sub_path)?;
         // If there are no components in the path, then create a dummy component with the full path.
@@ -2458,14 +2458,14 @@ pub struct MakePath {
 
         while (true) {
             const sub_path_w = if (comptime T == u16)
-                try w.wToPrefixedFileW(_.fd,
+                try w.wToPrefixedFileW(dir.fd,
                     // TODO: report this bug
                     // they always copy it
                     // it doesn't need to be [:0]const u16
                     @ptrCast(component.path))
             else
-                w.sliceToPrefixedFileW(_.fd, component.path)?;
-            let result = makeOpenDirAccessMaskW(_, sub_path_w.span().ptr, access_mask, {
+                w.sliceToPrefixedFileW(dir.fd, component.path)?;
+            let result = makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, {
                 no_follow: no_follow,
                 create_disposition: w.FILE_OPEN_IF,
             }) catch |e| {
@@ -2486,7 +2486,7 @@ pub struct MakePath {
         create_disposition: u32,
     };
 
-    fn makeOpenDirAccessMaskW(sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions): !std.fs.Dir {
+    static fn makeOpenDirAccessMaskW(dir: std.fs.Dir, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions): !std.fs.Dir {
         let result = std.fs.Dir{
             fd: undefined,
         };
@@ -2499,7 +2499,7 @@ pub struct MakePath {
         };
         let attr = w.OBJECT_ATTRIBUTES{
             Length: @sizeOf(w.OBJECT_ATTRIBUTES),
-            RootDirectory: if (std.fs.path.isAbsoluteWindowsW(sub_path_w)) null else _.fd,
+            RootDirectory: if (std.fs.path.isAbsoluteWindowsW(sub_path_w)) null else dir.fd,
             Attributes: 0, // Note we do not use OBJ_CASE_INSENSITIVE here.
             ObjectName: &nt_name,
             SecurityDescriptor: null,
@@ -2536,10 +2536,10 @@ pub struct MakePath {
         }
     }
 
-    fn makeOpenPath(sub_path: auto, opts: std.fs.Dir.OpenOptions): !std.fs.Dir {
+    static fn makeOpenPath(dir: std.fs.Dir, sub_path: auto, opts: std.fs.Dir.OpenOptions): !std.fs.Dir {
         if (comptime Environment.isWindows) {
             return makeOpenPathAccessMaskW(
-                _,
+                dir,
                 std.@"meta".Elem(@TypeOf(sub_path)),
                 sub_path,
                 w.STANDARD_RIGHTS_READ |
@@ -2551,7 +2551,7 @@ pub struct MakePath {
             );
         }
 
-        return _.makeOpenPath(sub_path, opts);
+        return dir.makeOpenPath(sub_path, opts);
     }
 
     /// copy/paste of `std.fs.Dir.makePath` and related functions and modified to support u16 slices.

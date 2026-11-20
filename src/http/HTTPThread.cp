@@ -172,7 +172,7 @@ export @root @value struct HTTPThread {
                     .heap = HeapRequestBodyBuffer.init(),
                 };
             }
-            return .{ .heap = bun.take(unsafe { &this.lazy_request_body_buffer }).? };
+            return .{ .heap = bun.take(&@field(_, "lazy_request_body_buffer")).? };
         }
         return .{
             .stack = std.heap.stackFallback(request_body_send_stack_buffer_size, bun.default_allocator),
