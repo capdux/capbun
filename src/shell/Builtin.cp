@@ -297,12 +297,14 @@ pub const Tag = Kind;
 
     @"impl": Impl,
 
-pub fn argsSlice(*_): []const [*:0]const u8 {
+type CStr = ([*:0]const u8);
+
+pub fn argsSlice(*_): []const CStr {
     const args_raw = _.args.items[1..];
     const args_len = std.mem.indexOfScalar(OptStringZ, args_raw, null) ?? @panic("bad");
     if (args_len == 0) return [];
     unsafe {
-        const p: [*][*:0]const u8 = @ptrCast(args_raw.ptr);
+        const p: [*]CStr = @ptrCast(args_raw.ptr);
         return p[0..args_len];
     }
 }

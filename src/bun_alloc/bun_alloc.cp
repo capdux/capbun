@@ -78,13 +78,13 @@ pub @packed(u32) struct IndexType {
 
 const HashKeyType = u64;
 struct IndexMapContext {
-    pub fn hash(*_, key: HashKeyType): HashKeyType {
+    pub fn hash(key: HashKeyType): HashKeyType {
         const self_ref = _;
         * = self_ref;
         return key;
     }
 
-    pub fn eql(*_, a: HashKeyType, b: HashKeyType): bool {
+    pub fn eql(a: HashKeyType, b: HashKeyType): bool {
         const self_ref = _;
         * = self_ref;
         return a == b;

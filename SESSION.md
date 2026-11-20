@@ -3128,3 +3128,5 @@ Options:
 - **[2026-11-20 22:00] Wave 18 C 组验收提交（10 模块全绿，总错降至 339）**：完成 `VirtualMachine`/`RequestContext`/`FileRoute`/`ServerConfig`/`DevServer`/`HotReloadEvent`/`WatcherAtomics`/`memory_cost`/`PackedMap`/`SourceMapStore` 10 模块验收提交（10/10 PASS，ratio 0.616x~1.033x）；已派发 Gemini 4 Hydrogen (Medium) 子智能体（D 组）继续扫荡 DevServer/WebCore/Server/SQL 剩余报错。
 
 - **[2026-11-20 22:03] Wave 18 B 组验收提交（24 模块全绿）**：完成 `output`/`JSPromise`/`JSGlobalObject`/`valkey`/`interpreter`/`mv`/`tagged_pointer`/`IO`/`HardcodedModule`/`ZigStackFramePosition`/`postgres/NewWriter`/`baby_list`/`Expansion`/`posix_event_loop`/`PipeReader`/`codec_png`/`node_fs_stat_watcher`/`Handlers`/`udp_socket`/`ls`/`MiniEventLoop`/`IOReader`/`Pipeline`/`INotifyWatcher` 24 模块验收提交（24/24 PASS，ratio 0.805x~1.158x）；`std/Io/Writer`/`std/array_hash_map`/`std/hash_map`/`std/fmt` 全清零。
+
+- **[2026-11-20 22:05] Wave 18 B 组（第2批 18 模块）验收提交**：`bun_alloc`/`identity_context`/`ast/base`/`Builtin`/`IOWriter`/`basename`/`cd`/`dirname`/`exit`/`export`/`mv`/`pwd`/`seq`/`which`/`yes`/`states/Async`/`Watcher` 等 18/18 PASS，同步沉淀 6 条 `CP_PITFALLS.md` 新坑；`output.cp` 交由 Wave 19 A 组继续修 line 1230。

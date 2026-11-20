@@ -62,7 +62,7 @@ export @packed(u8) struct WatchEventOp {
         };
     }
 
-    pub static fn format(op: WatchEventOp, w: *std.Io.Writer): anyerror!void {
+    pub static fn format(op: WatchEventOp, w: *std.Io.Writer)! {
         w.writeAll("{")?;
         let first = true;
         inline for (name of comptime std.meta.fieldNames(WatchEventOp)) {

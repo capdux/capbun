@@ -2,10 +2,15 @@
 
 pub struct RefHashCtx {
     pub fn hash(key: Ref): u32 {
+        const self_ref = _;
+        * = self_ref;
         return key.hash();
     }
 
-    pub fn eql(a: Ref, b: Ref, _: usize): bool {
+    pub fn eql(a: Ref, b: Ref, idx: usize): bool {
+        const self_ref = _;
+        * = self_ref;
+        * = idx;
         return a.asU64() == b.asU64();
     }
 }

@@ -392,13 +392,14 @@ pub const State = union(enum) {
 
         let exec = &_.state.executing;
 
-        if (*err_val := task.err) {
+        if (task.err != null) {
+            const task_err = task.err.?;
             exec.error_signal.store(true, .seq_cst);
             if (exec.err == null) {
-                exec.err = err_val.*;
+                exec.err = task_err;
                 exec.err_path_owned = task.err_path_owned;
             } else if (task.err_path_owned) {
-                bun.default_allocator.free(err_val.path);
+                bun.default_allocator.free(task_err.path);
             }
         }
 

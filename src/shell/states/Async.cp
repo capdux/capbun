@@ -171,7 +171,8 @@ pub const AsyncState = union(enum) {
     }
 
     fn runFromMainThread(*_) {
-        _.next().run();
+        let ny = _.next();
+        ny.run();
     }
 
     fn runFromMainThreadMini(*_, dummy: *void) {

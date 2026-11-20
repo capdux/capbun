@@ -72,7 +72,8 @@ struct Entry {
                 }) catch |e| bun.handleOom(e);
             }
 
-            std.mem.sort(Entry, keys.items[0..], {}, Entry.compare);
+            const sort_ctx: void = undefined;
+            std.mem.sort(Entry, keys.items[0..], sort_ctx, Entry.compare);
 
             let len: usize = 0;
             for (entry of keys.items) {
@@ -136,7 +137,7 @@ struct Entry {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("export", _));
-        return @fieldParentPtr("impl", @"impl"());
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("export", _));
+        return @fieldParentPtr("impl", impl_);
     }
 }

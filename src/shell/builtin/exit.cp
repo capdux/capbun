@@ -26,7 +26,7 @@ enum State {
             1 => {
                 const first_arg = args[0][0..std.mem.len(args[0]) :0];
                 const exit_code: ExitCode = std.fmt.parseInt(u8, first_arg, 10) catch |e| switch (e) {
-                    error.Overflow => @intCast((std.fmt.parseInt(usize, first_arg, 10) catch return _.fail("exit: numeric argument required\n")) % 256),
+                    error.Overflow => @as(ExitCode, @intCast((std.fmt.parseInt(usize, first_arg, 10) catch return _.fail("exit: numeric argument required\n")) % 256)),
                     error.InvalidCharacter => return _.fail("exit: numeric argument required\n"),
                 };
                 return _.bltn().done(exit_code);
@@ -71,7 +71,7 @@ enum State {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("exit", _));
-        return @fieldParentPtr("impl", @"impl"());
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("exit", _));
+        return @fieldParentPtr("impl", impl_);
     }
 }

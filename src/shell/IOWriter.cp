@@ -558,7 +558,7 @@ pub fn brokenPipeForWriters(client: *IOWriter) {
             offset += w.len;
             continue;
         }
-        log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(0x{x}) {s}(0x{x})", .{ @intFromPtr(client), client.fd, @intFromPtr(w), @tagName(w.ptr.ptr.tag()), w.ptr.ptr.repr._ptr });
+        log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(len={d}) {s}(0x{x})", .{ @intFromPtr(client), client.fd, w.len, @tagName(w.ptr.ptr.tag()), w.ptr.ptr.repr._ptr });
         const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
         let chunk_y = w.ptr.onIOWriterChunk(0, e);
         chunk_y.run();

@@ -101,13 +101,13 @@ pub const IndexType = packed struct(u32) {
 
 pub const IndexMapContext = struct {
 
-pub fn hash(self: *IndexMapContext, key: HashKeyType) HashKeyType {
+pub fn hash(self: IndexMapContext, key: HashKeyType) HashKeyType {
             const self_ref = self;
             _ = &self_ref;
             return key;
     }
 
-pub fn eql(self: *IndexMapContext, a: HashKeyType, b: HashKeyType) bool {
+pub fn eql(self: IndexMapContext, a: HashKeyType, b: HashKeyType) bool {
             const self_ref = self;
             _ = &self_ref;
             return (a == b);

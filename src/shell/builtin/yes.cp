@@ -35,7 +35,8 @@ pub struct YesTask {
 
     pub fn runFromMainThread(*_) {
         const yes: *Yes = @fieldParentPtr("task", _);
-        yes.writeNoIO().run();
+        let wy = yes.writeNoIO();
+        wy.run();
     }
 
     pub fn runFromMainThreadMini(*_, _: *void) {
@@ -176,8 +177,8 @@ pub struct YesTask {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("yes", _));
-        return @fieldParentPtr("impl", @"impl"());
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("yes", _));
+        return @fieldParentPtr("impl", impl_);
     }
 
     pub fn deinit(*_) {

@@ -129,8 +129,8 @@ const State = union(enum) {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("cd", _));
-        return @fieldParentPtr("impl", @"impl"());
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cd", _));
+        return @fieldParentPtr("impl", impl_);
     }
 
     pub fn deinit(*_) {

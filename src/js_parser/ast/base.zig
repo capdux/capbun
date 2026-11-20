@@ -80,11 +80,16 @@ pub const RefTag = enum(u2) {
 
 pub const RefHashCtx = struct {
 
-pub fn hash(key: Ref) u32 {
+pub fn hash(self: RefHashCtx, key: Ref) u32 {
+            const self_ref = self;
+            _ = &self_ref;
             return key.hash();
     }
 
-pub fn eql(a: Ref, b: Ref, _: usize) bool {
+pub fn eql(self: RefHashCtx, a: Ref, b: Ref, idx: usize) bool {
+            const self_ref = self;
+            _ = &self_ref;
+            _ = &idx;
             return (a.asU64() == b.asU64());
     }
 };

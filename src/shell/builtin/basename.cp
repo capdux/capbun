@@ -70,7 +70,7 @@ enum State {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const @"impl": *Builtin.Impl = @alignCast(@fieldParentPtr("basename", _));
-        return @fieldParentPtr("impl", @"impl"());
+        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("basename", _));
+        return @fieldParentPtr("impl", impl_);
     }
 }

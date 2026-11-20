@@ -260,15 +260,15 @@ pub fn batchedMoveTaskDone(self: *Mv, task: *ShellMvBatchedTask) void {
         }
         var exec = (&self.state.executing);
         _ = &exec;
-        if (task.err) |*err_val| {
-            _ = &err_val;
+        if ((task.err != null)) {
+            const task_err = task.err.?;
             _ = exec.error_signal.store(true, .seq_cst);
             if ((exec.err == null)) {
-                exec.err = (err_val.*).*;
+                exec.err = task_err;
                 exec.err_path_owned = task.err_path_owned;
             } else {
                 if (task.err_path_owned) {
-                    _ = bun.default_allocator.free((err_val.*).path);
+                    _ = bun.default_allocator.free(task_err.path);
                 }
             }
         }

@@ -93,7 +93,7 @@ pub fn merge(before: WatchEventOp, after: WatchEventOp) WatchEventOp {
             return WatchEventOp{ .delete = (before.delete or after.delete), .write = (before.write or after.write), .metadata = (before.metadata or after.metadata), .rename = (before.rename or after.rename), .move_to = (before.move_to or after.move_to), .create = (before.create or after.create) };
     }
 
-pub fn format(op: WatchEventOp, w: *std.Io.Writer) anyerror!void {
+pub fn format(op: WatchEventOp, w: *std.Io.Writer) !void {
             _ = try w.writeAll("{");
             var first = true;
             _ = &first;

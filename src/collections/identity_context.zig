@@ -65,13 +65,13 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const ArrayIdentityContext = struct {
 pub const U64 = struct {
 
-pub fn hash(self: *U64, key: u64) u32 {
+pub fn hash(self: *const U64, key: u64) u32 {
                 const self_ref = self;
                 _ = &self_ref;
                 return (if (comptime @typeInfo(@TypeOf(key)) == .@"enum") cp_cast_int(u32, @intFromEnum(key)) else cp_cast_int(u32, key));
         }
 
-pub fn eql(self: *U64, a: u64, b: u64, idx: usize) bool {
+pub fn eql(self: *const U64, a: u64, b: u64, idx: usize) bool {
                 const self_ref = self;
                 _ = &self_ref;
                 _ = &idx;
@@ -80,13 +80,13 @@ pub fn eql(self: *U64, a: u64, b: u64, idx: usize) bool {
     };
     
 
-pub fn hash(self: *ArrayIdentityContext, key: u32) u32 {
+pub fn hash(self: ArrayIdentityContext, key: u32) u32 {
             const self_ref = self;
             _ = &self_ref;
             return key;
     }
 
-pub fn eql(self: *ArrayIdentityContext, a: u32, b: u32, idx: usize) bool {
+pub fn eql(self: ArrayIdentityContext, a: u32, b: u32, idx: usize) bool {
             const self_ref = self;
             _ = &self_ref;
             _ = &idx;
