@@ -48,14 +48,18 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JS
     let stringifier: Stringifier = .init(scope.allocator(), global, space_value)?;
     defer stringifier.deinit();
 
-    stringifier.findAnchorsAndAliases(global, value, .root) catch (e) return switch (e) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => e,
-        error.StackOverflow => global.throwStackOverflow(),
+    stringifier.findAnchorsAndAliases(global, value, .root) catch |e| {
+        if (e == error.StackOverflow) return global.throwStackOverflow();
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        return error.JSError;
     };
 
-    stringifier.stringifyValue(global, value) catch (e) return switch (e) {
-        error.OutOfMemory, error.JSError, error.JSTerminated => e,
-        error.StackOverflow => global.throwStackOverflow(),
+    stringifier.stringifyValue(global, value) catch |e| {
+        if (e == error.StackOverflow) return global.throwStackOverflow();
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        return error.JSError;
     };
 
     return stringifier.builder.toString(global);
@@ -113,7 +117,7 @@ pub fn spaceInit(global: *JSGlobalObject, space_value: JSValue): JSError!Space {
     const space = space_value.unwrapBoxedPrimitive(global)?;
     if (space.isNumber()) {
         const num_f = space.asNumber();
-        if (!(num_f >= 1)) return .minified;
+        if (!(num_f >= 1)) return Space.minified;
         return Space{ number: if (num_f > 10) 10 else @intFromFloat(num_f) };
     }
 
@@ -121,12 +125,12 @@ pub fn spaceInit(global: *JSGlobalObject, space_value: JSValue): JSError!Space {
         const str = space.toBunString(global)?;
         if (str.length() == 0) {
             str.deref();
-            return .minified;
+            return Space.minified;
         }
         return Space{ str: str };
     }
 
-    return .minified;
+    return Space.minified;
 }
 
 pub fn spaceDeinit(this_space: *Space) {

@@ -1151,7 +1151,7 @@ extern "c" fn WebCore_BufferEncodingType_toJS(globalObject: *jsc.JSGlobalObject,
 pub fn jsAssertEncodingValid(global: *jsc.JSGlobalObject, call_frame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const value = call_frame.argument(0);
         _ = try Encoding.assert(value, global, .utf8);
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn CallbackTask(comptime Result: type) type {

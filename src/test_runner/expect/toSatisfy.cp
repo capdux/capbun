@@ -34,7 +34,7 @@ pub fn toSatisfy(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
     const not = client.flags.not;
     const pass = (result.isBoolean() && result.toBoolean()) != not;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

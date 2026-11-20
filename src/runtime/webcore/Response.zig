@@ -598,7 +598,7 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
             _ = &str;
             _ = try json_value.jsonStringifyFast(globalThis, (&str));
             if (globalThis.hasException()) {
-                return error.zero;
+                return JSValue.zero;
             }
             if ((!str.isEmpty())) {
                 if ((if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) |bytes| {
@@ -621,7 +621,7 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
                 } else {
                     const maybe_init = (blk_catch_1: { break :blk_catch_1 ((Init.init(globalThis, arg_init)) catch |e| { _ = &e; break :blk_catch_1 @as(?Init, blk: {
                     if ((e == error.JSError)) {
-                        return error.zero;
+                        return JSValue.zero;
                     }
                     break :blk @as(?Init, null);
 }); }); });

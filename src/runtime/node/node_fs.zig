@@ -3261,7 +3261,7 @@ pub fn link(self: *NodeFS, args: Arguments.Link, _: Flavor) Maybe(Return.Link) {
 
 pub fn lstat(self: *NodeFS, args: Arguments.Lstat, _: Flavor) Maybe(Return.Lstat) {
             if ((Environment.isLinux and Syscall.supports_statx_on_linux.load(.monotonic))) {
-                return (switch (Syscall.lstatx(args.path.sliceZ((&self.sync_error_buf)), (&.{ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks }))) {
+                return (switch (Syscall.lstatx(@constCast(args.path.sliceZ((&self.sync_error_buf)).ptr), (&.{ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks }))) {
 .result => |result| .{ .result = .{ .stats = .init((&result), args.big_int) } },
 .err => |e| brk: {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
@@ -3299,7 +3299,7 @@ pub fn mkdirNonRecursive(self: *NodeFS, args: Arguments.Mkdir) Maybe(Return.Mkdi
     }
 
 pub fn mkdirRecursive(self: *NodeFS, args: Arguments.Mkdir) Maybe(Return.Mkdir) {
-            return self.mkdirRecursiveImpl(self, args, void, .{});
+            return self.mkdirRecursiveImpl(args, void, .{});
     }
 
 pub fn mkdirRecursiveImpl(self: *NodeFS, args: Arguments.Mkdir, comptime Ctx: type, ctx: Ctx) Maybe(Return.Mkdir) {
@@ -3414,7 +3414,7 @@ working_mem[cp_cast_int(usize, i)] = std.fs.path.sep;
 
 },
 else => {
-return .{ .e = e.withPath(self.osPathIntoSyncErrorBuf(strings.withoutNTPrefix(bun.OSPathChar, path))) };
+return .{ .err = e.withPath(self.osPathIntoSyncErrorBuf(strings.withoutNTPrefix(bun.OSPathChar, path))) };
 },
 }
 },
@@ -3718,7 +3718,7 @@ pub fn readdirWithEntries(args: Arguments.Readdir, fd: bun.FD, basename: [:0]con
                     }
                 }
                 _ = entries.deinit();
-                return .{ .e = e.withPath(args.path.slice()) };
+                return .{ .err = e.withPath(args.path.slice()) };
             }
 },
 .result => |ent| ent,
@@ -3796,9 +3796,9 @@ else => {
 },
 }
                     const path_parts: [2][]const u8 = .{ root_basename, basename };
-                    return .{ .e = e.withPath(bun.path.joinZBuf(buf, (&path_parts), .auto)) };
+                    return .{ .err = e.withPath(bun.path.joinZBuf(buf, (&path_parts), .auto)) };
                 }
-                return .{ .e = e.withPath(args.path.slice()) };
+                return .{ .err = e.withPath(args.path.slice()) };
             }
 },
 .result => |fd_| fd_,
@@ -3829,9 +3829,9 @@ else => {
 {
                 if (comptime (!is_root)) {
                     const path_parts: [2][]const u8 = .{ root_basename, basename };
-                    return .{ .e = e.withPath(bun.path.joinZBuf(buf, (&path_parts), .auto)) };
+                    return .{ .err = e.withPath(bun.path.joinZBuf(buf, (&path_parts), .auto)) };
                 }
-                return .{ .e = e.withPath(args.path.slice()) };
+                return .{ .err = e.withPath(args.path.slice()) };
             }
 },
 .result => |ent| ent,
@@ -3946,7 +3946,7 @@ pub fn readdirWithEntriesRecursiveSync(buf: *bun.PathBuffer, args: Arguments.Rea
 .err => |e| {
 {
                     if ((root_fd == bun.invalid_fd)) {
-                        return .{ .e = e.withPath(args.path.slice()) };
+                        return .{ .err = e.withPath(args.path.slice()) };
                     }
                     switch (e.getErrno()) {
 .NOENT, .NOTDIR, .PERM => {
@@ -3983,7 +3983,7 @@ return .{ .err = e };
                 }
                 while ((switch (entry) {
 .err => |e| {
-return .{ .e = e.withPath(args.path.slice()) };
+return .{ .err = e.withPath(args.path.slice()) };
 },
 .result => |ent| ent,
 })) |current| : (entry = iterator.next()) {
@@ -4115,7 +4115,7 @@ else => Syscall.open(path, flags, 0),
 .windows => bun.sys.openDirAtWindowsA(bun.FD.cwd(), path, .{ .iterable = true, .read_only = true }),
 })) {
 .err => |e| {
-return .{ .e = e.withPath(args.path.slice()) };
+return .{ .err = e.withPath(args.path.slice()) };
 },
 .result => |fd_| fd_,
 });
@@ -4181,7 +4181,7 @@ pub fn readFileWithOptions(self: *NodeFS, args: Arguments.ReadFile, comptime fla
             }
             break :brk (switch (bun.sys.open(path, (args.flag.asInt() | bun.O.NOCTTY), default_permission)) {
 .err => |e| {
-return .{ .e = e.withPath(args.path.path.slice()) };
+return .{ .err = e.withPath(args.path.path.slice()) };
 },
 .result => |fd| fd,
 });
@@ -4388,7 +4388,7 @@ pub fn writeFileWithPathBuffer(pathbuf: *bun.PathBuffer, args: Arguments.WriteFi
             const open_result = bun.sys.openat(args.dirfd, path, args.flag.asInt(), args.mode);
             break :brk (switch (open_result) {
 .err => |e| {
-return .{ .e = e.withPath(args.file.path.slice()) };
+return .{ .err = e.withPath(args.file.path.slice()) };
 },
 .result => |fd| fd,
 });

@@ -1,7 +1,8 @@
 // src/http/http.cp
 // Core HTTP Client implementation in CP language
 
-import { HTTPCertError } from "./HTTPCertError.cp";
+import HTTPCertErrorMod from "./HTTPCertError.zig";
+pub const HTTPCertError = HTTPCertErrorMod;
 import * as ProxyTunnelMod from "./ProxyTunnel.cp";
 pub const ProxyTunnel = ProxyTunnelMod.ProxyTunnel;
 import * as Headers from "./Headers.cp";
@@ -555,7 +556,7 @@ fn h3AltSvcEnabled(): bool {
 pub fn hashHeaderName(name: string): u64 {
     let hasher = std.hash.Wyhash.init(0);
     let remain = name;
-    let buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
+    let buf: @TypeOf(hasher.buf) = undefined;
 
     while (remain.len > 0) {
         const end = @min(hasher.buf.len, remain.len);
@@ -568,7 +569,7 @@ pub fn hashHeaderName(name: string): u64 {
 pub fn hashHeaderConst(comptime name: string): u64 {
     let hasher = std.hash.Wyhash.init(0);
     let remain = name;
-    let buf: [hasher.buf.len]u8 = undefined;
+    let buf: @TypeOf(hasher.buf) = undefined;
 
     while (remain.len > 0) {
         const end = @min(hasher.buf.len, remain.len);
@@ -679,7 +680,7 @@ export @root @value struct HTTPClient {
             tunnel.detachAndDeref();
         }
         bun.debugAssert(this.h2 == null);
-        if (tls := this.tls_props) {
+        if (*tls := this.tls_props) {
             tls.deinit();
             this.tls_props = null;
         }
@@ -2132,10 +2133,10 @@ export @root @value struct HTTPClient {
             const content_length = this.state.content_length;
             // is it exactly as much as we need?
             if (is_only_buffer and content_length != null and incoming_data.len >= content_length.?) {
-                try handleResponseBodyFromSinglePacket(this, incoming_data[0..content_length.?]);
+                try this.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?]);
                 return true;
             } else {
-                return handleResponseBodyFromMultiplePackets(this, incoming_data);
+                return this.handleResponseBodyFromMultiplePackets(incoming_data);
             }
         }
 
@@ -2376,7 +2377,7 @@ export @root @value struct HTTPClient {
         pub fn handleResponseMetadata(
             *_: *HTTPClient,
             response: *picohttp.Response,
-        ) !ShouldContinue {
+        ): ShouldContinue! {
             let location: string = "";
             let pretend_304 = false;
             let is_server_sent_events = false;

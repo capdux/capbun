@@ -639,10 +639,11 @@ pub fn disableBuffering() void {
 
 pub fn panic(comptime fmt: []const u8, args: anytype) noreturn {
         @branchHint(.cold);
+        const actual_args = (if (comptime (@typeInfo(@TypeOf(args)) == .pointer)) args.* else args);
         if (enable_ansi_colors_stderr) {
-            _ = std.debug.panic((comptime prettyFmt(fmt, true)), args);
+            _ = std.debug.panic((comptime prettyFmt(fmt, true)), actual_args);
         } else {
-            _ = std.debug.panic((comptime prettyFmt(fmt, false)), args);
+            _ = std.debug.panic((comptime prettyFmt(fmt, false)), actual_args);
         }
 }
 

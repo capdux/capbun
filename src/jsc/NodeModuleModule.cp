@@ -22,7 +22,7 @@ fn findPath(
 
     const absolute_request = std.fs.path.isAbsolute(request);
     if (!absolute_request && paths_maybe == null) {
-        return .false;
+        return JSValue.false;
     }
 
     // for each path
@@ -46,7 +46,7 @@ fn findPath(
         return str.transferToJS(global);
     }
 
-    return .false;
+    return JSValue.false;
 }
 
 fn findPathInner(

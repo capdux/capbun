@@ -1044,7 +1044,7 @@ pub const MAX_HANDLE_RETRANSMISSIONS = 3;
 fn emitProcessErrorEvent(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     const ex = callframe.argumentsAsArray(1)[0];
     jsc.VirtualMachine.Process__emitErrorEvent(globalThis, ex);
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub enum FromEnum { subprocess_exited, subprocess, process }
@@ -1052,12 +1052,12 @@ pub enum FromEnum { subprocess_exited, subprocess, process }
 fn doSendErr(globalObject: *jsc.JSGlobalObject, callback: jsc.JSValue, ex: jsc.JSValue, origin: FromEnum): bun.JSError!JSValue {
     if (callback.isCallable()) {
         (callback.callNextTick(globalObject, .{ ex }))?;
-        return .false;
+        return JSValue.false;
     }
     if (origin == .process) {
         const target = jsc.JSFunction.create(globalObject, bun.String.empty, emitProcessErrorEvent, 1, .{});
         (target.callNextTick(globalObject, .{ ex }))?;
-        return .false;
+        return JSValue.false;
     }
     // Bun.spawn().send() should throw an error (unless callback is passed)
     return globalObject.throwValue(ex);
@@ -1145,7 +1145,7 @@ pub fn doSend(ipc: (*SendQueue)?, globalObject: *jsc.JSGlobalObject, callFrame: 
         // in the success or backoff case, serializeAndSend will handle calling the callback
         return if (status == .success) .true else .false;
     }
-    return .false;
+    return JSValue.false;
 }
 
 pub union(enum) IPCCommand {

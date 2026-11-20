@@ -4068,7 +4068,7 @@ pub fn shellCmdFromJS(globalThis: *jsc.JSGlobalObject, string_args: JSValue, tem
         return;
 }
 
-pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSValue, out_jsobjs: *std.array_list.Managed(JSValue), out_script: *std.array_list.Managed(u8), jsstrings: *std.array_list.Managed(bun.String), jsobjref_buf: []u8, marked_argument_buffer: *jsc.MarkedArgumentBuffer) !bun.JSError {
+pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSValue, out_jsobjs: *std.array_list.Managed(JSValue), out_script: *std.array_list.Managed(u8), jsstrings: *std.array_list.Managed(bun.String), jsobjref_buf: []u8, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!void {
         var builder = ShellSrcBuilder.init(globalThis, out_script, jsstrings);
         _ = &builder;
         if ((template_value != .zero)) {
@@ -4209,7 +4209,7 @@ pub fn escape8Bit(str: []const u8, outbuf: *std.array_list.Managed(u8), comptime
             _ = &is_backslashable;
             inline for (BACKSLASHABLE_CHARS) |spc| {
                 if ((spc == c)) {
-                    _ = outbuf.appendSlice((&.{ 92, c }));
+                    _ = try outbuf.appendSlice((&.{ 92, c }));
                     is_backslashable = true;
                     break;
                 }

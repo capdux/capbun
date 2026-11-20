@@ -24,7 +24,7 @@ pub fn toBeArrayOfSize(client: *Expect, globalThis: *JSGlobalObject, callFrame: 
     let pass = value.jsType().isArray() && @as(i32, i32(try value.getLength(globalThis))) == size.toInt32();
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

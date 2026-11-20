@@ -12,7 +12,7 @@ pub fn toMatchObject(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
     const received_object: JSValue = client.getValue(globalThis, thisValue, "toMatchObject", "<green>expected<r>")?;
 
     if (!received_object.isObject()) {
-        const matcher_error = "\n\n<b>Matcher error<r>: <red>received<r> value must be a non-null object\n";
+        const matcher_error: [:0]const u8 = "\n\n<b>Matcher error<r>: <red>received<r> value must be a non-null object\n";
         if (not) {
             const signature = comptime getSignature("toMatchObject", "<green>expected<r>", true);
             return client.throw(globalThis, signature, matcher_error, {});
@@ -23,7 +23,7 @@ pub fn toMatchObject(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
     }
 
     if (args.len < 1 || !args[0].isObject()) {
-        const matcher_error = "\n\n<b>Matcher error<r>: <green>expected<r> value must be a non-null object\n";
+        const matcher_error: [:0]const u8 = "\n\n<b>Matcher error<r>: <green>expected<r> value must be a non-null object\n";
         if (not) {
             const signature = comptime getSignature("toMatchObject", "", true);
             return client.throw(globalThis, signature, matcher_error, {});
@@ -37,7 +37,7 @@ pub fn toMatchObject(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
     let pass = received_object.jestDeepMatch(property_matchers, globalThis, true)?;
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     const diff_formatter = DiffFormatter{

@@ -117,7 +117,7 @@ pub struct Targets {
             break :target_feature feature;
         };
 
-        return shouldCompile(_, compat_feature, target_feature);
+        return _.shouldCompile(compat_feature, target_feature);
     }
 
     fn shouldCompileSelectors(): bool {
@@ -126,8 +126,8 @@ pub struct Targets {
     }
 
     fn isCompatible(feature: css.compat.Feature): bool {
-        if (*targets := _.browsers) {
-            return feature.isCompatible(targets.*);
+        if (targets := _.browsers) {
+            return feature.isCompatible(targets);
         }
         return true;
     }

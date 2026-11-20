@@ -121,8 +121,8 @@ pub enum BasicParseErrorKind {
     /// A qualified rule was encountered that was invalid.
     qualified_rule_invalid,
 
-    pub fn format(writer: *std.Io.Writer)! {
-        return switch (_) {
+    static fn format(c: BasicParseErrorKind, writer: *std.Io.Writer)! {
+        return switch (c) {
             .unexpected_token => |token| {
                 writer.print("unexpected token: {f}", .{token})?;
             },

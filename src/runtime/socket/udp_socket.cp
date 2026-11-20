@@ -475,7 +475,7 @@ export class UDPSocket {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
 
-        return .true;
+        return JSValue.true;
     }
 
     pub fn addMembership(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -527,7 +527,7 @@ export class UDPSocket {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
 
-        return .true;
+        return JSValue.true;
     }
 
     pub fn addSourceSpecificMembership(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -551,7 +551,7 @@ export class UDPSocket {
         let addr: std.posix.sockaddr.storage = undefined;
 
         if (!try parseAddr(this, globalThis, .jsNumber(0), arguments[0], &addr)) {
-            return .false;
+            return JSValue.false;
         }
 
         const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
@@ -561,7 +561,7 @@ export class UDPSocket {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
 
-        return .true;
+        return JSValue.true;
     }
 
     pub fn setTTL(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -775,22 +775,22 @@ export class UDPSocket {
         if (!this.closed) {
             this.poll_ref.ref(globalThis.bunVM());
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn unref(*_, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         this.poll_ref.unref(globalThis.bunVM());
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn close(*_, _: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
         if (!this.closed) {
-            const sock = this.socket orelse return .js_undefined;
+            const sock = this.socket orelse return JSValue.js_undefined;
             this.socket = null;
             sock.close();
             this.this_value.downgrade();
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn reload(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -800,14 +800,14 @@ export class UDPSocket {
         }
 
         const options = args.ptr[0];
-        const thisValue = this.this_value.tryGet() orelse return .js_undefined;
+        const thisValue = this.this_value.tryGet() orelse return JSValue.js_undefined;
         const config = try UDPSocketConfig.fromJS(globalThis, options, thisValue);
 
         let previous_config = this.config;
         this.config = config;
         previous_config.release();
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn getClosed(*_: *UDPSocket, _: *JSGlobalObject): JSValue {
@@ -918,7 +918,7 @@ export class UDPSocket {
         UDPSocket.js.addressSetCached(callFrame.this(), globalThis, .zero);
         UDPSocket.js.remoteAddressSetCached(callFrame.this(), globalThis, .zero);
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn jsDisconnect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -939,7 +939,7 @@ export class UDPSocket {
         }
         this_socket.connect_info = null;
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 }
 

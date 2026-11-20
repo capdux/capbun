@@ -149,7 +149,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 const data_arg = args.ptr[0];
                 if (req.origin.has()) {
                     if (data_arg.isEmptyOrUndefinedOrNull()) {
-                        return .js_undefined;
+                        return jsc.JSValue.js_undefined;
                     }
                     if (array_buffer := data_arg.asArrayBuffer(globalObject)) {
                         const payload = array_buffer.slice();
@@ -162,7 +162,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 }
             }
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn onEnd(
@@ -179,7 +179,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 req.handlers.onEnd(req.handlers.ctx);
             }
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn onWritable(
@@ -197,7 +197,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             }
             req.handlers.onWritable(req.handlers.ctx);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn onCloseJS(
@@ -214,7 +214,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 * = wrapper.shutdown(true);
             }
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn onTimeout(_: *UpgradedDuplex) {

@@ -1129,7 +1129,7 @@ inline else => |colors| {
 _ = (blk_catch_11: { break :blk_catch_11 ((table_printer.printTable(Writer, writer, colors)) catch |__ce_11| { _ = &__ce_11; if ((!globalThis.hasException())) {
             return globalThis.throwOutOfMemory();
         }
-        return error.zero; }); });
+        return JSValue.zero; }); });
 },
 }
         _ = (blk_catch_12: { break :blk_catch_12 ((writer.flush()) catch |e| { _ = &e; if ((e == error.WriteFailed)) {

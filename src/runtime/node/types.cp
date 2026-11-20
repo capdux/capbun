@@ -512,7 +512,7 @@ pub enum Encoding: u8 {
 pub fn jsAssertEncodingValid(global: *jsc.JSGlobalObject, call_frame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const value = call_frame.argument(0);
     * = Encoding.assert(value, global, .utf8)?;
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 union(Tag) PathOrBuffer {

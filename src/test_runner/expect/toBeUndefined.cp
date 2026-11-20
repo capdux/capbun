@@ -10,7 +10,7 @@ pub fn toBeUndefined(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
     if (value.isUndefined()) pass = true;
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

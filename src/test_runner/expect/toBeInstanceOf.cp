@@ -24,7 +24,7 @@ pub fn toBeInstanceOf(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
     const not = client.flags.not;
     let pass = value.isInstanceOf(globalThis, expected_value);
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     const expected_fmt = expected_value.toFmt(&formatter);

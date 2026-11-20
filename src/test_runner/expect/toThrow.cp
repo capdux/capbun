@@ -39,14 +39,16 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
 
     const not = client.flags.not;
 
-    const [result_, return_value_from_function] = client.getValueAsToThrow(globalThis, client.getValue(globalThis, thisValue, "toThrow", "<green>expected<r>")?)?;
+    const throw_pair = client.getValueAsToThrow(globalThis, client.getValue(globalThis, thisValue, "toThrow", "<green>expected<r>")?)?;
+    const result_ = throw_pair[0];
+    const return_value_from_function = throw_pair[1];
 
     const did_throw = result_ != null;
 
     if (not) {
         const signature = comptime getSignature("toThrow", "<green>expected<r>", true);
 
-        if (!did_throw) return .js_undefined;
+        if (!did_throw) return JSValue.js_undefined;
 
         const result: JSValue = result_.?;
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
@@ -83,7 +85,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 defer expected_slice.deinit();
                 const received_slice = received_message.toSliceOrNull(globalThis)?;
                 defer received_slice.deinit();
-                if (!strings.contains(received_slice.slice(), expected_slice.slice())) return .js_undefined;
+                if (!strings.contains(received_slice.slice(), expected_slice.slice())) return JSValue.js_undefined;
             }
 
             return client.throw(globalThis, signature, "\n\nExpected substring: not <green>{f}<r>\nReceived message: <red>{f}<r>\n", .{
@@ -102,7 +104,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             // TODO: REMOVE THIS GETTER! Expose a binding to call .test on the RegExp object directly.
             if (test_fn := expected_value.get(globalThis, "test")?) {
                 const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch |e| globalThis.takeException(e);
-                if (!matches.toBoolean()) return .js_undefined;
+                if (!matches.toBoolean()) return JSValue.js_undefined;
             }
 
             return client.throw(globalThis, signature, "\n\nExpected pattern: not <green>{f}<r>\nReceived message: <red>{f}<r>\n", .{
@@ -119,12 +121,12 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             if (globalThis.hasException()) return .zero;
 
             // no partial match for this case
-            if (!(expected_message.isSameValue(received_message, globalThis)?)) return .js_undefined;
+            if (!(expected_message.isSameValue(received_message, globalThis)?)) return JSValue.js_undefined;
 
             return client.throw(globalThis, signature, "\n\nExpected message: not <green>{f}<r>\n", .{ expected_message.toFmt(&formatter) });
         }
 
-        if (!result.isInstanceOf(globalThis, expected_value)) return .js_undefined;
+        if (!result.isInstanceOf(globalThis, expected_value)) return JSValue.js_undefined;
 
         let expected_class = ZigString.Empty;
         expected_value.getClassName(globalThis, &expected_class)?;
@@ -133,7 +135,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
     }
 
     if (did_throw) {
-        if (expected_value == .zero || expected_value.isUndefined()) return .js_undefined;
+        if (expected_value == .zero || expected_value.isUndefined()) return JSValue.js_undefined;
 
         let result: JSValue = result_.?;
         if (r := result_.?.toError()) {
@@ -153,7 +155,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 defer expected_slice.deinit();
                 const received_slice = received_message.toSlice(globalThis, globalThis.allocator())?;
                 defer received_slice.deinit();
-                if (strings.contains(received_slice.slice(), expected_slice.slice())) return .js_undefined;
+                if (strings.contains(received_slice.slice(), expected_slice.slice())) return JSValue.js_undefined;
             }
 
             // error: message from received error does not match expected string
@@ -178,7 +180,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 // TODO: REMOVE THIS GETTER! Expose a binding to call .test on the RegExp object directly.
                 if (test_fn := expected_value.get(globalThis, "test")?) {
                     const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch |e| globalThis.takeException(e);
-                    if (matches.toBoolean()) return .js_undefined;
+                    if (matches.toBoolean()) return JSValue.js_undefined;
                 }
             }
 
@@ -209,7 +211,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             }
 
             if (is_equal) {
-                return .js_undefined;
+                return JSValue.js_undefined;
             }
 
             let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
@@ -226,7 +228,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             const signature = comptime getSignature("toThrow", "<green>expected<r>", false);
 
             if (received_message := _received_message) {
-                if (received_message.isSameValue(expected_message, globalThis)?) return .js_undefined;
+                if (received_message.isSameValue(expected_message, globalThis)?) return JSValue.js_undefined;
             }
 
             // error: message from received error does not match expected error message.
@@ -244,7 +246,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             return client.throw(globalThis, signature, "\n\nExpected message: <green>{f}<r>\nReceived value: <red>{f}<r>\n", .{ expected_fmt, received_fmt });
         }
 
-        if (result.isInstanceOf(globalThis, expected_value)) return .js_undefined;
+        if (result.isInstanceOf(globalThis, expected_value)) return JSValue.js_undefined;
 
         // error: received error not instance of received error constructor
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

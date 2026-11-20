@@ -517,7 +517,7 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         inline else => |colors| table_printer.printTable(Writer, writer, colors) catch {
             if (!globalThis.hasException())
                 return globalThis.throwOutOfMemory();
-            return .zero;
+            return JSValue.zero;
         },
     }
 

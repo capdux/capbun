@@ -184,7 +184,7 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                 const data_arg = args.ptr[0];
                 if (req.origin.has()) {
                     if (data_arg.isEmptyOrUndefinedOrNull()) {
-                        return error.js_undefined;
+                        return jsc.JSValue.js_undefined;
                     }
                     if (data_arg.asArrayBuffer(globalObject)) |array_buffer| {
                         _ = &array_buffer;
@@ -202,7 +202,7 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                 }
             }
         }
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -220,7 +220,7 @@ pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
                 _ = req.handlers.onEnd(req.handlers.ctx);
             }
         }
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn onWritable(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -240,7 +240,7 @@ pub fn onWritable(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
             }
             _ = req.handlers.onWritable(req.handlers.ctx);
         }
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn onCloseJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -259,7 +259,7 @@ pub fn onCloseJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
                 _ = (wrapper.*).shutdown(true);
             }
         }
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn onTimeout(self: *UpgradedDuplex) void {

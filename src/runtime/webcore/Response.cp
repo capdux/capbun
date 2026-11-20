@@ -618,7 +618,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
             json_value.jsonStringifyFast(globalThis, &str)?;
 
             if (globalThis.hasException()) {
-                return .zero;
+                return JSValue.zero;
             }
 
             if (!str.isEmpty()) {
@@ -644,7 +644,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
                 response.#init.status_code = @as(u16, @intCast(@min(@max(0, arg_init.toInt32()), std.math.maxInt(u16))));
             } else {
                 const maybe_init = Init.init(globalThis, arg_init) catch |e| blk: {
-                    if (e == error.JSError) return .zero;
+                    if (e == error.JSError) return JSValue.zero;
                     break :blk @as(Init?, null);
                 };
                 if (_init := maybe_init) {

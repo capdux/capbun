@@ -4023,7 +4023,7 @@ pub struct NodeFS {
 
     fn lstat(*_, args: Arguments.Lstat, _: Flavor): Maybe(Return.Lstat) {
         if (Environment.isLinux && Syscall.supports_statx_on_linux.load(.monotonic)) {
-            return switch (Syscall.lstatx(args.path.sliceZ(&_.sync_error_buf), &[ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks ])) {
+            return switch (Syscall.lstatx(@constCast(args.path.sliceZ(&_.sync_error_buf).ptr), &[ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks ])) {
                 .result => |result| .{ result: .{ stats: .init(&result, args.big_int) } },
                 .err => |e| brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
@@ -4064,7 +4064,7 @@ pub struct NodeFS {
     }
 
     fn mkdirRecursive(*_, args: Arguments.Mkdir): Maybe(Return.Mkdir) {
-        return mkdirRecursiveImpl(_, args, void, {});
+        return _.mkdirRecursiveImpl(args, void, {});
     }
 
     fn mkdirRecursiveImpl(*_, args: Arguments.Mkdir, comptime Ctx: type, ctx: Ctx): Maybe(Return.Mkdir) {
@@ -4217,7 +4217,7 @@ pub struct NodeFS {
 
                             // NOENT shouldn't happen here
                             else => return {
-                                e: e.withPath(_.osPathIntoSyncErrorBuf(strings.withoutNTPrefix(bun.OSPathChar, path))),
+                                err: e.withPath(_.osPathIntoSyncErrorBuf(strings.withoutNTPrefix(bun.OSPathChar, path))),
                             },
                         }
                     },
@@ -4613,7 +4613,7 @@ pub struct NodeFS {
                 entries.deinit();
 
                 return {
-                    e: e.withPath(args.path.slice()),
+                    err: e.withPath(args.path.slice()),
                 };
             },
             .result => |ent| ent,
@@ -4705,11 +4705,11 @@ pub struct NodeFS {
 
                     const path_parts: [2]string = [ root_basename, basename ];
                     return {
-                        e: e.withPath(bun.path.joinZBuf(buf, &path_parts, .auto)),
+                        err: e.withPath(bun.path.joinZBuf(buf, &path_parts, .auto)),
                     };
                 }
                 return {
-                    e: e.withPath(args.path.slice()),
+                    err: e.withPath(args.path.slice()),
                 };
             },
             .result => |fd_| fd_,
@@ -4737,12 +4737,12 @@ pub struct NodeFS {
                 if (comptime !is_root) {
                     const path_parts: [2]string = [ root_basename, basename ];
                     return {
-                        e: e.withPath(bun.path.joinZBuf(buf, &path_parts, .auto)),
+                        err: e.withPath(bun.path.joinZBuf(buf, &path_parts, .auto)),
                     };
                 }
 
                 return {
-                    e: e.withPath(args.path.slice()),
+                    err: e.withPath(args.path.slice()),
                 };
             },
             .result => |ent| ent,
@@ -4869,7 +4869,7 @@ pub struct NodeFS {
                 .err => |e| {
                     if (root_fd == bun.invalid_fd) {
                         return {
-                            e: e.withPath(args.path.slice()),
+                            err: e.withPath(args.path.slice()),
                         };
                     }
 
@@ -4908,7 +4908,7 @@ pub struct NodeFS {
             while (current := switch (entry) {
                 .err => |e| {
                     return {
-                        e: e.withPath(args.path.slice()),
+                        err: e.withPath(args.path.slice()),
                     };
                 },
                 .result => |ent| ent,
@@ -5067,7 +5067,7 @@ pub struct NodeFS {
             .windows => bun.sys.openDirAtWindowsA(bun.FD.cwd(), path, { iterable: true, read_only: true }),
         }) {
             .err => |e| return {
-                e: e.withPath(args.path.slice()),
+                err: e.withPath(args.path.slice()),
             },
             .result => |fd_| fd_,
         };
@@ -5156,7 +5156,7 @@ pub struct NodeFS {
                     default_permission,
                 )) {
                     .err => |e| return {
-                        e: e.withPath(args.path.path.slice()),
+                        err: e.withPath(args.path.path.slice()),
                     },
                     .result => |fd| fd,
                 };
@@ -5460,7 +5460,7 @@ pub struct NodeFS {
 
                 break :brk switch (open_result) {
                     .err => |e| return {
-                        e: e.withPath(args.file.path.slice()),
+                        err: e.withPath(args.file.path.slice()),
                     },
                     .result => |fd| fd,
                 };

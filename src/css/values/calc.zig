@@ -638,7 +638,7 @@ pub fn Calc(comptime V: type) type {
                     const Closure = struct {
                         ctx: @TypeOf(ctx),
                         pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
-                            const strategy = if (i.tryParse(RoundingStrategy.parse, {}).asValue()) |s| brk: {
+                            const strategy = if (i.tryParse(RoundingStrategy.parse, .{}).asValue()) |s| brk: {
                                 if (i.expectComma().asErr()) |e| return .{ .err = e };
                                 break :brk s;
                             } else RoundingStrategy.default();
@@ -811,7 +811,7 @@ pub fn Calc(comptime V: type) type {
                                 .result => |vv| vv,
                                 .err => |e| return .{ .err = e },
                             };
-                            if (i.tryParse(css.Parser.expectComma, {}).isOk()) {
+                            if (i.tryParse(css.Parser.expectComma, .{}).isOk()) {
                                 const base = switch (This.parseNumeric(i, self.ctx, parseIdent)) {
                                     .result => |vv| vv,
                                     .err => |e| return .{ .err = e },
@@ -927,7 +927,7 @@ pub fn Calc(comptime V: type) type {
             }
         }
 
-        pub fn parseNumericFn(input: *css.Parser, comptime op: enum { sqrt, exp }, ctx: anytype, comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This) Result(This) {
+        pub fn parseNumericFn(input: *css.Parser, comptime op: enum { sqrt, exp }, ctx: anytype, comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This) Result(This) {
             const Closure = struct {
                 ctx: @TypeOf(ctx),
                 pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
@@ -953,10 +953,10 @@ pub fn Calc(comptime V: type) type {
         pub fn parseMathFn(
             input: *css.Parser,
             ctx_for_op_and_fallback: anytype,
-            comptime op: *const *const fn(@TypeOf(ctx_for_op_and_fallback), f32, f32) f32,
-            comptime fallback: *const *const fn(@TypeOf(ctx_for_op_and_fallback), This, This) MathFunction(V),
+            comptime op: *const fn(@TypeOf(ctx_for_op_and_fallback), f32, f32) f32,
+            comptime fallback: *const fn(@TypeOf(ctx_for_op_and_fallback), This, This) MathFunction(V),
             ctx_for_parse_ident: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx_for_parse_ident), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx_for_parse_ident), []const u8) ?This,
         ) Result(This) {
             const a = switch (This.parseSum(input, ctx_for_parse_ident, parse_ident)) {
                 .result => |vv| vv,
@@ -982,7 +982,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseSum(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(This) {
             var cur = switch (This.parseProduct(input, ctx, parse_ident)) {
                 .result => |vv| vv,
@@ -1040,7 +1040,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseProduct(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(This) {
             var node = switch (This.parseValue(input, ctx, parse_ident)) {
                 .result => |vv| vv,
@@ -1095,7 +1095,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseValue(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(This) {
             // Parse nested calc() and other math functions.
             if (input.tryParse(This.parse, .{}).asValue()) |_calc| {
@@ -1109,7 +1109,7 @@ pub fn Calc(comptime V: type) type {
                 }
             }
 
-            if (input.tryParse(css.Parser.expectParenthesisBlock, {}).isOk()) {
+            if (input.tryParse(css.Parser.expectParenthesisBlock, .{}).isOk()) {
                 const Closure = struct {
                     ctx: @TypeOf(ctx),
                     pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
@@ -1137,7 +1137,7 @@ pub fn Calc(comptime V: type) type {
                 return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
             }
 
-            const value = switch (input.tryParse(css.generic.parseFor(V), {})) {
+            const value = switch (input.tryParse(css.generic.parseFor(V), .{})) {
                 .result => |vv| vv,
                 .err => |e| return .{ .err = e },
             };
@@ -1162,7 +1162,7 @@ pub fn Calc(comptime V: type) type {
             },
             to_angle: bool,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(This) {
             const trig_fn = struct {
                 pub fn run(x: f32) f32 {
@@ -1239,7 +1239,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseAtan2(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(Angle) {
             const Ctx = @TypeOf(ctx);
 
@@ -1288,7 +1288,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseAtan2Args(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(Angle) {
             const a = switch (This.parseSum(input, ctx, parse_ident)) {
                 .result => |vv| vv,
@@ -1323,7 +1323,7 @@ pub fn Calc(comptime V: type) type {
         pub fn parseNumeric(
             input: *css.Parser,
             ctx: anytype,
-            comptime parse_ident: *const *const fn(@TypeOf(ctx), []const u8) ?This,
+            comptime parse_ident: *const fn(@TypeOf(ctx), []const u8) ?This,
         ) Result(f32) {
             const Closure = struct {
                 ctx: @TypeOf(ctx),
@@ -1389,7 +1389,7 @@ pub fn Calc(comptime V: type) type {
             b: *const This,
             allocator: std.mem.Allocator,
             ctx: anytype,
-            comptime op: *const *const fn(@TypeOf(ctx), f32, f32) f32,
+            comptime op: *const fn(@TypeOf(ctx), f32, f32) f32,
         ) ?This {
             if (a.* == .value and b.* == .value) {
                 if (css.generic.tryOp(V, a.value, b.value, ctx, op)) |v| {
@@ -1413,7 +1413,7 @@ pub fn Calc(comptime V: type) type {
             return null;
         }
 
-        pub fn applyMap(this: *const @This(), allocator: Allocator, comptime op: *const *const fn(f32) f32) ?This {
+        pub fn applyMap(this: *const @This(), allocator: Allocator, comptime op: *const fn(f32) f32) ?This {
             switch (this.*) {
                 .number => |n| return This{ .number = op(n) },
                 .value => |v| {

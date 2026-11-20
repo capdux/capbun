@@ -19,7 +19,7 @@ pub fn toHaveBeenCalledOnce(client: *Expect, globalThis: *JSGlobalObject, callfr
 
     const not = client.flags.not;
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     if (not) {

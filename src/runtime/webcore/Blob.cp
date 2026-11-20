@@ -526,6 +526,11 @@ pub struct BlobExternalSharedDescriptor {
         * = end;
         return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
     }
+
+    static fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
+        * = callframe;
+        return globalThis.throw("Blob.writeFile not yet ported", .{});
+    }
 }
 
 @c pub fn Bun__Blob__getSizeForBindings(blob: *Blob): usize {

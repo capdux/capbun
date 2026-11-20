@@ -291,7 +291,7 @@ pub struct random {
 
         if (!callback.isUndefined()) {
             callback.callNextTick(global, .{ .js_undefined, JSValue.jsNumber(res) })?;
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         return JSValue.jsNumber(res);
@@ -382,7 +382,7 @@ pub struct random {
         };
         Job.initAndSchedule(global, callback, &ctx)?;
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     static fn randomFillSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
@@ -459,7 +459,7 @@ pub struct random {
 
         if (size == 0) {
             * = callback.call(global, .js_undefined, &.{ .@"null", buf_value })?;
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         const ctx: JobCtx = .{
@@ -470,7 +470,7 @@ pub struct random {
         };
         Job.initAndSchedule(global, callback, &ctx)?;
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 }
 
@@ -529,7 +529,7 @@ pub fn timingSafeEqual(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSEr
 }
 
 pub fn secureHeapUsed(_: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getFips(_: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
@@ -537,7 +537,7 @@ pub fn getFips(_: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
 }
 
 pub fn setFips(_: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
@@ -833,7 +833,7 @@ fn scrypt(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
     const ctx = res[0];
     const callback = res[1];
     Scrypt.Job.initAndSchedule(global, callback, &ctx)?;
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {

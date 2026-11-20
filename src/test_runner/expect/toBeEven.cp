@@ -20,7 +20,7 @@ pub fn toBeEven(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFr
         const _value = value.toInt64();
         pass = switch (_value == -0.0) { // negative zero is even
             true => true,
-            else => _value & 1 == 0,
+            else => (_value & 1) == 0,
         };
     } else if (value.isNumber()) {
         const _value = JSValue.asNumber(value);
@@ -34,7 +34,7 @@ pub fn toBeEven(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFr
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

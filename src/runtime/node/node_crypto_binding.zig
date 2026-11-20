@@ -105,7 +105,7 @@ pub fn randomInt(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSE
             const res = std.crypto.random.intRangeLessThan(i64, min, max);
             if ((!callback.isUndefined())) {
                 _ = try callback.callNextTick(global, .{ .js_undefined, JSValue.jsNumber(res) });
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             return JSValue.jsNumber(res);
     }
@@ -177,7 +177,7 @@ pub fn randomBytes(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!J
             }
             const ctx: JobCtx = .{ .value = result, .bytes = bytes.ptr, .offset = 0, .length = size };
             _ = try Job.initAndSchedule(global, callback, (&ctx));
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn randomFillSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
@@ -234,11 +234,11 @@ pub fn randomFill(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
             const size = (if (size_value.isUndefined()) (buf.byte_len - offset) else try assertSize(global, size_value, element_size, offset, buf.byte_len));
             if ((size == 0)) {
                 _ = try callback.call(global, .js_undefined, (&.{ .@"null", buf_value }));
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             const ctx: JobCtx = .{ .value = buf_value, .bytes = buf.slice().ptr, .offset = offset, .length = size };
             _ = try Job.initAndSchedule(global, callback, (&ctx));
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
     pub const JobCtx = struct {
         value: JSValue,
@@ -663,7 +663,7 @@ pub fn schedule(job: *@This()) callconv(.c) void {
 pub fn pbkdf2(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const data = try PBKDF2.fromJS(globalThis, callFrame, true);
         const job = PBKDF2.Job.create(jsc.VirtualMachine.get(), globalThis, (&data));
-        return (if (@typeInfo(@TypeOf(job.promise)) == .@"enum") @intFromEnum(job.promise) else job.promise.value)();
+        return job.promise.value();
 }
 
 pub fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -710,7 +710,7 @@ pub fn timingSafeEqual(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSErr
 }
 
 pub fn secureHeapUsed(_: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getFips(_: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
@@ -718,7 +718,7 @@ pub fn getFips(_: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
 }
 
 pub fn setFips(_: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
@@ -762,7 +762,7 @@ pub fn scrypt(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValu
         const ctx = res[0];
         const callback = res[1];
         _ = try Scrypt.Job.initAndSchedule(global, callback, (&ctx));
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {

@@ -634,7 +634,7 @@ pub fn runFromJS(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *js
             if (globalThis.hasException()) {
                 return error.JSError;
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn ioToJSValue(globalThis: *JSGlobalObject, buf: *bun.ByteList) JSValue {
@@ -754,7 +754,7 @@ pub fn #deinitFromExec(self: *Interpreter, _: *ThisInterpreter) void {
 pub fn setQuiet(self: *Interpreter, _: *JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = log("Interpreter(0x{x}) setQuiet()", .{ @intFromPtr(self) });
             self.flags.quiet = true;
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn setCwd(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -775,7 +775,7 @@ return globalThis.throwValue(e.toJS(globalThis));
 
 },
 }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn setEnv(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -809,7 +809,7 @@ pub fn setEnv(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *jsc.C
                 }
                 _ = self.root_shell.export_env.insert(keyref, valueref);
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn isRunning(self: *Interpreter, _: *JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {

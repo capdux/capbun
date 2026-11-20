@@ -9,7 +9,7 @@ pub fn toBeArray(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
     const not = client.flags.not;
     const pass = value.jsType().isArray() != not;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

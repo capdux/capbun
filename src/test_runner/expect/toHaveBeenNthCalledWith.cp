@@ -42,7 +42,7 @@ pub fn toHaveBeenNthCalledWith(client: *Expect, globalThis: *JSGlobalObject, cal
         } else {
             let itr = nthCallValue.arrayIterator(globalThis)?;
             while (callArg := itr.next()?) {
-                if (!callArg.jestDeepEquals(expected_args[itr.i - 1], globalThis)?) {
+                if (!(callArg.jestDeepEquals(expected_args[itr.i - 1], globalThis)?)) {
                     pass = false;
                     break;
                 }
@@ -51,7 +51,7 @@ pub fn toHaveBeenNthCalledWith(client: *Expect, globalThis: *JSGlobalObject, cal
     }
 
     if (pass != client.flags.not) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     // handle failure

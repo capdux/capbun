@@ -71,8 +71,8 @@ pub const BasicParseErrorKind = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn format(self: *BasicParseErrorKind, writer: *std.Io.Writer) !void {
-            return (switch (self) {
+pub fn format(c: BasicParseErrorKind, writer: *std.Io.Writer) !void {
+            return (switch (c) {
 .unexpected_token => |token| try writer.print("unexpected token: {f}", .{ token }),
 .end_of_input => try writer.print("unexpected end of input", .{}),
 .at_rule_invalid => |rule| try writer.print("invalid @ rule encountered: '@{s}'", .{ rule }),

@@ -281,14 +281,11 @@ pub fn appendKey(self: *Stringifier, name: bun.String) void {
             if ((!bun.js_lexer.isIdentifierStart((if (comptime @typeInfo(@TypeOf(name.charAt(0))) == .@"enum") cp_cast_int(i32, @intFromEnum(name.charAt(0))) else cp_cast_int(i32, name.charAt(0)))))) {
                 break :is_identifier false;
             }
-            {
-                var i: i32 = 1;
-                _ = &i;
-                const __end_0 = name.length();
-                while (i < __end_0) : (i += 1) {
-                    if ((!bun.js_lexer.isIdentifierContinue((if (comptime @typeInfo(@TypeOf(name.charAt(i))) == .@"enum") cp_cast_int(i32, @intFromEnum(name.charAt(i))) else cp_cast_int(i32, name.charAt(i)))))) {
-                        break :is_identifier false;
-                    }
+            var i: usize = 1;
+            _ = &i;
+            while ((i < name.length())) : (i = (i + 1)) {
+                if ((!bun.js_lexer.isIdentifierContinue((if (comptime @typeInfo(@TypeOf(name.charAt(i))) == .@"enum") cp_cast_int(i32, @intFromEnum(name.charAt(i))) else cp_cast_int(i32, name.charAt(i)))))) {
+                    break :is_identifier false;
                 }
             }
             break :is_identifier true;
@@ -301,13 +298,11 @@ pub fn appendKey(self: *Stringifier, name: bun.String) void {
 
 pub fn appendQuotedString(self: *Stringifier, str: bun.String) void {
             _ = self.builder.append(.lchar, 39);
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_1 = str.length();
-                while (i < __end_1) : (i += 1) {
-                    const c = str.charAt(i);
-                    switch (c) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.length())) : (i = (i + 1)) {
+                const c = str.charAt(i);
+                switch (c) {
 0 => {
 _ = self.builder.append(.latin1, "\\0");
 },
@@ -343,14 +338,13 @@ _ = self.builder.append(.latin1, "\\u2029");
 },
 1...7, 14...31, 127 => {
 _ = self.builder.append(.latin1, "\\x");
-                    _ = self.builder.append(.lchar, Stringifier.hexDigit(cp_shr(c, 4)));
-                    _ = self.builder.append(.lchar, Stringifier.hexDigit((c & 15)));
+                _ = self.builder.append(.lchar, Stringifier.hexDigit(cp_shr(c, 4)));
+                _ = self.builder.append(.lchar, Stringifier.hexDigit((c & 15)));
 },
 else => {
 _ = self.builder.append(.uchar, c);
 },
 }
-                }
             }
             _ = self.builder.append(.lchar, 39);
     }
@@ -370,8 +364,8 @@ _ = self.builder.append(.lchar, 10);
             {
                 var loop_i: i32 = 0;
                 _ = &loop_i;
-                const __end_2 = (self.indent * space_num);
-                while (loop_i < __end_2) : (loop_i += 1) {
+                const __end_0 = (self.indent * space_num);
+                while (loop_i < __end_0) : (loop_i += 1) {
                     _ = self.builder.append(.lchar, 32);
                 }
             }
@@ -382,8 +376,8 @@ _ = self.builder.append(.lchar, 10);
             {
                 var loop_i: i32 = 0;
                 _ = &loop_i;
-                const __end_3 = self.indent;
-                while (loop_i < __end_3) : (loop_i += 1) {
+                const __end_1 = self.indent;
+                while (loop_i < __end_1) : (loop_i += 1) {
                     _ = self.builder.append(.@"string", clamped);
                 }
             }
@@ -436,7 +430,13 @@ pub fn stringify(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSE
         _ = (blk_catch_0: { break :blk_catch_0 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return global.throwStackOverflow();
         }
-        return e; }); });
+        if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        if ((e == error.JSTerminated)) {
+            return error.JSTerminated;
+        }
+        return error.JSError; }); });
         return stringifier.builder.toString(global);
 }
 
@@ -494,7 +494,7 @@ pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!
         if (space.isNumber()) {
             const num_f = space.asNumber();
             if ((!(num_f >= 1))) {
-                return error.minified;
+                return Space.minified;
             }
             return Space{ .number = (if ((num_f > 10)) 10 else @intFromFloat(num_f)) };
         }
@@ -502,11 +502,11 @@ pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!
             const str = try space.toBunString(global);
             if ((str.length() == 0)) {
                 _ = str.deref();
-                return error.minified;
+                return Space.minified;
             }
             return Space{ .str = str };
         }
-        return error.minified;
+        return Space.minified;
 }
 
 pub fn spaceDeinit(this_space: *Space) void {

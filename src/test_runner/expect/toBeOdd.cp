@@ -11,9 +11,9 @@ pub fn toBeOdd(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
     let pass = false;
 
     if (value.isBigInt32()) {
-        pass = value.toInt32() & 1 == 1;
+        pass = (value.toInt32() & 1) == 1;
     } else if (value.isBigInt()) {
-        pass = value.toInt64() & 1 == 1;
+        pass = (value.toInt64() & 1) == 1;
     } else if (value.isInt32()) {
         const _value = value.toInt32();
         pass = @mod(_value, 2) == 1;
@@ -32,7 +32,7 @@ pub fn toBeOdd(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

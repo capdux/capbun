@@ -130,7 +130,7 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
     }
     const str = arguments.ptr[0].toBunString(globalObject) catch @panic("unreachable");
     if (!str.hasPrefixComptime("blob:")) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     const slice = str.toUTF8WithoutRef(bun.default_allocator);
@@ -139,10 +139,10 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
 
     const sliced = slice.slice();
     if (sliced.len < "blob:".len + UUID.stringLength) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     ObjectURLRegistry.singleton().revoke(sliced["blob:".len..]);
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 comptime {
@@ -153,17 +153,17 @@ comptime {
 fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     if (arguments.len < 1) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     const str = try arguments.ptr[0].toBunString(globalObject);
     defer str.deref();
 
     if (globalObject.hasException()) {
-        return .zero;
+        return jsc.JSValue.zero;
     }
 
     if (!str.hasPrefixComptime("blob:") or str.length() < specifier_len) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     const slice = str.toUTF8WithoutRef(bun.default_allocator);

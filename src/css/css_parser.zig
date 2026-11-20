@@ -1394,7 +1394,8 @@ return .{ .err = self.newError(BasicParseErrorKind.end_of_input) };
 },
 });
             self.input.cached_token = CachedToken{ .token = new_token, .start_position = token_start_position, .end_state = self.input.tokenizer.state() };
-            break :token self.input.cached_token.?.token;
+            const tok_ptr = self.input.cached_token.?.token;
+            break :token tok_ptr;
 });
             if (BlockType.opening(token)) |block_type| {
                 _ = &block_type;

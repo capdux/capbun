@@ -37,7 +37,9 @@ pub fn stringify(
 
     stringifier.stringifyValue(global, value) catch |e| {
         if (e == error.StackOverflow) return global.throwStackOverflow();
-        return e;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        return error.JSError;
     };
 
     return stringifier.builder.toString(global);
@@ -108,18 +110,18 @@ pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue): bun.JSError
         // Clamp on the float to match the spec's min(10, ToIntegerOrInfinity(space)).
         // toInt32() wraps large values and Infinity to 0, which is wrong.
         const num_f = space.asNumber();
-        if (!(num_f >= 1)) return .minified; // handles NaN, -Infinity, 0, negatives
+        if (!(num_f >= 1)) return Space.minified; // handles NaN, -Infinity, 0, negatives
         return Space{ number: if (num_f > 10) 10 else @intFromFloat(num_f) };
     }
     if (space.isString()) {
         const str = space.toBunString(global)?;
         if (str.length() == 0) {
             str.deref();
-            return .minified;
+            return Space.minified;
         }
         return Space{ str: str };
     }
-    return .minified;
+    return Space.minified;
 }
 
 pub fn spaceDeinit(this_space: *Space) {
@@ -326,7 +328,8 @@ struct Stringifier {
         const is_identifier = is_identifier: {
             if (name.length() == 0) break :is_identifier false;
             if (!bun.js_lexer.isIdentifierStart(i32(name.charAt(0)))) break :is_identifier false;
-            for (i of 1..name.length()) {
+            let i: usize = 1;
+            while (i < name.length()) : (i += 1) {
                 if (!bun.js_lexer.isIdentifierContinue(i32(name.charAt(i)))) break :is_identifier false;
             }
             break :is_identifier true;
@@ -341,7 +344,8 @@ struct Stringifier {
 
     fn appendQuotedString(*_, str: bun.String) {
         _.builder.append(.lchar, '\'');
-        for (i of 0..str.length()) {
+        let i: usize = 0;
+        while (i < str.length()) : (i += 1) {
             const c = str.charAt(i);
             switch (c) {
                 0x00 => _.builder.append(.latin1, "\\0"),

@@ -72,7 +72,7 @@ pub fn toBeOneOf(
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

@@ -34,7 +34,7 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
         } else {
             let itr = lastCallValue.arrayIterator(globalThis)?;
             while (callArg := itr.next()?) {
-                if (!callArg.jestDeepEquals(arguments[itr.i - 1], globalThis)?) {
+                if (!(callArg.jestDeepEquals(arguments[itr.i - 1], globalThis)?)) {
                     pass = false;
                     break;
                 }
@@ -43,7 +43,7 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
     }
 
     if (pass != client.flags.not) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     // handle failure

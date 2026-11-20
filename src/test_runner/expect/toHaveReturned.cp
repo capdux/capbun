@@ -50,11 +50,6 @@ inline fn toHaveReturnedTimesFn(client: *Expect, globalThis: *JSGlobalObject, ca
     if (not) pass = !pass;
     if (pass) return JSValue.js_undefined;
 
-    const signature = if (not)
-        comptime getSignature(@tagName(mode), "<green>expected<r>", true)
-    else
-        comptime getSignature(@tagName(mode), "<green>expected<r>", false);
-
     const str: []const u8 = switch (mode) {
         .toHaveReturned => if (not) "< " else ">= ",
         .toHaveReturnedTimes => if (not) "!= " else "== ",
@@ -64,11 +59,17 @@ inline fn toHaveReturnedTimesFn(client: *Expect, globalThis: *JSGlobalObject, ca
         .toHaveReturnedTimes => "   ",
     };
 
-    const msg = "\n\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++
+    const msg: [:0]const u8 = "\n\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++
         "Received number of succesful returns: {s}<red>{d}<r>\n" ++
         "Received number of calls:             {s}<red>{d}<r>\n";
 
-    return client.throw(globalThis, signature, msg, .{ str, expected_success_count, spc, actual_success_count, spc, total_call_count });
+    if (not) {
+        const signature = comptime getSignature(@tagName(mode), "<green>expected<r>", true);
+        return client.throw(globalThis, signature, msg, .{ str, expected_success_count, spc, actual_success_count, spc, total_call_count });
+    } else {
+        const signature = comptime getSignature(@tagName(mode), "<green>expected<r>", false);
+        return client.throw(globalThis, signature, msg, .{ str, expected_success_count, spc, actual_success_count, spc, total_call_count });
+    }
 }
 
 pub fn toHaveReturned(client: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {

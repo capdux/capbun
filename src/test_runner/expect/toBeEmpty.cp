@@ -73,7 +73,7 @@ pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     if (not) {
         const signature = comptime getSignature("toBeEmpty", "", true);

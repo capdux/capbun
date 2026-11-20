@@ -795,7 +795,7 @@ static fn NewSource(
                 }
 
                 globalThis.throwTODO("This is not implemented yet");
-                return .zero;
+                return JSValue.zero;
             }
 
             pub static fn arrayBuffer(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -807,7 +807,7 @@ static fn NewSource(
                 }
 
                 globalThis.throwTODO("This is not implemented yet");
-                return .zero;
+                return JSValue.zero;
             }
 
             pub static fn blob(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -819,7 +819,7 @@ static fn NewSource(
                 }
 
                 globalThis.throwTODO("This is not implemented yet");
-                return .zero;
+                return JSValue.zero;
             }
 
             pub static fn bytes(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -831,7 +831,7 @@ static fn NewSource(
                 }
 
                 globalThis.throwTODO("This is not implemented yet");
-                return .zero;
+                return JSValue.zero;
             }
 
             pub static fn json(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -843,7 +843,7 @@ static fn NewSource(
                 }
 
                 globalThis.throwTODO("This is not implemented yet");
-                return .zero;
+                return JSValue.zero;
             }
         };
     };

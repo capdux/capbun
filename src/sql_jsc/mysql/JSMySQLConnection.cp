@@ -373,14 +373,14 @@ fn hasNullByte(s: []const u8): bool {
             tls_config = if (tls_object.isBoolean() && tls_object.toBoolean())
                 .{}
             else if (tls_object.isObject())
-                ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return .zero) orelse .{})
+                ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return JSValue.zero) orelse .{})
             else {
                 return globalObject.throwInvalidArguments("tls must be a boolean or an object", .{});
             };
 
             if (globalObject.hasException()) {
                 tls_config.deinit();
-                return .zero;
+                return JSValue.zero;
             }
 
             let sock_err: uws.create_bun_socket_error_t = .none;

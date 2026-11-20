@@ -570,7 +570,7 @@ pub inline fn partialCmp(comptime T: type, lhs: *const T, rhs: *const T): std.ma
         f32 => partialCmpF32(lhs, rhs),
         CSSInteger => std.math.order(lhs.*, rhs.*),
         AngleT => AngleT.partialCmp(lhs, rhs),
-        else => T.partialCmp(lhs, rhs),
+        else => lhs.partialCmp(rhs),
     };
 }
 

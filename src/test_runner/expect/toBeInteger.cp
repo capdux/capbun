@@ -9,7 +9,7 @@ pub fn toBeInteger(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     const not = client.flags.not;
     const pass = value.isAnyInt() != not;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

@@ -3885,7 +3885,7 @@ pub fn handleTemplateValue(
     jsstrings: *std.array_list.Managed(bun.String),
     jsobjref_buf: []u8,
     marked_argument_buffer: *jsc.MarkedArgumentBuffer,
-): !bun.JSError {
+): bun.JSError!void {
     let builder = ShellSrcBuilder.init(globalThis, out_script, jsstrings);
     if (template_value != .zero) {
         if (array_buffer := template_value.asArrayBuffer(globalThis)) {
@@ -4157,7 +4157,7 @@ pub fn escape8Bit(str: []const u8, outbuf: *std.array_list.Managed(u8), comptime
                 outbuf.appendSlice(&.{
                     '\\',
                     c,
-                });
+                })?;
                 is_backslashable = true;
                 break;
             }

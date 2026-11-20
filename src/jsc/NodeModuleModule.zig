@@ -89,7 +89,7 @@ pub fn findPath(global: *JSGlobalObject, request_bun_str: bun.String, paths_mayb
         const request = request_slice.slice();
         const absolute_request = std.fs.path.isAbsolute(request);
         if (((!absolute_request) and (paths_maybe == null))) {
-            return error.false;
+            return JSValue.false;
         }
         var found: ?bun.String = null;
         _ = &found;
@@ -115,7 +115,7 @@ pub fn findPath(global: *JSGlobalObject, request_bun_str: bun.String, paths_mayb
             _ = &str;
             return (str.*).transferToJS(global);
         }
-        return error.false;
+        return JSValue.false;
 }
 
 pub fn findPathInner(request: bun.String, cur_path: bun.String, global: *JSGlobalObject) ?bun.String {

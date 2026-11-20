@@ -6,6 +6,7 @@ const string = []const u8;
 
 const assert = @import("bun").assert;
 const Futex = @import("bun").Futex;
+pub const builtin = @import("builtin");
 pub const Mutex = @This();
 
 impl: Impl = .{},
@@ -76,7 +77,7 @@ pub fn lock(self: *WindowsImpl) void {
 pub fn unlock(self: *WindowsImpl) void {
             _ = windows.kernel32.ReleaseSRWLockExclusive((&self.srwlock));
     }
-    pub const Type = windows.SRWLOCK;
+    const Type = windows.SRWLOCK;
 };
 
 pub const DarwinImpl = struct {
@@ -93,7 +94,7 @@ pub fn lock(self: *DarwinImpl) void {
 pub fn unlock(self: *DarwinImpl) void {
             _ = c.os_unfair_lock_unlock((&self.oul));
     }
-    pub const Type = c.os_unfair_lock;
+    const Type = c.os_unfair_lock;
 };
 
 pub const FutexImpl = struct {
@@ -134,16 +135,15 @@ pub fn unlock(self: *FutexImpl) void {
                 _ = Futex.wake((&self.state), 1);
             }
     }
-    pub const Type = u32;
+    const Type = u32;
 };
 
-pub const Impl = if (((builtin.mode == std.builtin.OptimizeMode.Debug) and true)) DebugImpl else ReleaseImpl;
-pub const ReleaseImpl = if ((builtin.os.tag == std.Target.Os.Tag.windows)) WindowsImpl else if (true) DarwinImpl else FutexImpl;
-pub const ExternImpl = ReleaseImpl.Type;
-const builtin = @import("builtin");
 const Thread = std.Thread;
 const windows = std.os.windows;
 const c = std.c;
+pub const Impl = (if (((builtin.mode == std.builtin.OptimizeMode.Debug) and (!builtin.single_threaded))) DebugImpl else ReleaseImpl);
+pub const ReleaseImpl = (if ((builtin.os.tag == std.Target.Os.Tag.windows)) WindowsImpl else (if (builtin.os.tag.isDarwin()) DarwinImpl else FutexImpl));
+pub const ExternImpl = ReleaseImpl.Type;
 const unlocked: u32 = 0;
 const locked: u32 = 1;
 const contended: u32 = 3;

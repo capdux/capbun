@@ -23,7 +23,7 @@ pub fn toHaveBeenCalled(client: *Expect, globalThis: *JSGlobalObject, callframe:
 
     const not = client.flags.not;
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     if (not) {

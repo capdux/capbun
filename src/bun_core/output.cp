@@ -555,11 +555,12 @@ pub fn disableBuffering() {
 
 pub fn panic(comptime fmt: string, args: auto): noreturn {
     @branchHint(.cold);
+    const actual_args = if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args;
 
     if (enable_ansi_colors_stderr) {
-        std.debug.panic(comptime prettyFmt(fmt, true), args);
+        std.debug.panic(comptime prettyFmt(fmt, true), actual_args);
     } else {
-        std.debug.panic(comptime prettyFmt(fmt, false), args);
+        std.debug.panic(comptime prettyFmt(fmt, false), actual_args);
     }
 }
 

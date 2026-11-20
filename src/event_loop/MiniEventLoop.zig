@@ -106,51 +106,52 @@ pub fn getVm(comptime kind: EventLoopKind) EventLoopKind.refType(kind) {
     }
 };
 
-pub const MiniEventLoop = struct {
-    tasks: Queue,
-    concurrent_tasks: ConcurrentTaskQueueT = .{},
-    loop: *uws.Loop,
-    allocator: std.mem.Allocator,
-    file_polls_: FilePollStorePtr = null,
-    env: DotEnvLoaderPtr = null,
-    top_level_dir: []const u8 = "",
-    after_event_loop_callback_ctx: ?*anyopaque = null,
-    after_event_loop_callback: ?jsc.OpaqueCallback = null,
-    pipe_read_buffer: PipeReadBufferPtr = null,
-    stdout_store: BlobStorePtr = null,
-    stderr_store: BlobStorePtr = null,
+pub const MiniEventLoop = @This();
+
+tasks: Queue,
+concurrent_tasks: ConcurrentTaskQueueT = .{},
+loop: *uws.Loop,
+allocator: std.mem.Allocator,
+file_polls_: FilePollStorePtr = null,
+env: DotEnvLoaderPtr = null,
+top_level_dir: []const u8 = "",
+after_event_loop_callback_ctx: ?*anyopaque = null,
+after_event_loop_callback: ?jsc.OpaqueCallback = null,
+pipe_read_buffer: PipeReadBufferPtr = null,
+stdout_store: BlobStorePtr = null,
+stderr_store: BlobStorePtr = null,
 
 pub fn initGlobal(env: DotEnvLoaderPtr, cwd: ?[]const u8) *MiniEventLoop {
-            if (globalInitialized) {
-                return global;
-            }
-            const loop = MiniEventLoop.init(bun.default_allocator);
-            global = bun.handleOom(bun.default_allocator.create(MiniEventLoop));
-            global.* = loop;
-            _ = global.loop.internal_loop_data.setParentEventLoop(bun.jsc.EventLoopHandle.init(global));
-            if (env) |e| {
-                _ = &e;
-                global.env = e;
+        if (globalInitialized) {
+            return global;
+        }
+        const loop = MiniEventLoop.init(bun.default_allocator);
+        global = bun.handleOom(bun.default_allocator.create(MiniEventLoop));
+        global.* = loop;
+        _ = global.loop.internal_loop_data.setParentEventLoop(bun.jsc.EventLoopHandle.init(global));
+        if (env) |e| {
+            _ = &e;
+            global.env = e;
+        } else {
+            if (bun.DotEnv.instance) |inst| {
+                _ = &inst;
+                global.env = inst;
             } else {
-                if (bun.DotEnv.instance) |inst| {
-                    _ = &inst;
-                    global.env = inst;
-                } else {
-                    const map = bun.handleOom(bun.default_allocator.create(bun.DotEnv.Map));
-                    map.* = bun.DotEnv.Map.init(bun.default_allocator);
-                    const loader = bun.handleOom(bun.default_allocator.create(bun.DotEnv.Loader));
-                    loader.* = bun.DotEnv.Loader.init(map, bun.default_allocator);
-                    global.env = loader;
-                }
+                const map = bun.handleOom(bun.default_allocator.create(bun.DotEnv.Map));
+                map.* = bun.DotEnv.Map.init(bun.default_allocator);
+                const loader = bun.handleOom(bun.default_allocator.create(bun.DotEnv.Loader));
+                loader.* = bun.DotEnv.Loader.init(map, bun.default_allocator);
+                global.env = loader;
             }
-            if (cwd) |dir| {
-                _ = &dir;
-                global.top_level_dir = dir;
-            } else {
-                if ((global.top_level_dir.len == 0)) {
-                    var buf: bun.PathBuffer = undefined;
-                    _ = &buf;
-                    switch (bun.sys.getcwd((&buf))) {
+        }
+        if (cwd) |dir| {
+            _ = &dir;
+            global.top_level_dir = dir;
+        } else {
+            if ((global.top_level_dir.len == 0)) {
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                switch (bun.sys.getcwd((&buf))) {
 .result => |p| {
 global.top_level_dir = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, p)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 ""; }); });
 },
@@ -158,87 +159,118 @@ global.top_level_dir = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocato
 global.top_level_dir = "";
 },
 }
-                }
             }
-            globalInitialized = true;
-            return global;
-    }
+        }
+        globalInitialized = true;
+        return global;
+}
 
 pub inline fn getVmImpl(self: *MiniEventLoop) *MiniEventLoop {
-            return self;
-    }
+        return self;
+}
 
 pub fn throwError(_: *MiniEventLoop, e: bun.sys.Error) void {
-            _ = bun.Output.prettyErrorln("{}", .{ e });
-            _ = bun.Output.flush();
-    }
+        _ = bun.Output.prettyErrorln("{}", .{ e });
+        _ = bun.Output.flush();
+}
 
 pub fn pipeReadBuffer(self: *MiniEventLoop) []u8 {
-            if (self.pipe_read_buffer) |p| {
-                _ = &p;
-                return p;
-            }
-            self.pipe_read_buffer = bun.handleOom(self.allocator.create(PipeReadBuffer));
-            return self.pipe_read_buffer.?;
-    }
+        if (self.pipe_read_buffer) |p| {
+            _ = &p;
+            return p;
+        }
+        self.pipe_read_buffer = bun.handleOom(self.allocator.create(PipeReadBuffer));
+        return self.pipe_read_buffer.?;
+}
 
 pub fn onAfterEventLoop(self: *MiniEventLoop) void {
-            if (self.after_event_loop_callback) |cb| {
-                _ = &cb;
-                const ctx = self.after_event_loop_callback_ctx;
-                self.after_event_loop_callback = null;
-                self.after_event_loop_callback_ctx = null;
-                _ = cb(ctx);
-            }
-    }
+        if (self.after_event_loop_callback) |cb| {
+            _ = &cb;
+            const ctx = self.after_event_loop_callback_ctx;
+            self.after_event_loop_callback = null;
+            self.after_event_loop_callback_ctx = null;
+            _ = cb(ctx);
+        }
+}
 
 pub fn filePolls(self: *MiniEventLoop) *Async.FilePoll.Store {
-            if (self.file_polls_) |p| {
-                _ = &p;
-                return p;
-            }
-            self.file_polls_ = bun.handleOom(self.allocator.create(Async.FilePoll.Store));
-            (self.file_polls_.?).* = Async.FilePoll.Store.init();
-            return self.file_polls_.?;
-    }
+        if (self.file_polls_) |p| {
+            _ = &p;
+            return p;
+        }
+        self.file_polls_ = bun.handleOom(self.allocator.create(Async.FilePoll.Store));
+        (self.file_polls_.?).* = Async.FilePoll.Store.init();
+        return self.file_polls_.?;
+}
 
 pub fn init(allocator: std.mem.Allocator) MiniEventLoop {
-            return .{ .tasks = Queue.init(allocator), .allocator = allocator, .loop = uws.Loop.get() };
-    }
+        return .{ .tasks = Queue.init(allocator), .allocator = allocator, .loop = uws.Loop.get() };
+}
 
 pub fn deinit(self: *MiniEventLoop) void {
-            _ = self.tasks.deinit();
-            _ = bun.assert(self.concurrent_tasks.isEmpty());
-    }
+        _ = self.tasks.deinit();
+        _ = bun.assert(self.concurrent_tasks.isEmpty());
+}
 
 pub fn tickConcurrentWithCount(self: *MiniEventLoop) usize {
-            var concurrent = self.concurrent_tasks.popBatch();
-            _ = &concurrent;
-            const count = concurrent.count;
-            if ((count == 0)) {
-                return 0;
+        var concurrent = self.concurrent_tasks.popBatch();
+        _ = &concurrent;
+        const count = concurrent.count;
+        if ((count == 0)) {
+            return 0;
+        }
+        var iter = concurrent.iterator();
+        _ = &iter;
+        const start_count = self.tasks.count;
+        if ((start_count == 0)) {
+            self.tasks.head = 0;
+        }
+        _ = ((self.tasks.ensureUnusedCapacity(count)) catch unreachable);
+        var writable = self.tasks.writableSlice(0);
+        _ = &writable;
+        while (iter.next()) |task| {
+            writable[cp_cast_int(usize, 0)] = task;
+            writable = writable[1..];
+            self.tasks.count = (self.tasks.count + 1);
+            if ((writable.len == 0)) {
+                break;
             }
-            var iter = concurrent.iterator();
-            _ = &iter;
-            const start_count = self.tasks.count;
-            if ((start_count == 0)) {
-                self.tasks.head = 0;
-            }
-            _ = ((self.tasks.ensureUnusedCapacity(count)) catch unreachable);
-            var writable = self.tasks.writableSlice(0);
-            _ = &writable;
-            while (iter.next()) |task| {
-                writable[cp_cast_int(usize, 0)] = task;
-                writable = writable[1..];
-                self.tasks.count = (self.tasks.count + 1);
-                if ((writable.len == 0)) {
-                    break;
-                }
-            }
-            return (self.tasks.count - start_count);
-    }
+        }
+        return (self.tasks.count - start_count);
+}
 
 pub fn tickOnce(self: *MiniEventLoop, context: *anyopaque) void {
+        if (((self.tickConcurrentWithCount() == 0) and (self.tasks.count == 0))) {
+            defer {
+            _ = self.onAfterEventLoop();
+            }
+            _ = self.loop.inc();
+            _ = self.loop.tick();
+            _ = self.loop.dec();
+        }
+        while (self.tasks.readItem()) |task| {
+            _ = task.run(context);
+        }
+}
+
+pub fn tickWithoutIdle(self: *MiniEventLoop, context: *anyopaque) void {
+        defer {
+        _ = self.onAfterEventLoop();
+        }
+        while (true) {
+            _ = self.tickConcurrentWithCount();
+            while (self.tasks.readItem()) |task| {
+                _ = task.run(context);
+            }
+            _ = self.loop.tickWithoutIdle();
+            if (((self.tasks.count == 0) and (self.tickConcurrentWithCount() == 0))) {
+                break;
+            }
+        }
+}
+
+pub fn tick(self: *MiniEventLoop, context: *anyopaque, comptime isDone: *const fn (*anyopaque) bool) void {
+        while ((!isDone(context))) {
             if (((self.tickConcurrentWithCount() == 0) and (self.tasks.count == 0))) {
                 defer {
                 _ = self.onAfterEventLoop();
@@ -250,68 +282,37 @@ pub fn tickOnce(self: *MiniEventLoop, context: *anyopaque) void {
             while (self.tasks.readItem()) |task| {
                 _ = task.run(context);
             }
-    }
-
-pub fn tickWithoutIdle(self: *MiniEventLoop, context: *anyopaque) void {
-            defer {
-            _ = self.onAfterEventLoop();
-            }
-            while (true) {
-                _ = self.tickConcurrentWithCount();
-                while (self.tasks.readItem()) |task| {
-                    _ = task.run(context);
-                }
-                _ = self.loop.tickWithoutIdle();
-                if (((self.tasks.count == 0) and (self.tickConcurrentWithCount() == 0))) {
-                    break;
-                }
-            }
-    }
-
-pub fn tick(self: *MiniEventLoop, context: *anyopaque, comptime isDone: *const fn (*anyopaque) bool) void {
-            while ((!isDone(context))) {
-                if (((self.tickConcurrentWithCount() == 0) and (self.tasks.count == 0))) {
-                    defer {
-                    _ = self.onAfterEventLoop();
-                    }
-                    _ = self.loop.inc();
-                    _ = self.loop.tick();
-                    _ = self.loop.dec();
-                }
-                while (self.tasks.readItem()) |task| {
-                    _ = task.run(context);
-                }
-            }
-    }
+        }
+}
 
 pub fn enqueueTask(self: *MiniEventLoop, comptime Context: type, ctx: *Context, comptime Callback: *const fn (*Context) void, comptime field: std.meta.FieldEnum(Context)) void {
-            const TaskType = MiniEventLoop.Task.New(Context, Callback);
-            @field(ctx, @tagName(field)) = TaskType.init(ctx);
-            _ = self.enqueueJSCTask((&@field(ctx, @tagName(field))));
-    }
+        const TaskType = MiniEventLoop.Task.New(Context, Callback);
+        @field(ctx, @tagName(field)) = TaskType.init(ctx);
+        _ = self.enqueueJSCTask((&@field(ctx, @tagName(field))));
+}
 
 pub fn enqueueTaskConcurrent(self: *MiniEventLoop, task: *AnyTaskWithExtraContext) void {
-            _ = self.concurrent_tasks.push(task);
-            _ = self.loop.wakeup();
-    }
+        _ = self.concurrent_tasks.push(task);
+        _ = self.loop.wakeup();
+}
 
 pub fn enqueueTaskConcurrentWithExtraCtx(self: *MiniEventLoop, comptime Context: type, comptime ParentContext: type, ctx: *Context, comptime Callback: *const fn (*Context, *ParentContext) void, comptime field: std.meta.FieldEnum(Context)) void {
-            _ = jsc.markBinding(@src());
-            const TaskType = MiniEventLoop.Task.New(Context, ParentContext, Callback);
-            @field(ctx, @tagName(field)) = TaskType.init(ctx);
-            _ = self.concurrent_tasks.push((&@field(ctx, @tagName(field))));
-            _ = self.loop.wakeup();
-    }
+        _ = jsc.markBinding(@src());
+        const TaskType = MiniEventLoop.Task.New(Context, ParentContext, Callback);
+        @field(ctx, @tagName(field)) = TaskType.init(ctx);
+        _ = self.concurrent_tasks.push((&@field(ctx, @tagName(field))));
+        _ = self.loop.wakeup();
+}
 
 pub fn stderr(self: *MiniEventLoop) *jsc.WebCore.Blob.Store {
-            if (self.stderr_store) |store| {
-                _ = &store;
-                return store;
-            }
-            var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
-            _ = &mode;
-            const fd = bun.FD.fromUV(2);
-            switch (bun.sys.fstat(fd)) {
+        if (self.stderr_store) |store| {
+            _ = &store;
+            return store;
+        }
+        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+        _ = &mode;
+        const fd = bun.FD.fromUV(2);
+        switch (bun.sys.fstat(fd)) {
 .result => |stat| {
 mode = @intCast(stat.mode);
 },
@@ -319,20 +320,20 @@ mode = @intCast(stat.mode);
 
 },
 }
-            const store = jsc.WebCore.Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = bun.default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (bun.Output.stderr_descriptor_type == .terminal), .mode = mode } } });
-            self.stderr_store = store;
-            return store;
-    }
+        const store = jsc.WebCore.Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = bun.default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (bun.Output.stderr_descriptor_type == .terminal), .mode = mode } } });
+        self.stderr_store = store;
+        return store;
+}
 
 pub fn stdout(self: *MiniEventLoop) *jsc.WebCore.Blob.Store {
-            if (self.stdout_store) |store| {
-                _ = &store;
-                return store;
-            }
-            var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
-            _ = &mode;
-            const fd = bun.FD.stdout();
-            switch (bun.sys.fstat(fd)) {
+        if (self.stdout_store) |store| {
+            _ = &store;
+            return store;
+        }
+        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+        _ = &mode;
+        const fd = bun.FD.stdout();
+        switch (bun.sys.fstat(fd)) {
 .result => |stat| {
 mode = @intCast(stat.mode);
 },
@@ -340,14 +341,12 @@ mode = @intCast(stat.mode);
 
 },
 }
-            const store = jsc.WebCore.Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = bun.default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (bun.Output.stdout_descriptor_type == .terminal), .mode = mode } } });
-            self.stdout_store = store;
-            return store;
-    }
-    pub const ConcurrentTaskQueue = ConcurrentTaskQueueT;
-    pub const Task = AnyTaskWithExtraContext;
-};
-
+        const store = jsc.WebCore.Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = bun.default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (bun.Output.stdout_descriptor_type == .terminal), .mode = mode } } });
+        self.stdout_store = store;
+        return store;
+}
+pub const ConcurrentTaskQueue = ConcurrentTaskQueueT;
+pub const Task = AnyTaskWithExtraContext;
 pub const JsVM = struct {
     vm: *VirtualMachine,
 

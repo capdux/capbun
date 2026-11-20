@@ -858,7 +858,7 @@ else => .disable,
             }
             if (globalObject.hasException()) {
                 _ = tls_config.deinit();
-                return error.zero;
+                return JSValue.zero;
             }
             var sock_err: uws.create_bun_socket_error_t = .none;
             _ = &sock_err;

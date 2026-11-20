@@ -15,7 +15,7 @@ pub fn toBePositive(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Ca
     const not = client.flags.not;
     if (not) pass = !pass;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

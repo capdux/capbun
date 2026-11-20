@@ -469,7 +469,18 @@ pub fn call(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSVa
 pub fn ArgsTupleType(comptime T: type) type {
             const ti = @typeInfo(T);
             if (((ti == .@"struct") and (!ti.@"struct".is_tuple))) {
-                return std.meta.Tuple(ti.@"struct".field_types);
+                const fields = ti.@"struct".fields;
+                const n = fields.len;
+                const TypeT = @TypeOf(u8);
+                _ = &TypeT;
+                comptime var types: [n]TypeT = undefined;
+                _ = &types;
+                comptime var i: usize = 0;
+                _ = &i;
+                inline while ((i < n)) : (i = (i + 1)) {
+                    types[cp_cast_int(usize, i)] = fields[@as(usize, @intCast(i))].@"type";
+                }
+                return std.meta.Tuple((&types));
             }
             return T;
     }
@@ -638,7 +649,7 @@ pub fn fnToErrStringOrUndefined(self: *Expect, globalThis: *JSGlobalObject, valu
             var err_value_res = ((err_value) orelse { return null; });
             _ = &err_value_res;
             if (err_value_res.isAnyError()) {
-                const message: JSValue = ((err_value_res.getTruthyComptime(globalThis, "message")) orelse (.js_undefined));
+                const message: JSValue = ((try err_value_res.getTruthyComptime(globalThis, "message")) orelse (.js_undefined));
                 err_value_res = message;
             } else {
                 err_value_res = .js_undefined;

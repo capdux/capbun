@@ -59,7 +59,7 @@ pub fn toIncludeRepeated(client: *Expect, globalThis: *JSGlobalObject, callFrame
     pass = actual_count == countAsNum;
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

@@ -478,10 +478,9 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
                         return;
                     }
                 }
-                if (tunnel) |t| {
-                    _ = &t;
-                    _ = (t).?.shutdown();
-                    _ = (t).?.detachAndDeref();
+                if ((tunnel != null)) {
+                    _ = tunnel.?.shutdown();
+                    _ = tunnel.?.detachAndDeref();
                 }
                 if (h2_session) |s| {
                     _ = &s;

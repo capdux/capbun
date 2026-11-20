@@ -64,7 +64,7 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const HTTPCertError = @import("./HTTPCertError.zig").HTTPCertError;
+pub const HTTPCertErrorMod = @import("./HTTPCertError.zig");
 pub const ProxyTunnelMod = @import("./ProxyTunnel.zig");
 pub const Headers = @import("./Headers.zig");
 pub const DecompressorMod = @import("./Decompressor.zig");
@@ -204,9 +204,9 @@ pub fn deinit(self: *HTTPClient) void {
             _ = tunnel.detachAndDeref();
         }
         _ = bun.debugAssert((self.h2 == null));
-        if (self.tls_props) |tls| {
+        if (self.tls_props) |*tls| {
             _ = &tls;
-            _ = tls.deinit();
+            _ = (tls.*).deinit();
             self.tls_props = null;
         }
         if (self.custom_ssl_ctx) |ctx| {
@@ -1479,10 +1479,10 @@ pub fn handleResponseBody(self: *HTTPClient, incoming_data: []const u8, is_only_
         _ = assert((self.state.transfer_encoding == .identity));
         const content_length = self.state.content_length;
         if (((is_only_buffer and (content_length != null)) and (incoming_data.len >= content_length.?))) {
-            _ = try self.handleResponseBodyFromSinglePacket(self, incoming_data[0..content_length.?]);
+            _ = try self.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?]);
             return true;
         } else {
-            return self.handleResponseBodyFromMultiplePackets(self, incoming_data);
+            return self.handleResponseBodyFromMultiplePackets(incoming_data);
         }
 }
 
@@ -1669,7 +1669,7 @@ self.state.flags.received_last_chunk = true;
         _ = unreachable;
 }
 
-pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) ShouldContinue!void {
+pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !ShouldContinue {
         var location: []const u8 = "";
         _ = &location;
         var pretend_304 = false;
@@ -2112,6 +2112,7 @@ pub fn isAbort(self: HTTPClientResult) bool {
 };
 
 pub const HttpCallbackCtx = ?*anyopaque;
+pub const HTTPCertError = HTTPCertErrorMod;
 pub const ProxyTunnel = ProxyTunnelMod.ProxyTunnel;
 pub const Decompressor = DecompressorMod.Decompressor;
 pub const NewHTTPContext = HTTPContextMod.NewHTTPContext;
@@ -2597,9 +2598,8 @@ pub fn hashHeaderName(name: []const u8) u64 {
         _ = &hasher;
         var remain = name;
         _ = &remain;
-        var buf: struct { @sizeOf(@TypeOf(hasher.buf)) } = undefined;
+        var buf: @TypeOf(hasher.buf) = undefined;
         _ = &buf;
-        u8 = undefined;
         while ((remain.len > 0)) {
             const end = @min(hasher.buf.len, remain.len);
             _ = hasher.update(strings.copyLowercaseIfNeeded(remain[0..end], (&buf)));
@@ -2613,9 +2613,8 @@ pub fn hashHeaderConst(comptime name: []const u8) u64 {
         _ = &hasher;
         var remain = name;
         _ = &remain;
-        var buf: struct { hasher.buf.len } = undefined;
+        var buf: @TypeOf(hasher.buf) = undefined;
         _ = &buf;
-        u8 = undefined;
         while ((remain.len > 0)) {
             const end = @min(hasher.buf.len, remain.len);
             _ = hasher.update(std.ascii.lowerString((&buf), remain[0..end]));

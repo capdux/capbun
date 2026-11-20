@@ -9,7 +9,7 @@ pub fn toBeFunction(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Ca
     const not = client.flags.not;
     const pass = value.isCallable() != not;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

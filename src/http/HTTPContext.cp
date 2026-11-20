@@ -714,9 +714,9 @@ export class HTTPContext<const ssl: bool> {
                 return;
             }
         }
-        if (t := tunnel) {
-            t.shutdown();
-            t.detachAndDeref();
+        if (tunnel != null) {
+            tunnel.?.shutdown();
+            tunnel.?.detachAndDeref();
         }
         if (s := h2_session) s.deref();
         closeSocket(socket);

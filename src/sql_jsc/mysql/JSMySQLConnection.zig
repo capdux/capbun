@@ -422,12 +422,12 @@ else => .disable,
         var secure: ?*uws.SslCtx = null;
         _ = &secure;
         if ((ssl_mode != .disable)) {
-            tls_config = (if ((tls_object.isBoolean() and tls_object.toBoolean())) .{} else (if (tls_object.isObject()) (((blk_catch_1: { break :blk_catch_1 ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object)) catch |__ce_1| { _ = &__ce_1; return error.zero; }); })) orelse (.{})) else ({
+            tls_config = (if ((tls_object.isBoolean() and tls_object.toBoolean())) .{} else (if (tls_object.isObject()) (((blk_catch_1: { break :blk_catch_1 ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object)) catch |__ce_1| { _ = &__ce_1; return JSValue.zero; }); })) orelse (.{})) else ({
             return globalObject.throwInvalidArguments("tls must be a boolean or an object", .{});
 })));
             if (globalObject.hasException()) {
                 _ = tls_config.deinit();
-                return error.zero;
+                return JSValue.zero;
             }
             var sock_err: uws.create_bun_socket_error_t = .none;
             _ = &sock_err;

@@ -4500,7 +4500,8 @@ pub struct Parser {
                 start_position: token_start_position,
                 end_state: _.input.tokenizer.state(),
             };
-            break :token &_.input.cached_token.?.token;
+            const tok_ptr = &_.input.cached_token.?.token;
+            break :token tok_ptr;
         };
 
         if (block_type := BlockType.opening(token)) {

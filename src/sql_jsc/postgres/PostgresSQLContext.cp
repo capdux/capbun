@@ -11,7 +11,7 @@ const jsc = bun.jsc;
         ctx.onQueryResolveFn.set(globalObject, callframe.argument(0));
         ctx.onQueryRejectFn.set(globalObject, callframe.argument(1));
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 }
 

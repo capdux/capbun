@@ -151,7 +151,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             const ctx = NativePromiseContext.take(RequestContext, arguments.ptr[1]) orelse {
                 // The cell's destructor already released the ref (the Promise
                 // was collected before a prior microtask turn reached us).
-                return .js_undefined;
+                return JSValue.js_undefined;
             };
             defer ctx.deref();
 
@@ -159,7 +159,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             result.ensureStillAlive();
 
             handleResolve(ctx, result);
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         fn renderMissingInvalidResponse(ctx: *RequestContext, value: jsc.JSValue) void {
@@ -331,13 +331,13 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             const ctx = NativePromiseContext.take(RequestContext, arguments.ptr[1]) orelse {
                 // The cell's destructor already released the ref (the Promise
                 // was collected before a prior microtask turn reached us).
-                return .js_undefined;
+                return JSValue.js_undefined;
             };
             defer ctx.deref();
 
             const err = arguments.ptr[0];
             handleReject(ctx, if (!err.isEmptyOrUndefinedOrNull()) err else .js_undefined);
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         fn handleReject(ctx: *RequestContext, value: jsc.JSValue) void {
@@ -1640,20 +1640,20 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         pub fn onResolveStream(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             streamLog("onResolveStream", .{});
             const args = callframe.arguments_old(2);
-            const req = NativePromiseContext.take(RequestContext, args.ptr[args.len - 1]) orelse return .js_undefined;
+            const req = NativePromiseContext.take(RequestContext, args.ptr[args.len - 1]) orelse return JSValue.js_undefined;
             defer req.deref();
             req.handleResolveStream();
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         pub fn onRejectStream(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             streamLog("onRejectStream", .{});
             const args = callframe.arguments_old(2);
-            const req = NativePromiseContext.take(RequestContext, args.ptr[args.len - 1]) orelse return .js_undefined;
+            const req = NativePromiseContext.take(RequestContext, args.ptr[args.len - 1]) orelse return JSValue.js_undefined;
             const err = args.ptr[0];
             defer req.deref();
 
             req.handleRejectStream(globalThis, err);
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: JSValue) void {

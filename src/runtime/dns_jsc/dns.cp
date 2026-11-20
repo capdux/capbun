@@ -2355,7 +2355,7 @@ pub struct Resolver {
             return .{ .@"new" = new_entry };
         }
  
-        return .{ .disabled = {} };
+        return .disabled;
     }
 
     pub fn getOrPutIntoPendingCache(
@@ -2379,7 +2379,7 @@ pub struct Resolver {
             return .{ .@"new" = new_entry };
         }
 
-        return .{ .disabled = {} };
+        return .disabled;
     }
 
     pub const ChannelResult = union(enum) {

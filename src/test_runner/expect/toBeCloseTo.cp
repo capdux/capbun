@@ -43,7 +43,7 @@ pub fn toBeCloseTo(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     }
 
     if (std.math.isPositiveInf(expected) && std.math.isPositiveInf(received)) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const expected_diff = bun.pow(10, -precision) / 2;
@@ -53,7 +53,7 @@ pub fn toBeCloseTo(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     const not = client.flags.not;
     if (not) pass = !pass;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

@@ -550,19 +550,16 @@ _ = self.writeEntity(content);
 .code => {
 var start: usize = 0;
             _ = &start;
-            {
-                var j: i32 = 0;
-                _ = &j;
-                const __end_0 = content.len;
-                while (j < __end_0) : (j += 1) {
-                    const byte = content[@as(usize, @intCast(j))];
-                    if ((byte == 10)) {
-                        if ((j > start)) {
-                            _ = self.writeHtmlEscaped(content[start..j]);
-                        }
-                        _ = self.write(" ");
-                        start = (j + 1);
+            var j: usize = 0;
+            _ = &j;
+            while ((j < content.len)) : (j = (j + 1)) {
+                const byte = content[@as(usize, @intCast(j))];
+                if ((byte == 10)) {
+                    if ((j > start)) {
+                        _ = self.writeHtmlEscaped(content[start..j]);
                     }
+                    _ = self.write(" ");
+                    start = (j + 1);
                 }
             }
             if ((start < content.len)) {
@@ -843,7 +840,7 @@ pub fn isDisallowedTag(content: []const u8) bool {
             if ((after_lt >= content.len)) {
                 return false;
             }
-            const disallowed: [][]const u8 = .{ "title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext" };
+            const disallowed: [9][]const u8 = .{ "title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext" };
             inline for (disallowed) |tag| {
                 if (matchTagNameCI(content, after_lt, tag)) {
                     return true;

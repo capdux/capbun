@@ -147,8 +147,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *SystemColor, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+pub fn toCss(c: *const SystemColor, dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), c, dest);
     }
 };
 
@@ -361,7 +361,7 @@ pub fn unpremultiply(self: *LAB, a: f32) void {
     }
 
 pub fn intoCssColor(self: LAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LAB, .LAB)(self, allocator);
+            return ImplementIntoCssColor(LAB, .LAB)((&self), allocator);
     }
 
 pub fn adjustHue(self: *LAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -404,7 +404,7 @@ pub fn unpremultiply(self: *SRGB, a: f32) void {
     }
 
 pub fn intoCssColor(self: SRGB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGB, .SRGB)(self, allocator);
+            return ImplementIntoCssColor(SRGB, .SRGB)((&self), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGB) void {
@@ -455,6 +455,10 @@ pub fn unpremultiply(self: *HSL, a: f32) void {
             _ = PolarPremultiply(HSL, "s", "l").unpremultiply(self, a);
     }
 
+pub fn intoCssColor(self: HSL, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(HSL, .HSL)((&self), allocator);
+    }
+
 pub fn adjustPowerlessComponents(self: *HSL) void {
             if ((@abs(self.s) < std.math.floatEps(f32))) {
                 self.h = std.math.nan(f32);
@@ -489,7 +493,6 @@ pub fn adjustHue(self: *HSL, other: *HSL, method: HueInterpolationMethod) void {
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
     pub const into = ColorIntoMixin(@This(), .HSL).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .HSL);
     pub const ChannelTypeMap = .{ .h = ChannelType{ .angle = true }, .s = ChannelType{ .percentage = true }, .l = ChannelType{ .percentage = true } };
 };
 
@@ -505,6 +508,10 @@ pub fn premultiply(self: *HWB) void {
 
 pub fn unpremultiply(self: *HWB, a: f32) void {
             _ = PolarPremultiply(HWB, "w", "b").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: HWB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(HWB, .HWB)((&self), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *HWB) void {
@@ -537,7 +544,6 @@ pub fn adjustHue(self: *HWB, other: *HWB, method: HueInterpolationMethod) void {
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
     pub const into = ColorIntoMixin(@This(), .HWB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .HWB);
     pub const ChannelTypeMap = .{ .h = ChannelType{ .angle = true }, .w = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -556,7 +562,7 @@ pub fn unpremultiply(self: *SRGBLinear, a: f32) void {
     }
 
 pub fn intoCssColor(self: SRGBLinear, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(self, allocator);
+            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)((&self), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGBLinear) void {
@@ -593,6 +599,10 @@ pub const P3 = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn intoCssColor(self: P3, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(P3, .P3)((&self), allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -609,7 +619,6 @@ pub const P3 = struct {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
     pub const into = ColorIntoMixin(@This(), .P3).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .P3);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .percentage = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -618,6 +627,10 @@ pub const A98 = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn intoCssColor(self: A98, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(A98, .A98)((&self), allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -634,7 +647,6 @@ pub const A98 = struct {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
     pub const into = ColorIntoMixin(@This(), .A98).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .A98);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .percentage = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -643,6 +655,10 @@ pub const ProPhoto = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn intoCssColor(self: ProPhoto, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(ProPhoto, .ProPhoto)((&self), allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -659,7 +675,6 @@ pub const ProPhoto = struct {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
     pub const into = ColorIntoMixin(@This(), .ProPhoto).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .ProPhoto);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .percentage = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -668,6 +683,10 @@ pub const Rec2020 = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn intoCssColor(self: Rec2020, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(Rec2020, .Rec2020)((&self), allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -684,7 +703,6 @@ pub const Rec2020 = struct {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
     pub const into = ColorIntoMixin(@This(), .Rec2020).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .Rec2020);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .percentage = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -693,6 +711,10 @@ pub const XYZd50 = struct {
     y: f32,
     z: f32,
     alpha: f32,
+
+pub fn intoCssColor(self: XYZd50, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(XYZd50, .XYZd50)((&self), allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -715,7 +737,6 @@ pub const XYZd50 = struct {
     pub const premultiply = recangular_impl.premultiply;
     pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .XYZd50).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .XYZd50);
     pub const ChannelTypeMap = .{ .x = ChannelType{ .percentage = true }, .y = ChannelType{ .percentage = true }, .z = ChannelType{ .percentage = true } };
 };
 
@@ -734,7 +755,7 @@ pub fn unpremultiply(self: *XYZd65, a: f32) void {
     }
 
 pub fn intoCssColor(self: XYZd65, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(XYZd65, .XYZd65)(self, allocator);
+            return ImplementIntoCssColor(XYZd65, .XYZd65)((&self), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *XYZd65) void {
@@ -789,7 +810,7 @@ pub fn unpremultiply(self: *LCH, a: f32) void {
     }
 
 pub fn intoCssColor(self: LCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LCH, .LCH)(self, allocator);
+            return ImplementIntoCssColor(LCH, .LCH)((&self), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -832,7 +853,7 @@ pub fn unpremultiply(self: *OKLAB, a: f32) void {
     }
 
 pub fn intoCssColor(self: OKLAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLAB, .OKLAB)(self, allocator);
+            return ImplementIntoCssColor(OKLAB, .OKLAB)((&self), allocator);
     }
 
 pub fn adjustHue(self: *OKLAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -883,7 +904,7 @@ pub fn unpremultiply(self: *OKLCH, a: f32) void {
     }
 
 pub fn intoCssColor(self: OKLCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLCH, .OKLCH)(self, allocator);
+            return ImplementIntoCssColor(OKLCH, .OKLCH)((&self), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -3589,20 +3610,20 @@ pub fn RecangularPremultiply(comptime T: type, comptime a: []const u8, comptime 
         }
         return struct {
 
-pub fn premultiply(self: *@This()) void {
-            if ((!std.math.isNan(self.alpha))) {
-                @field(self, a) = (@field(self, a) * self.alpha);
-                @field(self, b) = (@field(self, b) * self.alpha);
-                @field(self, c) = (@field(self, c) * self.alpha);
+pub fn premultiply(col: *T) void {
+            if ((!std.math.isNan(col.alpha))) {
+                @field(col, a) = (@field(col, a) * col.alpha);
+                @field(col, b) = (@field(col, b) * col.alpha);
+                @field(col, c) = (@field(col, c) * col.alpha);
             }
     }
 
-pub fn unpremultiply(self: *@This(), alpha_multiplier: f32) void {
-            if (((!std.math.isNan(self.alpha)) and (self.alpha != 0.0))) {
-                @field(self, a) = (@field(self, a) / self.alpha);
-                @field(self, b) = (@field(self, b) / self.alpha);
-                @field(self, c) = (@field(self, c) / self.alpha);
-                self.alpha = (self.alpha * alpha_multiplier);
+pub fn unpremultiply(col: *T, alpha_multiplier: f32) void {
+            if (((!std.math.isNan(col.alpha)) and (col.alpha != 0.0))) {
+                @field(col, a) = (@field(col, a) / col.alpha);
+                @field(col, b) = (@field(col, b) / col.alpha);
+                @field(col, c) = (@field(col, c) / col.alpha);
+                col.alpha = (col.alpha * alpha_multiplier);
             }
     }
 };
@@ -3617,32 +3638,31 @@ pub fn PolarPremultiply(comptime T: type, comptime a: []const u8, comptime b: []
         }
         return struct {
 
-pub fn premultiply(self: *@This()) void {
-            if ((!std.math.isNan(self.alpha))) {
-                @field(self, a) = (@field(self, a) * self.alpha);
-                @field(self, b) = (@field(self, b) * self.alpha);
+pub fn premultiply(col: *T) void {
+            if ((!std.math.isNan(col.alpha))) {
+                @field(col, a) = (@field(col, a) * col.alpha);
+                @field(col, b) = (@field(col, b) * col.alpha);
             }
     }
 
-pub fn unpremultiply(self: *@This(), alpha_multiplier: f32) void {
-            self.h = @mod(self.h, 360.0);
-            if ((!std.math.isNan(self.alpha))) {
-                @field(self, a) = (@field(self, a) / self.alpha);
-                @field(self, b) = (@field(self, b) / self.alpha);
-                self.alpha = (self.alpha * alpha_multiplier);
+pub fn unpremultiply(col: *T, alpha_multiplier: f32) void {
+            col.h = @mod(col.h, 360.0);
+            if ((!std.math.isNan(col.alpha))) {
+                @field(col, a) = (@field(col, a) / col.alpha);
+                @field(col, b) = (@field(col, b) / col.alpha);
+                col.alpha = (col.alpha * alpha_multiplier);
             }
     }
 };
 }
 
 pub fn AdjustPowerlessLAB(comptime T: type) type {
-    _ = T;
         return struct {
 
-pub fn adjustPowerlessComponents(self: *@This()) void {
-            if ((@abs(self.l) < std.math.floatEps(f32))) {
-                self.a = std.math.nan(f32);
-                self.b = std.math.nan(f32);
+pub fn adjustPowerlessComponents(col: *T) void {
+            if ((@abs(col.l) < std.math.floatEps(f32))) {
+                col.a = std.math.nan(f32);
+                col.b = std.math.nan(f32);
             }
     }
 };
@@ -3651,20 +3671,20 @@ pub fn adjustPowerlessComponents(self: *@This()) void {
 pub fn AdjustPowerlessLCH(comptime T: type) type {
         return struct {
 
-pub fn adjustPowerlessComponents(self: *@This()) void {
-            if ((@abs(self.c) < std.math.floatEps(f32))) {
-                self.h = std.math.nan(f32);
+pub fn adjustPowerlessComponents(col: *T) void {
+            if ((@abs(col.c) < std.math.floatEps(f32))) {
+                col.h = std.math.nan(f32);
             }
-            if ((@abs(self.l) < std.math.floatEps(f32))) {
-                self.c = std.math.nan(f32);
-                self.h = std.math.nan(f32);
+            if ((@abs(col.l) < std.math.floatEps(f32))) {
+                col.c = std.math.nan(f32);
+                col.h = std.math.nan(f32);
             }
     }
 
-pub fn adjustHue(self: *@This(), other: *T, method: HueInterpolationMethod) void {
+pub fn adjustHue(col: *T, other: *T, method: HueInterpolationMethod) void {
             var m = method;
             _ = &m;
-            _ = m.interpolate((&self.h), (&other.h));
+            _ = m.interpolate((&col.h), (&other.h));
     }
 };
 }
@@ -3861,7 +3881,7 @@ pub fn into(color: *const T, comptime target_space: ConvertTo) target_space.Type
 };
 }
 
-pub fn ImplementIntoCssColor(comptime T: type, space: ConvertTo) *const fn (*const T, Allocator) CssColor {
+pub fn ImplementIntoCssColor(comptime T: type, comptime space: ConvertTo) *const fn (*const T, Allocator) CssColor {
         const ns = ("convert_" ++ @tagName(space));
         return @field(color_conversions, ns).intoCssColor;
 }

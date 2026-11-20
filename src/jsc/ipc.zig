@@ -1262,18 +1262,18 @@ pub fn getNackPacket(mode: Mode) []const u8 {
 pub fn emitProcessErrorEvent(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         const ex = callframe.argumentsAsArray(1)[0];
         _ = jsc.VirtualMachine.Process__emitErrorEvent(globalThis, ex);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doSendErr(globalObject: *jsc.JSGlobalObject, callback: jsc.JSValue, ex: jsc.JSValue, origin: FromEnum) bun.JSError!JSValue {
         if (callback.isCallable()) {
             _ = try callback.callNextTick(globalObject, .{ ex });
-            return error.false;
+            return JSValue.false;
         }
         if ((origin == .process)) {
             const target = jsc.JSFunction.create(globalObject, bun.String.empty, emitProcessErrorEvent, 1, .{});
             _ = try target.callNextTick(globalObject, .{ ex });
-            return error.false;
+            return JSValue.false;
         }
         return globalObject.throwValue(ex);
 }
@@ -1362,7 +1362,7 @@ _ = &namedPipe;
             }
             return (if ((status == .success)) .true else .false);
         }
-        return error.false;
+        return JSValue.false;
 }
 
 pub fn handleIPCMessage(send_queue: *SendQueue, message: *DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) void {

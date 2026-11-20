@@ -3072,3 +3072,5 @@ Options:
 - **[2026-11-20 19:22] Wave 10 Batch A 验收提交（Socket+HTTP2+uws+WebCore 11 模块全绿，覆盖 ~255 错）**：完成 `uws_handlers`/`Handlers`/`UpgradedDuplex`/`socket`/`tls_socket_functions`/`h2_frame_parser`/`h3`/`vtable`/`Blob`/`Body`/`ResumableSink` 11 模块独立验收（11/11 PASS，ratio 0.106x~1.136x）并原子提交；静待专家 B 组（`4880dc8d`，23 文件）完成后跑 Wave 11 `zig:check`。
 
 - **[2026-11-20 19:28] Wave 10 Batch B 验收提交（23 模块全绿）+ Wave 11 `zig:check` 体检**：完成 Expect/CSS/DNS/Node/Valkey/SQL/MD/BunObject 23 模块独立验收（23/23 PASS，ratio 0.869x~1.124x）；Wave 11 `bun run zig:check` 总错误由 **493 暴跌至 257**（Socket/HTTP2/uws_sys/Valkey/SQL 全链路清零，剩余仅 19 个多错文件 + 100 个单错文件）。
+
+- **[2026-11-20 19:38] Wave 11 Batch A+C 验收提交（101 模块全绿）**：完成专家 C 组 23 模块（4 `std` 根因 `output`/`Mutex`/`SSLConfig`/`BufferFallbackAllocator` + 19 高频模块 132 处错误联合清扫，23/23 PASS，ratio 0.735x~1.105x）与专家 A 组 78 模块（57 `expect/to*.cp` + 21 多错模块，78/78 PASS）的独立验收并原子提交；静待 B 组（`73686747`）完成后执行 Wave 12 `zig:check`。

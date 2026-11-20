@@ -37,7 +37,7 @@ pub fn toMatch(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     const expected_fmt = expected_value.toFmt(&formatter);

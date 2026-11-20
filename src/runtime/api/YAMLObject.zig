@@ -874,8 +874,26 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
         defer {
         _ = stringifier.deinit();
         }
-        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .OutOfMemory) or cp_match_tag(__err_v_5, .JSError) or cp_match_tag(__err_v_5, .JSTerminated))) {  break :__sw_blk_5 cp_val(e); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .StackOverflow)) {  break :__sw_blk_5 cp_val(global.throwStackOverflow()); } }  unreachable; }); }); });
-        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if ((cp_match_tag(__err_v_6, .OutOfMemory) or cp_match_tag(__err_v_6, .JSError) or cp_match_tag(__err_v_6, .JSTerminated))) {  break :__sw_blk_6 cp_val(e); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .StackOverflow)) {  break :__sw_blk_6 cp_val(global.throwStackOverflow()); } }  unreachable; }); }); });
+        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+            return global.throwStackOverflow();
+        }
+        if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        if ((e == error.JSTerminated)) {
+            return error.JSTerminated;
+        }
+        return error.JSError; }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+            return global.throwStackOverflow();
+        }
+        if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        if ((e == error.JSTerminated)) {
+            return error.JSTerminated;
+        }
+        return error.JSError; }); });
         return stringifier.builder.toString(global);
 }
 
@@ -884,7 +902,7 @@ pub fn spaceInit(global: *JSGlobalObject, space_value: JSValue) JSError!Space {
         if (space.isNumber()) {
             const num_f = space.asNumber();
             if ((!(num_f >= 1))) {
-                return error.minified;
+                return Space.minified;
             }
             return Space{ .number = (if ((num_f > 10)) 10 else @intFromFloat(num_f)) };
         }
@@ -892,11 +910,11 @@ pub fn spaceInit(global: *JSGlobalObject, space_value: JSValue) JSError!Space {
             const str = try space.toBunString(global);
             if ((str.length() == 0)) {
                 _ = str.deref();
-                return error.minified;
+                return Space.minified;
             }
             return Space{ .str = str };
         }
-        return error.minified;
+        return Space.minified;
 }
 
 pub fn spaceDeinit(this_space: *Space) void {

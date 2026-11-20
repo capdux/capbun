@@ -8,6 +8,7 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 pub type CString = [*:0]const u8;
+pub type CStringSlice = []CString;
 
 @root struct SSLConfig {
     server_name: ([*:0]const u8)? = null,
@@ -20,9 +21,9 @@ pub type CString = [*:0]const u8;
 
     passphrase: ([*:0]const u8)? = null,
 
-    key: ([][*:0]const u8)? = null,
-    cert: ([][*:0]const u8)? = null,
-    ca: ([][*:0]const u8)? = null,
+    key: CStringSlice? = null,
+    cert: CStringSlice? = null,
+    ca: CStringSlice? = null,
 
     secure_options: u32 = 0,
     request_cert: i32 = 0,
@@ -321,7 +322,7 @@ fn stringsEqualOpt(first: ([*:0]const u8)?, second: ([*:0]const u8)?): bool {
     }
 }
 
-fn stringSlicesEqualOpt(first: ([][*:0]const u8)?, second: ([][*:0]const u8)?): bool {
+fn stringSlicesEqualOpt(first: CStringSlice?, second: CStringSlice?): bool {
     if (slice1 := first) {
         const slice2 = second orelse return false;
         if (slice1.len != slice2.len) return false;
@@ -341,7 +342,7 @@ fn stringsEqual(a: [*:0]const u8, b: [*:0]const u8): bool {
     return strings.eqlLong(lhs, rhs, true);
 }
 
-type OptCStringSlice = ([][*:0]const u8)?;
+type OptCStringSlice = CStringSlice?;
 type OptCString = ([*:0]const u8)?;
 
 fn freeStrings(slice: *OptCStringSlice) {
@@ -359,7 +360,7 @@ fn freeString(str_ptr: *OptCString) {
     str_ptr.* = null;
 }
 
-fn cloneStrings(slice: ([][*:0]const u8)?): ([][*:0]const u8)? {
+fn cloneStrings(slice: CStringSlice?): CStringSlice? {
     const inner = slice orelse return null;
     let result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
     let i: usize = 0;

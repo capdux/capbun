@@ -9,7 +9,7 @@ pub struct Percentage {
     v: CSSNumber,
 
     static fn parse(input: *css.Parser): Result(Percentage) {
-        if (calc_value := input.tryParse(Calc(Percentage).parse, {}).asValue()) {
+        if (calc_value := input.tryParse(Calc(Percentage).parse, .{}).asValue()) {
             if (calc_value == .value) return { result: calc_value.value.* };
             // Handle calc() expressions that can't be reduced to a simple value (e.g., containing NaN, variables, etc.)
             // Return an error since we can't determine the percentage value at parse time
@@ -32,7 +32,7 @@ pub struct Percentage {
         else
             null;
 
-        const percent = css.Token{ .percentage = {
+        let percent = css.Token{ .percentage = {
             has_sign: v < 0.0,
             unit_value: v,
             int_value: int_value,

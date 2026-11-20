@@ -2115,7 +2115,7 @@ pub fn getOrPutIntoResolvePendingCache(self: *Resolver, comptime request_type: t
                 new_entry.len = key.len;
                 return .{ .@"new" = new_entry };
             }
-            return .{ .disabled = .{} };
+            return .disabled;
     }
 
 pub fn getOrPutIntoPendingCache(self: *Resolver, key: GetAddrInfoRequest.PendingCacheKey, comptime field: std.meta.FieldEnum(Resolver)) CacheHit {
@@ -2139,7 +2139,7 @@ pub fn getOrPutIntoPendingCache(self: *Resolver, key: GetAddrInfoRequest.Pending
                 new_entry.len = key.len;
                 return .{ .@"new" = new_entry };
             }
-            return .{ .disabled = .{} };
+            return .disabled;
     }
 
 pub fn getChannel(self: *Resolver) ChannelResult {

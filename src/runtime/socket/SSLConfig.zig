@@ -73,9 +73,9 @@ cert_file_name: ?[*:0]u8 = null,
 ca_file_name: ?[*:0]u8 = null,
 dh_params_file_name: ?[*:0]u8 = null,
 passphrase: ?[*:0]u8 = null,
-key: ?[][*:0]u8 = null,
-cert: ?[][*:0]u8 = null,
-ca: ?[][*:0]u8 = null,
+key: ?CStringSlice = null,
+cert: ?CStringSlice = null,
+ca: ?CStringSlice = null,
 secure_options: u32 = 0,
 request_cert: i32 = 0,
 reject_unauthorized: i32 = 0,
@@ -114,17 +114,17 @@ pub fn asUSockets(self: *const SSLConfig) uws.SocketContext.BunSocketContextOpti
         if (self.key) |key| {
             _ = &key;
             ctx_opts.key = key.ptr;
-            ctx_opts.key_count = @intCast(std.mem.span(key).len);
+            ctx_opts.key_count = @intCast(key.len);
         }
         if (self.cert) |cert| {
             _ = &cert;
             ctx_opts.cert = cert.ptr;
-            ctx_opts.cert_count = @intCast(std.mem.span(cert).len);
+            ctx_opts.cert_count = @intCast(cert.len);
         }
         if (self.ca) |ca| {
             _ = &ca;
             ctx_opts.ca = ca.ptr;
-            ctx_opts.ca_count = @intCast(std.mem.span(ca).len);
+            ctx_opts.ca_count = @intCast(ca.len);
         }
         if ((self.ssl_ciphers != null)) {
             ctx_opts.ssl_ciphers = self.ssl_ciphers;
@@ -383,7 +383,8 @@ pub const SingleFileInput = union(enum) {
 };
 
 pub const CString = [*:0]u8;
-const OptCStringSlice = ?[][*:0]u8;
+pub const CStringSlice = []CString;
+const OptCStringSlice = ?CStringSlice;
 const OptCString = ?[*:0]u8;
 const strings = bun.strings;
 const uws = bun.uws;
@@ -483,16 +484,16 @@ pub fn stringsEqualOpt(first: ?[*:0]u8, second: ?[*:0]u8) bool {
         }
 }
 
-pub fn stringSlicesEqualOpt(first: ?[][*:0]u8, second: ?[][*:0]u8) bool {
+pub fn stringSlicesEqualOpt(first: ?CStringSlice, second: ?CStringSlice) bool {
         if (first) |slice1| {
             _ = &slice1;
             const slice2 = ((second) orelse { return false; });
-            if ((std.mem.span(slice1).len != std.mem.span(slice2).len)) {
+            if ((slice1.len != slice2.len)) {
                 return false;
             }
             var i: usize = 0;
             _ = &i;
-            while ((i < std.mem.span(slice1).len)) : (i = (i + 1)) {
+            while ((i < slice1.len)) : (i = (i + 1)) {
                 if ((!stringsEqual(slice1[@as(usize, @intCast(i))], slice2[@as(usize, @intCast(i))]))) {
                     return false;
                 }
@@ -529,14 +530,14 @@ pub fn freeString(str_ptr: *OptCString) void {
         str_ptr.* = null;
 }
 
-pub fn cloneStrings(slice: ?[][*:0]u8) ?[][*:0]u8 {
+pub fn cloneStrings(slice: ?CStringSlice) ?CStringSlice {
         const inner = ((slice) orelse { return null; });
-        var result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, std.mem.span(inner).len));
+        var result = bun.handleOom(bun.default_allocator.alloc([*:0]const u8, inner.len));
         var __result_moved = false; _ = &__result_moved;
         defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
         var i: usize = 0;
         _ = &i;
-        while ((i < std.mem.span(inner).len)) : (i = (i + 1)) {
+        while ((i < inner.len)) : (i = (i + 1)) {
             result[cp_cast_int(usize, i)] = bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(inner[@as(usize, @intCast(i))])));
         }
         __result_moved = true;

@@ -1617,8 +1617,8 @@ pub enum SystemColor {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+    static fn toCss(c: *const SystemColor, dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), c, dest);
     }
 }
 
@@ -1658,7 +1658,7 @@ pub struct LAB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LAB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LAB, .LAB)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LAB, .LAB)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -1704,7 +1704,7 @@ pub struct SRGB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGB, .SRGB)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGB, .SRGB)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1761,7 +1761,7 @@ pub struct HSL {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .HSL).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .HSL);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HSL, .HSL)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         h: ChannelType{ .angle = true },
@@ -1823,7 +1823,7 @@ pub struct HWB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .HWB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .HWB);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HWB, .HWB)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         h: ChannelType{ .angle = true },
@@ -1880,7 +1880,7 @@ pub struct SRGBLinear {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGBLinear).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .angle = true },
@@ -1921,7 +1921,7 @@ pub struct P3 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .P3).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .P3);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(P3, .P3)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1959,7 +1959,7 @@ pub struct A98 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .A98).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .A98);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(A98, .A98)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1997,7 +1997,7 @@ pub struct ProPhoto {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .ProPhoto).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .ProPhoto);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(ProPhoto, .ProPhoto)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -2035,7 +2035,7 @@ pub struct Rec2020 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .Rec2020).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .Rec2020);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(Rec2020, .Rec2020)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -2080,7 +2080,7 @@ pub struct XYZd50 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .XYZd50).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .XYZd50);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd50, .XYZd50)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         x: ChannelType{ .percentage = true },
@@ -2124,7 +2124,7 @@ pub struct XYZd65 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .XYZd65).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd65, .XYZd65)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd65, .XYZd65)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         x: ChannelType{ .percentage = true },
@@ -2173,7 +2173,7 @@ pub struct LCH {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LCH).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LCH, .LCH)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LCH, .LCH)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2218,7 +2218,7 @@ pub struct OKLAB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLAB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLAB, .OKLAB)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLAB, .OKLAB)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2267,7 +2267,7 @@ pub struct OKLCH {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLCH).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLCH, .OKLCH)(_, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLCH, .OKLCH)(&_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -3394,21 +3394,21 @@ pub fn RecangularPremultiply(
     if (!@hasField(T, b)) @compileError("Missing field: " ++ b);
     if (!@hasField(T, c)) @compileError("Missing field: " ++ c);
     return struct {
-        pub fn premultiply(*_) {
-            if (!std.math.isNan(_.alpha)) {
-                @field(_, a) *= _.alpha;
-                @field(_, b) *= _.alpha;
-                @field(_, c) *= _.alpha;
+        static fn premultiply(col: *T) {
+            if (!std.math.isNan(col.alpha)) {
+                @field(col, a) *= col.alpha;
+                @field(col, b) *= col.alpha;
+                @field(col, c) *= col.alpha;
             }
         }
 
-        pub fn unpremultiply(*_, alpha_multiplier: f32) {
-            if (!std.math.isNan(_.alpha) && _.alpha != 0.0) {
+        static fn unpremultiply(col: *T, alpha_multiplier: f32) {
+            if (!std.math.isNan(col.alpha) && col.alpha != 0.0) {
                 // PERF: precalculate 1/alpha?
-                @field(_, a) /= _.alpha;
-                @field(_, b) /= _.alpha;
-                @field(_, c) /= _.alpha;
-                _.alpha *= alpha_multiplier;
+                @field(col, a) /= col.alpha;
+                @field(col, b) /= col.alpha;
+                @field(col, c) /= col.alpha;
+                col.alpha *= alpha_multiplier;
             }
         }
     };
@@ -3422,21 +3422,21 @@ pub fn PolarPremultiply(
     if (!@hasField(T, a)) @compileError("Missing field: " ++ a);
     if (!@hasField(T, b)) @compileError("Missing field: " ++ b);
     return struct {
-        pub fn premultiply(*_) {
-            if (!std.math.isNan(_.alpha)) {
-                @field(_, a) *= _.alpha;
-                @field(_, b) *= _.alpha;
+        static fn premultiply(col: *T) {
+            if (!std.math.isNan(col.alpha)) {
+                @field(col, a) *= col.alpha;
+                @field(col, b) *= col.alpha;
             }
         }
 
-        pub fn unpremultiply(*_, alpha_multiplier: f32) {
+        static fn unpremultiply(col: *T, alpha_multiplier: f32) {
             // this.h %= 360.0;
-            _.h = @mod(_.h, 360.0);
-            if (!std.math.isNan(_.alpha)) {
+            col.h = @mod(col.h, 360.0);
+            if (!std.math.isNan(col.alpha)) {
                 // PERF: precalculate 1/alpha?
-                @field(_, a) /= _.alpha;
-                @field(_, b) /= _.alpha;
-                _.alpha *= alpha_multiplier;
+                @field(col, a) /= col.alpha;
+                @field(col, b) /= col.alpha;
+                col.alpha *= alpha_multiplier;
             }
         }
     };
@@ -3444,11 +3444,11 @@ pub fn PolarPremultiply(
 
 pub fn AdjustPowerlessLAB(comptime T: type): type {
     return struct {
-        pub fn adjustPowerlessComponents(*_) {
+        static fn adjustPowerlessComponents(col: *T) {
             // If the lightness of a LAB color is 0%, both the a and b components are powerless.
-            if (@abs(_.l) < std.math.floatEps(f32)) {
-                _.a = std.math.nan(f32);
-                _.b = std.math.nan(f32);
+            if (@abs(col.l) < std.math.floatEps(f32)) {
+                col.a = std.math.nan(f32);
+                col.b = std.math.nan(f32);
             }
         }
     };
@@ -3456,22 +3456,22 @@ pub fn AdjustPowerlessLAB(comptime T: type): type {
 
 pub fn AdjustPowerlessLCH(comptime T: type): type {
     return struct {
-        pub fn adjustPowerlessComponents(*_) {
+        static fn adjustPowerlessComponents(col: *T) {
             // If the chroma of an LCH color is 0%, the hue component is powerless.
             // If the lightness of an LCH color is 0%, both the hue and chroma components are powerless.
-            if (@abs(_.c) < std.math.floatEps(f32)) {
-                _.h = std.math.nan(f32);
+            if (@abs(col.c) < std.math.floatEps(f32)) {
+                col.h = std.math.nan(f32);
             }
 
-            if (@abs(_.l) < std.math.floatEps(f32)) {
-                _.c = std.math.nan(f32);
-                _.h = std.math.nan(f32);
+            if (@abs(col.l) < std.math.floatEps(f32)) {
+                col.c = std.math.nan(f32);
+                col.h = std.math.nan(f32);
             }
         }
 
-        pub fn adjustHue(*_, other: *T, method: HueInterpolationMethod) {
+        static fn adjustHue(col: *T, other: *T, method: HueInterpolationMethod) {
             let m = method;
-            * = m.interpolate(&_.h, &other.h);
+            * = m.interpolate(&col.h, &other.h);
         }
     };
 }
@@ -4719,7 +4719,7 @@ pub fn ColorIntoMixin(T: type, space: ConvertTo): type {
     };
 }
 
-pub fn ImplementIntoCssColor(comptime T: type, space: ConvertTo): fn (*const T, Allocator): CssColor {
+pub fn ImplementIntoCssColor(comptime T: type, comptime space: ConvertTo): fn (*const T, Allocator): CssColor {
     const ns = "convert_" ++ @tagName(space);
     return @field(color_conversions, ns).intoCssColor;
 }

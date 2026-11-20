@@ -4,7 +4,9 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
     defer client.postMatch(globalThis);
     const value: JSValue = client.getValue(globalThis, thisValue, "toHaveNthReturnedWith", "<green>n<r>, <green>expected<r>")?;
 
-    const [nth_arg, expected] = callframe.argumentsAsArray(2);
+    const args_pair = callframe.argumentsAsArray(2);
+    const nth_arg = args_pair[0];
+    const expected = args_pair[1];
 
     // Validate n is a number
     if (!nth_arg.isAnyInt()) {
@@ -55,7 +57,7 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
     }
 
     if (pass != client.flags.not) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     // Handle failure

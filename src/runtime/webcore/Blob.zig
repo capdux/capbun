@@ -622,6 +622,11 @@ pub fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8
         _ = &end;
         return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
 }
+
+pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        _ = &callframe;
+        return globalThis.throw("Blob.writeFile not yet ported", .{});
+}
 pub const Store = BlobStore;
 pub const read_file = read_file_mod;
 pub const write_file = write_file_mod;

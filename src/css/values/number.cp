@@ -23,7 +23,8 @@ pub struct CSSNumberFns {
         const number: f32 = @as(f32, this_val.*);
         if (number != 0.0 && @abs(number) < 1.0) {
             let dtoa_buf: [129]u8 = undefined;
-            const str = (css.dtoa_short(&dtoa_buf, number, 6)?)[0];
+            const dtoa_res = css.dtoa_short(&dtoa_buf, number, 6)?;
+            const str = dtoa_res[0];
             if (number < 0.0) {
                 dest.writeChar('-')?;
                 dest.writeStr(bun.strings.trimLeadingPattern2(str, '-', '0'))?;

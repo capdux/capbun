@@ -24,7 +24,8 @@ pub fn toHaveProperty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
 
     const not = client.flags.not;
     let path_string = ZigString.Empty;
-    expected_property_path.toZigString(&path_string, globalThis)?;
+    const path_ptr = &path_string;
+    expected_property_path.toZigString(path_ptr, globalThis)?;
 
     let pass = !value.isUndefinedOrNull();
     let received_property: JSValue = .zero;
@@ -39,7 +40,7 @@ pub fn toHaveProperty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
     }
 
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

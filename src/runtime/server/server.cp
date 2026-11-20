@@ -441,7 +441,7 @@ const ServePlugins = struct {
 
         handleOnResolve(plugins);
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn handleOnResolve(this: *ServePlugins) void {
@@ -474,7 +474,7 @@ const ServePlugins = struct {
         defer plugins.deref();
         handleOnReject(plugins, globalThis, error_js);
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn handleOnReject(this: *ServePlugins, global: *jsc.JSGlobalObject, err: JSValue) void {
@@ -690,7 +690,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 return this.globalThis.throwInvalidArguments("timeout() requires a Request object", .{});
             }
 
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn setIdleTimeout(this: *ThisServer, seconds: c_uint) void {
@@ -765,12 +765,12 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
 
             if (this.flags.terminated) {
-                return .false;
+                return JSValue.false;
             }
 
             if (object.as(NodeHTTPResponse)) |nodeHttpResponse| {
                 if (nodeHttpResponse.flags.ended or nodeHttpResponse.flags.socket_closed) {
-                    return .false;
+                    return JSValue.false;
                 }
 
                 let data_value = jsc.JSValue.zero;
@@ -872,14 +872,14 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 return globalThis.throwInvalidArguments("upgrade requires a Request object", .{});
             };
 
-            let upgrader = request.request_context.get(RequestContext) orelse return .false;
+            let upgrader = request.request_context.get(RequestContext) orelse return JSValue.false;
 
             if (upgrader.isAbortedOrEnded()) {
-                return .false;
+                return JSValue.false;
             }
 
             if (upgrader.upgrade_context == null or @intFromPtr(upgrader.upgrade_context) == std.math.maxInt(usize)) {
-                return .false;
+                return JSValue.false;
             }
 
             const resp = upgrader.resp.?;
@@ -945,7 +945,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
 
             if (sec_websocket_key_str.len == 0) {
-                return .false;
+                return JSValue.false;
             }
 
             if (sec_websocket_protocol.len > 0) {
@@ -1042,7 +1042,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             // `resp`/`ctx` locals now point at a socket that has been turned
             // into a WebSocket — using them again would be UB.
             if (upgrader.isAbortedOrEnded() or upgrader.didUpgradeWebSocket()) {
-                return .false;
+                return JSValue.false;
             }
 
             let cookies_to_write: ?*WebCore.CookieMap = null;
@@ -1106,7 +1106,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 ctx,
             );
 
-            return .true;
+            return JSValue.true;
         }
 
         pub fn onReloadFromZig(this: *ThisServer, new_config: *ServerConfig, globalThis: *jsc.JSGlobalObject) void {
@@ -1362,9 +1362,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         pub fn closeIdleConnections(this: *ThisServer, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = globalObject;
             _ = callframe;
-            if (this.app == null) return .js_undefined;
+            if (this.app == null) return JSValue.js_undefined;
             this.app.?.closeIdleConnections();
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn stopFromJS(this: *ThisServer, abruptly: ?JSValue) jsc.JSValue {
@@ -1501,7 +1501,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
         pub fn getHostname(this: *ThisServer, globalThis: *JSGlobalObject) !jsc.JSValue {
             switch (this.config.address) {
-                .unix => return .js_undefined,
+                .unix => return JSValue.js_undefined,
                 .tcp => {},
             }
             {
@@ -3555,7 +3555,7 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
     } else {
         bun.debugAssert(false);
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn Server__setAppFlags_(globalThis: *jsc.JSGlobalObject, server: jsc.JSValue, require_host_header: bool, use_strict_method_validation: bool): bun.JSError!jsc.JSValue {
@@ -3574,7 +3574,7 @@ pub fn Server__setAppFlags_(globalThis: *jsc.JSGlobalObject, server: jsc.JSValue
     } else {
         return globalThis.throw("Failed to set timeout: The 'this' value is not a Server.", .{});
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn Server__setMaxHTTPHeaderSize_(globalThis: *jsc.JSGlobalObject, server: jsc.JSValue, max_header_size: u64): bun.JSError!jsc.JSValue {
@@ -3593,7 +3593,7 @@ pub fn Server__setMaxHTTPHeaderSize_(globalThis: *jsc.JSGlobalObject, server: js
     } else {
         return globalThis.throw("Failed to set maxHeaderSize: The 'this' value is not a Server.", .{});
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 comptime {
     * = Server__setIdleTimeout;

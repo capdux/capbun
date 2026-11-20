@@ -716,7 +716,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     return to_buffered_value((&src.context), globalThis, .text);
                 }
                 _ = globalThis.throwTODO("This is not implemented yet");
-                return error.zero;
+                return JSValue.zero;
         }
     
     pub fn arrayBuffer(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -727,7 +727,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     return to_buffered_value((&src.context), globalThis, .arrayBuffer);
                 }
                 _ = globalThis.throwTODO("This is not implemented yet");
-                return error.zero;
+                return JSValue.zero;
         }
     
     pub fn blob(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -738,7 +738,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     return to_buffered_value((&src.context), globalThis, .blob);
                 }
                 _ = globalThis.throwTODO("This is not implemented yet");
-                return error.zero;
+                return JSValue.zero;
         }
     
     pub fn bytes(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -749,7 +749,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     return to_buffered_value((&src.context), globalThis, .bytes);
                 }
                 _ = globalThis.throwTODO("This is not implemented yet");
-                return error.zero;
+                return JSValue.zero;
         }
     
     pub fn json(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -760,7 +760,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     return to_buffered_value((&src.context), globalThis, .json);
                 }
                 _ = globalThis.throwTODO("This is not implemented yet");
-                return error.zero;
+                return JSValue.zero;
         }
     };
 };

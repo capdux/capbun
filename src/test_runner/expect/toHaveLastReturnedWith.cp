@@ -46,7 +46,7 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
     }
 
     if (pass != client.flags.not) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     // Handle failure

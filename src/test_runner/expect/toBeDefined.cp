@@ -9,7 +9,7 @@ pub fn toBeDefined(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     const not = client.flags.not;
     let pass = !value.isUndefined();
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };

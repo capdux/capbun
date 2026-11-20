@@ -169,9 +169,9 @@ pub fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         if ((arguments.len < 1)) {
             return globalObject.throwNotEnoughArguments("createObjectURL", 1, arguments.len);
         }
-        const blob = ((arguments.ptr[0].as(jsc.WebCore.Blob)) orelse (({
+        const blob = ((arguments.ptr[0].as(jsc.WebCore.Blob)) orelse {
         return globalObject.throwInvalidArguments("createObjectURL expects a Blob object", .{});
-})));
+});
         const registry = ObjectURLRegistry.singleton();
         const uuid = registry.register(globalObject.bunVM(), blob);
         var str = bun.handleOom(bun.String.createFormat("blob:{f}", .{ uuid }));
@@ -189,7 +189,7 @@ pub fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         }
         const str = (blk_catch_0: { break :blk_catch_0 ((arguments.ptr[0].toBunString(globalObject)) catch |__ce_0| { _ = &__ce_0; @panic("unreachable"); }); });
         if ((!str.hasPrefixComptime("blob:"))) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         const slice = str.toUTF8WithoutRef(bun.default_allocator);
         defer {
@@ -200,26 +200,26 @@ pub fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         }
         const sliced = slice.slice();
         if ((sliced.len < ("blob:".len + UUID.stringLength))) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         _ = ObjectURLRegistry.singleton().revoke(sliced["blob:".len..]);
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(1);
         if ((arguments.len < 1)) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         const str = try arguments.ptr[0].toBunString(globalObject);
         defer {
         _ = str.deref();
         }
         if (globalObject.hasException()) {
-            return error.zero;
+            return jsc.JSValue.zero;
         }
         if (((!str.hasPrefixComptime("blob:")) or (str.length() < specifier_len))) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         const slice = str.toUTF8WithoutRef(bun.default_allocator);
         defer {

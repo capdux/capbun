@@ -20,7 +20,7 @@ type BlobStorePtr = (*bun.webcore.Blob.Store)?;
 @tls let globalInitialized: bool = false;
 @tls let global: *MiniEventLoop = undefined;
 
-pub struct MiniEventLoop {
+@root struct MiniEventLoop {
     tasks: Queue,
     concurrent_tasks: ConcurrentTaskQueueT = .{},
     loop: *uws.Loop,

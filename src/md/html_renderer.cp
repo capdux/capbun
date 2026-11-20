@@ -383,7 +383,8 @@ pub struct HtmlRenderer {
             .code => {
                 // In code spans, newlines become spaces
                 let start: usize = 0;
-                for (j of 0..content.len) {
+                let j: usize = 0;
+                while (j < content.len) : (j += 1) {
                     const byte = content[j];
                     if (byte == '\n') {
                         if (j > start) _.writeHtmlEscaped(content[start..j]);
@@ -666,7 +667,7 @@ pub struct HtmlRenderer {
         const after_lt: usize = if (content[1] == '/') @as(usize, 2) else @as(usize, 1);
         if (after_lt >= content.len) return false;
 
-        const disallowed = [
+        const disallowed: [9][]const u8 = [
             "title",   "textarea", "style",  "xmp",       "iframe",
             "noembed", "noframes", "script", "plaintext",
         ];

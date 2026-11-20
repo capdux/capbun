@@ -1405,3 +1405,5 @@
 - **[2026-11-20] Wave 10 Batch A Socket 全链路修复**：`uws_handlers.cp` 用 `@FieldType(struct { p: *((*T)?) }, "p")` 消除表达式位 `*?*T` 导致的 132 处 `*const type` 错；`Handlers`/`UpgradedDuplex` 升级 `@root struct` 补全根字段与 12 个核心方法导出；`h3.cp` 采用 `_h3_cb_sigs` + `@alignCast` 消除双重 `*const` 与对齐错。
 
 - **[2026-11-20] Wave 10 收官：Socket/HTTP2/uws_sys/Valkey/SQL 全链路清零**：`uws_handlers`(132→0)、`h2_frame_parser`(32→0)、`socket`(30→0)、`tls_socket_functions`(22→0)、`uws_sys/socket`(22→0)、`cares_jsc`(13→0)、`uws_sys/h3`(10→0) 全部通过语义检查。
+
+- **[2026-11-20] Wave 11 Batch A+C 典型修复**：`output.cp` `panic` 自动解包指针 `args` 彻底根治 `Io/Writer.zig:597`；`Mutex.cp` 改原生 `if` 解决误选 `DarwinImpl`；`SSLConfig.cp` 建 `CStringSlice` 避免 `.len` 误走 `std.mem.span`；`BufferFallbackAllocator`/`MiniEventLoop` 升级 `@root struct`；57 个 `expect/to*.cp` 批量消除 `error.js_undefined`；19 高频模块预防性清扫 132 处错误联合返回。

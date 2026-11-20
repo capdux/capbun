@@ -407,7 +407,15 @@ pub struct Expect {
     static fn ArgsTupleType(comptime T: type): type {
         const ti = @typeInfo(T);
         if (ti == .@"struct" && !ti.@"struct".is_tuple) {
-            return std.meta.Tuple(ti.@"struct".field_types);
+            const fields = ti.@"struct".fields;
+            const n = fields.len;
+            const TypeT = @TypeOf(u8);
+            comptime let types: [n]TypeT = undefined;
+            comptime let i: usize = 0;
+            inline while (i < n) : (i += 1) {
+                types[i] = fields[i].@"type";
+            }
+            return std.meta.Tuple(&types);
         }
         return T;
     }
@@ -665,7 +673,7 @@ pub struct Expect {
 
         let err_value_res = err_value orelse return null;
         if (err_value_res.isAnyError()) {
-            const message: JSValue = err_value_res.getTruthyComptime(globalThis, "message") ?? .js_undefined;
+            const message: JSValue = (err_value_res.getTruthyComptime(globalThis, "message")?) ?? .js_undefined;
             err_value_res = message;
         } else {
             err_value_res = .js_undefined;

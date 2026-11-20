@@ -465,7 +465,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             const arg = args[0];
             const str = arg.toString(globalThis);
             if (globalThis.hasException()) {
-                return .zero;
+                return JSValue.zero;
             }
 
             const view = str.view(globalThis);

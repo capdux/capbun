@@ -9,7 +9,7 @@ pub fn toBeNumber(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
     const not = client.flags.not;
     const pass = value.isNumber() != not;
 
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
     defer formatter.deinit();

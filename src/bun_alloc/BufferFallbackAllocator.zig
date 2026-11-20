@@ -4,52 +4,63 @@
 const std = @import("std");
 const string = []const u8;
 
-pub const BufferFallbackAllocator = struct {
-    fallback_allocator: Allocator,
-    fixed_buffer_allocator: FixedBufferAllocator,
+pub const BufferFallbackAllocator = @This();
+
+fallback_allocator: Allocator,
+fixed_buffer_allocator: FixedBufferAllocator,
 
 pub fn init(buffer: []u8, fallback_allocator: Allocator) BufferFallbackAllocator {
-            return BufferFallbackAllocator{ .fallback_allocator = fallback_allocator, .fixed_buffer_allocator = FixedBufferAllocator.init(buffer) };
-    }
+        return BufferFallbackAllocator{ .fallback_allocator = fallback_allocator, .fixed_buffer_allocator = FixedBufferAllocator.init(buffer) };
+}
 
 pub fn allocator(self: *BufferFallbackAllocator) Allocator {
-            return Allocator{ .ptr = self, .vtable = (&BufferFallbackAllocator.vtable) };
-    }
+        return Allocator{ .ptr = self, .vtable = (&BufferFallbackAllocator.vtable) };
+}
 
 pub fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ra: usize) ?[*]u8 {
-            const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
-            return ((FixedBufferAllocator.alloc((&self.fixed_buffer_allocator), len, alignment, ra)) orelse (self.fallback_allocator.rawAlloc(len, alignment, ra)));
-    }
+        const self: *BufferFallbackAllocator = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        return ((FixedBufferAllocator.alloc((&self.fixed_buffer_allocator), len, alignment, ra)) orelse (self.fallback_allocator.rawAlloc(len, alignment, ra)));
+}
 
 pub fn resize(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize) bool {
-            const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
-            if (self.fixed_buffer_allocator.ownsPtr(buf.ptr)) {
-                return FixedBufferAllocator.resize((&self.fixed_buffer_allocator), buf, alignment, new_len, ra);
-            }
-            return self.fallback_allocator.rawResize(buf, alignment, new_len, ra);
-    }
+        const self: *BufferFallbackAllocator = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        if (self.fixed_buffer_allocator.ownsPtr(buf.ptr)) {
+            return FixedBufferAllocator.resize((&self.fixed_buffer_allocator), buf, alignment, new_len, ra);
+        }
+        return self.fallback_allocator.rawResize(buf, alignment, new_len, ra);
+}
 
 pub fn remap(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize) ?[*]u8 {
-            const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
-            if (self.fixed_buffer_allocator.ownsPtr(memory.ptr)) {
-                return FixedBufferAllocator.remap((&self.fixed_buffer_allocator), memory, alignment, new_len, ra);
-            }
-            return self.fallback_allocator.rawRemap(memory, alignment, new_len, ra);
-    }
+        const self: *BufferFallbackAllocator = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        if (self.fixed_buffer_allocator.ownsPtr(memory.ptr)) {
+            return FixedBufferAllocator.remap((&self.fixed_buffer_allocator), memory, alignment, new_len, ra);
+        }
+        return self.fallback_allocator.rawRemap(memory, alignment, new_len, ra);
+}
 
 pub fn free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ra: usize) void {
-            const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
-            if (self.fixed_buffer_allocator.ownsPtr(buf.ptr)) {
-                return FixedBufferAllocator.free((&self.fixed_buffer_allocator), buf, alignment, ra);
-            }
-            return self.fallback_allocator.rawFree(buf, alignment, ra);
-    }
+        const self: *BufferFallbackAllocator = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        if (self.fixed_buffer_allocator.ownsPtr(buf.ptr)) {
+            return FixedBufferAllocator.free((&self.fixed_buffer_allocator), buf, alignment, ra);
+        }
+        return self.fallback_allocator.rawFree(buf, alignment, ra);
+}
 
 pub fn reset(self: *BufferFallbackAllocator) void {
-            _ = self.fixed_buffer_allocator.reset();
-    }
-    pub const vtable = Allocator.VTable{ .alloc = (&alloc), .resize = (&resize), .remap = (&remap), .free = (&free) };
-};
-
+        _ = self.fixed_buffer_allocator.reset();
+}
+const vtable = Allocator.VTable{ .alloc = (&alloc), .resize = (&resize), .remap = (&remap), .free = (&free) };
 const Allocator = std.mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
