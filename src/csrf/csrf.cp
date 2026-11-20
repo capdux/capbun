@@ -26,7 +26,7 @@ export enum TokenFormat {
     base64url,
     hex,
 
-    pub fn toNodeEncoding(self: TokenFormat): jsc.Node.Encoding {
+    pub fn toNodeEncoding(_: TokenFormat): jsc.Node.Encoding {
         return switch (self) {
             .base64 => .base64,
             .base64url => .base64url,
@@ -51,23 +51,23 @@ pub const VerifyOptions = struct {
 };
 
 pub fn generate(options: GenerateOptions, out_buffer: *[u8; 512]): ![]u8 {
-    var nonce: [u8; 16] = [0; 16];
+    let nonce: [u8; 16] = [0; 16];
     bun.csprng(&nonce);
 
     const timestamp = std.time.milliTimestamp();
     const timestamp_u64: u64 = @bitCast(@as(i64, timestamp));
 
-    var timestamp_bytes: [u8; 8] = [0; 8];
+    let timestamp_bytes: [u8; 8] = [0; 8];
     std.mem.writeInt(u64, &timestamp_bytes, timestamp_u64, .big);
-    var expires_in_bytes: [u8; 8] = [0; 8];
+    let expires_in_bytes: [u8; 8] = [0; 8];
     std.mem.writeInt(u64, &expires_in_bytes, options.expires_in_ms, .big);
 
-    var payload_buf: [u8; 32] = [0; 32];
+    let payload_buf: [u8; 32] = [0; 32];
     @memcpy(payload_buf[0..8], &timestamp_bytes);
     @memcpy(payload_buf[8..24], &nonce);
     @memcpy(payload_buf[24..32], &expires_in_bytes);
 
-    var digest_buf: [u8; 64] = [0; 64];
+    let digest_buf: [u8; 64] = [0; 64];
     const digest = hmac.generate(options.secret, &payload_buf, options.algorithm, &digest_buf) ?? return Error.TokenCreationFailed;
 
     @memcpy(out_buffer[0..8], &timestamp_bytes);
@@ -81,8 +81,8 @@ pub fn generate(options: GenerateOptions, out_buffer: *[u8; 512]): ![]u8 {
 pub fn verify(options: VerifyOptions): bool {
     const encoding: TokenFormat = options.encoding;
 
-    var buf: [u8; 96] = [0; 96];
-    var token = options.token;
+    let buf: [u8; 96] = [0; 96];
+    let token = options.token;
     if (token.len > 0 and token[token.len - 1] == 0) {
         token = token[0 .. token.len - 1];
     }
@@ -139,7 +139,7 @@ pub fn verify(options: VerifyOptions): bool {
     const payload = decoded[0..32];
     const received_signature = decoded[32..];
 
-    var expected_signature: [u8; 64] = [0; 64];
+    let expected_signature: [u8; 64] = [0; 64];
     const signature = hmac.generate(options.secret, payload, options.algorithm, &expected_signature) ?? return false;
 
     if (received_signature.len != signature.len) {

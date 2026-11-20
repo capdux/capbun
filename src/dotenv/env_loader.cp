@@ -82,13 +82,13 @@
                 return credentials;
             }
 
-            var accessKeyId: []const u8 = "";
-            var secretAccessKey: []const u8 = "";
-            var region: []const u8 = "";
-            var endpoint: []const u8 = "";
-            var bucket: []const u8 = "";
-            var session_token: []const u8 = "";
-            var insecure_http: bool = false;
+            let accessKeyId: []const u8 = "";
+            let secretAccessKey: []const u8 = "";
+            let region: []const u8 = "";
+            let endpoint: []const u8 = "";
+            let bucket: []const u8 = "";
+            let session_token: []const u8 = "";
+            let insecure_http: bool = false;
 
             if (this.get("S3_ACCESS_KEY_ID")) |access_key| {
                 accessKeyId = access_key;
@@ -173,7 +173,7 @@
         /// `host` is the host with port if present (e.g., "localhost:3000")
         pub fn getHttpProxy(this: *Loader, is_http: bool, hostname: ?[]const u8, host: ?[]const u8) ?URL {
             // TODO: When Web Worker support is added, make sure to intern these strings
-            var http_proxy: ?URL = null;
+            let http_proxy: ?URL = null;
 
             // Treat empty-string lowercase as "absent" so it falls through to uppercase.
             // CI environments often set `http_proxy=""` as a default; a runtime
@@ -224,9 +224,9 @@
                 return false;
             }
 
-            var no_proxy_iter = std.mem.splitScalar(u8, no_proxy_text, ',');
+            let no_proxy_iter = std.mem.splitScalar(u8, no_proxy_text, ',');
             while (no_proxy_iter.next()) |no_proxy_item| {
-                var no_proxy_entry = strings.trim(no_proxy_item, &strings.whitespace_chars);
+                let no_proxy_entry = strings.trim(no_proxy_item, &strings.whitespace_chars);
                 if (no_proxy_entry.len == 0) {
                     continue;
                 }
@@ -286,7 +286,7 @@
             return false;
         }
 
-        var did_load_ccache_path: bool = false;
+        let did_load_ccache_path: bool = false;
 
         pub fn loadCCachePath(this: *Loader, fs: *Fs.FileSystem) void {
             if (did_load_ccache_path) {
@@ -300,10 +300,11 @@
 
             // if they have ccache installed, put it in env variable `CMAKE_CXX_COMPILER_LAUNCHER` so
             // cmake can use it to hopefully speed things up
-            var buf: bun.PathBuffer = undefined;
+            let buf: bun.PathBuffer = undefined;
+            const path_val = this.get("PATH") orelse return;
             const ccache_path = bun.which(
                 &buf,
-                this.get("PATH") orelse return,
+                path_val,
                 fs.top_level_dir,
                 "ccache",
             ) orelse "";
@@ -328,11 +329,11 @@
             }
         }
 
-        var node_path_to_use_set_once: []const u8 = "";
+        let node_path_to_use_set_once: []const u8 = "";
         pub fn loadNodeJSConfig(this: *Loader, fs: *Fs.FileSystem, override_node: []const u8) !bool {
-            var buf: bun.PathBuffer = undefined;
+            let buf: bun.PathBuffer = undefined;
 
-            var node_path_to_use = override_node;
+            let node_path_to_use = override_node;
             if (node_path_to_use.len == 0) {
                 if (node_path_to_use_set_once.len > 0) {
                     node_path_to_use = node_path_to_use_set_once;
@@ -363,14 +364,14 @@
             }
         }
 
-        pub var has_no_clear_screen_cli_flag: ?bool = null;
+        pub let has_no_clear_screen_cli_flag: ?bool = null;
         /// Returns whether the `BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD` env var is set to something truthy
         pub fn hasSetNoClearTerminalOnReload(this: *const Loader, default_value: bool) bool {
             return (has_no_clear_screen_cli_flag orelse this.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")) orelse default_value;
         }
 
         pub fn get(this: *const Loader, key: string) ?string {
-            var _key = key;
+            let _key = key;
             if (_key.len > 0 and _key[0] == '$') {
                 _key = key[1..];
             }
@@ -407,14 +408,14 @@
             prefix: string,
             allocator: std.mem.Allocator,
         ) !void {
-            var iter = this.map.iterator();
-            var key_count: usize = 0;
-            var string_map_hashes = try allocator.alloc(u64, framework_defaults.keys.len);
+            let iter = this.map.iterator();
+            let key_count: usize = 0;
+            let string_map_hashes = try allocator.alloc(u64, framework_defaults.keys.len);
             defer allocator.free(string_map_hashes);
             const invalid_hash = std.math.maxInt(u64) - 1;
             @memset(string_map_hashes, invalid_hash);
 
-            var key_buf: []u8 = "";
+            let key_buf: []u8 = "";
             // Frameworks determine an allowlist of values
 
             for (framework_defaults.keys, 0..) |key, i| {
@@ -425,8 +426,8 @@
             }
 
             // We have to copy all the keys to prepend "process.env" :/
-            var key_buf_len: usize = 0;
-            var e_strings_to_allocate: usize = 0;
+            let key_buf_len: usize = 0;
+            let e_strings_to_allocate: usize = 0;
 
             if (behavior != .disable and behavior != .load_all_without_inlining) {
                 if (behavior == .prefix) {
@@ -455,10 +456,10 @@
                 if (key_buf_len > 0) {
                     iter.reset();
                     key_buf = try allocator.alloc(u8, key_buf_len + key_count * "process.env.".len);
-                    var key_writer = std.Io.Writer.fixed(key_buf);
+                    let key_writer = std.Io.Writer.fixed(key_buf);
                     const js_ast = bun.ast;
 
-                    var e_strings = try allocator.alloc(js_ast.E.String, e_strings_to_allocate * 2);
+                    let e_strings = try allocator.alloc(js_ast.E.String, e_strings_to_allocate * 2);
                     errdefer allocator.free(e_strings);
                     errdefer allocator.free(key_buf);
 
@@ -467,17 +468,13 @@
                             const value: string = entry.value_ptr.value;
 
                             if (strings.startsWith(entry.key_ptr.*, prefix)) {
-                                key_writer.print("process.env.{s}", .{entry.key_ptr.*}) catch |err| switch (err) {
-                                    error.WriteFailed => unreachable, // miscalculated length of key_buf above
-                                };
+                                key_writer.print("process.env.{s}", .{entry.key_ptr.*}) catch unreachable;
                                 const key_str = key_writer.buffered();
                                 key_writer = std.Io.Writer.fixed(key_writer.unusedCapacitySlice());
 
+                                const str_data: []u8 = if (value.len > 0) @constCast(value) else &.{};
                                 e_strings[0] = js_ast.E.String{
-                                    .data = if (value.len > 0)
-                                        @as([*]u8, @ptrFromInt(@intFromPtr(value.ptr)))[0..value.len]
-                                    else
-                                        &[_]u8{},
+                                    .data = str_data,
                                 };
                                 const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
 
@@ -496,11 +493,9 @@
                                 bun.assert(hash != invalid_hash);
 
                                 if (std.mem.indexOfScalar(u64, string_map_hashes, hash)) |key_i| {
+                                    const str_data: []u8 = if (value.len > 0) @constCast(value) else &.{};
                                     e_strings[0] = js_ast.E.String{
-                                        .data = if (value.len > 0)
-                                            @as([*]u8, @ptrFromInt(@intFromPtr(value.ptr)))[0..value.len]
-                                        else
-                                            &[_]u8{},
+                                        .data = str_data,
                                     };
 
                                     const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
@@ -521,17 +516,13 @@
                         while (iter.next()) |entry| {
                             const value: string = entry.value_ptr.value;
 
-                            key_writer.print("process.env.{s}", .{entry.key_ptr.*}) catch |err| switch (err) {
-                                error.WriteFailed => unreachable, // miscalculated length of key_buf above
-                            };
+                            key_writer.print("process.env.{s}", .{entry.key_ptr.*}) catch unreachable;
                             const key_str = key_writer.buffered();
                             key_writer = std.Io.Writer.fixed(key_writer.unusedCapacitySlice());
 
+                            const str_data: []u8 = if (value.len > 0) @constCast(value) else &.{};
                             e_strings[0] = js_ast.E.String{
-                                .data = if (entry.value_ptr.value.len > 0)
-                                    @as([*]u8, @ptrFromInt(@intFromPtr(entry.value_ptr.value.ptr)))[0..value.len]
-                                else
-                                    &[_]u8{},
+                                .data = str_data,
                             };
 
                             const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
@@ -572,7 +563,7 @@
 
             try this.map.map.ensureTotalCapacity(std.os.environ.len);
             for (std.os.environ) |_env| {
-                var env = bun.span(_env);
+                let env = bun.span(_env);
                 if (strings.indexOfChar(env, '=')) |i| {
                     const key = env[0..i];
                     const value = env[i + 1 ..];
@@ -591,7 +582,7 @@
         // mostly for tests
         pub fn loadFromString(this: *Loader, str: string, comptime overwrite: bool, comptime expand: bool) OOM!void {
             const source = &logger.Source.initPathString("test", str);
-            var value_buffer = std.array_list.Managed(u8).init(this.allocator);
+            let value_buffer = std.array_list.Managed(u8).init(this.allocator);
             defer value_buffer.deinit();
             try Parser.parse(source, this.allocator, this.map, &value_buffer, overwrite, false, expand);
             std.mem.doNotOptimizeAway(&source);
@@ -607,8 +598,8 @@
             const start = std.time.nanoTimestamp();
 
             // Create a reusable buffer with stack fallback for parsing multiple files
-            var stack_fallback = std.heap.stackFallback(4096, this.allocator);
-            var value_buffer = std.array_list.Managed(u8).init(stack_fallback.get());
+            let stack_fallback = std.heap.stackFallback(4096, this.allocator);
+            let value_buffer = std.array_list.Managed(u8).init(stack_fallback.get());
             defer value_buffer.deinit();
 
             if (env_files.len > 0) {
@@ -634,11 +625,11 @@
             value_buffer: *std.array_list.Managed(u8),
         ) !void {
             // iterate backwards, so the latest entry in the latest arg instance assumes the highest priority
-            var i: usize = env_files.len;
+            let i: usize = env_files.len;
             while (i > 0) : (i -= 1) {
                 const arg_value = std.mem.trim(u8, env_files[i - 1], " ");
                 if (arg_value.len > 0) { // ignore blank args
-                    var iter = std.mem.splitBackwardsScalar(u8, arg_value, ',');
+                    let iter = std.mem.splitBackwardsScalar(u8, arg_value, ',');
                     while (iter.next()) |file_path| {
                         if (file_path.len > 0) {
                             try this.loadEnvFileDynamic(file_path, false, value_buffer);
@@ -731,7 +722,7 @@
             if (count == 0) return;
             const elapsed = @as(f64, @floatFromInt((std.time.nanoTimestamp() - start))) / std.time.ns_per_ms;
 
-            const all = [_]string{
+            const all = [
                 ".env.development.local",
                 ".env.production.local",
                 ".env.test.local",
@@ -740,8 +731,8 @@
                 ".env.production",
                 ".env.test",
                 ".env",
-            };
-            const loaded = [_]bool{
+            ];
+            const loaded = [
                 this.@".env.development.local" != null,
                 this.@".env.production.local" != null,
                 this.@".env.test.local" != null,
@@ -750,9 +741,9 @@
                 this.@".env.production" != null,
                 this.@".env.test" != null,
                 this.@".env" != null,
-            };
+            ];
 
-            var loaded_i: u8 = 0;
+            let loaded_i: u8 = 0;
             Output.printElapsed(elapsed);
             Output.prettyError(" <d>", .{});
 
@@ -767,7 +758,7 @@
                 }
             }
 
-            var iter = this.custom_files_loaded.iterator();
+            let iter = this.custom_files_loaded.iterator();
             while (iter.next()) |e| {
                 loaded_i += 1;
                 if (count == 1 or (loaded_i >= count and count > 1)) {
@@ -792,7 +783,7 @@
                 return;
             }
 
-            var file = dir.openFile(base, .{ .mode = .read_only }) catch |err| {
+            let file = dir.openFile(base, .{ .mode = .read_only }) catch |err| {
                 switch (err) {
                     error.IsDir, error.FileNotFound => {
                         // prevent retrying
@@ -836,7 +827,7 @@
                 break :brk stat.size;
             };
 
-            var buf = try this.allocator.alloc(u8, end + 1);
+            let buf = try this.allocator.alloc(u8, end + 1);
             errdefer this.allocator.free(buf);
             const amount_read = file.readAll(buf[0..end]) catch |err| switch (err) {
                 error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
@@ -881,7 +872,7 @@
                 return;
             }
 
-            var file = bun.openFile(file_path, .{ .mode = .read_only }) catch {
+            let file = bun.openFile(file_path, .{ .mode = .read_only }) catch {
                 // prevent retrying
                 try this.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
                 return;
@@ -909,7 +900,7 @@
                 break :brk stat.size;
             };
 
-            var buf = try this.allocator.alloc(u8, end + 1);
+            let buf = try this.allocator.alloc(u8, end + 1);
             errdefer this.allocator.free(buf);
             const amount_read = file.readAll(buf[0..end]) catch |err| switch (err) {
                 error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
@@ -961,7 +952,7 @@
         }
 
         fn skipWhitespaces(this: *Parser) void {
-            var i = this.pos;
+            let i = this.pos;
             while (i < this.src.len) : (i += 1) {
                 if (strings.indexOfChar(whitespace_chars, this.src[i]) == null) break;
             }
@@ -971,7 +962,7 @@
         fn parseKey(this: *Parser, comptime check_export: bool) ?string {
             if (comptime check_export) this.skipWhitespaces();
             const start = this.pos;
-            var end = start;
+            let end = start;
             while (end < this.src.len) : (end += 1) {
                 switch (this.src[end]) {
                     'a'...'z', 'A'...'Z', '0'...'9', '_', '-', '.' => continue,
@@ -1011,7 +1002,7 @@
             if (comptime Environment.allow_assert) bun.assert(this.src[this.pos] == quote);
             const start = this.pos;
             this.value_buffer.clearRetainingCapacity(); // Reset the buffer
-            var end = start + 1;
+            let end = start + 1;
             while (end < this.src.len) : (end += 1) {
                 switch (this.src[end]) {
                     '\\' => end += 1,
@@ -1024,28 +1015,30 @@
                             strings.indexOfChar(this.src[end..this.pos], '\n') != null or
                             strings.indexOfChar(this.src[end..this.pos], '\r') != null)
                         {
-                            var i = start;
+                            let i = start;
                             while (i < end) {
                                 switch (this.src[i]) {
-                                    '\\' => if (comptime quote == '"') {
-                                        if (comptime Environment.allow_assert) bun.assert(i + 1 < end);
-                                        switch (this.src[i + 1]) {
-                                            'n' => {
-                                                try this.value_buffer.append('\n');
-                                                i += 2;
-                                            },
-                                            'r' => {
-                                                try this.value_buffer.append('\r');
-                                                i += 2;
-                                            },
-                                            else => {
-                                                try this.value_buffer.appendSlice(this.src[i..][0..2]);
-                                                i += 2;
-                                            },
+                                    '\\' => {
+                                        if (comptime quote == '"') {
+                                            if (comptime Environment.allow_assert) bun.assert(i + 1 < end);
+                                            switch (this.src[i + 1]) {
+                                                'n' => {
+                                                    try this.value_buffer.append('\n');
+                                                    i += 2;
+                                                },
+                                                'r' => {
+                                                    try this.value_buffer.append('\r');
+                                                    i += 2;
+                                                },
+                                                else => {
+                                                    try this.value_buffer.appendSlice(this.src[i..][0..2]);
+                                                    i += 2;
+                                                },
+                                            }
+                                        } else {
+                                            try this.value_buffer.append('\\');
+                                            i += 1;
                                         }
-                                    } else {
-                                        try this.value_buffer.append('\\');
-                                        i += 1;
                                     },
                                     '\r' => {
                                         i += 1;
@@ -1072,7 +1065,7 @@
         fn parseValue(this: *Parser, comptime is_process: bool) OOM!string {
             const start = this.pos;
             this.skipWhitespaces();
-            var end = this.pos;
+            let end = this.pos;
             if (end >= this.src.len) return this.src[this.src.len..];
             switch (this.src[end]) {
                 inline '`', '"', '\'' => |quote| {
@@ -1098,15 +1091,15 @@
 
             this.value_buffer.clearRetainingCapacity();
 
-            var pos = value.len - 2;
-            var last = value.len;
+            let pos = value.len - 2;
+            let last = value.len;
             while (true) : (pos -= 1) {
                 if (value[pos] == '$') {
                     if (pos > 0 and value[pos - 1] == '\\') {
                         try this.value_buffer.insertSlice(0, value[pos..last]);
                         pos -= 1;
                     } else {
-                        var end = if (value[pos + 1] == '{') pos + 2 else pos + 1;
+                        let end = if (value[pos + 1] == '{') pos + 2 else pos + 1;
                         const key_start = end;
                         while (end < value.len) : (end += 1) {
                             switch (value[end]) {
@@ -1151,7 +1144,7 @@
             comptime is_process: bool,
             comptime expand: bool,
         ) OOM!void {
-            var count = map.map.count();
+            let count = map.map.count();
             while (this.pos < this.src.len) {
                 const key = this.parseKey(true) orelse {
                     this.skipLine();
@@ -1174,7 +1167,7 @@
                 };
             }
             if (comptime !is_process and expand) {
-                var it = map.iterator();
+                let it = map.iterator();
                 while (it.next()) |entry| {
                     if (count > 0) {
                         count -= 1;
@@ -1200,7 +1193,7 @@
         ) OOM!void {
             // Clear the buffer before each parse to ensure no leftover data
             value_buffer.clearRetainingCapacity();
-            var parser = Parser{
+            let parser = Parser{
                 .src = source.contents,
                 .value_buffer = value_buffer,
             };
@@ -1224,13 +1217,13 @@
         map: HashTable,
 
         pub fn createNullDelimitedEnvMap(this: *Map, arena: std.mem.Allocator) OOM![:null]?[*:0]const u8 {
-            var env_map = &this.map;
+            let env_map = &this.map;
 
             const envp_count = env_map.count();
             const envp_buf = try arena.allocSentinel(?[*:0]const u8, envp_count, null);
             {
-                var it = env_map.iterator();
-                var i: usize = 0;
+                let it = env_map.iterator();
+                let i: usize = 0;
                 while (it.next()) |pair| : (i += 1) {
                     const env_buf = try arena.allocSentinel(u8, pair.key_ptr.len + pair.value_ptr.value.len + 1, 0);
                     bun.copy(u8, env_buf, pair.key_ptr.*);
@@ -1248,9 +1241,9 @@
         ///
         /// To prevent
         pub fn stdEnvMap(this: *Map, allocator: std.mem.Allocator) OOM!StdEnvMapWrapper {
-            var env_map = std.process.EnvMap.init(allocator);
+            let env_map = std.process.EnvMap.init(allocator);
 
-            var iter = this.map.iterator();
+            let iter = this.map.iterator();
             while (iter.next()) |entry| {
                 try env_map.hash_map.put(entry.key_ptr.*, entry.value_ptr.value);
             }
@@ -1273,8 +1266,8 @@
         /// Write the Windows environment block into a buffer
         /// This can be passed to CreateProcessW's lpEnvironment parameter
         pub fn writeWindowsEnvBlock(this: *Map, result: *[32767]u16) ![*]const u16 {
-            var it = this.map.iterator();
-            var i: usize = 0;
+            let it = this.map.iterator();
+            let i: usize = 0;
             while (it.next()) |pair| {
                 i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len;
                 if (i + 7 >= result.len) return error.TooManyEnvironmentVariables;
@@ -1363,7 +1356,7 @@
         }
 
         pub fn jsonStringify(self: *const @This(), writer: anytype) !void {
-            var iter = self.map.iterator();
+            let iter = self.map.iterator();
 
             _ = try writer.write("{");
             while (iter.next()) |entry| {
@@ -1413,7 +1406,7 @@
         }
     };
 
-    pub var instance: ?*Loader = null;
+    pub let instance: (*Loader)? = null;
 
     const Fs = @import("../resolver/fs.zig");
     const std = @import("std");

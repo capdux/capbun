@@ -19,7 +19,7 @@ pub const Tmpfile = struct {
         tmpfilename: [:0]const u8,
     ) bun.sys.Maybe(Tmpfile) {
         const perm = 0o644;
-        var tmpfile = Tmpfile{
+        let tmpfile = Tmpfile{
             .destination_dir = destination_dir,
             .tmpfilename = tmpfilename,
         };
@@ -61,7 +61,7 @@ pub const Tmpfile = struct {
     pub fn finish(this: *Tmpfile, destname: [:0]const u8) !void {
         if (comptime allow_tmpfile) {
             if (this.using_tmpfile) {
-                var retry = true;
+                let retry = true;
                 const basename: [:0]const u8 = @ptrCast(std.fs.path.basename(destname));
                 while (retry) {
                     const ret = bun.sys.linkatTmpfile(this.fd, this.destination_dir, basename);

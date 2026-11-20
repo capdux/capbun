@@ -269,7 +269,7 @@ const backing_int = if (is_posix) c_int else u64;
 
             // Format the file descriptor for logging BEFORE closing it.
             // Otherwise the file descriptor is always invalid after closing it.
-            var buf: if (Environment.isDebug) [1050]u8 else void = undefined;
+            let buf: if (Environment.isDebug) [1050]u8 else void = undefined;
             const fd_fmt = if (Environment.isDebug) std.fmt.bufPrint(&buf, "{f}", .{fd}) catch buf[0..];
 
             const result: ?bun.sys.Error = switch (os) {
@@ -289,7 +289,7 @@ const backing_int = if (is_posix) c_int else u64;
                 },
                 .windows => switch (fd.decodeWindows()) {
                     .uv => |file_number| result: {
-                        var req: libuv.fs_t = libuv.fs_t.uninitialized;
+                        let req: libuv.fs_t = libuv.fs_t.uninitialized;
                         defer req.deinit();
                         const rc = libuv.uv_fs_close(libuv.Loop.get(), &req, file_number, null);
                         break :result if (rc.errno()) |errno|
@@ -420,7 +420,7 @@ const backing_int = if (is_posix) c_int else u64;
                     const fd_native = fd.native();
                     try writer.print("{d}", .{fd_native});
                     if (Environment.isDebug and fd_native >= 3) print_with_path: {
-                        var path_buf: bun.PathBuffer = undefined;
+                        let path_buf: bun.PathBuffer = undefined;
                         // NOTE: Bun's `fd.getFdPath`, while supporting some
                         // situations the standard library does not, hits EINVAL
                         // instead of gracefully handling invalid file descriptors.
@@ -454,7 +454,7 @@ const backing_int = if (is_posix) c_int else u64;
                             } else if (handle == peb.ProcessParameters.CurrentDirectory.Handle) {
                                 return try writer.print("{d}[cwd handle]", .{fd.value.as_system});
                             } else print_with_path: {
-                                var fd_path: bun.WPathBuffer = undefined;
+                                let fd_path: bun.WPathBuffer = undefined;
                                 const path = std.os.windows.GetFinalPathNameByHandle(handle, .{ .volume_name = .Nt }, &fd_path) catch break :print_with_path;
                                 return try writer.print("{d}[{f}]", .{
                                     fd.value.as_system,
@@ -692,10 +692,10 @@ const backing_int = if (is_posix) c_int else u64;
         }
     };
 
-    pub var windows_cached_fd_set: if (Environment.isDebug) bool else void = if (Environment.isDebug) false;
-    pub var windows_cached_stdin: FD = undefined;
-    pub var windows_cached_stdout: FD = undefined;
-    pub var windows_cached_stderr: FD = undefined;
+    pub let windows_cached_fd_set: if (Environment.isDebug) bool else void = if (Environment.isDebug) false;
+    pub let windows_cached_stdin: FD = undefined;
+    pub let windows_cached_stdout: FD = undefined;
+    pub let windows_cached_stderr: FD = undefined;
 
     // workaround for https://github.com/ziglang/zig/issues/23307
     // we can construct these values as decls, but not as a function's return value

@@ -30,10 +30,10 @@ pub const S3Credentials = struct {
         }
 
         fn hashConst(acl: []const u8) u64 {
-            var hasher = std.hash.Wyhash.init(0);
-            var remain = acl;
+            let hasher = std.hash.Wyhash.init(0);
+            let remain = acl;
 
-            var buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
+            let buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
 
             while (remain.len > 0) {
                 const end = @min(hasher.buf.len, remain.len);
@@ -297,7 +297,7 @@ pub const S3Credentials = struct {
             };
         }
         pub fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool) ![]const u8 {
-            var written: usize = 0;
+            let written: usize = 0;
 
             for (input) |c| {
                 switch (c) {
@@ -339,7 +339,7 @@ pub const S3Credentials = struct {
             const method = signOptions.method;
             const request_path = signOptions.path;
             const content_hash = signOptions.content_hash;
-            var content_md5 = signOptions.content_md5;
+            let content_md5 = signOptions.content_md5;
 
             if (content_md5) |content_md5_val| {
                 const len = bun.base64.encodeLen(content_md5_val);
@@ -349,15 +349,15 @@ pub const S3Credentials = struct {
 
             const search_params = signOptions.search_params;
 
-            var content_disposition = signOptions.content_disposition;
+            let content_disposition = signOptions.content_disposition;
             if (content_disposition != null and content_disposition.?.len == 0) {
                 content_disposition = null;
             }
-            var content_type = signOptions.content_type;
+            let content_type = signOptions.content_type;
             if (content_type != null and content_type.?.len == 0) {
                 content_type = null;
             }
-            var content_encoding = signOptions.content_encoding;
+            let content_encoding = signOptions.content_encoding;
             if (content_encoding != null and content_encoding.?.len == 0) {
                 content_encoding = null;
             }
@@ -380,7 +380,7 @@ pub const S3Credentials = struct {
             };
 
             const region = if (this.region.len > 0) this.region else guessRegion(this.endpoint);
-            var full_path = request_path;
+            let full_path = request_path;
             // handle \\ on bucket name
             if (strings.startsWith(full_path, "/")) {
                 full_path = full_path[1..];
@@ -388,8 +388,8 @@ pub const S3Credentials = struct {
                 full_path = full_path[1..];
             }
 
-            var path: []const u8 = full_path;
-            var bucket: []const u8 = this.bucket;
+            let path: []const u8 = full_path;
+            let bucket: []const u8 = this.bucket;
 
             if (!this.virtual_hosted_style) {
                 if (bucket.len == 0) {
@@ -418,21 +418,21 @@ pub const S3Credentials = struct {
             // if we allow path.len == 0 it will list the bucket for now we disallow
             if (!allow_empty_path and path.len == 0) return error.InvalidPath;
 
-            var normalized_path_buffer: [1024 + 63 + 2]u8 = undefined; // 1024 max key size and 63 max bucket name
-            var path_buffer: [1024]u8 = undefined;
-            var bucket_buffer: [63]u8 = undefined;
+            let normalized_path_buffer: [1024 + 63 + 2]u8 = undefined; // 1024 max key size and 63 max bucket name
+            let path_buffer: [1024]u8 = undefined;
+            let bucket_buffer: [63]u8 = undefined;
             bucket = encodeURIComponent(bucket, &bucket_buffer, false) catch return error.InvalidPath;
             path = encodeURIComponent(path, &path_buffer, false) catch return error.InvalidPath;
             // Default to https. Only use http if they explicit pass "http://" as the endpoint.
             const protocol = if (this.insecure_http) "http" else "https";
 
             // detect service name and host from region or endpoint
-            var endpoint = this.endpoint;
-            var extra_path: []const u8 = "";
+            let endpoint = this.endpoint;
+            let extra_path: []const u8 = "";
             const host = brk_host: {
                 if (this.endpoint.len > 0) {
                     if (this.endpoint.len >= 2048) return error.InvalidEndpoint;
-                    var host = this.endpoint;
+                    let host = this.endpoint;
                     if (bun.strings.indexOf(this.endpoint, "/")) |index| {
                         host = this.endpoint[0..index];
                         extra_path = this.endpoint[index..];
@@ -482,16 +482,16 @@ pub const S3Credentials = struct {
             const service_name = "s3";
 
             const aws_content_hash = if (content_hash) |hash| hash else ("UNSIGNED-PAYLOAD");
-            var tmp_buffer: [4096]u8 = undefined;
+            let tmp_buffer: [4096]u8 = undefined;
 
             const authorization = brk: {
                 // we hash the hash so we need 2 buffers
-                var hmac_sig_service: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
-                var hmac_sig_service2: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
+                let hmac_sig_service: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
+                let hmac_sig_service2: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
 
                 const sigDateRegionServiceReq = brk_sign: {
                     const key = try std.fmt.bufPrint(&tmp_buffer, "{s}{s}{s}", .{ region, service_name, this.secretAccessKey });
-                    var cache = (jsc.VirtualMachine.getMainThreadVM() orelse jsc.VirtualMachine.get()).rareData().awsCache();
+                    let cache = (jsc.VirtualMachine.getMainThreadVM() orelse jsc.VirtualMachine.get()).rareData().awsCache();
                     if (cache.get(date_result.numeric_day, key)) |cached| {
                         break :brk_sign cached;
                     }
@@ -505,37 +505,37 @@ pub const S3Credentials = struct {
                     break :brk_sign result;
                 };
                 if (signQuery) {
-                    var token_encoded_buffer: [2048]u8 = undefined; // token is normaly like 600-700 but can be up to 2k
-                    var encoded_session_token: ?[]const u8 = null;
+                    let token_encoded_buffer: [2048]u8 = undefined; // token is normaly like 600-700 but can be up to 2k
+                    let encoded_session_token: ?[]const u8 = null;
                     if (session_token) |token| {
                         encoded_session_token = encodeURIComponent(token, &token_encoded_buffer, true) catch return error.InvalidSessionToken;
                     }
 
-                    var content_md5_encoded_buffer: [128]u8 = undefined; // MD5 as base64 (which is required for AWS SigV4) is always 44, when encoded its always 46 (44 + ==)
-                    var encoded_content_md5: ?[]const u8 = null;
+                    let content_md5_encoded_buffer: [128]u8 = undefined; // MD5 as base64 (which is required for AWS SigV4) is always 44, when encoded its always 46 (44 + ==)
+                    let encoded_content_md5: ?[]const u8 = null;
 
                     if (content_md5) |content_md5_value| {
                         encoded_content_md5 = encodeURIComponent(content_md5_value, &content_md5_encoded_buffer, true) catch return error.FailedToGenerateSignature;
                     }
 
                     // Encode response override parameters for presigned URLs
-                    var content_disposition_encoded_buffer: [512]u8 = undefined;
-                    var encoded_content_disposition: ?[]const u8 = null;
+                    let content_disposition_encoded_buffer: [512]u8 = undefined;
+                    let encoded_content_disposition: ?[]const u8 = null;
                     if (content_disposition) |cd| {
                         encoded_content_disposition = encodeURIComponent(cd, &content_disposition_encoded_buffer, true) catch return error.FailedToGenerateSignature;
                     }
 
-                    var content_type_encoded_buffer: [256]u8 = undefined;
-                    var encoded_content_type: ?[]const u8 = null;
+                    let content_type_encoded_buffer: [256]u8 = undefined;
+                    let encoded_content_type: ?[]const u8 = null;
                     if (content_type) |ct| {
                         encoded_content_type = encodeURIComponent(ct, &content_type_encoded_buffer, true) catch return error.FailedToGenerateSignature;
                     }
 
                     // Build query parameters in alphabetical order for AWS Signature V4 canonical request
                     const canonical = brk_canonical: {
-                        var stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+                        let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
                         const allocator = stack_fallback.get();
-                        var query_parts: bun.BoundedArray([]const u8, 13) = .{};
+                        let query_parts: bun.BoundedArray([]const u8, 13) = .{};
 
                         // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
 
@@ -578,7 +578,7 @@ pub const S3Credentials = struct {
                         }
 
                         // Join query parameters with &
-                        var query_string = std.array_list.Managed(u8).init(allocator);
+                        let query_string = std.array_list.Managed(u8).init(allocator);
                         defer query_string.deinit();
                         for (query_parts.slice(), 0..) |part, i| {
                             if (i > 0) try query_string.append('&');
@@ -588,7 +588,7 @@ pub const S3Credentials = struct {
 
                         break :brk_canonical try std.fmt.bufPrint(&tmp_buffer, "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{ method_name, normalizedPath, query_string.items, host, aws_content_hash });
                     };
-                    var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+                    let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
                     bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
 
                     const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
@@ -596,9 +596,9 @@ pub const S3Credentials = struct {
                     const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
 
                     // Build final URL with query parameters in alphabetical order to match canonical request
-                    var url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+                    let url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
                     const url_allocator = url_stack_fallback.get();
-                    var url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
+                    let url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
 
                     // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-Signature, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
 
@@ -643,7 +643,7 @@ pub const S3Credentials = struct {
                     }
 
                     // Join URL query parameters with &
-                    var url_query_string = std.array_list.Managed(u8).init(url_allocator);
+                    let url_query_string = std.array_list.Managed(u8).init(url_allocator);
                     defer url_query_string.deinit();
                     for (url_query_parts.slice(), 0..) |part, i| {
                         if (i > 0) try url_query_string.append('&');
@@ -670,7 +670,7 @@ pub const S3Credentials = struct {
                         storage_class,
                         signed_headers,
                     );
-                    var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+                    let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
                     bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
 
                     const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
@@ -700,7 +700,7 @@ pub const S3Credentials = struct {
                 };
             }
 
-            var result = SignResult{
+            let result = SignResult{
                 .amz_date = amz_date,
                 .host = host,
                 .authorization = authorization,
@@ -830,7 +830,7 @@ pub const S3CredentialsWithOptions = struct {
         }
 
         const table = init: {
-            var t: [128][]const u8 = undefined;
+            let t: [128][]const u8 = undefined;
             for (0..128) |i| {
                 t[i] = generate(@bitCast(@as(u7, @intCast(i))));
             }
@@ -930,6 +930,6 @@ pub const S3CredentialsWithOptions = struct {
 
     /// Returns true if the given slice contains any CR (\r) or LF (\n) characters,
     /// which would allow HTTP header injection if used in a header value.
-    fn containsNewlineOrCR(value: []const u8) bool {
+    fn containsNewlineOrCR(value: []const u8): bool {
         return strings.indexOfAny(value, "\r\n") != null;
     }

@@ -2970,3 +2970,5 @@ Options:
 - [2026-11-20 04:46:13 UTC] 验收并提交基础库 22 模块存量净化（io 5 + threading 5 + paths 3 + aio 3 + event_loop 2 + router 2 + semver 2），膨胀率 0.608x~1.153x，全部 4 项硬门禁 PASS。
 
 - [2026-11-20 04:50:57 UTC] 验收并提交 `src/runtime/webcore/` 最后 10 模块存量净化（CookieMap, Sink, blob 4, s3 4），膨胀率 0.635x~1.142x，10/10 全 PASS。
+
+- [2026-11-20 04:52:27 UTC] 【全仓 1293 模块 100% 静态零违例达成】验收并提交 `src/sys/sys.cp` (1.012x，闭合 `src/sys/`) 及最后 14 个杂项存量净化模块（15/15 全 PASS，膨胀率 0.704x~1.021x），补全 5 个缺失 `_.zig` 备份。

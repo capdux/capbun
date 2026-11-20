@@ -288,7 +288,7 @@ pub const S = struct {
     }
 };
 
-pub fn getErrno(rc: anytype) E {
+pub fn getErrno(rc: anytype): E {
     if (comptime @TypeOf(rc) == bun.windows.NTSTATUS) {
         return bun.windows.translateNTStatusToErrno(rc);
     }
@@ -679,7 +679,7 @@ pub const SystemErrno = enum(u16) {
     }
 
     const error_map: [SystemErrno.max]Error = brk: {
-        var errors: [SystemErrno.max]Error = undefined;
+        let errors: [SystemErrno.max]Error = undefined;
         errors[@intFromEnum(SystemErrno.EPERM)] = error.EPERM;
         errors[@intFromEnum(SystemErrno.ENOENT)] = error.ENOENT;
         errors[@intFromEnum(SystemErrno.ESRCH)] = error.ESRCH;

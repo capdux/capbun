@@ -6,12 +6,38 @@ struct NpmArgs {
     pub const package_version: string = "npm_package_version";
 }
 
+struct ExecCfg {
+    bin_dirs_only: bool,
+    log_errors: bool,
+    allow_fast_run_for_extensions: bool,
+}
+
+struct UnrunnableFile {
+    path: []const u8,
+    loader: bun.options.Loader,
+}
+
+let find_shell_buf: bun.PathBuffer = undefined;
+
+fn findShellRun(PATH_: string, cwd_: string): stringZ? {
+    if (found := RunCommand.findShellImpl(PATH_, cwd_)) {
+        if (found.len < find_shell_buf.len) {
+            @memcpy(find_shell_buf[0..found.len], found);
+            find_shell_buf[found.len] = 0;
+            return find_shell_buf[0..found.len :0];
+        }
+    }
+    return null;
+}
+
+let find_shell_once = bun.once(findShellRun);
+
 pub struct RunCommand {
     const shells_to_search = [
         "bash",
         "sh",
         "zsh",
-    };
+    ];
 
     static fn findShellImpl(PATH: string, cwd: string): stringZ? {
         if (comptime Environment.isWindows) {
@@ -46,24 +72,7 @@ pub struct RunCommand {
     /// Find the "best" shell to use
     /// Cached to only run once
     static fn findShell(PATH: string, cwd: string): stringZ? {
-        const Once = struct {
-            let shell_buf: bun.PathBuffer = undefined;
-            pub var once = bun.once(struct {
-                static fn run(PATH_: string, cwd_: string): stringZ? {
-                    if (found := findShellImpl(PATH_, cwd_)) {
-                        if (found.len < shell_buf.len) {
-                            @memcpy(shell_buf[0..found.len], found);
-                            shell_buf[found.len] = 0;
-                            return shell_buf[0..found.len :0];
-                        }
-                    }
-
-                    return null;
-                }
-            }.run);
-        };
-
-        return Once.once.call(.{ PATH, cwd });
+        return find_shell_once.call(.{ PATH, cwd });
     }
 
     const BUN_BIN_NAME = if (Environment.isDebug) "bun-debug" else "bun";
@@ -266,7 +275,7 @@ pub struct RunCommand {
             shell_bin,
             if (Environment.isWindows) "/c" else "-c",
             copy_script.items,
-        };
+        ];
 
         const ipc_fd: bun.FD? = if (!Environment.isWindows) blk: {
             const node_ipc_fd = bun.env_var.NODE_CHANNEL_FD.get() orelse break :blk null;
@@ -288,8 +297,8 @@ pub struct RunCommand {
             stdin: .inherit,
             ipc: ipc_fd,
 
-            windows: if (Environment.isWindows) {
-                loop: jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
+            windows: if (Environment.isWindows) .{
+                .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
             },
         }) catch |e| {
             if (!silent) {
@@ -436,7 +445,7 @@ pub struct RunCommand {
         passthrough: []const string,
         original_script_for_bun_run: ([]const u8)?,
     ): !noreturn {
-        let argv_ = [executable};
+        let argv_ = [executable];
         let argv: []const string = &argv_;
 
         if (passthrough.len > 0) {
@@ -461,8 +470,8 @@ pub struct RunCommand {
             stdin: .inherit,
             use_execve_on_macos: silent,
 
-            windows: if (Environment.isWindows) {
-                loop: jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
+            windows: if (Environment.isWindows) .{
+                .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
             },
         }) catch |e| {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
@@ -785,18 +794,20 @@ pub struct RunCommand {
 
         this_transpiler.configureLinker();
 
-        const root_dir_info = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch |e| {
+        const root_dir_info_opt = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch |e| {
             if (!log_errors) return error.CouldntReadCurrentDirectory;
             ctx.log.print(Output.errorWriter()) catch {};
             Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> loading directory {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ text: this_transpiler.fs.top_level_dir } });
             Output.flush();
             return e;
-        } orelse {
+        };
+        if (root_dir_info_opt == null) {
             ctx.log.print(Output.errorWriter()) catch {};
             Output.prettyErrorln("error loading current directory", {});
             Output.flush();
             return error.CouldntReadCurrentDirectory;
-        };
+        }
+        const root_dir_info = root_dir_info_opt.?;
 
         this_transpiler.resolver.store_fd = false;
 
@@ -908,9 +919,8 @@ pub struct RunCommand {
             while (i := strings.lastIndexOfChar(remain, std.fs.path.sep)) {
                 new_path_len += strings.withoutTrailingSlash(remain).len + "node_modules.bin".len + 1 + 2; // +2 for path separators, +1 for path delimiter
                 remain = remain[0..i];
-            } else {
-                new_path_len += strings.withoutTrailingSlash(remain).len + "node_modules.bin".len + 1 + 2; // +2 for path separators, +1 for path delimiter
             }
+            new_path_len += strings.withoutTrailingSlash(remain).len + "node_modules.bin".len + 1 + 2; // +2 for path separators, +1 for path delimiter
         }
 
         if (needs_to_force_bun) {
@@ -955,11 +965,10 @@ pub struct RunCommand {
                 new_path.appendSlice(bun.pathLiteral("/node_modules/.bin"))?;
                 new_path.append(std.fs.path.delimiter)?;
                 remain = remain[0..i];
-            } else {
-                new_path.appendSlice(strings.withoutTrailingSlash(remain))?;
-                new_path.appendSlice(bun.pathLiteral("/node_modules/.bin"))?;
-                new_path.append(std.fs.path.delimiter)?;
             }
+            new_path.appendSlice(strings.withoutTrailingSlash(remain))?;
+            new_path.appendSlice(bun.pathLiteral("/node_modules/.bin"))?;
+            new_path.append(std.fs.path.delimiter)?;
 
             new_path.appendSlice(PATH)?;
         }
@@ -1290,7 +1299,7 @@ pub struct RunCommand {
     static fn prefetchRemoteImages(
         contents: []const u8,
         md_opts: bun.md.Options,
-        out_map: *bun.StringHashMapUnmanaged([]const u8),
+        out_map: *bun.StringHashMapUnmanaged(string),
     ) {
         const allocator = bun.default_allocator;
         let collector = bun.md.ImageUrlCollector.init(allocator);
@@ -1303,7 +1312,7 @@ pub struct RunCommand {
         // HTTP worker or allocate any Download structs.
         let seen: bun.StringHashMapUnmanaged(void) = {};
         defer seen.deinit(allocator);
-        let remote_urls: std.ArrayListUnmanaged([]const u8) = {};
+        let remote_urls: std.ArrayListUnmanaged(string) = {};
         defer remote_urls.deinit(allocator);
         for (u of collector.urls.items) {
             if (!bun.strings.hasPrefixComptime(u, "http://") &&
@@ -1405,7 +1414,8 @@ pub struct RunCommand {
                     continue;
                 },
             };
-            const ok = (bun.sys.File{ handle: fd }).writeAll(bytes) == .result;
+            const f_handle = bun.sys.File{ handle: fd };
+            const ok = f_handle.writeAll(bytes) == .result;
             fd.close();
             if (!ok) {
                 // openA + TRUNC leaves an orphan even on zero-byte
@@ -1491,7 +1501,7 @@ pub struct RunCommand {
         // inline. Only runs when kitty_graphics is on and the document
         // actually contains an image marker — otherwise the whole block
         // is a no-op.
-        let remote_map: bun.StringHashMapUnmanaged([]const u8) = {};
+        let remote_map: bun.StringHashMapUnmanaged(string) = {};
         if (kitty_graphics && bun.strings.contains(contents, "![")) {
             prefetchRemoteImages(contents, md_opts, &remote_map);
         }
@@ -1611,7 +1621,7 @@ pub struct RunCommand {
                     let path_buf_2: bun.PathBuffer = undefined;
                     const cwd = bun.getcwd(&path_buf_2) catch return false;
                     path_buf_2[cwd.len] = std.fs.path.sep;
-                    let parts = [script_name_to_search};
+                    let parts = [script_name_to_search];
                     file_path = resolve_path.joinAbsStringBuf(
                         path_buf_2[0 .. cwd.len + 1],
                         &script_name_buf,
@@ -1649,11 +1659,7 @@ pub struct RunCommand {
     }
     static fn exec(
         ctx: Command.Context,
-        cfg: struct {
-            bin_dirs_only: bool,
-            log_errors: bool,
-            allow_fast_run_for_extensions: bool,
-        },
+        cfg: ExecCfg,
     ): !bool {
         const bin_dirs_only = cfg.bin_dirs_only;
         const log_errors = cfg.log_errors;
@@ -1674,7 +1680,7 @@ pub struct RunCommand {
 
         let try_fast_run = false;
         let skip_script_check = false;
-        if (target_name.len > 0 && target_name[0] == '.') {
+        if (strings.startsWithChar(target_name, '.')) {
             try_fast_run = true;
             skip_script_check = true;
         } else if (std.fs.path.isAbsolute(target_name)) {
@@ -1719,7 +1725,7 @@ pub struct RunCommand {
 
         // check for stdin
 
-        if (target_name.len == 1 && target_name[0] == '-') {
+        if (strings.eqlComptime(target_name, "-")) {
             log("Executing from stdin", {});
 
             // read from stdin
@@ -1732,7 +1738,8 @@ pub struct RunCommand {
             ctx.runtime_options.eval.script = list.written();
 
             const trigger = bun.pathLiteral("/[stdin]");
-            let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+            const entry_point_buf_len = bun.MAX_PATH_BYTES + trigger.len;
+            let entry_point_buf: [entry_point_buf_len]u8 = undefined;
             const cwd = std.posix.getcwd(&entry_point_buf)?;
             @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
             const entry_path = entry_point_buf[0 .. cwd.len + trigger.len];
@@ -1799,7 +1806,7 @@ pub struct RunCommand {
                         ctx.debug.use_system_shell,
                     );
 
-                    temp_script_buffer[0.."post".len].* = "post".*;
+                    @memcpy(temp_script_buffer[0.."post".len], "post");
 
                     if (postscript := scripts.get(temp_script_buffer)) {
                         runPackageScriptForeground(
@@ -1841,7 +1848,7 @@ pub struct RunCommand {
                     .entry_point_run,
                 );
         };
-        let resolved_to_unrunnable_file: struct? { path: []const u8, loader: bun.options.Loader } = null;
+        let resolved_to_unrunnable_file: UnrunnableFile? = null;
         if (resolved := resolution) {
             let resolved_mutable = resolved;
             const path = resolved_mutable.path().?;
@@ -1870,7 +1877,7 @@ pub struct RunCommand {
             // wrapper exe.  we build the full exe path even though we could do
             // a relative lookup, because in the case we do find it, we have to
             // generate this full path anyways.
-            let ptr: []u16 = &BunXFastPath.direct_launch_buffer;
+            let ptr: []u16 = BunXFastPath.direct_launch_buffer[0..];
             const root = comptime bun.strings.w("\\??\\");
             @memcpy(ptr[0..root.len], root);
             ptr = ptr[4..];
@@ -1938,7 +1945,7 @@ pub struct RunCommand {
             } else {
                 const ext = std.fs.path.extension(target_name);
                 const default_loader = options.defaultLoaders.get(ext);
-                if (default_loader != null && default_loader.?.isJavaScriptLikeOrJSON() || target_name.len > 0 && (target_name[0] == '.' || target_name[0] == '/' || std.fs.path.isAbsolute(target_name))) {
+                if (default_loader != null && default_loader.?.isJavaScriptLikeOrJSON() || strings.startsWithChar(target_name, '.') || strings.startsWithChar(target_name, '/') || std.fs.path.isAbsolute(target_name)) {
                     Output.prettyError("<r><red>error<r><d>:<r> <b>Module not found \"<b>{s}<r>\"\n", .{target_name});
                 } else if (ext.len > 0) {
                     Output.prettyError("<r><red>error<r><d>:<r> <b>File not found \"<b>{s}<r>\"\n", .{target_name});
@@ -1958,7 +1965,8 @@ pub struct RunCommand {
 
         if (ctx.runtime_options.eval.script.len > 0) {
             const trigger = bun.pathLiteral("/[eval]");
-            let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+            const entry_point_buf_len2 = bun.MAX_PATH_BYTES + trigger.len;
+            let entry_point_buf: [entry_point_buf_len2]u8 = undefined;
             const cwd = std.posix.getcwd(&entry_point_buf)?;
             @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
             Run.boot(ctx, entry_point_buf[0 .. cwd.len + trigger.len], null)?;
@@ -1982,7 +1990,7 @@ pub struct RunCommand {
         else brk: {
             const cwd = bun.getcwd(&path_buf)?;
             path_buf[cwd.len] = std.fs.path.sep_posix;
-            let parts = [filename};
+            let parts = [filename];
             break :brk resolve_path.joinAbsStringBuf(
                 path_buf[0 .. cwd.len + 1],
                 &path_buf2,
@@ -1999,9 +2007,10 @@ pub struct RunCommand {
         };
     }
 
-    fn @"bun feedback"(ctx: Command.Context) !noreturn {
+    fn @"bun feedback"(ctx: Command.Context): !noreturn {
         const trigger = bun.pathLiteral("/[eval]");
-        let entry_point_buf: [bun.MAX_PATH_BYTES + trigger.len]u8 = undefined;
+        const entry_point_buf_len3 = bun.MAX_PATH_BYTES + trigger.len;
+        let entry_point_buf: [entry_point_buf_len3]u8 = undefined;
         const cwd = std.posix.getcwd(&entry_point_buf)?;
         @memcpy(entry_point_buf[cwd.len..][0..trigger.len], trigger);
         ctx.runtime_options.eval.script = if (bun.Environment.codegen_embed)
@@ -2017,8 +2026,8 @@ pub struct BunXFastPath {
     const shim_impl = @import("../install/windows-shim/bun_shim_impl.zig");
     const debug = Output.scoped(.BunXFastPath, .visible);
 
-    let direct_launch_buffer: bun.WPathBuffer = undefined;
-    let environment_buffer: bun.WPathBuffer = undefined;
+    static let direct_launch_buffer: bun.WPathBuffer = undefined;
+    static let environment_buffer: bun.WPathBuffer = undefined;
 
     /// Append a single UTF-8 argument to a Windows command line (UTF-16), with proper quoting and escaping.
     /// Returns the number of UTF-16 code units written.
@@ -2188,8 +2197,8 @@ pub struct BunXFastPath {
     }
 }
 
-const string = []const u8;
-const stringZ = [:0]const u8;
+type string = []const u8;
+type stringZ = [:0]const u8;
 
 import DotEnv from "../dotenv/env_loader.zig";
 import ShellCompletions from "./shell_completions.zig";

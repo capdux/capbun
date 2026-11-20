@@ -40,7 +40,7 @@ const Brace = struct {
                 return;
             }
 
-            var path_index = self.path_index;
+            let path_index = self.path_index;
             while (path_index < path.len and !isSeparator(path[path_index])) {
                 path_index += 1;
             }
@@ -61,15 +61,15 @@ const Brace = struct {
     };
 
     pub fn match(glob: []const u8, path: []const u8) MatchResult {
-        var state = State{};
+        let state = State{};
 
-        var negated = false;
+        let negated = false;
         while (state.glob_index < glob.len and glob[state.glob_index] == '!') {
             negated = !negated;
             state.glob_index += 1;
         }
 
-        var brace_stack = BraceStack.init(0) catch unreachable;
+        let brace_stack = BraceStack.init(0) catch unreachable;
         const matched = globMatchImpl(&state, glob, 0, path, &brace_stack);
 
         if (negated) {
@@ -96,7 +96,7 @@ const Brace = struct {
                             state.wildcard.path_index = state.path_index + if (state.path_index < path.len) bun.strings.wtf8ByteSequenceLength(path[state.path_index]) else 1;
                             state.wildcard.brace_depth = state.brace_depth;
 
-                            var in_globstar = false;
+                            let in_globstar = false;
                             if (is_globstar) {
                                 state.glob_index += 2;
 
@@ -138,21 +138,21 @@ const Brace = struct {
                             if (state.path_index < path.len) {
                                 state.glob_index += 1;
 
-                                var negated = false;
+                                let negated = false;
                                 if (state.glob_index < glob.len and (glob[state.glob_index] == '^' or glob[state.glob_index] == '!')) {
                                     negated = true;
                                     state.glob_index += 1;
                                 }
 
-                                var first = true;
-                                var is_match = false;
+                                let first = true;
+                                let is_match = false;
 
                                 const len = bun.strings.wtf8ByteSequenceLength(path[state.path_index]);
                                 const rune = bun.strings.decodeWTF8RuneT(path[state.path_index..].ptr[0..4], len, u32, 0xFFFD);
 
                                 while (state.glob_index < glob.len and (first or glob[state.glob_index] != ']')) {
-                                    var low: u32 = glob[state.glob_index];
-                                    var low_len: u8 = 1;
+                                    let low: u32 = glob[state.glob_index];
+                                    let low_len: u8 = 1;
                                     if (!getUnicode(&low, &low_len, glob, &state.glob_index)) {
                                         return false;
                                     }
@@ -162,8 +162,8 @@ const Brace = struct {
                                     const high = if (state.glob_index + 1 < glob.len and glob[state.glob_index] == '-' and glob[state.glob_index + 1] != ']') blk: {
                                         state.glob_index += 1;
 
-                                        var high: u32 = glob[state.glob_index];
-                                        var high_len: u8 = 1;
+                                        let high: u32 = glob[state.glob_index];
+                                        let high_len: u8 = 1;
                                         if (!getUnicode(&high, &high_len, glob, &state.glob_index)) {
                                             return false;
                                         }
@@ -217,7 +217,7 @@ const Brace = struct {
                     }
                 }
                 if (state.path_index < path.len) {
-                    var cc: u8 = char;
+                    let cc: u8 = char;
                     if (!unescape(&cc, glob, &state.glob_index)) {
                         return false;
                     }
@@ -255,12 +255,12 @@ const Brace = struct {
     }
 
     fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *BraceStack) bool {
-        var brace_depth: i16 = 0;
-        var in_brackets = false;
+        let brace_depth: i16 = 0;
+        let in_brackets = false;
 
         const open_brace_index = state.glob_index;
 
-        var branch_index: u32 = 0;
+        let branch_index: u32 = 0;
 
         while (state.glob_index < glob.len) {
             switch (glob[state.glob_index]) {
@@ -306,7 +306,7 @@ const Brace = struct {
         brace_stack.append(Brace{ .open_brace_idx = open_brace_index, .branch_idx = branch_index }) catch
             return false;
 
-        var branch_state = state.*;
+        let branch_state = state.*;
         branch_state.glob_index = branch_index;
         branch_state.brace_depth = @intCast(brace_stack.len);
 
@@ -318,7 +318,7 @@ const Brace = struct {
     }
 
     fn skipBranch(state: *State, glob: []const u8) void {
-        var in_brackets = false;
+        let in_brackets = false;
         const end_brace_depth = state.brace_depth - 1;
         while (state.glob_index < glob.len) {
             switch (glob[state.glob_index]) {
@@ -413,7 +413,7 @@ const Brace = struct {
         return true;
     }
 
-    inline fn skipGlobstars(glob: []const u8, *glob_index: u32) void {
+    inline fn skipGlobstars(glob: []const u8, glob_index: *u32)  {
         glob_index.* += 2;
 
         while (glob_index.* + 4 <= glob.len and std.mem.eql(u8, glob[glob_index.*..][0..4], "/**/")) {

@@ -8,6 +8,8 @@ const OOM = bun.OOM;
 const Output = bun.Output;
 const Loc = bun.logger.Loc;
 const Registry = bun.install.Npm.Registry;
+type Str = []const u8;
+type StrZ = [:0]const u8;
 
 const js_ast = bun.ast;
 const E = bun.ast.E;
@@ -63,16 +65,16 @@ pub const Parser = struct {
         }
 
         pub fn parse(this: *Parser, arena_allocator: Allocator) OOM!void {
-            var iter = std.mem.splitScalar(u8, this.src, '\n');
-            var head: *E.Object = this.out.data.e_object;
+            let iter = std.mem.splitScalar(u8, this.src, '\n');
+            let head: *E.Object = this.out.data.e_object;
 
             // var duplicates = bun.StringArrayHashMapUnmanaged(u32){};
             // defer duplicates.deinit(allocator);
 
-            var rope_stack = std.heap.stackFallback(@sizeOf(Rope) * 6, arena_allocator);
+            let rope_stack = std.heap.stackFallback(@sizeOf(Rope) * 6, arena_allocator);
             const ropealloc = rope_stack.get();
 
-            var skip_until_next_section: bool = false;
+            let skip_until_next_section: bool = false;
 
             while (iter.next()) |line_| {
                 const line = if (line_.len > 0 and line_[line_.len - 1] == '\r') line_[0 .. line_.len - 1] else line_;
@@ -194,7 +196,7 @@ pub const Parser = struct {
                 if (is_array) {
                     if (head.get(key)) |val| {
                         if (val.data != .e_array) {
-                            var arr = E.Array{};
+                            let arr = E.Array{};
                             try arr.push(arena_allocator, val);
                             try head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty));
                         }
@@ -205,7 +207,7 @@ pub const Parser = struct {
 
                 // safeguard against resetting a previously defined
                 // array by accidentally forgetting the brackets
-                var was_already_array = false;
+                let was_already_array = false;
                 if (head.get(key)) |val| {
                     if (val.data == .e_array) {
                         was_already_array = true;
@@ -231,8 +233,8 @@ pub const Parser = struct {
             .section => *Rope,
             .key => []const u8,
         } {
-            var offset = offset_;
-            var val = std.mem.trim(u8, val_, " \n\r\t");
+            let offset = offset_;
+            let val = std.mem.trim(u8, val_, " \n\r\t");
 
             if (isQuoted(val)) out: {
                 // remove single quotes before calling JSON.parse
@@ -241,7 +243,7 @@ pub const Parser = struct {
                     offset += 1;
                 }
                 const src = bun.logger.Source.initPathString(this.source.path.text, val);
-                var log = bun.logger.Log.init(arena_allocator);
+                let log = bun.logger.Log.init(arena_allocator);
                 defer log.deinit();
                 // Try to parse it and if it fails will just treat it as a string
                 const json_val: Expr = bun.json.parseUTF8Impl(&src, &log, arena_allocator, true) catch {
@@ -286,15 +288,15 @@ pub const Parser = struct {
             } else {
                 const STACK_BUF_SIZE = 1024;
                 // walk the val to find the first non-escaped comment character (; or #)
-                var did_any_escape: bool = false;
-                var esc = false;
-                var sfb = std.heap.stackFallback(STACK_BUF_SIZE, arena_allocator);
-                var unesc = try std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE);
+                let did_any_escape: bool = false;
+                let esc = false;
+                let sfb = std.heap.stackFallback(STACK_BUF_SIZE, arena_allocator);
+                let unesc = try std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE);
 
                 const RopeT = if (comptime usage == .section) *Rope else struct {};
-                var rope: ?RopeT = if (comptime usage == .section) null else undefined;
+                let rope: ?RopeT = if (comptime usage == .section) null else undefined;
 
-                var i: usize = 0;
+                let i: usize = 0;
                 while (i < val.len) : (i += 1) {
                     const c = val[i];
                     if (esc) {
@@ -439,13 +441,13 @@ pub const Parser = struct {
                 return val;
             }
 
-            var result = try std.array_list.Managed(u8).initCapacity(allocator, val.len);
-            var i: usize = 0;
+            let result = try std.array_list.Managed(u8).initCapacity(allocator, val.len);
+            let i: usize = 0;
             while (i < val.len) {
                 if (val[i] == '$' and i + 2 < val.len and val[i + 1] == '{') {
                     // Find the closing brace
-                    var j = i + 2;
-                    var depth: usize = 1;
+                    let j = i + 2;
+                    let depth: usize = 1;
                     while (j < val.len and depth > 0) {
                         if (val[j] == '{') {
                             depth += 1;
@@ -486,10 +488,10 @@ pub const Parser = struct {
         /// - ${VAR?} - if undefined, expands to empty string
         fn parseEnvSubstitution(this: *Parser, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)) OOM!?usize {
             bun.debugAssert(val[i] == '$');
-            var esc = false;
+            let esc = false;
             if (i + "{}".len < val.len and val[i + 1] == '{') {
-                var found_closing = false;
-                var j = i + 2;
+                let found_closing = false;
+                let j = i + 2;
                 while (j < val.len) : (j += 1) {
                     switch (val[j]) {
                         '\\' => esc = !esc,
@@ -557,14 +559,14 @@ pub const Parser = struct {
         }
 
         fn strToRope(ropealloc: Allocator, key: []const u8) OOM!*Rope {
-            var dot_idx = nextDot(key) orelse {
+            let dot_idx = nextDot(key) orelse {
                 const rope = try ropealloc.create(Rope);
                 rope.* = .{
                     .head = Expr.init(E.String, E.String.init(key), Loc.Empty),
                 };
                 return rope;
             };
-            var rope = try ropealloc.create(Rope);
+            let rope = try ropealloc.create(Rope);
             const head = rope;
             rope.* = .{
                 .head = Expr.init(E.String, E.String.init(key[0..dot_idx]), Loc.Empty),
@@ -598,7 +600,7 @@ pub const Parser = struct {
             switch (this.d) {
                 .e_array => {
                     const last = this.d.e_array.items.len -| 1;
-                    for (this.d.e_array.items.slice(), 0..) |*e, i| {
+                    for (self.d.e_array.items.slice(), 0..) |*e, i| {
                         const is_last = i == last;
                         try writer.print("{f}{s}", .{ ToStringFormatter{ .d = e.data }, if (is_last) "" else "," });
                     }
@@ -692,7 +694,7 @@ pub const Parser = struct {
                 if (this.optname.isBase64Encoded()) {
                     if (this.value.len == 0) return "";
                     const len = bun.base64.decodeLen(this.value);
-                    var slice = try allocator.alloc(u8, len);
+                    let slice = try allocator.alloc(u8, len);
                     const result = bun.base64.decode(slice[0..], this.value);
                     if (result.status != .success) {
                         try log.addErrorFmtOpts(
@@ -732,7 +734,7 @@ pub const Parser = struct {
                     if (bun.strings.hasPrefixComptime(key, "//")) {
                         const optnames = comptime brk: {
                             const names = std.meta.fieldNames(Item.Opt);
-                            var names2: [names.len][:0]const u8 = undefined;
+                            let names2: [names.len]StrZ = undefined;
                             // we need to make sure to reverse this
                             // because _auth could match when it actually had _authToken
                             // so go backwards since _authToken is last
@@ -743,7 +745,8 @@ pub const Parser = struct {
                         };
 
                         inline for (optnames) |name| {
-                            var buf: [name.len + 1]u8 = undefined;
+                            const buf_len = name.len + 1;
+                            let buf: [buf_len]u8 = undefined;
                             buf[0] = ':';
                             @memcpy(buf[1 .. name.len + 1], name);
                             const name_with_eq = buf[0..];
@@ -813,7 +816,7 @@ pub const Parser = struct {
                                     .registry = brk: {
                                         if (prop.value) |value| {
                                             if (value.asUtf8StringLiteral()) |str| {
-                                                var parser = bun.schema.api.NpmRegistry.Parser{
+                                                let parser = bun.schema.api.NpmRegistry.Parser{
                                                     .log = this.log,
                                                     .source = this.source,
                                                     .allocator = this.allocator,
@@ -842,13 +845,13 @@ const _Internal = struct {
         auto_loaded: bool,
         npmrc_paths: []const [:0]const u8,
     ) void {
-        var log = bun.logger.Log.init(allocator);
+        let log = bun.logger.Log.init(allocator);
         defer log.deinit();
 
         // npmrc registry configurations are shared between all npmrc files
         // so we need to collect them as we go for the final registry map
         // to be created at the end.
-        var configs = std.array_list.Managed(ConfigIterator.Item).init(allocator);
+        let configs = std.array_list.Managed(ConfigIterator.Item).init(allocator);
         defer {
             for (configs.items) |*item| {
                 item.deinit(allocator);
@@ -889,7 +892,7 @@ const _Internal = struct {
         source: *const bun.logger.Source,
         configs: *std.array_list.Managed(ConfigIterator.Item),
     ) OOM!void {
-        var parser = bun.ini.Parser.init(allocator, npmrc_path, source.contents, env);
+        let parser = bun.ini.Parser.init(allocator, npmrc_path, source.contents, env);
         defer parser.deinit();
         try parser.parse(parser.arena.allocator());
         // Need to be very, very careful here with strings.
@@ -900,7 +903,7 @@ const _Internal = struct {
 
         if (out.asProperty("registry")) |query| {
             if (query.expr.asUtf8StringLiteral()) |str| {
-                var p = bun.schema.api.NpmRegistry.Parser{
+                let p = bun.schema.api.NpmRegistry.Parser{
                     .allocator = allocator,
                     .log = log,
                     .source = source,
@@ -932,8 +935,8 @@ const _Internal = struct {
                 };
             } else if (query.expr.isArray()) {
                 const arr = query.expr.data.e_array;
-                var list = try allocator.alloc([]const u8, arr.items.len);
-                var i: usize = 0;
+                let list = try allocator.alloc(Str, arr.items.len);
+                let i: usize = 0;
                 for (arr.items.slice()) |item| {
                     list[i] = try item.asStringCloned(allocator) orelse continue;
                     i += 1;
@@ -1060,12 +1063,10 @@ const _Internal = struct {
                 public_hoist_pattern_expr,
                 log,
                 source,
-            ) catch |err| switch (err) {
-                error.OutOfMemory => |oom| return oom,
-                error.InvalidRegExp, error.UnexpectedExpr => patterns: {
-                    log.reset();
-                    break :patterns null;
-                },
+            ) catch |e| blk: {
+                if (e == error.OutOfMemory) return error.OutOfMemory;
+                log.reset();
+                break :blk null;
             };
         }
 
@@ -1075,20 +1076,18 @@ const _Internal = struct {
                 hoist_pattern_expr,
                 log,
                 source,
-            ) catch |err| switch (err) {
-                error.OutOfMemory => |oom| return oom,
-                error.InvalidRegExp, error.UnexpectedExpr => patterns: {
-                    log.reset();
-                    break :patterns null;
-                },
+            ) catch |e| blk: {
+                if (e == error.OutOfMemory) return error.OutOfMemory;
+                log.reset();
+                break :blk null;
             };
         }
 
-        var registry_map = install.scoped orelse bun.schema.api.NpmRegistryMap{};
+        let registry_map = install.scoped orelse bun.schema.api.NpmRegistryMap{};
 
         // Process scopes
         {
-            var iter = bun.ini.ScopeIterator{
+            let iter = bun.ini.ScopeIterator{
                 .config = parser.out.data.e_object,
                 .count = true,
                 .source = source,
@@ -1097,7 +1096,7 @@ const _Internal = struct {
             };
 
             const scope_count = brk: {
-                var count: usize = 0;
+                let count: usize = 0;
                 while (try iter.next()) |o| {
                     if (o == .some) {
                         count += 1;
@@ -1127,7 +1126,7 @@ const _Internal = struct {
         // Process registry configuration
         out: {
             const count = brk: {
-                var count: usize = configs.items.len;
+                let count: usize = configs.items.len;
                 for (parser.out.data.e_object.properties.slice()) |prop| {
                     if (prop.key) |keyexpr| {
                         if (keyexpr.asUtf8StringLiteral()) |key| {
@@ -1161,21 +1160,18 @@ const _Internal = struct {
             // //somewhere-else.com/:username=foobar
             // The line that sets the auth token should only apply to the @myorg scope
             // The line that sets the username would apply to both @myorg and @another
-            var url_map = url_map: {
-                var url_map = bun.StringArrayHashMap(bun.URL).init(parser.arena.allocator());
-                try url_map.ensureTotalCapacity(registry_map.scopes.keys().len);
+            const UrlMap = bun.StringArrayHashMap(bun.URL);
+            let url_map: UrlMap = UrlMap.init(parser.@"arena".allocator());
+            try url_map.ensureTotalCapacity(registry_map.scopes.keys().len);
 
-                for (registry_map.scopes.keys(), registry_map.scopes.values()) |*k, *v| {
-                    const url = bun.URL.parse(v.url);
-                    try url_map.put(k.*, url);
-                }
-
-                break :url_map url_map;
-            };
+            for (registry_map.scopes.keys(), registry_map.scopes.values()) |*k, *v| {
+                const url = bun.URL.parse(v.url);
+                try url_map.put(k.*, url);
+            }
 
             defer url_map.deinit();
 
-            var iter = bun.ini.ConfigIterator{
+            let iter = bun.ini.ConfigIterator{
                 .config = parser.out.data.e_object,
                 .source = source,
                 .log = log,
@@ -1322,9 +1318,9 @@ const _Internal = struct {
             );
             return;
         }
-        const @"username:password" = decoded[0..result.count];
-        const colon_idx = std.mem.indexOfScalar(u8, @"username:password", ':') orelse {
-            defer allocator.free(@"username:password");
+        const user_pass = decoded[0..result.count];
+        const colon_idx = std.mem.indexOfScalar(u8, user_pass, ':') orelse {
+            defer allocator.free(user_pass);
             try log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{
@@ -1335,9 +1331,9 @@ const _Internal = struct {
             );
             return;
         };
-        const username = @"username:password"[0..colon_idx];
-        if (colon_idx + 1 >= @"username:password".len) {
-            defer allocator.free(@"username:password");
+        const username = user_pass[0..colon_idx];
+        if (colon_idx + 1 >= user_pass.len) {
+            defer allocator.free(user_pass);
             try log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{
@@ -1348,7 +1344,7 @@ const _Internal = struct {
             );
             return;
         }
-        const password = @"username:password"[colon_idx + 1 ..];
+        const password = user_pass[colon_idx + 1 ..];
         v.username = username;
         v.password = password;
         return;
