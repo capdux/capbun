@@ -264,7 +264,7 @@ pub enum FontStretchKeyword {
     }
 
     fn intoPercentage(): Percentage {
-        const val: f32 = switch (_.*) {
+        const val: f32 = switch (_) {
             .@"ultra-condensed" => 0.5,
             .@"extra-condensed" => 0.625,
             .condensed => 0.75,

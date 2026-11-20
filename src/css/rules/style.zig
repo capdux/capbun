@@ -119,7 +119,7 @@ pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
     }
 
 pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
-            const supports_nesting = ((self.rules.v.items.len == 0) or (!css.Targets.shouldCompileSame((&dest.targets), .nesting)));
+            const supports_nesting = ((self.rules.v.items.len == 0) or (!css.Targets.shouldCompileSame(dest.targets, .nesting)));
             const len = (self.declarations.declarations.items.len + self.declarations.important_declarations.items.len);
             const has_declarations = ((supports_nesting or (len > 0)) or (self.rules.v.items.len == 0));
             if (has_declarations) {

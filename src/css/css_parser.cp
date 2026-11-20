@@ -283,6 +283,11 @@ pub struct SourceLocation {
                 .kind = .{ .custom = selector.parser.SelectorParseErrorKind.intoDefaultParserError(e) },
                 .location = _,
             };
+        } else if (@TypeOf(e) == @typeInfo(ParserError).@"union".tag_type.?) {
+            return .{
+                .kind = .{ .custom = @as(ParserError, e) },
+                .location = _,
+            };
         } else {
             @compileError("TODO implement this for: " ++ @typeName(@TypeOf(e)));
         }
@@ -946,7 +951,8 @@ pub fn DefineEnumProperty(comptime T: type): type {
 pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
     const field_values: []const media_query.MediaFeatureType = field_values: {
         const fields = std.@"meta".fields(T);
-        let mapping: [fields.len]media_query.MediaFeatureType = undefined;
+        const fields_len = fields.len;
+        let mapping: [fields_len]media_query.MediaFeatureType = undefined;
         for (fields, 0..) |field, i| {
             // Check that it exists in the type map
             mapping[i] = @field(ValueTypeMap, field.name);
@@ -1076,7 +1082,7 @@ fn parse_custom_at_rule_prelude(name: []const u8, input: *Parser, options: *cons
                 // do nothing
             } else return {
                 err: input.newCustomError(
-                    ParserError{ .at_rule_prelude_invalid = {} },
+                    ParserError.at_rule_prelude_invalid,
                 ),
             };
         },
@@ -6202,9 +6208,8 @@ pub union(TokenKind) Token {
         return implementEql(Token, lhs, rhs);
     }
 
-    fn hash(hasher: *std.hash.Wyhash) {
-        const _self = _;
-        return implementHash(@This(), unsafe { &_self }, hasher);
+    static fn hash(s: *const @This(), hasher: *std.hash.Wyhash) {
+        return implementHash(@This(), s, hasher);
     }
 
     /// Return whether this token represents a parse error.

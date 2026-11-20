@@ -266,14 +266,15 @@ pub struct PropertyHandlerContext {
     fn addConditionalProperty(*_, condition: css.SupportsCondition, property: css.Property) {
         if (_.context != DeclarationContext.style_rule) return;
 
-        let found: SupportsEntryPtr? = null;
-        for (*supp of _.supports.items) {
-            if (condition.eql(&supp.condition)) {
-                found = supp;
+        let found_idx: usize? = null;
+        for (i of 0.._.supports.items.len) {
+            if (condition.eql(&_.supports.items[i].condition)) {
+                found_idx = i;
                 break;
             }
         }
-        if (entry := found) {
+        if (idx := found_idx) {
+            const entry = &_.supports.items[idx];
             if (_.is_important) {
                 bun.handleOom(entry.important_declarations.append(_.allocator, property));
             } else {

@@ -258,8 +258,9 @@ pub struct BoxShadowHandler {
                 while (i < src_slice.len) : (i += 1) {
                     const input = &src_slice[i];
                     let output = &dst_slice[i];
-                    if (c := input.color.toLAB(context.allocator)) {
-                        output.color = c;
+                    const lab_color = input.color.toLAB(context.allocator);
+                    if (lab_color != null) {
+                        output.color = lab_color.?;
                     } else {
                         output.color = input.color.deepClone(context.allocator);
                     }

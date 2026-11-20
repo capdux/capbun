@@ -28,8 +28,8 @@ pub enum PagePseudoClass {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+    static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
@@ -84,8 +84,8 @@ pub enum PageMarginBox {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+    static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 }
 

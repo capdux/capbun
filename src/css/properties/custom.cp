@@ -67,7 +67,7 @@ pub struct TokenList {
                 .url => |url| {
                     if (dest.dependencies != null && is_custom_property) {
                         const recs = dest.getImportRecords()?;
-                        if (!url.isAbsolute(recs.slice())) {
+                        if (!url.isAbsolute(recs)) {
                             return dest.newError(css.PrinterErrorKind{
                                 ambiguous_url_in_custom_property: { url: recs.at(url.import_record_idx).path.pretty },
                             }, url.loc);

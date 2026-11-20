@@ -85,7 +85,7 @@ pub fn StyleRule(comptime R: type): type {
             // If supported, or there are no targets, preserve nesting. Otherwise, write nested rules after parent.
             const supports_nesting = _.rules.v.items.len == 0 ||
                 !css.Targets.shouldCompileSame(
-                    &dest.targets,
+                    dest.targets,
                     .nesting,
                 );
 

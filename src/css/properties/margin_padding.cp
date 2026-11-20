@@ -837,7 +837,8 @@ fn NewSizeHandler(
             dest: *css.DeclarationList,
             context: *css.PropertyHandlerContext,
         ) {
-            if (*v := val.*) {
+            if (val.* != null) {
+                const v = &val.*.?;
                 if (@as(css.PropertyIdTag, v.*) == logical) {
                     dest.append(
                         context.allocator,

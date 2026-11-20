@@ -344,7 +344,11 @@ pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) 
                     if ((@TypeOf(e) == selector.parser.SelectorParseErrorKind)) {
                         return .{ .kind = .{ .custom = selector.parser.SelectorParseErrorKind.intoDefaultParserError(e) }, .location = self };
                     } else {
-                        _ = @compileError(("TODO implement this for: " ++ @typeName(@TypeOf(e))));
+                        if ((@TypeOf(e) == @typeInfo(ParserError).@"union".tag_type.?)) {
+                            return .{ .kind = .{ .custom = (if (comptime @typeInfo(ParserError) == .@"enum") @as(ParserError, @enumFromInt(e)) else @as(ParserError, e)) }, .location = self };
+                        } else {
+                            _ = @compileError(("TODO implement this for: " ++ @typeName(@TypeOf(e))));
+                        }
                     }
                 }
             }
@@ -2836,12 +2840,8 @@ pub fn eql(lhs: *const Token, rhs: *const Token) bool {
             return implementEql(Token, lhs, rhs);
     }
 
-pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
-            const _self = self;
-            return implementHash(@This(), (blk: {
-            break :blk _self;
-
-}), hasher);
+pub fn hash(s: *const @This(), hasher: *std.hash.Wyhash) void {
+            return implementHash(@This(), s, hasher);
     }
 
 pub fn isParseError(self: Token) bool {
@@ -4429,9 +4429,9 @@ pub fn hash(self: *const T, hasher: *std.hash.Wyhash) void {
 pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
         const field_values: []const media_query.MediaFeatureType = field_values: {
         const fields = std.@"meta".fields(T);
-        var mapping: struct { fields.len } = undefined;
+        const fields_len = fields.len;
+        var mapping: [fields_len]media_query.MediaFeatureType = undefined;
         _ = &mapping;
-        media_query.MediaFeatureType = undefined;
         for (fields, 0..) |field, i| {
             _ = &field;
             _ = &i;
@@ -4562,7 +4562,7 @@ return .{ .result = .{ .custom = prelude } };
 .err => |e| {
 if (((e.kind == .basic) and (e.kind.basic == .at_rule_invalid))) {
         } else {
-            return .{ .err = input.newCustomError(ParserError{ .at_rule_prelude_invalid = .{} }) };
+            return .{ .err = input.newCustomError(ParserError.at_rule_prelude_invalid) };
         }
 },
 }

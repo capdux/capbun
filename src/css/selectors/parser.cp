@@ -2820,7 +2820,8 @@ pub fn parse_one_simple_selector(
                         };
 
                         let closure = Closure{ .parser = parser };
-                        const names = switch (input.parseNestedBlock([]Impl.SelectorImpl.Identifier, &closure, Closure.parsefn)) {
+                        const IdentSlice = []Impl.SelectorImpl.Identifier;
+                        const names = switch (input.parseNestedBlock(IdentSlice, &closure, Closure.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };

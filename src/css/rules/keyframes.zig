@@ -140,8 +140,8 @@ pub const KeyframeSelector = union(enum) {
     @"from": void,
     to: void,
 
-pub fn toCss(self: *KeyframeSelector, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            switch (s.*) {
 .percentage => |p| {
 if ((dest.minify and (p.v == 1.0))) {
                 _ = try dest.writeStr("to");
@@ -309,14 +309,14 @@ return .{ .err = input.newUnexpectedTokenError(t) };
 }
     }
 
-pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self_ptr: *const @This(), dest: *Printer) PrintErr!void {
             var css_module_aimation_enabled = false;
             _ = &css_module_aimation_enabled;
             if (dest.css_module) |cm| {
                 _ = &cm;
                 css_module_aimation_enabled = cm.config.animation;
             }
-            switch (self.*) {
+            switch (self_ptr.*) {
 .ident => |ident| {
 _ = try dest.writeIdent(ident.v, css_module_aimation_enabled);
 },

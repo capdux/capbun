@@ -307,9 +307,9 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
                         const input = (&src_slice[@as(usize, @intCast(i))]);
                         var output = (&dst_slice[@as(usize, @intCast(i))]);
                         _ = &output;
-                        if (input.color.toLAB(context.allocator)) |c| {
-                            _ = &c;
-                            output.color = c;
+                        const lab_color = input.color.toLAB(context.allocator);
+                        if ((lab_color != null)) {
+                            output.color = lab_color.?;
                         } else {
                             output.color = input.color.deepClone(context.allocator);
                         }

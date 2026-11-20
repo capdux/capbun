@@ -341,8 +341,8 @@ pub fn asStr(self: MediaFeatureComparison) []const u8 {
             return css.enum_property_util.asStr(@This(), self);
     }
 
-pub fn toCss(self: *MediaFeatureComparison, dest: *Printer) PrintErr!void {
-            switch (self) {
+pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
+            switch (s) {
 .equal => {
 _ = try dest.delim(45, true);
 },
@@ -436,8 +436,8 @@ pub fn deinit(self: *MediaFeatureValue, allocator: std.mem.Allocator) void {
 });
     }
 
-pub fn toCss(self: *MediaFeatureValue, dest: *Printer) PrintErr!void {
-            switch (self) {
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            switch (s.*) {
 .length => |len| {
 return len.toCss(dest);
 },
@@ -478,7 +478,8 @@ pub fn checkType(self: MediaFeatureValue, expected_type: MediaFeatureType) bool 
     }
 
 pub fn parse(input: *css.Parser, expected_type: MediaFeatureType) Result(MediaFeatureValue) {
-            if (input.tryParse(MediaFeatureValue{ .parseKnown = {} }, .{ expected_type }).asValue()) |value| {
+            const parseKnownFn = MediaFeatureValue{ .parseKnown = {} };
+            if (input.tryParse(parseKnownFn, .{ expected_type }).asValue()) |value| {
                 _ = &value;
                 return .{ .result = value };
             }
@@ -587,7 +588,7 @@ pub fn addF32(self: MediaFeatureValue, allocator: Allocator, other: f32) MediaFe
     }
 
 pub fn valueType(self: MediaFeatureValue) MediaFeatureType {
-            return (switch (self.*) {
+            return (switch (self) {
 .length => .length,
 .number => .number,
 .integer => .integer,
@@ -1440,8 +1441,8 @@ else => .unknown,
 });
     }
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            return (switch (self) {
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            return (switch (s.*) {
 .standard => |v| v.toCss(dest),
 .custom => |d| DashedIdentFns.toCss((&d), dest),
 .unknown => |v| IdentFns.toCss((&v), dest),

@@ -708,7 +708,7 @@ return .{ .err = e };
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             const f: []const u8 = undefined;
-            const prefix: ?css.VendorPrefix = (switch (self.*) {
+            const prefix: ?css.VendorPrefix = (switch (self) {
 .linear => |g| .{ "linear-gradient(", g.vendor_prefix },
 .repeating_linear => |g| .{ "repeating-linear-gradient(", g.vendor_prefix },
 .radial => |g| .{ "radial-gradient(", g.vendor_prefix },
@@ -722,7 +722,7 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
                 _ = try p.toCss(dest);
             }
             _ = try dest.writeStr(f);
-            switch (self.*) {
+            switch (self) {
 .linear, .repeating_linear => |*linear| {
 _ = try linear.toCss(dest, (linear.vendor_prefix != css.VendorPrefix{ .none = true }));
 },

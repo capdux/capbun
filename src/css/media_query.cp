@@ -1162,8 +1162,8 @@ pub enum MediaFeatureComparison: u8 {
         return css.enum_property_util.asStr(@This(), _);
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_) {
+    pub static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
+        switch (s) {
             .equal => {
                 dest.delim('-', true)?;
             },
@@ -1248,10 +1248,11 @@ pub enum MediaFeatureValue {
         };
     }
 
-    fn toCss(
+    static fn toCss(
+        s: *const @This(),
         dest: *Printer,
-    )!PrintErr {
-        switch (_) {
+    ): PrintErr!void {
+        switch (s.*) {
             .length => |len| return len.toCss(dest),
             .number => |num| return CSSNumberFns.toCss(&num, dest),
             .integer => |int| return CSSIntegerFns.toCss(&int, dest),
@@ -1278,7 +1279,8 @@ pub enum MediaFeatureValue {
     /// Parses a single media query feature value, with an expected type.
     /// If the type is unknown, pass MediaFeatureType::Unknown instead.
     static fn parse(input: *css.Parser, expected_type: MediaFeatureType): Result(MediaFeatureValue) {
-        if (value := input.tryParse(MediaFeatureValue.parseKnown, .{expected_type}).asValue()) {
+        const parseKnownFn = MediaFeatureValue.parseKnown;
+        if (value := input.tryParse(parseKnownFn, .{expected_type}).asValue()) {
             return { result: value };
         }
 
@@ -1366,7 +1368,7 @@ pub enum MediaFeatureValue {
     }
 
     pub fn valueType(): MediaFeatureType {
-        return switch (_.*) {
+        return switch (_) {
             .length => .length,
             .number => .number,
             .integer => .integer,
@@ -1435,8 +1437,8 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             };
         }
 
-        pub fn toCss(dest: *Printer): PrintErr!void {
-            return switch (_) {
+        pub static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+            return switch (s.*) {
                 .standard => |v| v.toCss(dest),
                 .custom => |d| DashedIdentFns.toCss(&d, dest),
                 .unknown => |v| IdentFns.toCss(&v, dest),

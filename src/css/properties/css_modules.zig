@@ -106,10 +106,10 @@ pub fn toCss(self: Composes, dest: *Printer) PrintErr!void {
                 }
                 _ = try CustomIdentFns.toCss(name, dest);
             }
-            if (self.@"from") |*@"from"| {
-                _ = &@"from";
+            if (self.@"from") |*from_val| {
+                _ = &from_val;
                 _ = try dest.writeStr(" from ");
-                _ = @"from"(try .toCss(dest));
+                _ = try (from_val.*).toCss(dest);
             }
     }
 

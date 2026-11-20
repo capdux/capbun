@@ -95,7 +95,7 @@ pub fn parse(name: DashedIdent, input: *css.Parser, loc: Location) Result(FontPa
 
 pub fn toCss(self: FontPaletteValuesRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeStr("@font-palette-values ");
-            _ = try css.css_values.ident.DashedIdentFns.toCss((&self.name), dest);
+            _ = try css.css_values.ident.DashedIdentFns.toCss(self.name, dest);
             _ = try dest.whitespace();
             _ = try dest.writeChar(123);
             _ = dest.indent();

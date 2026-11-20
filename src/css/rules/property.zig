@@ -192,7 +192,7 @@ pub const PropertyRuleDeclarationParser = struct {
     const This = @This();
     pub const DeclarationParser = struct {
     
-    pub fn parseValue(self: *@This(), name: []const u8, input: *css.Parser) Result(Declaration) {
+    pub fn parseValue(p: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser) Result(Declaration) {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("syntax", name)) {
                     const syntax = (switch (SyntaxString.parse(input)) {
     .result => |vv| vv,
@@ -200,7 +200,7 @@ pub const PropertyRuleDeclarationParser = struct {
     return .{ .err = e };
     },
     });
-                    self.syntax = syntax;
+                    p.syntax = syntax;
                 } else {
                     if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("inherits", name)) {
                         const location = input.currentSourceLocation();
@@ -218,7 +218,7 @@ pub const PropertyRuleDeclarationParser = struct {
                             while (input.next().isOk()) {
                             }
                             const initial_value = input.sliceFrom(start);
-                            self.initial_value = initial_value;
+                            p.initial_value = initial_value;
                         } else {
                             return .{ .err = input.newCustomError(css.ParserError.invalid_declaration) };
                         }
@@ -250,20 +250,18 @@ pub const PropertyRuleDeclarationParser = struct {
         }
     
     pub fn ruleWithoutBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState) css.Maybe(AtRuleParser.AtRule,void) {
-                return .{ .err = .{} };
+                return .{ .err = undefined };
         }
         pub const Prelude = void;
         pub const AtRule = void;
     };
     pub const QualifiedRuleParser = struct {
     
-    pub fn parsePrelude(self: *@This(), input: *css.Parser) Result(Prelude) {
-            _ = self;
+    pub fn parsePrelude(_: *PropertyRuleDeclarationParser, input: *css.Parser) Result(Prelude) {
                 return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
         }
     
-    pub fn parseBlock(self: *@This(), _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
-            _ = self;
+    pub fn parseBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
                 return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
         }
         pub const Prelude = void;

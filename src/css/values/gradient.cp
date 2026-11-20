@@ -190,7 +190,7 @@ pub const Gradient = union(enum) {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        const f: []const u8, const prefix: css.VendorPrefix? = switch (_.*) {
+        const f: []const u8, const prefix: css.VendorPrefix? = switch (_) {
             .linear => |g| .{ "linear-gradient(", g.vendor_prefix },
             .repeating_linear => |g| .{ "repeating-linear-gradient(", g.vendor_prefix },
             .radial => |g| .{ "radial-gradient(", g.vendor_prefix },
@@ -206,7 +206,7 @@ pub const Gradient = union(enum) {
 
         dest.writeStr(f)?;
 
-        switch (_.*) {
+        switch (_) {
             .linear, .repeating_linear => |*linear| {
                 linear.toCss(dest, linear.vendor_prefix != css.VendorPrefix{ .none = true })?;
             },

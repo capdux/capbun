@@ -383,6 +383,12 @@ pub inline fn toCss(comptime T: type, this: *const T, dest: *Printer): PrintErr!
             if (comptime info.params.len > 0 && info.params[0].@"type" == T) {
                 return T.toCss(this.*, dest);
             }
+            if (comptime info.params.len > 0) {
+                const p0 = @typeInfo(info.params[0].@"type".?);
+                if (comptime p0 == .pointer && !p0.pointer.is_const) {
+                    return T.toCss(@constCast(this), dest);
+                }
+            }
             return T.toCss(this, dest);
         },
     };
@@ -674,8 +680,13 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) {
     return switch (T) {
         []const u8 => hasher.update(this.*),
         else => {
-            if (comptime @typeInfo(@TypeOf(T.hash)).@"fn".params[0].type == T) {
+            const h_info = @typeInfo(@TypeOf(T.hash)).@"fn";
+            if (comptime h_info.params[0].type == T) {
                 return T.hash(this.*, hasher);
+            }
+            const hp0 = @typeInfo(h_info.params[0].type.?);
+            if (comptime hp0 == .pointer && !hp0.pointer.is_const) {
+                return T.hash(@constCast(this), hasher);
             }
             return T.hash(this, hasher);
         },

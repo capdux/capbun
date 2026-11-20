@@ -102,8 +102,8 @@ pub enum BaselinePosition {
             return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    fn toCss(dest: *css.Printer): css.PrintErr!void {
-        return switch (_) {
+    static fn toCss(s: @This(), dest: *css.Printer): css.PrintErr!void {
+        return switch (s) {
             .first => try dest.writeStr("baseline"),
             .last => try dest.writeStr("last baseline"),
         };
@@ -821,7 +821,10 @@ pub struct PlaceItems {
     fn toCss(dest: *css.Printer): css.PrintErr!void {
         _.@"align".toCss(dest)?;
         const is_equal = switch (_.justify) {
-            .normal => _.@"align".eql(&AlignItems.normal),
+            .normal => brk: {
+                const normal_val: AlignItems = .normal;
+                break :brk _.@"align".eql(&normal_val);
+            },
             .stretch => _.@"align".eql(&AlignItems{ .stretch = {} }),
             .baseline_position => |*p| brk: {
                 if (_.@"align" == .baseline_position) break :brk p.eql(&_.@"align".baseline_position);

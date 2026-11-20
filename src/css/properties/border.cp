@@ -501,7 +501,7 @@ pub fn ImplFallbacks(comptime T: type): type {
                 bun.bits.insert(ColorFallbackKind, &fallbacks, @field(this_val, field.name).getNecessaryFallbacks(targets));
             }
 
-            let res = css.SmallList(T, 2){};
+            let res: css.SmallList(T, 2) = .{};
             if (fallbacks.rgb) {
                 let out: T = undefined;
                 inline for (field of fields) {

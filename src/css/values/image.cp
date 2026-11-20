@@ -223,12 +223,12 @@ pub struct ImageSet {
         };
 
         const Fn = struct {
-            static fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser): Result(ArrayList(ImageSetOption)) {
+            static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(ImageSetOption)) {
                 return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
             }
         };
 
-        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), {}, Fn.parseNestedBlockFn)) {
+        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), undefined, Fn.parseNestedBlockFn)) {
             .result => |vv| vv,
             .err => |e| return .{ .err = e },
         };
@@ -402,11 +402,11 @@ type Str = []const u8;
 fn parseFileType(input: *css.Parser): Result(Str) {
     if (e := input.expectFunctionMatching("type").asErr()) return .{ .err = e };
     const Fn = struct {
-        static fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser): Result(Str) {
+        static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(Str) {
             return i.expectString();
         }
     };
-    return input.parseNestedBlock(Str, {}, Fn.parseNestedBlockFn);
+    return input.parseNestedBlock(Str, undefined, Fn.parseNestedBlockFn);
 }
 
 import bun from "bun";

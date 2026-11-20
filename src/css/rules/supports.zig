@@ -296,15 +296,11 @@ return .{ .err = location.newUnexpectedTokenError(tok.*) };
             return .{ .result = SupportsCondition{ .unknown = input.sliceFrom(pos) } };
     }
 
-pub fn toCss(self: SupportsCondition, dest: *css.Printer) css.PrintErr!void {
-            const self_val = self;
-            switch (self) {
+pub fn toCss(s: *const @This(), dest: *css.Printer) css.PrintErr!void {
+            switch (s.*) {
 .not => |condition| {
 _ = try dest.writeStr(" not ");
-            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens((blk: {
-            break :blk self_val;
-
-})));
+            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens(s));
 },
 .@"and" => |conditions| {
 var first = true;
@@ -316,7 +312,7 @@ var first = true;
                 } else {
                     _ = try dest.writeStr(" and ");
                 }
-                _ = try cond.toCssWithParensIfNeeded(dest, cond.needsParens(self));
+                _ = try cond.toCssWithParensIfNeeded(dest, cond.needsParens(s));
             }
 },
 .@"or" => |conditions| {
@@ -329,7 +325,7 @@ var first = true;
                 } else {
                     _ = try dest.writeStr(" or ");
                 }
-                _ = try cond.toCssWithParensIfNeeded(dest, cond.needsParens(self));
+                _ = try cond.toCssWithParensIfNeeded(dest, cond.needsParens(s));
             }
 },
 .declaration => |decl| {
@@ -459,7 +455,7 @@ pub fn SupportsRule(comptime R: type) type {
     rules: css.CssRuleList(R),
     loc: Location,
 
-pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             _ = try dest.writeStr("@supports ");
             _ = try self.condition.toCss(dest);
             _ = try dest.whitespace();

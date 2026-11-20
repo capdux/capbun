@@ -250,7 +250,10 @@ pub inline fn importRecord(self: *Printer, import_record_idx: u32) PrintErr!*con
     }
 
 pub inline fn getImportRecordUrl(self: *Printer, import_record_idx: u32) PrintErr![]const u8 {
-            const import_info = ((self.import_info) orelse { return .{ .ok = self.addNoImportRecordError() }; });
+            if ((self.import_info == null)) {
+                return self.addNoImportRecordError();
+            }
+            const import_info = self.import_info.?;
             const record = import_info.import_records.at(import_record_idx);
             if (record.source_index.isValid()) {
                 const urls_for_css = import_info.ast_urls_for_css[@as(usize, @intCast(record.source_index.get()))];

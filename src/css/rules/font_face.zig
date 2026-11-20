@@ -124,7 +124,7 @@ pub const FontFaceProperty = union(enum) {
     custom: css.css_properties.custom.CustomProperty,
 
 pub fn toCss(self: FontFaceProperty, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .source => |value| writeFontFaceProperty(dest, "src", value, true),
 .font_family => |value| writeFontFaceProperty(dest, "font-family", value, false),
 .font_style => |value| writeFontFaceProperty(dest, "font-style", value, false),
@@ -500,12 +500,8 @@ _ = try dest.writeStr(self.string);
 }
     }
 
-pub fn deepClone(self: FontFormat, allocator: std.mem.Allocator) @This() {
-            const s = self;
-            return css.implementDeepClone(@This(), (blk: {
-            break :blk s;
-
-}), allocator);
+pub fn deepClone(s: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), s, allocator);
     }
 };
 
@@ -556,12 +552,8 @@ _ = try dest.writeStr("local(");
 }
     }
 
-pub fn deepClone(self: Source, allocator: std.mem.Allocator) @This() {
-            const s = self;
-            return css.implementDeepClone(@This(), (blk: {
-            break :blk (&s);
-
-}), allocator);
+pub fn deepClone(s: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), s, allocator);
     }
 };
 

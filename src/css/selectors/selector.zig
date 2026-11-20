@@ -114,7 +114,7 @@ const SerializePseudoClassHelpers = struct {
 
 pub inline fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8) PrintErr!void {
             _ = try d.writeChar(58);
-            const vp = (if ((!d.vendor_prefix.isEmpty())) bun.bits.@"||"(css.VendorPrefix, d.vendor_prefix, prefix).orNone() else prefix);
+            const vp = (if ((!d.vendor_prefix.isEmpty())) bun.bits.@"or"(css.VendorPrefix, d.vendor_prefix, prefix).orNone() else prefix);
             _ = try vp.toCss(d);
             _ = try d.writeStr(val);
     }

@@ -293,7 +293,8 @@ pub struct Printer {
     }
 
     pub inline fn getImportRecordUrl(*_, import_record_idx: u32): PrintErr![]const u8 {
-        const import_info = _.import_info ?? return _.addNoImportRecordError();
+        if (_.import_info == null) return _.addNoImportRecordError();
+        const import_info = _.import_info.?;
         const record = import_info.import_records.at(import_record_idx);
         if (record.source_index.isValid()) {
             // It has an inlined url for CSS

@@ -207,17 +207,22 @@ pub fn addConditionalProperty(self: *PropertyHandlerContext, condition: css.Supp
             if ((self.context != DeclarationContext.style_rule)) {
                 return;
             }
-            var found: ?SupportsEntryPtr = null;
-            _ = &found;
-            for (self.supports.items) |*supp| {
-                _ = &supp;
-                if (condition.eql((&(supp.*).condition))) {
-                    found = (supp.*);
-                    break;
+            var found_idx: ?usize = null;
+            _ = &found_idx;
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_6 = self.supports.items.len;
+                while (i < __end_6) : (i += 1) {
+                    if (condition.eql((&self.supports.items[@as(usize, @intCast(i))].condition))) {
+                        found_idx = i;
+                        break;
+                    }
                 }
             }
-            if (found) |entry| {
-                _ = &entry;
+            if (found_idx) |idx| {
+                _ = &idx;
+                const entry = (&self.supports.items[@as(usize, @intCast(idx))]);
                 if (self.is_important) {
                     _ = bun.handleOom(entry.important_declarations.append(self.allocator, property));
                 } else {

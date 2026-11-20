@@ -57,9 +57,9 @@ pub struct Composes {
             CustomIdentFns.toCss(name, dest)?;
         }
 
-        if (*@"from" := this.@"from") {
+        if (*from_val := this.@"from") {
             dest.writeStr(" from ")?;
-            @"from"(.toCss(dest)?);
+            from_val.toCss(dest)?;
         }
     }
 

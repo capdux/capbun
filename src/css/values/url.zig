@@ -118,8 +118,8 @@ break;
             return false;
     }
 
-pub fn toCss(self: Url, dest: *Printer) PrintErr!void {
-            const dep: ?UrlDependency = (if ((dest.dependencies != null)) UrlDependency.new(dest.allocator, self, dest.filename(), try dest.getImportRecords()) else null);
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            const dep: ?UrlDependency = (if ((dest.dependencies != null)) UrlDependency.new(dest.allocator, s, dest.filename(), try dest.getImportRecords()) else null);
             if (dep) |d| {
                 _ = &d;
                 _ = try dest.writeStr("url(");
@@ -131,8 +131,8 @@ pub fn toCss(self: Url, dest: *Printer) PrintErr!void {
                 }
                 return;
             }
-            const import_record = try dest.importRecord(self.import_record_idx);
-            const url = try dest.getImportRecordUrl(self.import_record_idx);
+            const import_record = try dest.importRecord(s.import_record_idx);
+            const url = try dest.getImportRecordUrl(s.import_record_idx);
             if ((dest.minify and (!import_record.flags.is_internal))) {
                 var buf = std.Io.Writer.Allocating.init(dest.allocator);
                 _ = &buf;

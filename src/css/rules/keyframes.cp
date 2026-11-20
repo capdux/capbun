@@ -131,13 +131,13 @@ pub const KeyframesName = union(enum) {
         }
     }
 
-    pub fn toCss(*_, dest: *Printer): PrintErr!void {
+    pub static fn toCss(self_ptr: *const @This(), dest: *Printer): PrintErr!void {
         let css_module_aimation_enabled = false;
         if (cm := dest.css_module) {
             css_module_aimation_enabled = cm.config.animation;
         }
 
-        switch (_.*) {
+        switch (self_ptr.*) {
             .ident => |ident| {
                 dest.writeIdent(ident.v, css_module_aimation_enabled)?;
             },
@@ -181,8 +181,8 @@ pub union(enum) KeyframeSelector {
     //     @panic(css.todo_stuff.depth);
     // }
 
-    pub fn toCss(*_, dest: *Printer): PrintErr!void {
-        switch (_.*) {
+    pub static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+        switch (s.*) {
             .percentage => |p| {
                 if (dest.minify && p.v == 1.0) {
                     dest.writeStr("to")?;

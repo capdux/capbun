@@ -520,7 +520,7 @@ const SerializePseudoClassHelpers = struct {
         try d.writeChar(':');
         // If the printer has a vendor prefix override, use that.
         const vp = if (!d.vendor_prefix.isEmpty())
-            bun.bits.@"||"(css.VendorPrefix, d.vendor_prefix, prefix).orNone()
+            bun.bits.@"or"(css.VendorPrefix, d.vendor_prefix, prefix).orNone()
         else
             prefix;
 

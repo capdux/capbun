@@ -87,8 +87,7 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *HorizontalPositionKeyword, dest: *Printer) PrintErr!void {
-            const s = self;
+pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
             return css.enum_property_util.toCss(@This(), s, dest);
     }
 
@@ -125,8 +124,7 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *VerticalPositionKeyword, dest: *Printer) PrintErr!void {
-            const s = self;
+pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
             return css.enum_property_util.toCss(@This(), s, dest);
     }
 

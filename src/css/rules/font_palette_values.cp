@@ -46,7 +46,7 @@ pub struct FontPaletteValuesRule {
         // dest.add_mapping(self.loc);
 
         dest.writeStr("@font-palette-values ")?;
-        css.css_values.ident.DashedIdentFns.toCss(&_.name, dest)?;
+        css.css_values.ident.DashedIdentFns.toCss(_.name, dest)?;
         dest.whitespace()?;
         dest.writeChar('{')?;
         dest.indent();

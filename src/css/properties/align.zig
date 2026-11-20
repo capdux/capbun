@@ -112,8 +112,8 @@ if (input.expectIdentMatching("baseline").asErr()) |e| {
             }
     }
 
-pub fn toCss(self: *BaselinePosition, dest: *css.Printer) css.PrintErr!void {
-            return (switch (self) {
+pub fn toCss(s: @This(), dest: *css.Printer) css.PrintErr!void {
+            return (switch (s) {
 .first => try dest.writeStr("baseline"),
 .last => try dest.writeStr("last baseline"),
 });
@@ -394,7 +394,10 @@ return .{ .err = e };
 pub fn toCss(self: PlaceItems, dest: *css.Printer) css.PrintErr!void {
             _ = try self.@"align".toCss(dest);
             const is_equal = (switch (self.justify) {
-.normal => self.@"align".eql((&AlignItems.normal)),
+.normal => brk: {
+            const normal_val: AlignItems = .normal;
+            break :brk self.@"align".eql((&normal_val));
+},
 .stretch => self.@"align".eql((&AlignItems{ .stretch = .{} })),
 .baseline_position => |*p| brk: {
             if ((self.@"align" == .baseline_position)) {

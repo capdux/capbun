@@ -159,7 +159,7 @@ pub struct PropertyRuleDeclarationParser {
             .{ "initial-value", .initial_value },
         });
 
-        fn parseValue(*_, name: []const u8, input: *css.Parser): Result(Declaration) {
+        static fn parseValue(p: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser): Result(Declaration) {
             // todo_stuff.match_ignore_ascii_case
 
             //   if (Map.getASCIIICaseInsensitive(
@@ -172,7 +172,7 @@ pub struct PropertyRuleDeclarationParser {
                     .result => |vv| vv,
                     .err => |e| return { err: e },
                 };
-                _.syntax = syntax;
+                p.syntax = syntax;
             } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("inherits", name)) {
                 const location = input.currentSourceLocation();
                 const ident = switch (input.expectIdent()) {
@@ -185,13 +185,13 @@ pub struct PropertyRuleDeclarationParser {
                     false
                 else
                     return { err: location.newUnexpectedTokenError({ ident: ident }) };
-                _.inherits = inherits;
+                p.inherits = inherits;
             } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("initial-value", name)) {
                 // Buffer the value into a string. We will parse it later.
                 const start = input.position();
                 while (input.next().isOk()) {}
                 const initial_value = input.sliceFrom(start);
-                _.initial_value = initial_value;
+                p.initial_value = initial_value;
             } else {
                 return { err: input.newCustomError(css.ParserError.invalid_declaration) };
             }
@@ -223,7 +223,7 @@ pub struct PropertyRuleDeclarationParser {
         }
 
         static fn ruleWithoutBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
-            return { err: {} };
+            return { err: undefined };
         }
     };
 
@@ -231,11 +231,11 @@ pub struct PropertyRuleDeclarationParser {
         pub const Prelude = void;
         pub const QualifiedRule = void;
 
-        fn parsePrelude(*_, input: *css.Parser): Result(Prelude) {
+        static fn parsePrelude(_: *PropertyRuleDeclarationParser, input: *css.Parser): Result(Prelude) {
             return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
         }
 
-        fn parseBlock(*_, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
+        static fn parseBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
             return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
         }
     };

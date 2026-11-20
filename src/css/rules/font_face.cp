@@ -66,7 +66,7 @@ pub union(enum) FontFaceProperty {
     const This = @This();
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.*) {
+        return switch (_) {
             .source => |value| writeFontFaceProperty(dest, "src", value, true),
             .font_family => |value| writeFontFaceProperty(dest, "font-family", value, false),
             .font_style => |value| writeFontFaceProperty(dest, "font-style", value, false),
@@ -438,9 +438,8 @@ pub union(enum) FontFormat {
         }
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        const s = _;
-        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
+    pub static fn deepClone(s: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), s, allocator);
     }
 }
 
@@ -488,9 +487,8 @@ pub union(enum) Source {
         }
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        const s = _;
-        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
+    pub static fn deepClone(s: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), s, allocator);
     }
 }
 

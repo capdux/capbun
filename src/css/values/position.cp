@@ -386,8 +386,7 @@ pub enum HorizontalPositionKeyword {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        const s = _;
+    static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
         return css.enum_property_util.toCss(@This(), s, dest);
     }
 
@@ -422,8 +421,7 @@ pub enum VerticalPositionKeyword {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        const s = _;
+    static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
         return css.enum_property_util.toCss(@This(), s, dest);
     }
 

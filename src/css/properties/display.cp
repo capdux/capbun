@@ -177,12 +177,12 @@ pub struct DisplayPair {
             };
 
             let needs_space = false;
-            if (!_.outside.eql(&default_outside) || (_.inside.eql(&DisplayInside{ .flow = {} }) && !_.is_list_item)) {
+            if (!_.outside.eql(&default_outside) || (_.inside.eql(&DisplayInside.flow) && !_.is_list_item)) {
                 _.outside.toCss(dest)?;
                 needs_space = true;
             }
 
-            if (!_.inside.eql(&DisplayInside{ .flow = {} })) {
+            if (!_.inside.eql(&DisplayInside.flow)) {
                 if (needs_space) {
                     dest.writeChar(' ')?;
                 }

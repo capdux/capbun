@@ -66,11 +66,12 @@ pub struct Url {
         return false;
     }
 
-    fn toCss(
+    static fn toCss(
+        s: *const @This(),
         dest: *Printer,
     ): PrintErr!void {
         const dep: UrlDependency? = if (dest.dependencies != null)
-            UrlDependency.new(dest.allocator, _, dest.filename(), try dest.getImportRecords())
+            UrlDependency.new(dest.allocator, s, dest.filename(), try dest.getImportRecords())
         else
             null;
 
@@ -88,8 +89,8 @@ pub struct Url {
             return;
         }
 
-        const import_record = dest.importRecord(_.import_record_idx)?;
-        const url = dest.getImportRecordUrl(_.import_record_idx)?;
+        const import_record = dest.importRecord(s.import_record_idx)?;
+        const url = dest.getImportRecordUrl(s.import_record_idx)?;
 
         if (dest.minify && !import_record.flags.is_internal) {
             let buf = std.Io.Writer.Allocating.init(dest.allocator);

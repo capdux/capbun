@@ -517,6 +517,12 @@ _ = @compileError("TODO");
             if (comptime ((info.params.len > 0) and (info.params[0].@"type" == T))) {
                 return T.toCss(self.*, dest);
             }
+            if (comptime (info.params.len > 0)) {
+                const p0 = @typeInfo(info.params[0].@"type".?);
+                if (comptime ((p0 == .pointer) and (!p0.pointer.is_const))) {
+                    return T.toCss(@constCast(self), dest);
+                }
+            }
             return T.toCss(self, dest);
         }
 });
@@ -840,8 +846,13 @@ return self.hash(hasher);
         }
         return (if (T == []const u8) hasher.update(self.*) else {
 {
-            if (comptime (@typeInfo(@TypeOf(T.hash)).@"fn".params[0].type == T)) {
+            const h_info = @typeInfo(@TypeOf(T.hash)).@"fn";
+            if (comptime (h_info.params[0].type == T)) {
                 return T.hash(self.*, hasher);
+            }
+            const hp0 = @typeInfo(h_info.params[0].type.?);
+            if (comptime ((hp0 == .pointer) and (!hp0.pointer.is_const))) {
+                return T.hash(@constCast(self), hasher);
             }
             return T.hash(self, hasher);
         }

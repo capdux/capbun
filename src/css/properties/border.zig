@@ -1362,10 +1362,8 @@ pub fn getFallbacks(this_val: *T, allocator: std.mem.Allocator, targets: css.Tar
             inline for (fields) |field| {
                 _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getNecessaryFallbacks(targets));
             }
-            var res = css.SmallList(T, 2);
+            var res: css.SmallList(T,2) = .{};
             _ = &res;
-            {
-            }
             if (fallbacks.rgb) {
                 var out: T = undefined;
                 _ = &out;

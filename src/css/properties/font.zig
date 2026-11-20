@@ -153,7 +153,7 @@ pub fn default() FontStretchKeyword {
     }
 
 pub fn intoPercentage(self: FontStretchKeyword) Percentage {
-            const val: f32 = (switch (self.*) {
+            const val: f32 = (switch (self) {
 .@"ultra-condensed" => 0.5,
 .@"extra-condensed" => 0.625,
 .condensed => 0.75,

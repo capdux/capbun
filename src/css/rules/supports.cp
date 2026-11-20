@@ -301,12 +301,11 @@ pub union(enum) SupportsCondition {
         return { result: SupportsCondition{ .unknown = input.sliceFrom(pos) } };
     }
 
-    pub fn toCss(dest: *css.Printer): css.PrintErr!void {
-        const self_val = _;
-        switch (_) {
+    pub static fn toCss(s: *const @This(), dest: *css.Printer): css.PrintErr!void {
+        switch (s.*) {
             .not => |condition| {
                 dest.writeStr(" not ")?;
-                condition.toCssWithParensIfNeeded(dest, condition.needsParens(unsafe { &self_val }))?;
+                condition.toCssWithParensIfNeeded(dest, condition.needsParens(s))?;
             },
             .@"and" => |conditions| {
                 let first = true;
@@ -316,7 +315,7 @@ pub union(enum) SupportsCondition {
                     } else {
                         dest.writeStr(" and ")?;
                     }
-                    cond.toCssWithParensIfNeeded(dest, cond.needsParens(_))?;
+                    cond.toCssWithParensIfNeeded(dest, cond.needsParens(s))?;
                 }
             },
             .@"or" => |conditions| {
@@ -327,7 +326,7 @@ pub union(enum) SupportsCondition {
                     } else {
                         dest.writeStr(" or ")?;
                     }
-                    cond.toCssWithParensIfNeeded(dest, cond.needsParens(_))?;
+                    cond.toCssWithParensIfNeeded(dest, cond.needsParens(s))?;
                 }
             },
             .declaration => |decl| {
@@ -398,7 +397,7 @@ pub fn SupportsRule(comptime R: type): type {
 
         const This = @This();
 
-        pub fn toCss(*_, dest: *Printer): PrintErr!void {
+        pub fn toCss(dest: *Printer): PrintErr!void {
             // #[cfg(feature = "sourcemap")]
             // dest.add_mapping(self.loc);
 
