@@ -1335,3 +1335,6 @@
 
 ### 2026-11-20 06:05:50 UTC - 跨模块根因修复经验（pool/VM/fs）
 - `ObjectPool` 的 `Init` 改 `(fn (...) anyerror!Type)?`；`VM.throwError` 返回纯错误集 `ThrowError`；`FileSystem.instance` 放回结构体内 `pub static let`。
+
+### 2026-11-20 06:09:17 UTC - 跨模块根因修复经验（PackageInstaller/cache/Request）
+- 发现 `pub struct Set` 与内置 `Set` 重名会被静默跳过（改名 `CacheSet` + `pub const Set = CacheSet;` 即解决）；`Request.cp` 由旧式 `export class` 完整升级为 `@root struct Request`。

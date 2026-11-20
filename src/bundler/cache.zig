@@ -56,6 +56,16 @@ pub const JsonMode = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const CacheSet = struct {
+    js: JavaScript,
+    fs: Fs,
+    json: Json,
+
+pub fn init(allocator: std.mem.Allocator) CacheSet {
+            return CacheSet{ .js = JavaScript.init(allocator), .fs = Fs{ .shared_buffer = ((MutableString.init(allocator, 0)) catch unreachable), .macro_shared_buffer = ((MutableString.init(allocator, 0)) catch unreachable) }, .json = Json{  } };
+    }
+};
+
 pub const FsExternalFreeFunction = struct {
     ctx: ?*anyopaque = null,
     function: OptFreeFn = null,
@@ -148,7 +158,7 @@ pub fn readFileShared(self: *Fs, _fs: *fs.FileSystem, path: [:0]const u8, cached
                 }
             }
             }
-            const file = (blk_catch_0: { break :blk_catch_0 ((rfs.readFileWithHandle(path, null, file_handle, true, shared, self.stream)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
+            const file = (blk_catch_2: { break :blk_catch_2 ((rfs.readFileWithHandle(path, null, file_handle, true, shared, self.stream)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
                 _ = Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
             return e; }); });
@@ -170,7 +180,7 @@ pub fn readFileWithAllocator(self: *Fs, allocator: std.mem.Allocator, _fs: *fs.F
                 _ = try file_handle.seekTo(0);
             } else {
                 if ((FeatureFlags.store_file_descriptors and dirname_fd.isValid())) {
-                    const fd_res = (blk_catch_1: { break :blk_catch_1 ((bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; break :blk_catch_1 brk: {
+                    const fd_res = (blk_catch_3: { break :blk_catch_3 ((bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; break :blk_catch_3 brk: {
                     if ((e == error.ENOENT)) {
                         const handle = try bun.openFile(path, .{ .mode = .read_only });
                         _ = Output.prettyErrorln("<r><d>Internal error: directory mismatch for directory \"{s}\", fd {f}<r>. You don't need to do anything, but this indicates a bug.", .{ path, dirname_fd });
@@ -196,7 +206,7 @@ pub fn readFileWithAllocator(self: *Fs, allocator: std.mem.Allocator, _fs: *fs.F
                 }
             }
             }
-            const file = (blk_catch_2: { break :blk_catch_2 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), self.stream)) catch |e| { _ = &e; if (Environment.isDebug) {
+            const file = (blk_catch_4: { break :blk_catch_4 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), self.stream)) catch |e| { _ = &e; if (Environment.isDebug) {
                 _ = Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
             return e; }); });
@@ -228,15 +238,15 @@ pub fn parse(_: *const JavaScript, allocator: std.mem.Allocator, opts: js_parser
             var temp_log = logger.Log.init(allocator);
             _ = &temp_log;
             temp_log.level = log.level;
-            var parser = (blk_catch_3: { break :blk_catch_3 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_3| { _ = &__ce_3; _ = (blk_catch_4: { break :blk_catch_4 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_4| { _ = &__ce_4;  }); });
+            var parser = (blk_catch_5: { break :blk_catch_5 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_5| { _ = &__ce_5; _ = (blk_catch_6: { break :blk_catch_6 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_6| { _ = &__ce_6;  }); });
             return null; }); });
             _ = &parser;
-            const result = (blk_catch_5: { break :blk_catch_5 ((parser.parse()) catch |e| { _ = &e; if ((temp_log.errors == 0)) {
+            const result = (blk_catch_7: { break :blk_catch_7 ((parser.parse()) catch |e| { _ = &e; if ((temp_log.errors == 0)) {
                 _ = ((log.addRangeError(source, parser.lexer.range(), @errorName(e))) catch unreachable);
             }
-            _ = (blk_catch_7: { break :blk_catch_7 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_7| { _ = &__ce_7;  }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_9| { _ = &__ce_9;  }); });
             return null; }); });
-            _ = (blk_catch_8: { break :blk_catch_8 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_8| { _ = &__ce_8;  }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_10| { _ = &__ce_10;  }); });
             return result;
     }
 
@@ -247,9 +257,9 @@ pub fn scan(_: *JavaScript, allocator: std.mem.Allocator, scan_pass_result: *js_
             var temp_log = logger.Log.init(allocator);
             _ = &temp_log;
             defer {
-            _ = (blk_catch_9: { break :blk_catch_9 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_9| { _ = &__ce_9;  }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_11| { _ = &__ce_11;  }); });
             }
-            var parser = (blk_catch_10: { break :blk_catch_10 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_10| { _ = &__ce_10; return; }); });
+            var parser = (blk_catch_12: { break :blk_catch_12 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_12| { _ = &__ce_12; return; }); });
             _ = &parser;
             return try parser.scanImports(scan_pass_result);
     }
@@ -267,10 +277,10 @@ pub fn parse(_: *Json, log: *logger.Log, source: *const logger.Source, allocator
             _ = &temp_log;
             defer {
             {
-                _ = (blk_catch_11: { break :blk_catch_11 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_11| { _ = &__ce_11;  }); });
+                _ = (blk_catch_13: { break :blk_catch_13 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_13| { _ = &__ce_13;  }); });
             }
             }
-            return (blk_catch_12: { break :blk_catch_12 ((func(source, (&temp_log), allocator, force_utf8)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); });
+            return (blk_catch_14: { break :blk_catch_14 ((func(source, (&temp_log), allocator, force_utf8)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 null; }); });
     }
 
 pub fn parseJSON(cache: *Json, log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator, mode: JsonMode, comptime force_utf8: bool) anyerror!?js_ast.Expr {
@@ -291,6 +301,7 @@ pub fn parseTSConfig(cache: *Json, log: *logger.Log, source: *const logger.Sourc
 
 pub const OptFreeFn = ?FreeFn;
 const string = []const u8;
+pub const Set = CacheSet;
 const debug = Output.scoped(.fs, .visible);
 pub const FreeFn = *const *const fn(?*anyopaque) callconv(.c) void;
 const Define = @import("./defines.zig").Define;

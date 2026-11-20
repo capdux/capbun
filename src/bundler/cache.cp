@@ -1,10 +1,10 @@
-pub struct Set {
+pub struct CacheSet {
     js: JavaScript,
     fs: Fs,
     json: Json,
 
-    pub static fn init(allocator: std.mem.Allocator): Set {
-        return Set{
+    pub static fn init(allocator: std.mem.Allocator): CacheSet {
+        return CacheSet{
             js: JavaScript.init(allocator),
             fs: Fs{
                 shared_buffer: MutableString.init(allocator, 0) catch unreachable,
@@ -14,6 +14,8 @@ pub struct Set {
         };
     }
 }
+
+pub const Set = CacheSet;
 
 const debug = Output.scoped(.fs, .visible);
 

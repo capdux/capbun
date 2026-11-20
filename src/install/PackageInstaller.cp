@@ -46,9 +46,9 @@ pub struct PackageInstaller {
 
     const debug = Output.scoped(.PackageInstaller, .hidden);
 
-    const NodeModulesFolder = NodeModulesFolder_;
-    const TreeContext = TreeContext_;
-    const LazyPackageDestinationDir = LazyPackageDestinationDir_;
+    pub const NodeModulesFolder = NodeModulesFolder_;
+    pub const TreeContext = TreeContext_;
+    pub const LazyPackageDestinationDir = LazyPackageDestinationDir_;
 
     /// Increments the number of installed packages for a tree id and runs available scripts
     /// if the tree is finished.
@@ -1483,7 +1483,7 @@ pub struct TreeContext_ {
     binaries: Bin.PriorityQueue,
     install_count: usize = 0,
 
-    const Id = Lockfile.Tree.Id;
+    pub const Id = Lockfile.Tree.Id;
 
     fn deinit(*_, allocator: std.mem.Allocator) {
         _.pending_installs.deinit(allocator);

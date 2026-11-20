@@ -1021,9 +1021,9 @@ pub fn installPackage(self: *PackageInstaller, dep_id: DependencyID, log_level: 
             _ = self.installPackageWithNameAndResolution(dep_id, package_id, log_level, name, resolution, needs_verify, is_pending_package_install);
     }
     const debug = Output.scoped(.PackageInstaller, .hidden);
-    const NodeModulesFolder = NodeModulesFolder_;
-    const TreeContext = TreeContext_;
-    const LazyPackageDestinationDir = LazyPackageDestinationDir_;
+    pub const NodeModulesFolder = NodeModulesFolder_;
+    pub const TreeContext = TreeContext_;
+    pub const LazyPackageDestinationDir = LazyPackageDestinationDir_;
 };
 
 pub const NodeModulesFolder_ = struct {
@@ -1128,7 +1128,7 @@ pub fn deinit(self: *TreeContext_, allocator: std.mem.Allocator) void {
             _ = self.pending_installs.deinit(allocator);
             _ = self.binaries.deinit();
     }
-    const Id = Lockfile.Tree.Id;
+    pub const Id = Lockfile.Tree.Id;
 };
 
 pub const LazyNodeModulesPath_ = struct {

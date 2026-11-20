@@ -1606,3 +1606,6 @@
 
 ### 2026-11-20 06:05:50 UTC - zig:check 3 处跨模块根因模块（pool/VM/fs）修复入库
 - 完成：`pool.cp`/`VM.cp`/`resolver/fs.cp` 3/3 全 PASS。
+
+### 2026-11-20 06:09:17 UTC - zig:check 外部根因（PackageInstaller/cache/Request）修复入库
+- 完成：`PackageInstaller.cp` 补 `pub const NodeModulesFolder`、`cache.cp` 避内置名改 `CacheSet` + `pub const Set`、`Request.cp` 完整重构 `@root struct Request`。
