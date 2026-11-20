@@ -1111,18 +1111,27 @@ pub fn nonASCIISequenceLength(first_byte: u8): u3_fast {
     };
 }
 
+type U16SliceZ = [:0]u16;
+type U16Slice = []u16;
+type U16ArrayList = std.array_list.Managed(u16);
+
+fn UTF16AllocReturn(comptime sentinel: bool): type {
+    if (sentinel) return U16SliceZ;
+    return U16Slice;
+}
+
 /// Convert a UTF-8 string to a UTF-16 string IF there are any non-ascii characters
 /// If there are no non-ascii characters, this returns null
 /// This is intended to be used for strings that go to JavaScript
-pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool) !if (sentinel): ?[:0]u16 else ([]u16)? {
+pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool): UTF16AllocReturn(sentinel)?! {
     if (i := strings.firstNonASCII(bytes)) {
-        const output_: std.array_list.Managed?(u16) = if (comptime bun.FeatureFlags.use_simdutf) simd: {
+        const output_: U16ArrayList? = if (comptime bun.FeatureFlags.use_simdutf) simd: {
             const out_length = bun.simdutf.length.utf16.@"from".utf8(bytes);
             if (out_length == 0)
                 break :simd null;
 
             let out = allocator.alloc(u16, out_length + if (sentinel) 1 else 0)?;
-            log("toUTF16 {d} UTF8 -> {d} UTF16", .{ bytes.len, out_length });
+            log("toUTF16 {d} UTF8 -> {d} UTF16", [ bytes.len, out_length ]);
 
             const res = bun.simdutf.convert.utf8.to.utf16.with_errors.le(bytes, if (comptime sentinel) out[0..out_length] else out);
             if (res.status == .success) {
@@ -1138,14 +1147,14 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
                 return error.InvalidByteSequence;
             }
 
-            break :simd {
+            break :simd U16ArrayList{
                 items: out[0..i],
                 capacity: out.len,
                 allocator: allocator,
             };
         } else null;
         let output = output_ ?? fallback: {
-            let list = std.array_list.Managed(u16).initCapacity(allocator, i + 2)?;
+            let list = U16ArrayList.initCapacity(allocator, i + 2)?;
             list.items.len = i;
             strings.copyU8IntoU16(list.items, bytes[0..i]);
             break :fallback list;
@@ -1165,13 +1174,12 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
             remaining = remaining[@max(replacement.len, 1)..];
 
             //#define U16_LENGTH(c) ((uint32_t)(c)<=0xffff ? 1 : 2)
-            switch (replacement.code_point) {
-                0...0xffff => |c| {
-                    output.append(@as(u16, i32(c)))?;
-                },
-                else => |c| {
-                    output.appendSlice(&[_]u16{ strings.u16Lead(c), strings.u16Trail(c) })?;
-                },
+            const c = replacement.code_point;
+            if (c <= 0xffff) {
+                output.append(@as(u16, @intCast(c)))?;
+            } else {
+                const pair: [2]u16 = [ strings.u16Lead(c), strings.u16Trail(c) ];
+                output.appendSlice(&pair)?;
             }
         }
 
@@ -1192,13 +1200,12 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
             remaining = remaining[@max(replacement.len, 1)..];
 
             //#define U16_LENGTH(c) ((uint32_t)(c)<=0xffff ? 1 : 2)
-            switch (replacement.code_point) {
-                0...0xffff => |c| {
-                    output.append(@as(u16, i32(c)))?;
-                },
-                else => |c| {
-                    output.appendSlice(&[_]u16{ strings.u16Lead(c), strings.u16Trail(c) })?;
-                },
+            const c = replacement.code_point;
+            if (c <= 0xffff) {
+                output.append(@as(u16, @intCast(c)))?;
+            } else {
+                const pair: [2]u16 = [ strings.u16Lead(c), strings.u16Trail(c) ];
+                output.appendSlice(&pair)?;
             }
         }
 
@@ -1224,18 +1231,19 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
 pub const TestingAPIs = @import("../../jsc/bun_string_jsc.zig").UnicodeTestingAPIs;
 
 // this one does the thing it's named after
-pub fn toUTF16AllocForReal(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool) !if (sentinel): [:0]u16 else []u16 {
-    return (try toUTF16Alloc(allocator, bytes, fail_if_invalid, sentinel)) ?? {
-        const output = allocator.alloc(u16, bytes.len + if (sentinel) 1 else 0)?;
-        bun.strings.copyU8IntoU16(if (sentinel) output[0..bytes.len] else output, bytes);
+pub fn toUTF16AllocForReal(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool): UTF16AllocReturn(sentinel)! {
+    if (res := toUTF16Alloc(allocator, bytes, fail_if_invalid, sentinel)?) {
+        return res;
+    }
+    let output = allocator.alloc(u16, bytes.len + if (sentinel) 1 else 0)?;
+    bun.strings.copyU8IntoU16(if (sentinel) output[0..bytes.len] else output, bytes);
 
-        if (comptime sentinel) {
-            output[bytes.len] = 0;
-            return output[0..bytes.len :0];
-        }
+    if (comptime sentinel) {
+        output[bytes.len] = 0;
+        return output[0..bytes.len :0];
+    }
 
-        return output;
-    };
+    return output;
 }
 
 pub err UTF16Error {

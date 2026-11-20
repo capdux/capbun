@@ -1621,3 +1621,6 @@
 
 ### 2026-11-20 06:17:25 UTC - zig:check 第 3 轮 Runtime 簇 9 模块语义修复入库
 - 完成：`BunObject`/`NativePromiseContext`/`bun/process`/`cares_jsc`/`dns`/`node_os`/`node/path`/`SSLConfig`/`Blob` 9/9 全 PASS。
+
+### 2026-11-20 06:19:59 UTC - zig:check 外部根因（http/NullableAllocator/unicode）修复入库
+- 完成：`http.cp` 补齐 18 处 `pub` 重导出、`NullableAllocator.cp` 升级 `@root struct`、`unicode.cp` 修复 `toUTF16Alloc` 签名与函数体，3/3 全 PASS。

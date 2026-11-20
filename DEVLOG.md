@@ -1350,3 +1350,6 @@
 
 ### 2026-11-20 06:17:25 UTC - zig:check 第 3 轮 Runtime 簇修复经验
 - `BunObject` 去外层 `@root struct` 暴露 `EnvironmentVariables`；`dns`/`path` 显式写 `return jsc.JSValue.js_undefined;` 避误生成 `error.js_undefined`；`SSLConfig` 用 `type OptCString` 修正 `*?T` 优先级。
+
+### 2026-11-20 06:19:59 UTC - 跨模块根因修复经验（http/NullableAllocator/unicode）
+- `UTF16AllocReturn(sentinel)` 辅助类型函数解决 `cpc` 下条件返回类型被吞；`http.cp` 顶层 `pub` 导出与 `http_.zig` 对齐归零。

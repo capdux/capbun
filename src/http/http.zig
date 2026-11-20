@@ -66,20 +66,20 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 const HTTPCertError = @import("./HTTPCertError.zig").HTTPCertError;
 const ProxyTunnel = @import("./ProxyTunnel.zig").ProxyTunnel;
-const Headers = @import("./Headers.zig").Headers;
-const Decompressor = @import("./Decompressor.zig").Decompressor;
-const Signals = @import("./Signals.zig").Signals;
-const ThreadSafeStreamBuffer = @import("./ThreadSafeStreamBuffer.zig").ThreadSafeStreamBuffer;
-const HTTPThread = @import("./HTTPThread.zig").HTTPThread;
-const NewHTTPContext = @import("./HTTPContext.zig").NewHTTPContext;
-const AsyncHTTP = @import("./AsyncHTTP.zig").AsyncHTTP;
-const InternalState = @import("./InternalState.zig").InternalState;
-const CertificateInfo = @import("./CertificateInfo.zig").CertificateInfo;
-const InitError = @import("./InitError.zig").InitError;
-const HTTPRequestBody = @import("./HTTPRequestBody.zig").HTTPRequestBody;
-const SendFile = @import("./SendFile.zig").SendFile;
-const HeaderValueIterator = @import("./HeaderValueIterator.zig").HeaderValueIterator;
-const HeaderBuilder = @import("./HeaderBuilder.zig").HeaderBuilder;
+pub const Headers = @import("./Headers.zig");
+pub const DecompressorMod = @import("./Decompressor.zig");
+pub const Signals = @import("./Signals.zig");
+pub const ThreadSafeStreamBuffer = @import("./ThreadSafeStreamBuffer.zig");
+pub const HTTPThread = @import("./HTTPThread.zig");
+pub const HTTPContextMod = @import("./HTTPContext.zig");
+pub const AsyncHTTP = @import("./AsyncHTTP.zig");
+pub const InternalState = @import("./InternalState.zig");
+pub const CertificateInfo = @import("./CertificateInfo.zig");
+pub const InitErrorMod = @import("./InitError.zig");
+pub const HTTPRequestBodyMod = @import("./HTTPRequestBody.zig");
+pub const SendFile = @import("./SendFile.zig");
+pub const HeaderValueIterator = @import("./HeaderValueIterator.zig");
+pub const HeaderBuilder = @import("./HeaderBuilder.zig");
 pub const H2 = @import("./H2Client.zig");
 pub const H2Wire = @import("./H2FrameParser.zig");
 pub const H3 = @import("./H3Client.zig");
@@ -87,10 +87,10 @@ pub const ETag = @import("../http_types/ETag.zig");
 pub const MethodMod = @import("../http_types/Method.zig");
 pub const MimeType = @import("../http_types/MimeType.zig");
 pub const URLPath = @import("../http_types/URLPath.zig");
-const Encoding = @import("../http_types/Encoding.zig").Encoding;
-const FetchRedirect = @import("../http_types/FetchRedirect.zig").FetchRedirect;
-const FetchCacheMode = @import("../http_types/FetchCacheMode.zig").FetchCacheMode;
-const FetchRequestMode = @import("../http_types/FetchRequestMode.zig").FetchRequestMode;
+pub const EncodingMod = @import("../http_types/Encoding.zig");
+pub const FetchRedirectMod = @import("../http_types/FetchRedirect.zig");
+pub const FetchCacheModeMod = @import("../http_types/FetchCacheMode.zig");
+pub const FetchRequestModeMod = @import("../http_types/FetchRequestMode.zig");
 pub const HTTPVerboseLevel = enum {
     none,
     headers,
@@ -2112,7 +2112,15 @@ pub fn isAbort(self: HTTPClientResult) bool {
 };
 
 pub const HttpCallbackCtx = ?*anyopaque;
+pub const Decompressor = DecompressorMod.Decompressor;
+pub const NewHTTPContext = HTTPContextMod.NewHTTPContext;
+pub const InitError = InitErrorMod.InitError;
+pub const HTTPRequestBody = HTTPRequestBodyMod.HTTPRequestBody;
 pub const Method = MethodMod.Method;
+pub const Encoding = EncodingMod.Encoding;
+pub const FetchRedirect = FetchRedirectMod.FetchRedirect;
+pub const FetchCacheMode = FetchCacheModeMod.FetchCacheMode;
+pub const FetchRequestMode = FetchRequestModeMod.FetchRequestMode;
 const bun = @import("bun");
 const Output = bun.Output;
 const picohttp = bun.picohttp;

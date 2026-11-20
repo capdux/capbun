@@ -5,49 +5,48 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
-pub const NullableAllocator = struct {
-    ptr: *anyopaque = undefined,
-    vtable: ?*const std.mem.Allocator.VTable = null,
+pub const NullableAllocator = @This();
+
+ptr: *anyopaque = undefined,
+vtable: ?*const std.mem.Allocator.VTable = null,
 
 pub inline fn init(allocator: ?std.mem.Allocator) NullableAllocator {
-            if (allocator) |a| {
-                _ = &a;
-                return NullableAllocator{ .ptr = a.ptr, .vtable = a.vtable };
-            } else {
-                return NullableAllocator{  };
-            }
-    }
+        if (allocator) |a| {
+            _ = &a;
+            return NullableAllocator{ .ptr = a.ptr, .vtable = a.vtable };
+        } else {
+            return NullableAllocator{  };
+        }
+}
 
 pub inline fn isNull(self: NullableAllocator) bool {
-            return (self.vtable == null);
-    }
+        return (self.vtable == null);
+}
 
 pub inline fn isWTFAllocator(self: NullableAllocator) bool {
-            if (self.get()) |alloc| {
-                _ = &alloc;
-                return bun.String.isWTFAllocator(alloc);
-            }
-            return false;
-    }
+        if (self.get()) |alloc| {
+            _ = &alloc;
+            return bun.String.isWTFAllocator(alloc);
+        }
+        return false;
+}
 
 pub inline fn get(self: NullableAllocator) ?std.mem.Allocator {
-            if (self.vtable) |vt| {
-                _ = &vt;
-                return std.mem.Allocator{ .ptr = self.ptr, .vtable = vt };
-            } else {
-                return null;
-            }
-    }
+        if (self.vtable) |vt| {
+            _ = &vt;
+            return std.mem.Allocator{ .ptr = self.ptr, .vtable = vt };
+        } else {
+            return null;
+        }
+}
 
 pub fn free(self: NullableAllocator, bytes: []const u8) void {
-            if (self.get()) |allocator| {
-                _ = &allocator;
-                if (bun.String.isWTFAllocator(allocator)) {
-                    _ = allocator.rawFree(@constCast(bytes), std.mem.Alignment.fromByteUnits(1), 0);
-                    return;
-                }
-                _ = allocator.free(bytes);
+        if (self.get()) |allocator| {
+            _ = &allocator;
+            if (bun.String.isWTFAllocator(allocator)) {
+                _ = allocator.rawFree(@constCast(bytes), std.mem.Alignment.fromByteUnits(1), 0);
+                return;
             }
-    }
-};
-
+            _ = allocator.free(bytes);
+        }
+}

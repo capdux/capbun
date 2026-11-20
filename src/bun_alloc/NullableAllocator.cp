@@ -3,7 +3,7 @@
 
 import bun from "bun";
 
-export struct NullableAllocator {
+@root struct NullableAllocator {
     ptr: *! = undefined;
     vtable: (*const std.mem.Allocator.VTable)? = null;
 

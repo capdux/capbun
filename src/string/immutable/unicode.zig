@@ -216,6 +216,9 @@ else => 4,
 const string = []const u8;
 pub const SimdScanFn = *const fn ([]const u8) ?usize;
 const ManagedU8List = std.array_list.Managed(u8);
+const U16SliceZ = [:0]u16;
+const U16Slice = []u16;
+const U16ArrayList = std.array_list.Managed(u16);
 pub const UTF16BufferedResult = struct { []u16, [3]u8, u2 };
 const CodePoint = bun.CodePoint;
 const Environment = bun.Environment;
@@ -998,6 +1001,124 @@ pub fn nonASCIISequenceLength(first_byte: u8) u3_fast {
 245...255 => 0,
 else => unreachable,
 });
+}
+
+pub fn UTF16AllocReturn(comptime sentinel: bool) type {
+        if (sentinel) {
+            return U16SliceZ;
+        }
+        return U16Slice;
+}
+
+pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool) !?UTF16AllocReturn(sentinel) {
+        if (strings.firstNonASCII(bytes)) |i| {
+            _ = &i;
+            const output_: ?U16ArrayList = (if (comptime bun.FeatureFlags.use_simdutf) simd: {
+            const out_length = bun.simdutf.length.utf16.@"from".utf8(bytes);
+            if ((out_length == 0)) {
+                break :simd null;
+            }
+            var out = try allocator.alloc(u16, (out_length + (if (sentinel) 1 else 0)));
+            _ = &out;
+            _ = log("toUTF16 {d} UTF8 -> {d} UTF16", .{ bytes.len, out_length });
+            const res = bun.simdutf.convert.utf8.to.utf16.with_errors.le(bytes, (if (comptime sentinel) out[0..out_length] else out));
+            if ((res.status == .success)) {
+                if (comptime sentinel) {
+                    out[cp_cast_int(usize, out_length)] = 0;
+                    return out[0..out_length :0];
+                }
+                return out;
+            }
+            if (comptime fail_if_invalid) {
+                _ = allocator.free(out);
+                return error.InvalidByteSequence;
+            }
+            break :simd U16ArrayList{ .items = out[0..i], .capacity = out.len, .allocator = allocator };
+} else null);
+            var output = ((output_) orelse (fallback: {
+            var list = try U16ArrayList.initCapacity(allocator, (i + 2));
+            _ = &list;
+            list.items.len = i;
+            _ = strings.copyU8IntoU16(list.items, bytes[0..i]);
+            break :fallback list;
+}));
+            _ = &output;
+            errdefer {
+            _ = output.deinit();
+            }
+            var remaining = bytes[i..];
+            _ = &remaining;
+            {
+                const replacement = strings.convertUTF8BytesIntoUTF16(remaining);
+                if (comptime fail_if_invalid) {
+                    if (replacement.fail) {
+                        if (comptime Environment.allow_assert) {
+                            _ = assert((replacement.code_point == unicode_replacement));
+                        }
+                        return error.InvalidByteSequence;
+                    }
+                }
+                remaining = remaining[@max(replacement.len, 1)..];
+                const c = replacement.code_point;
+                if ((c <= 65535)) {
+                    _ = try output.append(@as(u16, @intCast(c)));
+                } else {
+                    const pair: [2]u16 = .{ strings.u16Lead(c), strings.u16Trail(c) };
+                    _ = try output.appendSlice((&pair));
+                }
+            }
+            while (strings.firstNonASCII(remaining)) |j| {
+                const end = output.items.len;
+                _ = try output.ensureUnusedCapacity(j);
+                output.items.len = (output.items.len + j);
+                _ = strings.copyU8IntoU16(output.items[end..][0..j], remaining[0..j]);
+                remaining = remaining[j..];
+                const replacement = strings.convertUTF8BytesIntoUTF16(remaining);
+                if (comptime fail_if_invalid) {
+                    if (replacement.fail) {
+                        if (comptime Environment.allow_assert) {
+                            _ = assert((replacement.code_point == unicode_replacement));
+                        }
+                        return error.InvalidByteSequence;
+                    }
+                }
+                remaining = remaining[@max(replacement.len, 1)..];
+                const c = replacement.code_point;
+                if ((c <= 65535)) {
+                    _ = try output.append(@as(u16, @intCast(c)));
+                } else {
+                    const pair: [2]u16 = .{ strings.u16Lead(c), strings.u16Trail(c) };
+                    _ = try output.appendSlice((&pair));
+                }
+            }
+            if ((remaining.len > 0)) {
+                _ = try output.ensureTotalCapacityPrecise(((output.items.len + remaining.len) + (comptime (if (sentinel) 1 else 0))));
+                output.items.len = (output.items.len + remaining.len);
+                _ = strings.copyU8IntoU16(output.items[(output.items.len - remaining.len)..], remaining);
+            }
+            if (comptime sentinel) {
+                _ = try output.ensureUnusedCapacity(1);
+                _ = output.appendAssumeCapacity(0);
+                return output.items[0..(output.items.len - 1) :0];
+            }
+            return output.items;
+        }
+        return null;
+}
+
+pub fn toUTF16AllocForReal(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool) !UTF16AllocReturn(sentinel) {
+        if (try toUTF16Alloc(allocator, bytes, fail_if_invalid, sentinel)) |res| {
+            _ = &res;
+            return res;
+        }
+        var output = try allocator.alloc(u16, (bytes.len + (if (sentinel) 1 else 0)));
+        _ = &output;
+        _ = bun.strings.copyU8IntoU16((if (sentinel) output[0..bytes.len] else output), bytes);
+        if (comptime sentinel) {
+            output[cp_cast_int(usize, bytes.len)] = 0;
+            return output[0..bytes.len :0];
+        }
+        return output;
 }
 
 pub fn toUTF16AllocMaybeBuffered(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime flush: bool) UTF16Error!?UTF16BufferedResult {

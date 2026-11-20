@@ -3024,3 +3024,5 @@ Options:
 - [2026-11-20 06:16:26 UTC] 验收并提交第 3 轮 `zig:check` Core+Shell+Sys+Install 簇 11 模块修复（11/11 全 PASS），并派发 3 处外部根因修复（`http.cp`/`NullableAllocator.cp`/`unicode.cp`）。
 
 - [2026-11-20 06:17:25 UTC] 验收并提交第 3 轮 `zig:check` Runtime 簇 9 模块修复（9/9 全 PASS），并派发 `Response.cp` 与 `EventLoopTimer.cp` 升级 `@root struct`。
+
+- [2026-11-20 06:19:59 UTC] 验收并提交 3 处外部根因修复：`http.cp` (0.869x，补齐 18 项 `pub` 重导出)、`NullableAllocator.cp` (1.021x，`@root struct`)、`unicode.cp` (1.006x，恢复 `toUTF16Alloc`)，3/3 全 PASS。
