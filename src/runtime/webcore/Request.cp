@@ -696,7 +696,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
         if (value_type == .DOMWrapper) {
             if (request := value.asDirect(Request)) {
                 if (values_to_try.len == 1) {
-                    let req_ptr: *Request = &req;
+                    let req_ptr: *Request = unsafe { &req };
                     request.cloneInto(req_ptr, bun.default_allocator, globalThis, fields.contains(.url))?;
                     success = true;
                     return req;

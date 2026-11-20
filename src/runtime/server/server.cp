@@ -143,7 +143,7 @@ pub const AnyRoute = union(enum) {
     /// This is the JS representation of an HTMLImportManifest
     ///
     /// See ./src/bundler/HTMLImportManifest.zig
-    fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+    fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext): bun.JSError!AnyRoute? {
         if (!argument.isObject()) return null;
 
         const index_opt = argument.getOptional(init_ctx.global, "index", ZigString.Slice)?;
@@ -154,10 +154,10 @@ pub const AnyRoute = union(enum) {
         const files_opt = argument.getArray(init_ctx.global, "files")?;
         if (files_opt == null) return null;
         const files = files_opt.?;
-        let iter = try files.arrayIterator(init_ctx.global);
-        let html_route: ?AnyRoute = null;
-        while (try iter.next()) |file_entry| {
-            if (try bundledHTMLManifestItemFromJS(file_entry, index.slice(), init_ctx)) |item| {
+        let iter = files.arrayIterator(init_ctx.global)?;
+        let html_route: AnyRoute? = null;
+        while (file_entry := iter.next()?) {
+            if (item := bundledHTMLManifestItemFromJS(file_entry, index.slice(), init_ctx)?) {
                 html_route = item;
             }
         }

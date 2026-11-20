@@ -483,7 +483,7 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         }
                         if ((min_line != std.math.maxInt(u32))) {
                             if (has_executed) {
-                                _ = stmts_which_have_executed.set(i);
+                                _ = stmts_which_have_executed.set((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)));
                             }
                             _ = try stmts.append(allocator, .{ .start_line = min_line, .end_line = max_line });
                         }
@@ -608,7 +608,7 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             if ((min_line != std.math.maxInt(u32))) {
                                 _ = try stmts.append(allocator, .{ .start_line = min_line, .end_line = max_line });
                                 if (has_executed) {
-                                    _ = stmts_which_have_executed.set(i);
+                                    _ = stmts_which_have_executed.set((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)));
                                 }
                             }
                         }

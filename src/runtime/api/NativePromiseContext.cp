@@ -153,7 +153,7 @@ pub struct DeferredDerefTask {
                     // BufferOutputSink, with the owner pointer stored in .ctx.
                     // The pending-promise ref was taken on the owner, so we
                     // release it there.
-                    const bufferer: *bun.webcore.Body.ValueBufferer = @ptrCast(ctx);
+                    const bufferer: *bun.webcore.Body.ValueBufferer = @ptrCast(@alignCast(ctx));
                     @as(*HTMLRewriter.BufferOutputSink, bufferer.ctx).deref();
                 },
                 .HTTPSServerH3RequestContext => @as(*server.HTTPSServer.H3RequestContext, ctx).deref(),

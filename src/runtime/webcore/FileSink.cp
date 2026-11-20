@@ -33,7 +33,7 @@ pub struct FlushPendingTask {
     static fn runFromJSThread(flush_pending: *FlushPendingTask) {
         const had = flush_pending.has;
         flush_pending.has = false;
-        const this_sink: *FileSink = @fieldParentPtr("run_pending_later", flush_pending);
+        const this_sink: *FileSink = @alignCast(@fieldParentPtr("run_pending_later", flush_pending));
         defer this_sink.deref();
         if (had) {
             this_sink.runPending();

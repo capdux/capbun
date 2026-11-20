@@ -449,9 +449,9 @@ pub struct Builder {
         for (k of 0..n_deltas) {
             const d = deltas[k];
             const bit = (1 as u8) << @as(u3, @intCast(k & 7));
-            if (d.d_gen_line >= 1) buf[win_hdr.gen_line_mask_off + (k >> 3)] |= bit;
-            if (d.d_orig_line == d.d_gen_line) buf[win_hdr.orig_line_eq_mask_off + (k >> 3)] |= bit;
-            if (d.d_orig_col == d.d_gen_col) buf[win_hdr.orig_col_eq_mask_off + (k >> 3)] |= bit;
+            if (d.d_gen_line >= 1) buf[win_hdr.gen_line_mask_off + ((k as usize) >> 3)] |= bit;
+            if (d.d_orig_line == d.d_gen_line) buf[win_hdr.orig_line_eq_mask_off + ((k as usize) >> 3)] |= bit;
+            if (d.d_orig_col == d.d_gen_col) buf[win_hdr.orig_col_eq_mask_off + ((k as usize) >> 3)] |= bit;
             w += writeVarint(buf[w..].ptr, d.d_gen_col);
         }
         const gen_col_len = (w - win_hdr.gen_col_lane_off) as u16;

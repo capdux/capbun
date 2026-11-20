@@ -145,7 +145,7 @@ pub fn dateForHeader(self: *Request, name: []const u8) !?u64 {
             var ms = try s.parseDate(bun.jsc.VirtualMachine.get().global);
             _ = &ms;
             if ((((!std.math.isNan(ms)) and std.math.isFinite(ms)) and (ms >= 0.0))) {
-                return (if (comptime @typeInfo(@TypeOf(ms)) == .@"enum") cp_cast_int(u64, @intFromEnum(ms)) else cp_cast_int(u64, ms));
+                return @intFromFloat(ms);
             }
             return null;
     }

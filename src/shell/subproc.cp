@@ -977,7 +977,7 @@ pub struct ShellSubprocess {
             windows: if (Environment.isWindows) bun.spawn.WindowsSpawnOptions.WindowsOptions{
                 hide_window: true,
                 loop: event_loop,
-            },
+            } else undefined,
         };
         if (bun.Environment.isPosix) {
             spawn_options.no_sigpipe = no_sigpipe;

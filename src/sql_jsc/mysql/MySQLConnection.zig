@@ -759,7 +759,7 @@ defer {
         }
 }
 
-pub fn sendHandshakeResponse(self: *MySQLConnection) AnyMySQLError.Error!void {
+pub fn sendHandshakeResponse(self: *MySQLConnection) !void {
         _ = debug("sendHandshakeResponse", .{});
         if (self.@"#auth_plugin") |plugin| {
             _ = &plugin;

@@ -224,7 +224,7 @@ pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
 var list_result_mut = list_result;
             _ = &list_result_mut;
             defer {
-            _ = list_result_mut.deinit();
+            _ = (if (comptime @typeInfo(@TypeOf(list_result_mut)) == .pointer) (list_result_mut) else &(list_result_mut)).release();
             }
             const list_result_js = (blk_catch_0: { break :blk_catch_0 ((list_result_mut.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return wrap.promise.reject(globalObject, error.JSError); }); });
             _ = try wrap.promise.resolve(globalObject, list_result_js);

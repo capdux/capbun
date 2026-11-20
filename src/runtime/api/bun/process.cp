@@ -1367,8 +1367,8 @@ pub fn spawnProcess(
 }
 pub fn spawnProcessPosix(
     options: *const PosixSpawnOptions,
-    argv: [*:null][*:0]const u8?,
-    envp: [*:null][*:0]const u8?,
+    argv: ([*:null][*:0]const u8)?,
+    envp: ([*:null][*:0]const u8)?,
 ): !bun.sys.Maybe(PosixSpawnResult) {
     bun.analytics.Features.spawn += 1;
     let actions = PosixSpawn.Actions.init()?;

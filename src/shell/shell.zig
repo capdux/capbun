@@ -2287,7 +2287,7 @@ _ = self.expect(.CmdSubstBegin);
                     _ = &subparser;
                     const script = (blk_catch_1: { break :blk_catch_1 ((subparser.parse_impl()) catch |e| { _ = &e; _ = self.continue_from_subparser((&subparser));
                     return e; }); });
-                    _ = atoms.append(.{ .cmd_subst = .{ .script = script, .quoted = is_quoted } });
+                    _ = try atoms.append(.{ .cmd_subst = .{ .script = script, .quoted = is_quoted } });
                     _ = self.continue_from_subparser((&subparser));
                     if (self.delimits(self.peek())) {
                         _ = self.matchTok(.Delimit);

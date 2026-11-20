@@ -8,8 +8,8 @@ const decoderWrap = NewReaderMod.decoderWrap;
 
 @root struct AuthSwitchRequest {
     header: u8 = 0xfe,
-    plugin_name: Data = Data{ empty: {} },
-    plugin_data: Data = Data{ empty: {} },
+    plugin_name: Data = Data{ empty: undefined },
+    plugin_data: Data = Data{ empty: undefined },
     packet_size: u24,
 
     pub fn deinit(*_)  {

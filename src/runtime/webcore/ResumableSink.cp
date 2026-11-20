@@ -11,7 +11,7 @@ import {
     jsc,
 } from "bun";
 const BunString = bun.String;
-import { Allocator } from "std:mem";
+const Allocator = std.mem.Allocator;
 import { math } from "std";
 
 const JSGlobalObject = jsc.JSGlobalObject;

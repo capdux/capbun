@@ -550,7 +550,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                     break :blk bun.sliceTo(name_ptr, 0);
 } else "");
                     const is_dir_child = ((ev.mask & IN.ISDIR) != 0);
-                    const event_type: PathWatcher.EventType = (if ((ev.mask & ((((((IN.CREATE | IN.DELETE) | IN.DELETE_SELF) | IN.MOVE_SELF) | IN.MOVED_FROM) | IN.MOVED_TO) != 0))) .rename else .change);
+                    const event_type: PathWatcher.EventType = (if (((ev.mask & (((((IN.CREATE | IN.DELETE) | IN.DELETE_SELF) | IN.MOVE_SELF) | IN.MOVED_FROM) | IN.MOVED_TO)) != 0)) .rename else .change);
                     var oi: usize = 0;
                     _ = &oi;
                     while (true) : (oi = (oi + 1)) {

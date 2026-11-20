@@ -556,7 +556,7 @@ pub struct TransformTask {
 
         let printer = JSPrinter.BufferPrinter.init(buffer_writer);
         const printed = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch |e| {
-            _.err = e;
+            _.e = e;
             return;
         };
 
@@ -572,9 +572,9 @@ pub struct TransformTask {
     fn then(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
         defer _.deinit();
 
-        if (_.log.hasAny() || _.err != null) {
+        if (_.log.hasAny() || _.e != null) {
             const error_value: bun.JSError!JSValue = brk: {
-                if (e := _.err) {
+                if (e := _.e) {
                     if (!_.log.hasAny()) {
                         break :brk bun.api.BuildMessage.create(
                             _.global,

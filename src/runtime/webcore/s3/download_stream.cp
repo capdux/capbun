@@ -45,7 +45,7 @@ export class S3HttpDownloadStreamingTask {
     state: State.AtomicType = State.AtomicType.init(@bitCast(State{}));
 
     concurrent_task: jsc.ConcurrentTask = .{};
-    range: []const u8?;
+    range: ([]const u8)?;
     proxy_url: []const u8;
 
     pub const State = packed struct(u64) {

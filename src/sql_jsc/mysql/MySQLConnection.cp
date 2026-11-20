@@ -758,7 +758,7 @@ export struct Reader {
         }
     }
 
-    pub fn sendHandshakeResponse(*_): AnyMySQLError.Error!void {
+    pub fn sendHandshakeResponse(*_): !void {
         debug("sendHandshakeResponse", .{});
         if (plugin := this.@"#auth_plugin") {
             const requires_password = switch (plugin) {

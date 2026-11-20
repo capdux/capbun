@@ -159,7 +159,7 @@ else => {
     }
 
 pub fn runParser(self: *TOML) !Expr {
-            var root = self.e(E.Object, self.lexer.loc());
+            var root = self.e(std.mem.zeroes(E.Object), self.lexer.loc());
             _ = &root;
             var head = root.data.e_object;
             _ = &head;
@@ -200,7 +200,7 @@ _ = try self.lexer.next();
                 }
                 return err_val; }); });
                 _ = &array;
-                const new_head = self.e(E.Object, loc);
+                const new_head = self.e(std.mem.zeroes(E.Object), loc);
                 _ = try array.data.e_array.push(self.allocator, new_head);
                 head = new_head.data.e_object;
                 _ = stack.fixed_buffer_allocator.reset();
@@ -285,7 +285,7 @@ _ = try self.lexer.next();
             var stack = std.heap.stackFallback((@sizeOf(Rope) * 6), self.allocator);
             _ = &stack;
             const key_allocator = stack.get();
-            const expr = self.e(E.Object, loc);
+            const expr = self.e(std.mem.zeroes(E.Object), loc);
             const obj = expr.data.e_object;
             while ((self.lexer.token != .t_close_brace)) {
                 if ((obj.properties.len > 0)) {
@@ -313,13 +313,13 @@ _ = try self.lexer.next();
 .t_empty_array => {
 _ = try self.lexer.next();
             self.lexer.allow_double_bracket = true;
-            return self.e(E.Array, loc);
+            return self.e(std.mem.zeroes(E.Array), loc);
 },
 .t_open_bracket => {
 _ = try self.lexer.next();
             var is_single_line = (!self.lexer.has_newline_before);
             _ = &is_single_line;
-            const array_ = self.e(E.Array, loc);
+            const array_ = self.e(std.mem.zeroes(E.Array), loc);
             var array = array_.data.e_array;
             _ = &array;
             const allocator = self.allocator;

@@ -817,7 +817,7 @@ return globalThis.throwValue(e);
                     }
                 }
             }
-            if (((config.getArray(globalThis, "entrypoints")) orelse (try try config.getArray(globalThis, "entryPoints")))) |entry_points| {
+            if (((try config.getArray(globalThis, "entrypoints")) orelse (try config.getArray(globalThis, "entryPoints")))) |entry_points| {
                 _ = &entry_points;
                 var iter = try entry_points.arrayIterator(globalThis);
                 _ = &iter;

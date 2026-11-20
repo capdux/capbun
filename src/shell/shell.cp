@@ -1872,7 +1872,7 @@ pub const Parser = struct {
                         atoms.append({ cmd_subst: {
                             script: script,
                             quoted: is_quoted,
-                        } });
+                        } })?;
                         _.continue_from_subparser(&subparser);
                         if (_.delimits(_.peek())) {
                             * = _.matchTok(.Delimit);

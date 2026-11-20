@@ -437,7 +437,7 @@ return (if ((b.slice.len > 0)) Data{ .temporary = b.slice.slice() } else Data{ .
 
 pub fn fromJS(value: JSC.JSValue, globalObject: *JSC.JSGlobalObject, field_type: FieldType, unsigned: bool, roots: *JSC.MarkedArgumentBuffer) AnyMySQLError.Error!@This() {
             if (value.isEmptyOrUndefinedOrNull()) {
-                return Value{ .@"null" = .{} };
+                return Value{ .@"null" = undefined };
             }
             return (switch (field_type) {
 .MYSQL_TYPE_TINY => Value{ .@"bool" = value.toBoolean() },

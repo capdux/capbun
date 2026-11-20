@@ -477,7 +477,7 @@ pub struct ByteRangeMapping {
                 }
 
                 if (min_line != std.math.maxInt(u32)) {
-                    if (has_executed) stmts_which_have_executed.set(i);
+                    if (has_executed) stmts_which_have_executed.set(i as usize);
                     stmts.append(allocator, { start_line: min_line, end_line: max_line })?;
                 }
             }
@@ -570,7 +570,7 @@ pub struct ByteRangeMapping {
 
                 if (min_line != std.math.maxInt(u32)) {
                     stmts.append(allocator, { start_line: min_line, end_line: max_line })?;
-                    if (has_executed) stmts_which_have_executed.set(i);
+                    if (has_executed) stmts_which_have_executed.set(i as usize);
                 }
             }
 

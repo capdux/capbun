@@ -52,8 +52,8 @@ pub const NewReaderMod = @import("./NewReader.zig");
 pub const AuthSwitchRequest = @This();
 
 header: u8 = 254,
-plugin_name: Data = Data{ .empty = .{} },
-plugin_data: Data = Data{ .empty = .{} },
+plugin_name: Data = Data{ .empty = undefined },
+plugin_data: Data = Data{ .empty = undefined },
 packet_size: u24,
 
 pub fn deinit(self: *AuthSwitchRequest) void {

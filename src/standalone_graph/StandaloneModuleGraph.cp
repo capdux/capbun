@@ -1087,7 +1087,7 @@ pub struct StandaloneModuleGraph {
         let needs_download: bool = true;
         const dest_z = target.exePath(&exe_path_buf, version_str, env, &needs_download);
         if (needs_download) {
-            let target_mut = target;
+            let target_mut = target.*;
             target_mut.downloadToPath(env, allocator, dest_z) catch e => {
                 switch (e) {
                     error.TargetNotFound => {

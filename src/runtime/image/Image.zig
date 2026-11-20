@@ -1185,7 +1185,10 @@ else => {
 .encoded => |enc| {
 switch (self.deliver) {
 .uint8array => {
-_ = try promise.resolve(global, (blk_catch_18: { break :blk_catch_18 ((jsc.ArrayBuffer.fromBytes(enc.out.bytes, .Uint8Array).toJSWithContext(global, null, enc.out.free)) catch |__ce_18| { _ = &__ce_18; return promise.reject(global, error.JSError); }); }));
+var ab = jsc.ArrayBuffer.fromBytes(enc.out.bytes, .Uint8Array);
+            var __ab_moved = false; _ = &__ab_moved;
+            defer if (!__ab_moved) { const __T = @TypeOf(ab); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ab.release() catch {}; } else { ab.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ab; _drop_val.release(); } };
+            _ = try promise.resolve(global, (blk_catch_18: { break :blk_catch_18 ((ab.toJSWithContext(global, null, enc.out.free)) catch |__ce_18| { _ = &__ce_18; return promise.reject(global, error.JSError); }); }));
 },
 .buffer => {
 _ = try promise.resolve(global, jsc.JSValue.createBufferWithCtx(global, enc.out.bytes, null, enc.out.free));

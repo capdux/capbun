@@ -17,7 +17,7 @@ pub fn ParseImportExport(
                 if (p.lexer.isContextualKeyword("meta")) {
                     p.lexer.next()?;
                     p.has_import_meta = true;
-                    return p.newExpr(E.ImportMeta{}, loc);
+                    return p.newExpr(std.mem.zeroes(E.ImportMeta), loc);
                 } else {
                     p.lexer.expectedString("\"meta\"")?;
                 }

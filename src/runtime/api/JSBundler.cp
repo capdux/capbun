@@ -756,7 +756,7 @@ const OwnedString = bun.MutableString;
                 }
             }
 
-            if (entry_points := config.getArray(globalThis, "entrypoints") ?? try config.getArray(globalThis, "entryPoints")?) {
+            if (entry_points := (config.getArray(globalThis, "entrypoints")? ?? config.getArray(globalThis, "entryPoints")?)) {
                 let iter = entry_points.arrayIterator(globalThis)?;
                 while (entry_point := iter.next()?) {
                     let slice = entry_point.toSliceOrNull(globalThis)?;

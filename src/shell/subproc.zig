@@ -578,7 +578,7 @@ return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, e.toS
             }
 },
 });
-            var spawn_options = bun.spawn.SpawnOptions{ .cwd = spawn_args.cwd, .stdin = stdin_opt, .stdout = stdout_opt, .stderr = stderr_opt, .windows = (if (Environment.isWindows) bun.spawn.WindowsSpawnOptions.WindowsOptions{ .hide_window = true, .loop = event_loop } else null) };
+            var spawn_options = bun.spawn.SpawnOptions{ .cwd = spawn_args.cwd, .stdin = stdin_opt, .stdout = stdout_opt, .stderr = stderr_opt, .windows = (if (Environment.isWindows) bun.spawn.WindowsSpawnOptions.WindowsOptions{ .hide_window = true, .loop = event_loop } else undefined) };
             _ = &spawn_options;
             if (bun.Environment.isPosix) {
                 spawn_options.no_sigpipe = no_sigpipe;

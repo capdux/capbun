@@ -113,7 +113,7 @@ _ = @as(*server.DebugHTTPServer.RequestContext, @ptrCast(@alignCast(ctx))).deref
 _ = @as(*server.DebugHTTPSServer.RequestContext, @ptrCast(@alignCast(ctx))).deref();
 },
 .BodyValueBufferer => {
-const bufferer: *bun.webcore.Body.ValueBufferer = @ptrCast(ctx);
+const bufferer: *bun.webcore.Body.ValueBufferer = @ptrCast(@alignCast(ctx));
                 _ = @as(*HTMLRewriter.BufferOutputSink, @ptrCast(@alignCast(bufferer.ctx))).deref();
 },
 .HTTPSServerH3RequestContext => {

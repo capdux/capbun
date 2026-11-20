@@ -2039,7 +2039,7 @@ pub struct Resolver {
 
         _.event_loop_timer.state = .PENDING;
 
-        const maybe_channel: (*c_ares.Channel)? = _.getChannelOrError(vm.global) catch null;
+        const maybe_channel: (*c_ares.Channel)? = _.getChannelOrError(vm.global) catch @as((*c_ares.Channel)?, null);
         if (channel := maybe_channel) {
             if (_.anyRequestsPending()) {
                 c_ares.ares_process_fd(channel, c_ares.ARES_SOCKET_BAD, c_ares.ARES_SOCKET_BAD);

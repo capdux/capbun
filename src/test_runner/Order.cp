@@ -126,10 +126,11 @@ pub struct AllOrderResult {
         current.failure_skip_past = null;
 
         if (_.cfg.always_use_hooks) {
-            let scope: (*DescribeScope)? = current.scope;
-            while (sc := scope) : (scope = sc.parent) {
-                for (entry of sc.beforeEach.items) {
-                    list.append(entry);
+            let scope: (*DescribeScope)? = current.base.parent;
+            while (sc := scope) : (scope = sc.base.parent) {
+                let i: usize = sc.beforeEach.items.len;
+                while (i > 0) : (i -= 1) {
+                    list.prepend(bun.create(_.@"arena", ExecutionEntry, sc.beforeEach.items[i - 1].*));
                 }
             }
         }
@@ -137,10 +138,10 @@ pub struct AllOrderResult {
         list.append(current);
 
         if (_.cfg.always_use_hooks) {
-            let scope: (*DescribeScope)? = current.scope;
-            while (sc := scope) : (scope = sc.parent) {
+            let scope: (*DescribeScope)? = current.base.parent;
+            while (sc := scope) : (scope = sc.base.parent) {
                 for (entry of sc.afterEach.items) {
-                    list.append(entry);
+                    list.append(bun.create(_.@"arena", ExecutionEntry, entry.*));
                 }
             }
         }

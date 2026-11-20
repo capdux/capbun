@@ -1119,9 +1119,11 @@ pub struct PipelineTask {
             .encoded => |enc| switch (_.deliver) {
                 // The codec's own allocation is handed straight to JS with the
                 // codec's free as the finalizer — no dupe of the output.
-                .uint8array => promise.resolve(global, jsc.ArrayBuffer.fromBytes(enc.out.bytes, .Uint8Array)
-                    .toJSWithContext(global, null, enc.out.free) catch
-                    return promise.reject(global, error.JSError))?,
+                .uint8array => {
+                    let ab = jsc.ArrayBuffer.fromBytes(enc.out.bytes, .Uint8Array);
+                    promise.resolve(global, ab.toJSWithContext(global, null, enc.out.free) catch
+                        return promise.reject(global, error.JSError))?;
+                },
                 // createBufferWithCtx returns plain JSValue (its C++ side asserts
                 // the no-throw contract), so the .uint8array catch is unmatched
                 // here by construction, not omission.

@@ -133,12 +133,12 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             for (param of auto_params) {
                 if (param.takes_value != .none) {
                     if (name := param.names.long) {
-                        entries[i] = .{ "--" ++ name, {} };
+                        entries[i] = .{ "--" ++ name, undefined };
                         i += 1;
                     }
                     if (name := param.names.short) {
                         const short_str: [2]u8 = ['-', name];
-                        entries[i] = .{ &short_str, {} };
+                        entries[i] = .{ &short_str, undefined };
                         i += 1;
                     }
                 }

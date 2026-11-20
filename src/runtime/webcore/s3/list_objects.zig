@@ -256,12 +256,12 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                 defer if (!__jsCommonPrefixes_moved) { const __T = @TypeOf(jsCommonPrefixes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsCommonPrefixes.release() catch {}; } else { jsCommonPrefixes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsCommonPrefixes; _drop_val.release(); } };
                 var i: usize = 0;
                 _ = &i;
-                for (common_prefixes.items) |prefix| {
-                    _ = &prefix;
+                for (common_prefixes.items) |cp_prefix| {
+                    _ = &cp_prefix;
                     var jsPrefix = JSValue.createEmptyObject(globalObject, 0);
                     var __jsPrefix_moved = false; _ = &__jsPrefix_moved;
                     defer if (!__jsPrefix_moved) { const __T = @TypeOf(jsPrefix); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsPrefix.release() catch {}; } else { jsPrefix.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsPrefix; _drop_val.release(); } };
-                    _ = jsPrefix.put(globalObject, ZigString.static("prefix"), try BunString.createUTF8ForJS(globalObject, self.prefix));
+                    _ = jsPrefix.put(globalObject, ZigString.static("prefix"), try BunString.createUTF8ForJS(globalObject, cp_prefix));
                     _ = try jsCommonPrefixes.putIndex(globalObject, @intCast(i), jsPrefix);
                     i = (i + 1);
                 }

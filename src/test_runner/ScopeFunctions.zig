@@ -663,7 +663,9 @@ pub fn createUnbound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue,
         _ = &client;
         client.* = .{ .mode = mode, .each = each, .cfg = cfg };
         const value = client.toJS(globalThis);
-        _ = client.js.eachSetCached(value, globalThis, each);
+        if ((each != .zero)) {
+            _ = js.eachSetCached(value, globalThis, each);
+        }
         return value;
 }
 

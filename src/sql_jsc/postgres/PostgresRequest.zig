@@ -258,8 +258,8 @@ pub fn writeQuery(query: []const u8, name: []const u8, params: []const int4, com
 
 pub fn prepareAndQueryWithSignature(globalObject: *jsc.JSGlobalObject, query: []const u8, array_value: JSValue, comptime Context: type, writer: protocol.NewWriter(Context), signature: *Signature) AnyPostgresError!void {
         _ = try writeQuery(query, signature.prepared_statement_name, signature.fields, Context, writer);
-        const empty_params: [0]int4 = &.{};
-        const empty_fields: [0]protocol.FieldDescription = &.{};
+        const empty_params: [0]int4 = std.mem.zeroes([0]int4);
+        const empty_fields: [0]protocol.FieldDescription = std.mem.zeroes([0]protocol.FieldDescription);
         _ = try writeBind(signature.prepared_statement_name, bun.String.empty, globalObject, array_value, .zero, (&empty_params), (&empty_fields), Context, writer);
         var exec = protocol.Execute{ .p = .{ .prepared_statement = signature.prepared_statement_name } };
         _ = &exec;

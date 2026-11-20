@@ -507,13 +507,13 @@ pub fn flushWindow(self: *Builder) void {
                     const d = deltas[@as(usize, @intCast(k))];
                     const bit = cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), @as(u3, @intCast((k & 7))));
                     if ((d.d_gen_line >= 1)) {
-                        buf[cp_cast_int(usize, (win_hdr.gen_line_mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((win_hdr.gen_line_mask_off + cp_shr(k, 3))))] | bit);
+                        buf[cp_cast_int(usize, (win_hdr.gen_line_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3)))] = (buf[@as(usize, @intCast((win_hdr.gen_line_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3))))] | bit);
                     }
                     if ((d.d_orig_line == d.d_gen_line)) {
-                        buf[cp_cast_int(usize, (win_hdr.orig_line_eq_mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((win_hdr.orig_line_eq_mask_off + cp_shr(k, 3))))] | bit);
+                        buf[cp_cast_int(usize, (win_hdr.orig_line_eq_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3)))] = (buf[@as(usize, @intCast((win_hdr.orig_line_eq_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3))))] | bit);
                     }
                     if ((d.d_orig_col == d.d_gen_col)) {
-                        buf[cp_cast_int(usize, (win_hdr.orig_col_eq_mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((win_hdr.orig_col_eq_mask_off + cp_shr(k, 3))))] | bit);
+                        buf[cp_cast_int(usize, (win_hdr.orig_col_eq_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3)))] = (buf[@as(usize, @intCast((win_hdr.orig_col_eq_mask_off + cp_shr((if (comptime @typeInfo(@TypeOf(k)) == .@"enum") cp_cast_int(usize, @intFromEnum(k)) else cp_cast_int(usize, k)), 3))))] | bit);
                     }
                     w = (w + writeVarint(buf[w..].ptr, d.d_gen_col));
                 }

@@ -539,7 +539,7 @@ pub fn run(self: *TransformTask) void {
             _ = buffer_writer.reset();
             var printer = JSPrinter.BufferPrinter.init(buffer_writer);
             _ = &printer;
-            const printed = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.print(parse_result, @TypeOf((&printer)), (&printer), .esm_ascii)) catch |e| { _ = &e; self.err = self.e;
+            const printed = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.print(parse_result, @TypeOf((&printer)), (&printer), .esm_ascii)) catch |e| { _ = &e; self.e = self.e;
             return; }); });
             if ((printed > 0)) {
                 buffer_writer = printer.ctx;
@@ -554,9 +554,9 @@ pub fn then(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void
             defer {
             _ = self.deinit();
             }
-            if ((self.log.hasAny() or (self.err != null))) {
+            if ((self.log.hasAny() or (self.e != null))) {
                 const error_value: bun.JSError!JSValue = .{ .ok = brk: {
-                if (self.err) |e| {
+                if (self.e) |e| {
                     _ = &e;
                     if ((!self.log.hasAny())) {
                         break :brk bun.api.BuildMessage.create(self.global, bun.default_allocator, logger.Msg{ .data = logger.Data{ .text = bun.asByteSlice(@errorName(e)) } });

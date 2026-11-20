@@ -190,4 +190,4 @@ const decoderWrap = NewReaderMod.decoderWrap;
 const NewWriter = NewWriterMod.NewWriter;
 const writeWrap = NewWriterMod.writeWrap;
 const debug = bun.Output.scoped(.PreparedStatement, .hidden);
-const empty_values: [0]Value = &.{};
+const empty_values: [0]Value = std.mem.zeroes([0]Value);

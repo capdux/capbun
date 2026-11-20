@@ -452,7 +452,8 @@ pub enum QueryStatus: u8 {
                         }
                         return err.JSError;
                     };
-                    writer.write(&protocol.Sync) catch |e| {
+                    const sync_pkt = protocol.Sync;
+                    writer.write(&sync_pkt) catch |e| {
                         if (connection_entry_value != null) {
                             * = connection.statements.remove(signature_hash);
                         }

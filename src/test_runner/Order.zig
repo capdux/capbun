@@ -169,23 +169,24 @@ pub fn generateOrderTest(self: *Order, current: *ExecutionEntry) bun.JSError!voi
         current.next = null;
         current.failure_skip_past = null;
         if (self.cfg.always_use_hooks) {
-            var scope: ?*DescribeScope = current.scope;
+            var scope: ?*DescribeScope = current.base.parent;
             _ = &scope;
-            while (scope) |sc| : (scope = sc.parent) {
-                for (sc.beforeEach.items) |entry| {
-                    _ = &entry;
-                    _ = list.append(entry);
+            while (scope) |sc| : (scope = sc.base.parent) {
+                var i: usize = sc.beforeEach.items.len;
+                _ = &i;
+                while ((i > 0)) : (i = (i - 1)) {
+                    _ = list.prepend(bun.create(self.@"arena", ExecutionEntry, (sc.beforeEach.items[@as(usize, @intCast((i - 1)))]).*));
                 }
             }
         }
         _ = list.append(current);
         if (self.cfg.always_use_hooks) {
-            var scope: ?*DescribeScope = current.scope;
+            var scope: ?*DescribeScope = current.base.parent;
             _ = &scope;
-            while (scope) |sc| : (scope = sc.parent) {
+            while (scope) |sc| : (scope = sc.base.parent) {
                 for (sc.afterEach.items) |entry| {
                     _ = &entry;
-                    _ = list.append(entry);
+                    _ = list.append(bun.create(self.@"arena", ExecutionEntry, entry.*));
                 }
             }
         }

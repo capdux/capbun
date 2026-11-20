@@ -71,7 +71,6 @@ const String = @import("bun").String;
 const webcore = @import("bun").webcore;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
-const Allocator = @import("std:mem").Allocator;
 const math = @import("std").math;
 const FetchTasklet = @import("./fetch.zig").FetchTasklet;
 const S3UploadStreamWrapper = @import("./s3/client.zig").S3UploadStreamWrapper;
@@ -86,6 +85,7 @@ pub const ResumableSinkBackpressure = enum {
 };
 
 const BunString = bun.String;
+const Allocator = std.mem.Allocator;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ReadableStream = jsc.WebCore.ReadableStream;

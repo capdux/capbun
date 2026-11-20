@@ -105,12 +105,12 @@ pub fn t_super(p: *P, level: Level) anyerror!Expr {
             switch (p.lexer.token) {
 .t_open_paren => {
 if (((l < @intFromEnum(Level.call)) and p.fn_or_arrow_data_parse.allow_super_call)) {
-                return p.newExpr(E.Super, loc);
+                return p.newExpr(std.mem.zeroes(E.Super), loc);
             }
 },
 .t_dot, .t_open_bracket => {
 if (p.fn_or_arrow_data_parse.allow_super_property) {
-                return p.newExpr(E.Super, loc);
+                return p.newExpr(std.mem.zeroes(E.Super), loc);
             }
 },
 else => {
@@ -118,7 +118,7 @@ else => {
 },
 }
             _ = ((p.log.addRangeError(p.source, superRange, "Unexpected \"super\"")) catch unreachable);
-            return p.newExpr(E.Super, loc);
+            return p.newExpr(std.mem.zeroes(E.Super), loc);
     }
 
 pub fn t_open_paren(p: *P, level: Level) anyerror!Expr {

@@ -181,9 +181,9 @@ export struct S3ListObjectsV2Result {
             let jsCommonPrefixes = JSValue.createEmptyArray(globalObject, common_prefixes.items.len)?;
 
             let i: usize = 0;
-            for (prefix of common_prefixes.items) {
+            for (cp_prefix of common_prefixes.items) {
                 let jsPrefix = JSValue.createEmptyObject(globalObject, 0);
-                jsPrefix.put(globalObject, ZigString.static("prefix"), BunString.createUTF8ForJS(globalObject, prefix)?);
+                jsPrefix.put(globalObject, ZigString.static("prefix"), BunString.createUTF8ForJS(globalObject, cp_prefix)?);
                 jsCommonPrefixes.putIndex(globalObject, @intCast(i), jsPrefix)?;
                 i += 1;
             }

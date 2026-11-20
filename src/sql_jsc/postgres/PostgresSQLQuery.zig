@@ -476,7 +476,8 @@ if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
                         return globalObject.throwValue(postgresErrorToJS(globalObject, "failed to write query", e));
                     }
                     return error.JSError; }); });
-                    _ = (blk_catch_11: { break :blk_catch_11 ((writer.write(*const protocol.Sync)) catch |e| { _ = &e; if ((connection_entry_value != null)) {
+                    const sync_pkt = protocol.Sync;
+                    _ = (blk_catch_11: { break :blk_catch_11 ((writer.write((&sync_pkt))) catch |e| { _ = &e; if ((connection_entry_value != null)) {
                         _ = connection.statements.remove(signature_hash);
                     }
                     _ = signature.deinit();

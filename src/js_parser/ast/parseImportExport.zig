@@ -77,7 +77,7 @@ pub fn parseImportExpr(p: *P, loc: logger.Loc, level: Level) anyerror!Expr {
                 if (p.lexer.isContextualKeyword("meta")) {
                     _ = try p.lexer.next();
                     p.has_import_meta = true;
-                    return p.newExpr(E.ImportMeta, loc);
+                    return p.newExpr(std.mem.zeroes(E.ImportMeta), loc);
                 } else {
                     _ = try p.lexer.expectedString("\"meta\"");
                 }

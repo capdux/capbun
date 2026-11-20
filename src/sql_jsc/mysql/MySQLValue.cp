@@ -481,7 +481,7 @@ pub union(enum) Value {
 
     pub static fn fromJS(value: JSC.JSValue, globalObject: *JSC.JSGlobalObject, field_type: FieldType, unsigned: bool, roots: *JSC.MarkedArgumentBuffer): AnyMySQLError.Error!@This() {
         if (value.isEmptyOrUndefinedOrNull()) {
-            return Value{ @"null": {} };
+            return Value{ @"null": undefined };
         }
         return switch (field_type) {
             .MYSQL_TYPE_TINY => Value{ @"bool": value.toBoolean() },

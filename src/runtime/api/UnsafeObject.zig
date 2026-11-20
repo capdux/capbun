@@ -129,6 +129,6 @@ pub fn dump_mimalloc(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.J
         if (bun.heap_breakdown.enabled) {
             _ = dump_zone_malloc_stats();
         }
-        return error.js_undefined;
+        return jsc.JSValue.jsUndefined();
 }
 pub const __CpObj_gcAggressionLevel__anyopaque_arrayBufferToString__anyopaque_mimallocDump__anyopaque = struct { gcAggressionLevel: *anyopaque, arrayBufferToString: *anyopaque, mimallocDump: *anyopaque };
