@@ -30,12 +30,12 @@ export @root struct Chunk {
         };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.buffer.deinit();
     }
 
     pub fn printSourceMapContents(
-        this,
+        
         source: *const Logger.Source,
         mutable: *MutableString,
         include_sources_contents: bool,
@@ -45,7 +45,7 @@ export @root struct Chunk {
     }
 
     pub fn printSourceMapContentsFromInternal(
-        this,
+        
         source: *const Logger.Source,
         mutable: *MutableString,
         include_sources_contents: bool,
@@ -115,7 +115,7 @@ pub struct VLQSourceMap {
         };
     }
 
-    pub fn appendLineSeparator(*this)! {
+    pub fn appendLineSeparator(*_)! {
         if (*b := this.internal) {
             b.appendLineSeparator();
             return;
@@ -123,7 +123,7 @@ pub struct VLQSourceMap {
         this.data.appendChar(';')?;
     }
 
-    pub fn append(*this, current_state: SourceMapState, prev_state: SourceMapState)! {
+    pub fn append(*_, current_state: SourceMapState, prev_state: SourceMapState)! {
         if (*b := this.internal) {
             b.appendMapping(current_state);
             this.count += 1;
@@ -139,11 +139,11 @@ pub struct VLQSourceMap {
         this.count += 1;
     }
 
-    pub fn shouldIgnore(this): bool {
-        return this.count == 0;
+    pub fn shouldIgnore(): bool {
+        return _.count == 0;
     }
 
-    pub fn getBuffer(*this): MutableString {
+    pub fn getBuffer(*_): MutableString {
         if (*b := this.internal) {
             this.data = unsafe { b.finalize().* };
             b.finalized = null;
@@ -152,7 +152,7 @@ pub struct VLQSourceMap {
         return this.data;
     }
 
-    pub fn takeBuffer(*this): MutableString {
+    pub fn takeBuffer(*_): MutableString {
         if (*b := this.internal) {
             this.data = unsafe { b.finalize().* };
             b.finalized = null;
@@ -162,8 +162,8 @@ pub struct VLQSourceMap {
         return this.data;
     }
 
-    pub fn getCount(this): usize {
-        return this.count;
+    pub fn getCount(): usize {
+        return _.count;
     }
 }
 

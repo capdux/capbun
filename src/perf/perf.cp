@@ -3,7 +3,7 @@ import bun from "bun";
 import { PerfEvent } from "./generated_perf_trace_events.zig";
 
 struct DisabledCtx {
-    pub inline fn end(this): void {}
+    pub inline fn end() {}
 }
 
 export enum Ctx {
@@ -16,7 +16,7 @@ export enum Ctx {
 
     pub const Disabled = DisabledCtx;
 
-    pub fn end(this): void {
+    pub fn end() {
         switch (this) {
             inline else => |*ctx| ctx.end(),
         }
@@ -26,19 +26,19 @@ export enum Ctx {
 let is_enabled_once = std.once(isEnabledOnce);
 let is_enabled = std.atomic.Value(bool).init(false);
 
-fn isEnabledOnMacOSOnce(): void {
+fn isEnabledOnMacOSOnce() {
     if (bun.env_var.DYLD_ROOT_PATH.get() != null || bun.feature_flag.BUN_INSTRUMENTS.get()) {
         is_enabled.store(true, .seq_cst);
     }
 }
 
-fn isEnabledOnLinuxOnce(): void {
+fn isEnabledOnLinuxOnce() {
     if (bun.feature_flag.BUN_TRACE.get()) {
         is_enabled.store(true, .seq_cst);
     }
 }
 
-fn isEnabledOnce(): void {
+fn isEnabledOnce() {
     if (comptime bun.Environment.isMac) {
         isEnabledOnMacOSOnce();
         if (Darwin.get() == null) {
@@ -93,7 +93,7 @@ export fn trace(@comptime name: cstring): Ctx {
 let darwin_os_log: (*bun.darwin.OSLog!)? = null;
 let darwin_os_log_once = std.once(darwinGetOnce);
 
-fn darwinGetOnce(): void {
+fn darwinGetOnce() {
     darwin_os_log = bun.darwin.OSLog.init();
 }
 
@@ -107,8 +107,8 @@ export struct Darwin {
         };
     }
 
-    pub fn end(this): void {
-        this.interval.end();
+    pub fn end() {
+        _.interval.end();
     }
 
     pub static fn get(): (*OSLog!)? {
@@ -121,10 +121,10 @@ let linux_is_initialized = std.atomic.Value(bool).init(false);
 let linux_init_once = std.once(linuxInitOnce);
 
 extern fn Bun__linux_trace_init(): c_int;
-extern fn Bun__linux_trace_close(): void;
+extern fn Bun__linux_trace_close();
 extern fn Bun__linux_trace_emit(event_name: cstr, duration_ns: i64): c_int;
 
-fn linuxInitOnce(): void {
+fn linuxInitOnce() {
     unsafe {
         const result = Bun__linux_trace_init();
         linux_is_initialized.store(result != 0, .monotonic);
@@ -147,13 +147,13 @@ export struct Linux {
         };
     }
 
-    pub fn end(this): void {
+    pub fn end(*_) {
         if (!Linux.isSupported()) return;
 
         const duration = bun.timespec.now(.force_real_time).ns() -| this.start_time;
 
         unsafe {
-            _ = Bun__linux_trace_emit(@tagName(this.event).ptr, @intCast(duration));
+            * = Bun__linux_trace_emit(@tagName(this.event).ptr, @intCast(duration));
         }
     }
 }

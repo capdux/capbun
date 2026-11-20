@@ -2982,3 +2982,5 @@ Options:
 - [2026-11-20 05:11:20 UTC] 验收并提交 `src/runtime/` 41/42 模块新版 `cpc` 语法升级（膨胀率 0.049x~1.158x，全门禁 PASS）；[发送至 cp_agy] 工单 `task-bun-20261120-return-struct-rawzig-fallback`（复现 `/data/dev/cp/temp/repro_return_struct_rawzig_fallback.cp`）：泛型 `return struct` 内部静默透传未 lower 代码（阻断 `node_fs.cp`，原 `node_fs.zig` 已还原保护）。
 
 - [2026-11-20 05:12:59 UTC] 验收并提交全仓最后 42 个零散目录模块新版 `cpc` 语法升级（42/42 全 PASS，膨胀率 0.658x~1.180x，补齐 2 个缺失 `_.zig` 备份）。
+
+- [2026-11-20 05:18:18 UTC] 验收并提交 16 目录 65/66 模块新版 `cpc` 语法升级（膨胀率 0.676x~1.142x，全门禁 PASS，补齐 4 个缺失 `_.zig` 备份）；`src/shell/shell.cp` 已单独派发专人提升嵌套类型收官。

@@ -10,25 +10,25 @@ export @root struct Mutex {
     /// Tries to acquire the mutex without blocking the caller's thread.
     /// Returns `false` if the calling thread would have to block to acquire it.
     /// Otherwise, returns `true` and the caller should `unlock()` the Mutex to release it.
-    pub fn tryLock(*this): bool {
+    pub fn tryLock(*_): bool {
         return this.impl.tryLock();
     }
 
     /// Acquires the mutex, blocking the caller's thread until it can.
     /// It is undefined behavior if the mutex is already held by the caller's thread.
     /// Once acquired, call `unlock()` on the Mutex to release it.
-    pub fn lock(*this) {
+    pub fn lock(*_) {
         this.impl.lock();
     }
 
     /// Releases the mutex which was previously acquired with `lock()` or `tryLock()`.
     /// It is undefined behavior if the mutex is unlocked from a different thread that it was locked from.
-    pub fn unlock(*this) {
+    pub fn unlock(*_) {
         this.impl.unlock();
     }
 
-    pub fn release(*this) {}
-    pub fn deinit(*this) {
+    pub fn release(*_) {}
+    pub fn deinit(*_) {
         this.release();
     }
 }
@@ -46,7 +46,7 @@ pub type ExternImpl = ReleaseImpl.Type;
     locking_thread: std.atomic.Value(Thread.Id) = std.atomic.Value(Thread.Id).init(0),
     impl: ReleaseImpl = .{},
 
-    inline fn tryLock(this: *DebugImpl): bool {
+    inline fn tryLock(*_: *DebugImpl): bool {
         const locking = this.impl.tryLock();
         if (locking) {
             this.locking_thread.store(Thread.getCurrentId(), .unordered);
@@ -54,7 +54,7 @@ pub type ExternImpl = ReleaseImpl.Type;
         return locking;
     }
 
-    inline fn lock(this: *DebugImpl) {
+    inline fn lock(*_: *DebugImpl) {
         const current_id = Thread.getCurrentId();
         if (this.locking_thread.load(.unordered) == current_id and current_id != 0) {
             @panic("Deadlock detected");
@@ -63,7 +63,7 @@ pub type ExternImpl = ReleaseImpl.Type;
         this.locking_thread.store(current_id, .unordered);
     }
 
-    inline fn unlock(this: *DebugImpl) {
+    inline fn unlock(*_: *DebugImpl) {
         assert(this.locking_thread.load(.unordered) == Thread.getCurrentId());
         this.locking_thread.store(0, .unordered);
         this.impl.unlock();
@@ -73,15 +73,15 @@ pub type ExternImpl = ReleaseImpl.Type;
 @value struct WindowsImpl {
     srwlock: windows.SRWLOCK = .{},
 
-    fn tryLock(this: *WindowsImpl): bool {
+    fn tryLock(*_: *WindowsImpl): bool {
         return windows.kernel32.TryAcquireSRWLockExclusive(&this.srwlock) != windows.FALSE;
     }
 
-    fn lock(this: *WindowsImpl) {
+    fn lock(*_: *WindowsImpl) {
         windows.kernel32.AcquireSRWLockExclusive(&this.srwlock);
     }
 
-    fn unlock(this: *WindowsImpl) {
+    fn unlock(*_: *WindowsImpl) {
         windows.kernel32.ReleaseSRWLockExclusive(&this.srwlock);
     }
 
@@ -91,15 +91,15 @@ pub type ExternImpl = ReleaseImpl.Type;
 @value struct DarwinImpl {
     oul: c.os_unfair_lock = .{},
 
-    fn tryLock(this: *DarwinImpl): bool {
+    fn tryLock(*_: *DarwinImpl): bool {
         return c.os_unfair_lock_trylock(&this.oul);
     }
 
-    fn lock(this: *DarwinImpl) {
+    fn lock(*_: *DarwinImpl) {
         c.os_unfair_lock_lock(&this.oul);
     }
 
-    fn unlock(this: *DarwinImpl) {
+    fn unlock(*_: *DarwinImpl) {
         c.os_unfair_lock_unlock(&this.oul);
     }
 
@@ -113,13 +113,13 @@ const contended: u32 = 0b11;
 @value struct FutexImpl {
     state: std.atomic.Value(u32) = std.atomic.Value(u32).init(unlocked),
 
-    fn lock(this: *FutexImpl) {
+    fn lock(*_: *FutexImpl) {
         if (!this.tryLock()) {
             this.lockSlow();
         }
     }
 
-    fn tryLock(this: *FutexImpl): bool {
+    fn tryLock(*_: *FutexImpl): bool {
         if (comptime builtin.target.cpu.arch.isX86()) {
             const locked_bit = @ctz(locked);
             return this.state.bitSet(locked_bit, .acquire) == 0;
@@ -128,7 +128,7 @@ const contended: u32 = 0b11;
         return this.state.cmpxchgWeak(unlocked, locked, .acquire, .monotonic) == null;
     }
 
-    fn lockSlow(this: *FutexImpl) {
+    fn lockSlow(*_: *FutexImpl) {
         @branchHint(.cold);
 
         if (this.state.load(.monotonic) == contended) {
@@ -140,7 +140,7 @@ const contended: u32 = 0b11;
         }
     }
 
-    fn unlock(this: *FutexImpl) {
+    fn unlock(*_: *FutexImpl) {
         const state = this.state.swap(unlocked, .release);
         assert(state != unlocked);
 

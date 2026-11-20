@@ -11,11 +11,11 @@ extern fn BakeSourceProvider__getSourceSlice(provider: *BakeSourceProvider): bun
 pub @opaque struct BakeSourceProvider {
     pub const getSourceSlice = BakeSourceProvider__getSourceSlice;
 
-    pub fn toSourceContentPtr(*this): SourceMap.ParsedSourceMap.SourceContentPtr {
+    pub fn toSourceContentPtr(*_): SourceMap.ParsedSourceMap.SourceContentPtr {
         return SourceMap.ParsedSourceMap.SourceContentPtr.fromBakeProvider(this);
     }
 
-    pub fn getExternalData(*this, source_filename: []const u8): ([]const u8)? {
+    pub fn getExternalData(*_, source_filename: []const u8): ([]const u8)? {
         const vm: *bun.jsc.VirtualMachine = bun.jsc.VirtualMachine.get();
         const global = vm.global;
         if (!unsafe { BakeGlobalObject__isBakeGlobalObject(global) }) return null;
@@ -28,7 +28,7 @@ pub @opaque struct BakeSourceProvider {
     }
 
     pub fn getSourceMap(
-        *this,
+        *_,
         source_filename: []const u8,
         load_hint: SourceMap.SourceMapLoadHint,
         result: SourceMap.ParseUrlResultHint,

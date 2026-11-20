@@ -30,7 +30,7 @@ pub struct Shifter {
     linkedit_fileoff: u64,
     linkedit_filesize: u64,
 
-    pub fn do(this, value: u64): u32! {
+    pub fn do(value: u64): u32! {
         if (value == 0) return 0;
         const range_min = this.start;
         const range_max = this.linkedit_fileoff + this.linkedit_filesize;
@@ -129,7 +129,7 @@ pub struct MachoSigner {
         return res;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.data.deinit();
         this.allocator.destroy(this);
     }
@@ -146,7 +146,7 @@ pub struct MachoSigner {
         return super_blob_header_size + blob_index_size + code_dir_length;
     }
 
-    pub fn sign(*this, writer: *std.Io.Writer): void! {
+    pub fn sign(*_, writer: *std.Io.Writer): void! {
         const PAGE_SIZE: usize = SIGNATURE_PAGE_SIZE;
         const HASH_SIZE: usize = SIGNATURE_HASH_SIZE;
 
@@ -262,12 +262,12 @@ pub struct MachoFile {
         return res;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.data.deinit();
         this.allocator.destroy(this);
     }
 
-    pub fn writeSection(*this, data: []const u8): void! {
+    pub fn writeSection(*_, data: []const u8): void! {
         const blob_alignment: u64 = 16 * 1024;
         const PAGE_SIZE: u64 = 1 << 12;
         const HASH_SIZE: usize = 32;
@@ -410,7 +410,7 @@ pub struct MachoFile {
         this.validateSegments()?;
     }
 
-    fn updateLoadCommandOffsets(*this, previous_fileoff: u64, size_diff: u64, new_linkedit_fileoff: u64, new_linkedit_filesize: u64, sig_size: usize): void! {
+    fn updateLoadCommandOffsets(*_, previous_fileoff: u64, size_diff: u64, new_linkedit_fileoff: u64, new_linkedit_filesize: u64, sig_size: usize): void! {
         if (new_linkedit_fileoff < previous_fileoff) {
             return err.InvalidLinkeditOffset;
         }
@@ -485,18 +485,18 @@ pub struct MachoFile {
         }
     }
 
-    pub fn iterator(this): macho.LoadCommandIterator {
+    pub fn iterator(): macho.LoadCommandIterator {
         return macho.LoadCommandIterator{
             buffer: this.data.items[@sizeOf(macho.mach_header_64)..][0..this.header.sizeofcmds],
             ncmds: this.header.ncmds,
         };
     }
 
-    pub fn build(*this, writer: auto): void! {
+    pub fn build(*_, writer: auto): void! {
         writer.writeAll(this.data.items)?;
     }
 
-    fn validateSegments(*this): void! {
+    fn validateSegments(*_): void! {
         let iter = this.iterator();
         let prev_end: u64 = 0;
 
@@ -512,7 +512,7 @@ pub struct MachoFile {
         }
     }
 
-    pub fn buildAndSign(*this, writer: *std.Io.Writer): void! {
+    pub fn buildAndSign(*_, writer: *std.Io.Writer): void! {
         if (this.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
             let out_data = std.array_list.Managed(u8).init(this.allocator);
             defer out_data.deinit();

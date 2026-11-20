@@ -15,19 +15,19 @@ export @root struct WaitGroup {
         return .{ .raw_count = .{ .raw = count } };
     }
 
-    pub fn addUnsynchronized(*this, n: usize) {
+    pub fn addUnsynchronized(*_, n: usize) {
         this.raw_count.raw += n;
     }
 
-    pub fn add(*this, n: usize) {
-        _ = this.raw_count.fetchAdd(n, .monotonic);
+    pub fn add(*_, n: usize) {
+        * = this.raw_count.fetchAdd(n, .monotonic);
     }
 
-    pub fn addOne(*this) {
+    pub fn addOne(*_) {
         this.add(1);
     }
 
-    pub fn finish(*this) {
+    pub fn finish(*_) {
         if (this.raw_count.fetchSub(1, .acq_rel) > 1) {
             return;
         }
@@ -37,7 +37,7 @@ export @root struct WaitGroup {
         this.cond.signal();
     }
 
-    pub fn wait(*this) {
+    pub fn wait(*_) {
         this.mutex.lock();
         defer this.mutex.unlock();
 
@@ -46,12 +46,12 @@ export @root struct WaitGroup {
         }
     }
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         this.cond.release();
         this.mutex.release();
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 }

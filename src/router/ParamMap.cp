@@ -14,7 +14,7 @@ pub struct Param {
 pub const ParamList = Param.List;
 pub type ParamListPtr = *Param.List;
 
-pub threadlocal var params_list: Param.List = undefined;
+pub threadlocal let params_list: Param.List = undefined;
 
 pub struct ParamMap {
     allocator: std.mem.Allocator,
@@ -27,30 +27,30 @@ pub struct ParamMap {
         };
     }
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         this.list.deinit(this.allocator);
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 
-    pub fn count(this): usize {
-        return this.list.len;
+    pub fn count(): usize {
+        return _.list.len;
     }
 
-    pub fn isEmpty(this): bool {
-        return this.list.len == 0;
+    pub fn isEmpty(): bool {
+        return _.list.len == 0;
     }
 
-    pub fn append(*this, name: string, value: string): !void {
+    pub fn append(*_, name: string, value: string): !void {
         this.list.append(this.allocator, .{
             .name = name,
             .value = value,
-        }) catch |err| return err;
+        }) catch |e| return e;
     }
 
-    pub fn find(this, name: string): ?string {
+    pub fn find(name: string): string? {
         let i: usize = 0;
         const names = this.list.items(.name);
         const values = this.list.items(.value);
@@ -63,7 +63,7 @@ pub struct ParamMap {
         return null;
     }
 
-    pub fn get(this, index: usize): ?Param {
+    pub fn get(index: usize): Param? {
         if (index >= this.list.len) return null;
         return Param{
             .name = this.list.items(.name)[index],
@@ -71,15 +71,15 @@ pub struct ParamMap {
         };
     }
 
-    pub fn clear(*this) {
+    pub fn clear(*_) {
         this.list.shrinkRetainingCapacity(0);
     }
 
-    pub fn shrinkRetainingCapacity(*this, new_len: usize) {
+    pub fn shrinkRetainingCapacity(*_, new_len: usize) {
         this.list.shrinkRetainingCapacity(new_len);
     }
 
-    pub fn getList(*this): *Param.List {
+    pub fn getList(*_): *Param.List {
         return &this.list;
     }
 }

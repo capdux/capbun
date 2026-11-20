@@ -11,11 +11,11 @@ struct SinglyLinkedListNode<T, Parent> {
     const Node = Self;
     pub const Data = T;
 
-    pub fn insertAfter(*this, new_node: *Node): void {
+    pub fn insertAfter(*_, new_node: *Node) {
         unsafe {
             let n = new_node;
-            n.next = this.next;
-            this.next = new_node;
+            n.next = _.next;
+            _.next = new_node;
         }
     }
 
@@ -33,9 +33,9 @@ struct SinglyLinkedListNode<T, Parent> {
         return it;
     }
 
-    pub fn countChildren(this: *const Node): usize {
+    pub fn countChildren(): usize {
         let count: usize = 0;
-        let it: (*const Node)? = this.next;
+        let it = _.next;
         while (n := it) {
             count += 1;
             it = n.next;
@@ -43,7 +43,7 @@ struct SinglyLinkedListNode<T, Parent> {
         return count;
     }
 
-    pub inline fn release(self_node: *Node): void {
+    pub inline fn release(self_node: *Node) {
         @call(.auto, @field(Parent, "release"), [self_node]);
     }
 }
@@ -54,7 +54,7 @@ struct SinglyLinkedList<T, Parent> {
 
     pub const Node = SinglyLinkedListNode(T, Parent);
 
-    pub fn prepend(*this, new_node: *Node): void {
+    pub fn prepend(*_, new_node: *Node) {
         unsafe {
             let n = new_node;
             n.next = this.first;
@@ -62,7 +62,7 @@ struct SinglyLinkedList<T, Parent> {
         }
     }
 
-    pub fn remove(*this, node: *Node): void {
+    pub fn remove(*_, node: *Node) {
         if (this.first == node) {
             this.first = node.next;
         } else {
@@ -80,8 +80,8 @@ struct SinglyLinkedList<T, Parent> {
         return first;
     }
 
-    pub fn len(this): usize {
-        if (n := this.first) {
+    pub fn len(): usize {
+        if (n := _.first) {
             return 1 + n.countChildren();
         } else {
             return 0;
@@ -99,7 +99,7 @@ struct PoolDataStruct<LinkedList, MaxCountInt> {
 
 pub fn ObjectPool(
     comptime Type: type,
-    comptime Init: (?*const fn (allocator: std.mem.Allocator) anyerror!Type),
+    comptime Init: (*const fn (allocator: std.mem.Allocator) anyerror!Type?),
     comptime threadsafe: bool,
     comptime max_count: comptime_int,
 ): type {

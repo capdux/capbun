@@ -1206,7 +1206,7 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {
     return true;
 }
 
-inline fn float64(num: anytype) f64 {
+inline fn float64(num: anytype): f64 {
     const f: f64 = @floatFromInt(num);
     return f;
 }

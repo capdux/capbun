@@ -82,7 +82,7 @@ struct Calibration {
 let calibration: Calibration = Calibration{};
 let calibrate_once = std.once(calibrate);
 
-fn calibrate(): void {
+fn calibrate() {
     const freq = readFrequency();
     if (freq == 0) return;
     const start_ns = osMonotonicNs();
@@ -111,7 +111,7 @@ fn readFrequency(): u64 {
             let hz: u64 = 0;
             let hz_len: usize = @sizeOf(u64);
             unsafe {
-                _ = std.c.sysctlbyname(name, *hz!, *hz_len!, null, 0);
+                * = std.c.sysctlbyname(name, *hz!, *hz_len!, null, 0);
             }
             return hz;
         }
@@ -175,11 +175,11 @@ fn osMonotonicNs(): u64 {
         if (comptime Environment.isLinux) {
             // CLOCK_MONOTONIC, not _RAW: guaranteed vDSO (no syscall). _RAW only
             // joined the vDSO in 5.3.
-            _ = std.os.linux.clock_gettime(.MONOTONIC, *spec! as *std.os.linux.timespec!);
+            * = std.os.linux.clock_gettime(.MONOTONIC, *spec! as *std.os.linux.timespec!);
         } else if (comptime Environment.isMac) {
-            _ = std.c.clock_gettime(.MONOTONIC_RAW, *spec! as *std.c.timespec!);
+            * = std.c.clock_gettime(.MONOTONIC_RAW, *spec! as *std.c.timespec!);
         } else {
-            _ = std.c.clock_gettime(.MONOTONIC, *spec! as *std.c.timespec!);
+            * = std.c.clock_gettime(.MONOTONIC, *spec! as *std.c.timespec!);
         }
     }
     return spec.ns();

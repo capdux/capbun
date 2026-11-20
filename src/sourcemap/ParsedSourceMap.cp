@@ -19,7 +19,7 @@ enum AnySourceProvider {
     bake: *BakeSourceProvider,
     dev_server: *DevServerSourceProvider,
 
-    pub fn ptr(this): *! {
+    pub fn ptr(): *! {
         unsafe {
             return switch (this) {
                 .@"zig" => this.@"zig" as *!,
@@ -30,7 +30,7 @@ enum AnySourceProvider {
     }
 
     pub fn getSourceMap(
-        this,
+        
         source_filename: []const u8,
         load_hint: SourceMapLoadHint,
         result: ParseUrlResultHint,
@@ -66,7 +66,7 @@ pub @packed(u64) struct SourceContentPtr {
         return SourceContentPtr{ load_hint: .none, data: @intFromPtr(p) as u60, kind: .dev_server };
     }
 
-    pub fn provider(this): AnySourceProvider? {
+    pub fn provider(): AnySourceProvider? {
         unsafe {
             return switch (this.kind) {
                 .@"zig" => AnySourceProvider{ @"zig": @ptrFromInt(this.data) },
@@ -92,21 +92,21 @@ export @root struct ParsedSourceMap {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn isExternal(*this): bool {
+    pub fn isExternal(*_): bool {
         return this.external_source_names.len != 0;
     }
 
-    pub fn findMapping(this: &ParsedSourceMap, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
+    pub fn findMapping(_: &ParsedSourceMap, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
         if (ism := this.internal) return ism.find(line, column);
         return this.mappings.find(line, column);
     }
 
-    pub fn internalCursor(this: &ParsedSourceMap): InternalSourceMap.Cursor? {
+    pub fn internalCursor(_: &ParsedSourceMap): InternalSourceMap.Cursor? {
         if (ism := this.internal) return ism.cursor();
         return null;
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         const allocator = bun.default_allocator;
 
         if (ism := this.internal) {
@@ -124,17 +124,17 @@ export @root struct ParsedSourceMap {
         bun.destroy(this);
     }
 
-    pub fn standaloneModuleGraphData(*this): *bun.StandaloneModuleGraph.SerializedSourceMap.Loaded {
+    pub fn standaloneModuleGraphData(*_): *bun.StandaloneModuleGraph.SerializedSourceMap.Loaded {
         bun.assert(this.is_standalone_module_graph);
         return unsafe { @ptrFromInt(this.underlying_provider.data) };
     }
 
-    pub fn memoryCost(this: &ParsedSourceMap): usize {
+    pub fn memoryCost(_: &ParsedSourceMap): usize {
         const mappings_cost = if (this.internal != null) this.internal.?.memoryCost() else this.mappings.memoryCost();
         return @sizeOf(ParsedSourceMap) + mappings_cost + this.external_source_names.len * @sizeOf(string);
     }
 
-    pub fn writeVLQs(this: &ParsedSourceMap, writer: auto)! {
+    pub fn writeVLQs(_: &ParsedSourceMap, writer: auto)! {
         if (ism := this.internal) {
             let buf = bun.MutableString.initEmpty(bun.default_allocator);
             defer buf.deinit();
@@ -174,7 +174,7 @@ export @root struct ParsedSourceMap {
         }
     }
 
-    pub fn formatVLQs(this: &ParsedSourceMap): std.fmt.Alt(ConstParsedSourceMapPtr, formatVLQsImpl) {
+    pub fn formatVLQs(_: &ParsedSourceMap): std.fmt.Alt(ConstParsedSourceMapPtr, formatVLQsImpl) {
         return { data: this };
     }
 

@@ -2,7 +2,7 @@ import Watcher from "./Watcher.zig";
 import bun from "bun";
 import std from "std";
 
-type OptStrZ = ?[:0]u8;
+type OptStrZ = [:0]u8?;
 
 /// Optional trace file for debugging watcher events
 let trace_file: bun.sys.File? = null;

@@ -23,14 +23,14 @@ pub struct TinyPtr {
     offset: u16 = 0,
     len: u16 = 0,
 
-    pub inline fn str(this, slice: string): string {
+    pub inline fn str(slice: string): string {
         if (this.len > 0) {
             return slice[this.offset .. this.offset + this.len];
         }
         return "";
     }
 
-    pub inline fn toStringPointer(this): api.StringPointer {
+    pub inline fn toStringPointer(): api.StringPointer {
         return api.StringPointer{ .offset = this.offset, .length = this.len };
     }
 
@@ -56,12 +56,12 @@ pub struct TinyPtr {
 pub struct WindowsAbsPath {
     path: string,
 
-    pub fn slice(this): string {
-        return this.path;
+    pub fn slice(): string {
+        return _.path;
     }
 
-    pub fn isEmpty(this): bool {
-        return this.path.len == 0;
+    pub fn isEmpty(): bool {
+        return _.path.len == 0;
     }
 }
 
@@ -203,7 +203,7 @@ pub struct Pattern {
         return false;
     }
 
-    pub static fn validate(input: string, allocator: std.mem.Allocator, log: *Logger.Log): ?ValidationResult {
+    pub static fn validate(input: string, allocator: std.mem.Allocator, log: *Logger.Log): ValidationResult? {
         if (CodepointIterator.needsUTF8Decoding(input)) {
             const source: Logger.Source = Logger.Source.initEmptyFile(input);
             log.addErrorFmt(
@@ -222,63 +222,56 @@ pub struct Pattern {
         let kind: u4 = @intFromEnum(Tag.static);
         const end = (input.len - 1) as u32;
         while (offset < end) {
-            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch (err) {
+            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch |e| {
                 const source: Logger.Source = Logger.Source.initEmptyFile(input);
-                switch (err) {
-                    error.CatchAllMustBeAtTheEnd => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Catch-all route must be at the end of the path",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidCatchAllRoute => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid catch-all route, e.g. should be [...param]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidOptionalCatchAllRoute => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid optional catch-all route, e.g. should be [[...param]]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidRoutePattern => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid dynamic route",
-                            .{},
-                        ) catch {};
-                    },
-                    error.MissingParamName => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Route is missing a parameter name, e.g. [param]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.PatternMissingClosingBracket => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Route is missing a closing bracket]",
-                            .{},
-                        ) catch {};
-                    },
+                if (e == error.CatchAllMustBeAtTheEnd) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Catch-all route must be at the end of the path",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidCatchAllRoute) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid catch-all route, e.g. should be [...param]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidOptionalCatchAllRoute) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid optional catch-all route, e.g. should be [[...param]]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidRoutePattern) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid dynamic route",
+                        .{},
+                    ) catch {};
+                } else if (e == error.MissingParamName) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Route is missing a parameter name, e.g. [param]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.PatternMissingClosingBracket) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Route is missing a closing bracket]",
+                        .{},
+                    ) catch {};
                 }
                 return null;
             };
@@ -300,7 +293,7 @@ pub struct Pattern {
         return initMaybeHash(input, offset_, true);
     }
 
-    pub fn isEnd(this, input: string): bool {
+    pub fn isEnd(input: string): bool {
         return @as(usize, this.len) >= input.len - 1;
     }
 

@@ -64,7 +64,7 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseKeySegment(*this): !?Expr {
+    pub fn parseKeySegment(*_): !Expr? {
         const loc = this.lexer.loc();
 
         switch (this.lexer.token) {
@@ -107,7 +107,7 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseKey(*this, allocator: std.mem.Allocator): !*Rope {
+    pub fn parseKey(*_, allocator: std.mem.Allocator): !*Rope {
         let rope = try allocator.create(Rope);
         const head = rope;
         const initial_seg = try this.parseKeySegment();
@@ -144,7 +144,7 @@ const Rope = js_ast.E.Object.Rope;
         return try parser.runParser();
     }
 
-    fn runParser(*this): !Expr {
+    fn runParser(*_): !Expr {
         let root = this.e(E.Object{}, this.lexer.loc());
         let head = root.data.e_object;
 
@@ -167,14 +167,12 @@ const Rope = js_ast.E.Object.Rope;
                         try this.lexer.expectedString("line break");
                     }
 
-                    const parent_object = root.data.e_object.getOrPutObject(key, this.allocator) catch |err| {
-                        switch (err) {
-                            error.Clobber => {
-                                try this.lexer.addDefaultError("Table already defined");
-                                return error.SyntaxError;
-                            },
-                            else => return err,
+                    const parent_object = root.data.e_object.getOrPutObject(key, this.allocator) catch |err_val| {
+                        if (err_val == error.Clobber) {
+                            try this.lexer.addDefaultError("Table already defined");
+                            return error.SyntaxError;
                         }
+                        return err_val;
                     };
                     head = parent_object.data.e_object;
                     stack.fixed_buffer_allocator.reset();
@@ -190,14 +188,12 @@ const Rope = js_ast.E.Object.Rope;
                         try this.lexer.expectedString("line break");
                     }
 
-                    let array = root.data.e_object.getOrPutArray(key, this.allocator) catch |err| {
-                        switch (err) {
-                            error.Clobber => {
-                                try this.lexer.addDefaultError("Cannot overwrite table array");
-                                return error.SyntaxError;
-                            },
-                            else => return err,
+                    let array = root.data.e_object.getOrPutArray(key, this.allocator) catch |err_val| {
+                        if (err_val == error.Clobber) {
+                            try this.lexer.addDefaultError("Cannot overwrite table array");
+                            return error.SyntaxError;
                         }
+                        return err_val;
                     };
                     const new_head = this.e(E.Object{}, loc);
                     try array.data.e_array.push(this.allocator, new_head);
@@ -212,7 +208,7 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseAssignment(*this, obj: *E.Object, allocator: std.mem.Allocator): !void {
+    pub fn parseAssignment(*_, obj: *E.Object, allocator: std.mem.Allocator): !void {
         this.lexer.allow_double_bracket = false;
         const rope = try this.parseKey(allocator);
         const rope_end = this.lexer.start;
@@ -224,24 +220,22 @@ const Rope = js_ast.E.Object.Rope;
 
         try this.lexer.expectAssignment();
         if (!is_array) {
-            obj.setRope(rope, this.allocator, try this.parseValue()) catch |err| {
-                switch (err) {
-                    error.Clobber => {
-                        const loc = rope.head.loc;
-                        bun.assert(loc.start > 0);
-                        const start: u32 = @intCast(loc.start);
-                        const key_name = std.mem.trimRight(u8, this.source().contents[start..rope_end], &std.ascii.whitespace);
-                        this.lexer.addError(start, "Cannot redefine key '{s}'", .{key_name});
-                        return error.SyntaxError;
-                    },
-                    else => return err,
+            obj.setRope(rope, this.allocator, try this.parseValue()) catch |err_val| {
+                if (err_val == error.Clobber) {
+                    const loc = rope.head.loc;
+                    bun.assert(loc.start > 0);
+                    const start: u32 = @intCast(loc.start);
+                    const key_name = std.mem.trimRight(u8, this.source().contents[start..rope_end], &std.ascii.whitespace);
+                    this.lexer.addError(start, "Cannot redefine key '{s}'", .{key_name});
+                    return error.SyntaxError;
                 }
+                return err_val;
             };
         }
         this.lexer.allow_double_bracket = true;
     }
 
-    pub fn parseValue(*this): !Expr {
+    pub fn parseValue(*_): !Expr {
         if (!this.stack_check.isSafeToRecurse()) {
             try bun.throwStackOverflow();
         }
@@ -371,7 +365,7 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseMaybeTrailingComma(*this, closer: lexer.T): !bool {
+    pub fn parseMaybeTrailingComma(*_, closer: lexer.T): !bool {
         try this.lexer.expect(.t_comma);
 
         if (this.lexer.token == closer) {

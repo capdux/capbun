@@ -31,7 +31,7 @@ export @root struct ThreadLock {
         return ThreadLock.initLocked();
     }
 
-    pub fn lock(*this) {
+    pub fn lock(*_) {
         if (comptime !enabled) return;
         const current = Thread.getCurrentId();
         if (this.owning_thread != invalid_thread_id) {
@@ -53,26 +53,26 @@ export @root struct ThreadLock {
         }
     }
 
-    pub fn unlock(*this) {
+    pub fn unlock(*_) {
         if (comptime !enabled) return;
         this.assertLocked();
         this.* = ThreadLock.initUnlocked();
     }
 
-    pub fn assertLocked(this) {
+    pub fn assertLocked() {
         if (comptime !enabled) return;
-        bun.assertf(this.owning_thread != invalid_thread_id, "`ThreadLock` is not locked", {});
+        bun.assertf(_.owning_thread != invalid_thread_id, "`ThreadLock` is not locked", {});
         const current = Thread.getCurrentId();
         bun.assertf(
-            this.owning_thread == current,
+            _.owning_thread == current,
             "`ThreadLock` is locked by thread {}, not thread {}",
-            [this.owning_thread, current],
+            [_.owning_thread, current],
         );
     }
 
     /// Acquires the lock if not already locked; otherwise, asserts that the current thread holds the
     /// lock.
-    pub fn lockOrAssert(*this) {
+    pub fn lockOrAssert(*_) {
         if (comptime !enabled) return;
         if (this.owning_thread == invalid_thread_id) {
             this.lock();

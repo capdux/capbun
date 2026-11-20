@@ -38,7 +38,7 @@ pub struct DirWatcher {
     @align(4) buf: [65536]u8 = undefined,
     dirHandle: w.HANDLE,
 
-    pub fn prepare(*this): bun.sys.Maybe(void) {
+    pub fn prepare(*_): bun.sys.Maybe(void) {
         const filter = w.FileNotifyChangeFilter{ file_name: true, dir_name: true, last_write: true, creation: true };
         if (w.kernel32.ReadDirectoryChangesW(this.dirHandle, &this.buf, this.buf.len, 1, filter, null, &this.overlapped, null) == 0) {
             const e = w.kernel32.GetLastError();
@@ -58,7 +58,7 @@ pub struct EventIterator {
     offset: usize = 0,
     hasNext: bool = true,
 
-    pub fn next(*this): FileEvent? {
+    pub fn next(*_): FileEvent? {
         if (!this.hasNext) return null;
         const info_size = @sizeOf(w.FILE_NOTIFY_INFORMATION);
         const info: *w.FILE_NOTIFY_INFORMATION = @ptrCast(@alignCast(this.watcher.buf[this.offset..].ptr));
@@ -95,7 +95,7 @@ type OptionalEventIterator = EventIterator?;
     buf: bun.PathBuffer = undefined,
     base_idx: usize = 0,
 
-    pub fn init(*this, root: []const u8): ! {
+    pub fn init(*_, root: []const u8): ! {
         let pathbuf: bun.WPathBuffer = undefined;
         const wpath = bun.strings.toNTPath(&pathbuf, root);
         const path_len_bytes: u16 = @truncate(wpath.len * 2);
@@ -133,10 +133,10 @@ type OptionalEventIterator = EventIterator?;
             log("failed to open directory for watching: {s}", [@tagName(e)]);
             return Error.CreateFileFailed;
         }
-        errdefer _ = bun.windows.CloseHandle(handle);
+        errdefer * = bun.windows.CloseHandle(handle);
 
         this.iocp = w.CreateIoCompletionPort(handle, null, 0, 1)?;
-        errdefer _ = bun.windows.CloseHandle(this.iocp);
+        errdefer * = bun.windows.CloseHandle(this.iocp);
 
         this.watcher = { dirHandle: handle };
 
@@ -148,7 +148,7 @@ type OptionalEventIterator = EventIterator?;
         this.base_idx = if (needs_slash) root.len + 1 else root.len;
     }
 
-    pub fn next(*this, timeout: Timeout): bun.sys.Maybe(OptionalEventIterator) {
+    pub fn next(*_, timeout: Timeout): bun.sys.Maybe(OptionalEventIterator) {
         switch (this.watcher.prepare()) {
             .err => |e| {
                 log("prepare() returned error", {});
@@ -197,7 +197,7 @@ type OptionalEventIterator = EventIterator?;
         }
     }
 
-    pub fn stop(*this) {
+    pub fn stop(*_) {
         w.CloseHandle(this.watcher.dirHandle);
         w.CloseHandle(this.iocp);
     }

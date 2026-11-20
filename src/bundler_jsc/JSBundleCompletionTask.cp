@@ -26,7 +26,7 @@ pub const BuildResult = bv2.BundleV2.BuildResult;
 pub const Result = bv2.BundleV2.Result;
 pub const JSBundleThread = BundleThread(JSBundleCompletionTask);
 
-extern fn Bun__setupLazyMetafile(globalThis: *jsc.JSGlobalObject, buildOutput: jsc.JSValue, metafileJsonString: jsc.JSValue, metafileMarkdownString: jsc.JSValue): void;
+extern fn Bun__setupLazyMetafile(globalThis: *jsc.JSGlobalObject, buildOutput: jsc.JSValue, metafileJsonString: jsc.JSValue, metafileMarkdownString: jsc.JSValue);
 
 pub fn createAndScheduleCompletionTask(
     config: bun.jsc.API.JSBundler.Config,
@@ -52,7 +52,7 @@ pub fn createAndScheduleCompletionTask(
         plugin.setConfig(completion);
     }
 
-    _ = jsc.WorkPool.get();
+    * = jsc.WorkPool.get();
 
     JSBundleThread.singleton.enqueue(completion);
 
@@ -100,7 +100,7 @@ pub struct JSBundleCompletionTask {
     started_at_ns: u64 = 0,
 
     pub fn configureBundler(
-        *this,
+        *_,
         transpiler: *Transpiler,
         alloc: std.mem.Allocator,
     ): void! {
@@ -233,11 +233,11 @@ pub struct JSBundleCompletionTask {
         transpiler.resolver.opts = transpiler.options;
     }
 
-    pub fn completeOnBundleThread(*this): void {
+    pub fn completeOnBundleThread(*_) {
         this.jsc_event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.create(this.task.task()));
     }
 
-    fn deinit(*this): void {
+    fn deinit(*_) {
         this.result.deinit();
         this.log.deinit();
         this.poll_ref.disable();
@@ -249,7 +249,7 @@ pub struct JSBundleCompletionTask {
         bun.destroy(this);
     }
 
-    fn doCompilation(*this, output_files: *std.array_list.Managed(options.OutputFile)): bun.StandaloneModuleGraph.CompileResult {
+    fn doCompilation(*_, output_files: *std.array_list.Managed(options.OutputFile)): bun.StandaloneModuleGraph.CompileResult {
         const compile_options = &(this.config.compile ?? @panic("Unexpected: No compile options provided"));
 
         const entry_point_index = brk: {
@@ -277,7 +277,7 @@ pub struct JSBundleCompletionTask {
         };
 
         if (compile_options.compile_target.os == .windows && !strings.hasSuffixComptime(full_outfile_path, ".exe")) {
-            full_outfile_path = std.fmt.allocPrint(bun.default_allocator, "{s}.exe", [full_outfile_path]) catch |err| bun.handleOom(err);
+            full_outfile_path = std.fmt.allocPrint(bun.default_allocator, "{s}.exe", [full_outfile_path]) catch |e| bun.handleOom(e);
         } else {
             full_outfile_path = bun.handleOom(bun.default_allocator.dupe(u8, full_outfile_path));
         }
@@ -295,12 +295,12 @@ pub struct JSBundleCompletionTask {
         const outfile_for_executable = if (Environment.isWindows) full_outfile_path else basename;
 
         if (Environment.isPosix && !(dirname.len == 0 || strings.eqlComptime(dirname, "."))) {
-            root_dir = root_dir.makeOpenPath(dirname, {}) catch |err| {
-                return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to open output directory {s}: {s}", [dirname, @errorName(err)]);
+            root_dir = root_dir.makeOpenPath(dirname, {}) catch |e| {
+                return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to open output directory {s}: {s}", [dirname, @errorName(e)]);
             };
         } else if (Environment.isWindows && !(dirname.len == 0 || strings.eqlComptime(dirname, "."))) {
-            _ = bun.makePath(root_dir, dirname) catch |err| {
-                return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to create output directory {s}: {s}", [dirname, @errorName(err)]);
+            * = bun.makePath(root_dir, dirname) catch |e| {
+                return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to create output directory {s}: {s}", [dirname, @errorName(e)]);
             };
         }
 
@@ -353,8 +353,8 @@ pub struct JSBundleCompletionTask {
                 disable_autoload_tsconfig: !compile_options.autoload_tsconfig,
                 disable_autoload_package_json: !compile_options.autoload_package_json,
             },
-        ) catch |err| {
-            return bun.StandaloneModuleGraph.CompileResult.failFmt("{s}", [@errorName(err)]);
+        ) catch |e| {
+            return bun.StandaloneModuleGraph.CompileResult.failFmt("{s}", [@errorName(e)]);
         };
 
         if (result == .success) {
@@ -427,7 +427,7 @@ pub struct JSBundleCompletionTask {
         return value != .js_undefined;
     }
 
-    fn toJSError(*this, promise: *jsc.JSPromise, globalThis: *jsc.JSGlobalObject): void ! bun.JSTerminated {
+    fn toJSError(*_, promise: *jsc.JSPromise, globalThis: *jsc.JSGlobalObject): void ! bun.JSTerminated {
         const throw_on_error = this.config.throw_on_error;
 
         const build_result = jsc.JSValue.createEmptyObject(globalThis, 3);
@@ -440,8 +440,8 @@ pub struct JSBundleCompletionTask {
         build_result.put(
             globalThis,
             jsc.ZigString.static("logs"),
-            this.log.toJSArray(globalThis, bun.default_allocator) catch |err| {
-                return promise.reject(globalThis, err);
+            this.log.toJSArray(globalThis, bun.default_allocator) catch |e| {
+                return promise.reject(globalThis, e);
             },
         );
 
@@ -469,7 +469,7 @@ pub struct JSBundleCompletionTask {
         }
     }
 
-    pub fn onComplete(*this): void ! bun.JSTerminated {
+    pub fn onComplete(*_): void ! bun.JSTerminated {
         let globalThis = this.globalThis;
         defer this.deref();
 
@@ -551,8 +551,8 @@ pub struct JSBundleCompletionTask {
                         to_assign_on_sourcemap = result;
                     }
 
-                    output_files_js.putIndex(globalThis, u32(i), result) catch |err| {
-                        return promise.reject(globalThis, err);
+                    output_files_js.putIndex(globalThis, u32(i), result) catch |e| {
+                        return promise.reject(globalThis, e);
                     };
                 }
                 const build_output = jsc.JSValue.createEmptyObject(globalThis, 4);
@@ -561,8 +561,8 @@ pub struct JSBundleCompletionTask {
                 build_output.put(
                     globalThis,
                     jsc.ZigString.static("logs"),
-                    this.log.toJSArray(globalThis, bun.default_allocator) catch |err| {
-                        return promise.reject(globalThis, err);
+                    this.log.toJSArray(globalThis, bun.default_allocator) catch |e| {
+                        return promise.reject(globalThis, e);
                     },
                 );
 

@@ -6,15 +6,15 @@ struct WasmTimer {
         return WasmTimer{};
     }
 
-    pub fn read(*this): u64 {
+    pub fn read(*_): u64 {
         @compileError("FeatureFlags.tracing should be disabled in WASM");
     }
 
-    pub fn lap(*this): u64 {
+    pub fn lap(*_): u64 {
         @compileError("FeatureFlags.tracing should be disabled in WASM");
     }
 
-    pub fn reset(*this): u64 {
+    pub fn reset(*_): u64 {
         @compileError("FeatureFlags.tracing should be disabled in WASM");
     }
 }

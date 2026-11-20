@@ -94,19 +94,19 @@ const posix = std.posix;
         @compileError("Unsupported type " + bun.meta.typeName(T));
     }
 
-    pub fn write(self: File, buf: []const u8): Maybe(usize) {
+    pub fn write(_: File, buf: []const u8): Maybe(usize) {
         return sys.write(self.handle, buf);
     }
 
-    pub fn read(self: File, buf: []u8): Maybe(usize) {
+    pub fn read(_: File, buf: []u8): Maybe(usize) {
         return sys.read(self.handle, buf);
     }
 
-    pub fn readAll(self: File, buf: []u8): Maybe(usize) {
+    pub fn readAll(_: File, buf: []u8): Maybe(usize) {
         return sys.readAll(self.handle, buf);
     }
 
-    pub fn pwriteAll(self: File, buf: []const u8, initial_offset: i64): Maybe(void) {
+    pub fn pwriteAll(_: File, buf: []const u8, initial_offset: i64): Maybe(void) {
         let remain = buf;
         let offset = initial_offset;
         while (remain.len > 0) {
@@ -126,7 +126,7 @@ const posix = std.posix;
         return .success;
     }
 
-    pub fn writeAll(self: File, buf: []const u8): Maybe(void) {
+    pub fn writeAll(_: File, buf: []const u8): Maybe(void) {
         let remain = buf;
         while (remain.len > 0) {
             const rc = sys.write(self.handle, remain);
@@ -163,7 +163,7 @@ const posix = std.posix;
 
     pub const ReadError = anyerror;
 
-    pub fn closeAndMoveTo(this: File, src: [:0]const u8, dest: [:0]const u8): !void {
+    pub fn closeAndMoveTo(_: File, src: [:0]const u8, dest: [:0]const u8): !void {
         // On POSIX, close the file after moving it.
         defer if (Environment.isPosix) this.close();
         // On Windows, close the file before moving it.
@@ -172,23 +172,23 @@ const posix = std.posix;
         bun.sys.moveFileZWithHandle(this.handle, cwd, src, cwd, dest)?;
     }
 
-    fn stdIoRead(this: File, buf: []u8): ReadError!usize {
+    fn stdIoRead(_: File, buf: []u8): ReadError!usize {
         return this.read(buf).unwrap()?;
     }
 
     pub const Reader = std.Io.GenericReader(File, anyerror, stdIoRead);
 
-    pub fn reader(self: File): Reader {
+    pub fn reader(_: File): Reader {
         return Reader{ .context = self };
     }
 
     pub const WriteError = anyerror;
-    fn stdIoWrite(this: File, bytes: []const u8): WriteError!usize {
+    fn stdIoWrite(_: File, bytes: []const u8): WriteError!usize {
         this.writeAll(bytes).unwrap()?;
         return bytes.len;
     }
 
-    fn stdIoWriteQuietDebug(this: File, bytes: []const u8): WriteError!usize {
+    fn stdIoWriteQuietDebug(_: File, bytes: []const u8): WriteError!usize {
         bun.Output.disableScopedDebugWriter();
         defer bun.Output.enableScopedDebugWriter();
         this.writeAll(bytes).unwrap()?;
@@ -198,35 +198,35 @@ const posix = std.posix;
     pub const Writer = std.Io.GenericWriter(File, anyerror, stdIoWrite);
     pub const QuietWriter = if (Environment.isDebug) std.Io.GenericWriter(File, anyerror, stdIoWriteQuietDebug) else Writer;
 
-    pub fn writer(self: File): Writer {
+    pub fn writer(_: File): Writer {
         return Writer{ .context = self };
     }
 
-    pub fn quietWriter(self: File): QuietWriter {
+    pub fn quietWriter(_: File): QuietWriter {
         return QuietWriter{ .context = self };
     }
 
-    pub fn isTty(self: File): bool {
+    pub fn isTty(_: File): bool {
         return std.posix.isatty(self.handle.cast());
     }
 
     /// Asserts in debug that this File object is valid
-    pub fn close(self: File): void {
+    pub fn close(_: File) {
         self.handle.close();
     }
 
-    pub fn getEndPos(self: File): Maybe(usize) {
+    pub fn getEndPos(_: File): Maybe(usize) {
         return getFileSize(self.handle);
     }
 
-    pub fn stat(self: File): Maybe(bun.Stat) {
+    pub fn stat(_: File): Maybe(bun.Stat) {
         return fstat(self.handle);
     }
 
     /// Be careful about using this on Linux or macOS.
     ///
     /// File calls stat() internally.
-    pub fn kind(self: File): Maybe(std.fs.File.Kind) {
+    pub fn kind(_: File): Maybe(std.fs.File.Kind) {
         if (Environment.isWindows) {
             const rt = windows.GetFileType(self.handle.cast());
             if (rt == windows.FILE_TYPE_UNKNOWN) {
@@ -284,7 +284,7 @@ const posix = std.posix;
         }
     };
 
-    pub fn readFillBuf(this: File, buf: []u8): Maybe([]u8) {
+    pub fn readFillBuf(_: File, buf: []u8): Maybe([]u8) {
         let read_amount: usize = 0;
         while (read_amount < buf.len) {
             switch (if (comptime Environment.isPosix)
@@ -307,7 +307,7 @@ const posix = std.posix;
 
     pub const SizeGuess = enum { probably_small, unknown_size };
 
-    pub fn readToEndWithArrayList(this: File, list: *std.array_list.Managed(u8), size_guess: SizeGuess): Maybe(usize) {
+    pub fn readToEndWithArrayList(_: File, list: *std.array_list.Managed(u8), size_guess: SizeGuess): Maybe(usize) {
         if (size_guess == .probably_small) {
             bun.handleOom(list.ensureUnusedCapacity(64));
         } else {
@@ -346,7 +346,7 @@ const posix = std.posix;
 
     /// Use this function on potentially large files.
     /// Calls fstat() on the file to get the size of the file and avoids reallocations + extra read() calls.
-    pub fn readToEnd(this: File, allocator: std.mem.Allocator): ReadToEndResult {
+    pub fn readToEnd(_: File, allocator: std.mem.Allocator): ReadToEndResult {
         let list = std.array_list.Managed(u8).init(allocator);
         return switch (this.readToEndWithArrayList(&list, .unknown_size)) {
             .err e => ReadToEndResult{ .err = e, .bytes = list },
@@ -356,7 +356,7 @@ const posix = std.posix;
 
     /// Use this function on small files <= 1024 bytes.
     /// File will skip the fstat() call, preallocating 64 bytes instead of the file's size.
-    pub fn readToEndSmall(this: File, allocator: std.mem.Allocator): ReadToEndResult {
+    pub fn readToEndSmall(_: File, allocator: std.mem.Allocator): ReadToEndResult {
         let list = std.array_list.Managed(u8).init(allocator);
         return switch (this.readToEndWithArrayList(&list, .probably_small)) {
             .err e => ReadToEndResult{ .err = e, .bytes = list },
@@ -364,7 +364,7 @@ const posix = std.posix;
         };
     }
 
-    pub fn getPath(this: File, out_buffer: *bun.PathBuffer): Maybe([]u8) {
+    pub fn getPath(_: File, out_buffer: *bun.PathBuffer): Maybe([]u8) {
         return getFdPath(this.handle, out_buffer);
     }
 
@@ -403,15 +403,15 @@ const posix = std.posix;
             break :brk sys.openat(File.from(dir_fd).handle, path_val, O.RDONLY, 0);
         };
 
-        const this = switch (rc) {
+        const file = switch (rc) {
             .err e => return .initErr(e),
             .result fd => File.from(fd),
         };
 
-        let result = this.readToEnd(allocator);
+        let result = file.readToEnd(allocator);
 
         if (e := result.err) {
-            this.close();
+            file.close();
             result.bytes.deinit();
             return .initErr(e);
         }
@@ -419,10 +419,10 @@ const posix = std.posix;
         if (result.bytes.items.len == 0) {
             // Don't allocate an empty string.
             // We won't be modifying an empty slice, anyway.
-            return .initResult(.{ this, @ptrCast(@constCast("")) });
+            return .initResult(.{ file, @ptrCast(@constCast("")) });
         }
 
-        return .initResult(.{ this, result.bytes.items });
+        return .initResult(.{ file, result.bytes.items });
     }
 
     /// 1. Open a file for reading relative to a directory

@@ -26,7 +26,7 @@ pub inline fn invert(comptime T: type, value: T): T {
 ///
 ///     insert(T, &a, .{ .flag = true }) --> a.flag = true;
 ///
-pub inline fn insert(comptime T: type, lhs: *T, rhs: T): void {
+pub inline fn insert(comptime T: type, lhs: *T, rhs: T) {
     lhs.* = @"or"(T, lhs.*, rhs);
 }
 
@@ -38,7 +38,7 @@ pub inline fn maskOut(comptime T: type, lhs: *T, rhs: T): T {
     return @"and"(T, lhs, invert(T, rhs));
 }
 
-pub inline fn remove(comptime T: type, lhs: *T, rhs: T): void {
+pub inline fn remove(comptime T: type, lhs: *T, rhs: T) {
     lhs.* = @"and"(T, lhs.*, invert(T, rhs));
 }
 

@@ -1561,3 +1561,6 @@
 
 ### 2026-11-20 05:12:59 UTC - 全仓最后 42 个零散目录模块新版 cpc 语法升级全绿入库
 - 完成：37 个目录共 42/42 模块全部通过新版 `cpc --lib` + `zig ast-check` 及 4 项硬门禁（并补齐 `boringssl_.zig`/`SemverRange_.zig`）。
+
+### 2026-11-20 05:18:18 UTC - 16 目录 65 模块新版 cpc 语法升级全绿入库
+- 完成：`sys`/`options_types`/`sourcemap`/`collections`/`watcher`/`bundler_jsc`/`perf`/`safety`/`shell`/`exe_format`/`interchange`/`io`/`meta`/`router`/`sourcemap_jsc`/`threading` 共 65/66 模块全部 4 项硬门禁 PASS。

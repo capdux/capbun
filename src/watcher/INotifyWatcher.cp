@@ -41,7 +41,7 @@ const EventListBytes = [eventlist_bytes_size]u8;
 type UnalignedEventPtr = *align(1) Event;
 type ConstUnalignedEventPtr = *align(1) const Event;
 type ConstUnalignedEventSlice = []const *align(1) Event;
-type OptStrZ = ?[:0]u8;
+type OptStrZ = [:0]u8?;
 
 pub struct ReadPtr {
     i: u32,
@@ -57,7 +57,7 @@ pub struct ReadPtr {
     watch_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     coalesce_interval: isize = 100_000,
 
-    pub fn watchPath(*this, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
+    pub fn watchPath(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
         bun.assert(this.loaded);
         const old_count = this.watch_count.fetchAdd(1, .release);
         defer if (old_count == 0) Futex.wake(&this.watch_count, 10);
@@ -67,7 +67,7 @@ pub struct ReadPtr {
         return bun.sys.Maybe(EventListIndex).errnoSysP(rc, .watch, pathname) ?? { result: rc };
     }
 
-    pub fn watchDir(*this, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
+    pub fn watchDir(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
         bun.assert(this.loaded);
         const old_count = this.watch_count.fetchAdd(1, .release);
         defer if (old_count == 0) Futex.wake(&this.watch_count, 10);
@@ -77,14 +77,14 @@ pub struct ReadPtr {
         return bun.sys.Maybe(EventListIndex).errnoSysP(rc, .watch, pathname) ?? { result: rc };
     }
 
-    pub fn unwatch(*this, wd: EventListIndex) {
+    pub fn unwatch(*_, wd: EventListIndex) {
         bun.assert(this.loaded);
-        _ = this.watch_count.fetchSub(1, .release);
-        _ = system.inotify_rm_watch(this.fd, wd);
+        * = this.watch_count.fetchSub(1, .release);
+        * = system.inotify_rm_watch(this.fd, wd);
     }
 
-    pub fn init(*this, _root: []const u8): ! {
-        _ = _root;
+    pub fn init(*_, _root: []const u8): ! {
+        * = _root;
         bun.assert(!this.loaded);
         this.loaded = true;
 
@@ -96,7 +96,7 @@ pub struct ReadPtr {
         log("{f} init", [this.fd]);
     }
 
-    pub fn read(*this): bun.sys.Maybe(ConstUnalignedEventSlice) {
+    pub fn read(*_): bun.sys.Maybe(ConstUnalignedEventSlice) {
         bun.assert(this.loaded);
         let i: u32 = 0;
         let read_eventlist_bytes: []u8 = &[];
@@ -202,7 +202,7 @@ pub struct ReadPtr {
         return { result: this.eventlist_ptrs[0..count] };
     }
 
-    pub fn stop(*this) {
+    pub fn stop(*_) {
         log("{f} stop", [this.fd]);
         if (this.fd != bun.invalid_fd) {
             this.fd.close();

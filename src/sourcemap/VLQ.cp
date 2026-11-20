@@ -9,11 +9,11 @@ export @root struct VLQ {
     len: u8 = 0,
 
     @inline
-    pub fn slice(this): string {
+    pub fn slice(): string {
         return this.bytes[0..this.len as usize];
     }
 
-    pub fn writeTo(this, writer: auto)! {
+    pub fn writeTo(writer: auto)! {
         writer.writeAll(this.bytes[0..this.len as usize])?;
     }
 }

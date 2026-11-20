@@ -38,7 +38,7 @@ pub struct PluginRunner {
     }
 
     pub fn onResolve(
-        *this,
+        *_,
         specifier: []const u8,
         importer: []const u8,
         log: *logger.Log,
@@ -137,7 +137,7 @@ pub struct PluginRunner {
         }
     }
 
-    pub fn onResolveJSC(this, namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget): jsc.ErrorableString? ! bun.JSError {
+    pub fn onResolveJSC(namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget): jsc.ErrorableString? ! bun.JSError {
         let global = this.global_object;
         const on_resolve_plugin = global.runOnResolvePlugins(
             if (namespace.length() > 0 && !namespace.eqlComptime("file"))
@@ -217,13 +217,13 @@ pub struct PluginRunner {
         const combined_string = std.fmt.allocPrint(this.allocator, "{f}:{f}", [user_namespace, file_path]) catch unreachable;
         let out_ = bun.String.init(combined_string);
         defer out_.deref();
-        const jsval = out_.toJS(this.global_object) catch |err| {
+        const jsval = out_.toJS(this.global_object) catch |e| {
             this.allocator.free(combined_string);
-            return jsc.ErrorableString.err(err, this.global_object.tryTakeException() ?? .js_undefined);
+            return jsc.ErrorableString.err(e, this.global_object.tryTakeException() ?? .js_undefined);
         };
-        const out = jsval.toBunString(this.global_object) catch |err| {
+        const out = jsval.toBunString(this.global_object) catch |e| {
             this.allocator.free(combined_string);
-            return jsc.ErrorableString.err(err, this.global_object.tryTakeException() ?? .js_undefined);
+            return jsc.ErrorableString.err(e, this.global_object.tryTakeException() ?? .js_undefined);
         };
         this.allocator.free(combined_string);
         return jsc.ErrorableString.ok(out);

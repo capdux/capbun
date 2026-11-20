@@ -54,7 +54,7 @@ pub struct ParseResultFail {
     value: i32 = 0,
     msg: []const u8 = "",
 
-    pub fn toData(this, path: []const u8): Logger.Data {
+    pub fn toData(path: []const u8): Logger.Data {
         return Logger.Data{
             location: Logger.Location{
                 file: path,
@@ -95,12 +95,12 @@ pub @c struct DevServerSourceMapData {
 pub @opaque struct SourceProviderMap {
     pub const getSourceSlice = ZigSourceProvider__getSourceSlice;
 
-    pub fn toSourceContentPtr(*this): ParsedSourceMap.SourceContentPtr {
+    pub fn toSourceContentPtr(*_): ParsedSourceMap.SourceContentPtr {
         return ParsedSourceMap.SourceContentPtr.fromProvider(this);
     }
 
     pub fn getSourceMap(
-        *this,
+        *_,
         source_filename: []const u8,
         load_hint: SourceMapLoadHint,
         result: ParseUrlResultHint,
@@ -120,12 +120,12 @@ pub @opaque struct DevServerSourceProvider {
     pub const getSourceSlice = DevServerSourceProvider__getSourceSlice;
     pub const getSourceMapJSON = DevServerSourceProvider__getSourceMapJSON;
 
-    pub fn toSourceContentPtr(*this): ParsedSourceMap.SourceContentPtr {
+    pub fn toSourceContentPtr(*_): ParsedSourceMap.SourceContentPtr {
         return ParsedSourceMap.SourceContentPtr.fromDevServerProvider(this);
     }
 
     pub fn getSourceMap(
-        *this,
+        *_,
         source_filename: []const u8,
         load_hint: SourceMapLoadHint,
         result: ParseUrlResultHint,
@@ -144,14 +144,14 @@ pub enum LineColumnOffsetOptional {
     @"null",
     value: LineColumnOffset,
 
-    pub fn advance(*this, input: []const u8) {
+    pub fn advance(*_, input: []const u8) {
         switch (unsafe { this.* }) {
             .@"null" => {},
             .value => |*v| v.advance(input),
         }
     }
 
-    pub fn reset(*this) {
+    pub fn reset(*_) {
         switch (unsafe { this.* }) {
             .@"null" => {},
             .value => {
@@ -167,7 +167,7 @@ pub struct LineColumnOffset {
 
     pub const Optional = LineColumnOffsetOptional;
 
-    pub fn add(*this, b: LineColumnOffset) {
+    pub fn add(*_, b: LineColumnOffset) {
         if (b.lines.zeroBased() == 0) {
             this.columns = this.columns.add(b.columns);
         } else {
@@ -176,7 +176,7 @@ pub struct LineColumnOffset {
         }
     }
 
-    pub fn advance(*this, input: []const u8) {
+    pub fn advance(*_, input: []const u8) {
         let cur: LineColumnOffset = unsafe { this.* };
         defer unsafe { this.* = cur; };
 
@@ -228,12 +228,12 @@ pub struct LineColumnOffset {
         cur.columns = cur.columns.addScalar(remain.len as i32);
     }
 
-    pub fn comesBefore(this, b: LineColumnOffset): bool {
+    pub fn comesBefore(b: LineColumnOffset): bool {
         return this.lines.zeroBased() < b.lines.zeroBased() || (this.lines.zeroBased() == b.lines.zeroBased() && this.columns.zeroBased() < b.columns.zeroBased());
     }
 
     pub static fn cmp(ctx: void, a: LineColumnOffset, b: LineColumnOffset): std.math.Order {
-        _ = ctx;
+        * = ctx;
         if (a.lines.zeroBased() != b.lines.zeroBased()) {
             return std.math.order(a.lines.zeroBased(), b.lines.zeroBased());
         }
@@ -265,11 +265,11 @@ pub struct SourceMapPieces {
         };
     }
 
-    pub fn hasContent(*this): bool {
+    pub fn hasContent(*_): bool {
         return (this.prefix.items.len + this.mappings.items.len + this.suffix.items.len) > 0;
     }
 
-    pub fn finalize(*this, allocator: std.mem.Allocator, _shifts: []SourceMapShifts): ([]const u8)! {
+    pub fn finalize(*_, allocator: std.mem.Allocator, _shifts: []SourceMapShifts): ([]const u8)! {
         let shifts = _shifts;
         let start_of_run: usize = 0;
         let current: usize = 0;
@@ -353,10 +353,10 @@ pub struct SourceMapPieces {
 pub struct DebugIDFormatter {
     id: u64 = 0,
 
-    pub fn format(this, writer: *std.Io.Writer)! {
+    pub fn format(*_, writer: *std.Io.Writer)! {
         let buf: [32]u8 = undefined;
         const formatter = bun.fmt.hexIntUpper(this.id);
-        _ = std.fmt.bufPrint(&buf, "{f}64756E2164756E21", [formatter]) catch unreachable;
+        * = std.fmt.bufPrint(&buf, "{f}64756E2164756E21", [formatter]) catch unreachable;
         writer.writeAll(&buf)?;
     }
 }
@@ -617,8 +617,8 @@ export @root struct SourceMap {
                         allocator,
                         found_url.slice(),
                         result,
-                    ) catch |err| {
-                        inline_err = err;
+                    ) catch |e| {
+                        inline_err = e;
                         ParseUrl{}
                     };
                     if (inline_err != null) break :try_inline;
@@ -644,10 +644,10 @@ export @root struct SourceMap {
                             allocator,
                             json_slice,
                             result,
-                        ) catch |err| {
+                        ) catch |e| {
                             bun.Output.warn("Could not decode sourcemap in dev server runtime: {s} - {s}", [
                                 source_filename,
-                                @errorName(err),
+                                @errorName(e),
                             ]);
                             bun.jsc.SavedSourceMap.MissingSourceMapNoteInfo.seen_invalid = true;
                             return null;
@@ -665,10 +665,10 @@ export @root struct SourceMap {
                                 allocator,
                                 data,
                                 result,
-                            ) catch |err| {
+                            ) catch |e| {
                                 bun.Output.warn("Could not decode sourcemap in '{s}': {s}", [
                                     source_filename,
-                                    @errorName(err),
+                                    @errorName(e),
                                 ]);
                                 bun.jsc.SavedSourceMap.MissingSourceMapNoteInfo.seen_invalid = true;
                                 return null;
@@ -695,10 +695,10 @@ export @root struct SourceMap {
                         allocator,
                         data,
                         result,
-                    ) catch |err| {
+                    ) catch |e| {
                         bun.Output.warn("Could not decode sourcemap in '{s}': {s}", [
                             source_filename,
-                            @errorName(err),
+                            @errorName(e),
                         ]);
                         bun.jsc.SavedSourceMap.MissingSourceMapNoteInfo.seen_invalid = true;
                         return null;
@@ -728,7 +728,7 @@ export @root struct SourceMap {
     }
 
     pub fn find(
-        this: &SourceMap,
+        _: &SourceMap,
         line: bun.Ordinal,
         column: bun.Ordinal,
     ): Mapping? {
@@ -736,48 +736,51 @@ export @root struct SourceMap {
     }
 
     pub static fn appendSourceMapChunk(
-        *j: StringJoiner,
+        j: *StringJoiner,
         allocator: std.mem.Allocator,
-        let prev_end_state: SourceMapState,
-        let start_state: SourceMapState,
-        let source_map: []const u8,
+        prev_end_state: SourceMapState,
+        start_state: SourceMapState,
+        source_map: []const u8,
     )! {
-        if (start_state.generated_line != 0) {
-            j.push(strings.repeatingAlloc(allocator, start_state.generated_line as usize, ';')?, allocator);
-            prev_end_state.generated_column = 0;
+        let sm = source_map;
+        let prev = prev_end_state;
+        let start = start_state;
+        if (start.generated_line != 0) {
+            j.push(strings.repeatingAlloc(allocator, start.generated_line as usize, ';')?, allocator);
+            prev.generated_column = 0;
         }
 
-        if (semicolons := strings.indexOfNotChar(source_map, ';')) {
+        if (semicolons := strings.indexOfNotChar(sm, ';')) {
             if (semicolons > 0) {
-                j.pushStatic(source_map[0..semicolons]);
-                source_map = source_map[semicolons..];
-                prev_end_state.generated_column = 0;
-                start_state.generated_column = 0;
+                j.pushStatic(sm[0..semicolons]);
+                sm = sm[semicolons..];
+                prev.generated_column = 0;
+                start.generated_column = 0;
             }
         }
 
         let i: usize = 0;
-        const generated_column = decodeVLQAssumeValid(source_map, i);
+        const generated_column = decodeVLQAssumeValid(sm, i);
         i = generated_column.start;
-        const source_index = decodeVLQAssumeValid(source_map, i);
+        const source_index = decodeVLQAssumeValid(sm, i);
         i = source_index.start;
-        const original_line = decodeVLQAssumeValid(source_map, i);
+        const original_line = decodeVLQAssumeValid(sm, i);
         i = original_line.start;
-        const original_column = decodeVLQAssumeValid(source_map, i);
+        const original_column = decodeVLQAssumeValid(sm, i);
         i = original_column.start;
 
-        source_map = source_map[i..];
+        sm = sm[i..];
 
-        start_state.source_index += source_index.value;
-        start_state.generated_column += generated_column.value;
-        start_state.original_line += original_line.value;
-        start_state.original_column += original_column.value;
+        start.source_index += source_index.value;
+        start.generated_column += generated_column.value;
+        start.original_line += original_line.value;
+        start.original_column += original_column.value;
 
         let str: MutableString = MutableString.initEmpty(allocator);
-        appendMappingToBuffer(*str, j.lastByte(), prev_end_state, start_state);
+        appendMappingToBuffer(*str, j.lastByte(), prev, start);
         j.push(str.slice(), allocator);
 
-        j.pushStatic(source_map);
+        j.pushStatic(sm);
     }
 
     pub static fn appendSourceMappingURLRemote(
@@ -798,7 +801,7 @@ export @root struct SourceMap {
         writer.writeAll(".map")?;
     }
 
-    pub static fn appendMappingToBuffer(*buffer: MutableString, last_byte: u8, prev_state: SourceMapState, current_state: SourceMapState) {
+    pub static fn appendMappingToBuffer(buffer: *MutableString, last_byte: u8, prev_state: SourceMapState, current_state: SourceMapState) {
         const needs_comma = last_byte != 0 && last_byte != ';' && last_byte != '"';
 
         const vlqs: [4]VLQ = [

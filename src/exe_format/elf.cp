@@ -44,12 +44,12 @@ pub struct ElfFile {
         return res;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.data.deinit();
         this.allocator.destroy(this);
     }
 
-    pub fn normalizeInterpreter(*this): void {
+    pub fn normalizeInterpreter(*_) {
         if (hostUsesNixStoreInterpreter()) return;
 
         const ehdr = readEhdr(this.data.items);
@@ -98,7 +98,7 @@ pub struct ElfFile {
         }
     }
 
-    fn updateInterpSectionSize(*this, ehdr: Elf64_Ehdr, new_size: u64): void {
+    fn updateInterpSectionSize(*_, ehdr: Elf64_Ehdr, new_size: u64) {
         const shdr_size: usize = @sizeOf(Elf64_Shdr);
         const shnum = ehdr.e_shnum;
         if (shnum == 0 || ehdr.e_shstrndx >= shnum) return;
@@ -124,7 +124,7 @@ pub struct ElfFile {
         }
     }
 
-    pub fn writeBunSection(*this, payload: []const u8): void! {
+    pub fn writeBunSection(*_, payload: []const u8): void! {
         const ehdr = readEhdr(this.data.items);
         const bun_section = this.findBunSection(ehdr)?;
         const bun_section_offset = bun_section.file_offset;
@@ -240,11 +240,11 @@ pub struct ElfFile {
         @memcpy(this.data.items[phdr_offset..][0..phdr_size], std.mem.asBytes(&extended));
     }
 
-    pub fn write(this, writer: auto): void! {
+    pub fn write(writer: auto): void! {
         writer.writeAll(this.data.items)?;
     }
 
-    fn findBunSection(this, ehdr: Elf64_Ehdr): BunSectionInfo! {
+    fn findBunSection(ehdr: Elf64_Ehdr): BunSectionInfo! {
         const shdr_size: u64 = @sizeOf(Elf64_Shdr);
         const shdr_table_offset = ehdr.e_shoff;
         const shnum = ehdr.e_shnum;
@@ -279,12 +279,12 @@ pub struct ElfFile {
         return err.BunSectionNotFound;
     }
 
-    fn readShdr(this, table_offset: u64, index: u16): Elf64_Shdr {
+    fn readShdr(table_offset: u64, index: u16): Elf64_Shdr {
         const offset = table_offset + (index as u64) * @sizeOf(Elf64_Shdr);
         return unsafe { std.mem.bytesAsValue(Elf64_Shdr, this.data.items[(offset as usize)..][0..@sizeOf(Elf64_Shdr)]).* };
     }
 
-    fn writeEhdrShoff(*this, new_shoff: u64): void {
+    fn writeEhdrShoff(*_, new_shoff: u64) {
         std.mem.writeInt(u64, this.data.items[40..][0..8], new_shoff, .little);
     }
 

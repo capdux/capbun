@@ -6,18 +6,18 @@ export enum Format {
     cjs,
     internal_bake_dev,
 
-    pub fn keepES6ImportExportSyntax(this): bool {
-        return this == Format.esm;
+    pub fn keepES6ImportExportSyntax(): bool {
+        return _ == Format.esm;
     }
 
     @inline
-    pub fn isESM(this): bool {
-        return this == Format.esm;
+    pub fn isESM(): bool {
+        return _ == Format.esm;
     }
 
     @inline
-    pub fn isAlwaysStrictMode(this): bool {
-        return this == Format.esm;
+    pub fn isAlwaysStrictMode(): bool {
+        return _ == Format.esm;
     }
 
     pub const Map = bun.ComptimeStringMap(Format, .{

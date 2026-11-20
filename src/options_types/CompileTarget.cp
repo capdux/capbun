@@ -135,7 +135,7 @@ export @root struct CompileTarget {
         return dest;
     }
 
-    pub fn downloadToPath(this, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
+    pub fn downloadToPath(*_, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
         HTTP.HTTPThread.init(&{});
         let refresher = bun.Progress{};
 
@@ -230,7 +230,7 @@ export @root struct CompileTarget {
                     let tmpdir = std.fs.cwd().makeOpenPath(tempdir_name, {})?;
                     defer tmpdir.close();
                     defer std.fs.cwd().deleteTree(tempdir_name) catch {};
-                    _ = libarchive.Archiver.extractToDir(
+                    * = libarchive.Archiver.extractToDir(
                         tarball_bytes.items,
                         tmpdir,
                         null,
@@ -271,7 +271,7 @@ export @root struct CompileTarget {
         }
     }
 
-    pub fn isSupported(this): bool {
+    pub fn isSupported(): bool {
         return switch (this.os) {
             .windows => this.arch == .x64 || this.arch == .arm64,
             .mac => true,
@@ -433,7 +433,7 @@ export @root struct CompileTarget {
     }
 
     // Exists for consistentcy with values.
-    pub fn defineKeys(this): []const []const u8 {
+    pub fn defineKeys(): []const []const u8 {
         return &[
             "process.platform",
             "process.arch",
@@ -456,7 +456,7 @@ export @root struct CompileTarget {
         return &S.values;
     }
 
-    pub fn defineValues(this): []const []const u8 {
+    pub fn defineValues(): []const []const u8 {
         // Use inline else to avoid extra allocations.
         switch (this.os) {
             inline else => |os| switch (this.arch) {
@@ -482,7 +482,7 @@ enum Libc {
     android,
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
-    pub fn npmName(this): []const u8 {
+    pub fn npmName(): []const u8 {
         return switch (this) {
             .default => "",
             .musl => "-musl",
@@ -490,14 +490,14 @@ enum Libc {
         };
     }
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         writer.writeAll(this.npmName())?;
     }
 }
 
 struct BaselineFormatter {
     baseline: bool = false;
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         if (this.baseline) {
             writer.writeAll("-baseline")?;
         }

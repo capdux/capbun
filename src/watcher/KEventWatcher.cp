@@ -12,14 +12,14 @@ const changelist_count = 128;
     eventlist_index: EventListIndex = 0,
     fd: bun.FD.Optional = .none,
 
-    pub fn init(*this, _root: []const u8): ! {
-        _ = _root;
+    pub fn init(*_, _root: []const u8): ! {
+        * = _root;
         const fd = std.posix.kqueue()?;
         if (fd == 0) return err.KQueueError;
         this.fd = .init(.fromNative(fd));
     }
 
-    pub fn stop(*this) {
+    pub fn stop(*_) {
         if (fd := this.fd.take()) {
             fd.close();
         }

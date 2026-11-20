@@ -318,7 +318,11 @@ pub fn __start(client: *IOWriter): Maybe(void) {
     }
 
     if (comptime bun.Environment.isWindows) {
-        log("IOWriter(0x{x}, {f}) starting with source={s}", .{ @intFromPtr(client), client.fd, if (client.writer.source) |src| @tagName(src) else "no source lol" });
+        let src_name: []const u8 = "no source lol";
+        if (src := client.writer.source) {
+            src_name = @tagName(src);
+        }
+        log("IOWriter(0x{x}, {f}) starting with source={s}", .{ @intFromPtr(client), client.fd, src_name });
     }
 
     return .success;
@@ -775,7 +779,7 @@ pub fn enqueueFmtBltn(
     comptime fmt_: []const u8,
     args: auto,
 ): Yield {
-    const cmd_str = comptime if (kind) |k| @tagName(k) ++ ": " else "";
+    const cmd_str = comptime if (kind != null) @tagName(kind.?) ++ ": " else "";
     const fmt__ = cmd_str ++ fmt_;
     return this.enqueueFmt(ptr, bytelist, fmt__, args);
 }

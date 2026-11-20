@@ -9,7 +9,7 @@ import analyze from "../bundler/analyze_transpiled_module.zig";
 const ModuleInfoDeserialized = analyze.ModuleInfoDeserialized;
 const StringID = analyze.StringID;
 
-@c export fn zig__renderDiff(expected_ptr: [*:0]const u8!, expected_len: usize, received_ptr: [*:0]const u8!, received_len: usize, globalThis: *bun.jsc.JSGlobalObject): void {
+@c export fn zig__renderDiff(expected_ptr: [*:0]const u8!, expected_len: usize, received_ptr: [*:0]const u8!, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) {
     const formatter = unsafe {
         DiffFormatter{
             received_string: received_ptr[0..received_len],
@@ -93,25 +93,25 @@ const StringID = analyze.StringID;
     return module_record;
 }
 
-extern fn JSC__VariableEnvironment__add(environment: *VariableEnvironment, vm: *bun.jsc.VM, identifier_array: *IdentifierArray, identifier_index: StringID): void;
+extern fn JSC__VariableEnvironment__add(environment: *VariableEnvironment, vm: *bun.jsc.VM, identifier_array: *IdentifierArray, identifier_index: StringID);
 extern fn JSC__IdentifierArray__create(len: usize): *IdentifierArray;
-extern fn JSC__IdentifierArray__destroy(identifier_array: *IdentifierArray): void;
-extern fn JSC__IdentifierArray__setFromUtf8(identifier_array: *IdentifierArray, n: usize, vm: *bun.jsc.VM, str: [*]const u8!, len: usize): void;
+extern fn JSC__IdentifierArray__destroy(identifier_array: *IdentifierArray);
+extern fn JSC__IdentifierArray__setFromUtf8(identifier_array: *IdentifierArray, n: usize, vm: *bun.jsc.VM, str: [*]const u8!, len: usize);
 extern fn JSC_JSModuleRecord__create(global_object: *bun.jsc.JSGlobalObject, vm: *bun.jsc.VM, module_key: *const IdentifierArray, source_code: *const SourceCode, declared_variables: *VariableEnvironment, lexical_variables: *VariableEnvironment, has_import_meta: bool, is_typescript: bool, has_tla: bool): *JSModuleRecord;
 extern fn JSC_JSModuleRecord__declaredVariables(module_record: *JSModuleRecord): *VariableEnvironment;
 extern fn JSC_JSModuleRecord__lexicalVariables(module_record: *JSModuleRecord): *VariableEnvironment;
-extern fn JSC_JSModuleRecord__addIndirectExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, import_name: StringID, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addLocalExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, local_name: StringID): void;
-extern fn JSC_JSModuleRecord__addNamespaceExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addStarExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addRequestedModuleNullAttributesPtr(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addRequestedModuleJavaScript(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addRequestedModuleWebAssembly(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addRequestedModuleJSON(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addRequestedModuleHostDefined(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID, host_defined_import_type: StringID): void;
-extern fn JSC_JSModuleRecord__addImportEntrySingle(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addImportEntrySingleTypeScript(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID): void;
-extern fn JSC_JSModuleRecord__addImportEntryNamespace(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID): void;
+extern fn JSC_JSModuleRecord__addIndirectExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, import_name: StringID, module_name: StringID);
+extern fn JSC_JSModuleRecord__addLocalExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, local_name: StringID);
+extern fn JSC_JSModuleRecord__addNamespaceExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, export_name: StringID, module_name: StringID);
+extern fn JSC_JSModuleRecord__addStarExport(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID);
+extern fn JSC_JSModuleRecord__addRequestedModuleNullAttributesPtr(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID);
+extern fn JSC_JSModuleRecord__addRequestedModuleJavaScript(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID);
+extern fn JSC_JSModuleRecord__addRequestedModuleWebAssembly(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID);
+extern fn JSC_JSModuleRecord__addRequestedModuleJSON(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID);
+extern fn JSC_JSModuleRecord__addRequestedModuleHostDefined(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, module_name: StringID, host_defined_import_type: StringID);
+extern fn JSC_JSModuleRecord__addImportEntrySingle(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID);
+extern fn JSC_JSModuleRecord__addImportEntrySingleTypeScript(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID);
+extern fn JSC_JSModuleRecord__addImportEntryNamespace(module_record: *JSModuleRecord, identifier_array: *IdentifierArray, import_name: StringID, local_name: StringID, module_name: StringID);
 
 @opaque struct VariableEnvironment {
     pub const add = JSC__VariableEnvironment__add;
@@ -121,7 +121,7 @@ extern fn JSC_JSModuleRecord__addImportEntryNamespace(module_record: *JSModuleRe
     pub const create = JSC__IdentifierArray__create;
     pub const destroy = JSC__IdentifierArray__destroy;
 
-    pub fn setFromUtf8(*this, n: usize, vm: *bun.jsc.VM, str: []const u8): void {
+    pub fn setFromUtf8(*_, n: usize, vm: *bun.jsc.VM, str: []const u8) {
         unsafe { JSC__IdentifierArray__setFromUtf8(this, n, vm, str.ptr, str.len); }
     }
 }

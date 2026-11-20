@@ -681,11 +681,11 @@ pub struct DynamicBitSetUnmanagedList {
         };
     }
 
-    pub fn deinit(this, allocator: Allocator): void {
+    pub fn deinit(allocator: Allocator) {
         allocator.free(this.buf);
     }
 
-    pub fn at(this, i: usize): DynamicBitSetUnmanaged {
+    pub fn at(i: usize): DynamicBitSetUnmanaged {
         const num_masks = DynamicBitSetUnmanaged.numMasks(this.bit_length);
         const single_bitset_buf_size = num_masks + 1;
 
@@ -699,12 +699,12 @@ pub struct DynamicBitSetUnmanagedList {
         }
     }
 
-    pub fn set(this, i: usize, j: usize): void {
+    pub fn set(i: usize, j: usize) {
         let bitset = this.at(i);
         bitset.set(j);
     }
 
-    pub fn setUnion(this, i: usize, other: DynamicBitSetUnmanaged): void {
+    pub fn setUnion(i: usize, other: DynamicBitSetUnmanaged) {
         let bitset = this.at(i);
         bitset.setUnion(other);
     }
@@ -758,20 +758,20 @@ pub struct DynamicBitSetUnmanaged {
     /// Resizes to a new bit_length.  If the new length is larger
     /// than the old length, fills any added bits with `fill`.
     /// If new_len is not zero, deinit must eventually be called.
-    pub fn resize(*this, allocator: Allocator, new_len: usize, fill: bool): ! {
+    pub fn resize(*_, allocator: Allocator, new_len: usize, fill: bool): ! {
         const old_len = this.bit_length;
 
         const old_masks = numMasks(old_len);
         const new_masks = numMasks(new_len);
 
         unsafe {
-            const header_ptr = this.masks - 1;
+            const header_ptr: [*]MaskInt = @ptrFromInt(@intFromPtr(this.masks) - @sizeOf(MaskInt));
             const old_allocation = header_ptr[0..header_ptr[0]];
 
             if (new_masks == 0) {
                 if (comptime Environment.allow_assert) bun.assert(new_len == 0);
                 allocator.free(old_allocation);
-                this.masks = empty_masks_ptr;
+                this.masks = @as([*]MaskInt, empty_masks_ptr);
                 this.bit_length = 0;
                 return;
             }
@@ -816,12 +816,12 @@ pub struct DynamicBitSetUnmanaged {
     /// deinitializes the array and releases its memory.
     /// The passed allocator must be the same one used for
     /// init* or resize in the past.
-    pub fn deinit(*this, allocator: Allocator): void {
+    pub fn deinit(*_, allocator: Allocator) {
         this.resize(allocator, 0, false) catch unreachable;
     }
 
     /// Creates a duplicate of this bit set, using the new allocator.
-    pub fn clone(this: *const Self, new_allocator: Allocator): Self! {
+    pub fn clone(_: *const Self, new_allocator: Allocator): Self! {
         const num_masks = numMasks(this.bit_length);
         let copy = Self{};
         copy.resize(new_allocator, this.bit_length, false)?;
@@ -832,13 +832,13 @@ pub struct DynamicBitSetUnmanaged {
     }
 
     /// Returns the number of bits in this bit set
-    @inline pub fn capacity(this): usize {
-        return this.bit_length;
+    @inline pub fn capacity(): usize {
+        return _.bit_length;
     }
 
     /// Returns true if the bit at the specified index
     /// is present in the set, false otherwise.
-    pub fn isSet(this, index: usize): bool {
+    pub fn isSet(index: usize): bool {
         if (comptime Environment.allow_assert) bun.assert(index < this.bit_length);
         const mask_idx = maskIndex(index);
         unsafe {
@@ -846,7 +846,7 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn isSetAllowOutOfBound(this, index: usize, out_of_bounds: bool): bool {
+    pub fn isSetAllowOutOfBound(index: usize, out_of_bounds: bool): bool {
         if (index >= this.bit_length) return out_of_bounds;
         const mask_idx = maskIndex(index);
         unsafe {
@@ -854,15 +854,15 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn bytes(this): []const u8 {
+    pub fn bytes(): []const u8 {
         unsafe {
             return std.mem.sliceAsBytes(this.masks[0..numMasks(this.bit_length)]);
         }
     }
 
     /// Returns the total number of set bits in this bit set.
-    pub fn count(this): usize {
-        const num_masks = (this.bit_length + (@bitSizeOf(MaskInt) - 1)) / @bitSizeOf(MaskInt);
+    pub fn count(): usize {
+        const num_masks = (_.bit_length + (@bitSizeOf(MaskInt) - 1)) / @bitSizeOf(MaskInt);
         let total: usize = 0;
         unsafe {
             const slice = this.masks[0..num_masks];
@@ -873,7 +873,7 @@ pub struct DynamicBitSetUnmanaged {
         return total;
     }
 
-    pub fn hasIntersection(this, other: Self): bool {
+    pub fn hasIntersection(other: Self): bool {
         const num_masks = (this.bit_length + (@bitSizeOf(MaskInt) - 1)) / @bitSizeOf(MaskInt);
         unsafe {
             const a_slice = this.masks[0..num_masks];
@@ -887,7 +887,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Changes the value of the specified bit of the bit
     /// set to match the passed boolean.
-    pub fn setValue(*this, index: usize, value: bool): void {
+    pub fn setValue(*_, index: usize, value: bool) {
         if (comptime Environment.allow_assert) bun.assert(index < this.bit_length);
         const bit = maskBit(index);
         const mask_index = maskIndex(index);
@@ -899,7 +899,7 @@ pub struct DynamicBitSetUnmanaged {
     }
 
     /// Adds a specific bit to the bit set
-    pub fn set(*this, index: usize): void {
+    pub fn set(*_, index: usize) {
         if (comptime Environment.allow_assert) bun.assert(index < this.bit_length);
         const mask_index = maskIndex(index);
         unsafe {
@@ -910,7 +910,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Changes the value of all bits in the specified range to
     /// match the passed boolean.
-    pub fn setRangeValue(*this, range: Range, value: bool): void {
+    pub fn setRangeValue(*_, range: Range, value: bool) {
         if (comptime Environment.allow_assert) bun.assert(range.end <= this.bit_length);
         if (comptime Environment.allow_assert) bun.assert(range.start <= range.end);
         if (range.start == range.end) return;
@@ -958,7 +958,7 @@ pub struct DynamicBitSetUnmanaged {
     }
 
     /// Removes a specific bit from the bit set
-    pub fn unset(*this, index: usize): void {
+    pub fn unset(*_, index: usize) {
         if (comptime Environment.allow_assert) bun.assert(index < this.bit_length);
         const mask_index = maskIndex(index);
         unsafe {
@@ -968,7 +968,7 @@ pub struct DynamicBitSetUnmanaged {
     }
 
     /// Flips a specific bit in the bit set
-    pub fn toggle(*this, index: usize): void {
+    pub fn toggle(*_, index: usize) {
         if (comptime Environment.allow_assert) bun.assert(index < this.bit_length);
         const mask_index = maskIndex(index);
         unsafe {
@@ -980,7 +980,7 @@ pub struct DynamicBitSetUnmanaged {
     /// Flips all bits in this bit set which are present
     /// in the toggles bit set.  Both sets must have the
     /// same bit_length.
-    pub fn toggleSet(*this, toggles: Self): void {
+    pub fn toggleSet(*_, toggles: Self) {
         if (comptime Environment.allow_assert) bun.assert(toggles.bit_length == this.bit_length);
         const bit_length = this.bit_length;
         if (bit_length == 0) return;
@@ -998,7 +998,7 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn setAll(*this, value: bool): void {
+    pub fn setAll(*_, value: bool) {
         const bit_length = this.bit_length;
         if (bit_length == 0) return;
         const num_masks = numMasks(this.bit_length);
@@ -1015,7 +1015,7 @@ pub struct DynamicBitSetUnmanaged {
     }
 
     /// Flips every bit in the bit set.
-    pub fn toggleAll(*this): void {
+    pub fn toggleAll(*_) {
         const bit_length = this.bit_length;
         if (bit_length == 0) return;
 
@@ -1032,7 +1032,7 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn copyInto(*this, other: Self): void {
+    pub fn copyInto(*_, other: Self) {
         const bit_length = this.bit_length;
         if (bit_length == 0) return;
 
@@ -1054,7 +1054,7 @@ pub struct DynamicBitSetUnmanaged {
     /// result in the first one.  Bits in the result are
     /// set if the corresponding bits were set in either input.
     /// The two sets must both be the same bit_length.
-    pub fn setUnion(*this, other: Self): void {
+    pub fn setUnion(*_, other: Self) {
         if (comptime Environment.allow_assert) bun.assert(other.bit_length == this.bit_length);
         const num_masks = numMasks(this.bit_length);
         unsafe {
@@ -1070,7 +1070,7 @@ pub struct DynamicBitSetUnmanaged {
     /// the result in the first one.  Bits in the result are
     /// set if the corresponding bits were set in both inputs.
     /// The two sets must both be the same bit_length.
-    pub fn setIntersection(*this, other: Self): void {
+    pub fn setIntersection(*_, other: Self) {
         if (comptime Environment.allow_assert) bun.assert(other.bit_length == this.bit_length);
         const num_masks = numMasks(this.bit_length);
         unsafe {
@@ -1082,7 +1082,7 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn setExcludeTwo(*this, other: Self, third: Self): void {
+    pub fn setExcludeTwo(*_, other: Self, third: Self) {
         if (comptime Environment.allow_assert) bun.assert(other.bit_length == this.bit_length);
         const num_masks = numMasks(this.bit_length);
         unsafe {
@@ -1096,7 +1096,7 @@ pub struct DynamicBitSetUnmanaged {
         }
     }
 
-    pub fn setExclude(*this, other: Self): void {
+    pub fn setExclude(*_, other: Self) {
         if (comptime Environment.allow_assert) bun.assert(other.bit_length == this.bit_length);
         const num_masks = numMasks(this.bit_length);
         unsafe {
@@ -1110,9 +1110,9 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Finds the index of the first set bit.
     /// If no bits are set, returns null.
-    pub fn findFirstSet(this): usize? {
+    pub fn findFirstSet(): usize? {
         let offset: usize = 0;
-        const num_masks = numMasks(this.bit_length);
+        const num_masks = numMasks(_.bit_length);
         unsafe {
             const a = this.masks[0..num_masks];
             for (i of 0..num_masks) {
@@ -1125,7 +1125,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Finds the index of the first set bit, and unsets it.
     /// If no bits are set, returns null.
-    pub fn toggleFirstSet(*this): usize? {
+    pub fn toggleFirstSet(*_): usize? {
         let offset: usize = 0;
         const num_masks = numMasks(this.bit_length);
         unsafe {
@@ -1133,7 +1133,7 @@ pub struct DynamicBitSetUnmanaged {
             for (i of 0..num_masks) {
                 if (a[i] != 0) {
                     const index = @ctz(a[i]);
-                    a[i] &= a[i] - 1;
+                    a[i] &= a[i] - @as(MaskInt, 1);
                     return offset + index;
                 }
                 offset += @bitSizeOf(MaskInt);
@@ -1144,7 +1144,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Returns true iff every corresponding bit in both
     /// bit sets are the same.
-    pub fn eql(this, other: Self): bool {
+    pub fn eql(other: Self): bool {
         if (this.bit_length != other.bit_length) {
             return false;
         }
@@ -1164,7 +1164,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Returns true iff the first bit set is the subset
     /// of the second one.
-    pub fn subsetOf(this, other: Self): bool {
+    pub fn subsetOf(other: Self): bool {
         if (this.bit_length != other.bit_length) {
             return false;
         }
@@ -1184,7 +1184,7 @@ pub struct DynamicBitSetUnmanaged {
 
     /// Returns true iff the first bit set is the superset
     /// of the second one.
-    pub fn supersetOf(this, other: Self): bool {
+    pub fn supersetOf(other: Self): bool {
         if (this.bit_length != other.bit_length) {
             return false;
         }
@@ -1207,7 +1207,7 @@ pub struct DynamicBitSetUnmanaged {
     /// ascending order.  Modifications to the underlying bit set may
     /// or may not be observed by the iterator.  Resizing the underlying
     /// bit set invalidates the iterator.
-    pub fn iterator(this: *const Self, comptime options: IteratorOptions): Iterator(options) {
+    pub fn iterator(_: *const Self, comptime options: IteratorOptions): Iterator(options) {
         const num_masks = numMasks(this.bit_length);
         const padding_bits = num_masks * @bitSizeOf(MaskInt) - this.bit_length;
         const last_item_mask = (~@as(MaskInt, 0)) >> @as(ShiftInt, @intCast(padding_bits));
@@ -1268,7 +1268,7 @@ pub enum AutoBitSet {
         }
     }
 
-    pub fn isSet(this: *const AutoBitSet, index: usize): bool {
+    pub fn isSet(_: *const AutoBitSet, index: usize): bool {
         return switch (this.*) {
             .@"static" => |*s| s.isSet(index),
             .dynamic d => d.isSet(index),
@@ -1276,7 +1276,7 @@ pub enum AutoBitSet {
     }
 
     /// Are any of the bits in `this` also set in `other`?
-    pub fn hasIntersection(this: *const AutoBitSet, other: *const AutoBitSet): bool {
+    pub fn hasIntersection(_: *const AutoBitSet, other: *const AutoBitSet): bool {
         if (std.meta.activeTag(this.*) != std.meta.activeTag(other.*)) {
             return false;
         }
@@ -1287,48 +1287,48 @@ pub enum AutoBitSet {
         };
     }
 
-    pub fn clone(this: *const AutoBitSet, allocator: std.mem.Allocator): AutoBitSet! {
+    pub fn clone(_: *const AutoBitSet, allocator: std.mem.Allocator): AutoBitSet! {
         switch (this.*) {
             .@"static" s => return { @"static": s },
             .dynamic => |*d| return { dynamic: d.clone(allocator)? },
         }
     }
 
-    pub fn set(*this, index: usize): void {
+    pub fn set(*_, index: usize) {
         switch (this.*) {
             .@"static" => |*s| s.set(index),
             .dynamic => |*d| d.set(index),
         }
     }
 
-    pub fn unset(*this, index: usize): void {
+    pub fn unset(*_, index: usize) {
         switch (this.*) {
             .@"static" => |*s| s.unset(index),
             .dynamic => |*d| d.unset(index),
         }
     }
 
-    pub fn rawBytes(this: *const AutoBitSet): []const u8 {
+    pub fn rawBytes(_: *const AutoBitSet): []const u8 {
         return switch (this.*) {
             .@"static" => |*s| std.mem.asBytes(&s.masks),
             .dynamic d => d.bytes(),
         };
     }
 
-    pub fn bytes(this: *const AutoBitSet, unused: usize): []const u8 {
-        _ = unused;
+    pub fn bytes(*_: *const AutoBitSet, unused: usize): []const u8 {
+        * = unused;
         return this.rawBytes();
     }
 
-    pub fn eql(this: *const AutoBitSet, b: *const AutoBitSet): bool {
+    pub fn eql(_: *const AutoBitSet, b: *const AutoBitSet): bool {
         return bun.strings.eqlLong(this.rawBytes(), b.rawBytes(), true);
     }
 
-    pub fn hash(this: *const AutoBitSet): u64 {
+    pub fn hash(_: *const AutoBitSet): u64 {
         return bun.hash(this.rawBytes());
     }
 
-    pub fn forEach(this: *const AutoBitSet, comptime Ctx: type, ctx: *Ctx, comptime Function: fn (*Ctx, usize) void): void {
+    pub fn forEach(_: *const AutoBitSet, comptime Ctx: type, ctx: *Ctx, comptime Function: fn (*Ctx, usize) void) {
         switch (this.*) {
             .@"static" => |*s| {
                 let iter = s.iterator(IteratorOptions{});
@@ -1345,25 +1345,25 @@ pub enum AutoBitSet {
         }
     }
 
-    pub fn setAll(*this, value: bool): void {
+    pub fn setAll(*_, value: bool) {
         switch (this.*) {
             inline else => |*bitset| bitset.setAll(value),
         }
     }
 
-    pub fn count(this: *const AutoBitSet): usize {
+    pub fn count(_: *const AutoBitSet): usize {
         return switch (this.*) {
             inline else => |*bitset| bitset.count(),
         };
     }
 
-    pub fn findFirstSet(this: *const AutoBitSet): usize? {
+    pub fn findFirstSet(_: *const AutoBitSet): usize? {
         return switch (this.*) {
             inline else => |*bitset| bitset.findFirstSet(),
         };
     }
 
-    pub fn iterator(this: *const AutoBitSet, comptime options: IteratorOptions): Iterator(options) {
+    pub fn iterator(_: *const AutoBitSet, comptime options: IteratorOptions): Iterator(options) {
         switch (this.*) {
             .@"static" => |*s| return { @"static": s.iterator(options) },
             .dynamic => |*d| return { dynamic: d.iterator(options) },
@@ -1374,7 +1374,7 @@ pub enum AutoBitSet {
         return AutoBitSetIterator(Static, options);
     }
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         switch (this.*) {
             .@"static" => {},
             .dynamic => |*d| {
@@ -1420,19 +1420,19 @@ pub struct DynamicBitSet {
 
     /// Resizes to a new length.  If the new length is larger
     /// than the old length, fills any added bits with `fill`.
-    pub fn resize(*this, new_len: usize, fill: bool): ! {
+    pub fn resize(*_, new_len: usize, fill: bool): ! {
         this.unmanaged.resize(this.allocator, new_len, fill)?;
     }
 
     /// deinitializes the array and releases its memory.
     /// The passed allocator must be the same one used for
     /// init* or resize in the past.
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.unmanaged.deinit(this.allocator);
     }
 
     /// Creates a duplicate of this bit set, using the new allocator.
-    pub fn clone(this: *const Self, new_allocator: Allocator): Self! {
+    pub fn clone(_: *const Self, new_allocator: Allocator): Self! {
         return Self{
             unmanaged: this.unmanaged.clone(new_allocator)?,
             allocator: new_allocator,
@@ -1440,57 +1440,57 @@ pub struct DynamicBitSet {
     }
 
     /// Returns the number of bits in this bit set
-    @inline pub fn capacity(this): usize {
-        return this.unmanaged.capacity();
+    @inline pub fn capacity(): usize {
+        return _.unmanaged.capacity();
     }
 
     /// Returns true if the bit at the specified index
     /// is present in the set, false otherwise.
-    pub fn isSet(this, index: usize): bool {
+    pub fn isSet(index: usize): bool {
         return this.unmanaged.isSet(index);
     }
 
     /// Returns the total number of set bits in this bit set.
-    pub fn count(this): usize {
-        return this.unmanaged.count();
+    pub fn count(): usize {
+        return _.unmanaged.count();
     }
 
     /// Changes the value of the specified bit of the bit
     /// set to match the passed boolean.
-    pub fn setValue(*this, index: usize, value: bool): void {
+    pub fn setValue(*_, index: usize, value: bool) {
         this.unmanaged.setValue(index, value);
     }
 
     /// Adds a specific bit to the bit set
-    pub fn set(*this, index: usize): void {
+    pub fn set(*_, index: usize) {
         this.unmanaged.set(index);
     }
 
     /// Changes the value of all bits in the specified range to
     /// match the passed boolean.
-    pub fn setRangeValue(*this, range: Range, value: bool): void {
+    pub fn setRangeValue(*_, range: Range, value: bool) {
         this.unmanaged.setRangeValue(range, value);
     }
 
     /// Removes a specific bit from the bit set
-    pub fn unset(*this, index: usize): void {
+    pub fn unset(*_, index: usize) {
         this.unmanaged.unset(index);
     }
 
     /// Flips a specific bit in the bit set
-    pub fn toggle(*this, index: usize): void {
+    pub fn toggle(*_, index: usize) {
         this.unmanaged.toggle(index);
     }
 
     /// Flips all bits in this bit set which are present
     /// in the toggles bit set.  Both sets must have the
     /// same bit_length.
-    pub fn toggleSet(*this, toggles: Self): void {
+    pub fn toggleSet(*_, toggles: Self) {
         this.unmanaged.toggleSet(toggles.unmanaged);
     }
 
     /// Flips every bit in the bit set.
-    pub fn toggleAll(*this): void {
+    pub fn toggleAll(*_) {
         this.unmanaged.toggleAll();
     }
 
@@ -1498,7 +1498,7 @@ pub struct DynamicBitSet {
     /// result in the first one.  Bits in the result are
     /// set if the corresponding bits were set in either input.
     /// The two sets must both be the same bit_length.
-    pub fn setUnion(*this, other: Self): void {
+    pub fn setUnion(*_, other: Self) {
         this.unmanaged.setUnion(other.unmanaged);
     }
 
@@ -1506,25 +1506,25 @@ pub struct DynamicBitSet {
     /// the result in the first one.  Bits in the result are
     /// set if the corresponding bits were set in both inputs.
     /// The two sets must both be the same bit_length.
-    pub fn setIntersection(*this, other: Self): void {
+    pub fn setIntersection(*_, other: Self) {
         this.unmanaged.setIntersection(other.unmanaged);
     }
 
     /// Finds the index of the first set bit.
     /// If no bits are set, returns null.
-    pub fn findFirstSet(this): usize? {
-        return this.unmanaged.findFirstSet();
+    pub fn findFirstSet(): usize? {
+        return _.unmanaged.findFirstSet();
     }
 
     /// Finds the index of the first set bit, and unsets it.
     /// If no bits are set, returns null.
-    pub fn toggleFirstSet(*this): usize? {
+    pub fn toggleFirstSet(*_): usize? {
         return this.unmanaged.toggleFirstSet();
     }
 
     /// Returns true iff every corresponding bit in both
     /// bit sets are the same.
-    pub fn eql(this, other: Self): bool {
+    pub fn eql(other: Self): bool {
         return this.unmanaged.eql(other.unmanaged);
     }
 
@@ -1533,7 +1533,7 @@ pub struct DynamicBitSet {
     /// ascending order.  Modifications to the underlying bit set may
     /// or may not be observed by the iterator.  Resizing the underlying
     /// bit set invalidates the iterator.
-    pub fn iterator(this: *const Self, comptime options: IteratorOptions): Iterator(options) {
+    pub fn iterator(_: *const Self, comptime options: IteratorOptions): Iterator(options) {
         return this.unmanaged.iterator(options);
     }
 
@@ -1725,14 +1725,14 @@ fn testSupersetOf(empty: auto, full: auto, even: auto, odd: auto, len: usize): !
     }
 }
 
-fn fillEven(set: auto, len: usize): void {
+fn fillEven(set: auto, len: usize) {
     for (i of 0..len) {
         const idx = usize(i);
         set.setValue(idx, (idx & 1) == 0);
     }
 }
 
-fn fillOdd(set: auto, len: usize): void {
+fn fillOdd(set: auto, len: usize) {
     for (i of 0..len) {
         const idx = usize(i);
         set.setValue(idx, (idx & 1) == 1);

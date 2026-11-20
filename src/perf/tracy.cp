@@ -20,27 +20,27 @@ export @c struct Ctx {
     id: u32 = 0,
     active: c_int = 0,
 
-    pub inline fn end(this): void {
+    pub inline fn end() {
         if (!enable) return;
-        ___tracy_emit_zone_end(this);
+        ___tracy_emit_zone_end(_);
     }
 
-    pub inline fn addText(this, text: string): void {
+    pub inline fn addText(text: string) {
         if (!enable) return;
         ___tracy_emit_zone_text(this, text.ptr, text.len);
     }
 
-    pub inline fn setName(this, name: string): void {
+    pub inline fn setName(name: string) {
         if (!enable) return;
         ___tracy_emit_zone_name(this, name.ptr, name.len);
     }
 
-    pub inline fn setColor(this, color: u32): void {
+    pub inline fn setColor(color: u32) {
         if (!enable) return;
         ___tracy_emit_zone_color(this, color);
     }
 
-    pub inline fn setValue(this, value: u64): void {
+    pub inline fn setValue(value: u64) {
         if (!enable) return;
         ___tracy_emit_zone_value(this, value);
     }
@@ -170,33 +170,33 @@ export fn TracyAllocator(@comptime name: cstring?): type {
 }
 
 // This function only accepts comptime-known strings, see `messageCopy` for runtime strings
-export inline fn message(@comptime msg: cstring): void {
+export inline fn message(@comptime msg: cstring) {
     if (!enable) return;
     ___tracy_emit_messageL(msg.ptr, @if (enable_callstack) callstack_depth else 0);
 }
 
 // This function only accepts comptime-known strings, see `messageColorCopy` for runtime strings
-export inline fn messageColor(@comptime msg: cstring, color: u32): void {
+export inline fn messageColor(@comptime msg: cstring, color: u32) {
     if (!enable) return;
     ___tracy_emit_messageLC(msg.ptr, color, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn messageCopy(msg: string): void {
+export inline fn messageCopy(msg: string) {
     if (!enable) return;
     ___tracy_emit_message(msg.ptr, msg.len, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn messageColorCopy(msg: cstring, color: u32): void {
+export inline fn messageColorCopy(msg: cstring, color: u32) {
     if (!enable) return;
     ___tracy_emit_messageC(msg.ptr, msg.len, color, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn frameMark(): void {
+export inline fn frameMark() {
     if (!enable) return;
     ___tracy_emit_frame_mark(null);
 }
 
-export inline fn frameMarkNamed(@comptime name: cstring): void {
+export inline fn frameMarkNamed(@comptime name: cstring) {
     if (!enable) return;
     ___tracy_emit_frame_mark(name.ptr);
 }
@@ -215,17 +215,17 @@ export fn Frame(@comptime name: cstring): type {
     };
 }
 
-inline fn frameMarkStart(@comptime name: cstring): void {
+inline fn frameMarkStart(@comptime name: cstring) {
     if (!enable) return;
     ___tracy_emit_frame_mark_start(name.ptr);
 }
 
-inline fn frameMarkEnd(@comptime name: cstring): void {
+inline fn frameMarkEnd(@comptime name: cstring) {
     if (!enable) return;
     ___tracy_emit_frame_mark_end(name.ptr);
 }
 
-inline fn alloc(ptr: [*]u8, len: usize): void {
+inline fn alloc(ptr: [*]u8, len: usize) {
     if (!enable) return;
 
     if (enable_callstack) {
@@ -235,7 +235,7 @@ inline fn alloc(ptr: [*]u8, len: usize): void {
     }
 }
 
-inline fn allocNamed(ptr: [*]u8, len: usize, @comptime name: cstring): void {
+inline fn allocNamed(ptr: [*]u8, len: usize, @comptime name: cstring) {
     if (!enable) return;
 
     if (enable_callstack) {
@@ -245,7 +245,7 @@ inline fn allocNamed(ptr: [*]u8, len: usize, @comptime name: cstring): void {
     }
 }
 
-inline fn free(ptr: [*]u8): void {
+inline fn free(ptr: [*]u8) {
     if (!enable) return;
 
     if (enable_callstack) {
@@ -255,7 +255,7 @@ inline fn free(ptr: [*]u8): void {
     }
 }
 
-inline fn freeNamed(ptr: [*]u8, @comptime name: cstring): void {
+inline fn freeNamed(ptr: [*]u8, @comptime name: cstring) {
     if (!enable) return;
 
     if (enable_callstack) {
@@ -292,23 +292,23 @@ type TracySetThreadName = @c (name: cstr): void;
 type TracyStartupProfiler = @c (): void;
 type TracyShutdownProfiler = @c (): void;
 
-fn ___tracy_startup_profiler(): void {
+fn ___tracy_startup_profiler() {
     const fn_ptr = (dlsym(TracyStartupProfiler, "___tracy_startup_profiler") ?? return) as TracyStartupProfiler;
     fn_ptr();
 }
 
-fn ___tracy_shutdown_profiler(): void {
+fn ___tracy_shutdown_profiler() {
     const fn_ptr = (dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler") ?? return) as TracyShutdownProfiler;
     fn_ptr();
 }
 
 export let has_started = false;
-export fn start(): void {
+export fn start() {
     if (!enable || has_started) return;
     ___tracy_startup_profiler();
 }
 
-export fn stop(): void {
+export fn stop() {
     if (!enable || !has_started) return;
     ___tracy_shutdown_profiler();
 }
@@ -318,16 +318,16 @@ fn ___tracy_connected(): c_int {
     return fn_ptr();
 }
 
-fn ___tracy_set_thread_name(name: cstr): void {
+fn ___tracy_set_thread_name(name: cstr) {
     const fn_ptr = dlsym(TracySetThreadName, "___tracy_set_thread_name").? as TracySetThreadName;
     fn_ptr(name);
 }
 
-fn ___tracy_emit_frame_mark_start(name: cstr): void {
+fn ___tracy_emit_frame_mark_start(name: cstr) {
     const fn_ptr = dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start").? as TracyEmitFrameMarkStart;
     fn_ptr(name);
 }
-fn ___tracy_emit_frame_mark_end(name: cstr): void {
+fn ___tracy_emit_frame_mark_end(name: cstr) {
     const fn_ptr = dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end").? as TracyEmitFrameMarkEnd;
     fn_ptr(name);
 }
@@ -339,75 +339,75 @@ fn ___tracy_emit_zone_begin_callstack(srcloc: *const SourceLocationData!, depth:
     const fn_ptr = dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack").? as TracyEmitZoneBeginCallstack;
     return fn_ptr(srcloc, depth, active);
 }
-fn ___tracy_emit_zone_text(ctx: Ctx, txt: [*]const u8, size: usize): void {
+fn ___tracy_emit_zone_text(ctx: Ctx, txt: [*]const u8, size: usize) {
     const fn_ptr = dlsym(TracyEmitZoneText, "___tracy_emit_zone_text").? as TracyEmitZoneText;
     fn_ptr(ctx, txt, size);
 }
-fn ___tracy_emit_zone_name(ctx: Ctx, txt: [*]const u8, size: usize): void {
+fn ___tracy_emit_zone_name(ctx: Ctx, txt: [*]const u8, size: usize) {
     const fn_ptr = dlsym(TracyEmitZoneName, "___tracy_emit_zone_name").? as TracyEmitZoneName;
     fn_ptr(ctx, txt, size);
 }
-fn ___tracy_emit_zone_color(ctx: Ctx, color: u32): void {
+fn ___tracy_emit_zone_color(ctx: Ctx, color: u32) {
     const fn_ptr = dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color").? as TracyEmitZoneColor;
     fn_ptr(ctx, color);
 }
-fn ___tracy_emit_zone_value(ctx: Ctx, value: u64): void {
+fn ___tracy_emit_zone_value(ctx: Ctx, value: u64) {
     const fn_ptr = dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value").? as TracyEmitZoneValue;
     fn_ptr(ctx, value);
 }
-fn ___tracy_emit_zone_end(ctx: Ctx): void {
+fn ___tracy_emit_zone_end(ctx: Ctx) {
     const fn_ptr = dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end").? as TracyEmitZoneEnd;
     fn_ptr(ctx);
 }
-fn ___tracy_emit_memory_alloc(ptr: *const !, size: usize, secure: c_int): void {
+fn ___tracy_emit_memory_alloc(ptr: *const !, size: usize, secure: c_int) {
     const fn_ptr = dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc").? as TracyEmitMemoryAlloc;
     fn_ptr(ptr, size, secure);
 }
-fn ___tracy_emit_memory_alloc_callstack(ptr: *const !, size: usize, depth: c_int, secure: c_int): void {
+fn ___tracy_emit_memory_alloc_callstack(ptr: *const !, size: usize, depth: c_int, secure: c_int) {
     const fn_ptr = dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack").? as TracyEmitMemoryAllocCallstack;
     fn_ptr(ptr, size, depth, secure);
 }
-fn ___tracy_emit_memory_free(ptr: *const !, secure: c_int): void {
+fn ___tracy_emit_memory_free(ptr: *const !, secure: c_int) {
     const fn_ptr = dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free").? as TracyEmitMemoryFree;
     fn_ptr(ptr, secure);
 }
-fn ___tracy_emit_memory_free_callstack(ptr: *const !, depth: c_int, secure: c_int): void {
+fn ___tracy_emit_memory_free_callstack(ptr: *const !, depth: c_int, secure: c_int) {
     const fn_ptr = dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack").? as TracyEmitMemoryFreeCallstack;
     fn_ptr(ptr, depth, secure);
 }
-fn ___tracy_emit_memory_alloc_named(ptr: *const !, size: usize, secure: c_int, name: cstr): void {
+fn ___tracy_emit_memory_alloc_named(ptr: *const !, size: usize, secure: c_int, name: cstr) {
     const fn_ptr = dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named").? as TracyEmitMemoryAllocNamed;
     fn_ptr(ptr, size, secure, name);
 }
-fn ___tracy_emit_memory_alloc_callstack_named(ptr: *const !, size: usize, depth: c_int, secure: c_int, name: cstr): void {
+fn ___tracy_emit_memory_alloc_callstack_named(ptr: *const !, size: usize, depth: c_int, secure: c_int, name: cstr) {
     const fn_ptr = dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named").? as TracyEmitMemoryAllocCallstackNamed;
     fn_ptr(ptr, size, depth, secure, name);
 }
-fn ___tracy_emit_memory_free_named(ptr: *const !, secure: c_int, name: cstr): void {
+fn ___tracy_emit_memory_free_named(ptr: *const !, secure: c_int, name: cstr) {
     const fn_ptr = dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named").? as TracyEmitMemoryFreeNamed;
     fn_ptr(ptr, secure, name);
 }
-fn ___tracy_emit_memory_free_callstack_named(ptr: *const !, depth: c_int, secure: c_int, name: cstr): void {
+fn ___tracy_emit_memory_free_callstack_named(ptr: *const !, depth: c_int, secure: c_int, name: cstr) {
     const fn_ptr = dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named").? as TracyEmitMemoryFreeCallstackNamed;
     fn_ptr(ptr, depth, secure, name);
 }
-fn ___tracy_emit_message(txt: [*]const u8, size: usize, callstack: c_int): void {
+fn ___tracy_emit_message(txt: [*]const u8, size: usize, callstack: c_int) {
     const fn_ptr = dlsym(TracyEmitMessage, "___tracy_emit_message").? as TracyEmitMessage;
     fn_ptr(txt, size, callstack);
 }
-fn ___tracy_emit_messageL(txt: cstr, callstack: c_int): void {
+fn ___tracy_emit_messageL(txt: cstr, callstack: c_int) {
     const fn_ptr = dlsym(TracyEmitMessageL, "___tracy_emit_messageL").? as TracyEmitMessageL;
     fn_ptr(txt, callstack);
 }
-fn ___tracy_emit_messageC(txt: [*]const u8, size: usize, color: u32, callstack: c_int): void {
+fn ___tracy_emit_messageC(txt: [*]const u8, size: usize, color: u32, callstack: c_int) {
     const fn_ptr = dlsym(TracyEmitMessageC, "___tracy_emit_messageC").? as TracyEmitMessageC;
     fn_ptr(txt, size, color, callstack);
 }
-fn ___tracy_emit_messageLC(txt: cstr, color: u32, callstack: c_int): void {
+fn ___tracy_emit_messageLC(txt: cstr, color: u32, callstack: c_int) {
     const fn_ptr = dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC").? as TracyEmitMessageLC;
     fn_ptr(txt, color, callstack);
 }
-fn ___tracy_emit_frame_mark(name: cstr?): void {
+fn ___tracy_emit_frame_mark(name: cstr?) {
     const fn_ptr = dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark").? as TracyEmitFrameMark;
     fn_ptr(name);
 }
@@ -437,7 +437,7 @@ export fn isConnected(): bool {
     return fn_ptr() != 0;
 }
 
-export fn initThread(@comptime name: cstring): void {
+export fn initThread(@comptime name: cstring) {
     if (comptime !bun.Environment.isNative) {
         return;
     }

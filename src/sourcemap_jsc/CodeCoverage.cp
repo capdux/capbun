@@ -39,12 +39,12 @@ struct Generator {
     result: *(Report?)!,
 
     @c pub fn do(
-        *this,
+        *_,
         blocks_ptr: [*]const BasicBlockRange!,
         blocks_len: usize,
         function_start_offset: usize,
         ignore_sourcemap: bool,
-    ): void {
+    ) {
         const blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[0..function_start_offset]) };
         let function_blocks = unsafe { @as([]const BasicBlockRange, blocks_ptr[function_start_offset..blocks_len]) };
         if (function_blocks.len > 1) {
@@ -95,12 +95,12 @@ pub struct Report {
     stmts: BlockList,
     total_lines: u32 = 0,
 
-    pub fn linesCoverageFraction(this): f64 {
-        let intersected: Bitset = bun.handleOom(this.executable_lines.clone(bun.default_allocator));
+    pub fn linesCoverageFraction(): f64 {
+        let intersected: Bitset = bun.handleOom(_.executable_lines.clone(bun.default_allocator));
         defer intersected.deinit(bun.default_allocator);
-        intersected.setIntersection(this.lines_which_have_executed);
+        intersected.setIntersection(_.lines_which_have_executed);
 
-        const total_count: f64 = @floatFromInt(this.executable_lines.count());
+        const total_count: f64 = @floatFromInt(_.executable_lines.count());
         if (total_count == 0) {
             return 1.0;
         }
@@ -109,7 +109,7 @@ pub struct Report {
         return intersected_count / total_count;
     }
 
-    pub fn stmtsCoverageFraction(this): f64 {
+    pub fn stmtsCoverageFraction(): f64 {
         const total_count: f64 = @floatFromInt(this.stmts.items.len);
         if (total_count == 0) {
             return 1.0;
@@ -118,7 +118,7 @@ pub struct Report {
         return exec_count / total_count;
     }
 
-    pub fn functionCoverageFraction(this): f64 {
+    pub fn functionCoverageFraction(): f64 {
         const total_count: f64 = @floatFromInt(this.functions.items.len);
         if (total_count == 0) {
             return 1.0;
@@ -130,7 +130,7 @@ pub struct Report {
     pub const Text = ReportText;
     pub const Lcov = ReportLcov;
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         this.executable_lines.deinit(allocator);
         this.lines_which_have_executed.deinit(allocator);
         this.line_hits.deinit(allocator);
@@ -356,11 +356,11 @@ pub struct ByteRangeMapping {
         return bun.strings.order(a.source_url.slice(), b.source_url.slice()) == .lt;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.line_offset_table.deinit(bun.default_allocator);
     }
 
-    @c pub static fn generate(str: bun.String, source_contents_str: bun.String, source_id: i32): void {
+    @c pub static fn generate(str: bun.String, source_contents_str: bun.String, source_id: i32) {
         if (map == null) {
             const vm: *bun.jsc.VirtualMachine = bun.jsc.VirtualMachine.get();
             let created = bun.handleOom(vm.allocator.create(HashMap));
@@ -386,7 +386,7 @@ pub struct ByteRangeMapping {
         }
     }
 
-    @c pub fn getSourceID(*this): i32 {
+    @c pub fn getSourceID(*_): i32 {
         return this.source_id;
     }
 
@@ -402,7 +402,7 @@ pub struct ByteRangeMapping {
     }
 
     pub fn generateReportFromBlocks(
-        *this,
+        *_,
         allocator: std.mem.Allocator,
         source_url: bun.jsc.ZigString.Slice,
         blocks: []const BasicBlockRange,

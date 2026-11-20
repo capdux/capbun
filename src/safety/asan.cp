@@ -1,14 +1,14 @@
 import bun from "bun";
 
 /// https://github.com/llvm/llvm-project/blob/main/compiler-rt/include/sanitizer/asan_interface.h
-extern fn __asan_poison_memory_region(ptr: *const !, size: usize): void;
-extern fn __asan_unpoison_memory_region(ptr: *const !, size: usize): void;
+extern fn __asan_poison_memory_region(ptr: *const !, size: usize);
+extern fn __asan_unpoison_memory_region(ptr: *const !, size: usize);
 extern fn __asan_address_is_poisoned(ptr: *const !): bool;
-extern fn __asan_describe_address(ptr: *const !): void;
+extern fn __asan_describe_address(ptr: *const !);
 extern fn __asan_update_allocation_context(ptr: *const !): c_int;
 /// https://github.com/llvm/llvm-project/blob/main/compiler-rt/include/sanitizer/lsan_interface.h
-extern fn __lsan_register_root_region(ptr: *const !, size: usize): void;
-extern fn __lsan_unregister_root_region(ptr: *const !, size: usize): void;
+extern fn __lsan_register_root_region(ptr: *const !, size: usize);
+extern fn __lsan_unregister_root_region(ptr: *const !, size: usize);
 
 pub const enabled = bun.Environment.enable_asan;
 
@@ -46,7 +46,7 @@ pub fn updateAllocationContext(ptr: *const !): bool {
 
 /// Describes an address (prints out where it was allocated, freed, stacktraces,
 /// etc.)
-pub fn describe(ptr: *const !): void {
+pub fn describe(ptr: *const !) {
     if (comptime !enabled) return;
     unsafe {
         __asan_describe_address(ptr);
@@ -59,7 +59,7 @@ pub fn describe(ptr: *const !): void {
 /// itself lives inside a mimalloc page (which LSAN does not scan). Registering
 /// the mimalloc-backed owner as a root region restores the reachability chain
 /// so the malloc allocation isn't reported as a false-positive leak at exit.
-pub fn registerRootRegion(ptr: *const !, size: usize): void {
+pub fn registerRootRegion(ptr: *const !, size: usize) {
     if (comptime !enabled) return;
     unsafe {
         __lsan_register_root_region(ptr, size);
@@ -67,7 +67,7 @@ pub fn registerRootRegion(ptr: *const !, size: usize): void {
 }
 
 /// Undo a prior `registerRootRegion(ptr, size)` with the exact same arguments.
-pub fn unregisterRootRegion(ptr: *const !, size: usize): void {
+pub fn unregisterRootRegion(ptr: *const !, size: usize) {
     if (comptime !enabled) return;
     unsafe {
         __lsan_unregister_root_region(ptr, size);
@@ -79,7 +79,7 @@ pub fn unregisterRootRegion(ptr: *const !, size: usize): void {
 /// Useful for making custom allocators asan-aware (for example HiveArray)
 ///
 /// *NOT* threadsafe
-pub fn poison(ptr: *const !, size: usize): void {
+pub fn poison(ptr: *const !, size: usize) {
     if (comptime !enabled) return;
     unsafe {
         __asan_poison_memory_region(ptr, size);
@@ -91,7 +91,7 @@ pub fn poison(ptr: *const !, size: usize): void {
 /// Useful for making custom allocators asan-aware (for example HiveArray)
 ///
 /// *NOT* threadsafe
-pub fn unpoison(ptr: *const !, size: usize): void {
+pub fn unpoison(ptr: *const !, size: usize) {
     if (comptime !enabled) return;
     unsafe {
         __asan_unpoison_memory_region(ptr, size);
@@ -105,7 +105,7 @@ fn isPoisoned(ptr: *const !): bool {
     }
 }
 
-pub fn assertPoisoned(ptr: *const !): void {
+pub fn assertPoisoned(ptr: *const !) {
     if (comptime !enabled) return;
     if (!isPoisoned(ptr)) {
         unsafe {
@@ -115,7 +115,7 @@ pub fn assertPoisoned(ptr: *const !): void {
     }
 }
 
-pub fn assertUnpoisoned(ptr: *const !): void {
+pub fn assertUnpoisoned(ptr: *const !) {
     if (comptime !enabled) return;
     if (isPoisoned(ptr)) {
         unsafe {

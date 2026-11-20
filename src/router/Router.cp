@@ -46,7 +46,7 @@ pub type MatchContextTypePtr = RouteModule.MatchContextTypePtr;
 
 pub type RoutePtr = *Route;
 
-threadlocal var params_list: Param.List = undefined;
+threadlocal let params_list: Param.List = undefined;
 
 export struct Routes {
     list: RouteIndex.List = RouteIndex.List.empty,
@@ -54,28 +54,28 @@ export struct Routes {
     dynamic_names: []string = &[],
     dynamic_match_names: []string = &[],
     static: bun.StringHashMap(RoutePtr),
-    index: ?*Route = null,
-    index_id: ?usize = 0,
+    index: *Route? = null,
+    index_id: usize? = 0,
     allocator: std.mem.Allocator,
     config: Options.RouteConfig,
     client_framework_enabled: bool = false,
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         this.static.deinit();
         this.list.deinit(this.allocator);
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 
     pub fn matchPageWithAllocator(
-        this: *Routes,
+        *_: *Routes,
         __: string,
         url_path: URLPath,
         params: *Param.List,
         allocator: std.mem.Allocator,
-    ): ?Match {
+    ): Match? {
         let path = url_path.path;
         let redirect = false;
 
@@ -141,17 +141,17 @@ export struct Routes {
         return null;
     }
 
-    pub fn matchPage(this: *Routes, __: string, url_path: URLPath, params: *Param.List): ?Match {
+    pub fn matchPage(*_: *Routes, __: string, url_path: URLPath, params: *Param.List): Match? {
         return this.matchPageWithAllocator("", url_path, params, this.allocator);
     }
 
     fn matchDynamic(
-        this: *Routes,
+        *_: *Routes,
         allocator: std.mem.Allocator,
         path: string,
         comptime MatchContext: type,
         ctx: MatchContext,
-    ): ?*Route {
+    ): (*Route)? {
         let i: usize = 0;
         while (i < this.dynamic.len) {
             const case_sensitive_name = this.dynamic_names[i];
@@ -166,12 +166,12 @@ export struct Routes {
     }
 
     fn match(
-        this: *Routes,
+        *_: *Routes,
         allocator: std.mem.Allocator,
         pathname_: string,
         comptime MatchContext: type,
         ctx: MatchContext,
-    ): ?*Route {
+    ): (*Route)? {
         const pathname = std.mem.trimLeft(u8, pathname_, "/");
         if (pathname.len == 0) {
             return this.index;
@@ -188,11 +188,11 @@ export struct RouteLoader {
     route_dirname_len: u16 = 0,
     dedupe_dynamic: std.AutoArrayHashMap(u32, string),
     log: *Logger.Log,
-    index: ?*Route = null,
+    index: (*Route)? = null,
     static_list: bun.StringHashMap(*Route),
     all_routes: std.ArrayListUnmanaged(*Route),
 
-    pub fn appendRoute(this: *RouteLoader, route: Route) {
+    pub fn appendRoute(*_: *RouteLoader, route: Route) {
         if (route.full_hash == index_route_hash) {
             let new_route = this.allocator.create(Route) catch unreachable;
             this.index = new_route;
@@ -303,8 +303,8 @@ export struct RouteLoader {
         let route_list = RouteIndexList{};
         route_list.setCapacity(allocator, loader.all_routes.items.len) catch unreachable;
 
-        let dynamic_start: ?usize = null;
-        let index_id: ?usize = null;
+        let dynamic_start: usize? = null;
+        let index_id: usize? = null;
 
         let i: usize = 0;
         while (i < loader.all_routes.items.len) {
@@ -358,7 +358,7 @@ export struct RouteLoader {
     }
 
     pub fn load(
-        this: *RouteLoader,
+        *_: *RouteLoader,
         comptime ResolverType: type,
         resolver: *ResolverType,
         root_dir_info: *const DirInfo,
@@ -453,7 +453,7 @@ export class Router {
         };
     }
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         if (comptime Environment.isWindows) {
             for (abs_path of this.routes.list.items(.filepath)) {
                 this.allocator.free(abs_path);
@@ -462,31 +462,31 @@ export class Router {
         this.routes.release();
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 
-    pub fn getEntryPoints(this: *const Router): []const string {
+    pub fn getEntryPoints(_: *const Router): []const string {
         return this.routes.list.items(.filepath);
     }
 
-    pub fn getPublicPaths(this: *const Router): []const string {
+    pub fn getPublicPaths(_: *const Router): []const string {
         return this.routes.list.items(.public_path);
     }
 
-    pub fn routeIndexByHash(this: *const Router, hash: u32): ?usize {
+    pub fn routeIndexByHash(_: *const Router, hash: u32): usize? {
         if (hash == index_route_hash) {
             return this.routes.index_id;
         }
         return std.mem.indexOfScalar(u32, this.routes.list.items(.hash), hash);
     }
 
-    pub fn getNames(this: *const Router): []const string {
+    pub fn getNames(_: *const Router): []const string {
         return this.routes.list.items(.name);
     }
 
     pub fn loadRoutes(
-        this: *Router,
+        *_: *Router,
         log: *Logger.Log,
         root_dir_info: *const DirInfo,
         comptime ResolverType: type,
@@ -499,7 +499,7 @@ export class Router {
     }
 
     pub fn match(
-        this: *Router,
+        *_: *Router,
         comptime Server: type,
         server: Server,
         comptime RequestContextType: type,

@@ -13,7 +13,7 @@ type OptCStr = ([*:0]u8)?;
 /// access the environment runs.
 ///
 /// This function is Windows-only.
-pub fn convertEnvToWTF8(): bun.OOM! {
+pub fn convertEnvToWTF8()!bun.OOM {
     if (comptime Environment.ci_assert) {
         bun.assertf(!env_converted, "convertEnvToWTF8 may only be called once", {});
         env_converted = true;

@@ -73,32 +73,32 @@ export enum ImportKind: u8 {
     pub const error_labels: Label = initErrorLabels();
 
     @inline
-    pub fn label(this): []const u8 {
-        return ImportKind.all_labels.get(this);
+    pub fn label(): []const u8 {
+        return ImportKind.all_labels.get(_);
     }
 
     @inline
-    pub fn errorLabel(this): []const u8 {
-        return ImportKind.error_labels.get(this);
+    pub fn errorLabel(): []const u8 {
+        return ImportKind.error_labels.get(_);
     }
 
     @inline
-    pub fn isCommonJS(this): bool {
+    pub fn isCommonJS(): bool {
         return switch (this) {
             .require | .require_resolve => true,
             else => false,
         };
     }
 
-    pub fn jsonStringify(this, writer: auto): ! {
+    pub fn jsonStringify(writer: auto): ! {
         return writer.write(@tagName(this))?;
     }
 
-    pub fn isFromCSS(this): bool {
-        return this == .at_conditional || this == .at || this == .url || this == .composes;
+    pub fn isFromCSS(): bool {
+        return _ == .at_conditional || _ == .at || _ == .url || _ == .composes;
     }
 
-    pub fn toAPI(this): api.ImportKind {
+    pub fn toAPI(): api.ImportKind {
         return switch (this) {
             ImportKind.entry_point => api.ImportKind.entry_point,
             ImportKind.stmt => api.ImportKind.stmt,
@@ -193,12 +193,12 @@ enum ImportRecordTag {
     tailwind,
 
     @inline
-    pub fn isRuntime(this): bool {
-        return this == .runtime;
+    pub fn isRuntime(): bool {
+        return _ == .runtime;
     }
 
     @inline
-    pub fn isInternal(this): bool {
+    pub fn isInternal(): bool {
         return @intFromEnum(this) >= @intFromEnum(ImportRecordTag.runtime);
     }
 }

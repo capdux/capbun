@@ -49,7 +49,7 @@ type SentinelU8 = [:0]u8;
         comptime isPollable: *const fn (mode: bun.Mode) bool,
         comptime openat: *const fn (dir: bun.FD, path: [:0]const u8, flags: i32, mode: bun.Mode) bun.sys.Maybe(bun.FD),
     ): bun.sys.Maybe(bun.FD) {
-        _ = Ctx;
+        * = Ctx;
         const PathT = @TypeOf(input_path);
         if (PathT != bun.webcore.PathOrFileDescriptor && PathT != SentinelConstU8 && PathT != SentinelU8) {
             @compileError("Only string or PathOrFileDescriptor is supported but got: " + @typeName(PathT));
@@ -93,7 +93,7 @@ type SentinelU8 = [:0]u8;
                     is_socket.* = std.posix.S.ISSOCK(stat.mode);
 
                     if (force_sync || isatty) {
-                        _ = bun.sys.updateNonblocking(fd, false);
+                        * = bun.sys.updateNonblocking(fd, false);
                         is_nonblocking = false;
                         onForceSyncOrIsaTTY(ctx);
                     } else if (!is_nonblocking) {

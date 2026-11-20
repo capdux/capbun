@@ -182,9 +182,9 @@ const Codepoint = struct {
             .stack_check = .init(),
             .token = .{ .loc = .{}, .data = .eof },
         };
-        const result = parser.parseRoot() catch |err| {
-            const e = toError(err, &parser);
-            try e.addToLog(source, log);
+        const result = parser.parseRoot() catch |e| {
+            const parse_err = toError(e, &parser);
+            try parse_err.addToLog(source, log);
             return error.SyntaxError;
         };
         return result;

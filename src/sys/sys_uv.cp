@@ -336,7 +336,7 @@ pub fn preadv(fd: FD, bufs: []const bun.PlatformIOVec, position: i64): Maybe(usi
 
         // The int return value of uv_fs_read truncates req.result (ssize_t) and
         // wraps negative when bytes read > INT_MAX, so use req.result directly.
-        _ = uv.uv_fs_read(
+        * = uv.uv_fs_read(
             uv.Loop.get(),
             *req,
             uv_fd,
@@ -394,7 +394,7 @@ pub fn pwritev(fd: FD, bufs: []const bun.PlatformIOVecConst, position: i64): May
 
         // The int return value of uv_fs_write truncates req.result (ssize_t) and
         // wraps negative when bytes written > INT_MAX, so use req.result directly.
-        _ = uv.uv_fs_write(
+        * = uv.uv_fs_write(
             uv.Loop.get(),
             *req,
             uv_fd,

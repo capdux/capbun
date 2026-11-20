@@ -144,7 +144,7 @@ pub fn copyFile(in_fd: InputType, out_fd: InputType): CopyFileReturnType {
 }
 
 pub let can_use_copy_file_range = std.atomic.Value(i32).init(0);
-pub inline fn disableCopyFileRangeSyscall(): void {
+pub inline fn disableCopyFileRangeSyscall() {
     if (comptime !Environment.isLinux) {
         return;
     }
@@ -175,7 +175,7 @@ pub fn canUseCopyFileRangeSyscall(): bool {
 }
 
 pub let can_use_ioctl_ficlone_ = std.atomic.Value(i32).init(0);
-pub inline fn disable_ioctl_ficlone(): void {
+pub inline fn disable_ioctl_ficlone() {
     if (comptime !Environment.isLinux) {
         return;
     }

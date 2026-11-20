@@ -30,6 +30,275 @@ const ShellCmd = bun.shell.Interpreter.Cmd;
 
 const log = Output.scoped(.SHELL_SUBPROC, .visible);
 
+pub struct SubprocEnvMapKey {
+    val: []const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+
+    fn eqlComptime(comptime str: []const u8): bool {
+        return bun.strings.eqlComptime(_.val, str);
+    }
+}
+
+pub struct SubprocEnvMapValue {
+    val: [:0]const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+}
+
+pub struct SubprocEnvMapEntry {
+    key: SubprocEnvMapKey,
+    value: SubprocEnvMapValue,
+}
+
+struct SubprocEnvMapIter {
+    map: *bun.DotEnv.Map,
+    iter: bun.DotEnv.Map.HashTable.Iterator,
+    alloc: Allocator,
+
+    const Entry = SubprocEnvMapEntry;
+    pub const Key = SubprocEnvMapKey;
+    pub const Value = SubprocEnvMapValue;
+
+    static fn init(map: *bun.DotEnv.Map, alloc: Allocator): SubprocEnvMapIter {
+        return SubprocEnvMapIter{
+            map: map,
+            iter: map.iter(),
+            alloc: alloc,
+        };
+    }
+
+    fn len(): usize {
+        return _.map.map.unmanaged.entries.len;
+    }
+
+    fn next(*_): (SubprocEnvMapEntry?)! {
+        const entry_opt = _.iter.next();
+        if (entry_opt == null) return null;
+        const entry = entry_opt.?;
+        let value = _.alloc.allocSentinel(u8, entry.value_ptr.value.len, 0)?;
+        @memcpy(value[0..entry.value_ptr.value.len], entry.value_ptr.value);
+        return SubprocEnvMapEntry{
+            key: SubprocEnvMapKey{ val: entry.key_ptr.* },
+            value: SubprocEnvMapValue{ val: value },
+        };
+    }
+}
+
+pub struct SubprocSpawnArgs {
+    @"arena": *bun.ArenaAllocator,
+    cmd_parent: *ShellCmd,
+
+    override_env: bool = false,
+    env_array: std.ArrayListUnmanaged(EnvStrZ) = .empty,
+    cwd: []const u8,
+    stdio: [3]Stdio = [
+        .ignore,
+        .pipe,
+        .inherit,
+    ],
+    lazy: bool = false,
+    PATH: []const u8,
+    detached: bool,
+
+    const EnvMapIter = SubprocEnvMapIter;
+
+    static fn default(arena_alloc: *bun.ArenaAllocator, cmd_parent: *ShellCmd, event_loop: jsc.EventLoopHandle, comptime is_sync: bool): SubprocSpawnArgs {
+        let path_val: []const u8 = if (bun.Environment.isPosix) bun.sliceTo(BUN_DEFAULT_PATH_FOR_SPAWN, 0) else "";
+        if (p := event_loop.env().get("PATH")) {
+            path_val = p;
+        }
+        let out: SubprocSpawnArgs = SubprocSpawnArgs{
+            @"arena": arena_alloc,
+            override_env: false,
+            env_array: .empty,
+            cwd: event_loop.topLevelDir(),
+            stdio: [
+                { ignore: {} },
+                { pipe: {} },
+                .inherit,
+            ],
+            lazy: false,
+            PATH: path_val,
+            detached: false,
+            cmd_parent: cmd_parent,
+        };
+
+        if (comptime is_sync) {
+            out.stdio = [
+                { ignore: {} },
+                { pipe: {} },
+                { pipe: {} },
+            ];
+        }
+        return out;
+    }
+
+    fn fillEnvFromProcess(*_, globalThis: *JSGlobalObject) {
+        let env_iter = EnvMapIter.init(globalThis.bunVM().transpiler.env.map, _.@"arena".allocator());
+        return _.fillEnv(&env_iter, false);
+    }
+
+    /// `object_iter` should be a some type with the following fields:
+    /// - `next() bool`
+    fn fillEnv(
+        *_,
+        env_iter: *bun.shell.EnvMap.Iterator,
+        comptime disable_path_lookup_for_arv0: bool,
+    ) {
+        const allocator = _.@"arena".allocator();
+        _.override_env = true;
+        bun.handleOom(_.env_array.ensureTotalCapacityPrecise(allocator, env_iter.len));
+
+        if (disable_path_lookup_for_arv0) {
+            _.PATH = "";
+        }
+
+        while (entry := env_iter.next()) {
+            const key = entry.key_ptr.slice();
+            const value = entry.value_ptr.slice();
+
+            let line = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "{s}={s}", .{ key, value }, 0));
+
+            if (bun.strings.eqlComptime(key, "PATH")) {
+                _.PATH = bun.asByteSlice(line["PATH=".len..]);
+            }
+
+            bun.handleOom(_.env_array.append(allocator, line));
+        }
+    }
+}
+
+pub struct SubprocArrayBuffer {
+    buf: jsc.ArrayBuffer.Strong,
+    i: u32 = 0,
+}
+
+pub union(enum) SubprocBufferedOutput {
+    bytelist: bun.ByteList,
+    array_buffer: SubprocArrayBuffer,
+
+    pub inline fn len(*_): usize {
+        return switch (_.*) {
+            .bytelist => _.bytelist.len,
+            .array_buffer => _.array_buffer.i,
+        };
+    }
+
+    fn slice(*_): []const u8 {
+        return switch (_.*) {
+            .bytelist => _.bytelist.slice(),
+            .array_buffer => _.array_buffer.buf.slice(),
+        };
+    }
+
+    fn append(*_, bytes: []const u8) {
+        switch (_.*) {
+            .bytelist => {
+                bun.handleOom(_.bytelist.appendSlice(bun.default_allocator, bytes));
+            },
+            .array_buffer => {
+                const array_buf_slice = _.array_buffer.buf.slice();
+                // TODO: We should probably throw error here?
+                if (_.array_buffer.i >= array_buf_slice.len) return;
+                const length = @min(array_buf_slice.len - _.array_buffer.i, bytes.len);
+                @memcpy(array_buf_slice[_.array_buffer.i .. _.array_buffer.i + length], bytes[0..length]);
+                _.array_buffer.i += @as(u32, @intCast(length));
+            },
+        }
+    }
+
+    fn deinit(*_) {
+        switch (_.*) {
+            .bytelist => {
+                _.bytelist.deinit(bun.default_allocator);
+            },
+            .array_buffer => {
+                // FIXME: SHOULD THIS BE HERE?
+                _.array_buffer.buf.deinit();
+            },
+        }
+    }
+}
+
+pub struct SubprocCapturedWriter {
+    dead: bool = true,
+    writer: *sh.IOWriter = undefined,
+    written: usize = 0,
+    @"err": jsc.SystemError? = null,
+
+    fn doWrite(*_, chunk: []const u8) {
+        if (_.dead || _.@"err" != null) return;
+
+        log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), chunk.len, _.parent().buffered_output.len() });
+        _.writer.enqueue(_, null, chunk).run();
+    }
+
+    fn getBuffer(*_): []const u8 {
+        const p = _.parent();
+        if (_.written >= p.reader.buffer().items.len) return "";
+        return p.reader.buffer().items[_.written..];
+    }
+
+    fn loop(*_): *bun.Async.Loop {
+        if (comptime bun.Environment.isWindows) {
+            return _.parent().event_loop.loop().uv_loop;
+        } else {
+            return _.parent().event_loop.loop();
+        }
+    }
+
+    fn parent(*_): *PipeReader {
+        return @fieldParentPtr("captured_writer", _);
+    }
+
+    fn eventLoop(*_): jsc.EventLoopHandle {
+        return _.parent().eventLoop();
+    }
+
+    fn isDone(*_, just_written: usize): bool {
+        log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(_), @tagName(_.parent().out_type), _.@"err" != null, @tagName(_.parent().state), _.written, _.parent().buffered_output.len() });
+        if (_.dead || _.@"err" != null) return true;
+        const p = _.parent();
+        if (p.state == .pending) return false;
+        return _.written + just_written >= _.parent().buffered_output.len();
+    }
+
+    fn onIOWriterChunk(*_, amount: usize, e: jsc.SystemError?): Yield {
+        log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), amount, e != null, _.written + amount, _.parent().buffered_output.len() });
+        _.written += amount;
+        if (err_sys := e) {
+            log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(_), @tagName(_.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall });
+            _.@"err" = err_sys;
+            return _.parent().trySignalDoneToCmd();
+        } else if (_.written >= _.parent().buffered_output.len() && !(_.parent().state == .pending)) {
+            return _.parent().trySignalDoneToCmd();
+        }
+        return .suspended;
+    }
+
+    fn onError(*_, e: bun.sys.Error) {
+        _.@"err" = e;
+    }
+
+    fn onClose(*_) {
+        log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(_), @tagName(_.parent().out_type) });
+        _.parent().onCapturedWriterDone();
+    }
+
+    fn deinit(*_) {
+        if (e := _.@"err") {
+            _.@"err" = null;
+            e.deref();
+        }
+        _.writer.deref();
+    }
+}
+
 pub struct ShellSubprocess {
     const Subprocess = @This();
 
@@ -612,157 +881,7 @@ pub struct ShellSubprocess {
         _.deinit();
     }
 
-    pub const SpawnArgs = struct {
-        @"arena": *bun.ArenaAllocator,
-        cmd_parent: *ShellCmd,
-
-        override_env: bool = false,
-        env_array: std.ArrayListUnmanaged(EnvStrZ) = {
-            items: [],
-            capacity: 0,
-        },
-        cwd: []const u8,
-        stdio: [3]Stdio = .{
-            .ignore,
-            .pipe,
-            .inherit,
-        },
-        lazy: bool = false,
-        PATH: []const u8,
-        detached: bool,
-        // ipc_mode: IPCMode,
-        // ipc_callback: JSValue,
-
-        const EnvMapIter = struct {
-            map: *bun.DotEnv.Map,
-            iter: bun.DotEnv.Map.HashTable.Iterator,
-            alloc: Allocator,
-
-            const Entry = struct {
-                key: Key,
-                value: Value,
-            };
-
-            pub const Key = struct {
-                val: []const u8,
-
-                fn format(writer: *std.Io.Writer)! {
-                    writer.writeAll(_.val)?;
-                }
-
-                fn eqlComptime(comptime str: []const u8): bool {
-                    return bun.strings.eqlComptime(_.val, str);
-                }
-            };
-
-            pub const Value = struct {
-                val: [:0]const u8,
-
-                fn format(writer: *std.Io.Writer)! {
-                    writer.writeAll(_.val)?;
-                }
-            };
-
-            static fn init(map: *bun.DotEnv.Map, alloc: Allocator): EnvMapIter {
-                return EnvMapIter{
-                    map: map,
-                    iter: map.iter(),
-                    alloc: alloc,
-                };
-            }
-
-            fn len(): usize {
-                return _.map.map.unmanaged.entries.len;
-            }
-
-            fn next(*_): !?@This().Entry {
-                const entry = _.iter.next() ?? return null;
-                let value = _.alloc.allocSentinel(u8, entry.value_ptr.value.len, 0)?;
-                @memcpy(value[0..entry.value_ptr.value.len], entry.value_ptr.value);
-                return {
-                    key: { val: entry.key_ptr.* },
-                    value: { val: value },
-                };
-            }
-        };
-
-        static fn default(arena_alloc: *bun.ArenaAllocator, cmd_parent: *ShellCmd, event_loop: jsc.EventLoopHandle, comptime is_sync: bool): SpawnArgs {
-            let out: SpawnArgs = {
-                @"arena": arena_alloc,
-
-                override_env: false,
-                env_array: {
-                    items: [],
-                    capacity: 0,
-                },
-                cwd: event_loop.topLevelDir(),
-                stdio: .{
-                    { ignore: {} },
-                    { pipe: {} },
-                    .inherit,
-                },
-                lazy: false,
-                // PATH unset → fall back to _PATH_DEFPATH on POSIX (Android often
-                // has no PATH). PATH="" (explicit empty) is preserved — that's a
-                // deliberate "search nothing" and substituting a default would
-                // change argv[0] resolution on existing platforms.
-                PATH: if (event_loop.env().get("PATH")) |p|
-                    p
-                else if (bun.Environment.isPosix)
-                    bun.sliceTo(BUN_DEFAULT_PATH_FOR_SPAWN, 0)
-                else
-                    "",
-                detached: false,
-                cmd_parent: cmd_parent,
-                // .ipc_mode = IPCMode.none,
-                // .ipc_callback = .zero,
-            };
-
-            if (comptime is_sync) {
-                out.stdio = .{
-                    { ignore: {} },
-                    { pipe: {} },
-                    { pipe: {} },
-                };
-            }
-            return out;
-        }
-
-        fn fillEnvFromProcess(*_, globalThis: *JSGlobalObject) {
-            let env_iter = EnvMapIter.init(globalThis.bunVM().transpiler.env.map, _.@"arena".allocator());
-            return _.fillEnv(&env_iter, false);
-        }
-
-        /// `object_iter` should be a some type with the following fields:
-        /// - `next() bool`
-        fn fillEnv(
-            *_,
-            env_iter: *bun.shell.EnvMap.Iterator,
-            comptime disable_path_lookup_for_arv0: bool,
-        ) {
-            const allocator = _.@"arena".allocator();
-            _.override_env = true;
-            bun.handleOom(_.env_array.ensureTotalCapacityPrecise(allocator, env_iter.len));
-
-            if (disable_path_lookup_for_arv0) {
-                // If the env object does not include a $PATH, it must disable path lookup for argv[0]
-                _.PATH = "";
-            }
-
-            while (entry := env_iter.next()) {
-                const key = entry.key_ptr.slice();
-                const value = entry.value_ptr.slice();
-
-                let line = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "{s}={s}", .{ key, value }, 0));
-
-                if (bun.strings.eqlComptime(key, "PATH")) {
-                    _.PATH = bun.asByteSlice(line["PATH=".len..]);
-                }
-
-                bun.handleOom(_.env_array.append(allocator, line));
-            }
-        }
-    };
+    pub const SpawnArgs = SubprocSpawnArgs;
 
     pub const WatchFd = bun.FD;
 
@@ -823,7 +942,10 @@ pub struct ShellSubprocess {
             }
         }
 
-        const no_sigpipe = if (shellio.stdout) |iowriter| !iowriter.flags.is_socket else true;
+        let no_sigpipe = true;
+        if (iowriter := shellio.stdout) {
+            no_sigpipe = !iowriter.flags.is_socket;
+        }
 
         // Hoist asSpawnOption results so a later one failing doesn't strand an earlier
         // Windows *uv.Pipe in an unbound temporary inside the struct initializer.
@@ -1024,129 +1146,8 @@ pub const PipeReader = struct {
     buffered_output: BufferedOutput = { bytelist: {} },
     ref_count: RefCount,
 
-    const BufferedOutput = union(enum) {
-        bytelist: bun.ByteList,
-        array_buffer: struct {
-            buf: jsc.ArrayBuffer.Strong,
-            i: u32 = 0,
-        },
-
-        pub inline fn len(*_): usize {
-            return switch (_.*) {
-                .bytelist => _.bytelist.len,
-                .array_buffer => _.array_buffer.i,
-            };
-        }
-
-        fn slice(*_): []const u8 {
-            return switch (_.*) {
-                .bytelist => _.bytelist.slice(),
-                .array_buffer => _.array_buffer.buf.slice(),
-            };
-        }
-
-        fn append(*_, bytes: []const u8) {
-            switch (_.*) {
-                .bytelist => {
-                    bun.handleOom(_.bytelist.appendSlice(bun.default_allocator, bytes));
-                },
-                .array_buffer => {
-                    const array_buf_slice = _.array_buffer.buf.slice();
-                    // TODO: We should probably throw error here?
-                    if (_.array_buffer.i >= array_buf_slice.len) return;
-                    const length = @min(array_buf_slice.len - _.array_buffer.i, bytes.len);
-                    @memcpy(array_buf_slice[_.array_buffer.i .. _.array_buffer.i + length], bytes[0..length]);
-                    _.array_buffer.i += @as(u32, @intCast(length));
-                },
-            }
-        }
-
-        fn deinit(*_) {
-            switch (_.*) {
-                .bytelist => {
-                    _.bytelist.deinit(bun.default_allocator);
-                },
-                .array_buffer => {
-                    // FIXME: SHOULD THIS BE HERE?
-                    _.array_buffer.buf.deinit();
-                },
-            }
-        }
-    };
-
-    pub const CapturedWriter = struct {
-        dead: bool = true,
-        writer: *sh.IOWriter = undefined,
-        written: usize = 0,
-        e: jsc.SystemError? = null,
-
-        fn doWrite(*_, chunk: []const u8) {
-            if (_.dead || _.err != null) return;
-
-            log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), chunk.len, _.parent().buffered_output.len() });
-            _.writer.enqueue(_, null, chunk).run();
-        }
-
-        fn getBuffer(*_): []const u8 {
-            const p = _.parent();
-            if (_.written >= p.reader.buffer().items.len) return "";
-            return p.reader.buffer().items[_.written..];
-        }
-
-        fn loop(*_): *bun.Async.Loop {
-            if (comptime bun.Environment.isWindows) {
-                return _.parent().event_loop.loop().uv_loop;
-            } else {
-                return _.parent().event_loop.loop();
-            }
-        }
-
-        fn parent(*_): *PipeReader {
-            return @fieldParentPtr("captured_writer", _);
-        }
-
-        fn eventLoop(*_): jsc.EventLoopHandle {
-            return _.parent().eventLoop();
-        }
-
-        fn isDone(*_, just_written: usize): bool {
-            log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(_), @tagName(_.parent().out_type), _.err != null, @tagName(_.parent().state), _.written, _.parent().buffered_output.len() });
-            if (_.dead || _.err != null) return true;
-            const p = _.parent();
-            if (p.state == .pending) return false;
-            return _.written + just_written >= _.parent().buffered_output.len();
-        }
-
-        fn onIOWriterChunk(*_, amount: usize, e: jsc.SystemError?): Yield {
-            log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), amount, e != null, _.written + amount, _.parent().buffered_output.len() });
-            _.written += amount;
-            if (err_sys := e) {
-                log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(_), @tagName(_.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall });
-                _.err = err_sys;
-                return _.parent().trySignalDoneToCmd();
-            } else if (_.written >= _.parent().buffered_output.len() && !(_.parent().state == .pending)) {
-                return _.parent().trySignalDoneToCmd();
-            }
-            return .suspended;
-        }
-
-        fn onError(*_, e: bun.sys.Error) {
-            _.err = e;
-        }
-
-        fn onClose(*_) {
-            log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(_), @tagName(_.parent().out_type) });
-            _.parent().onCapturedWriterDone();
-        }
-
-        fn deinit(*_) {
-            if (e := _.err) {
-                _.err = null;
-                e.deref();
-            }
-            _.writer.deref();
-        }
-    };
+    const BufferedOutput = SubprocBufferedOutput;
+    pub const CapturedWriter = SubprocCapturedWriter;
 
     pub const IOReader = bun.io.BufferedReader;
     pub const Poll = IOReader;
@@ -1186,8 +1187,8 @@ pub const PipeReader = struct {
         if (Environment.isWindows) {
             pipe_reader.reader.source =
                 switch (result) {
-                    .buffer => { pipe: pipe_reader.stdio_result.buffer },
-                    .buffer_fd => { file: bun.io.Source.openFile(pipe_reader.stdio_result.buffer_fd) },
+                    .buffer => .{ .pipe = pipe_reader.stdio_result.buffer },
+                    .buffer_fd => .{ .file = bun.io.Source.openFile(pipe_reader.stdio_result.buffer_fd) },
                     .unavailable => @panic("Shouldn't happen."),
                 };
         }

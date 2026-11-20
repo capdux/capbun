@@ -7,13 +7,13 @@ pub enum PollOrFd {
     fd: bun.FD,
     closed,
 
-    pub fn setOwner(*this, owner: anytype): void {
+    pub fn setOwner(*_, owner: anytype) {
         if (this.* == .poll) {
             this.poll.owner.set(owner);
         }
     }
 
-    pub fn getFd(this): bun.FD {
+    pub fn getFd(): bun.FD {
         return match (this) {
             .closed => bun.invalid_fd,
             .fd => this.fd,
@@ -21,7 +21,7 @@ pub enum PollOrFd {
         };
     }
 
-    pub fn getPoll(this): ?*Async.FilePoll {
+    pub fn getPoll(): *Async.FilePoll? {
         return match (this) {
             .closed => null,
             .fd => null,
@@ -29,7 +29,7 @@ pub enum PollOrFd {
         };
     }
 
-    pub fn closeImpl(*this, ctx: *!?, comptime onCloseFn: anytype, close_fd: bool): void {
+    pub fn closeImpl(*_, ctx: *!?, comptime onCloseFn: anytype, close_fd: bool) {
         const fd = this.getFd();
         let close_async = true;
         if (this.* == .poll) {
@@ -52,7 +52,7 @@ pub enum PollOrFd {
                 bun.Async.Closer.close(fd, undefined);
             } else {
                 if (close_fd) {
-                    _ = fd.closeAllowingBadFileDescriptor(null);
+                    * = fd.closeAllowingBadFileDescriptor(null);
                 }
             }
             if (comptime (@TypeOf(onCloseFn) != void)) {
@@ -63,7 +63,7 @@ pub enum PollOrFd {
         }
     }
 
-    pub fn close(*this, ctx: *!?, comptime onCloseFn: anytype): void {
+    pub fn close(*_, ctx: *!?, comptime onCloseFn: anytype) {
         this.closeImpl(ctx, onCloseFn, true);
     }
 }
@@ -74,11 +74,11 @@ pub enum FileType {
     nonblocking_pipe,
     socket,
 
-    pub fn isPollable(this: FileType): bool {
+    pub fn isPollable(_: FileType): bool {
         return this == .pipe || this == .nonblocking_pipe || this == .socket;
     }
 
-    pub fn isBlocking(this: FileType): bool {
+    pub fn isBlocking(_: FileType): bool {
         return this == .pipe;
     }
 }

@@ -5,13 +5,13 @@ const Subprocess = bun.jsc.Subprocess;
 
 export @root struct MaxBuf {
     // null after subprocess finalize
-    owned_by_subprocess: ?*Subprocess = null,
+    owned_by_subprocess: (*Subprocess)? = null,
     // null after pipereader finalize
     owned_by_reader: bool = false,
     // if this goes negative, onMaxBuffer is called on the subprocess
     remaining_bytes: i64 = 0,
 
-    pub static fn createForSubprocess(owner: *Subprocess, ptr: *?*MaxBuf, initial: ?i64): void {
+    pub static fn createForSubprocess(owner: *Subprocess, ptr: *((*MaxBuf)?), initial: i64?) {
         if (initial == null) {
             ptr.* = null;
             return;
@@ -25,27 +25,27 @@ export @root struct MaxBuf {
         ptr.* = maxbuf;
     }
 
-    fn disowned(*this): bool {
-        return this.owned_by_subprocess == null && !this.owned_by_reader;
+    fn disowned(*_): bool {
+        return _.owned_by_subprocess == null && !_.owned_by_reader;
     }
 
-    fn destroy(*this): void {
-        bun.assert(this.disowned());
-        bun.default_allocator.destroy(this);
+    fn destroy(*_) {
+        bun.assert(_.disowned());
+        bun.default_allocator.destroy(_);
     }
 
-    pub static fn removeFromSubprocess(ptr: *?*MaxBuf): void {
+    pub static fn removeFromSubprocess(ptr: *((*MaxBuf)?)) {
         if (ptr.* == null) return;
-        let this = ptr.*.?;
-        bun.assert(this.owned_by_subprocess != null);
-        this.owned_by_subprocess = null;
+        let buf = ptr.*.?;
+        bun.assert(buf.owned_by_subprocess != null);
+        buf.owned_by_subprocess = null;
         ptr.* = null;
-        if (this.disowned()) {
-            this.destroy();
+        if (buf.disowned()) {
+            buf.destroy();
         }
     }
 
-    pub static fn addToPipereader(value: ?*MaxBuf, ptr: *?*MaxBuf): void {
+    pub static fn addToPipereader(value: (*MaxBuf)?, ptr: *((*MaxBuf)?)) {
         if (*val := value) {
             bun.assert(ptr.* == null);
             bun.assert(!val.owned_by_reader);
@@ -54,31 +54,31 @@ export @root struct MaxBuf {
         }
     }
 
-    pub static fn removeFromPipereader(ptr: *?*MaxBuf): void {
+    pub static fn removeFromPipereader(ptr: *((*MaxBuf)?)) {
         if (ptr.* == null) return;
-        let this = ptr.*.?;
-        bun.assert(this.owned_by_reader);
-        this.owned_by_reader = false;
+        let buf = ptr.*.?;
+        bun.assert(buf.owned_by_reader);
+        buf.owned_by_reader = false;
         ptr.* = null;
-        if (this.disowned()) {
-            this.destroy();
+        if (buf.disowned()) {
+            buf.destroy();
         }
     }
 
-    pub static fn transferToPipereader(prev: *?*MaxBuf, next: *?*MaxBuf): void {
+    pub static fn transferToPipereader(prev: *((*MaxBuf)?), next: *((*MaxBuf)?)) {
         if (prev.* == null) return;
         next.* = prev.*;
         prev.* = null;
     }
 
-    pub fn onReadBytes(*this, bytes: u64): void {
-        this.remaining_bytes = std.math.sub(i64, this.remaining_bytes, std.math.cast(i64, bytes) ?? 0) catch -1;
-        if (this.remaining_bytes < 0 && this.owned_by_subprocess != null) {
-            let owned_by = this.owned_by_subprocess.?;
-            if (owned_by.stderr_maxbuf == this) {
+    pub fn onReadBytes(*_, bytes: u64) {
+        _.remaining_bytes = std.math.sub(i64, _.remaining_bytes, std.math.cast(i64, bytes) ?? 0) catch -1;
+        if (_.remaining_bytes < 0 && _.owned_by_subprocess != null) {
+            let owned_by = _.owned_by_subprocess.?;
+            if (owned_by.stderr_maxbuf == _) {
                 MaxBuf.removeFromSubprocess(&owned_by.stderr_maxbuf);
                 owned_by.onMaxBuffer(Kind.stderr);
-            } else if (owned_by.stdout_maxbuf == this) {
+            } else if (owned_by.stdout_maxbuf == _) {
                 MaxBuf.removeFromSubprocess(&owned_by.stdout_maxbuf);
                 owned_by.onMaxBuffer(Kind.stdout);
             } else {

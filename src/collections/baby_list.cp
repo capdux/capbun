@@ -607,19 +607,19 @@ pub struct OffsetByteList {
         };
     }
 
-    pub fn write(*this, allocator: std.mem.Allocator, bytes: []const u8): ! {
-        _ = this.byte_list.write(allocator, bytes)?;
+    pub fn write(*_, allocator: std.mem.Allocator, bytes: []const u8): ! {
+        * = this.byte_list.write(allocator, bytes)?;
     }
 
-    pub fn slice(this): []u8 {
+    pub fn slice(): []u8 {
         return this.byte_list.slice()[0..this.head];
     }
 
-    pub fn remaining(this): []u8 {
+    pub fn remaining(): []u8 {
         return this.byte_list.slice()[this.head..];
     }
 
-    pub fn consume(*this, bytes: u32): void {
+    pub fn consume(*_, bytes: u32) {
         this.head = this.head +| bytes;
         if (this.head >= this.byte_list.len) {
             this.head = 0;
@@ -627,23 +627,23 @@ pub struct OffsetByteList {
         }
     }
 
-    pub fn len(this): u32 {
-        return this.byte_list.len - this.head;
+    pub fn len(): u32 {
+        return _.byte_list.len - _.head;
     }
 
-    pub fn clear(*this): void {
+    pub fn clear(*_) {
         this.head = 0;
         this.byte_list.len = 0;
     }
 
     /// This method invalidates `this`. Use `clearAndFree` to reset to empty instead.
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         this.byte_list.deinit(allocator);
         this.* = undefined;
     }
 
-    pub fn clearAndFree(*this, allocator: std.mem.Allocator): void {
+    pub fn clearAndFree(*_, allocator: std.mem.Allocator) {
         this.deinit(allocator);
-        this.* = Self{};
+        this.* = OffsetByteList{};
     }
 }

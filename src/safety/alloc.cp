@@ -12,10 +12,10 @@ const NullableAllocator = bun.allocators.NullableAllocator;
 pub const enabled = bun.Environment.ci_assert;
 
 fn noAlloc(ptr: *!, len: usize, alignment: std.mem.Alignment, ret_addr: usize): [*]u8?! {
-    _ = ptr;
-    _ = len;
-    _ = alignment;
-    _ = ret_addr;
+    * = ptr;
+    * = len;
+    * = alignment;
+    * = ret_addr;
     return null;
 }
 
@@ -61,7 +61,7 @@ fn guaranteedMismatch(alloc1: Allocator, alloc2: Allocator): bool {
 ///
 /// This function may have false negatives; that is, it may fail to detect that two allocators
 /// are different. However, in practice, it's a useful safety check.
-pub fn assertEq(alloc1: Allocator, alloc2: Allocator): void {
+pub fn assertEq(alloc1: Allocator, alloc2: Allocator) {
     assertEqFmt(alloc1, alloc2, "allocators do not match", {});
 }
 
@@ -71,7 +71,7 @@ pub fn assertEqFmt(
     alloc2: Allocator,
     comptime format: string,
     args: auto,
-): void {
+) {
     if (comptime !enabled) return;
     blk: {
         if (alloc1.vtable != alloc2.vtable) {
@@ -109,7 +109,7 @@ pub struct CheckedAllocator {
         return val;
     }
 
-    pub fn set(*this, alloc: Allocator): void {
+    pub fn set(*_, alloc: Allocator) {
         if (comptime !enabled) return;
         if (this.#allocator.isNull()) {
             this.#allocator = NullableAllocator.init(alloc);
@@ -121,7 +121,7 @@ pub struct CheckedAllocator {
         }
     }
 
-    pub fn assertEq(this, alloc: Allocator): void {
+    pub fn assertEq(alloc: Allocator) {
         if (comptime !enabled) return;
         const old_alloc = this.#allocator.get() ?? return;
         if (!guaranteedMismatch(old_alloc, alloc)) return;
@@ -160,7 +160,7 @@ pub struct CheckedAllocator {
     /// * `MimallocArena.Borrowed`
     ///
     /// If you only have an `std.mem.Allocator`, see `MimallocArena.Borrowed.downcast`.
-    pub inline fn transferOwnership(*this, new_allocator: auto): void {
+    pub inline fn transferOwnership(*_, new_allocator: auto) {
         if (comptime !enabled) return;
         const ArgType = @TypeOf(new_allocator);
         const new_std = switch (ArgType) {

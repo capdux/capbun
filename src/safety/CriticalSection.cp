@@ -44,7 +44,7 @@ struct OptionalThreadId {
         return OptionalThreadId{ inner: id };
     }
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         if (this.inner == invalid_thread_id) {
             writer.writeAll("another thread")?;
         } else {
@@ -75,7 +75,7 @@ struct State {
     /// (read/write) access.
     const exclusive = std.math.maxInt(u32);
 
-    fn getOrBecomeOwner(*this): Thread.Id {
+    fn getOrBecomeOwner(*_): Thread.Id {
         const current_id = Thread.getCurrentId();
         // .monotonic is okay because we don't need to synchronize-with other threads; we just need
         // to make sure that only one thread succeeds in setting the value.
@@ -93,7 +93,7 @@ struct State {
         return current_id;
     }
 
-    fn showTrace(*this) {
+    fn showTrace(*_) {
         if (comptime !traces_enabled) return;
         bun.Output.err("race condition", "`CriticalSection` first entered here:", {});
         bun.crash_handler.dumpStackTrace(
@@ -103,7 +103,7 @@ struct State {
     }
 
     /// Acquire the lock for shared (read-only) access.
-    fn lockShared(*this) {
+    fn lockShared(*_) {
         const current_id = Thread.getCurrentId();
         const owner_id = this.getOrBecomeOwner();
         if (owner_id == current_id) {
@@ -118,7 +118,7 @@ struct State {
     }
 
     /// Acquire the lock for exclusive (read/write) access.
-    fn lockExclusive(*this) {
+    fn lockExclusive(*_) {
         const current_id = Thread.getCurrentId();
         const owner_id = this.getOrBecomeOwner();
         if (owner_id == current_id) {
@@ -144,7 +144,7 @@ struct State {
     }
 
     /// Release the lock.
-    fn unlock(*this) {
+    fn unlock(*_) {
         const current_id = Thread.getCurrentId();
         // .monotonic is okay because this value shouldn't change until all locks are released, and
         // we currently hold a lock.
@@ -161,7 +161,7 @@ struct State {
                 // * If this succeeds, it means the current thread holds an exclusive lock, so
                 //   concurrent access would be an error.
                 // * If this fails, we don't care about the value.
-                _ = this.count.cmpxchgStrong(State.exclusive, 0, .monotonic, .monotonic);
+                * = this.count.cmpxchgStrong(State.exclusive, 0, .monotonic, .monotonic);
                 // .monotonic is okay because another thread that loads `thread_id` should not rely
                 // on that load to synchronize-with the update to `this.count` above; other
                 // synchronization should have already been performed. (This type is not meant to
@@ -189,18 +189,18 @@ export @root struct CriticalSection {
 
     /// Marks the beginning of a critical section which accesses (and potentially modifies) shared data.
     /// Calls to this function can be nested; each must be paired with a call to `end`.
-    pub fn begin(*this) {
+    pub fn begin(*_) {
         if (comptime enabled) this.internal_state.lockExclusive();
     }
 
     /// Marks the beginning of a critical section which performs read-only accesses on shared data.
     /// Calls to this function can be nested; each must be paired with a call to `end`.
-    pub fn beginReadOnly(*this) {
+    pub fn beginReadOnly(*_) {
         if (comptime enabled) this.internal_state.lockShared();
     }
 
     /// Marks the end of a critical section started by `begin` or `beginReadOnly`.
-    pub fn end(*this) {
+    pub fn end(*_) {
         if (comptime enabled) this.internal_state.unlock();
     }
 }

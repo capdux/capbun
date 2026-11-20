@@ -37,7 +37,7 @@ pub struct SavedFile {
 }
 
 pub fn toJS(
-    this: *OutputFile,
+    *_: *OutputFile,
     owned_pathname: ([]const u8)?,
     globalObject: *jsc.JSGlobalObject,
 ): bun.jsc.JSValue {
@@ -56,8 +56,8 @@ pub fn toJS(
                     },
                 this.loader.toMimeType(&[owned_pathname ?? ""]),
                 globalObject.allocator(),
-            ) catch |err| {
-                Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(err)]);
+            ) catch |e| {
+                Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(e)]);
             };
 
             let build_output = bun.new(jsc.API.BuildArtifact, {
@@ -87,8 +87,8 @@ pub fn toJS(
                 },
                 this.loader.toMimeType(&[owned_pathname ?? ""]),
                 globalObject.allocator(),
-            ) catch |err| {
-                Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(err)]);
+            ) catch |e| {
+                Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(e)]);
             };
 
             this.value = {
@@ -145,7 +145,7 @@ pub fn toJS(
 }
 
 pub fn toBlob(
-    this: *OutputFile,
+    *_: *OutputFile,
     allocator: std.mem.Allocator,
     globalThis: *jsc.JSGlobalObject,
 ): jsc.WebCore.Blob! {

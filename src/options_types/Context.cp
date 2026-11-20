@@ -197,7 +197,7 @@ export struct TestOptions {
         junit: bool = false,
     };
 
-    pub inline fn testFilterRegex(this): OptRegularExpression {
+    pub inline fn testFilterRegex(): OptRegularExpression {
         unsafe {
             return @ptrCast(@alignCast(this.test_filter_regex));
         }

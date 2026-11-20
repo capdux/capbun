@@ -1,7 +1,7 @@
 import bun from "bun";
 import std from "std";
 
-fn deinitImpl(comptime Union: type, value: *Union): void {
+fn deinitImpl(comptime Union: type, value: *Union) {
     switch (std.meta.activeTag(value.*)) {
         inline else => |tag| bun.memory.deinit(&@field(value, @tagName(tag))),
     }

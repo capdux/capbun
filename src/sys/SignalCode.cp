@@ -65,7 +65,7 @@ export enum SignalCode: u8 {
         };
     }
 
-    pub fn description(signal: SignalCode): ?[]const u8 {
+    pub fn description(signal: SignalCode): []const u8? {
         // Description names copied from fish
         // https://github.com/fish-shell/fish-shell/blob/00ffc397b493f67e28f18640d3de808af29b1434/fish-rust/src/signal.rs#L420
         return switch (signal) {

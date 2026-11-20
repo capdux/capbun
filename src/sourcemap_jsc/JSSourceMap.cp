@@ -195,21 +195,21 @@ pub const toJS = js.toJS;
         return source_map;
     }
 
-    pub fn memoryCost(this): usize {
-        return @sizeOf(JSSourceMap) + this.sources.len * @sizeOf(bun.String) + this.sourcemap.memoryCost();
+    pub fn memoryCost(): usize {
+        return @sizeOf(JSSourceMap) + _.sources.len * @sizeOf(bun.String) + _.sourcemap.memoryCost();
     }
 
-    pub fn estimatedSize(*this): usize {
+    pub fn estimatedSize(*_): usize {
         return this.memoryCost();
     }
 
-    pub fn getPayload(*this, globalObject: *JSGlobalObject): JSValue {
-        _ = globalObject;
+    pub fn getPayload(*_, globalObject: *JSGlobalObject): JSValue {
+        * = globalObject;
         return JSValue.js_undefined;
     }
 
-    pub fn getLineLengths(*this, globalObject: *JSGlobalObject): JSValue {
-        _ = globalObject;
+    pub fn getLineLengths(*_, globalObject: *JSGlobalObject): JSValue {
+        * = globalObject;
         return JSValue.js_undefined;
     }
 
@@ -223,7 +223,7 @@ pub const toJS = js.toJS;
         ];
     }
 
-    fn mappingNameToJS(this, globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
+    fn mappingNameToJS(globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
         const name_index = mapping.nameIndex();
         if (name_index >= 0) {
             if (name := this.sourcemap.mappings.getName(name_index)) {
@@ -238,7 +238,7 @@ pub const toJS = js.toJS;
         return JSValue.js_undefined;
     }
 
-    fn sourceNameToJS(this, globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
+    fn sourceNameToJS(globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
         const source_index = mapping.sourceIndex();
         const len_i32: i32 = @intCast(this.sources.len);
         if (source_index >= 0 && source_index < len_i32) {
@@ -249,7 +249,7 @@ pub const toJS = js.toJS;
         return JSValue.js_undefined;
     }
 
-    pub fn findOrigin(*this, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
+    pub fn findOrigin(*_, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
         const coords = getLineColumn(globalObject, callFrame)?;
         const mapping_opt = this.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
         if (mapping_opt == null) return jsc.JSValue.createEmptyObject(globalObject, 0);
@@ -267,7 +267,7 @@ pub const toJS = js.toJS;
         };
     }
 
-    pub fn findEntry(*this, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
+    pub fn findEntry(*_, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
         const coords = getLineColumn(globalObject, callFrame)?;
         const mapping_opt = this.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
         if (mapping_opt == null) return jsc.JSValue.createEmptyObject(globalObject, 0);
@@ -287,7 +287,7 @@ pub const toJS = js.toJS;
         };
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         for (*str of this.sources) {
             str.deref();
         }
@@ -303,7 +303,7 @@ pub const toJS = js.toJS;
         bun.destroy(this);
     }
 
-    pub fn finalize(*this): void {
+    pub fn finalize(*_) {
         this.deinit();
     }
 }

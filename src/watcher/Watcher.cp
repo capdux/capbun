@@ -40,7 +40,7 @@ const Platform = switch (Environment.os) {
     .wasm => @compileError("Unsupported platform"),
 };
 
-pub type ChangedFilePath = ?[:0]u8;
+pub type ChangedFilePath = [:0]u8?;
 const empty_watch_events: [0]WatchEvent = [];
 const empty_names: [0]ChangedFilePath = [];
 const empty_hashes: [0]HashType = [];
@@ -54,7 +54,7 @@ export @packed(u8) struct WatchEventOp {
     create: bool = false,
     _padding: u2 = 0,
 
-    pub static fn merge(before: WatchEventOp, after: WatchEventOp) WatchEventOp {
+    pub static fn merge(before: WatchEventOp, after: WatchEventOp): WatchEventOp {
         return WatchEventOp{
             delete: before.delete || after.delete,
             write: before.write || after.write,
@@ -65,10 +65,10 @@ export @packed(u8) struct WatchEventOp {
         };
     }
 
-    pub static fn format(op: WatchEventOp, w: *std.Io.Writer) anyerror!void {
+    pub static fn format(op: WatchEventOp, w: *std.Io.Writer): anyerror!void {
         w.writeAll("{")?;
         let first = true;
-        inline for (comptime std.meta.fieldNames(WatchEventOp)) |name| {
+        inline for (name of comptime std.meta.fieldNames(WatchEventOp)) {
             if (comptime std.mem.eql(u8, name, "_padding")) continue;
             if (@field(op, name)) {
                 if (!first) {
@@ -91,16 +91,16 @@ export struct WatchEvent {
     name_off: u8 = 0,
     name_len: u8 = 0,
 
-    pub fn names(this, buf: []ChangedFilePath) []ChangedFilePath {
+    pub fn names(buf: []ChangedFilePath): []ChangedFilePath {
         if (this.name_len == 0) return empty_names[0..0];
         return buf[this.name_off..][0..this.name_len];
     }
 
-    pub static fn sortByIndex(_: Sorter, event: WatchEvent, rhs: WatchEvent) bool {
+    pub static fn sortByIndex(_: Sorter, event: WatchEvent, rhs: WatchEvent): bool {
         return event.index < rhs.index;
     }
 
-    pub fn merge(*this, other: WatchEvent) void {
+    pub fn merge(*_, other: WatchEvent)  {
         this.name_len += other.name_len;
         this.op = WatchEventOp.merge(this.op, other.op);
     }
@@ -151,14 +151,14 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
 @root struct Watcher {
     watch_events: []WatchEvent = empty_watch_events[0..0],
-    changed_filepaths: [max_count]?[:0]u8,
+    changed_filepaths: [max_count][:0]u8?,
     platform: Platform,
     watchlist: WatchList,
     watched_count: usize,
     mutex: BunMutex,
     fs: *bun.fs.FileSystem,
     allocator: std.mem.Allocator,
-    watchloop_handle: ?std.Thread.Id = null,
+    watchloop_handle: std.Thread.Id? = null,
     cwd: string,
     thread: std.Thread = undefined,
     running: bool = true,
@@ -170,7 +170,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     onError: OnErrorFn,
     thread_lock: bun.safety.ThreadLock = .initUnlocked(),
 
-    pub static fn init(comptime T: type, ctx: *T, fs: *bun.fs.FileSystem, allocator: std.mem.Allocator) anyerror!*Watcher {
+    pub static fn init(comptime T: type, ctx: *T, fs: *bun.fs.FileSystem, allocator: std.mem.Allocator): anyerror!*Watcher {
         const wrapped = InitWrapped(T);
 
         let watcher = allocator.create(Watcher)?;
@@ -199,16 +199,16 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         return watcher;
     }
 
-    pub fn writeTraceEvents(*this, events: []WatchEvent, changed_files: []ChangedFilePath) void {
+    pub fn writeTraceEvents(*_, events: []WatchEvent, changed_files: []ChangedFilePath)  {
         WatcherTrace.writeEvents(this, events, changed_files);
     }
 
-    pub fn start(*this) anyerror!void {
+    pub fn start(*_): anyerror!void {
         bun.assert(this.watchloop_handle == null);
         this.thread = std.Thread.spawn(.{}, threadMain, .{this})?;
     }
 
-    pub fn deinit(*this, close_descriptors: bool) void {
+    pub fn deinit(*_, close_descriptors: bool)  {
         if (this.watchloop_handle != null) {
             this.mutex.lock();
             defer this.mutex.unlock();
@@ -217,7 +217,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         } else {
             if (close_descriptors && this.running) {
                 const fds = this.watchlist.items(.fd);
-                for (fds) |fd| {
+                for (fd of fds) {
                     fd.close();
                 }
             }
@@ -227,11 +227,11 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         }
     }
 
-    pub static fn getHash(filepath: string) HashType {
+    pub static fn getHash(filepath: string): HashType {
         return @as(HashType, @truncate(bun.hash(filepath)));
     }
 
-    pub fn threadMain(*this) anyerror!void {
+    pub fn threadMain(*_): anyerror!void {
         this.watchloop_handle = std.Thread.getCurrentId();
         this.thread_lock.lock();
         Output.Source.configureNamedThread("File Watcher");
@@ -252,7 +252,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
         if (this.close_descriptors) {
             const fds = this.watchlist.items(.fd);
-            for (fds) |fd| {
+            for (fd of fds) {
                 fd.close();
             }
         }
@@ -264,7 +264,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         allocator.destroy(this);
     }
 
-    pub fn flushEvictions(*this) void {
+    pub fn flushEvictions(*_)  {
         if (this.evict_list_i == 0) return;
         defer this.evict_list_i = 0;
 
@@ -280,7 +280,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         let last_item = no_watch_item;
         const evict_items = this.evict_list[0..this.evict_list_i];
 
-        for (evict_items) |item| {
+        for (item of evict_items) {
             if (item == last_item) continue;
             if (item >= fds.len) continue;
 
@@ -293,7 +293,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         }
 
         last_item = no_watch_item;
-        for (evict_items) |item| {
+        for (item of evict_items) {
             if (item == last_item || this.watchlist.len <= item) continue;
             this.watchlist.swapRemove(item);
 
@@ -310,7 +310,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         }
     }
 
-    pub fn watchLoop(*this) bun.sys.Maybe(void) {
+    pub fn watchLoop(*_): bun.sys.Maybe(void) {
         while (this.running) {
             switch (Platform.watchLoopCycle(this)) {
                 .err => |e| return { err: e },
@@ -320,7 +320,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         return .success;
     }
 
-    pub fn addFileDescriptorToKQueueWithoutChecks(*this, fd: bun.FD, watchlist_id: usize) void {
+    pub fn addFileDescriptorToKQueueWithoutChecks(*_, fd: bun.FD, watchlist_id: usize)  {
         const KEvent = std.c.Kevent;
 
         let event = std.mem.zeroes(KEvent);
@@ -332,7 +332,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         event.udata = @as(usize, watchlist_id);
         let events: [1]KEvent = [event];
 
-        _ = std.posix.system.kevent(
+        * = std.posix.system.kevent(
             this.platform.fd.unwrap().?.native(),
             events[0..1].ptr,
             1,
@@ -343,7 +343,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     }
 
     pub fn appendFileAssumeCapacity(
-        *this,
+        *_,
         fd: bun.FD,
         file_path: string,
         hash: HashType,
@@ -351,7 +351,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         parent_hash: HashType,
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
-    ) bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(void) {
         if (comptime Environment.isWindows) {
             const rel = bun.path.isParentOrEqual(this.fs.top_level_dir, file_path);
             if (rel == .unrelated) {
@@ -394,12 +394,12 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     }
 
     pub fn appendDirectoryAssumeCapacity(
-        *this,
+        *_,
         stored_fd: bun.FD,
         file_path: string,
         hash: HashType,
         comptime clone_file_path: bool,
-    ) bun.sys.Maybe(WatchItemIndex) {
+    ): bun.sys.Maybe(WatchItemIndex) {
         if (comptime Environment.isWindows) {
             const rel = bun.path.isParentOrEqual(this.fs.top_level_dir, file_path);
             if (rel == .unrelated) {
@@ -448,7 +448,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
             event.udata = @as(usize, watchlist_id);
             let events: [1]KEvent = [event];
 
-            _ = std.posix.system.kevent(
+            * = std.posix.system.kevent(
                 this.platform.fd.unwrap().?.native(),
                 events[0..1].ptr,
                 1,
@@ -484,7 +484,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     }
 
     pub fn appendFileMaybeLock(
-        *this,
+        *_,
         fd: bun.FD,
         file_path: string,
         hash: HashType,
@@ -493,7 +493,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
         comptime lock: bool,
-    ) bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(void) {
         if (comptime lock) this.mutex.lock();
         defer if (comptime lock) this.mutex.unlock();
         bun.assert(file_path.len > 1);
@@ -502,7 +502,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         const parent_dir = pathname.dirWithTrailingSlash();
         const parent_dir_hash: HashType = getHash(parent_dir);
 
-        let parent_watch_item: ?WatchItemIndex = null;
+        let parent_watch_item: WatchItemIndex? = null;
         const autowatch_parent_dir = (comptime FeatureFlags.watch_directories) && this.isEligibleDirectory(parent_dir);
         if (autowatch_parent_dir) {
             let watchlist_slice = this.watchlist.slice();
@@ -556,12 +556,12 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         return .success;
     }
 
-    @inline pub fn isEligibleDirectory(*this, dir: string) bool {
+    @inline pub fn isEligibleDirectory(*_, dir: string): bool {
         return strings.contains(dir, this.fs.top_level_dir) && !strings.contains(dir, "node_modules");
     }
 
     pub fn appendFile(
-        *this,
+        *_,
         fd: bun.FD,
         file_path: string,
         hash: HashType,
@@ -569,17 +569,17 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         dir_fd: bun.FD,
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
-    ) bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(void) {
         return this.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, true);
     }
 
     pub fn addDirectory(
-        *this,
+        *_,
         fd: bun.FD,
         file_path: string,
         hash: HashType,
         comptime clone_file_path: bool,
-    ) bun.sys.Maybe(WatchItemIndex) {
+    ): bun.sys.Maybe(WatchItemIndex) {
         this.mutex.lock();
         defer this.mutex.unlock();
 
@@ -593,10 +593,10 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     }
 
     pub fn addFileByPathSlow(
-        *this,
+        *_,
         file_path: string,
         loader: options.Loader,
-    ) bool {
+    ): bool {
         if (file_path.len == 0) return false;
         const hash = getHash(file_path);
 
@@ -645,7 +645,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     }
 
     pub fn addFile(
-        *this,
+        *_,
         fd: bun.FD,
         file_path: string,
         hash: HashType,
@@ -653,7 +653,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         dir_fd: bun.FD,
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
-    ) bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(void) {
         this.mutex.lock();
         defer this.mutex.unlock();
 
@@ -670,17 +670,18 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         return this.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, false);
     }
 
-    pub fn indexOf(*this, hash: HashType) ?u32 {
+    pub fn indexOf(*_, hash: HashType): u32? {
         const hashes = this.watchlist.items(.hash);
-        for (hashes, 0..) |other, i| {
-            if (hash == other) {
+        let i: usize = 0;
+        while (i < hashes.len) : (i += 1) {
+            if (hash == hashes[i]) {
                 return @as(u32, @truncate(i));
             }
         }
         return null;
     }
 
-    pub fn remove(*this, hash: HashType) void {
+    pub fn remove(*_, hash: HashType)  {
         this.mutex.lock();
         defer this.mutex.unlock();
         if (index := Watcher.indexOf(this, hash)) {
@@ -688,30 +689,30 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         }
     }
 
-    pub fn removeAtIndex(*this, index: WatchItemIndex, hash: HashType, parents: []HashType, comptime kind: WatchItem.Kind) void {
+    pub fn removeAtIndex(*_, index: WatchItemIndex, hash: HashType, parents: []HashType, comptime kind: WatchItem.Kind)  {
         bun.assert(index != no_watch_item);
 
         this.evict_list[this.evict_list_i] = index;
-        this.evict_list_i += 1;
+        this.evict_list_i += @as(WatchItemIndex, 1);
 
         if (comptime kind == .directory) {
-            for (parents) |parent| {
+            for (parent of parents) {
                 if (parent == hash) {
                     this.evict_list[this.evict_list_i] = @as(WatchItemIndex, @truncate(parent));
-                    this.evict_list_i += 1;
+                    this.evict_list_i += @as(WatchItemIndex, 1);
                 }
             }
         }
     }
 
-    pub fn getResolveWatcher(*this) bun.resolver.AnyResolveWatcher {
+    pub fn getResolveWatcher(*_): bun.resolver.AnyResolveWatcher {
         const RW = bun.resolver.ResolveWatcher(*Watcher, onMaybeWatchDirectory);
         return RW.init(this);
     }
 
-    pub fn onMaybeWatchDirectory(*this, file_path: string, dir_fd: bun.FD) void {
+    pub fn onMaybeWatchDirectory(*_, file_path: string, dir_fd: bun.FD)  {
         if (std.mem.indexOf(u8, file_path, "node_modules") == null && std.mem.indexOf(u8, file_path, this.fs.top_level_dir) != null) {
-            _ = this.addDirectory(dir_fd, file_path, getHash(file_path), false);
+            * = this.addDirectory(dir_fd, file_path, getHash(file_path), false);
         }
     }
 }

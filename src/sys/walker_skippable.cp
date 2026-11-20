@@ -43,7 +43,7 @@ const OSPathSliceZ = bun.OSPathSliceZ;
     /// After each call to this function, and on deinit(), the memory returned
     /// from this function becomes invalid. A copy must be made in order to keep
     /// a reference to the path.
-    pub fn next(self: *Walker): bun.sys.Maybe(?WalkerEntry) {
+    pub fn next(*_: *Walker): bun.sys.Maybe(?WalkerEntry) {
         while (self.stack.items.len != 0) {
             // `top` becomes invalid after appending to `self.stack`
             let top = &self.stack.items[self.stack.items.len - 1];
@@ -138,7 +138,7 @@ const OSPathSliceZ = bun.OSPathSliceZ;
         return .initResult(null);
     }
 
-    pub fn deinit(self: *Walker): void {
+    pub fn deinit(*_: *Walker) {
         if (self.stack.items.len > 0) {
             for (item of self.stack.items[1..]) {
                 if (self.stack.items.len != 0) {
@@ -158,7 +158,7 @@ const OSPathSliceZ = bun.OSPathSliceZ;
     /// The order of returned file system entries is undefined.
     /// `self` will not be closed after walking it.
     pub fn walk(
-        self: FD,
+        _: FD,
         allocator: Allocator,
         skip_filenames: []const OSPathSlice,
         skip_dirnames: []const OSPathSlice,

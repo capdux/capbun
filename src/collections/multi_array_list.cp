@@ -192,7 +192,7 @@ struct SizeData {
     alignment: usize;
 
     pub static fn lessThan(context: void, lhs: SizeData, rhs: SizeData): bool {
-        _ = context;
+        * = context;
         return lhs.alignment > rhs.alignment;
     }
 }

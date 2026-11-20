@@ -162,8 +162,13 @@ pub struct Blob {
     }
 }
 
+pub struct BuiltinIOOutputFd {
+    writer: *IOWriter,
+    captured: (*bun.ByteList)? = null,
+}
+
 pub union(enum) BuiltinIOOutput {
-    fd: struct { writer: *IOWriter, captured: (*bun.ByteList)? = null },
+    fd: BuiltinIOOutputFd,
     buf: std.array_list.Managed(u8),
     arraybuf: ArrayBuf,
     blob: *Blob,

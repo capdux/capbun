@@ -186,40 +186,40 @@ pub struct PEFile {
     last_file_end: u32,
     last_va_end: u32,
 
-    fn getDosHeader(this): DOSHeader! {
-        return readDosAt(this.data.items, this.dos_header_offset);
+    fn getDosHeader(): DOSHeader! {
+        return readDosAt(_.data.items, _.dos_header_offset);
     }
 
-    fn getPEHeader(this): PEHeader! {
-        return readPEAt(this.data.items, this.pe_header_offset);
+    fn getPEHeader(): PEHeader! {
+        return readPEAt(_.data.items, _.pe_header_offset);
     }
 
-    fn writePEHeader(*this, hdr: PEHeader): void! {
+    fn writePEHeader(*_, hdr: PEHeader): void! {
         const sz: usize = @sizeOf(PEHeader);
-        if (this.pe_header_offset + sz > this.data.items.len) return err.OutOfBounds;
-        @memcpy(this.data.items[this.pe_header_offset..][0..sz], std.mem.asBytes(&hdr));
+        if (_.pe_header_offset + sz > _.data.items.len) return err.OutOfBounds;
+        @memcpy(_.data.items[_.pe_header_offset..][0..sz], std.mem.asBytes(&hdr));
     }
 
-    fn getOptionalHeader(this): OptionalHeader64! {
-        return readOptAt(this.data.items, this.optional_header_offset);
+    fn getOptionalHeader(): OptionalHeader64! {
+        return readOptAt(_.data.items, _.optional_header_offset);
     }
 
-    fn writeOptionalHeader(*this, hdr: OptionalHeader64): void! {
+    fn writeOptionalHeader(*_, hdr: OptionalHeader64): void! {
         const sz: usize = @sizeOf(OptionalHeader64);
-        if (this.optional_header_offset + sz > this.data.items.len) return err.OutOfBounds;
-        @memcpy(this.data.items[this.optional_header_offset..][0..sz], std.mem.asBytes(&hdr));
+        if (_.optional_header_offset + sz > _.data.items.len) return err.OutOfBounds;
+        @memcpy(_.data.items[_.optional_header_offset..][0..sz], std.mem.asBytes(&hdr));
     }
 
-    fn checkSectionHeadersBounds(this): void! {
-        const start = this.section_headers_offset;
-        const size = @sizeOf(SectionHeader) * (this.num_sections as usize);
-        if (start + size > this.data.items.len) return err.OutOfBounds;
+    fn checkSectionHeadersBounds(): void! {
+        const start = _.section_headers_offset;
+        const size = @sizeOf(SectionHeader) * (_.num_sections as usize);
+        if (start + size > _.data.items.len) return err.OutOfBounds;
     }
 
-    fn readSectionHeader(this, idx: usize): SectionHeader {
+    fn readSectionHeader(idx: usize): SectionHeader {
         const sz: usize = @sizeOf(SectionHeader);
-        const off = this.section_headers_offset + idx * sz;
-        return unsafe { std.mem.bytesAsValue(SectionHeader, this.data.items[off..][0..sz]).* };
+        const off = _.section_headers_offset + idx * sz;
+        return unsafe { std.mem.bytesAsValue(SectionHeader, _.data.items[off..][0..sz]).* };
     }
 
     pub static fn init(allocator: Allocator, pe_data: []const u8): (*PEFile!)! {
@@ -328,12 +328,12 @@ pub struct PEFile {
         return res;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.data.deinit();
         this.allocator.destroy(this);
     }
 
-    pub fn stripAuthenticode(*this, opts: StripOpts): void! {
+    pub fn stripAuthenticode(*_, opts: StripOpts): void! {
         const opt = this.getOptionalHeader()?;
 
         const dd = opt.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY];
@@ -386,7 +386,7 @@ pub struct PEFile {
             return err.UnexpectedOverlayPresent;
     }
 
-    fn recomputePEChecksum(*this): void! {
+    fn recomputePEChecksum(*_): void! {
         const checksum_off = this.optional_header_offset + 64;
         @memset(this.data.items[checksum_off .. checksum_off + 4], 0);
 
@@ -414,7 +414,7 @@ pub struct PEFile {
         this.writeOptionalHeader(opt)?;
     }
 
-    pub fn addBunSection(*this, data_to_embed: []const u8, strip: StripMode): void! {
+    pub fn addBunSection(*_, data_to_embed: []const u8, strip: StripMode): void! {
         if (strip == .strip_always) {
             this.stripAuthenticode(StripOpts{ require_overlay: true, recompute_checksum: true })?;
         } else if (strip == .strip_if_signed) {
@@ -532,23 +532,23 @@ pub struct PEFile {
         this.recomputePEChecksum()?;
     }
 
-    pub fn getBunSectionData(this): ([]const u8)! {
-        this.checkSectionHeadersBounds()?;
+    pub fn getBunSectionData(): ([]const u8)! {
+        _.checkSectionHeadersBounds()?;
         let s_idx: usize = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const section = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const section = _.readSectionHeader(s_idx);
             if (std.mem.eql(u8, section.name[0..8], BUN_SECTION_NAME[0..8])) {
                 if (section.size_of_raw_data < @sizeOf(u64)) {
                     return err.InvalidBunSection;
                 }
 
-                if ((section.pointer_to_raw_data as usize) >= this.data.items.len ||
-                    (section.pointer_to_raw_data as usize) + (section.size_of_raw_data as usize) > this.data.items.len)
+                if ((section.pointer_to_raw_data as usize) >= _.data.items.len ||
+                    (section.pointer_to_raw_data as usize) + (section.size_of_raw_data as usize) > _.data.items.len)
                 {
                     return err.InvalidBunSection;
                 }
 
-                const section_data = this.data.items[(section.pointer_to_raw_data as usize)..][0..(section.size_of_raw_data as usize)];
+                const section_data = _.data.items[(section.pointer_to_raw_data as usize)..][0..(section.size_of_raw_data as usize)];
                 const data_size = std.mem.readInt(u64, section_data[0..8], .little);
 
                 if (data_size + @sizeOf(u64) > section.size_of_raw_data) {
@@ -561,45 +561,45 @@ pub struct PEFile {
         return err.BunSectionNotFound;
     }
 
-    pub fn getBunSectionLength(this): u64! {
-        this.checkSectionHeadersBounds()?;
+    pub fn getBunSectionLength(): u64! {
+        _.checkSectionHeadersBounds()?;
         let s_idx: usize = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const section = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const section = _.readSectionHeader(s_idx);
             if (std.mem.eql(u8, section.name[0..8], BUN_SECTION_NAME[0..8])) {
                 if (section.size_of_raw_data < @sizeOf(u64)) {
                     return err.InvalidBunSection;
                 }
 
-                if ((section.pointer_to_raw_data as usize) >= this.data.items.len ||
-                    (section.pointer_to_raw_data as usize) + @sizeOf(u64) > this.data.items.len)
+                if ((section.pointer_to_raw_data as usize) >= _.data.items.len ||
+                    (section.pointer_to_raw_data as usize) + @sizeOf(u64) > _.data.items.len)
                 {
                     return err.InvalidBunSection;
                 }
 
-                const section_data = this.data.items[(section.pointer_to_raw_data as usize)..];
+                const section_data = _.data.items[(section.pointer_to_raw_data as usize)..];
                 return std.mem.readInt(u64, section_data[0..8], .little);
             }
         }
         return err.BunSectionNotFound;
     }
 
-    pub fn write(this, writer: auto): void! {
-        writer.writeAll(this.data.items)?;
+    pub fn write(writer: auto): void! {
+        writer.writeAll(_.data.items)?;
     }
 
-    pub fn validate(this): void! {
-        const dos_header = this.getDosHeader()?;
+    pub fn validate(): void! {
+        const dos_header = _.getDosHeader()?;
         if (dos_header.e_magic != DOS_SIGNATURE) {
             return err.InvalidDOSSignature;
         }
 
-        const pe_header = this.getPEHeader()?;
+        const pe_header = _.getPEHeader()?;
         if (pe_header.signature != PE_SIGNATURE) {
             return err.InvalidPESignature;
         }
 
-        const optional_header = this.getOptionalHeader()?;
+        const optional_header = _.getOptionalHeader()?;
         if (optional_header.magic != OPTIONAL_HEADER_MAGIC_64) {
             return err.UnsupportedPEFormat;
         }
@@ -613,29 +613,29 @@ pub struct PEFile {
             }
         }
 
-        const section_headers_end = this.section_headers_offset + @sizeOf(SectionHeader) * (this.num_sections as usize);
+        const section_headers_end = _.section_headers_offset + @sizeOf(SectionHeader) * (_.num_sections as usize);
         if (section_headers_end > (optional_header.size_of_headers as usize) ||
-            section_headers_end > this.data.items.len)
+            section_headers_end > _.data.items.len)
         {
             return err.InvalidPEFile;
         }
 
-        this.checkSectionHeadersBounds()?;
+        _.checkSectionHeadersBounds()?;
         let max_va_end: u32 = 0;
 
         let i: usize = 0;
-        while (i < this.num_sections) : (i += 1) {
-            const section = this.readSectionHeader(i);
+        while (i < _.num_sections) : (i += 1) {
+            const section = _.readSectionHeader(i);
             if (section.size_of_raw_data > 0) {
                 if (section.pointer_to_raw_data < optional_header.size_of_headers ||
-                    (section.pointer_to_raw_data as usize) + (section.size_of_raw_data as usize) > this.data.items.len)
+                    (section.pointer_to_raw_data as usize) + (section.size_of_raw_data as usize) > _.data.items.len)
                 {
                     return err.InvalidSectionData;
                 }
 
                 let j: usize = i + 1;
-                while (j < this.num_sections) : (j += 1) {
-                    const other = this.readSectionHeader(j);
+                while (j < _.num_sections) : (j += 1) {
+                    const other = _.readSectionHeader(j);
                     if (other.size_of_raw_data > 0) {
                         const section_start = section.pointer_to_raw_data;
                         const section_end = section_start + section.size_of_raw_data;

@@ -14,7 +14,7 @@ pub const Futex = @This();
 /// - The caller is unblocked by a matching `wake()`.
 /// - The caller is unblocked spuriously ("at random").
 /// - The caller blocks for longer than the given timeout. In which case, `error.Timeout` is returned.
-pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: ?u64): !void {
+pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: u64?): !void {
     @branchHint(.cold);
     // Avoid calling into the OS for no-op timeouts.
     if (t := timeout_ns) {
@@ -30,8 +30,8 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: ?u64): !void
 pub fn waitForever(ptr: *const atomic.Value(u32), expect: u32) {
     @branchHint(.cold);
     while (true) {
-        Impl.wait(ptr, expect, null) catch |err| {
-            if (err == error.Timeout) continue;
+        Impl.wait(ptr, expect, null) catch |e| {
+            if (e == error.Timeout) continue;
             break;
         };
         break;
@@ -266,12 +266,17 @@ const WasmImpl = struct {
         if (!comptime std.Target.wasm.featureSetHas(builtin.target.cpu.features, .atomics)) {
             @compileError("WASI target missing cpu feature 'atomics'");
         }
-        const to: i64 = if (timeout) |t| @intCast(t) else -1;
+        let to: i64 = -1;
+        if (t := timeout) {
+            to = @intCast(t);
+        }
+        const raw_ptr = &ptr.raw;
+        const exp_val = @as(i32, @bitCast(expect));
         const result = asm volatile (
             "local.get %[ptr]\nlocal.get %[expected]\nlocal.get %[timeout]\nmemory.atomic.wait32 0\nlocal.set %[ret]"
             : [ret] "=r" (-> u32),
-            : [ptr] "r" (&ptr.raw),
-              [expected] "r" (@as(i32, @bitCast(expect))),
+            : [ptr] "r" (raw_ptr),
+              [expected] "r" (exp_val),
               [timeout] "r" (to),
         );
         switch (result) {
@@ -287,10 +292,11 @@ const WasmImpl = struct {
             @compileError("WASI target missing cpu feature 'atomics'");
         }
         assert(max_waiters != 0);
+        const raw_ptr = &ptr.raw;
         const woken_count = asm volatile (
             "local.get %[ptr]\nlocal.get %[waiters]\nmemory.atomic.notify 0\nlocal.set %[ret]"
             : [ret] "=r" (-> u32),
-            : [ptr] "r" (&ptr.raw),
+            : [ptr] "r" (raw_ptr),
               [waiters] "r" (max_waiters),
         );
         _ = woken_count;

@@ -25,12 +25,12 @@ pub @c struct SyncEntry {
     original_column: i32,
     source_index: i32,
 
-    @inline pub fn lessOrEqual(this, line: i32, col: i32): bool {
+    @inline pub fn lessOrEqual(line: i32, col: i32): bool {
         return this.generated_line < line ||
             (this.generated_line == line && this.generated_column <= col);
     }
 
-    @inline pub fn toState(this): State {
+    @inline pub fn toState(): State {
         return State{
             generated_line: this.generated_line,
             generated_column: this.generated_column,
@@ -48,12 +48,12 @@ struct State {
     original_line: i32 = 0,
     original_column: i32 = 0,
 
-    @inline pub fn lessOrEqual(this, line: i32, col: i32): bool {
+    @inline pub fn lessOrEqual(line: i32, col: i32): bool {
         return this.generated_line < line ||
             (this.generated_line == line && this.generated_column <= col);
     }
 
-    pub fn toMapping(this): Mapping {
+    pub fn toMapping(): Mapping {
         return Mapping{
             generated: {
                 lines: bun.Ordinal.fromZeroBased(this.generated_line),
@@ -142,7 +142,7 @@ struct WindowReader {
     gen_line_exc_next_idx: u8,
     delta_idx: u8,
 
-    pub fn parse(*this, bytes: []const u8, start: usize) {
+    pub fn parse(*_, bytes: []const u8, start: usize) {
         unsafe {
             const b = bytes.ptr + start;
             this.bytes = bytes;
@@ -167,7 +167,7 @@ struct WindowReader {
                     this.gen_line_exc_next_idx = bytes[pos];
                     while (pos < bytes.len && bytes[pos] != 0xFF) {
                         pos += 1;
-                        _ = readVarint(bytes, *pos!);
+                        * = readVarint(bytes, *pos!);
                     }
                     pos += 1;
                 }
@@ -180,11 +180,11 @@ struct WindowReader {
         }
     }
 
-    @inline pub fn done(this: &WindowReader): bool {
+    @inline pub fn done(_: &WindowReader): bool {
         return this.delta_idx + 1 >= this.count;
     }
 
-    pub fn next(*this, *state: State) {
+    pub fn next(*_, state: *State) {
         const delta_idx = this.delta_idx;
         this.delta_idx = delta_idx + 1;
         const b = this.base;
@@ -210,7 +210,7 @@ struct WindowReader {
         state.original_column += d_orig_col;
     }
 
-    fn nextRare(*this, delta_idx: u8, d_gen_line: *i32!, d_orig_line: *i32!, *state: State) {
+    fn nextRare(*_, delta_idx: u8, d_gen_line: *i32!, d_orig_line: *i32!, state: *State) {
         @branchHint(.cold);
         unsafe {
             if (this.gen_line_exc_next_idx == delta_idx) {
@@ -249,7 +249,7 @@ pub struct FindCache {
 
     pub const Key = FindCacheKey;
 
-    pub fn invalidate(*this, data: [*]const u8!) {
+    pub fn invalidate(*_, data: [*]const u8!) {
         for (i of 0..slot_count) {
             if (this.keys[i].data == data) {
                 this.keys[i].data = null;
@@ -258,14 +258,14 @@ pub struct FindCache {
         }
     }
 
-    pub fn invalidateAll(*this) {
+    pub fn invalidateAll(*_) {
         for (i of 0..slot_count) {
             this.keys[i].data = null;
             this.slots[i].data = null;
         }
     }
 
-    @inline pub fn slotFor(*this, data: [*]const u8!, sync_idx: u32): *FindCacheSlot! {
+    @inline pub fn slotFor(*_, data: [*]const u8!, sync_idx: u32): *FindCacheSlot! {
         for (i of 0..slot_count) {
             const k = this.keys[i];
             if (k.data == data && k.sync_idx == sync_idx) return unsafe { *this.slots[i]! };
@@ -295,7 +295,7 @@ pub struct Cursor {
         return Cursor{ map: map, state: {}, peek: null, reader: undefined, sync_idx: 0, has_state: false };
     }
 
-    pub fn moveTo(*this, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
+    pub fn moveTo(*_, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
@@ -322,7 +322,7 @@ pub struct Cursor {
         return this.state.toMapping();
     }
 
-    fn advanceOne(*this): State? {
+    fn advanceOne(*_): State? {
         let seed: State = {};
         if (this.reader.done()) {
             const n_sync = this.map.syncCount();
@@ -336,11 +336,13 @@ pub struct Cursor {
         return nxt;
     }
 
-    fn reseek(*this, target_line: i32, target_col: i32): bool {
-        const idx = this.map.locateWindow(target_line, target_col) orelse {
+    fn reseek(*_, target_line: i32, target_col: i32): bool {
+        const idx_opt = this.map.locateWindow(target_line, target_col);
+        if (idx_opt == null) {
             this.has_state = false;
             return false;
-        };
+        }
+        const idx = idx_opt.?;
         this.sync_idx = idx;
         this.map.seedWindow(idx, *this.state, *this.reader);
         this.peek = null;
@@ -372,17 +374,17 @@ pub struct Builder {
         return Builder{ allocator: allocator };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.sync_entries.deinit(this.allocator);
         this.win_stream.deinit(this.allocator);
         if (*m := this.finalized) m.deinit();
     }
 
-    pub fn appendLineSeparator(*this) {
+    pub fn appendLineSeparator(*_) {
         this.pending_generated_line_delta += 1;
     }
 
-    pub fn appendMapping(*this, current: SourceMapState) {
+    pub fn appendMapping(*_, current: SourceMapState) {
         this.state = State{
             generated_line: this.state.generated_line + this.pending_generated_line_delta,
             generated_column: current.generated_column,
@@ -399,7 +401,7 @@ pub struct Builder {
         if (this.pending_n == sync_interval) this.flushWindow();
     }
 
-    fn flushWindow(*this) {
+    fn flushWindow(*_) {
         const n = this.pending_n;
         if (n == 0) return;
         const seed = this.pending[0];
@@ -411,7 +413,7 @@ pub struct Builder {
             original_line: seed.original_line,
             original_column: seed.original_column,
             source_index: seed.source_index,
-        }) catch |err| bun.handleOom(err);
+        }) catch |e| bun.handleOom(e);
 
         const n_deltas: usize = n - 1;
         let deltas: [63]Delta = undefined;
@@ -434,7 +436,7 @@ pub struct Builder {
         if ((flags & flag_has_gen_line_exceptions) != 0) cap += n_deltas * (1 + max_varint_len) + 1;
         if ((flags & flag_has_src_idx) != 0) cap += 8 + n_deltas * max_varint_len;
 
-        this.win_stream.ensureUnusedCapacity(this.allocator, cap) catch |err| bun.handleOom(err);
+        this.win_stream.ensureUnusedCapacity(this.allocator, cap) catch |e| bun.handleOom(e);
         const base = this.win_stream.items.len;
         this.win_stream.items.len += cap;
         let buf = this.win_stream.items[base..][0..cap];
@@ -502,7 +504,7 @@ pub struct Builder {
         this.pending_n = 0;
     }
 
-    pub fn finalize(*this): *MutableString! {
+    pub fn finalize(*_): *MutableString! {
         if (*m := this.finalized) return unsafe { *m! };
 
         this.flushWindow();
@@ -512,7 +514,7 @@ pub struct Builder {
         const total: usize = stream_offset + this.win_stream.items.len + stream_tail_pad;
 
         let out = MutableString.initEmpty(this.allocator);
-        out.list.resize(this.allocator, total) catch |err| bun.handleOom(err);
+        out.list.resize(this.allocator, total) catch |e| bun.handleOom(e);
         let blob = out.list.items;
 
         @memset(blob[0..24], 0);
@@ -539,43 +541,43 @@ pub err InvalidSourceMapError { InvalidSourceMap }
 export @root struct InternalSourceMap {
     data: [*]const u8!,
 
-    @inline pub fn totalLen(this): usize {
+    @inline pub fn totalLen(): usize {
         return unsafe { @as(u64, @bitCast(this.data[0..8].*)) };
     }
 
-    @inline pub fn mappingCount(this): usize {
+    @inline pub fn mappingCount(): usize {
         return unsafe { @as(u64, @bitCast(this.data[8..16].*)) };
     }
 
-    @inline pub fn inputLineCount(this): usize {
+    @inline pub fn inputLineCount(): usize {
         return unsafe { @as(u64, @bitCast(this.data[16..24].*)) };
     }
 
-    @inline pub fn syncCount(this): u32 {
+    @inline pub fn syncCount(): u32 {
         return unsafe { @as(u32, @bitCast(this.data[24..28].*)) };
     }
 
-    @inline pub fn streamOffset(this): u32 {
+    @inline pub fn streamOffset(): u32 {
         return unsafe { @as(u32, @bitCast(this.data[28..32].*)) };
     }
 
-    pub fn syncEntry(this, index: usize): SyncEntry {
+    pub fn syncEntry(index: usize): SyncEntry {
         const off = header_size + index * @sizeOf(SyncEntry);
         return unsafe { @as(SyncEntry, @bitCast(this.data[off..][0..@sizeOf(SyncEntry)].*)) };
     }
 
-    @inline pub fn stream(this): []const u8 {
+    @inline pub fn stream(): []const u8 {
         return unsafe { this.data[this.streamOffset()..this.totalLen()] };
     }
 
-    pub fn deinit(this) {
+    pub fn deinit() {
         unsafe {
             bun.default_allocator.free(@constCast(this.data[0..this.totalLen()]));
         }
     }
 
-    pub fn memoryCost(this): usize {
-        return this.totalLen();
+    pub fn memoryCost(): usize {
+        return _.totalLen();
     }
 
     pub static fn isValidBlob(blob: []const u8): bool {
@@ -592,7 +594,7 @@ export @root struct InternalSourceMap {
         return true;
     }
 
-    fn locateWindow(this, target_line: i32, target_col: i32): u32? {
+    fn locateWindow(target_line: i32, target_col: i32): u32? {
         const n_sync = this.syncCount();
         if (n_sync == 0) return null;
         let lo: usize = 0;
@@ -609,13 +611,13 @@ export @root struct InternalSourceMap {
         return (lo - 1) as u32;
     }
 
-    fn seedWindow(this, sync_idx: u32, *state: State, *reader: WindowReader) {
+    fn seedWindow(sync_idx: u32, state: *State, reader: *WindowReader) {
         const se = this.syncEntry(sync_idx);
         unsafe { state.* = se.toState(); }
         reader.parse(this.stream(), se.byte_offset);
     }
 
-    pub fn findWithCache(this, line: bun.Ordinal, column: bun.Ordinal, *set: FindCache): Mapping? {
+    pub fn findWithCache(line: bun.Ordinal, column: bun.Ordinal, set: *FindCache): Mapping? {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
@@ -655,7 +657,7 @@ export @root struct InternalSourceMap {
         return best.toMapping();
     }
 
-    pub fn find(this, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
+    pub fn find(line: bun.Ordinal, column: bun.Ordinal): Mapping? {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
@@ -679,11 +681,11 @@ export @root struct InternalSourceMap {
         return best.toMapping();
     }
 
-    pub fn cursor(this): Cursor {
-        return Cursor.init(this);
+    pub fn cursor(): Cursor {
+        return Cursor.init(_);
     }
 
-    pub fn appendVLQTo(this, *out: MutableString) {
+    pub fn appendVLQTo(out: *MutableString) {
         const n_sync = this.syncCount();
         let prev: SourceMapState = {};
         let generated_line: i32 = 0;
@@ -702,10 +704,10 @@ export @root struct InternalSourceMap {
         }
     }
 
-    static fn emitVLQ(*state: State, *prev: SourceMapState, generated_line: *i32!, *out: MutableString) {
+    static fn emitVLQ(state: *State, prev: *SourceMapState, generated_line: *i32!, out: *MutableString) {
         unsafe {
             while (generated_line.* < state.generated_line) : (generated_line.* += 1) {
-                out.appendChar(';') catch |err| bun.handleOom(err);
+                out.appendChar(';') catch |e| bun.handleOom(e);
                 prev.generated_column = 0;
             }
         }
@@ -804,7 +806,7 @@ export @root struct InternalSourceMap {
             blob[16..24].* = @bitCast(input_lines);
         }
 
-        const owned = out.list.toOwnedSlice(allocator) catch |err| bun.handleOom(err);
+        const owned = out.list.toOwnedSlice(allocator) catch |e| bun.handleOom(e);
         builder.finalized = null;
         return owned;
     }

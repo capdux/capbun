@@ -33,7 +33,7 @@ pub struct Reader {
         };
     }
 
-    pub fn read(*this, count: usize): ([]u8)! {
+    pub fn read(*_, count: usize): ([]u8)! {
         const read_count = @min(count, this.remain.len);
         if (read_count < count) {
             return err.EOF;
@@ -44,7 +44,7 @@ pub struct Reader {
         return slice;
     }
 
-    @inline pub fn readAs(*this, comptime T: type): T! {
+    @inline pub fn readAs(*_, comptime T: type): T! {
         if (!std.meta.hasUniqueRepresentation(T)) {
             @compileError(std.fmt.comptimePrint("{s} must have unique representation.", [@typeName(T)]));
         }
@@ -52,12 +52,12 @@ pub struct Reader {
         return std.mem.bytesAsValue(T, this.read(@sizeOf(T))?);
     }
 
-    @inline pub fn readByte(*this): u8! {
+    @inline pub fn readByte(*_): u8! {
         const slice = this.read(1)?;
         return slice[0];
     }
 
-    pub fn readEnum(*this, comptime Enum: type): Enum! {
+    pub fn readEnum(*_, comptime Enum: type): Enum! {
         const type_info = @typeInfo(Enum).Enum;
         const tag = this.readInt(type_info.tag_type)?;
 
@@ -70,7 +70,7 @@ pub struct Reader {
         return err.InvalidValue;
     }
 
-    pub fn readArray(*this, comptime T: type): ([]const T)! {
+    pub fn readArray(*_, comptime T: type): ([]const T)! {
         const length = this.readInt(u32)?;
         if (length == 0) {
             return &[];
@@ -120,7 +120,7 @@ pub struct Reader {
         }
     }
 
-    @inline pub fn readByteArray(*this): ([]u8)! {
+    @inline pub fn readByteArray(*_): ([]u8)! {
         const length = this.readInt(u32)?;
         if (length == 0) {
             return &[];
@@ -129,16 +129,16 @@ pub struct Reader {
         return this.read(usize(length))?;
     }
 
-    @inline pub fn readInt(*this, comptime T: type): T! {
+    @inline pub fn readInt(*_, comptime T: type): T! {
         const slice = this.read(@sizeOf(T))?;
         return std.mem.readIntSliceNative(T, slice);
     }
 
-    @inline pub fn readBool(*this): bool! {
+    @inline pub fn readBool(*_): bool! {
         return (this.readByte()?) > 0;
     }
 
-    @inline pub fn readValue(*this, comptime T: type): T! {
+    @inline pub fn readValue(*_, comptime T: type): T! {
         switch (T) {
             bool => {
                 return this.readBool()?;
@@ -292,7 +292,7 @@ pub enum Loader: u8 {
     md = 21,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -304,7 +304,7 @@ pub enum FrameworkEntryPointType: u8 {
     fallback,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -319,7 +319,7 @@ pub enum StackFrameScope: u8 {
     constructor,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -339,7 +339,7 @@ pub struct StackFrame {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.function_name), this.function_name)?;
         writer.writeValue(@typeOf(this.file), this.file)?;
         writer.writeValue(@typeOf(this.position), this.position)?;
@@ -358,7 +358,7 @@ pub struct SourceLine {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.line)?;
         writer.writeValue(@typeOf(this.text), this.text)?;
     }
@@ -375,7 +375,7 @@ pub struct StackTrace {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(SourceLine, this.source_lines)?;
         writer.writeArray(StackFrame, this.frames)?;
     }
@@ -404,7 +404,7 @@ pub struct JsException {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (name := this.name) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(name), name)?;
@@ -441,7 +441,7 @@ pub enum FallbackStep: u8 {
     fetch_event_handler,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -461,7 +461,7 @@ pub struct Problems {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.code)?;
         writer.writeValue(@typeOf(this.name), this.name)?;
         writer.writeArray(JsException, this.exceptions)?;
@@ -482,7 +482,7 @@ pub struct Router {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.routes), this.routes)?;
         writer.writeInt(this.route)?;
         writer.writeValue(@typeOf(this.params), this.params)?;
@@ -512,7 +512,7 @@ pub struct FallbackMessageContainer {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (message := this.message) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(message), message)?;
@@ -545,7 +545,7 @@ pub enum ResolveMode: u8 {
     bundle,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -558,7 +558,7 @@ pub enum Target: u8 {
     bun_macro,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -570,7 +570,7 @@ pub enum CssInJsBehavior: u8 {
     auto_onimportcss,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -582,7 +582,7 @@ pub enum JsxRuntime: u8 {
     solid,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -606,7 +606,7 @@ pub struct Jsx {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.factory), this.factory)?;
         writer.writeEnum(this.runtime)?;
         writer.writeValue(@typeOf(this.fragment), this.fragment)?;
@@ -627,12 +627,12 @@ pub struct Jsx {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.offset)?;
         writer.writeInt(this.length)?;
     }
 
-    pub fn slice(this, bytes: []const u8): []const u8 {
+    pub fn slice(bytes: []const u8): []const u8 {
         return bytes[this.offset .. this.offset + this.length];
     }
 }
@@ -659,7 +659,7 @@ pub struct JavascriptBundledModule {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeValue(@typeOf(this.code), this.code)?;
         writer.writeInt(this.package_id)?;
@@ -685,7 +685,7 @@ pub struct JavascriptBundledPackage {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.name), this.name)?;
         writer.writeValue(@typeOf(this.version), this.version)?;
         writer.writeInt(this.hash)?;
@@ -715,7 +715,7 @@ pub struct JavascriptBundle {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(JavascriptBundledModule, this.modules)?;
         writer.writeArray(JavascriptBundledPackage, this.packages)?;
         writer.writeArray(u8, this.etag)?;
@@ -749,7 +749,7 @@ pub struct JavascriptBundleContainer {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (bundle_format_version := this.bundle_format_version) {
             writer.writeFieldID(1)?;
             writer.writeInt(bundle_format_version)?;
@@ -780,7 +780,7 @@ pub enum ScanDependencyMode: u8 {
     all,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -791,7 +791,7 @@ pub enum ModuleImportType: u8 {
     require,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -809,7 +809,7 @@ pub struct ModuleImportRecord {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.kind)?;
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeInt(@as(u8, @intFromBool(this.dynamic)))?;
@@ -827,7 +827,7 @@ pub struct Module {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeArray(ModuleImportRecord, this.imports)?;
     }
@@ -844,7 +844,7 @@ pub struct StringMap {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(ConstBytes, this.keys)?;
         writer.writeArray(ConstBytes, this.values)?;
     }
@@ -861,7 +861,7 @@ pub struct LoaderMap {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(ConstBytes, this.extensions)?;
         writer.writeArray(Loader, this.loaders)?;
     }
@@ -875,7 +875,7 @@ pub enum DotEnvBehavior: u32 {
     load_all_without_inlining,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -897,7 +897,7 @@ pub struct EnvConfig {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (prefix := this.prefix) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(prefix), prefix)?;
@@ -923,7 +923,7 @@ pub struct LoadedEnvConfig {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.dotenv)?;
         writer.writeValue(@typeOf(this.defaults), this.defaults)?;
         writer.writeValue(@typeOf(this.prefix), this.prefix)?;
@@ -959,7 +959,7 @@ pub struct FrameworkConfig {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (package := this.package) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(package), package)?;
@@ -1009,7 +1009,7 @@ pub struct FrameworkEntryPoint {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.kind)?;
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeValue(@typeOf(this.env), this.env)?;
@@ -1035,7 +1035,7 @@ pub struct FrameworkEntryPointMap {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (client := this.client) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(client), client)?;
@@ -1069,7 +1069,7 @@ pub struct FrameworkEntryPointMessage {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (path := this.path) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(path), path)?;
@@ -1101,7 +1101,7 @@ pub struct LoadedFramework {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.package), this.package)?;
         writer.writeValue(@typeOf(this.display_name), this.display_name)?;
         writer.writeInt(@as(u8, @intFromBool(this.development)))?;
@@ -1126,7 +1126,7 @@ pub struct LoadedRouteConfig {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.dir), this.dir)?;
         writer.writeArray(ConstBytes, this.extensions)?;
         writer.writeValue(@typeOf(this.static_dir), this.static_dir)?;
@@ -1155,7 +1155,7 @@ pub struct RouteConfig {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (dir := this.dir) {
             writer.writeFieldID(1)?;
             writer.writeArray(ConstBytes, dir)?;
@@ -1278,7 +1278,7 @@ pub struct TransformOptions {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (jsx := this.jsx) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(jsx), jsx)?;
@@ -1404,7 +1404,7 @@ pub enum SourceMapMode: u8 {
 
     pub const fromJS = sourceMapModeFromJS;
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1414,7 +1414,7 @@ pub enum PackagesMode: u8 {
     external,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1432,7 +1432,7 @@ pub struct FileHandle {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeInt(this.size)?;
         writer.writeInt(this.fd)?;
@@ -1462,7 +1462,7 @@ pub struct Transform {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (handle := this.handle) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(handle), handle)?;
@@ -1506,7 +1506,7 @@ pub struct Scan {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (path := this.path) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(path), path)?;
@@ -1536,7 +1536,7 @@ pub struct ScanResult {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(ConstBytes, this.exports)?;
         writer.writeArray(ScannedImport, this.imports)?;
         writer.writeArray(ApiMessage, this.errors)?;
@@ -1554,7 +1554,7 @@ pub struct ScannedImport {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeEnum(this.kind)?;
     }
@@ -1572,7 +1572,7 @@ pub enum ImportKind: u8 {
     internal,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1583,7 +1583,7 @@ pub enum TransformResponseStatus: u32 {
     fail,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1599,7 +1599,7 @@ pub struct OutputFile {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(u8, this.data)?;
         writer.writeValue(@typeOf(this.path), this.path)?;
     }
@@ -1618,7 +1618,7 @@ pub struct TransformResponse {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.status)?;
         writer.writeArray(OutputFile, this.files)?;
         writer.writeArray(ApiMessage, this.errors)?;
@@ -1634,7 +1634,7 @@ pub enum MessageLevel: u32 {
     debug,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1658,7 +1658,7 @@ pub struct Location {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.file), this.file)?;
         writer.writeValue(@typeOf(this.namespace), this.namespace)?;
         writer.writeInt(this.line)?;
@@ -1685,7 +1685,7 @@ pub struct MessageData {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (text := this.text) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(text), text)?;
@@ -1715,7 +1715,7 @@ pub struct MessageMeta {
         unreachable;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         if (resolve := this.resolve) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(resolve), resolve)?;
@@ -1743,7 +1743,7 @@ pub struct ApiMessage {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.level)?;
         writer.writeValue(@typeOf(this.data), this.data)?;
         writer.writeArray(MessageData, this.notes)?;
@@ -1764,7 +1764,7 @@ pub struct Log {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.warnings)?;
         writer.writeInt(this.errors)?;
         writer.writeArray(ApiMessage, this.msgs)?;
@@ -1778,7 +1778,7 @@ pub enum Reloader: u8 {
     fast_refresh,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1795,7 +1795,7 @@ pub enum WebsocketMessageKind: u8 {
     file_change_notification_with_hint,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1807,7 +1807,7 @@ pub enum WebsocketCommandKind: u8 {
     build_with_file_path,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -1823,7 +1823,7 @@ pub struct WebsocketMessage {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.timestamp)?;
         writer.writeEnum(this.kind)?;
     }
@@ -1844,7 +1844,7 @@ pub struct WebsocketMessageWelcome {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.epoch)?;
         writer.writeEnum(this.javascript_reloader)?;
         writer.writeValue(@typeOf(this.cwd), this.cwd)?;
@@ -1863,7 +1863,7 @@ pub struct WebsocketMessageFileChangeNotification {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
         writer.writeEnum(this.loader)?;
     }
@@ -1880,7 +1880,7 @@ pub struct WebsocketCommand {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeEnum(this.kind)?;
         writer.writeInt(this.timestamp)?;
     }
@@ -1895,7 +1895,7 @@ pub struct WebsocketCommand {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
     }
 }
@@ -1909,7 +1909,7 @@ pub struct WebsocketCommand {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
     }
 }
@@ -1931,7 +1931,7 @@ pub struct WebsocketMessageBuildSuccess {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
         writer.writeInt(this.from_timestamp)?;
         writer.writeEnum(this.loader)?;
@@ -1957,7 +1957,7 @@ pub struct WebsocketMessageBuildFailure {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
         writer.writeInt(this.from_timestamp)?;
         writer.writeEnum(this.loader)?;
@@ -1977,7 +1977,7 @@ pub struct WebsocketCommandBuildWithFilePath {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
         writer.writeValue(@typeOf(this.file_path), this.file_path)?;
     }
@@ -1992,7 +1992,7 @@ pub struct WebsocketCommandBuildWithFilePath {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.id)?;
     }
 }
@@ -2002,12 +2002,12 @@ pub struct NpmRegistryParser {
     source: &bun.logger.Source,
     allocator: std.mem.Allocator,
 
-    fn addError(*this, loc: bun.logger.Loc, comptime text: []const u8)! {
+    fn addError(*_, loc: bun.logger.Loc, comptime text: []const u8)! {
         this.log.addError(this.source, loc, text) catch unreachable;
         return err.ParserError;
     }
 
-    fn expectString(*this, expr: js_ast.Expr)! {
+    fn expectString(*_, expr: js_ast.Expr)! {
         switch (expr.data) {
             .e_string => {},
             else => {
@@ -2020,11 +2020,11 @@ pub struct NpmRegistryParser {
         }
     }
 
-    pub fn parseRegistryURLString(*this, str: *js_ast.E.String): NpmRegistry ! OOM {
+    pub fn parseRegistryURLString(*_, str: *js_ast.E.String): NpmRegistry ! OOM {
         return this.parseRegistryURLStringImpl(str.data)?;
     }
 
-    pub fn parseRegistryURLStringImpl(*this, str: []const u8): NpmRegistry ! OOM {
+    pub fn parseRegistryURLStringImpl(*_, str: []const u8): NpmRegistry ! OOM {
         const url = bun.URL.parse(str);
         let registry = std.mem.zeroes(NpmRegistry);
 
@@ -2042,7 +2042,7 @@ pub struct NpmRegistryParser {
         return registry;
     }
 
-    fn parseRegistryObject(*this, obj: *js_ast.E.Object): NpmRegistry! {
+    fn parseRegistryObject(*_, obj: *js_ast.E.Object): NpmRegistry! {
         let registry = std.mem.zeroes(NpmRegistry);
 
         if (url := obj.get("url")) {
@@ -2069,7 +2069,7 @@ pub struct NpmRegistryParser {
         return registry;
     }
 
-    pub fn parseRegistry(*this, expr: js_ast.Expr): NpmRegistry! {
+    pub fn parseRegistry(*_, expr: js_ast.Expr): NpmRegistry! {
         switch (expr.data) {
             .e_string str => {
                 return this.parseRegistryURLString(str);
@@ -2092,7 +2092,7 @@ pub struct NpmRegistry {
     token: []const u8,
     email: []const u8,
 
-    pub fn dupe(this, allocator: std.mem.Allocator): NpmRegistry {
+    pub fn dupe(allocator: std.mem.Allocator): NpmRegistry {
         let buf = bun.handleOom(allocator.alloc(u8, this.url.len + this.username.len + this.password.len + this.token.len + this.email.len));
 
         let out = NpmRegistry{
@@ -2124,7 +2124,7 @@ pub struct NpmRegistry {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.url), this.url)?;
         writer.writeValue(@typeOf(this.username), this.username)?;
         writer.writeValue(@typeOf(this.password), this.password)?;
@@ -2145,7 +2145,7 @@ pub struct NpmRegistryMap {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(ConstBytes, this.scopes.keys())?;
         writer.writeArray(NpmRegistry, this.scopes.values())?;
     }
@@ -2207,7 +2207,7 @@ pub struct ClientServerModule {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.module_id)?;
         writer.writeValue(@typeOf(this.input_name), this.input_name)?;
         writer.writeValue(@typeOf(this.asset_name), this.asset_name)?;
@@ -2234,7 +2234,7 @@ pub struct ClientServerModuleManifest {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.version)?;
         writer.writeArray(ClientServerModule, this.client_modules)?;
         writer.writeArray(ClientServerModule, this.server_modules)?;
@@ -2255,7 +2255,7 @@ pub struct GetTestsRequest {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeValue(@typeOf(this.path), this.path)?;
         writer.writeArray(u8, this.contents)?;
     }
@@ -2267,7 +2267,7 @@ pub enum TestKind: u8 {
     describe_fn,
     _,
 
-    pub fn jsonStringify(this, writer: auto)! {
+    pub fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(this))?;
     }
 }
@@ -2285,7 +2285,7 @@ pub struct TestResponseItem {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeInt(this.byte_offset)?;
         writer.writeValue(@typeOf(this.label), this.label)?;
         writer.writeEnum(this.kind)?;
@@ -2303,7 +2303,7 @@ pub struct GetTestsResponse {
         return out;
     }
 
-    pub fn encode(this, writer: auto)! {
+    pub fn encode(writer: auto)! {
         writer.writeArray(TestResponseItem, this.tests)?;
         writer.writeArray(u8, this.contents)?;
     }

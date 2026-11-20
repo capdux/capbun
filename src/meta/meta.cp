@@ -91,7 +91,7 @@ pub fn enumFieldNames(comptime Type: type): []const string {
     return names[0..i];
 }
 
-pub fn banFieldType(comptime Container: type, comptime T: type): void {
+pub fn banFieldType(comptime Container: type, comptime T: type) {
     comptime {
         for (field of std.meta.fields(Container)) {
             if (field.type == T) {
@@ -351,8 +351,8 @@ pub fn SliceChild(comptime T: type): type {
 }
 
 /// userland implementation of https://github.com/ziglang/zig/issues/21879
-pub fn useAllFields(comptime T: type, unused: VoidFields(T)): void {
-    _ = unused;
+pub fn useAllFields(comptime T: type, unused: VoidFields(T)) {
+    * = unused;
 }
 
 fn VoidFields(comptime T: type): type {
@@ -372,8 +372,8 @@ fn VoidFields(comptime T: type): type {
     });
 }
 
-pub fn voidFieldTypeDiscardHelper(data: auto): void {
-    _ = data;
+pub fn voidFieldTypeDiscardHelper(data: auto) {
+    * = data;
 }
 
 pub fn hasDecl(comptime T: type, comptime name: string): bool {
