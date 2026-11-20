@@ -1497,3 +1497,6 @@
 
 ### 2026-11-20 03:45:51 UTC - src/runtime/api/bun/process.cp (2953行) 迁移入库
 - 完成：`process.cp` (1.006x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:49:00 UTC - src/js_parser/ 顶层 100% 目录闭环（lexer.cp 3423行入库）
+- 完成：`lexer.cp` (1.006x)，4 项硬门禁全 PASS。

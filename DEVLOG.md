@@ -1227,3 +1227,6 @@
 
 ### 2026-11-20 03:45:51 UTC - Bun Process 核心模块迁移经验
 - 提升 Windows/POSIX 子进程辅助结构至顶层，统一 `@c {}` 与 `@callconv("c")`/`@callconv("winapi")`，膨胀率 1.006x。
+
+### 2026-11-20 03:49:00 UTC - JS Lexer 核心模块迁移经验
+- 提升 `NewLexer_` 内 6 个嵌套类型至顶层避免 raw passthrough；用 `inline fn splatAscii` 规避 `@as(Vec, @splat(...))` lowering 报错，膨胀率 1.006x。
