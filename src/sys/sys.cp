@@ -1,4 +1,4 @@
-import ErrorMod from "./ErrorMod.zig";
+import ErrorMod from "./Error.zig";
 import DirMod from "./dir.zig";
 import FileMod from "./File.zig";
 import builtin from "builtin";

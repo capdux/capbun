@@ -1579,3 +1579,6 @@
 
 ### 2026-11-20 05:46:32 UTC - 最后 10 模块适配新版 cpc 全 PASS 入库（1,293/1,293 100% 满贯）
 - 完成：`css_parser`/`size`/`SpawnSyncEventLoop`/`npm`/`PipeWriter`/`dns`/`server`/`Listener`/`UpgradedDuplex`/`unicode` 10/10 全 PASS。
+
+### 2026-11-20 05:49:30 UTC - 全仓 281 个旧 prelude .zig 同步升级 & 启动 zig:check 语义清零
+- 修复 `src/sys/sys.cp` 导入路径并重编译 281 个 `.zig` 产物，首次全仓 `bun run zig:check` 6 秒跑通解析仅余 156 处语义错误。

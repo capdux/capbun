@@ -2996,3 +2996,5 @@ Options:
 - [2026-11-20 05:40:25 UTC] 【100% 全绿满贯里程碑】验收并提交最后 1 个文件 `src/runtime/node/node_fs.cp` (7344行, 0.988x PASS)！全仓 1,293/1,293 非豁免模块 100% 通过新版 `cpc --lib` + `vendor/zig/zig ast-check` 与 4 项硬门禁！
 
 - [2026-11-20 05:46:32 UTC] 【全仓 1,293/1,293 (100.00%) 真实满贯达成】验收并提交最后 10 个适配新版 `cpc` 的模块（10/10 全 PASS），全仓 1,293 个非豁免模块 100% 通过静态零违例 + `cpc --lib` + `vendor/zig/zig ast-check`！
+
+- [2026-11-20 05:49:30 UTC] 同步重编译 281 个旧 prelude `.zig` 产物并修复 `src/sys/sys.cp` 导入 `./Error.zig`；首次全仓 `bun run zig:check` 仅报 156 处跨模块语义错，已派发 3 路并发子智能体攻坚清零。
