@@ -996,12 +996,9 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
             }
         }
         _ = (blk_catch_9: { break :blk_catch_9 ((Braces.expand(arena_.allocator(), lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-            return e;
+            return error.OutOfMemory;
         }
-        if ((e == error.UnexpectedToken)) {
-            return global.throwPretty("Unexpected token while expanding braces", .{});
-        }
-        return e; }); });
+        return global.throwPretty("Unexpected token while expanding braces", .{}); }); });
         var out_strings = try arena_.allocator().alloc(bun.String, expansion_count);
         _ = &out_strings;
         {
@@ -1353,7 +1350,8 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
                 }
                 if (try opts.getTruthy(globalThis, "column")) |column_| {
                     _ = &column_;
-                    column = try column_.toSlice(globalThis, arguments.@"arena".allocator()).slice();
+                    const col_slice = try column_.toSlice(globalThis, arguments.@"arena".allocator());
+                    column = col_slice.slice();
                 }
             }
         }

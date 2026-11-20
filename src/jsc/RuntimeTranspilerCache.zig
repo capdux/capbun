@@ -86,7 +86,7 @@ pub fn writeCacheFilename(buf: []u8, input_hash: u64) !usize {
             return printed.len;
     }
 
-pub fn getCacheFilePath(buf: *bun.PathBuffer, input_hash: u64) [:0]const u8 {
+pub fn getCacheFilePath(buf: *bun.PathBuffer, input_hash: u64) !PathZ {
             const cache_dir = try getCacheDir(buf);
             buf[cp_cast_int(usize, cache_dir.len)] = std.fs.path.sep;
             const cache_filename_len = try writeCacheFilename(buf[(cache_dir.len + 1)..], input_hash);
@@ -131,7 +131,7 @@ pub fn reallyGetCacheDir(buf: *bun.PathBuffer) [:0]const u8 {
             }
     }
 
-pub fn getCacheDir(buf: *bun.PathBuffer) [:0]const u8 {
+pub fn getCacheDir(buf: *bun.PathBuffer) !PathZ {
             if (RuntimeTranspilerCache.is_disabled) {
                 return error.CacheDisabled;
             }
@@ -644,6 +644,7 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
             latin1 = 3,
             _,
         };
+    const PathZ = [:0]const u8;
     const cache_dir_bufs = bun.ThreadlocalBuffers(struct {
         buf: bun.PathBuffer = undefined,
     });

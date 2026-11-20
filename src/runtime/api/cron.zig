@@ -987,8 +987,7 @@ _ = promise.setHandled(self.global.vm());
             _ = self.scheduleNext(vm);
     }
 
-pub fn onPromiseResolve(self: *CronJob, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn onPromiseResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const args = callframe.arguments();
             const job: *CronJob = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(CronJob);
             defer {
@@ -1003,8 +1002,7 @@ pub fn onPromiseResolve(self: *CronJob, _: *jsc.JSGlobalObject, callframe: *jsc.
             return error.js_undefined;
     }
 
-pub fn onPromiseReject(self: *CronJob, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        _ = self;
+pub fn onPromiseReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const args = callframe.arguments();
             const job: *CronJob = args[@as(usize, @intCast((args.len - 1)))].asPromisePtr(CronJob);
             defer {
@@ -1228,9 +1226,9 @@ pub fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: anytype, stdin_opt
         defer {
         _ = envp_arena.deinit();
         }
-        const envp: ?[*:null]OptConstCString = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
+        const envp: ?[*:null]OptConstCString = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast(@constCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
         _ = job.finish();
-        return; }); }).ptr));
+        return; }); }).ptr)));
         var spawned = (blk_catch_48: { break :blk_catch_48 (((blk_catch_46: { break :blk_catch_46 ((bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), envp)) catch |e| { _ = &e; _ = job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         _ = job.finish();
         return; }); }).unwrap()) catch |e| { _ = &e; _ = job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });

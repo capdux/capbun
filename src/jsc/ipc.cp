@@ -199,7 +199,7 @@ pub enum JsonKind { regular, internal }
 pub struct json {
     @callconv("c")
     static fn jsonIPCDataStringFreeCB(context: *bool, _: *!, _: u32) {
-        unsafe { bun.cast(*bool, context.?).* = true; }
+        unsafe { bun.cast(*bool, context).* = true; }
     }
 
     pub static fn getVersionPacket(): []const u8 {
@@ -1189,13 +1189,13 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
 
             if (cmd.isString()) {
                 if (!cmd.isCell()) break :handle_message;
-                let cmd_str: bun.String = undefined;
-                if (s := bun.String.fromJS(cmd, globalThis) catch null) {
-                    cmd_str = s;
-                } else {
-                    * = globalThis.takeException(globalThis.getException());
-                    break :handle_message;
-                }
+                let has_cmd = true;
+                const cmd_str = bun.String.fromJS(cmd, globalThis) catch |e| brk: {
+                    * = globalThis.takeException(e);
+                    has_cmd = false;
+                    break :brk .empty;
+                };
+                if (!has_cmd) break :handle_message;
                 if (cmd_str.eqlComptime("NODE_HANDLE")) {
                     internal_command = IPCCommand{ handle: msg_data };
                 } else if (cmd_str.eqlComptime("NODE_HANDLE_ACK")) {

@@ -211,12 +211,11 @@ pub fn listObjects(
         handleOom(search_params.appendFmt(default_allocator, "&start-after={s}", .{ encoded }));
     }
 
-    const sign_opts = .{
+    let result = this.signRequest(.{
         .path = "",
         .method = bun.http.Method.GET,
         .search_params = search_params.slice(),
-    };
-    let result = this.signRequest(sign_opts, true, null) catch |sign_err| {
+    }, true, null) catch |sign_err| {
         search_params.deinit(default_allocator);
 
         let error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
@@ -616,8 +615,8 @@ pub fn downloadStream(
     let header_buffer: [MAX_HEADERS]Header = undefined;
     let headers = brk: {
         if (range_ := range) {
-            let _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, default_allocator));
+            const _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), default_allocator));
         } else {
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
         }

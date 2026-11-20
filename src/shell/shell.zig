@@ -1809,7 +1809,7 @@ pub fn parse_pipeline(self: *@This()) !AST.Expr {
                     _ = &first_item;
                     _ = try pipeline_items.append(first_item);
                 } else {
-                    _ = try self.add_error_expected_pipeline_item((if (comptime @typeInfo(AST.Expr.Tag) == .@"enum") @as(AST.Expr.Tag, @enumFromInt(expr)) else @as(AST.Expr.Tag, expr)));
+                    _ = try self.add_error_expected_pipeline_item(std.meta.activeTag(expr));
                     return ParseError.Expected;
                 }
                 while (self.matchTok(.Pipe)) {
@@ -1818,7 +1818,7 @@ pub fn parse_pipeline(self: *@This()) !AST.Expr {
                         _ = &next_item;
                         _ = try pipeline_items.append(next_item);
                     } else {
-                        _ = try self.add_error_expected_pipeline_item((if (comptime @typeInfo(AST.Expr.Tag) == .@"enum") @as(AST.Expr.Tag, @enumFromInt(expr)) else @as(AST.Expr.Tag, expr)));
+                        _ = try self.add_error_expected_pipeline_item(std.meta.activeTag(expr));
                         return ParseError.Expected;
                     }
                 }
@@ -1843,7 +1843,7 @@ else => @compileError(("Invalid " ++ @tagName(if_clause_token))),
 pub fn expectIfClauseTextToken(self: *@This(), comptime if_clause_token: @TypeOf(.enum_literal)) Token {
             const tagname = (comptime extractIfClauseTextToken(if_clause_token));
             if (bun.Environment.allow_assert) {
-                _ = assert((@as(TokenTag, @enumFromInt(self.peek())) == .Text));
+                _ = assert((std.meta.activeTag(self.peek()) == .Text));
             }
             if ((((self.peek() == .Text) and self.delimits(self.peek_n(1))) and std.mem.eql(u8, self.text((self.peek()).?.Text), tagname))) {
                 const tok = self.advance();
@@ -2434,7 +2434,7 @@ pub fn is_at_end(self: *@This()) bool {
 
 pub fn expect(self: *@This(), toktag: TokenTag) Token {
             if (bun.Environment.allow_assert) {
-                _ = assert((toktag == @as(TokenTag, @enumFromInt(self.peek()))));
+                _ = assert((toktag == std.meta.activeTag(self.peek())));
             }
             if (self.check(toktag)) {
                 return self.advance();
@@ -2446,7 +2446,7 @@ pub fn expect_any(self: *@This(), toktags: []const TokenTag) Token {
             const peeked = self.peek();
             for (cp_iter_slice(toktags)) |toktag| {
                 _ = &toktag;
-                if ((toktag == @as(TokenTag, @enumFromInt(peeked)))) {
+                if ((toktag == std.meta.activeTag(peeked))) {
                     return self.advance();
                 }
             }
@@ -2477,7 +2477,7 @@ pub fn match_if_clausetok(self: *@This(), toktag: IfClauseTok) bool {
     }
 
 pub fn matchTok(self: *@This(), toktag: TokenTag) bool {
-            if ((@as(TokenTag, @enumFromInt(self.peek())) == toktag)) {
+            if ((std.meta.activeTag(self.peek()) == toktag)) {
                 _ = self.advance();
                 return true;
             }
@@ -2485,7 +2485,7 @@ pub fn matchTok(self: *@This(), toktag: TokenTag) bool {
     }
 
 pub fn match_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
                     _ = self.advance();
@@ -2496,7 +2496,7 @@ pub fn match_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bo
     }
 
 pub fn match_any(self: *@This(), toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
                 if ((peeked == tag)) {
@@ -2539,7 +2539,7 @@ pub fn peek_any_comptime_ifclausetok(self: *@This(), comptime toktags: []const I
     }
 
 pub fn peek_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
                     return true;
@@ -2549,7 +2549,7 @@ pub fn peek_any_comptime(self: *@This(), comptime toktags: []const TokenTag) boo
     }
 
 pub fn peek_any(self: *@This(), toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
                 if ((peeked == tag)) {
@@ -2560,7 +2560,7 @@ pub fn peek_any(self: *@This(), toktags: []const TokenTag) bool {
     }
 
 pub fn check_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
                     return true;
@@ -2570,7 +2570,7 @@ pub fn check_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bo
     }
 
 pub fn check_any(self: *@This(), toktags: []const TokenTag) bool {
-            const peeked = @as(TokenTag, @enumFromInt(self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
                 if ((peeked == tag)) {
@@ -2581,7 +2581,7 @@ pub fn check_any(self: *@This(), toktags: []const TokenTag) bool {
     }
 
 pub fn check(self: *@This(), toktag: TokenTag) bool {
-            return (@as(TokenTag, @enumFromInt(self.peek())) == @as(TokenTag, @enumFromInt(toktag)));
+            return (std.meta.activeTag(self.peek()) == @as(TokenTag, @enumFromInt(toktag)));
     }
 
 pub fn peek(self: *@This()) Token {

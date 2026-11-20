@@ -309,7 +309,7 @@ export class FetchTasklet {
             return response;
         }
 
-        if (response_js := _.response.get()) {
+        if (response_js := @TypeOf(_.response).get()) {
             if (response := response_js.as(Response)) {
                 return response;
             }
@@ -550,17 +550,17 @@ export class FetchTasklet {
             _.promise.deinit();
         }
         const success = _.result.isSuccess();
-        const result = switch (success) {
-            true => jsc.Strong.Optional.create(_.onResolve(), globalThis),
-            false => brk: {
+        const result = if (success)
+            jsc.Strong.Optional.create(_.onResolve(), globalThis)
+        else
+            brk: {
                 let value = _.onReject();
                 const err = value.toJS(globalThis);
                 if (sink := _.sink) {
                     sink.cancel(err);
                 }
                 break :brk value.JSValue;
-            },
-        };
+            };
 
         promise_value.ensureStillAlive();
         const Holder = struct {
@@ -613,7 +613,7 @@ export class FetchTasklet {
             if (certificate_info.cert.len > 0) {
                 const cert = certificate_info.cert;
                 let cert_ptr = cert.ptr;
-                if (x509 := BoringSSL.d2i_X509(null, &cert_ptr, @intCast(cert.len))) {
+                if (x509 := bun.BoringSSL.c.d2i_X509(null, &cert_ptr, @intCast(cert.len))) {
                     const globalObject = _.global_this;
                     defer x509.free();
                     const js_cert = X509.toJS(x509, globalObject) catch |e| {
@@ -726,11 +726,9 @@ export class FetchTasklet {
         }
 
         const fail_err = _.result.fail.?;
+        const code_str: [:0]const u8 = if (fail_err == error.ConnectionClosed) "ECONNRESET" else @errorName(fail_err);
         const fetch_error = jsc.SystemError{
-            .code = BunString.static(switch (fail_err) {
-                error.ConnectionClosed => "ECONNRESET",
-                else => @errorName(fail_err),
-            }),
+            .code = BunString.static(code_str),
             .message = switch (fail_err) {
                 error.ConnectionClosed => BunString.static("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"),
                 error.FailedToOpenSocket => BunString.static("Was there a typo in the url or port?"),

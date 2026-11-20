@@ -255,7 +255,7 @@ var ast_scope = js_ast.ASTMemoryAllocator.Scope{  };
         _ = &fd;
         var package_json: ?*PackageJSON = null;
         _ = &package_json;
-        const indexOfFn = @TypeOf(jsc_vm.bun_watcher.*).indexOf;
+        const indexOfFn = @TypeOf(jsc_vm.bun_watcher).indexOf;
         if (indexOfFn(jsc_vm.bun_watcher, hash)) |index| {
             _ = &index;
             fd = jsc_vm.bun_watcher.watchlist().items(.fd)[@as(usize, @intCast(index))].unwrapValid();
@@ -670,7 +670,7 @@ pub fn Bun__transpileFile(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject
         }
         var virtual_source_to_use: ?logger.Source = null;
         _ = &virtual_source_to_use;
-        var blob_to_deinit: ?*jsc.WebCore.Blob = null;
+        var blob_to_deinit: ?jsc.WebCore.Blob = null;
         _ = &blob_to_deinit;
         var lr = (blk_catch_10: { break :blk_catch_10 ((options.getLoaderAndVirtualSource(_specifier.slice(), jsc_vm, (&virtual_source_to_use), (&blob_to_deinit), type_attribute_str)) catch |__ce_10| { _ = &__ce_10; ret.* = jsc.ErrorableResolvedSource.err(error.JSErrorObject, globalObject.ERR(.MODULE_NOT_FOUND, "Blob not found", .{}).toJS());
         return null; }); });

@@ -244,7 +244,7 @@ pub fn expect(self: *@This(), toktag: Token.Tag) Token {
     }
 
 pub fn matchTok(self: *@This(), toktag: Token.Tag) bool {
-            if (((if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(self.peek())) else @as(Token.Tag, self.peek())) == toktag)) {
+            if ((std.meta.activeTag(self.peek()) == toktag)) {
                 _ = self.advance();
                 return true;
             }
@@ -264,7 +264,7 @@ pub fn match_any2(self: *@This(), comptime toktags: []const Token.Tag) ?Token {
     }
 
 pub fn match_any(self: *@This(), comptime toktags: []const Token.Tag) bool {
-            const peeked = (if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(self.peek())) else @as(Token.Tag, self.peek()));
+            const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 _ = &tag;
                 if ((peeked == tag)) {
@@ -276,7 +276,7 @@ pub fn match_any(self: *@This(), comptime toktags: []const Token.Tag) bool {
     }
 
 pub fn check(self: *@This(), toktag: Token.Tag) bool {
-            return ((if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(self.peek())) else @as(Token.Tag, self.peek())) == (if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(toktag)) else @as(Token.Tag, toktag)));
+            return (std.meta.activeTag(self.peek()) == toktag);
     }
 
 pub fn peek(self: *@This()) Token {

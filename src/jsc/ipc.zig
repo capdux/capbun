@@ -327,7 +327,7 @@ pub const json = struct {
 
 pub fn jsonIPCDataStringFreeCB(context: *bool, _: *anyopaque, _: u32) callconv(.c) void {
             {
-                (bun.cast(*bool, context.?)).* = true;
+                (bun.cast(*bool, context)).* = true;
             }
     }
 
@@ -1410,13 +1410,14 @@ _ = log("received ipc message: internal: {f}", .{ jsvalue.toFmt((&formatter)) })
                     if ((!cmd.isCell())) {
                         break :handle_message;
                     }
-                    var cmd_str: bun.String = undefined;
-                    _ = &cmd_str;
-                    if ((blk_catch_13: { break :blk_catch_13 ((bun.String.fromJS(cmd, globalThis)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 null; }); })) |s| {
-                        _ = &s;
-                        cmd_str = s;
-                    } else {
-                        _ = globalThis.takeException(globalThis.getException());
+                    var has_cmd = true;
+                    _ = &has_cmd;
+                    const cmd_str = (blk_catch_13: { break :blk_catch_13 ((bun.String.fromJS(cmd, globalThis)) catch |e| { _ = &e; break :blk_catch_13 brk: {
+                    _ = globalThis.takeException(e);
+                    has_cmd = false;
+                    break :brk .empty;
+}; }); });
+                    if ((!has_cmd)) {
                         break :handle_message;
                     }
                     if (cmd_str.eqlComptime("NODE_HANDLE")) {

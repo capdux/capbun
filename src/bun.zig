@@ -3041,8 +3041,7 @@ pub fn exitThread() noreturn {
 }
 
 pub fn deleteAllPoolsForThreadExit() void {
-        const pools_to_delete: struct { *anyopaque, *anyopaque, *anyopaque, *anyopaque, *anyopaque } = .{ jsc.WebCore.ByteListPool, bun.w_path_buffer_pool, bun.path_buffer_pool, jsc.ConsoleObject.Formatter.Visited.Pool, bun.js_parser.StringVoidMap.Pool };
-        inline for (pools_to_delete) |pool| {
+        inline for (.{ jsc.WebCore.ByteListPool, bun.w_path_buffer_pool, bun.path_buffer_pool, jsc.ConsoleObject.Formatter.Visited.Pool, bun.js_parser.StringVoidMap.Pool }) |pool| {
             _ = pool.deleteAll();
         }
         _ = freeAllThreadlocalBuffers();

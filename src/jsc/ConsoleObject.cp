@@ -2740,7 +2740,7 @@ pub struct Formatter {
                 } else if (resolve_log := value.@"as"(bun.api.ResolveMessage)) {
                     resolve_log.msg.writeFormat(writer_, enable_ansi_colors) catch {};
                     return;
-                } else if (try JestPrettyFormat.printAsymmetricMatcher(_, Format, &writer, writer_, name_buf, value, enable_ansi_colors)) {
+                } else if (try JestPrettyFormat.printAsymmetricMatcher(_, Format, &writer, writer_, Formatter.name_buf, value, enable_ansi_colors)) {
                     return;
                 } else if (jsType != .DOMWrapper) {
                     if (remove_before_recurse) {

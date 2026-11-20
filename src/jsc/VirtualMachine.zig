@@ -297,7 +297,7 @@ pub const Options = struct {
     dns_result_order: DNSResolver.Order = .verbatim,
     eval: bool = false,
     graph: ?*bun.StandaloneModuleGraph = null,
-    debugger: bun.cli.Command.Debugger = .{ .unspecified = .{} },
+    debugger: bun.cli.Command.Debugger = .unspecified,
     is_main_thread: bool = false,
     destruct_main_thread_on_exit: bool = false,
 };
@@ -417,6 +417,7 @@ pub fn dispatchOnBeforeExit(self: *ExitHandler) void {
 
 pub const OnUnhandledRejection = *const fn (*VirtualMachine, *JSGlobalObject, JSValue) void;
 pub const OnException = *const fn (*ZigException) void;
+const OptZigStringSlice = ?ZigString.Slice;
 const string = []const u8;
 pub var has_bun_garbage_collector_flag_enabled = false;
 pub var isBunTest: bool = false;
@@ -2600,7 +2601,7 @@ pub fn remapOneFrameSlow(client: *VirtualMachine, frame: *jsc.ZigStackFrame, pat
         frame.remapped = true;
 }
 
-pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, error_instance: JSValue, exception_list: ?*ExceptionList, must_reset_parser_arena_later: *bool, source_code_slice: ?*ZigString.Slice, allow_source_code_preview: bool) void {
+pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, error_instance: JSValue, exception_list: ?*ExceptionList, must_reset_parser_arena_later: *bool, source_code_slice: *OptZigStringSlice, allow_source_code_preview: bool) void {
         _ = error_instance.toZigException(client.global, exception);
         var enable_source_code_preview = (allow_source_code_preview and (!(bun.feature_flag.BUN_DISABLE_SOURCE_CODE_PREVIEW.get() or bun.feature_flag.BUN_DISABLE_TRANSPILED_SOURCE_CODE_PREVIEW.get())));
         _ = &enable_source_code_preview;

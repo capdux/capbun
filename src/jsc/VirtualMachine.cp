@@ -1225,7 +1225,7 @@ pub struct Options {
     eval: bool = false,
 
     graph: (*bun.StandaloneModuleGraph)? = null,
-    debugger: bun.cli.Command.Debugger = { unspecified: {} },
+    debugger: bun.cli.Command.Debugger = .unspecified,
     is_main_thread: bool = false,
     /// Whether this VM should be destroyed after it exits, even if it is the main thread's VM.
     /// Worker VMs are always destroyed on exit, regardless of this setting. Setting this to
@@ -3076,13 +3076,14 @@ fn remapOneFrameSlow(client: *VirtualMachine, frame: *jsc.ZigStackFrame, path: [
     frame.remapped = true;
 }
 
+type OptZigStringSlice = ZigString.Slice?;
 pub fn remapZigException(
     client: *VirtualMachine,
     exception: *ZigException,
     error_instance: JSValue,
     exception_list: (*ExceptionList)?,
     must_reset_parser_arena_later: *bool,
-    source_code_slice: *ZigString.Slice?,
+    source_code_slice: *OptZigStringSlice,
     allow_source_code_preview: bool,
 ) {
     error_instance.toZigException(client.global, exception);

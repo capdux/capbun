@@ -33,7 +33,7 @@ fn countFilesInArchive(data: []const u8): u32 {
 
     let count: u32 = 0;
     let entry: *libarchive.lib.Archive.Entry = undefined;
-    while (archive.readNextHeader(&entry) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry }) == .ok) {
         if (entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular)) {
             count += 1;
         }
@@ -156,7 +156,7 @@ fn extractToDiskFiltered(
     let count: u32 = 0;
     let entry: *lib.Archive.Entry = undefined;
 
-    while (archive.readNextHeader(&entry) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry }) == .ok) {
         const pathname = entry.pathnameUtf8();
 
         // Validate path safety (reject absolute paths, path traversal)
@@ -271,7 +271,7 @@ const PromiseResult = union(enum) {
     resolve: jsc.JSValue,
     reject: jsc.JSValue,
 
-    fn fulfill(_: PromiseResult, globalThis: *jsc.JSGlobalObject, promise: *jsc.JSPromise): bun.JSTerminated! {
+    fn fulfill(globalThis: *jsc.JSGlobalObject, promise: *jsc.JSPromise): bun.JSTerminated!void {
         switch (_) {
             .resolve => |v| promise.resolve(globalThis, v)?,
             .reject => |v| promise.rejectWithAsyncStack(globalThis, v)?,
@@ -631,7 +631,7 @@ struct FilesContext {
         errdefer freeEntries(&entries);
 
         let entry: *lib.Archive.Entry = undefined;
-    while (archive.readNextHeader(&entry) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry }) == .ok) {
             if (entry.filetype() != @intFromEnum(lib.FileType.regular)) continue;
 
             const pathname = entry.pathnameUtf8();

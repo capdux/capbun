@@ -2907,14 +2907,13 @@ pub fn exitThread(): noreturn {
 }
 
 pub fn deleteAllPoolsForThreadExit() {
-    const pools_to_delete = .{
+    inline for (pool of .{
         jsc.WebCore.ByteListPool,
         bun.w_path_buffer_pool,
         bun.path_buffer_pool,
         jsc.ConsoleObject.Formatter.Visited.Pool,
         bun.js_parser.StringVoidMap.Pool,
-    };
-    inline for (pool of pools_to_delete) {
+    }) {
         pool.deleteAll();
     }
     freeAllThreadlocalBuffers();

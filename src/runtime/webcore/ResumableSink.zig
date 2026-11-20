@@ -133,8 +133,9 @@ pub fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, contex
                         const err = brk_err: {
                         const pending = byte_stream.pending.result;
                         if ((pending == .err)) {
-                            const js_err = undefined;
-                            const was_strong = pending.err.toJSWeak(sink.globalThis);
+                            const weak_pair = pending.err.toJSWeak(sink.globalThis);
+                            const js_err = weak_pair[0];
+                            const was_strong = weak_pair[1];
                             _ = js_err.ensureStillAlive();
                             if ((was_strong == .Strong)) {
                                 _ = js_err.unprotect();

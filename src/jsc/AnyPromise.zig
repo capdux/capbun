@@ -69,32 +69,32 @@ pub const AnyPromise = union(enum) {
     internal: *JSInternalPromise,
 
 pub fn unwrap(self: AnyPromise, vm: *VM, mode: JSPromise.UnwrapMode) JSPromise.Unwrapped {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |promise| promise.unwrap(vm, mode),
 });
     }
 
 pub fn status(self: AnyPromise) JSPromise.Status {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |promise| promise.status(),
 });
     }
 
 pub fn result(self: AnyPromise, vm: *VM) JSValue {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |promise| promise.result(vm),
 });
     }
 
 pub fn isHandled(self: AnyPromise) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |promise| promise.isHandled(),
 });
     }
 
 pub fn setHandled(self: AnyPromise, vm: *VM) void {
             _ = &vm;
-            switch (self.*) {
+            switch (self) {
 inline else => |promise| {
 _ = promise.setHandled();
 },
@@ -102,7 +102,7 @@ _ = promise.setHandled();
     }
 
 pub fn resolve(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
-            switch (self.*) {
+            switch (self) {
 inline else => |promise| {
 _ = try promise.resolve(globalThis, value);
 },
@@ -110,7 +110,7 @@ _ = try promise.resolve(globalThis, value);
     }
 
 pub fn reject(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
-            switch (self.*) {
+            switch (self) {
 inline else => |promise| {
 _ = try promise.reject(globalThis, value);
 },
@@ -123,14 +123,14 @@ pub fn rejectWithAsyncStack(self: AnyPromise, globalThis: *JSGlobalObject, value
     }
 
 pub fn asJSPromise(self: AnyPromise) *JSPromise {
-            return (switch (self.*) {
+            return (switch (self) {
 .normal => |p| p,
 .internal => |p| @ptrCast(p),
 });
     }
 
 pub fn rejectAsHandled(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
-            switch (self.*) {
+            switch (self) {
 inline else => |promise| {
 _ = try promise.rejectAsHandled(globalThis, value);
 },
@@ -138,7 +138,7 @@ _ = try promise.rejectAsHandled(globalThis, value);
     }
 
 pub fn asValue(self: AnyPromise) JSValue {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |promise| promise.toJS(),
 });
     }

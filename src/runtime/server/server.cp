@@ -80,7 +80,8 @@ pub const AnyRoute = union(enum) {
     fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
         if (!argument.isObject()) return null;
 
-        let path_string = try bun.String.fromJS(try argument.get(init_ctx.global, "path") orelse return null, init_ctx.global);
+        const path_val = (argument.get(init_ctx.global, "path")?) orelse return null;
+        let path_string = bun.String.fromJS(path_val, init_ctx.global)?;
         defer path_string.deref();
         let path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, &path_string, false, bun.default_allocator) };
         defer path.deinit();
@@ -3698,7 +3699,7 @@ fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject): bool {
     return false;
 }
 
-extern fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *void);
+extern fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *!);
 extern fn NodeHTTP_setUsingCustomExpectHandler(_: bool, _: *!, _: bool);
 
 

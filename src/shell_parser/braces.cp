@@ -160,7 +160,7 @@ pub const Parser = struct {
     }
 
     fn matchTok(this: *Parser, toktag: Token.Tag): bool {
-        if (@as(Token.Tag, this.peek()) == toktag) {
+        if (std.meta.activeTag(this.peek()) == toktag) {
             * = this.advance();
             return true;
         }
@@ -179,7 +179,7 @@ pub const Parser = struct {
     }
 
     fn match_any(this: *Parser, comptime toktags: []const Token.Tag): bool {
-        const peeked = @as(Token.Tag, this.peek());
+        const peeked = std.meta.activeTag(this.peek());
         inline for (toktags) |tag| {
             if (peeked == tag) {
                 * = this.advance();
@@ -190,7 +190,7 @@ pub const Parser = struct {
     }
 
     fn check(this: *Parser, toktag: Token.Tag): bool {
-        return @as(Token.Tag, this.peek()) == @as(Token.Tag, toktag);
+        return std.meta.activeTag(this.peek()) == toktag;
     }
 
     fn peek(this: *Parser): Token {

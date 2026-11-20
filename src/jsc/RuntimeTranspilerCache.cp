@@ -427,10 +427,11 @@ pub struct RuntimeTranspilerCache {
         return printed.len;
     }
 
+    type PathZ = [:0]const u8;
     static fn getCacheFilePath(
         buf: *bun.PathBuffer,
         input_hash: u64,
-    ): [:0]const u8! {
+    ): PathZ! {
         const cache_dir = getCacheDir(buf)?;
         buf[cache_dir.len] = std.fs.path.sep;
         const cache_filename_len = writeCacheFilename(buf[cache_dir.len + 1 ..], input_hash)?;
@@ -491,7 +492,7 @@ pub struct RuntimeTranspilerCache {
     @tls static let runtime_transpiler_cache: [:0]const u8? = null;
     pub static let is_disabled: bool = false;
 
-    static fn getCacheDir(buf: *bun.PathBuffer): [:0]const u8! {
+    static fn getCacheDir(buf: *bun.PathBuffer): PathZ! {
         if (RuntimeTranspilerCache.is_disabled) return error.CacheDisabled;
         const path = runtime_transpiler_cache ?? path: {
             const path = reallyGetCacheDir(&cache_dir_bufs.get().buf);

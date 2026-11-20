@@ -20,7 +20,7 @@ pub const ImportWatcher = union(enum) {
 
     pub inline fn indexOf(hash: Watcher.HashType): u32? {
         return switch (_) {
-            inline .hot, .watch => |w| w.indexOf(hash),
+            inline .hot, .watch => |w| Watcher.indexOf(w, hash),
             else => null,
         };
     }

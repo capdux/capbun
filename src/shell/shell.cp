@@ -1312,7 +1312,7 @@ pub const Parser = struct {
             if (first_item := expr.asPipelineItem()) {
                 pipeline_items.append(first_item)?;
             } else {
-                _.add_error_expected_pipeline_item(@as(AST.Expr.Tag, expr))?;
+                _.add_error_expected_pipeline_item(std.meta.activeTag(expr))?;
                 return ParseError.Expected;
             }
 
@@ -1321,7 +1321,7 @@ pub const Parser = struct {
                 if (next_item := expr.asPipelineItem()) {
                     pipeline_items.append(next_item)?;
                 } else {
-                    _.add_error_expected_pipeline_item(@as(AST.Expr.Tag, expr))?;
+                    _.add_error_expected_pipeline_item(std.meta.activeTag(expr))?;
                     return ParseError.Expected;
                 }
             }
@@ -1346,7 +1346,7 @@ pub const Parser = struct {
 
     fn expectIfClauseTextToken(*_, comptime if_clause_token: @TypeOf(.enum_literal)): Token {
         const tagname = comptime extractIfClauseTextToken(if_clause_token);
-        if (bun.Environment.allow_assert) assert(@as(TokenTag, _.peek()) == .Text);
+        if (bun.Environment.allow_assert) assert(std.meta.activeTag(_.peek()) == .Text);
         if (_.peek() == .Text &&
             _.delimits(_.peek_n(1)) &&
             std.mem.eql(u8, _.text(_.peek().Text), tagname))
@@ -1976,7 +1976,7 @@ pub const Parser = struct {
     }
 
     fn expect(*_, toktag: TokenTag): Token {
-        if (bun.Environment.allow_assert) assert(toktag == @as(TokenTag, _.peek()));
+        if (bun.Environment.allow_assert) assert(toktag == std.meta.activeTag(_.peek()));
         if (_.check(toktag)) {
             return _.advance();
         }
@@ -1986,7 +1986,7 @@ pub const Parser = struct {
     fn expect_any(*_, toktags: []const TokenTag): Token {
         const peeked = _.peek();
         for (toktag of toktags) {
-            if (toktag == @as(TokenTag, peeked)) return _.advance();
+            if (toktag == std.meta.activeTag(peeked)) return _.advance();
         }
 
         @panic("Unexpected token");
@@ -2018,7 +2018,7 @@ pub const Parser = struct {
 
     /// Consumes token if it matches
     fn matchTok(*_, toktag: TokenTag): bool {
-        if (@as(TokenTag, _.peek()) == toktag) {
+        if (std.meta.activeTag(_.peek()) == toktag) {
             * = _.advance();
             return true;
         }
@@ -2026,7 +2026,7 @@ pub const Parser = struct {
     }
 
     fn match_any_comptime(*_, comptime toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         inline for (tag of toktags) {
             if (peeked == tag) {
                 * = _.advance();
@@ -2037,7 +2037,7 @@ pub const Parser = struct {
     }
 
     fn match_any(*_, toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         for (tag of toktags) {
             if (peeked == tag) {
                 * = _.advance();
@@ -2076,7 +2076,7 @@ pub const Parser = struct {
     }
 
     fn peek_any_comptime(*_, comptime toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         inline for (tag of toktags) {
             if (peeked == tag) {
                 return true;
@@ -2086,7 +2086,7 @@ pub const Parser = struct {
     }
 
     fn peek_any(*_, toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         for (tag of toktags) {
             if (peeked == tag) {
                 return true;
@@ -2096,7 +2096,7 @@ pub const Parser = struct {
     }
 
     fn check_any_comptime(*_, comptime toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         inline for (tag of toktags) {
             if (peeked == tag) {
                 return true;
@@ -2106,7 +2106,7 @@ pub const Parser = struct {
     }
 
     fn check_any(*_, toktags: []const TokenTag): bool {
-        const peeked = @as(TokenTag, _.peek());
+        const peeked = std.meta.activeTag(_.peek());
         for (tag of toktags) {
             if (peeked == tag) {
                 return true;
@@ -2116,7 +2116,7 @@ pub const Parser = struct {
     }
 
     fn check(*_, toktag: TokenTag): bool {
-        return @as(TokenTag, _.peek()) == @as(TokenTag, toktag);
+        return std.meta.activeTag(_.peek()) == @as(TokenTag, toktag);
     }
 
     fn peek(*_): Token {

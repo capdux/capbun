@@ -3160,3 +3160,5 @@ Options:
 - **[2026-11-20 22:55] Wave 22 C 组验收提交（25 模块全绿）**：完成 25 个 1~2 错模块独立验收（25/25 PASS，ratio 0.844x~1.118x）并原子提交；已将 C 组精准定位的 11 个外部根因与 `C_REST` 1 错长尾流水线派发给 D 组接力。
 
 - **[2026-11-20 22:56] Wave 22 A 组验收提交（19 模块全绿）**：完成 `cli/test_command`、SQL 5 模块、JSParser/JSPrinter 11 模块、Resolver 2 模块独立验收（19/19 PASS，ratio 0.918x~1.100x）并原子提交；已流水线补派 E 组扫荡剩余全部 1 错长尾。
+
+- **[2026-11-20 22:57] Wave 22 B 组验收提交（21 模块全绿）**：完成 JSC 8 模块 + `bun`/`server`/`shell`/`braces` + API 4 + WebCore 3 + `ssl_wrapper`/`output_file_jsc` 共 21 模块独立验收（21/21 PASS，ratio 0.786x~1.042x）并原子提交；目前 D/E 两组并发收尾中。

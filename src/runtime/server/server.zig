@@ -150,7 +150,8 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
             if ((!argument.isObject())) {
                 return null;
             }
-            var path_string = try bun.String.fromJS(try ((argument.get(init_ctx.global, "path")) orelse { return .{ .ok = null }; }), init_ctx.global);
+            const path_val = ((try argument.get(init_ctx.global, "path")) orelse { return .{ .ok = null }; });
+            var path_string = try bun.String.fromJS(path_val, init_ctx.global);
             _ = &path_string;
             defer {
             _ = path_string.deref();
@@ -4098,6 +4099,6 @@ pub fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject) bool {
         return false;
 }
 
-extern "c" fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *void) callconv(.c) void;
+extern "c" fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *anyopaque) callconv(.c) void;
 
 extern "c" fn NodeHTTP_setUsingCustomExpectHandler(_: bool, _: *anyopaque, _: bool) callconv(.c) void;

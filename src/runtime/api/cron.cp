@@ -1065,7 +1065,7 @@ pub struct CronJob {
     pub export const Bun__CronJob__onPromiseResolve = jsc.toJSHostFn(onPromiseResolve);
     pub export const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
 
-    fn onPromiseResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn onPromiseResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
         const job: *CronJob = args[args.len - 1].asPromisePtr(CronJob);
         defer job.releasePendingRef();
@@ -1076,7 +1076,7 @@ pub struct CronJob {
         return .js_undefined;
     }
 
-    fn onPromiseReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn onPromiseReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
         const job: *CronJob = args[args.len - 1].asPromisePtr(CronJob);
         defer job.releasePendingRef();
@@ -1246,11 +1246,11 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
     const envp: ([*:null]OptConstCString)? = if (comptime bun.Environment.isPosix)
         @ptrCast(@constCast(std.c.environ))
     else
-        @ptrCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator()) catch {
+        @ptrCast(@constCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator()) catch {
             job.setErr("Failed to create environment block", .{});
             job.finish();
             return;
-        }).ptr);
+        }).ptr));
     let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), envp) catch |e| {
         job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         job.finish();

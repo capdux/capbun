@@ -378,9 +378,8 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         expanded_strings,
         lexer_output.contains_nested,
     ) catch |e| {
-        if (e == error.OutOfMemory) return e;
-        if (e == error.UnexpectedToken) return global.throwPretty("Unexpected token while expanding braces", .{});
-        return e;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        return global.throwPretty("Unexpected token while expanding braces", .{});
     };
 
     let out_strings = arena_.allocator().alloc(bun.String, expansion_count)?;
@@ -761,7 +760,8 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
             }
 
             if (column_ := opts.getTruthy(globalThis, "column")?) {
-                column = ((column_.toSlice(globalThis, arguments.@"arena".allocator()))?).slice();
+                const col_slice = column_.toSlice(globalThis, arguments.@"arena".allocator())?;
+                column = col_slice.slice();
             }
         }
     }

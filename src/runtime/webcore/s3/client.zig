@@ -472,8 +472,7 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
             _ = &encoded;
             _ = handleOom(search_params.appendFmt(default_allocator, "&start-after={s}", .{ encoded }));
         }
-        const sign_opts: __CpObj_path___const_u8_method__anyopaque_search_params__anyopaque = .{ .path = "", .method = bun.http.Method.GET, .search_params = search_params.slice() };
-        var result = (blk_catch_7: { break :blk_catch_7 ((self.signRequest(sign_opts, true, null)) catch |sign_err| { _ = &sign_err; _ = search_params.deinit(default_allocator);
+        var result = (blk_catch_7: { break :blk_catch_7 ((self.signRequest(.{ .path = "", .method = bun.http.Method.GET, .search_params = search_params.slice() }, true, null)) catch |sign_err| { _ = &sign_err; _ = search_params.deinit(default_allocator);
         var error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
         _ = &error_code_and_message;
         _ = try callback(.{ .failure = .{ .code = error_code_and_message.code, .message = error_code_and_message.message } }, callback_context);
@@ -620,9 +619,8 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         var headers = brk: {
         if (range) |range_| {
             _ = &range_;
-            var _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
-            _ = &_headers;
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, default_allocator));
+            const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), default_allocator));
         } else {
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
         }
@@ -660,4 +658,3 @@ pub fn readableStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         _ = downloadStream(self, path, offset, size, proxy_url, request_payer, S3DownloadStreamWrapper.opaqueCallback, wrapper);
         return readable_value;
 }
-pub const __CpObj_path___const_u8_method__anyopaque_search_params__anyopaque = struct { path: []const u8, method: *anyopaque, search_params: *anyopaque };

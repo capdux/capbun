@@ -1623,7 +1623,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                                                             _ = (blk_catch_29: { break :blk_catch_29 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_29| { _ = &__ce_29;  }); });
                                                             return;
                                                         } else {
-                                                            if (try JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, self.name_buf, value, enable_ansi_colors)) {
+                                                            if (try JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, Formatter.name_buf, value, enable_ansi_colors)) {
                                                                 return;
                                                             } else {
                                                                 if ((jsType != .DOMWrapper)) {
