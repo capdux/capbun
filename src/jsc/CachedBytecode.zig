@@ -101,6 +101,14 @@ pub fn generate(format: bun.options.Format, input: []const u8, source_provider_u
 else => null,
 });
     }
+
+pub fn allocator(self: *CachedBytecode) std.mem.Allocator {
+            return .{ .ptr = self, .vtable = VTable };
+    }
+
+pub fn isInstance(allocator_: std.mem.Allocator) bool {
+            return (allocator_.vtable == VTable);
+    }
     pub const VTable = (&std.mem.Allocator.VTable{ .alloc = vtableAlloc, .free = vtableFree, .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap) });
 };
 

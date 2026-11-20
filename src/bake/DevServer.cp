@@ -2669,13 +2669,15 @@ pub fn finalizeBundle(
                 source_map_entry.deinit();
             }
 
-            const json_data = try source_map_entry.renderJSON(
+            const json_data = source_map_entry.renderJSON(
                 dev,
                 arena_.allocator(),
                 .hmr_chunk,
                 dev.allocator(),
                 .server,
-            );
+            ) catch |e| {
+                if (e == error.OutOfMemory) return error.OutOfMemory else unreachable;
+            };
             break :json json_data;
         } else null;
         defer if (json := source_map_json) dev.allocator().free(json);

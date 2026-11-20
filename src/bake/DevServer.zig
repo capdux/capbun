@@ -2671,7 +2671,11 @@ _ = try dev.client_graph.processChunkDependencies((&ctx), .normal, part_range.so
                 _ = source_map_entry.deinit();
             }
             }
-            const json_data = try source_map_entry.renderJSON(dev, arena_.allocator(), .hmr_chunk, dev.allocator(), .server);
+            const json_data = (blk_catch_26: { break :blk_catch_26 ((source_map_entry.renderJSON(dev, arena_.allocator(), .hmr_chunk, dev.allocator(), .server)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = unreachable;
+            } }); });
             break :json json_data;
 } else null);
             _ = &source_map_json;
@@ -2692,13 +2696,13 @@ _ = try dev.client_graph.processChunkDependencies((&ctx), .normal, part_range.so
                 if (comptime AllocationScope.enabled) {
                     _ = dev.allocation_scope.leakSlice(json);
                 }
-                server_modules = (blk_catch_26: { break :blk_catch_26 ((c.BakeLoadServerHmrPatchWithSourceMap(@ptrCast(dev.vm.global), bun.String.cloneUTF8(server_bundle), json.ptr, json.len)) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
+                server_modules = (blk_catch_27: { break :blk_catch_27 ((c.BakeLoadServerHmrPatchWithSourceMap(@ptrCast(dev.vm.global), bun.String.cloneUTF8(server_bundle), json.ptr, json.len)) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler."); }); });
             } else {
-                server_modules = (blk_catch_27: { break :blk_catch_27 ((c.BakeLoadServerHmrPatch(@ptrCast(dev.vm.global), bun.String.cloneLatin1(server_bundle))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
+                server_modules = (blk_catch_28: { break :blk_catch_28 ((c.BakeLoadServerHmrPatch(@ptrCast(dev.vm.global), bun.String.cloneLatin1(server_bundle))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler."); }); });
             }
-            _ = (blk_catch_28: { break :blk_catch_28 (((dev.server_register_update_callback.get()).?.call(dev.vm.global, dev.vm.global.toJSValue(), (&.{ server_modules, try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_added.items), try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_removed.items) }))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
+            _ = (blk_catch_29: { break :blk_catch_29 (((dev.server_register_update_callback.get()).?.call(dev.vm.global, dev.vm.global.toJSValue(), (&.{ server_modules, try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_added.items), try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_removed.items) }))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
             @panic("Error thrown in Hot-module-replacement code. This is always a bug in the HMR runtime."); }); });
         }
         var route_bits = try DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len);
@@ -3082,7 +3086,7 @@ pub fn startNextBundleIfPresent(dev: *DevServer) void {
             }
             var is_reload = false;
             _ = &is_reload;
-            var timer = (blk_catch_30: { break :blk_catch_30 ((std.time.Timer.start()) catch |__ce_30| { _ = &__ce_30; @panic("timers unsupported"); }); });
+            var timer = (blk_catch_31: { break :blk_catch_31 ((std.time.Timer.start()) catch |__ce_31| { _ = &__ce_31; @panic("timers unsupported"); }); });
             _ = &timer;
             if ((dev.next_bundle.reload_event != null)) {
                 var current = dev.next_bundle.reload_event.?;
@@ -3225,7 +3229,7 @@ pub fn onRequest(dev: *DevServer, req: *Request, resp: anytype) void {
             _ = &route_index;
             var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = AnyResponse.init(resp), .kind = .server_handler, .route_bundle_index = bun.handleOom(dev.getOrPutRouteBundle(.{ .framework = route_index })) };
             _ = &ctx;
-            _ = (blk_catch_31: { break :blk_catch_31 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_31 (__sw_blk_48: { const __disc_48 = e; _ = &__disc_48; if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSError)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSTerminated)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .OutOfMemory)) {  break :__sw_blk_48 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_32: { break :blk_catch_32 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_32 (__sw_blk_48: { const __disc_48 = e; _ = &__disc_48; if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSError)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSTerminated)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .OutOfMemory)) {  break :__sw_blk_48 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             return;
         }
         if ((dev.server.?.config().onRequest != .zero)) {
@@ -3251,10 +3255,10 @@ pub fn handleRenderRedirect(dev: *DevServer, saved_request: bun.jsc.API.SavedReq
 pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, req: *uws.Request, resp: AnyResponse) bun.OOM!void {
         var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = resp, .kind = .bundled_html_page, .route_bundle_index = try dev.getOrPutRouteBundle(.{ .html = html }) };
         _ = &ctx;
-        _ = (blk_catch_32: { break :blk_catch_32 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
-        break :blk_catch_32 dev.vm.global.reportActiveExceptionAsUnhandled(e); }); });
+        break :blk_catch_33 dev.vm.global.reportActiveExceptionAsUnhandled(e); }); });
 }
 
 pub fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex) !RouteBundle.Index {
@@ -3460,11 +3464,11 @@ pub noinline fn dumpBundleForChunk(dev: *DevServer, dump_dir: std.fs.Dir, side: 
         const size = std.mem.replacementSize(u8, rel_path, (".." ++ std.fs.path.sep_str), ("_.._" ++ std.fs.path.sep_str));
         _ = std.mem.replace(u8, rel_path, (".." ++ std.fs.path.sep_str), ("_.._" ++ std.fs.path.sep_str), (&b));
         const rel_path_escaped = b[0..size];
-        _ = (blk_catch_33: { break :blk_catch_33 ((dumpBundle(dump_dir, (switch (side) {
+        _ = (blk_catch_34: { break :blk_catch_34 ((dumpBundle(dump_dir, (switch (side) {
 .client => .client,
 .server => (if (is_ssr_graph) .ssr else .server),
 }), rel_path_escaped, code, wrap)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-        break :blk_catch_33 @as(void, Output.warn("Could not dump bundle: {}", .{ e })); }); });
+        break :blk_catch_34 @as(void, Output.warn("Could not dump bundle: {}", .{ e })); }); });
 }
 
 pub fn emitVisualizerMessageIfNeeded(dev: *DevServer) void {
@@ -3484,7 +3488,7 @@ pub fn emitVisualizerMessageIfNeeded(dev: *DevServer) void {
         defer {
         _ = payload.deinit();
         }
-        _ = (blk_catch_35: { break :blk_catch_35 ((dev.writeVisualizerMessage((&payload))) catch |__ce_35| { _ = &__ce_35; return; }); });
+        _ = (blk_catch_36: { break :blk_catch_36 ((dev.writeVisualizerMessage((&payload))) catch |__ce_36| { _ = &__ce_36; return; }); });
         _ = dev.publish(.incremental_visualizer, payload.items, .binary);
 }
 
@@ -3520,7 +3524,7 @@ pub fn emitMemoryVisualizerMessage(dev: *DevServer) void {
         _ = payload.deinit();
         }
         _ = payload.appendAssumeCapacity(MessageId.memory_visualizer.char());
-        _ = (blk_catch_37: { break :blk_catch_37 ((writeMemoryVisualizerMessage(dev, (&payload))) catch |__ce_37| { _ = &__ce_37; return; }); });
+        _ = (blk_catch_38: { break :blk_catch_38 ((writeMemoryVisualizerMessage(dev, (&payload))) catch |__ce_38| { _ = &__ce_38; return; }); });
         _ = dev.publish(.memory_visualizer, payload.items, .binary);
 }
 
@@ -3833,8 +3837,8 @@ pub fn dumpStateDueToCrash(dev: *DevServer) !void {
         _ = &max_path_len;
         var filepath_buf: [max_path_len]u8 = undefined;
         _ = &filepath_buf;
-        const filepath = (blk_catch_38: { break :blk_catch_38 ((std.fmt.bufPrintZ((&filepath_buf), "incremental-graph-crash-dump.{d}.html", .{ std.time.timestamp() })) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 "incremental-graph-crash-dump.html"; }); });
-        const file = (blk_catch_39: { break :blk_catch_39 ((std.fs.cwd().createFileZ(filepath, .{})) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        const filepath = (blk_catch_39: { break :blk_catch_39 ((std.fmt.bufPrintZ((&filepath_buf), "incremental-graph-crash-dump.{d}.html", .{ std.time.timestamp() })) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 "incremental-graph-crash-dump.html"; }); });
+        const file = (blk_catch_40: { break :blk_catch_40 ((std.fs.cwd().createFileZ(filepath, .{})) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         _ = Output.warn("Could not open file for dumping incremental graph: {}", .{ e });
         return; }); });
         defer {

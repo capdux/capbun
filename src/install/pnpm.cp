@@ -369,7 +369,7 @@ pub fn migratePnpmLockfile(
             root_pkg.resolutions = .{ off: range.off, len: range.len };
 
             root_pkg.@"meta".id = 0;
-            root_pkg.resolution = .init(.{ root: .{} });
+            root_pkg.resolution = .init(.{ root: undefined });
             lockfile.packages.append(allocator, root_pkg)?;
             lockfile.getOrPutID(0, root_pkg.name_hash)?;
         }

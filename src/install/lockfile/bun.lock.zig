@@ -199,7 +199,13 @@ pub fn isLessThan(self: @This(), l: PackageID, r: PackageID) bool {
                         const res = pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))];
                         _ = try writer.writeAll("\n");
                         _ = try writeIndent(writer, indent);
-                        _ = try writeWorkspaceDeps(writer, indent, @intCast(workspace_pkg_id), (if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).workspace, pkg_names, pkg_name_hashes, pkg_bins, pkg_dep_lists, buf, extern_strings, deps_buf, lockfile.workspace_versions, (&optional_peers_buf), (&pkg_map), cp_iter_slice(pkg_names[@as(usize, @intCast(workspace_pkg_id))])[@intCast(buf)..], (&path_buf));
+                        _ = try writeWorkspaceDeps(writer, indent, @intCast(workspace_pkg_id), (if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).workspace, pkg_names, pkg_name_hashes, pkg_bins, pkg_dep_lists, buf, extern_strings, deps_buf, lockfile.workspace_versions, (&optional_peers_buf), (&pkg_map), blk_str: {
+                        const str_slice = String.slice;
+                        break :blk_str str_slice((blk: {
+                        break :blk (&pkg_names[@as(usize, @intCast(workspace_pkg_id))]);
+
+}), buf);
+}, (&path_buf));
                     }
                 }
                 _ = try writer.writeByte(10);
@@ -248,7 +254,11 @@ pub fn isLessThan(_: void, l: Item, r: Item) bool {
                         const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
                         const dep = deps_buf[@as(usize, @intCast(dep_id))];
                         if ((lockfile.patched_dependencies.count() > 0)) {
-                            _ = try temp_writer.print("{s}@", .{ cp_iter_slice(pkg_name)[@intCast(buf)..] });
+                            const str_slice = String.slice;
+                            _ = try temp_writer.print("{s}@", .{ str_slice((blk: {
+                            break :blk (&pkg_name);
+
+}), buf) });
                             switch (res.tag) {
 .workspace => {
 if (lockfile.workspace_versions.get(pkg_name_hash)) |workspace_version| {
@@ -617,7 +627,11 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
             _ = &has_any;
             if ((pkg_id == 0)) {
                 _ = try writer.writeAll("\"\": {");
-                const root_name = cp_iter_slice(pkg_names[0])[@intCast(buf)..];
+                const str_slice = String.slice;
+                const root_name = str_slice((blk: {
+                break :blk (&pkg_names[0]);
+
+}), buf);
                 if ((root_name.len > 0)) {
                     _ = try writer.writeByte(10);
                     _ = try incIndent(writer, indent);
@@ -625,10 +639,17 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
                     has_any = true;
                 }
             } else {
-                _ = try writer.print("{f}: {{", .{ bun.fmt.formatJSONStringUTF8(cp_iter_slice(res)[@intCast(buf)..], .{}) });
+                const str_slice = String.slice;
+                _ = try writer.print("{f}: {{", .{ bun.fmt.formatJSONStringUTF8(str_slice((blk: {
+                break :blk (&res);
+
+}), buf), .{}) });
                 _ = try writer.writeByte(10);
                 _ = try incIndent(writer, indent);
-                _ = try writer.print("\"name\": {f}", .{ bun.fmt.formatJSONStringUTF8(cp_iter_slice(pkg_names[@as(usize, @intCast(pkg_id))])[@intCast(buf)..], .{}) });
+                _ = try writer.print("\"name\": {f}", .{ bun.fmt.formatJSONStringUTF8(str_slice((blk: {
+                break :blk (&pkg_names[@as(usize, @intCast(pkg_id))]);
+
+}), buf), .{}) });
                 if (workspace_versions.get(pkg_name_hashes[@as(usize, @intCast(pkg_id))])) |version| {
                     _ = &version;
                     _ = try writer.writeAll(",\n");

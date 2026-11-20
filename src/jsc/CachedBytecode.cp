@@ -64,6 +64,17 @@ fn vtableFree(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize)
         resize: &std.mem.Allocator.noResize,
         remap: &std.mem.Allocator.noRemap,
     };
+
+    fn allocator(*_): std.mem.Allocator {
+        return .{
+            ptr: _,
+            vtable: VTable,
+        };
+    }
+
+    static fn isInstance(allocator_: std.mem.Allocator): bool {
+        return allocator_.vtable == VTable;
+    }
 }
 
 import bun from "bun";

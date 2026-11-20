@@ -167,7 +167,10 @@ pub struct Stringifier {
                         lockfile.workspace_versions,
                         &optional_peers_buf,
                         &pkg_map,
-                        pkg_names[workspace_pkg_id].slice(buf),
+                        blk_str: {
+                            const str_slice = String.slice;
+                            break :blk_str str_slice(unsafe { &pkg_names[workspace_pkg_id] }, buf);
+                        },
                         &path_buf,
                     );
                 }
@@ -211,7 +214,8 @@ pub struct Stringifier {
                     const dep = deps_buf[dep_id];
 
                     if (lockfile.patched_dependencies.count() > 0) {
-                        temp_writer.print("{s}@", .{pkg_name.slice(buf)})?;
+                        const str_slice = String.slice;
+                        temp_writer.print("{s}@", .{str_slice(unsafe { &pkg_name }, buf)})?;
                         switch (res.tag) {
                             .workspace => {
                                 if (workspace_version := lockfile.workspace_versions.get(pkg_name_hash)) {
@@ -812,7 +816,8 @@ pub struct Stringifier {
         // need a way to detect new/deleted workspaces
         if (pkg_id == 0) {
             writer.writeAll("\"\": {")?;
-            const root_name = pkg_names[0].slice(buf);
+            const str_slice = String.slice;
+            const root_name = str_slice(unsafe { &pkg_names[0] }, buf);
             if (root_name.len > 0) {
                 writer.writeByte('\n')?;
                 incIndent(writer, indent)?;
@@ -824,13 +829,14 @@ pub struct Stringifier {
                 has_any = true;
             }
         } else {
+            const str_slice = String.slice;
             try writer.print("{f}: {{", .{
-                bun.fmt.formatJSONStringUTF8(res.slice(buf), {}),
+                bun.fmt.formatJSONStringUTF8(str_slice(unsafe { &res }, buf), {}),
             });
             writer.writeByte('\n')?;
             incIndent(writer, indent)?;
             try writer.print("\"name\": {f}", .{
-                bun.fmt.formatJSONStringUTF8(pkg_names[pkg_id].slice(buf), {}),
+                bun.fmt.formatJSONStringUTF8(str_slice(unsafe { &pkg_names[pkg_id] }, buf), {}),
             });
 
             if (version := workspace_versions.get(pkg_name_hashes[pkg_id])) {

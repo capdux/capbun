@@ -404,7 +404,7 @@ else => {
             root_pkg.dependencies = .{ .off = range.off, .len = range.len };
             root_pkg.resolutions = .{ .off = range.off, .len = range.len };
             root_pkg.@"meta".id = 0;
-            root_pkg.resolution = .init(.{ .root = .{} });
+            root_pkg.resolution = .init(.{ .root = undefined });
             _ = try lockfile.packages.append(allocator, root_pkg);
             _ = try lockfile.getOrPutID(0, root_pkg.name_hash);
         }
