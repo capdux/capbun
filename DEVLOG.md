@@ -1389,3 +1389,5 @@
 - **[2026-11-20] Wave 7 Batch A 核弹级根因修复**：`output.cp` 用 `type IoWriterPtr = *std.Io.Writer; out: *IoWriterPtr` 消除 263 处二级指针压平报错；`ref_count.cp` 以 `const empty_ctx: void = undefined` 消除 16 处 void `.{}` 报错；`ReadableStream.JSReadableStreamSource` 与 `node_zlib_binding.CompressionStream` 方法统一 `static fn` 显式接源类型指针消除 53 处绑定错；`Blob` 补全 23 项根导出、`S3Client` 补 `static fn`、`node_fs_binding` 补 6 项导出。
 
 - **[2026-11-20] Wave 7 Batch B 典型修复**：`color.cp` 29 处多重元组解构改下标访问；`TimeoutObject`/`ImmediateObject`/`Listener` 修正跨模块类型路径；`BlockList.cp` 提取数组长度常量与拆分 `try` 优先级；`uws_sys/Response.cp` 补全 `AnyResponse` 全部转发方法并消除 `NodeHTTPResponse` 6 错；`cron_parser.cp` 消除 `?? return` 错误 lowering。
+
+- **[2026-11-20] Wave 8 Batch A 典型修复**：`Blob` 用 `_BlobCloneSigs` 消除双层 `*const`、`JSSourceMap.memoryCost` 改为 `*_`，彻底清零 `ZigGeneratedClasses.zig` 剩余 2 处错误；`Sink` 升级 `@root struct`、`Store` 取消多余 `export class`；`uws_sys/Response` `_ResHandlerSigs` 补 `static fn`；`html_rewriter` 24 处 `jsUndefined()` 修正为 `js_undefined`。

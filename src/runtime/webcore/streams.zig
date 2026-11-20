@@ -91,7 +91,7 @@ pub const Start = union(enum) {
     done: ByteList,
 
 pub fn toJS(self: *const Start, globalThis: *JSGlobalObject) JSError!JSValue {
-            switch (self) {
+            switch (self.*) {
 .empty, .ready => {
 return JSValue.js_undefined;
 },
@@ -238,7 +238,9 @@ return .{ self.JSValue, WasStrong.Strong };
 return .{ self.WeakJSValue, WasStrong.Weak };
 },
 .AbortReason => |reason| {
-return .{ reason.toJS(globalObject), WasStrong.Weak };
+var r = reason;
+            _ = &r;
+            return .{ r.toJS(globalObject), WasStrong.Weak };
 },
 }
     }
@@ -413,7 +415,8 @@ pub fn run(self: *ResultPending) void {
             self.state = .used;
             switch (self.future) {
 .promise => |p| {
-_ = Result.fulfillPromise(self.result, p.promise, p.globalThis);
+const res_ptr = self.result;
+            _ = Result.fulfillPromise(res_ptr, p.promise, p.globalThis);
 },
 .handler => |h| {
 if (h.handler) |handler_fn| {
@@ -422,6 +425,25 @@ if (h.handler) |handler_fn| {
             }
 },
 }
+    }
+
+pub fn runOnNextTick(self: *ResultPending) void {
+            if ((self.state != .pending)) {
+                return;
+            }
+            const vm = jsc.VirtualMachine.get();
+            if (vm.isShuttingDown()) {
+                return;
+            }
+            const clone = bun.create(bun.default_allocator, ResultPending, self.*);
+            self.state = .none;
+            self.result = .done;
+            _ = vm.eventLoop().enqueueTask(jsc.Task.init(clone));
+    }
+
+pub fn runFromJSThread(self: *ResultPending) void {
+            _ = self.run();
+            _ = bun.destroy(self);
     }
     pub const Future = ResultPendingFuture;
     pub const Handler = ResultPendingHandler;
@@ -448,7 +470,7 @@ _ = owned.clearAndFree(default_allocator);
 _ = owned_and_done.clearAndFree(default_allocator);
 },
 .err => |e| {
-if ((e == .JSValue)) {
+if ((e.* == .JSValue)) {
                 _ = e.JSValue.unprotect();
             }
 },
@@ -677,7 +699,7 @@ pub fn init(self: *NetworkSink, task: ?*bun.S3.MultiPartUpload, signal: Signal, 
             self.cancel = cancel;
     }
 
-pub fn start(self: *NetworkSink, stream_start: *Start) sys.Maybe(void) {
+pub fn start(self: *NetworkSink, stream_start: bun.webcore.streams.Start) sys.Maybe(void) {
             if (self.ended) {
                 return .success;
             }
@@ -1214,7 +1236,7 @@ pub fn onWritable(self: *@This(), write_offset: u64, _: *UWSResponse) bool {
             return true;
     }
 
-pub fn start(self: *@This(), stream_start: *Start) bun.sys.Maybe(void) {
+pub fn start(self: *@This(), stream_start: bun.webcore.streams.Start) bun.sys.Maybe(void) {
             if (((self.aborted or (self.res == null)) or self.res.?.hasResponded())) {
                 _ = self.markDone();
                 _ = self.signal.close(null);

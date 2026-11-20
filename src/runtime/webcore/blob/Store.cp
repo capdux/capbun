@@ -90,14 +90,14 @@ export class StoreFile {
     }
 }
 
-export class StoreS3 {
-    pathlike: node.PathLike;
-    mime_type: MimeType = .other;
-    credentials: (*S3Credentials)?;
-    options: MultiPartUploadOptions = .{};
-    acl: ACL? = null;
-    storage_class: StorageClass? = null;
-    request_payer: bool = false;
+pub struct StoreS3 {
+    pathlike: node.PathLike,
+    mime_type: MimeType = .other,
+    credentials: (*S3Credentials)?,
+    options: MultiPartUploadOptions = .{},
+    acl: ACL? = null,
+    storage_class: StorageClass? = null,
+    request_payer: bool = false,
 
     pub fn isSeekable(_: *const StoreS3): bool? {
         return true;
@@ -130,7 +130,7 @@ export class StoreS3 {
     }
 
     pub fn unlink(_: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: JSValue?): JSError!JSValue {
-        let Wrapper = struct {
+        const Wrapper = struct {
             promise: JSPromise.Strong,
             store: *Store,
             global: *JSGlobalObject,
@@ -178,7 +178,7 @@ export class StoreS3 {
             return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
         }
 
-        let Wrapper = struct {
+        const Wrapper = struct {
             promise: JSPromise.Strong,
             store: *Store,
             resolvedlistOptions: S3ListObjectsOptions,
@@ -273,12 +273,12 @@ export class StoreS3 {
     }
 }
 
-export class StoreBytes {
-    ptr: [*]u8? = undefined;
-    len: SizeType = 0;
-    cap: SizeType = 0;
-    allocator: Allocator;
-    stored_name: PathString = PathString.empty;
+pub struct StoreBytes {
+    ptr: [*]u8? = undefined,
+    len: SizeType = 0,
+    cap: SizeType = 0,
+    allocator: Allocator,
+    stored_name: PathString = PathString.empty,
 
     pub static fn init(bytes: []u8, allocator: Allocator): StoreBytes {
         return StoreBytes {

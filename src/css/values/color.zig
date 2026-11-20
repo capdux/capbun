@@ -2607,13 +2607,15 @@ pub fn callback(allocator: Allocator, h: f32, w: f32, b: f32, a: f32) CssColor {
 .rgb, .rgba => parseRgb(input, (&parser)),
 .@"color-mix" => input.parseNestedBlock(CssColor, .{}, struct {
 
-pub fn parseFn(_: void, i: *css.Parser) Result(CssColor) {
+pub fn parseFn(self: @This(), _: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
+        _ = self;
             return parseColorMix(i);
     }
 }.parseFn),
 .@"light-dark" => input.parseNestedBlock(CssColor, .{}, struct {
 
-pub fn callback(_: void, i: *css.Parser) Result(CssColor) {
+pub fn callback(self: @This(), _: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
+        _ = self;
             const light = (switch ((switch (CssColor.parse(i)) {
 .result => |v| v,
 .err => |e| {
@@ -3072,8 +3074,8 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser) Result(CssC
         _ = &closure;
         const res = (switch (input.parseNestedBlock(CssColor, (&closure), struct {
 
-pub fn parseFn(self: *@This(), i: *css.Parser) Result(CssColor) {
-        _ = self;
+pub fn parseFn(c: *Closure, i: *css.Parser) Result(CssColor) {
+        _ = c;
             const @"from": ?CssColor = (if (i.tryParse(css.Parser.expectIdentMatching, .{ "from" }).isOk()) (switch (CssColor.parse(i)) {
 .result => |vv| vv,
 .err => |e| {
@@ -3242,7 +3244,6 @@ pub fn parseColorMix(input: *css.Parser) Result(CssColor) {
 .err => |e| {
 return .{ .err = e };
 },
-else => unreachable,
 });
         const R_hue = Result(HueInterpolationMethod);
         _ = &R_hue;

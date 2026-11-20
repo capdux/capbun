@@ -263,7 +263,7 @@ pub struct Context {
         let e = _.stream.init();
         if (e.isError()) {
             StreamImpl.emitError(_, globalThis, this_value, e);
-            return .false;
+            return jsc.JSValue.false;
         }
 
         const params_ = arguments[0].asArrayBuffer(globalThis).?.asU32();
@@ -276,15 +276,15 @@ pub struct Context {
             e = _.stream.setParams(@intCast(i), d);
             if (e.isError()) {
                 _.stream.close();
-                return .false;
+                return jsc.JSValue.false;
             }
         }
 
-        return .true;
+        return jsc.JSValue.true;
     }
 
     pub fn params(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn deinit(*_) {

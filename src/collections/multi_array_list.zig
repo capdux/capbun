@@ -151,7 +151,7 @@ pub fn FieldType(comptime field: Field) type {
 pub fn items(self: @This(), comptime field: Field) []FieldType(field) {
             const F = FieldType(field);
             if ((self.capacity == 0)) {
-                var empty_arr: [0]F = &.{};
+                var empty_arr: [0]F = undefined;
                 _ = &empty_arr;
                 return empty_arr[0..0];
             }

@@ -226,11 +226,13 @@ pub struct Context {
     }
 
     pub fn estimatedSize(*_): usize {
-        return @sizeOf(NativeZstd) + @as(usize, switch (_.stream.mode) {
-            .ZSTD_COMPRESS => 5272,
-            .ZSTD_DECOMPRESS => 95968,
-            else => 0,
-        });
+        let extra: usize = 0;
+        switch (_.stream.mode) {
+            .ZSTD_COMPRESS => extra = 5272,
+            .ZSTD_DECOMPRESS => extra = 95968,
+            else => {},
+        }
+        return @sizeOf(NativeZstd) + extra;
     }
 
     pub fn init(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -243,7 +245,9 @@ pub struct Context {
         const writeState_value = arguments[2];
         const processCallback_value = arguments[3];
 
-        const writeState = writeState_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
+        const writeState_opt = writeState_value.asArrayBuffer(globalThis);
+        if (writeState_opt == null) return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
+        const writeState = writeState_opt.?;
         if (writeState.typed_array_type != .Uint32Array) return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
         _.write_result = writeState.asU32().ptr;
 
@@ -258,10 +262,12 @@ pub struct Context {
         let e = _.stream.init(pledged_src_size);
         if (e.isError()) {
             StreamImpl.emitError(_, globalThis, this_value, e);
-            return .false;
+            return jsc.JSValue.false;
         }
 
-        const params_ = initParamsArray_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value);
+        const params_opt = initParamsArray_value.asArrayBuffer(globalThis);
+        if (params_opt == null) return globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value);
+        const params_ = params_opt.?;
         if (params_.typed_array_type != .Uint32Array) return globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value);
         const params_u32 = params_.asU32();
         for (i of 0..params_u32.len) {
@@ -274,11 +280,11 @@ pub struct Context {
             }
         }
 
-        return .true;
+        return jsc.JSValue.true;
     }
 
     pub fn params(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn deinit(*_) {

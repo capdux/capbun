@@ -693,12 +693,12 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
             }.callback),
             .rgb, .rgba => parseRgb(input, &parser),
             .@"color-mix" => input.parseNestedBlock(CssColor, {}, struct {
-                pub fn parseFn(_: void, i: *css.Parser): Result(CssColor) {
+                pub fn parseFn(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
                     return parseColorMix(i);
                 }
             }.parseFn),
             .@"light-dark" => input.parseNestedBlock(CssColor, {}, struct {
-                fn callback(_: void, i: *css.Parser): Result(CssColor) {
+                fn callback(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
                     const light = switch (switch (CssColor.parse(i)) {
                         .result => |v| v,
                         .err => |e| return { err: e },
@@ -2755,7 +2755,7 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser): Result(Css
     };
     const res = switch (input.parseNestedBlock(CssColor, &closure, struct {
         // https://www.w3.org/TR/css-color-4/#color-function
-        pub fn parseFn(*_, i: *css.Parser): Result(CssColor) {
+        pub static fn parseFn(c: *Closure, i: *css.Parser): Result(CssColor) {
             const @"from": CssColor? = if (i.tryParse(css.Parser.expectIdentMatching, .{"from"}).isOk())
                 switch (CssColor.parse(i)) {
                     .result => |vv| vv,
@@ -2772,12 +2772,12 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser): Result(Css
             if (f := @"from") {
                 if (f == .light_dark) {
                     const state = i.state();
-                    const light = switch (parsePredefinedRelative(i, _.p, colorspace, f.light_dark.light)) {
+                    const light = switch (parsePredefinedRelative(i, c.p, colorspace, f.light_dark.light)) {
                         .result => |vv| vv,
                         .err => |e| return { err: e },
                     };
                     i.reset(&state);
-                    const dark = switch (parsePredefinedRelative(i, _.p, colorspace, f.light_dark.dark)) {
+                    const dark = switch (parsePredefinedRelative(i, c.p, colorspace, f.light_dark.dark)) {
                         .result => |vv| vv,
                         .err => |e| return { err: e },
                     };
@@ -2798,7 +2798,7 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser): Result(Css
                 }
             }
 
-            return parsePredefinedRelative(i, _.p, colorspace, if (@"from") |*f| f else null);
+            return parsePredefinedRelative(i, c.p, colorspace, if (@"from") |*f| f else null);
         }
     }.parseFn)) {
         .result => |vv| vv,
@@ -3051,7 +3051,6 @@ pub fn parseColorMix(input: *css.Parser): Result(CssColor) {
     const method = switch (ColorSpaceName.parse(input)) {
         .result => |vv| vv,
         .err => |e| return { err: e },
-        else => unreachable,
     };
 
     const R_hue = Result(HueInterpolationMethod);

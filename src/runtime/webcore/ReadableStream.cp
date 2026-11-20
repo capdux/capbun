@@ -581,10 +581,10 @@ static fn NewSource(
                     bun.assert(flag.isBoolean());
                 }
                 _.context.setFlowing(flag == .true);
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
             }
 
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         const supports_ref = setRefUnrefFn != null;
@@ -627,7 +627,9 @@ static fn NewSource(
                 const view = arguments.ptr[0];
                 view.ensureStillAlive();
                 src.this_jsvalue = this_jsvalue;
-                let buffer = view.asArrayBuffer(globalThis) ?? return .js_undefined;
+                const buf_opt = view.asArrayBuffer(globalThis);
+                if (buf_opt == null) return jsc.JSValue.js_undefined;
+                let buffer = buf_opt.?;
                 return processResult(
                     this_jsvalue,
                     globalThis,
@@ -689,7 +691,7 @@ static fn NewSource(
                 jsc.markBinding(@src());
                 src.this_jsvalue = callFrame.this();
                 src.cancel();
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
             }
 
             pub static fn setOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!void {
@@ -742,7 +744,7 @@ static fn NewSource(
                     return val;
                 }
 
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
             }
 
             pub static fn updateRef(src: *ReadableStreamSourceType, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -752,7 +754,7 @@ static fn NewSource(
                 const ref_or_unref = callFrame.argument(0).toBoolean();
                 src.setRef(ref_or_unref);
 
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
             }
 
             static fn onClose(ptr: *!?) {
@@ -776,9 +778,10 @@ static fn NewSource(
                 src.this_jsvalue = callFrame.this();
                 let list = src.drain();
                 if (list.len > 0) {
-                    return jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
+                    let ab = jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+                    return ab.toJS(globalThis);
                 }
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
             }
 
             pub static fn text(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {

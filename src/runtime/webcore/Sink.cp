@@ -90,11 +90,11 @@ export class UTF8Fallback {
 
 type MaybeSyscallErr = Syscall.Error?;
 
-export class Sink {
-    ptr: *!;
-    vtable: VTable;
-    status: Status = Status.closed;
-    used: bool = false;
+@root struct Sink {
+    ptr: *!,
+    vtable: VTable,
+    status: Status = Status.closed,
+    used: bool = false,
 
     pub const pending = Sink{
         .ptr = @ptrFromInt(0xaaaaaaaa),
@@ -271,13 +271,13 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         const SetDestroyCallbackFn = *const fn (JSValue, usize) callconv(.c) void;
         const DetachPtrFn = *const fn (JSValue) callconv(.c) void;
 
-        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" }).*;
-        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" }).*;
-        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" }).*;
-        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" }).*;
-        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" }).*;
-        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" }).*;
-        const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" }).*;
+        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" });
+        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" });
+        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" });
+        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" });
+        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" });
+        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" });
+        const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" });
 
         pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *!, jsvalue_ptr: **void): JSValue {
             return assignToStreamExtern(globalThis, stream, ptr, jsvalue_ptr);

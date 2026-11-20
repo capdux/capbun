@@ -636,10 +636,10 @@ pub fn assertOwned(self: *@This()) void {
                 return;
             }
             if (comptime traces_enabled) {
-                _ = bun.Output.note("borrowed BabyList created here:", &.{});
+                _ = bun.Output.note("borrowed BabyList created here:", .{});
                 _ = bun.crash_handler.dumpStackTrace(self.#origin.borrowed.trace.trace(), .{ .frame_count = 10, .stop_at_jsc_llint = true });
             }
-            _ = std.debug.panic("cannot perform this operation on a BabyList that doesn't own its data", &.{});
+            _ = std.debug.panic("cannot perform this operation on a BabyList that doesn't own its data", .{});
     }
 
 pub fn list(self: @This()) std.ArrayListUnmanaged(Type) {

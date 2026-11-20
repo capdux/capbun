@@ -452,7 +452,7 @@ _ = r.onData(optional_data, wrapper.ssl_cb);
 _ = r.onData(optional_data, wrapper.tcp_cb);
 },
 .H3 => |r| {
-_ = r.onData(UserDataType, wrapper.h3_cb, optional_data);
+_ = r.onData(optional_data, wrapper.h3_cb);
 },
 }
     }
@@ -480,7 +480,7 @@ _ = r.onWritable(optional_data, wrapper.ssl_cb);
 _ = r.onWritable(optional_data, wrapper.tcp_cb);
 },
 .H3 => |r| {
-_ = r.onWritable(UserDataType, wrapper.h3_cb, optional_data);
+_ = r.onWritable(optional_data, wrapper.h3_cb);
 },
 }
     }
@@ -508,7 +508,7 @@ _ = r.onTimeout(optional_data, wrapper.ssl_cb);
 _ = r.onTimeout(optional_data, wrapper.tcp_cb);
 },
 .H3 => |r| {
-_ = r.onTimeout(UserDataType, wrapper.h3_cb, optional_data);
+_ = r.onTimeout(optional_data, wrapper.h3_cb);
 },
 }
     }
@@ -706,23 +706,19 @@ pub const ResVoidHandler = ?ResVoidHandlerFn;
 pub const ResDataHandler = ?ResDataHandlerFn;
 const _ResHandlerSigs = struct {
 
-pub fn writable(self: *@This(), _: *uws_res, _: u64, _: ?*anyopaque) callconv(.c) bool {
-        _ = self;
+pub fn writable(_: *uws_res, _: u64, _: ?*anyopaque) callconv(.c) bool {
             _ = unreachable;
     }
 
-pub fn void_cb(self: *@This(), _: *uws_res, _: ?*anyopaque) callconv(.c) void {
-        _ = self;
+pub fn void_cb(_: *uws_res, _: ?*anyopaque) callconv(.c) void {
             _ = unreachable;
     }
 
-pub fn data_cb(self: *@This(), _: *uws_res, _: [*c]const u8, _: usize, _: bool, _: ?*anyopaque) callconv(.c) void {
-        _ = self;
+pub fn data_cb(_: *uws_res, _: [*c]const u8, _: usize, _: bool, _: ?*anyopaque) callconv(.c) void {
             _ = unreachable;
     }
 
-pub fn cork_cb(self: @This(), _: ?*anyopaque) callconv(.c) void {
-        _ = self;
+pub fn cork_cb(_: ?*anyopaque) callconv(.c) void {
             _ = unreachable;
     }
 };
@@ -926,10 +922,11 @@ pub fn hasResponded(self: *@This()) bool {
     }
 
 pub fn onWritable(self: *@This(), ud: anytype, comptime handler: anytype) void {
+            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, offset: u64, user_data: ?*anyopaque) callconv(.c) bool {
-            return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast((&NewResponse(ssl_flag)), res_));
+            return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
     }
 };
             _ = uws_res_on_writable(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
@@ -940,10 +937,11 @@ pub fn clearOnWritable(self: *@This()) void {
     }
 
 pub fn onAborted(self: *@This(), ud: anytype, comptime handler: anytype) void {
+            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast((&NewResponse(ssl_flag)), res_));
+            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
     }
 };
             _ = uws_res_on_aborted(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
@@ -954,10 +952,11 @@ pub fn clearAborted(self: *@This()) void {
     }
 
 pub fn onTimeout(self: *@This(), ud: anytype, comptime handler: anytype) void {
+            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast((&NewResponse(ssl_flag)), res_));
+            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
     }
 };
             _ = uws_res_on_timeout(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
@@ -968,10 +967,11 @@ pub fn clearTimeout(self: *@This()) void {
     }
 
 pub fn onData(self: *@This(), ud: anytype, comptime handler: anytype) void {
+            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast((&NewResponse(ssl_flag)), res_), (if ((length > 0)) data[0..length] else ""), last);
+            _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), (if ((length > 0)) data[0..length] else ""), last);
     }
 };
             _ = uws_res_on_data(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
@@ -1023,11 +1023,10 @@ pub fn corked(self: *@This(), comptime handler: anytype, args_tuple: std.meta.Ar
             const Wrapper = struct {
 
 pub fn handle(user_data: ?*anyopaque) callconv(.c) void {
-            const args: Args = @ptrCast(@alignCast(user_data.?));
+            const args: *@TypeOf(args_tuple) = @ptrCast(@alignCast(user_data.?));
             _ = @call(bun.callmod_inline, handler_fn, args.*);
     }
     const handler_fn = handler;
-    const Args = (&@TypeOf(args_tuple));
 };
             _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(@constCast((&args_tuple))), Wrapper.handle);
     }

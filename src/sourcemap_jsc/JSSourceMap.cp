@@ -35,8 +35,8 @@ pub const toJS = js.toJS;
 
 @root struct JSSourceMap {
     sourcemap: *bun.SourceMap.ParsedSourceMap,
-    sources: []bun.String = &[],
-    names: []bun.String = &[],
+    sources: []bun.String = [],
+    names: []bun.String = [],
 
     static fn findSourceMap(
         globalObject: *JSGlobalObject,
@@ -90,7 +90,7 @@ pub const toJS = js.toJS;
         const instance = bun.new(JSSourceMap, {
             sourcemap: source_map,
             sources: fake_sources_array,
-            names: &[],
+            names: [],
         });
 
         return instance.toJS(globalObject);
@@ -195,7 +195,7 @@ pub const toJS = js.toJS;
         return source_map;
     }
 
-    pub fn memoryCost(): usize {
+    pub fn memoryCost(*_): usize {
         return @sizeOf(JSSourceMap) + _.sources.len * @sizeOf(bun.String) + _.sourcemap.memoryCost();
     }
 

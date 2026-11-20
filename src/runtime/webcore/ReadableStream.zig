@@ -502,9 +502,9 @@ pub fn setFlowingFromJS(self: *@This(), _: *jsc.JSGlobalObject, call_frame: *jsc
                     _ = bun.assert(flag.isBoolean());
                 }
                 _ = self.context.setFlowing((flag == .true));
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
@@ -549,7 +549,11 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                 const view = arguments.ptr[0];
                 _ = view.ensureStillAlive();
                 src.this_jsvalue = this_jsvalue;
-                var buffer = ((view.asArrayBuffer(globalThis)) orelse { return .{ .ok = .js_undefined }; });
+                const buf_opt = view.asArrayBuffer(globalThis);
+                if ((buf_opt == null)) {
+                    return jsc.JSValue.js_undefined;
+                }
+                var buffer = buf_opt.?;
                 _ = &buffer;
                 return processResult(this_jsvalue, globalThis, arguments.ptr[1], src.onPullFromJS(buffer.slice(), view));
         }
@@ -615,7 +619,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                 _ = jsc.markBinding(@src());
                 src.this_jsvalue = callFrame.this();
                 _ = src.cancel();
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
         }
     
     pub fn setOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
@@ -660,7 +664,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                     _ = &val;
                     return val;
                 }
-                return .js_undefined;
+                return jsc.JSValue.js_undefined;
         }
     
     pub fn updateRef(src: *ReadableStreamSourceType, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -669,7 +673,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                 src.this_jsvalue = callFrame.this();
                 const ref_or_unref = callFrame.argument(0).toBoolean();
                 _ = src.setRef(ref_or_unref);
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
         }
     
     pub fn onClose(ptr: ?*anyopaque) void {
@@ -694,9 +698,11 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
                 var list = src.drain();
                 _ = &list;
                 if ((list.len > 0)) {
-                    return jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
+                    var ab = jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+                    _ = &ab;
+                    return ab.toJS(globalThis);
                 }
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
         }
     
     pub fn text(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {

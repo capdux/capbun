@@ -307,7 +307,7 @@ pub fn init(self: *NativeBrotli, globalThis: *jsc.JSGlobalObject, callframe: *js
         _ = &e;
         if (e.isError()) {
             _ = StreamImpl.emitError(self, globalThis, this_value, e);
-            return error.false;
+            return jsc.JSValue.false;
         }
         const params_ = (arguments[0].asArrayBuffer(globalThis)).?.asU32();
         {
@@ -322,16 +322,16 @@ pub fn init(self: *NativeBrotli, globalThis: *jsc.JSGlobalObject, callframe: *js
                 e = self.stream.setParams(@intCast(i), d);
                 if (e.isError()) {
                     _ = self.stream.close();
-                    return error.false;
+                    return jsc.JSValue.false;
                 }
             }
         }
-        return error.true;
+        return jsc.JSValue.true;
 }
 
 pub fn params(self: *NativeBrotli, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
     _ = self;
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn deinit(self: *NativeBrotli) void {

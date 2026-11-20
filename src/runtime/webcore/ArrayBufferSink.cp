@@ -62,10 +62,10 @@ const Signal = webcore.streams.Signal;
 
     pub fn flushFromJS(*_, globalThis: *JSGlobalObject, wait: bool): sys.Maybe(JSValue) {
         if (_.streaming) {
-            const value: JSValue = switch (_.as_uint8array) {
-                true => jsc.ArrayBuffer.create(globalThis, _.bytes.slice(), .Uint8Array) catch .zero,
-                false => jsc.ArrayBuffer.create(globalThis, _.bytes.slice(), .ArrayBuffer) catch .zero,
-            };
+            const value: JSValue = if (_.as_uint8array)
+                jsc.ArrayBuffer.create(globalThis, _.bytes.slice(), .Uint8Array) catch .zero
+            else
+                jsc.ArrayBuffer.create(globalThis, _.bytes.slice(), .ArrayBuffer) catch .zero;
             _.bytes.len = 0;
             if (wait) {}
             return .{ .result = value };

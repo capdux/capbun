@@ -65,7 +65,7 @@ pub union(enum) Start {
     pub const Tag = StartTag;
 
     pub fn toJS(_: Start, globalThis: *JSGlobalObject): JSError!JSValue {
-        switch (this) {
+        switch (_.*) {
             .empty, .ready => return JSValue.js_undefined,
             .chunk_size => |chunk| return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk))),
             .err => |err| return globalThis.throwValue(try err.toJS(globalThis)),
@@ -226,7 +226,10 @@ pub union(enum) ResultStreamError {
             .Error => |err| return .{ err.toJS(globalObject) catch return .{ JSValue.zero, WasStrong.Weak }, WasStrong.Weak },
             .JSValue => return .{ this.JSValue, WasStrong.Strong },
             .WeakJSValue => return .{ this.WeakJSValue, WasStrong.Weak },
-            .AbortReason => |reason| return .{ reason.toJS(globalObject), WasStrong.Weak },
+            .AbortReason => |reason| {
+                let r = reason;
+                return .{ r.toJS(globalObject), WasStrong.Weak };
+            },
         }
     }
 }
@@ -420,7 +423,8 @@ pub struct ResultPending {
         _.state = .used;
         switch (_.future) {
             .promise => |p| {
-                Result.fulfillPromise(&_.result, p.promise, p.globalThis);
+                const res_ptr = &_.result;
+                Result.fulfillPromise(res_ptr, p.promise, p.globalThis);
             },
             .handler => |h| {
                 if (handler_fn := h.handler) {
@@ -428,6 +432,23 @@ pub struct ResultPending {
                 }
             },
         }
+    }
+
+    fn runOnNextTick(*_) {
+        if (_.state != .pending) return;
+        const vm = jsc.VirtualMachine.get();
+        if (vm.isShuttingDown()) {
+            return;
+        }
+        const clone = bun.create(bun.default_allocator, ResultPending, _.*);
+        _.state = .none;
+        _.result = .done;
+        vm.eventLoop().enqueueTask(jsc.Task.init(clone));
+    }
+
+    fn runFromJSThread(*_) {
+        _.run();
+        bun.destroy(_);
     }
 }
 
@@ -453,7 +474,7 @@ export union(enum) Result {
             .owned => |*owned| owned.clearAndFree(default_allocator),
             .owned_and_done => |*owned_and_done| owned_and_done.clearAndFree(default_allocator),
             .err => |e| {
-                if (e == .JSValue) {
+                if (e.* == .JSValue) {
                     e.JSValue.unprotect();
                 }
             },
@@ -647,7 +668,7 @@ export class NetworkSink {
     pub const name = "NetworkSink";
     pub const JSSink = Sink.JSSink(NetworkSink, name);
 
-    pub fn start(*_: *NetworkSink, stream_start: Start): sys.Maybe(void) {
+    pub fn start(*_: *NetworkSink, stream_start: bun.webcore.streams.Start): sys.Maybe(void) {
         if (this.ended) return .success;
         switch (stream_start) {
             .chunk_size => |chunk_size| {
@@ -930,7 +951,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             return true;
         }
 
-        pub fn start(this: *@This(), stream_start: Start) bun.sys.Maybe(void) {
+        pub fn start(this: *@This(), stream_start: bun.webcore.streams.Start) bun.sys.Maybe(void) {
             if (this.aborted || this.res == null || this.res.?.hasResponded()) {
                 this.markDone();
                 this.signal.close(null);

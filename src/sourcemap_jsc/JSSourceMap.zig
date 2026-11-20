@@ -82,8 +82,8 @@ pub const bun = @import("bun");
 pub const JSSourceMap = @This();
 
 sourcemap: *bun.SourceMap.ParsedSourceMap,
-sources: []bun.String = (&&.{}),
-names: []bun.String = (&&.{}),
+sources: []bun.String = &.{},
+names: []bun.String = &.{},
 
 pub fn findSourceMap(globalObject: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
         if ((!@field(@This(), "--enable-source-maps"))) {
@@ -123,13 +123,13 @@ pub fn findSourceMap(globalObject: *JSGlobalObject, callFrame: *CallFrame) bun.J
             }
         }
         const vm = globalObject.bunVM();
-        const source_map = ((vm.source_mappings.get(source_url)) orelse (({
+        const source_map = ((vm.source_mappings.get(source_url)) orelse {
         return JSValue.js_undefined;
-})));
+});
         var fake_sources_array = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.alloc(bun.String, 1)) catch |__ce_0| { _ = &__ce_0; return globalObject.throwOutOfMemory(); }); });
         _ = &fake_sources_array;
         fake_sources_array[cp_cast_int(usize, 0)] = source_url_string.dupeRef();
-        const instance = bun.new(JSSourceMap, .{ .sourcemap = source_map, .sources = fake_sources_array, .names = (&&.{}) });
+        const instance = bun.new(JSSourceMap, .{ .sourcemap = source_map, .sources = fake_sources_array, .names = &.{} });
         return instance.toJS(globalObject);
 }
 
@@ -154,9 +154,9 @@ pub fn constructor(globalObject: *JSGlobalObject, callFrame: *CallFrame, thisVal
         }
         const arena_allocator = arena_alloc.allocator();
         const mappings_opt = try payload_arg.getStringish(globalObject, "mappings");
-        const mappings_value = ((mappings_opt) orelse (({
+        const mappings_value = ((mappings_opt) orelse {
         return globalObject.throwInvalidArguments("payload 'mappings' must be a string", .{});
-})));
+});
         defer {
         _ = mappings_value.deref();
         }
@@ -227,7 +227,7 @@ pub fn constructor(globalObject: *JSGlobalObject, callFrame: *CallFrame, thisVal
         return source_map;
 }
 
-pub fn memoryCost(self: JSSourceMap) usize {
+pub fn memoryCost(self: *JSSourceMap) usize {
         return ((@sizeOf(JSSourceMap) + (self.sources.len * @sizeOf(bun.String))) + self.sourcemap.memoryCost());
 }
 

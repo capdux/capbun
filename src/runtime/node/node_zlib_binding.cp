@@ -125,7 +125,7 @@ pub fn CompressionStream(comptime T: type): type {
             stream.poll_ref.ref(vm);
             jsc.WorkPool.schedule(&stream.task);
 
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         const AsyncJob = struct {
@@ -245,12 +245,12 @@ pub fn CompressionStream(comptime T: type): type {
             }
             stream.deref();
 
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         pub static fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
             resetInternal(stream, globalThis, callframe.this());
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         static fn resetInternal(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) {
@@ -274,7 +274,7 @@ pub fn CompressionStream(comptime T: type): type {
             * = globalThis;
             * = callframe;
             closeInternal(stream);
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         static fn closeInternal(stream: *T) {
@@ -367,14 +367,16 @@ pub struct CountedKeepAlive {
     }
 }
 
+type CStr = [*:0]const u8;
+
 pub struct Error {
-    msg: [*:0]const u8?,
+    msg: CStr?,
     e: c_int,
-    code: [*:0]const u8?,
+    code: CStr?,
 
     pub const ok: Error = init(null, 0, null);
 
-    static fn init(msg: [*:0]const u8?, e: c_int, code: [*:0]const u8?): Error {
+    static fn init(msg: CStr?, e: c_int, code: CStr?): Error {
         return Error{
             msg: msg,
             e: e,

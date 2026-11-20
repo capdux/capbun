@@ -555,7 +555,7 @@ pub fn BabyList(comptime Type: type): type {
         fn assertOwned(*this): void {
             if ((comptime !safety_checks) || this.#origin == .owned) return;
             if (comptime traces_enabled) {
-                bun.Output.note("borrowed BabyList created here:", []);
+                bun.Output.note("borrowed BabyList created here:", .{});
                 bun.crash_handler.dumpStackTrace(
                     this.#origin.borrowed.trace.trace(),
                     { frame_count: 10, stop_at_jsc_llint: true },
@@ -563,7 +563,7 @@ pub fn BabyList(comptime Type: type): type {
             }
             std.debug.panic(
                 "cannot perform this operation on a BabyList that doesn't own its data",
-                [],
+                .{},
             );
         }
 

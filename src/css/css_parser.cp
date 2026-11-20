@@ -4044,17 +4044,7 @@ pub struct Parser {
     pub inline fn tryParse(*_, comptime func: auto, args_: auto): bun.@"meta".ReturnOf(func) {
         const start = _.state();
         const result = result: {
-            const args = brk: {
-                let args: std.@"meta".ArgsTuple(@TypeOf(func)) = undefined;
-                args[0] = _;
-
-                comptime let arg_idx: usize = 0;
-                inline while (arg_idx < args_.len) : (arg_idx += 1) {
-                    args[arg_idx + 1] = args_[arg_idx];
-                }
-
-                break :brk args;
-            };
+            const args = .{_} ++ args_;
 
             break :result @call(.auto, func, args);
         };
@@ -4498,7 +4488,8 @@ pub struct Parser {
             if (cached_token.token == .function) {
                 _.input.tokenizer.seeFunction(cached_token.token.function);
             }
-            break :token &cached_token.token;
+            const tok_ptr = &cached_token.token;
+            break :token tok_ptr;
         } else token: {
             const new_token = switch (_.input.tokenizer.next()) {
                 .result => |v| v,
@@ -4509,10 +4500,11 @@ pub struct Parser {
                 start_position: token_start_position,
                 end_state: _.input.tokenizer.state(),
             };
-            break :token &_.input.cached_token.?.token;
+            const tok_ptr = &_.input.cached_token.?.token;
+            break :token tok_ptr;
         };
 
-        if (block_type := BlockType.opening(&token)) {
+        if (block_type := BlockType.opening(token)) {
             _.at_start_of = block_type;
         }
 
@@ -5135,13 +5127,13 @@ struct Tokenizer {
 
         // Do all the math in f64 so that large numbers overflow to +/-inf
         // and i32::{MIN, MAX} are within range.
-        const has_sign: bool, const sign: f64 = brk: {
-            switch (_.nextByteUnchecked()) {
-                '-' => break :brk .{ true, -1.0 },
-                '+' => break :brk .{ true, 1.0 },
-                else => break :brk .{ false, 1.0 },
-            }
-        };
+        let has_sign: bool = false;
+        let sign: f64 = 1.0;
+        switch (_.nextByteUnchecked()) {
+            '-' => { has_sign = true; sign = -1.0; },
+            '+' => { has_sign = true; sign = 1.0; },
+            else => {},
+        }
 
         if (has_sign) _.advance(1);
 
@@ -5188,13 +5180,13 @@ struct Tokenizer {
             })) {
                 is_integer = false;
                 _.advance(1);
-                const has_sign2: bool, const sign2: f64 = brk: {
-                    switch (_.nextByteUnchecked()) {
-                        '-' => break :brk .{ true, -1.0 },
-                        '+' => break :brk .{ true, 1.0 },
-                        else => break :brk .{ false, 1.0 },
-                    }
-                };
+                let has_sign2: bool = false;
+                let sign2: f64 = 1.0;
+                switch (_.nextByteUnchecked()) {
+                    '-' => { has_sign2 = true; sign2 = -1.0; },
+                    '+' => { has_sign2 = true; sign2 = 1.0; },
+                    else => {},
+                }
 
                 if (has_sign2) _.advance(1);
 
@@ -5842,7 +5834,7 @@ struct Tokenizer {
     /// 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding
     /// 10xxxxxx  0x80..0xBF   Continuation byte: one of 1-3 bytes following the first <--
     fn consumeContinuationByte(*_) {
-        if (bun.Environment.allow_assert) std.debug.assert(_.nextByteUnchecked() & 0xC0 == 0x80);
+        if (bun.Environment.allow_assert) std.debug.assert((_.nextByteUnchecked() & 0xC0) == 0x80);
         // Continuation bytes contribute to column overcount. Note
         // that due to the special case for the 4-byte sequence intro,
         // we must use wrapping add here.
@@ -5860,7 +5852,7 @@ struct Tokenizer {
     /// 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding <--
     /// 10xxxxxx  0x80..0xBF   Continuation byte: one of 1-3 bytes following the first
     fn consume4byteIntro(*_) {
-        if (bun.Environment.allow_assert) std.debug.assert(_.nextByteUnchecked() & 0xF0 == 0xF0);
+        if (bun.Environment.allow_assert) std.debug.assert((_.nextByteUnchecked() & 0xF0) == 0xF0);
         // This takes two UTF-16 characters to represent, so we
         // actually have an undercount.
         // this.current_line_start_position = self.current_line_start_position.wrapping_sub(1);
@@ -5910,7 +5902,8 @@ struct Tokenizer {
             // Each byte must either be an ASCII byte or a sequence
             // leader, but not a 4-byte leader; also newlines are
             // rejected.
-            for (i of 0..n) {
+            let i: usize = 0;
+            while (i < n) : (i += 1) {
                 const b = _.byteAt(i);
                 std.debug.assert(std.ascii.isAscii(b) || (b & 0xF0 != 0xF0 && b & 0xC0 != 0x80));
                 std.debug.assert(b != '\r' && b != '\n' && b != '\x0C');
@@ -6204,10 +6197,11 @@ pub union(TokenKind) Token {
         };
     }
 
-    pub fn format(
+    pub static fn format(
+        tok: *const Token,
         writer: *std.Io.Writer,
     )! {
-        return switch (_.*) {
+        return switch (tok.*) {
             .ident => |value| try serializer.serializeIdentifier(value, writer),
             .at_keyword => |value| {
                 writer.writeByte('@')?;

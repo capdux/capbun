@@ -109,11 +109,7 @@ pub fn flush(self: *ArrayBufferSink) sys.Maybe(void) {
 
 pub fn flushFromJS(self: *ArrayBufferSink, globalThis: *JSGlobalObject, wait: bool) sys.Maybe(JSValue) {
         if (self.streaming) {
-            const value: JSValue = (switch (self.as_uint8array) {
-true => (blk_catch_1: { break :blk_catch_1 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .Uint8Array)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); }),
-false => (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .ArrayBuffer)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); }),
-else => unreachable,
-});
+            const value: JSValue = (if (self.as_uint8array) (blk_catch_1: { break :blk_catch_1 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .Uint8Array)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); }) else (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.create(globalThis, self.bytes.slice(), .ArrayBuffer)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); }));
             self.bytes.len = 0;
             if (wait) {
             }

@@ -1126,7 +1126,8 @@ pub const InternalRequest = struct {
     refcount: u32 = 0,
     created_at: u32 = std.math.maxInt(u32),
     valid: bool = true,
-    libinfo: if (Environment.isMac) MacAsyncDNS else void = (if (Environment.isMac) .{} else null),
+    libinfo: if (Environment.isMac) MacAsyncDNS else void = (if (Environment.isMac) .{} else ({
+})),
     can_retry_for_addrconfig: bool = default_hints.flags.ADDRCONFIG,
 
 pub fn isExpired(self: *InternalRequest, timestamp_to_store: *u32) bool {
@@ -1224,15 +1225,12 @@ pub fn deleteEntryAt(self: *InternalGlobalCache, len: usize, i: usize) ?*Interna
 
 pub fn remove(self: *InternalGlobalCache, entry: *InternalRequest) void {
             const len = self.len;
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_0 = len;
-                while (i < __end_0) : (i += 1) {
-                    if ((self.cache[@as(usize, @intCast(i))] == entry)) {
-                        _ = self.deleteEntryAt(len, i);
-                        return;
-                    }
+            var i: usize = 0;
+            _ = &i;
+            while ((i < len)) : (i = (i + 1)) {
+                if ((self.cache[@as(usize, @intCast(i))] == entry)) {
+                    _ = self.deleteEntryAt(len, i);
+                    return;
                 }
             }
     }
@@ -1353,8 +1351,8 @@ pub fn processResults(info: *std.c.addrinfo) []InternalResultEntry {
             {
                 var idx: i32 = 0;
                 _ = &idx;
-                const __end_2 = count;
-                while (idx < __end_2) : (idx += 1) {
+                const __end_1 = count;
+                while (idx < __end_1) : (idx += 1) {
                     if ((results[@as(usize, @intCast(idx))].info.family == want)) {
                         continue;
                     }
@@ -1363,8 +1361,8 @@ pub fn processResults(info: *std.c.addrinfo) []InternalResultEntry {
                     {
                         var j: i32 = (idx + 1);
                         _ = &j;
-                        const __end_3 = count;
-                        while (j < __end_3) : (j += 1) {
+                        const __end_2 = count;
+                        while (j < __end_2) : (j += 1) {
                             if ((results[@as(usize, @intCast(j))].info.family == want)) {
                                 _ = std.mem.swap(InternalResultEntry, (&results[@as(usize, @intCast(idx))]), (&results[@as(usize, @intCast(j))]));
                                 want = (if ((want == std.c.AF.INET6)) std.c.AF.INET else std.c.AF.INET6);
@@ -2865,7 +2863,7 @@ pub fn doResolveCAres(self: *Resolver, comptime cares_type: type, comptime type_
 .result => |res| res,
 .err => |err| {
 {
-                const syscall_name = std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] });
+                const syscall_name = (comptime std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] }));
                 var __syscall_name_moved = false; _ = &__syscall_name_moved;
                 defer if (!__syscall_name_moved) { const __T = @TypeOf(syscall_name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = syscall_name.release() catch {}; } else { syscall_name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = syscall_name; _drop_val.release(); } };
                 return globalThis.throwValue(try err.toJSWithSyscall(globalThis, syscall_name));

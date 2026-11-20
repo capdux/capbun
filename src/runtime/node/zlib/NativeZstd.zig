@@ -31,7 +31,6 @@ pub const Err = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -274,19 +273,20 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
 }
 
 pub fn estimatedSize(self: *NativeZstd) usize {
-        return (@sizeOf(NativeZstd) + (if (comptime @typeInfo(@TypeOf((switch (self.stream.mode) {
-.ZSTD_COMPRESS => 5272,
-.ZSTD_DECOMPRESS => 95968,
-else => 0,
-}))) == .@"enum") cp_cast_int(usize, @intFromEnum((switch (self.stream.mode) {
-.ZSTD_COMPRESS => 5272,
-.ZSTD_DECOMPRESS => 95968,
-else => 0,
-}))) else cp_cast_int(usize, (switch (self.stream.mode) {
-.ZSTD_COMPRESS => 5272,
-.ZSTD_DECOMPRESS => 95968,
-else => 0,
-}))));
+        var extra: usize = 0;
+        _ = &extra;
+        switch (self.stream.mode) {
+.ZSTD_COMPRESS => {
+extra = 5272;
+},
+.ZSTD_DECOMPRESS => {
+extra = 95968;
+},
+else => {
+
+},
+}
+        return (@sizeOf(NativeZstd) + extra);
 }
 
 pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -299,7 +299,11 @@ pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         const pledgedSrcSize_value = arguments[1];
         const writeState_value = arguments[2];
         const processCallback_value = arguments[3];
-        const writeState = ((writeState_value.asArrayBuffer(globalThis)) orelse { return .{ .ok = globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value) }; });
+        const writeState_opt = writeState_value.asArrayBuffer(globalThis);
+        if ((writeState_opt == null)) {
+            return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
+        }
+        const writeState = writeState_opt.?;
         if ((writeState.typed_array_type != .Uint32Array)) {
             return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
         }
@@ -315,9 +319,13 @@ pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         _ = &e;
         if (e.isError()) {
             _ = StreamImpl.emitError(self, globalThis, this_value, e);
-            return error.false;
+            return jsc.JSValue.false;
         }
-        const params_ = ((initParamsArray_value.asArrayBuffer(globalThis)) orelse { return .{ .ok = globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value) }; });
+        const params_opt = initParamsArray_value.asArrayBuffer(globalThis);
+        if ((params_opt == null)) {
+            return globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value);
+        }
+        const params_ = params_opt.?;
         if ((params_.typed_array_type != .Uint32Array)) {
             return globalThis.throwInvalidArgumentTypeValue("initParamsArray", "Uint32Array", initParamsArray_value);
         }
@@ -338,12 +346,12 @@ pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
                 }
             }
         }
-        return error.true;
+        return jsc.JSValue.true;
 }
 
 pub fn params(self: *NativeZstd, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
     _ = self;
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn deinit(self: *NativeZstd) void {

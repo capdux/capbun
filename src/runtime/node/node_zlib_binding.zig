@@ -71,11 +71,11 @@ pub fn deinit(self: *CountedKeepAlive) void {
 };
 
 pub const Error = struct {
-    msg: ?[*:0]u8,
+    msg: ?CStr,
     e: c_int,
-    code: ?[*:0]u8,
+    code: ?CStr,
 
-pub fn init(msg: ?[*:0]u8, e: c_int, code: ?[*:0]u8) Error {
+pub fn init(msg: ?CStr, e: c_int, code: ?CStr) Error {
             return Error{ .msg = msg, .e = e, .code = code };
     }
 
@@ -85,6 +85,7 @@ pub fn isError(self: Error) bool {
     pub const ok: Error = Error.init(null, 0, null);
 };
 
+const CStr = [*:0]u8;
 const debug = bun.Output.scoped(.zlib, .hidden);
 pub const NativeZlib = jsc.Codegen.JSNativeZlib.getConstructor;
 pub const NativeBrotli = jsc.Codegen.JSNativeBrotli.getConstructor;
@@ -208,7 +209,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             stream.task = .{ .callback = (&AsyncJob.runTask) };
             _ = stream.poll_ref.ref(vm);
             _ = jsc.WorkPool.schedule((&stream.task));
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn runFromJSThread(stream: *T) void {
@@ -303,12 +304,12 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
                 stream.write_in_progress = false;
             }
             _ = stream.deref();
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) jsc.JSValue {
             _ = resetInternal(stream, globalThis, callframe.this());
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn resetInternal(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) void {
@@ -330,7 +331,7 @@ pub fn close(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             _ = &globalThis;
             _ = &callframe;
             _ = closeInternal(stream);
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn closeInternal(stream: *T) void {

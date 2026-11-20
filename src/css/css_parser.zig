@@ -872,17 +872,7 @@ if ((!ignore_errors)) {
 pub inline fn tryParse(self: *Parser, comptime func: anytype, args_: anytype) bun.@"meta".ReturnOf(func) {
             const start = self.state();
             const result = result: {
-            const args = brk: {
-            var args: std.@"meta".ArgsTuple(@TypeOf(func)) = undefined;
-            _ = &args;
-            args[cp_cast_int(usize, 0)] = self;
-            comptime var arg_idx: usize = 0;
-            _ = &arg_idx;
-            inline while ((arg_idx < args_.len)) : (arg_idx = (arg_idx + 1)) {
-                args[cp_cast_int(usize, (arg_idx + 1))] = args_[@as(usize, @intCast(arg_idx))];
-            }
-            break :brk args;
-};
+            const args = (.{ self } ++ args_);
             break :result @call(.auto, func, args);
 };
             if ((result == .err)) {
@@ -1394,7 +1384,8 @@ pub fn nextIncludingWhitespaceAndComments(self: *Parser) Result(*Token) {
             if ((cached_token.token == .function)) {
                 _ = self.input.tokenizer.seeFunction(cached_token.token.function);
             }
-            break :token cached_token.token;
+            const tok_ptr = cached_token.token;
+            break :token tok_ptr;
 } else token: {
             const new_token = (switch (self.input.tokenizer.next()) {
 .result => |v| v,
@@ -1403,9 +1394,10 @@ return .{ .err = self.newError(BasicParseErrorKind.end_of_input) };
 },
 });
             self.input.cached_token = CachedToken{ .token = new_token, .start_position = token_start_position, .end_state = self.input.tokenizer.state() };
-            break :token self.input.cached_token.?.token;
+            const tok_ptr = self.input.cached_token.?.token;
+            break :token tok_ptr;
 });
-            if (BlockType.opening((&token))) |block_type| {
+            if (BlockType.opening(token)) |block_type| {
                 _ = &block_type;
                 self.at_start_of = block_type;
             }
@@ -1986,15 +1978,23 @@ return;
     }
 
 pub fn consumeNumeric(self: *Tokenizer) Token {
-            const has_sign: bool = undefined;
-            const sign: f64 = brk: {
-            break :brk (switch (self.nextByteUnchecked()) {
-'-' => break :brk .{ true, -1.0 },
-'+' => break :brk .{ true, 1.0 },
-else => break :brk .{ false, 1.0 },
-});
+            var has_sign: bool = false;
+            _ = &has_sign;
+            var sign: f64 = 1.0;
+            _ = &sign;
+            switch (self.nextByteUnchecked()) {
+'-' => {
+has_sign = true;
+            sign = -1.0;
+},
+'+' => {
+has_sign = true;
+            sign = 1.0;
+},
+else => {
 
-};
+},
+}
             if (has_sign) {
                 _ = self.advance(1);
             }
@@ -2046,15 +2046,23 @@ else => false,
 })))) {
                     is_integer = false;
                     _ = self.advance(1);
-                    const has_sign2: bool = undefined;
-                    const sign2: f64 = brk: {
-                    break :brk (switch (self.nextByteUnchecked()) {
-'-' => break :brk .{ true, -1.0 },
-'+' => break :brk .{ true, 1.0 },
-else => break :brk .{ false, 1.0 },
-});
+                    var has_sign2: bool = false;
+                    _ = &has_sign2;
+                    var sign2: f64 = 1.0;
+                    _ = &sign2;
+                    switch (self.nextByteUnchecked()) {
+'-' => {
+has_sign2 = true;
+                    sign2 = -1.0;
+},
+'+' => {
+has_sign2 = true;
+                    sign2 = 1.0;
+},
+else => {
 
-};
+},
+}
                     if (has_sign2) {
                         _ = self.advance(1);
                     }
@@ -2679,14 +2687,14 @@ pub fn consumeNewline(self: *Tokenizer) void {
 
 pub fn consumeContinuationByte(self: *Tokenizer) void {
             if (bun.Environment.allow_assert) {
-                _ = std.debug.assert((self.nextByteUnchecked() & (192 == 128)));
+                _ = std.debug.assert(((self.nextByteUnchecked() & 192) == 128));
             }
             self.position = (self.position + 1);
     }
 
 pub fn consume4byteIntro(self: *Tokenizer) void {
             if (bun.Environment.allow_assert) {
-                _ = std.debug.assert((self.nextByteUnchecked() & (240 == 240)));
+                _ = std.debug.assert(((self.nextByteUnchecked() & 240) == 240));
             }
             self.position = (self.position + 1);
     }
@@ -2721,15 +2729,12 @@ pub fn startsWith(self: *Tokenizer, comptime needle: []const u8) bool {
 
 pub fn advance(self: *Tokenizer, n: usize) void {
             if (bun.Environment.allow_assert) {
-                {
-                    var i: i32 = 0;
-                    _ = &i;
-                    const __end_2 = n;
-                    while (i < __end_2) : (i += 1) {
-                        const b = self.byteAt(i);
-                        _ = std.debug.assert((std.ascii.isAscii(b) or ((b & (240 != 240)) and (b & (192 != 128)))));
-                        _ = std.debug.assert((((b != 13) and (b != 10)) and (b != 12)));
-                    }
+                var i: usize = 0;
+                _ = &i;
+                while ((i < n)) : (i = (i + 1)) {
+                    const b = self.byteAt(i);
+                    _ = std.debug.assert((std.ascii.isAscii(b) or ((b & (240 != 240)) and (b & (192 != 128)))));
+                    _ = std.debug.assert((((b != 13) and (b != 10)) and (b != 12)));
                 }
             }
             self.position = (self.position + n);
@@ -2834,8 +2839,8 @@ else => false,
 });
     }
 
-pub fn format(self: *Token, writer: *std.Io.Writer) !void {
-            return (switch (self.*) {
+pub fn format(tok: *const Token, writer: *std.Io.Writer) !void {
+            return (switch (tok.*) {
 .ident => |value| try serializer.serializeIdentifier(value, writer),
 .at_keyword => |value| {
 {
@@ -3551,8 +3556,8 @@ pub fn integer(comptime T: type, self: T, dest: *Printer) PrintErr!void {
 pub fn float32(self: to_css, writer: *Printer) !void {
             var scratch: [129]u8 = undefined;
             _ = &scratch;
-            const _tmp_v5 = try dtoa_short((&scratch), self, 6);
-            var str = cp_unpack_elem(_tmp_v5, 0);
+            const _tmp_v4 = try dtoa_short((&scratch), self, 6);
+            var str = cp_unpack_elem(_tmp_v4, 0);
             _ = &str;
             return writer.writeAll(str);
     }
@@ -6317,8 +6322,8 @@ else => null,
         {
             var i: i32 = 1;
             _ = &i;
-            const __end_8 = len;
-            while (i < __end_8) : (i += 1) {
+            const __end_7 = len;
+            while (i < __end_7) : (i += 1) {
                 if ((buf[@as(usize, @intCast(i))] == 46)) {
                     _ = bun.debugAssert((_pos_dot == null));
                     _pos_dot = @intCast(i);
@@ -6376,8 +6381,8 @@ else => null,
             {
                 var i: i32 = new_coeff_end;
                 _ = &i;
-                const __end_9 = pos_dot;
-                while (i < __end_9) : (i += 1) {
+                const __end_8 = pos_dot;
+                while (i < __end_8) : (i += 1) {
                     buf[cp_cast_int(usize, i)] = 48;
                 }
             }
@@ -6407,8 +6412,8 @@ else => null,
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_10 = exp_len;
-                    while (i < __end_10) : (i += 1) {
+                    const __end_9 = exp_len;
+                    while (i < __end_9) : (i += 1) {
                         buf[cp_cast_int(usize, (new_coeff_end + i))] = buf[@as(usize, @intCast((posexp + i)))];
                     }
                 }

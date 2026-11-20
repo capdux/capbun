@@ -1265,7 +1265,7 @@ pub struct InternalRequest {
     refcount: u32 = 0,
     created_at: u32 = std.math.maxInt(u32),
     valid: bool = true,
-    libinfo: if (Environment.isMac) MacAsyncDNS else void = if (Environment.isMac) .{},
+    libinfo: if (Environment.isMac) MacAsyncDNS else void = if (Environment.isMac) .{} else {},
     can_retry_for_addrconfig: bool = default_hints.flags.ADDRCONFIG,
 
     pub fn isExpired(_: *InternalRequest, timestamp_to_store: *u32): bool {
@@ -1359,7 +1359,8 @@ pub struct InternalGlobalCache {
 
     pub fn remove(_: *This, entry: *InternalRequest) {
         const len = _.len;
-        for (i of 0..len) {
+        let i: usize = 0;
+        while (i < len) : (i += 1) {
             if (_.cache[i] == entry) {
                 * = _.deleteEntryAt(len, i);
                 return;
@@ -2982,7 +2983,7 @@ pub struct Resolver {
         let channel: *c_ares.Channel = switch (_.getChannel()) {
             .result => |res| res,
             .err => |err| {
-                const syscall_name = std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] });
+                const syscall_name = comptime std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] });
                 return globalThis.throwValue(try err.toJSWithSyscall(globalThis, syscall_name));
             },
         };

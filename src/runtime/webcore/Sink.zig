@@ -139,63 +139,61 @@ pub fn writeUTF16(self: *const UTF8Fallback, comptime Ctx: type, ctx: *Ctx, inpu
     }
 };
 
-pub const Sink = struct {
-    ptr: *anyopaque,
-    vtable: VTable,
-    status: Status = Status.closed,
-    used: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.status = Status.closed; self_ptr.used = false; return self_ptr; }
+pub const Sink = @This();
 
-pub fn initWithType(self: *const Sink, comptime Type: type, handler: *Type) *Sink {
-        _ = self;
-            return .{ .ptr = @ptrCast(handler), .vtable = VTable.wrap(Type), .status = .ready, .used = false };
-    }
+ptr: *anyopaque,
+vtable: VTable,
+status: Status = Status.closed,
+used: bool = false,
 
-pub fn init(handler: anytype) *Sink {
-            return initWithType(meta.Child(@TypeOf(handler)), handler);
-    }
+pub fn initWithType(comptime Type: type, handler: *Type) Sink {
+        return .{ .ptr = @ptrCast(handler), .vtable = VTable.wrap(Type), .status = .ready, .used = false };
+}
+
+pub fn init(handler: anytype) Sink {
+        return initWithType(meta.Child(@TypeOf(handler)), handler);
+}
 
 pub fn end(self: *Sink, err: ?Syscall.Error) sys.Maybe(void) {
-            if ((self.status == .closed)) {
-                return .success;
-            }
-            self.status = .closed;
-            return self.vtable.end(self.ptr, err);
-    }
+        if ((self.status == .closed)) {
+            return .success;
+        }
+        self.status = .closed;
+        return self.vtable.end(self.ptr, err);
+}
 
 pub fn writeLatin1(self: *Sink, data: streams.Result) streams.Result.Writable {
-            if ((self.status == .closed)) {
-                return .{ .done = .{} };
-            }
-            const res = self.vtable.writeLatin1(self.ptr, data);
-            self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
-            self.used = true;
-            return res;
-    }
+        if ((self.status == .closed)) {
+            return .{ .done = .{} };
+        }
+        const res = self.vtable.writeLatin1(self.ptr, data);
+        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.used = true;
+        return res;
+}
 
 pub fn writeBytes(self: *Sink, data: streams.Result) streams.Result.Writable {
-            if ((self.status == .closed)) {
-                return .{ .done = .{} };
-            }
-            const res = self.vtable.write(self.ptr, data);
-            self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
-            self.used = true;
-            return res;
-    }
+        if ((self.status == .closed)) {
+            return .{ .done = .{} };
+        }
+        const res = self.vtable.write(self.ptr, data);
+        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.used = true;
+        return res;
+}
 
 pub fn writeUTF16(self: *Sink, data: streams.Result) streams.Result.Writable {
-            if ((self.status == .closed)) {
-                return .{ .done = .{} };
-            }
-            const res = self.vtable.writeUTF16(self.ptr, data);
-            self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
-            self.used = true;
-            return res;
-    }
+        if ((self.status == .closed)) {
+            return .{ .done = .{} };
+        }
+        const res = self.vtable.writeUTF16(self.ptr, data);
+        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.used = true;
+        return res;
+}
 
 pub fn write(self: *Sink, data: Data) streams.Result.Writable {
-            switch (data) {
+        switch (data) {
 .utf16 => |str| {
 return self.writeUTF16(str);
 },
@@ -206,57 +204,55 @@ return self.writeLatin1(str);
 return self.writeBytes(bytes);
 },
 }
-    }
-    pub const pending = Sink{ .ptr = @ptrFromInt(2863311530), .vtable = undefined };
-    pub const Status = enum {
-            ready,
-            closed,
-        };
-    pub const Data = union(enum) {
-        utf16: streams.Result,
-        latin1: streams.Result,
-        bytes: streams.Result,
+}
+pub const pending = Sink{ .ptr = @ptrFromInt(2863311530), .vtable = undefined };
+pub const Status = enum {
+        ready,
+        closed,
     };
-    pub const VTable = struct {
-        connect: ConnectFn,
-        write: WriteUTF8Fn,
-        writeLatin1: WriteLatin1Fn,
-        writeUTF16: WriteUTF16Fn,
-        end: EndFn,
-    
-    pub fn wrap(comptime Wrapped: type) VTable {
-                const Functions = struct {
-    
-    pub fn onWrite(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
-                return Wrapped.write(cast(*Wrapped, ctx), data);
-        }
-    
-    pub fn onConnect(ctx: *anyopaque, signal: streams.Signal) sys.Maybe(void) {
-                return Wrapped.connect(cast(*Wrapped, ctx), signal);
-        }
-    
-    pub fn onWriteLatin1(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
-                return Wrapped.writeLatin1(cast(*Wrapped, ctx), data);
-        }
-    
-    pub fn onWriteUTF16(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
-                return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
-        }
-    
-    pub fn onEnd(ctx: *anyopaque, err: ?Syscall.Error) sys.Maybe(void) {
-                return Wrapped.end(cast(*Wrapped, ctx), err);
-        }
-    };
-                return VTable{ .write = Functions.onWrite, .writeLatin1 = Functions.onWriteLatin1, .writeUTF16 = Functions.onWriteUTF16, .end = Functions.onEnd, .connect = Functions.onConnect };
-        }
-        pub const WriteUTF16Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-        pub const WriteUTF8Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-        pub const WriteLatin1Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-        pub const EndFn = *const fn (*anyopaque, MaybeSyscallErr) sys.Maybe(void);
-        pub const ConnectFn = *const fn (*anyopaque, streams.Signal) sys.Maybe(void);
-    };
+pub const Data = union(enum) {
+    utf16: streams.Result,
+    latin1: streams.Result,
+    bytes: streams.Result,
 };
+pub const VTable = struct {
+    connect: ConnectFn,
+    write: WriteUTF8Fn,
+    writeLatin1: WriteLatin1Fn,
+    writeUTF16: WriteUTF16Fn,
+    end: EndFn,
 
+pub fn wrap(comptime Wrapped: type) VTable {
+            const Functions = struct {
+
+pub fn onWrite(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
+            return Wrapped.write(cast(*Wrapped, ctx), data);
+    }
+
+pub fn onConnect(ctx: *anyopaque, signal: streams.Signal) sys.Maybe(void) {
+            return Wrapped.connect(cast(*Wrapped, ctx), signal);
+    }
+
+pub fn onWriteLatin1(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
+            return Wrapped.writeLatin1(cast(*Wrapped, ctx), data);
+    }
+
+pub fn onWriteUTF16(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
+            return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
+    }
+
+pub fn onEnd(ctx: *anyopaque, err: ?Syscall.Error) sys.Maybe(void) {
+            return Wrapped.end(cast(*Wrapped, ctx), err);
+    }
+};
+            return VTable{ .write = Functions.onWrite, .writeLatin1 = Functions.onWriteLatin1, .writeUTF16 = Functions.onWriteUTF16, .end = Functions.onEnd, .connect = Functions.onConnect };
+    }
+    pub const WriteUTF16Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const WriteUTF8Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const WriteLatin1Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const EndFn = *const fn (*anyopaque, MaybeSyscallErr) sys.Maybe(void);
+    pub const ConnectFn = *const fn (*anyopaque, streams.Signal) sys.Maybe(void);
+};
 const MaybeSyscallErr = ?Syscall.Error;
 pub const ArrayBufferSink = ArrayBufferSinkMod;
 const Syscall = sys;
@@ -305,13 +301,13 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
         const SetDestroyCallbackFn = *const *const fn(JSValue, usize) callconv(.c) void;
         const DetachPtrFn = *const *const fn(JSValue) callconv(.c) void;
 
-        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" }).*;
-        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" }).*;
-        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" }).*;
-        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" }).*;
-        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" }).*;
-        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" }).*;
-        const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" }).*;
+        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" });
+        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" });
+        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" });
+        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" });
+        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" });
+        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" });
+        const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" });
 
         pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *anyopaque, jsvalue_ptr: **void) JSValue {
             return assignToStreamExtern(globalThis, stream, ptr, jsvalue_ptr);

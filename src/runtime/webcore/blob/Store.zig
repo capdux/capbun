@@ -109,8 +109,6 @@ pub const StoreS3 = struct {
     acl: ?ACL = null,
     storage_class: ?StorageClass = null,
     request_payer: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.mime_type = .other; self_ptr.options = .{}; self_ptr.acl = null; self_ptr.storage_class = null; self_ptr.request_payer = false; return self_ptr; }
 
 pub fn isSeekable(self: *const StoreS3) ?bool {
         _ = self;
@@ -151,7 +149,7 @@ pub fn path(self: *const StoreS3) []const u8 {
     }
 
 pub fn unlink(self: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: ?JSValue) JSError!JSValue {
-            var Wrapper = struct {
+            const Wrapper = struct {
     promise: JSPromise.Strong,
     store: *Store,
     global: *JSGlobalObject,
@@ -179,7 +177,6 @@ pub fn deinit(wrap: *@This()) void {
             _ = destroy(wrap);
     }
 };
-            _ = &Wrapper;
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
             var value = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
@@ -202,7 +199,7 @@ pub fn listObjects(self: *const StoreS3, store: *Store, globalThis: *JSGlobalObj
             if (((!listOptions.isEmptyOrUndefinedOrNull()) and (!listOptions.isObject()))) {
                 return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
             }
-            var Wrapper = struct {
+            const Wrapper = struct {
     promise: JSPromise.Strong,
     store: *Store,
     resolvedlistOptions: S3ListObjectsOptions,
@@ -236,7 +233,6 @@ pub fn deinit(wrap: *@This()) void {
             _ = destroy(wrap);
     }
 };
-            _ = &Wrapper;
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
             var value = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
@@ -257,12 +253,12 @@ pub fn deinit(wrap: *@This()) void {
             return value;
     }
 
-pub fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: ?MimeType, credentials: *S3Credentials) *StoreS3 {
+pub fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: ?MimeType, credentials: *S3Credentials) StoreS3 {
             _ = credentials.ref();
             return StoreS3{ .credentials = credentials, .pathlike = pathlike, .mime_type = ((mime_type) orelse (.other)), .options = .{}, .acl = null, .storage_class = null, .request_payer = false };
     }
 
-pub fn init(pathlike: node.PathLike, mime_type: ?MimeType, credentials: S3Credentials) *StoreS3 {
+pub fn init(pathlike: node.PathLike, mime_type: ?MimeType, credentials: S3Credentials) StoreS3 {
             return StoreS3{ .credentials = credentials.dupe(), .pathlike = pathlike, .mime_type = ((mime_type) orelse (.other)), .options = .{}, .acl = null, .storage_class = null, .request_payer = false };
     }
 
@@ -295,14 +291,12 @@ pub const StoreBytes = struct {
     cap: SizeType = 0,
     allocator: Allocator,
     stored_name: PathString = PathString.empty,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.ptr = undefined; self_ptr.len = 0; self_ptr.cap = 0; self_ptr.stored_name = PathString.empty; return self_ptr; }
 
-pub fn init(bytes: []u8, allocator: Allocator) *StoreBytes {
+pub fn init(bytes: []u8, allocator: Allocator) StoreBytes {
             return StoreBytes{ .ptr = bytes.ptr, .len = @as(SizeType, @truncate(bytes.len)), .cap = @as(SizeType, @truncate(bytes.len)), .allocator = allocator, .stored_name = PathString.empty };
     }
 
-pub fn initEmptyWithName(name: PathString, allocator: Allocator) *StoreBytes {
+pub fn initEmptyWithName(name: PathString, allocator: Allocator) StoreBytes {
             return StoreBytes{ .ptr = null, .len = 0, .cap = 0, .allocator = allocator, .stored_name = name };
     }
 
@@ -566,9 +560,9 @@ pub fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator) !*Store
     pub const Bytes = StoreBytes;
     pub const Map = std.HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
     pub const Data = union(enum) {
-        bytes: *StoreBytes,
+        bytes: StoreBytes,
         file: *StoreFile,
-        s3: *StoreS3,
+        s3: StoreS3,
     };
     pub const SerializeTag = enum(u8) {
             file = 0,

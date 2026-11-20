@@ -92,7 +92,7 @@ pub fn setup(self: *ByteStream) void {
 
 pub fn onStart(self: *ByteStream) streams.Start {
         if ((self.has_received_last_chunk and (self.buffer.items.len == 0))) {
-            return .{ .empty = .{} };
+            return .empty;
         }
         if (self.has_received_last_chunk) {
             var buffer = self.buffer.moveToUnmanaged();

@@ -1,9 +1,9 @@
 
 const _ResHandlerSigs = struct {
-    pub fn writable(_: *uws_res, _: u64, _: *!?) callconv(.c) bool { unreachable; }
-    pub fn void_cb(_: *uws_res, _: *!?) callconv(.c) void { unreachable; }
-    pub fn data_cb(_: *uws_res, _: [*c]const u8, _: usize, _: bool, _: *!?) callconv(.c) void { unreachable; }
-    pub fn cork_cb(_: *!?) callconv(.c) void { unreachable; }
+    static fn writable(_: *uws_res, _: u64, _: *!?) callconv(.c) bool { unreachable; }
+    static fn void_cb(_: *uws_res, _: *!?) callconv(.c) { unreachable; }
+    static fn data_cb(_: *uws_res, _: [*c]const u8, _: usize, _: bool, _: *!?) callconv(.c) { unreachable; }
+    static fn cork_cb(_: *!?) callconv(.c) { unreachable; }
 };
 pub const ResWritableHandlerFn = @TypeOf(&_ResHandlerSigs.writable);
 pub type ResWritableHandler = ResWritableHandlerFn?;
@@ -209,9 +209,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onWritable(this: *@This(), ud: anytype, comptime handler: anytype): void {
+        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, offset: u64, user_data: *!?) callconv(.c) bool {
-                return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(*NewResponse(ssl_flag), res_));
+                return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
             }
         };
         uws_res_on_writable(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
@@ -222,9 +223,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onAborted(this: *@This(), ud: anytype, comptime handler: anytype): void {
+        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
-                handler(@ptrCast(@alignCast(user_data)), bun.cast(*NewResponse(ssl_flag), res_));
+                handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
             }
         };
         uws_res_on_aborted(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
@@ -235,9 +237,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onTimeout(this: *@This(), ud: anytype, comptime handler: anytype): void {
+        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
-                handler(@ptrCast(@alignCast(user_data)), bun.cast(*NewResponse(ssl_flag), res_));
+                handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
             }
         };
         uws_res_on_timeout(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
@@ -248,9 +251,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onData(this: *@This(), ud: anytype, comptime handler: anytype): void {
+        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: *!?) callconv(.c) void {
-                handler(@ptrCast(@alignCast(user_data)), bun.cast(*NewResponse(ssl_flag), res_), if (length > 0) data[0..length] else "", last);
+                handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), if (length > 0) data[0..length] else "", last);
             }
         };
         uws_res_on_data(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
@@ -302,9 +306,8 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     pub fn corked(this: *@This(), comptime handler: anytype, args_tuple: std.meta.ArgsTuple(@TypeOf(handler))): void {
         const Wrapper = struct {
             const handler_fn = handler;
-            const Args = *@TypeOf(args_tuple);
             pub fn handle(user_data: *!?) callconv(.c) void {
-                const args: Args = @ptrCast(@alignCast(user_data.?));
+                const args: *@TypeOf(args_tuple) = @ptrCast(@alignCast(user_data.?));
                 @call(bun.callmod_inline, handler_fn, args.*);
             }
         };
@@ -588,7 +591,7 @@ export enum AnyResponse {
         switch (this) {
             .SSL(r) => r.onData(optional_data, wrapper.ssl_cb),
             .TCP(r) => r.onData(optional_data, wrapper.tcp_cb),
-            .H3(r) => r.onData(UserDataType, wrapper.h3_cb, optional_data),
+            .H3(r) => r.onData(optional_data, wrapper.h3_cb),
         }
     }
 
@@ -607,7 +610,7 @@ export enum AnyResponse {
         switch (this) {
             .SSL(r) => r.onWritable(optional_data, wrapper.ssl_cb),
             .TCP(r) => r.onWritable(optional_data, wrapper.tcp_cb),
-            .H3(r) => r.onWritable(UserDataType, wrapper.h3_cb, optional_data),
+            .H3(r) => r.onWritable(optional_data, wrapper.h3_cb),
         }
     }
 
@@ -626,7 +629,7 @@ export enum AnyResponse {
         switch (this) {
             .SSL(r) => r.onTimeout(optional_data, wrapper.ssl_cb),
             .TCP(r) => r.onTimeout(optional_data, wrapper.tcp_cb),
-            .H3(r) => r.onTimeout(UserDataType, wrapper.h3_cb, optional_data),
+            .H3(r) => r.onTimeout(optional_data, wrapper.h3_cb),
         }
     }
 

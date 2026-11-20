@@ -720,7 +720,7 @@ pub fn init(text_chunk: *LOLHTML.TextChunk) *TextChunk {
 
 pub fn contentHandler(self: *TextChunk, comptime Callback: *const fn (*LOLHTML.TextChunk, []const u8, bool) LOLHTML.Error!void, thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
             if ((self.text_chunk == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const text_chunk = self.text_chunk.?;
             var content_slice = content.toSlice(bun.default_allocator);
@@ -746,7 +746,7 @@ pub fn replace_(self: *TextChunk, callFrame: *jsc.CallFrame, globalObject: *JSGl
 
 pub fn remove(self: *TextChunk, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.text_chunk == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const text_chunk = self.text_chunk.?;
             _ = text_chunk.remove();
@@ -755,7 +755,7 @@ pub fn remove(self: *TextChunk, _: *JSGlobalObject, callFrame: *jsc.CallFrame) b
 
 pub fn getText(self: *TextChunk, global: *JSGlobalObject) bun.JSError!JSValue {
             if ((self.text_chunk == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const text_chunk = self.text_chunk.?;
             return bun.String.createUTF8ForJS(global, text_chunk.getContent().slice());
@@ -763,7 +763,7 @@ pub fn getText(self: *TextChunk, global: *JSGlobalObject) bun.JSError!JSValue {
 
 pub fn removed(self: *TextChunk, _: *JSGlobalObject) JSValue {
             if ((self.text_chunk == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const text_chunk = self.text_chunk.?;
             return JSValue.jsBoolean(text_chunk.isRemoved());
@@ -771,7 +771,7 @@ pub fn removed(self: *TextChunk, _: *JSGlobalObject) JSValue {
 
 pub fn lastInTextNode(self: *TextChunk, _: *JSGlobalObject) JSValue {
             if ((self.text_chunk == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const text_chunk = self.text_chunk.?;
             return JSValue.jsBoolean(text_chunk.isLastInTextNode());
@@ -816,7 +816,7 @@ pub fn init(doctype: *LOLHTML.DocType) *DocType {
 
 pub fn name(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const str = self.doctype.?.getName().slice();
             if ((str.len == 0)) {
@@ -827,7 +827,7 @@ pub fn name(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn systemId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const str = self.doctype.?.getSystemId().slice();
             if ((str.len == 0)) {
@@ -838,7 +838,7 @@ pub fn systemId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn publicId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const str = self.doctype.?.getPublicId().slice();
             if ((str.len == 0)) {
@@ -849,7 +849,7 @@ pub fn publicId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn remove(self: *DocType, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.doctype == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.doctype.?.remove();
             return callFrame.this();
@@ -857,7 +857,7 @@ pub fn remove(self: *DocType, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun
 
 pub fn removed(self: *DocType, _: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return JSValue.jsBoolean(self.doctype.?.isRemoved());
     }
@@ -975,7 +975,7 @@ pub fn setText(self: *Comment, global: *JSGlobalObject, value: JSValue) JSError!
 
 pub fn removed(self: *Comment, _: *JSGlobalObject) JSValue {
             if ((self.comment == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return JSValue.jsBoolean(self.comment.?.isRemoved());
     }
@@ -1044,7 +1044,7 @@ pub fn replace_(self: *EndTag, callFrame: *jsc.CallFrame, globalObject: *JSGloba
 
 pub fn remove(self: *EndTag, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.end_tag == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.end_tag.?.remove();
             return callFrame.this();
@@ -1052,7 +1052,7 @@ pub fn remove(self: *EndTag, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.
 
 pub fn getName(self: *EndTag, globalObject: *JSGlobalObject) bun.JSError!JSValue {
             if ((self.end_tag == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return try self.end_tag.?.getName().toJS(globalObject);
     }
@@ -1229,7 +1229,7 @@ pub fn hasAttribute_(self: *Element, global: *JSGlobalObject, name: ZigString) J
 
 pub fn setAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name_: ZigString, value_: ZigString) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.detachAttributeIterators();
             var name_slice = name_.toSlice(bun.default_allocator);
@@ -1248,7 +1248,7 @@ pub fn setAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *J
 
 pub fn removeAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name: ZigString) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.detachAttributeIterators();
             var name_slice = name.toSlice(bun.default_allocator);
@@ -1262,7 +1262,7 @@ pub fn removeAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject:
 
 pub fn contentHandler(self: *Element, comptime Callback: *const fn (*LOLHTML.Element, []const u8, bool) LOLHTML.Error!void, thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             var content_slice = content.toSlice(bun.default_allocator);
             _ = &content_slice;
@@ -1299,7 +1299,7 @@ pub fn setInnerContent_(self: *Element, callFrame: *jsc.CallFrame, globalObject:
 
 pub fn remove(self: *Element, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.element.?.remove();
             return callFrame.this();
@@ -1307,7 +1307,7 @@ pub fn remove(self: *Element, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun
 
 pub fn removeAndKeepContent(self: *Element, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             _ = self.element.?.removeAndKeepContent();
             return callFrame.this();
@@ -1315,7 +1315,7 @@ pub fn removeAndKeepContent(self: *Element, _: *JSGlobalObject, callFrame: *jsc.
 
 pub fn getTagName(self: *Element, globalObject: *JSGlobalObject) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return try htmlStringValue(self.element.?.tagName(), globalObject);
     }
@@ -1334,35 +1334,35 @@ pub fn setTagName(self: *Element, global: *JSGlobalObject, value: JSValue) JSErr
 
 pub fn getRemoved(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return JSValue.jsBoolean(self.element.?.isRemoved());
     }
 
 pub fn getSelfClosing(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return JSValue.jsBoolean(self.element.?.isSelfClosing());
     }
 
 pub fn getCanHaveContent(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return JSValue.jsBoolean(self.element.?.canHaveContent());
     }
 
 pub fn getNamespaceURI(self: *Element, globalObject: *JSGlobalObject) JSError!JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             return bun.String.createUTF8ForJS(globalObject, std.mem.span(self.element.?.namespaceURI()));
     }
 
 pub fn getAttributes(self: *Element, globalObject: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return JSValue.jsUndefined();
+                return JSValue.js_undefined;
             }
             const iter_opt = self.element.?.attributes();
             if ((iter_opt == null)) {

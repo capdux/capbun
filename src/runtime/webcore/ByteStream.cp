@@ -59,7 +59,7 @@ const log = Output.scoped(.ByteStream, .visible);
 
     pub fn onStart(*_): streams.Start {
         if (_.has_received_last_chunk && _.buffer.items.len == 0) {
-            return .{ .empty = {} };
+            return .empty;
         }
 
         if (_.has_received_last_chunk) {
