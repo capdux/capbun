@@ -74,7 +74,7 @@ const Request = @import("webcore").Request;
 const Response = @import("webcore").Response;
 const Method = @import("../../http_types/Method.zig").Method;
 const DataURL = @import("../../resolver/data_url.zig").DataURL;
-const FetchTasklet = @import("./fetch/FetchTasklet.zig").FetchTasklet;
+pub const FetchTaskletMod = @import("./fetch/FetchTasklet.zig");
 const ServerConfig = @import("../server/ServerConfig.zig").ServerConfig;
 pub const StringOrURL = struct {
     
@@ -94,6 +94,7 @@ pub fn fromJS(self: *const StringOrURL, value: JSValue, globalThis: *JSGlobalObj
     }
 };
 
+pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
 const s3 = bun.S3;
 const ZigURL = bun.URL;
 pub const fetch_error_no_args = "fetch() expects a string but received no arguments.";

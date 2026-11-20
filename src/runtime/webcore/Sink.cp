@@ -14,7 +14,8 @@ import {
     jsc,
 } from "bun";
 import { meta, mem, fmt } from "std";
-import { ArrayBufferSink } from "./ArrayBufferSink";
+import ArrayBufferSinkMod from "./ArrayBufferSink.zig";
+pub const ArrayBufferSink = ArrayBufferSinkMod;
 import bun from "bun";
 
 const Syscall = sys;

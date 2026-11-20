@@ -170,7 +170,7 @@ pub struct Context {
 }
 
 @root struct NativeZstd {
-    const RefCount = bun.ptr.RefCount(NativeZstd, "ref_count", deinit, {});
+    const RefCount = bun.ptr.RefCount(NativeZstd, "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 

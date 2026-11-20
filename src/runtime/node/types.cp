@@ -3,7 +3,7 @@ pub const BlobOrStringOrBuffer = union(enum) {
     string_or_buffer: StringOrBuffer,
 
     pub fn deinit() {
-        switch (_.*) {
+        switch (_) {
             .blob => |blob| {
                 if (store := blob.store) {
                     store.deref();
@@ -16,14 +16,14 @@ pub const BlobOrStringOrBuffer = union(enum) {
     }
 
     pub fn slice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .blob => |*blob| blob.sharedView(),
             .string_or_buffer => |*str| str.slice(),
         };
     }
 
     pub fn protect() {
-        switch (_.*) {
+        switch (_) {
             .string_or_buffer => |sob| {
                 sob.protect();
             },
@@ -205,13 +205,13 @@ pub const StringOrBuffer = union(enum) {
     }
 
     pub fn slice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             inline else => |*str| str.slice(),
         };
     }
 
     pub fn deinit() {
-        switch (_.*) {
+        switch (_) {
             inline .threadsafe_string, .string => |*str| {
                 str.deinit();
             },
@@ -223,7 +223,7 @@ pub const StringOrBuffer = union(enum) {
     }
 
     pub fn deinitAndUnprotect() {
-        switch (_.*) {
+        switch (_) {
             inline .threadsafe_string, .string => |*str| {
                 str.deinit();
             },
@@ -545,7 +545,7 @@ pub const PathLike = union(enum) {
     encoded_slice: jsc.ZigString.Slice,
 
     pub fn estimatedSize(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .string => _.string.estimatedSize(),
             .buffer => _.buffer.slice().len,
             .threadsafe_string, .slice_with_underlying_string => 0,
@@ -554,7 +554,7 @@ pub const PathLike = union(enum) {
     }
 
     pub fn deinit() {
-        switch (_.*) {
+        switch (_) {
             .string, .buffer => {},
             inline else => |*str| {
                 str.deinit();
@@ -577,7 +577,7 @@ pub const PathLike = union(enum) {
     }
 
     pub fn deinitAndUnprotect() {
-        switch (_.*) {
+        switch (_) {
             inline .encoded_slice, .threadsafe_string, .slice_with_underlying_string => |*val| {
                 val.deinit();
             },
@@ -933,7 +933,7 @@ pub const PathOrFileDescriptor = union(Tag) {
     }
 
     pub fn estimatedSize(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .path => _.path.estimatedSize(),
             .fd => 0,
         };

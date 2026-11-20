@@ -296,7 +296,11 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         groupLog.begin(@src());
         defer groupLog.end();
 
-        const client = ScopeFunctions.fromJS(callFrame.this()) ?? return globalThis.throw("Expected callee to be ScopeFunctions", .{});
+        const client_opt = ScopeFunctions.fromJS(callFrame.this());
+        if (client_opt == null) {
+            return globalThis.throw("Expected callee to be ScopeFunctions", .{});
+        }
+        const client = client_opt.?;
         const line_no = jsc.Jest.captureTestLineNumber(callFrame, globalThis);
 
         const bunTest = bun_test.BunTest.get();
@@ -522,16 +526,7 @@ pub fn createUnbound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue,
 }
 
 pub fn bind(value: JSValue, globalThis: *JSGlobalObject, name: bun.String): bun.JSError!JSValue {
-    groupLog.begin(@src());
-    defer groupLog.end();
-
-    const call_val = value.get(globalThis, "call")?;
-    let callFn_opt: (*jsc.JSFunction)? = null;
-    if (cv := call_val) {
-        callFn_opt = cv.as(jsc.JSFunction);
-    }
-    if (callFn_opt == null) return globalThis.throw("Expected call to be a function", .{});
-    const callFn = callFn_opt.?;
+    const callFn = jsc.JSFunction.create(globalThis, name, ScopeFunctions.callAsFunction, 1, .{});
     const bound = callFn.bind(globalThis, value, &name, 1, &.{})?;
     bound.setPrototypeDirect(value.getPrototype(globalThis), globalThis)?;
     return bound;

@@ -77,7 +77,7 @@ const jsc = @import("bun").jsc;
 const meta = @import("std").meta;
 const mem = @import("std").mem;
 const fmt = @import("std").fmt;
-const ArrayBufferSink = @import("./ArrayBufferSink").ArrayBufferSink;
+pub const ArrayBufferSinkMod = @import("./ArrayBufferSink.zig");
 pub const bun = @import("bun");
 pub const UTF8Fallback = struct {
     
@@ -249,15 +249,16 @@ return self.writeBytes(bytes);
     };
                 return VTable{ .write = Functions.onWrite, .writeLatin1 = Functions.onWriteLatin1, .writeUTF16 = Functions.onWriteUTF16, .end = Functions.onEnd, .connect = Functions.onConnect };
         }
-        pub const WriteUTF16Fn = *const fn(ctx: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const WriteUTF8Fn = *const fn(ctx: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const WriteLatin1Fn = *const fn(ctx: *anyopaque, data: streams.Result) streams.Result.Writable;
-        pub const EndFn = *const fn(ctx: *anyopaque, err: MaybeSyscallErr) sys.Maybe(void);
-        pub const ConnectFn = *const fn(ctx: *anyopaque, signal: streams.Signal) sys.Maybe(void);
+        pub const WriteUTF16Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+        pub const WriteUTF8Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+        pub const WriteLatin1Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+        pub const EndFn = *const fn (*anyopaque, MaybeSyscallErr) sys.Maybe(void);
+        pub const ConnectFn = *const fn (*anyopaque, streams.Signal) sys.Maybe(void);
     };
 };
 
 const MaybeSyscallErr = ?Syscall.Error;
+pub const ArrayBufferSink = ArrayBufferSinkMod;
 const Syscall = sys;
 const Subprocess = api.Subprocess;
 const JSGlobalObject = jsc.JSGlobalObject;

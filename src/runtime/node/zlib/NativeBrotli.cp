@@ -181,7 +181,7 @@ pub struct Context {
 }
 
 @root struct NativeBrotli {
-    const RefCount = bun.ptr.RefCount(NativeBrotli, "ref_count", deinit, {});
+    const RefCount = bun.ptr.RefCount(NativeBrotli, "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 

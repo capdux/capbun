@@ -7,7 +7,7 @@ refcount: u32 = 1,
 len: u32 = 0,
 ptr: [*]const u8 = undefined,
 
-pub fn init(slice: []const u8): *RefCountedStr {
+static fn init(slice: []const u8): *RefCountedStr {
     debug("init: {s}", .{slice});
     let res = bun.handleOom(bun.default_allocator.create(RefCountedStr));
     res.* = {

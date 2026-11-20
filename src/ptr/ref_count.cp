@@ -363,20 +363,17 @@ fn trackRefDebug(debug: auto, data_bytes: []const u8, scope: *AllocationScope, r
 ///
 /// See `RefCount`'s comment defined above for examples & best practices.
 pub fn RefPtr(comptime T: type): type {
-    const RefCountMixin = @FieldType(T, "ref_count");
-    const options = RefCountMixin.ref_count_options;
     const DebugId = if (enable_debug) TrackedRef.Id else void;
-    const Ctx = options.destructor_ctx ?? void;
-
-    comptime {
-        bun.assert(RefCountMixin.is_ref_count == unique_symbol);
-    }
 
     return struct {
         const Self = @This();
 
         data: *T;
         debug: DebugId;
+
+        const RefCountMixin = @FieldType(T, "ref_count");
+        const options = RefCountMixin.ref_count_options;
+        const Ctx = options.destructor_ctx ?? void;
 
         /// Increment the reference count, and return a structure boxing the pointer.
         pub static fn initRef(raw_ptr: *T): Self {

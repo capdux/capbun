@@ -461,7 +461,7 @@ pub const BlobOrStringOrBuffer = union(enum) {
     string_or_buffer: StringOrBuffer,
 
 pub fn deinit(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 .blob => |blob| {
 if (blob.store) |store| {
                 _ = &store;
@@ -475,14 +475,14 @@ _ = str.deinit();
     }
 
 pub fn slice(self: @This()) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 .blob => |*blob| blob.sharedView(),
 .string_or_buffer => |*str| str.slice(),
 });
     }
 
 pub fn protect(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 .string_or_buffer => |sob| {
 _ = sob.protect();
 },
@@ -675,13 +675,13 @@ return str.transferToJS(ctx);
     }
 
 pub fn slice(self: @This()) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 inline else => |*str| str.slice(),
 });
     }
 
 pub fn deinit(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 inline .threadsafe_string, .string => |*str| {
 _ = str.deinit();
 },
@@ -695,7 +695,7 @@ else => {
     }
 
 pub fn deinitAndUnprotect(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 inline .threadsafe_string, .string => |*str| {
 _ = str.deinit();
 },
@@ -815,7 +815,7 @@ pub const PathLike = union(enum) {
     encoded_slice: jsc.ZigString.Slice,
 
 pub fn estimatedSize(self: @This()) usize {
-            return (switch (self.*) {
+            return (switch (self) {
 .string => self.string.estimatedSize(),
 .buffer => self.buffer.slice().len,
 .threadsafe_string, .slice_with_underlying_string => 0,
@@ -824,7 +824,7 @@ pub fn estimatedSize(self: @This()) usize {
     }
 
 pub fn deinit(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 .string, .buffer => {
 
 },
@@ -851,7 +851,7 @@ else => {
     }
 
 pub fn deinitAndUnprotect(self: @This()) void {
-            switch (self.*) {
+            switch (self) {
 inline .encoded_slice, .threadsafe_string, .slice_with_underlying_string => |*val| {
 _ = val.deinit();
 },
@@ -1053,7 +1053,7 @@ pub fn deinit(self: @This()) void {
     }
 
 pub fn estimatedSize(self: @This()) usize {
-            return (switch (self.*) {
+            return (switch (self) {
 .path => self.path.estimatedSize(),
 .fd => 0,
 });

@@ -4,7 +4,8 @@ import { JSGlobalObject, JSValue, CallFrame, JSPromise, VirtualMachine, ZigStrin
 import { FetchHeaders, Blob, Body, Request, Response } from "webcore";
 import { Method } from "../../http_types/Method.zig";
 import { DataURL } from "../../resolver/data_url.zig";
-import { FetchTasklet } from "./fetch/FetchTasklet.zig";
+import FetchTaskletMod from "./fetch/FetchTasklet.zig";
+pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
 import { ServerConfig } from "../server/ServerConfig.zig";
 
 const s3 = bun.S3;
